@@ -2535,5 +2535,17 @@
   "lifecycle_state_unavailable": "Private current lifecycle state and native effect progress are not available through the current management read.",
   "lifecycle_capability_unavailable": "No exact native suspension or reinstatement action is currently advertised. Current scopes, consent and authority may make these controls unavailable.",
   "lifecycle_suspend_effect": "Suspension advances the authentication floor and fence before Auth cleanup. Operator effects may continue afterward. The reason remains private.",
-  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending."
+  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending.",
+  "library_follow_counts_heading": "Nombre de suivis",
+  "library_follow_counts_description": "Le total de vos suivis est privé. Le nombre d’abonnés est disponible uniquement pour les ressources que vous pouvez gérer.",
+  "library_follow_counts_outgoing": "Vos suivis",
+  "library_follow_counts_target": "Abonnés de la ressource",
+  "library_follow_counts_loading": "Chargement des totaux privés…",
+  "library_follow_counts_denied": "Vos droits d’accès actuels ne permettent pas de consulter ce total.",
+  "library_follow_counts_unavailable": "Les totaux privés sont indisponibles. Réessayez plus tard.",
+  "library_follow_counts_retry_after": "Réessayez dans {value} secondes.",
+  "library_follow_counts_retry_at": "Réessayez après {value}.",
+  "library_follow_counts_context_help": "Ouvrez le nombre d’abonnés depuis le menu de gestion d’une ressource pour consulter son total privé.",
+  "library_follow_counts_invalid_context": "Ce lien de ressource est invalide. Ouvrez-le à nouveau depuis le menu de gestion de la ressource.",
+  "library_follow_counts_reload": "Recharger les totaux"
 }

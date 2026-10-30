@@ -2535,5 +2535,17 @@
   "lifecycle_state_unavailable": "Private current lifecycle state and native effect progress are not available through the current management read.",
   "lifecycle_capability_unavailable": "No exact native suspension or reinstatement action is currently advertised. Current scopes, consent and authority may make these controls unavailable.",
   "lifecycle_suspend_effect": "Suspension advances the authentication floor and fence before Auth cleanup. Operator effects may continue afterward. The reason remains private.",
-  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending."
+  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending.",
+  "library_follow_counts_heading": "팔로우 수",
+  "library_follow_counts_description": "내 팔로우 총수는 비공개입니다. 관리 권한이 있는 리소스의 팔로워 수만 확인할 수 있습니다.",
+  "library_follow_counts_outgoing": "내가 팔로우하는 수",
+  "library_follow_counts_target": "리소스 팔로워",
+  "library_follow_counts_loading": "비공개 집계 불러오는 중…",
+  "library_follow_counts_denied": "현재 접근 권한으로는 이 집계를 확인할 수 없습니다.",
+  "library_follow_counts_unavailable": "비공개 집계를 불러올 수 없습니다. 나중에 다시 시도해 주세요.",
+  "library_follow_counts_retry_after": "{value}초 후에 다시 시도해 주세요.",
+  "library_follow_counts_retry_at": "{value} 이후에 다시 시도해 주세요.",
+  "library_follow_counts_context_help": "리소스의 관리 메뉴에서 팔로워 수를 열면 비공개 총수를 확인할 수 있습니다.",
+  "library_follow_counts_invalid_context": "리소스 링크 정보가 잘못되었습니다. 리소스의 관리 메뉴에서 다시 열어 주세요.",
+  "library_follow_counts_reload": "집계 새로고침"
 }

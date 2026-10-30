@@ -2535,5 +2535,17 @@
   "lifecycle_state_unavailable": "Private current lifecycle state and native effect progress are not available through the current management read.",
   "lifecycle_capability_unavailable": "No exact native suspension or reinstatement action is currently advertised. Current scopes, consent and authority may make these controls unavailable.",
   "lifecycle_suspend_effect": "Suspension advances the authentication floor and fence before Auth cleanup. Operator effects may continue afterward. The reason remains private.",
-  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending."
+  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending.",
+  "library_follow_counts_heading": "フォロー数",
+  "library_follow_counts_description": "あなたのフォロー総数は非公開です。フォロワー数は、管理権限のあるリソースでのみ確認できます。",
+  "library_follow_counts_outgoing": "フォローしている数",
+  "library_follow_counts_target": "リソースのフォロワー",
+  "library_follow_counts_loading": "非公開の集計を読み込み中…",
+  "library_follow_counts_denied": "現在のアクセス権限では、この集計を確認できません。",
+  "library_follow_counts_unavailable": "非公開の集計を取得できません。しばらくしてから再試行してください。",
+  "library_follow_counts_retry_after": "{value} 秒後に再試行してください。",
+  "library_follow_counts_retry_at": "{value} 以降に再試行してください。",
+  "library_follow_counts_context_help": "リソースの管理メニューからフォロワー数を開くと、非公開の総数を確認できます。",
+  "library_follow_counts_invalid_context": "リソースのリンク情報が無効です。リソースの管理メニューから開き直してください。",
+  "library_follow_counts_reload": "集計を再読み込み"
 }

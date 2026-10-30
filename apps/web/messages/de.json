@@ -2535,5 +2535,17 @@
   "lifecycle_state_unavailable": "Private current lifecycle state and native effect progress are not available through the current management read.",
   "lifecycle_capability_unavailable": "No exact native suspension or reinstatement action is currently advertised. Current scopes, consent and authority may make these controls unavailable.",
   "lifecycle_suspend_effect": "Suspension advances the authentication floor and fence before Auth cleanup. Operator effects may continue afterward. The reason remains private.",
-  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending."
+  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending.",
+  "library_follow_counts_heading": "Follow-Zahlen",
+  "library_follow_counts_description": "Die Gesamtzahl deiner abonnierten Ressourcen ist privat. Follower-Zahlen sind nur für Ressourcen sichtbar, die du verwalten darfst.",
+  "library_follow_counts_outgoing": "Von dir abonniert",
+  "library_follow_counts_target": "Follower der Ressource",
+  "library_follow_counts_loading": "Private Zahlen werden geladen…",
+  "library_follow_counts_denied": "Mit deinen aktuellen Zugriffsrechten ist diese Zahl nicht verfügbar.",
+  "library_follow_counts_unavailable": "Private Zahlen sind derzeit nicht verfügbar. Versuche es später erneut.",
+  "library_follow_counts_retry_after": "Versuche es in {value} Sekunden erneut.",
+  "library_follow_counts_retry_at": "Versuche es nach {value} erneut.",
+  "library_follow_counts_context_help": "Öffne die Follower-Zahl im Verwaltungsmenü einer Ressource, um ihre private Gesamtzahl zu sehen.",
+  "library_follow_counts_invalid_context": "Dieser Ressourcenlink ist ungültig. Öffne ihn erneut im Verwaltungsmenü der Ressource.",
+  "library_follow_counts_reload": "Zahlen neu laden"
 }

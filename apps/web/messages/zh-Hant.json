@@ -2535,5 +2535,17 @@
   "lifecycle_state_unavailable": "Private current lifecycle state and native effect progress are not available through the current management read.",
   "lifecycle_capability_unavailable": "No exact native suspension or reinstatement action is currently advertised. Current scopes, consent and authority may make these controls unavailable.",
   "lifecycle_suspend_effect": "Suspension advances the authentication floor and fence before Auth cleanup. Operator effects may continue afterward. The reason remains private.",
-  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending."
+  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending.",
+  "library_follow_counts_heading": "追蹤數量",
+  "library_follow_counts_description": "你的追蹤總數為私人資訊。只有你有權管理的資源才會顯示追蹤者數量。",
+  "library_follow_counts_outgoing": "你追蹤的數量",
+  "library_follow_counts_target": "資源追蹤者",
+  "library_follow_counts_loading": "正在載入私人數量…",
+  "library_follow_counts_denied": "你目前的存取權限無法查看此數量。",
+  "library_follow_counts_unavailable": "私人數量目前無法使用，請稍後再試。",
+  "library_follow_counts_retry_after": "請在 {value} 秒後重試。",
+  "library_follow_counts_retry_at": "請在 {value} 後重試。",
+  "library_follow_counts_context_help": "從資源的管理選單開啟追蹤者數量，即可查看其私人總數。",
+  "library_follow_counts_invalid_context": "此資源的連結資訊無效，請從資源的管理選單重新開啟。",
+  "library_follow_counts_reload": "重新載入數量"
 }

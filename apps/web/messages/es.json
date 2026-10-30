@@ -2535,5 +2535,17 @@
   "lifecycle_state_unavailable": "Private current lifecycle state and native effect progress are not available through the current management read.",
   "lifecycle_capability_unavailable": "No exact native suspension or reinstatement action is currently advertised. Current scopes, consent and authority may make these controls unavailable.",
   "lifecycle_suspend_effect": "Suspension advances the authentication floor and fence before Auth cleanup. Operator effects may continue afterward. The reason remains private.",
-  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending."
+  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending.",
+  "library_follow_counts_heading": "Recuentos de seguimiento",
+  "library_follow_counts_description": "Tu total de seguimientos es privado. El número de seguidores solo está disponible para los recursos que puedes gestionar.",
+  "library_follow_counts_outgoing": "Tus seguimientos",
+  "library_follow_counts_target": "Seguidores del recurso",
+  "library_follow_counts_loading": "Cargando recuentos privados…",
+  "library_follow_counts_denied": "Tus permisos de acceso actuales no permiten consultar este recuento.",
+  "library_follow_counts_unavailable": "Los recuentos privados no están disponibles. Inténtalo más tarde.",
+  "library_follow_counts_retry_after": "Vuelve a intentarlo en {value} segundos.",
+  "library_follow_counts_retry_at": "Vuelve a intentarlo después de {value}.",
+  "library_follow_counts_context_help": "Abre el recuento de seguidores desde el menú de gestión de un recurso para ver su total privado.",
+  "library_follow_counts_invalid_context": "Este enlace de recurso no es válido. Ábrelo de nuevo desde el menú de gestión del recurso.",
+  "library_follow_counts_reload": "Recargar recuentos"
 }

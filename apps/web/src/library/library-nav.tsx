@@ -7,7 +7,7 @@ import { builtinCollectionDestinations, type BuiltinCollectionRecord } from './b
 import type { LibraryPinsRead } from './pins-read';
 import { dynamicCollectionTitle } from './dynamic-collection';
 
-export type LibraryDestination = 'tracked' | 'continue' | 'collections' | { collectionId: string };
+export type LibraryDestination = 'tracked' | 'continue' | 'collections' | 'follow-counts' | { collectionId: string };
 export type LibraryNavigationEntry = {
   id: string;
   label: string;
@@ -86,6 +86,12 @@ export function libraryNavigationEntries(
       label: m.library_nav_all_collections(),
       href: `/${locale}/library/collections`,
       current: current === 'collections',
+    },
+    {
+      id: 'follow-counts',
+      label: m.library_follow_counts_heading(),
+      href: `/${locale}/library/follow-counts`,
+      current: current === 'follow-counts',
     },
   );
   for (const collection of collections) {

@@ -2839,5 +2839,17 @@
   "lifecycle_state_unavailable": "Private current lifecycle state and native effect progress are not available through the current management read.",
   "lifecycle_capability_unavailable": "No exact native suspension or reinstatement action is currently advertised. Current scopes, consent and authority may make these controls unavailable.",
   "lifecycle_suspend_effect": "Suspension advances the authentication floor and fence before Auth cleanup. Operator effects may continue afterward. The reason remains private.",
-  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending."
+  "lifecycle_reinstate_effect": "Reinstatement does not revive old tokens or sessions. A fresh sign-in is required. Existing operator effects may still be pending.",
+  "library_follow_counts_heading": "Follow counts",
+  "library_follow_counts_description": "Your following total is private. Follower counts are available only for resources you can manage.",
+  "library_follow_counts_outgoing": "You follow",
+  "library_follow_counts_target": "Resource followers",
+  "library_follow_counts_loading": "Loading private counts…",
+  "library_follow_counts_denied": "This count is not available with your current access.",
+  "library_follow_counts_unavailable": "Private counts are unavailable. Try again later.",
+  "library_follow_counts_retry_after": "Try again in {value} seconds.",
+  "library_follow_counts_retry_at": "Try again after {value}.",
+  "library_follow_counts_context_help": "Open follower counts from a resource’s management menu to see its private total.",
+  "library_follow_counts_invalid_context": "This resource context is invalid. Open the link again from the resource’s management menu.",
+  "library_follow_counts_reload": "Reload counts"
 }
