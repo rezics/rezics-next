@@ -4103,6 +4103,9 @@ ALTER TABLE "verification" ADD COLUMN erasure_source_client_owner_id text CHECK(
 CREATE INDEX native_role_verification_1 ON "verification" (erasure_source_client_owner_id,"id");
 ALTER TABLE verification ADD COLUMN erasure_format text CHECK(erasure_format IN ('reset-v1','webauthn-v1','webauthn-anonymous-v1','code-v1','unknown'));
 CREATE INDEX native_role_verification_pending ON "verification" ("id") WHERE erasure_role_version=0;
+-- A family's exact code/client source stays a top-one seek even when another
+-- client's verification history shares that identifier.
+CREATE INDEX native_role_verification_code_source ON verification(identifier,erasure_client_id,"createdAt" DESC,id DESC);
 ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
 ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_role_xid bigint;
 ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
