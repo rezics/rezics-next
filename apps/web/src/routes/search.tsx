@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { SearchPage } from '../search/search.tsx';
 import { searchQueryOptions } from '../search/search-queries';
+import { isRealmDiscoverySearch, realmDiscoveryQueryOptions } from '../search/realm-discovery-loader';
 import { searchLoaderDeps, searchParams } from '../search/search-params';
 import { PageHeading } from '../shell/page-heading';
 import { pageHead } from '../shell/head';
@@ -24,9 +25,11 @@ export const Route = createFileRoute('/search')({
   loaderDeps: ({ search }) => searchLoaderDeps(search),
   loader: ({ deps, context }) => {
     const params = deps;
-    return context.queryClient
-      .fetchQuery(searchQueryOptions(getLocale(), params))
-      .then(() => ({ query: params.query }));
+    const locale = getLocale();
+    return Promise.all([
+      context.queryClient.fetchQuery(searchQueryOptions(locale, params)),
+      isRealmDiscoverySearch(params) ? context.queryClient.fetchQuery(realmDiscoveryQueryOptions(locale)) : undefined,
+    ]).then(() => ({ query: params.query }));
   },
   head: ({ loaderData }) =>
     pageHead(
@@ -61,6 +64,8 @@ function SearchRoute() {
 }
 
 function SearchResults({ deps }: { deps: ReturnType<typeof searchLoaderDeps> }) {
-  const { data } = useSuspenseQuery(searchQueryOptions(getLocale(), deps));
-  return <SearchPage query={deps.query} data={data} />;
+  const locale = getLocale();
+  const { data } = useSuspenseQuery(searchQueryOptions(locale, deps));
+  const realms = useQuery({ ...realmDiscoveryQueryOptions(locale), enabled: isRealmDiscoverySearch(deps) });
+  return <SearchPage query={deps.query} data={data} {...(realms.data ? { realmDiscovery: realms.data } : {})} />;
 }

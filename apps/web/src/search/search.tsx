@@ -37,6 +37,9 @@ import { DiscoveryKinds } from './discovery-kinds';
 import { DiscoveryResults } from './discovery-results';
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 import { ConditionEditor } from './condition-editor';
+import { SearchRealmDiscovery } from './realm-discovery';
+import { isRealmDiscoverySearch, type RealmDiscoveryReader } from './realm-discovery-loader';
+import type { RealmDiscoveryState } from '../community/realm-discovery';
 import {
   conditionAdmission,
   conditionMetadata,
@@ -381,12 +384,16 @@ export function SearchPage({
   data,
   filtersOnly = false,
   initiallyOpen = false,
+  realmDiscovery,
+  realmDiscoveryRead,
 }: {
   query: string;
   cursor?: string;
   data?: SearchPageData;
   filtersOnly?: boolean;
   initiallyOpen?: boolean;
+  realmDiscovery?: RealmDiscoveryState;
+  realmDiscoveryRead?: RealmDiscoveryReader;
 }) {
   const [hydrated, setHydrated] = useState(false);
   const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(Boolean(data?.problem?.errors?.length));
@@ -660,16 +667,28 @@ export function SearchPage({
     return <div className="w-full">{filterControls}</div>;
   }
 
+  const browsing = isRealmDiscoverySearch(committedState) && !editing && !result && !discovery;
+  const content = browsing ? (
+    <SearchRealmDiscovery
+      key={JSON.stringify([locale, stateKey, realmDiscovery])}
+      initial={realmDiscovery ?? { kind: 'loading' }}
+      locale={locale}
+      {...(realmDiscoveryRead ? { read: realmDiscoveryRead } : {})}
+    />
+  ) : (
+    results
+  );
+
   return (
     <section className="mx-auto max-w-5xl space-y-6">
       <PageHeading>{m.search_heading()}</PageHeading>
       {hasFilterPanel ? (
         <div className="grid items-start gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
           {filterControls}
-          <div className="min-w-0 space-y-4 lg:col-start-2 lg:row-start-1">{results}</div>
+          <div className="min-w-0 space-y-4 lg:col-start-2 lg:row-start-1">{content}</div>
         </div>
       ) : (
-        results
+        content
       )}
     </section>
   );
