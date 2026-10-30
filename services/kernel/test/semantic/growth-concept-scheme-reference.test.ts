@@ -266,7 +266,17 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
       expect(plans).toContain('revision_identity_version');
       if (representation !== 'compact') {
         expect(plans).toContain('adoption_pkey');
-        expect(plans).toContain('candidate_pkey');
+        // PostgreSQL may choose another native index for the same exact
+        // candidate key. Require useful key conditions, rather than a name.
+        const candidates = nodes(measured.capture.plans, 'candidate').filter((node) =>
+          /Index/.test(node['Node Type']),
+        );
+        expect(candidates.length).toBeGreaterThan(0);
+        expect(
+          candidates.every((node) =>
+            ['route', 'subject_id', 'candidate_id'].every((key) => String(node['Index Cond']).includes(key)),
+          ),
+        ).toBe(true);
       }
       if (tuple) expect(plans).toContain('source_fences_pkey');
       // The harness counts examined and removed rows and applies the shared
