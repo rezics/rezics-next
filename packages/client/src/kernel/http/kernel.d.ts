@@ -1,4 +1,4 @@
-import type { CommerceMoneyPolicy } from '../commerce/money.ts';
+import { type CommerceMoneyPolicy } from '../commerce/money.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { zoneRoutes } from '../zones/http.ts';
 import type { Elysia } from 'elysia';

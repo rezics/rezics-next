@@ -44408,7 +44408,7 @@
                                   0,
                                   2
                                 ],
-                                "type": "number"
+                                "type": "string"
                               },
                               "factsVersion": {
                                 "const": "stripe-money-v1",
@@ -101766,6 +101766,35 @@
                           "id": {
                             "type": "string"
                           },
+                          "moneyUnit": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "exponent": {
+                                "enum": [
+                                  0,
+                                  2
+                                ],
+                                "type": "string"
+                              },
+                              "factsVersion": {
+                                "const": "stripe-money-v1",
+                                "type": "string"
+                              },
+                              "system": {
+                                "const": "stripe-api",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "system",
+                              "exponent",
+                              "factsVersion"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "revision": {
                             "minimum": 1,
                             "type": "integer"
@@ -101783,6 +101812,13 @@
                           "targetSubjectId": {
                             "type": "string"
                           },
+                          "taxBehavior": {
+                            "const": "exclusive",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "taxCode": {
                             "type": "string"
                           },
@@ -101794,6 +101830,8 @@
                           }
                         },
                         "required": [
+                          "moneyUnit",
+                          "taxBehavior",
                           "id",
                           "targetSubjectId",
                           "title",
@@ -102544,7 +102582,7 @@
                                 0,
                                 2
                               ],
-                              "type": "number"
+                              "type": "string"
                             },
                             "factsVersion": {
                               "const": "stripe-money-v1",
@@ -103433,7 +103471,7 @@
                                 0,
                                 2
                               ],
-                              "type": "number"
+                              "type": "string"
                             },
                             "factsVersion": {
                               "const": "stripe-money-v1",
@@ -104257,7 +104295,7 @@
                                 0,
                                 2
                               ],
-                              "type": "number"
+                              "type": "string"
                             },
                             "factsVersion": {
                               "const": "stripe-money-v1",
@@ -105327,7 +105365,7 @@
                                 0,
                                 2
                               ],
-                              "type": "number"
+                              "type": "string"
                             },
                             "factsVersion": {
                               "const": "stripe-money-v1",
@@ -107260,7 +107298,7 @@
                                   0,
                                   2
                                 ],
-                                "type": "number"
+                                "type": "string"
                               },
                               "factsVersion": {
                                 "const": "stripe-money-v1",
@@ -108029,7 +108067,7 @@
                                 0,
                                 2
                               ],
-                              "type": "number"
+                              "type": "string"
                             },
                             "factsVersion": {
                               "const": "stripe-money-v1",
@@ -108853,7 +108891,7 @@
                                 0,
                                 2
                               ],
-                              "type": "number"
+                              "type": "string"
                             },
                             "factsVersion": {
                               "const": "stripe-money-v1",

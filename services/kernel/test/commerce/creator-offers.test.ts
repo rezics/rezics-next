@@ -3,6 +3,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { insertOffer, setOfferState } from '../../src/commerce/store.ts';
 import type { CapturedContentEdition, Offer } from '../../src/commerce/model.ts';
+import { readCommerceMoneyPolicy, validateOfferAmount } from '../../src/commerce/money.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
 import { cookies, nativeFixture, password } from '../access/native-account-bindings-fixture.ts';
@@ -71,6 +72,7 @@ async function seed(creator: string, edition: boolean) {
     title: 'Captured creator title',
     currency: 'usd',
     unitAmountMinor: 1200,
+    ...(edition ? validateOfferAmount({ currency: 'usd', amountMinor: 1200 }, readCommerceMoneyPolicy({})) : {}),
     taxCode: 'txcd_10302000',
     royaltyBasisPoints: 9000,
     state: 'active',
@@ -137,17 +139,21 @@ test('creator sees bounded own active and delisted history without source identi
     state: 'delisted',
     title: 'Captured creator title',
     contentEdition: { source: { licence: 'CC-BY-4.0' } },
+    moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
+    taxBehavior: 'exclusive',
   });
   expect(Object.keys(history).sort()).toEqual(
     [
       'contentEdition',
       'currency',
       'id',
+      'moneyUnit',
       'revision',
       'royaltyBasisPoints',
       'state',
       'targetSubjectId',
       'taxCode',
+      'taxBehavior',
       'title',
       'unitAmountMinor',
     ].sort(),
@@ -155,6 +161,8 @@ test('creator sees bounded own active and delisted history without source identi
   expect(JSON.stringify(history)).not.toContain('threadId');
   expect(JSON.stringify(history)).not.toContain('postId');
   expect(page.offers[0].contentEdition).toBeNull();
+  expect(page.offers[0].moneyUnit).toBeNull();
+  expect(page.offers[0].taxBehavior).toBeNull();
   expect((await request(`/v1/offers/${offers[0]!.id}`)).status).toBe(404);
   expect(await (await request('/v1/offers?limit=100')).json()).toMatchObject({ next: null });
   // Repeating a read has no receipt/replay dependency.

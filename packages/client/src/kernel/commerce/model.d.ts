@@ -1,7 +1,7 @@
 import type { StripeMoneyUnit } from './money.ts';
 /**
  * Shared commerce types. Offers live in the creator account's partition; orders, their Stripe transactions and
- * entitlements live in the buyer account's partition. Amounts are integers in the currency's minor unit.
+ * entitlements live in the buyer account's partition. Amounts retain exact raw provider integers; interpretation requires captured unit metadata.
  */
 /** Maximum balance transactions in one complete provider snapshot. */
 export declare const MAX_ORDER_TRANSACTIONS = 256;
@@ -29,6 +29,7 @@ export type CapturedContentEdition = Readonly<{
     quantity: 1;
 }>;
 export type Offer = {
+    /** Absent historical metadata is unknown, never inferred from current currency facts. */
     moneyUnit?: StripeMoneyUnit | null;
     taxBehavior?: 'exclusive' | null;
     /** Null for historical subject-only rows; omission is accepted only in older receipts/fixtures. */
@@ -48,6 +49,7 @@ export type Offer = {
     revision: number;
 };
 export type Order = {
+    /** Absent historical metadata is unknown, never inferred from current currency facts. */
     moneyUnit?: StripeMoneyUnit | null;
     taxBehavior?: 'exclusive' | null;
     /** Null for historical subject-only rows; omission is accepted only in older receipts/fixtures. */
@@ -193,7 +195,9 @@ export type CheckoutDecision = {
     newTransactions: StripeTransaction[];
 };
 export type CheckoutRequest = {
+    /** Physical request baseline, distinct from unit facts. Omitted in pre-adoption captures. */
     apiVersion?: '2026-09-30.endive' | null;
+    /** Absent historical metadata is unknown, never inferred from current currency facts. */
     moneyUnit?: StripeMoneyUnit | null;
     taxBehavior?: 'exclusive' | null;
     orderId: string;

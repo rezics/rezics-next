@@ -117,6 +117,7 @@ const offerReadSchema = t.Object(
 );
 const sellerOfferSchema = t.Object(
   {
+    ...capturedMoneySchemas,
     id,
     targetSubjectId: id,
     title: t.String(),

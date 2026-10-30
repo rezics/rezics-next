@@ -79,7 +79,7 @@ first-party status or an older offer scope supplies no consent. A distinct princ
 current formula operand. No role, grant, source writer or alternative authorization mechanism is added.
 
 The closed response is `{offers,next}`. Each seller row contains exactly
-`{id,targetSubjectId,title,currency,unitAmountMinor,taxCode,royaltyBasisPoints,state,revision,contentEdition}`.
+`{id,targetSubjectId,title,currency,unitAmountMinor,moneyUnit,taxBehavior,taxCode,royaltyBasisPoints,state,revision,contentEdition}`.
 `contentEdition` is the actual sanitized `contentEditionTermsView` or explicit `null` for UNKNOWN historic mapping.
 It never includes native source thread/post IDs, revision bodies, transactions, receipts or other account metadata.
 Captured title/terms remain readable when the current target is unavailable; they assert neither current sale
@@ -314,7 +314,7 @@ Native create/reprice bodies derive `moneyUnit` and `taxBehavior:'exclusive'` af
 receipt replay. Currency, benefit and non-price terms remain immutable. Explicit repricing of an old UNKNOWN offer
 captures the adopted metadata and increments its revision even at the same numeric price. Unsupported old currencies
 remain readable but unavailable for fresh sale. Fresh orders require the captured known tuple and the displayed
-`expectedOfferRevision`; old orders and receipt results are never rewritten. Native offer and buyer DTOs expose
+`expectedOfferRevision`; old orders and receipt results are never rewritten. Native offer, seller and buyer DTOs expose
 nullable `moneyUnit`/`taxBehavior`; absent historical metadata always reads as null, never today's interpretation.
 
 `GET /v1/commerceMoney`, operation `commerce.money_schema`, uses normal `gate:selling` exposure and the existing
