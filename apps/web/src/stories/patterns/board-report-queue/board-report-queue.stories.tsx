@@ -191,6 +191,7 @@ export const ConfirmedTakedown: Story = {
     const view = await submit(canvasElement);
     await expect(await view.findByRole('status')).toHaveTextContent(m.moderation_queue_takedown_confirmed());
     await expect(view.getByRole('status')).toHaveTextContent(reason);
+    await expect(view.getByRole('status')).toHaveFocus();
     await expect(view.queryByText(currentText)).toBeNull();
     await expect(view.queryByText(revisionText)).toBeNull();
     await expect(view.queryByRole('textbox')).toBeNull();

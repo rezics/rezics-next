@@ -1897,7 +1897,7 @@
   "moderation_queue_submitted": "Enviada",
   "moderation_queue_submission": "Denuncia enviada",
   "moderation_queue_resolved_at": "Resuelta",
-  "moderation_queue_projection_pending": "Los resultados se actualizarán en la cola. Esta confirmación permanece hasta que cambies de página.",
+  "moderation_queue_projection_pending": "El estado de la denuncia puede tardar un momento en actualizarse. Esta confirmación permanece hasta que cambies de página.",
   "moderation_queue_review": "Revisar denuncia",
   "moderation_queue_reason_invalid": "Introduce un motivo de entre 1 y 1.024 caracteres.",
   "moderation_queue_reason_hint": "La retirada requiere un motivo de hasta 1.024 caracteres. Desestimar no requiere motivo.",

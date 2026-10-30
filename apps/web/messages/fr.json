@@ -1897,7 +1897,7 @@
   "moderation_queue_submitted": "Envoyé le",
   "moderation_queue_submission": "Signalement envoyé",
   "moderation_queue_resolved_at": "Résolu le",
-  "moderation_queue_projection_pending": "Les résultats seront mis à jour dans la file. Cette confirmation reste affichée jusqu’au changement de page.",
+  "moderation_queue_projection_pending": "La mise à jour du statut peut prendre un instant. Cette confirmation reste affichée jusqu’au changement de page.",
   "moderation_queue_review": "Examiner le signalement",
   "moderation_queue_reason_invalid": "Saisissez un motif de 1 à 1 024 caractères.",
   "moderation_queue_reason_hint": "Le retrait nécessite un motif de 1 024 caractères maximum. Le rejet ne nécessite aucun motif.",

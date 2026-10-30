@@ -1898,7 +1898,7 @@
   "moderation_queue_submitted": "提交于",
   "moderation_queue_submission": "提交的举报",
   "moderation_queue_resolved_at": "处理于",
-  "moderation_queue_projection_pending": "举报结果将通过原生队列更新。此确认会保留至你离开页面。",
+  "moderation_queue_projection_pending": "举报处理状态可能需要一些时间更新。此确认会保留至你离开页面。",
   "moderation_queue_review": "审核举报",
   "moderation_queue_reason_invalid": "请输入 1 至 1,024 个字符的原因。",
   "moderation_queue_reason_hint": "下架须提供原因，最多 1,024 个字符。驳回无需原因。",

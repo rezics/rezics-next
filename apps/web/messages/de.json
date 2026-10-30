@@ -1897,7 +1897,7 @@
   "moderation_queue_submitted": "Eingereicht",
   "moderation_queue_submission": "Eingereichte Meldung",
   "moderation_queue_resolved_at": "Erledigt",
-  "moderation_queue_projection_pending": "Die Ergebnisse werden über die Warteschlange aktualisiert. Diese Bestätigung bleibt bis zum Seitenwechsel sichtbar.",
+  "moderation_queue_projection_pending": "Es kann einen Moment dauern, bis der Meldungsstatus aktualisiert wird. Diese Bestätigung bleibt bis zum Seitenwechsel sichtbar.",
   "moderation_queue_review": "Meldung prüfen",
   "moderation_queue_reason_invalid": "Gib einen Grund mit 1 bis 1.024 Zeichen ein.",
   "moderation_queue_reason_hint": "Für die Entfernung ist ein Grund mit höchstens 1.024 Zeichen erforderlich. Zum Abweisen ist kein Grund nötig.",

@@ -1897,7 +1897,7 @@
   "moderation_queue_submitted": "提交於",
   "moderation_queue_submission": "提交的檢舉",
   "moderation_queue_resolved_at": "處理於",
-  "moderation_queue_projection_pending": "檢舉結果將透過原生佇列更新。此確認會保留至你離開頁面。",
+  "moderation_queue_projection_pending": "檢舉處理狀態可能需要一些時間更新。此確認會保留至你離開頁面。",
   "moderation_queue_review": "審核檢舉",
   "moderation_queue_reason_invalid": "請輸入 1 至 1,024 個字元的原因。",
   "moderation_queue_reason_hint": "下架須提供原因，最多 1,024 個字元。駁回無需原因。",

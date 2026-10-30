@@ -1898,7 +1898,7 @@
   "moderation_queue_submitted": "Submitted",
   "moderation_queue_submission": "Submitted report",
   "moderation_queue_resolved_at": "Resolved",
-  "moderation_queue_projection_pending": "Report outcomes will update through the native queue. This confirmation stays here until you navigate.",
+  "moderation_queue_projection_pending": "Report status may take a moment to update. This confirmation stays here until you leave the page.",
   "moderation_queue_review": "Review report",
   "moderation_queue_reason_invalid": "Enter a reason of 1 to 1,024 characters.",
   "moderation_queue_reason_hint": "Required for takedown, up to 1,024 characters. Dismissal does not need a reason.",

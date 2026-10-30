@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader } from '@rezics/ui/shadcn/card';
@@ -55,6 +55,10 @@ export function ReportReviewCard({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   const [confirmed, setConfirmed] = useState<Confirmation | null>(null);
+  const confirmationRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (confirmed) confirmationRef.current?.focus();
+  }, [confirmed]);
   const status =
     report.outcome === 'actioned'
       ? m.moderation_actioned()
@@ -151,7 +155,12 @@ export function ReportReviewCard({
         </div>
         <div className="border-t pt-4">
           {report.outcome || confirmed ? (
-            <div role="status" className="space-y-2 text-sm">
+            <div
+              ref={confirmationRef}
+              role="status"
+              tabIndex={-1}
+              className="space-y-2 text-sm focus-visible:rounded-lg focus-visible:outline focus-visible:outline-ring"
+            >
               {confirmed && !report.outcome ? <p className="font-medium">{status}</p> : null}
               {report.resolvedAt ? (
                 <p className="text-muted-foreground">

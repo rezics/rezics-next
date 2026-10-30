@@ -1897,7 +1897,7 @@
   "moderation_queue_submitted": "送信日時",
   "moderation_queue_submission": "送信された通報",
   "moderation_queue_resolved_at": "処理日時",
-  "moderation_queue_projection_pending": "通報の結果はキューに反映されます。ページを移動するまで確認結果が表示されます。",
+  "moderation_queue_projection_pending": "通報の処理状況の反映には時間がかかる場合があります。確認結果はページを移動するまで表示されます。",
   "moderation_queue_review": "通報を確認",
   "moderation_queue_reason_invalid": "理由を1～1,024文字で入力してください。",
   "moderation_queue_reason_hint": "削除には1,024文字以内の理由が必要です。却下には理由は不要です。",
