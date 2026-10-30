@@ -1,4 +1,5 @@
 import type { Order, StripeTransaction, TransactionKind } from './model.ts';
+import { movementEconomics, MovementIntegrityError } from './settlement.ts';
 
 export type RoyaltyLine = {
   balanceTransactionId: string;
@@ -161,14 +162,9 @@ export function royaltyLines(
       disputeFeeMinor: minor(disputeFees),
       netReceiptsMinor: minor(gross - lineTax - fees),
     };
-    const signature = JSON.stringify([
-      transaction.sourceId,
-      transaction.exchangeRate,
-      line,
-      transaction.feeDetails.map((detail) => [detail.type, detail.amountMinor, detail.description]),
-    ]);
+    const signature = movementEconomics(transaction);
     const previous = lines.get(transaction.id);
-    if (previous && previous.signature !== signature) throw new Error('Conflicting balance transaction ID');
+    if (previous && previous.signature !== signature) throw new MovementIntegrityError();
     if (!previous) lines.set(transaction.id, { signature, line });
   }
   return Array.from(lines.values(), (entry) => entry.line);

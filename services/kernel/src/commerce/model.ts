@@ -126,6 +126,8 @@ export type SettlementState = {
   entitlement: Entitlement | null;
   /** Snapshot balance transaction IDs already recorded for the order. */
   transactionIds: readonly string[];
+  /** Exact named movement evidence on this buyer route, including collisions with another order. */
+  retainedTransactions: readonly (StripeTransaction & { orderId: string })[];
 };
 
 export type EntitlementAction =

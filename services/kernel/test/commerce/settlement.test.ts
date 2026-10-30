@@ -5,7 +5,7 @@ import type {
   SettlementState,
   StripeTransaction,
 } from '../../src/commerce/model.ts';
-import { CheckoutMismatchError, decideCheckout } from '../../src/commerce/settlement.ts';
+import { CheckoutMismatchError, decideCheckout, MovementIntegrityError } from '../../src/commerce/settlement.ts';
 
 const time = (second: number) => `2026-10-25T00:00:${String(second).padStart(2, '0')}.000Z`;
 
@@ -33,6 +33,7 @@ function initial(): SettlementState {
     },
     entitlement: null,
     transactionIds: [],
+    retainedTransactions: [],
   };
 }
 
@@ -82,6 +83,10 @@ function apply(state: SettlementState, decision: CheckoutDecision): SettlementSt
   next.order.settlement = decision.settlement;
   next.order.observedAt = decision.observedAt;
   next.transactionIds = [...state.transactionIds, ...decision.newTransactions.map(({ id }) => id)];
+  next.retainedTransactions = [
+    ...state.retainedTransactions,
+    ...decision.newTransactions.map((transaction) => ({ ...transaction, orderId: state.order.id })),
+  ];
   switch (decision.entitlement.kind) {
     case 'grant':
       next.entitlement = {
@@ -347,6 +352,7 @@ test('stale snapshots are ignored and applying the same snapshot twice is idempo
 test('new transactions alone change the decision, retain order and exclude recorded IDs', () => {
   const state = paid();
   state.transactionIds = ['txn_old'];
+  state.retainedTransactions = [{ ...transaction('txn_old'), orderId: state.order.id }];
   const current = snapshot({ transactions: [transaction('txn_two'), transaction('txn_old'), transaction('txn_one')] });
   const decision = decideCheckout(state, current);
   expect(decision).toMatchObject({
@@ -404,4 +410,64 @@ test('generated histories and every subsequence ending at the latest snapshot co
       expect(outcome(state)).toEqual(expected);
     }
   }
+});
+
+test('immutable movement replay normalizes fee order and ignores mutable descriptions', () => {
+  const movement = {
+    ...transaction('txn_replay'),
+    feeDetails: [
+      { type: 'stripe_fee', amountMinor: 40, description: 'old' },
+      { type: 'tax', amountMinor: 10, description: null },
+    ],
+  };
+  const state = apply(initial(), decideCheckout(initial(), snapshot({ transactions: [movement] })));
+  const replay = {
+    ...movement,
+    feeDetails: [...movement.feeDetails].reverse().map((fee) => ({ ...fee, description: 'new' })),
+  };
+  expect(decideCheckout(state, snapshot({ transactions: [replay], observedAt: '2026-11-25T00:00:00Z' }))).toEqual({
+    changed: false,
+  });
+  expect(state.retainedTransactions).toEqual([{ ...movement, orderId: state.order.id }]);
+});
+
+test('retained movement economics and association conflicts fail without changing settlement state', () => {
+  const movement = transaction('txn_integrity');
+  const state = apply(initial(), decideCheckout(initial(), snapshot({ transactions: [movement] })));
+  const before = structuredClone(state);
+  const conflicts: Partial<StripeTransaction>[] = [
+    { amountMinor: 1101, netMinor: 1051 },
+    { currency: 'eur' },
+    { sourceId: 'ch_other' },
+    { feeMinor: 51, netMinor: 1049 },
+    { netMinor: 1051 },
+    { exchangeRate: 1.1 },
+    { created: time(2) },
+    { kind: 'refund' },
+    { feeDetails: [{ type: 'withheld_tax', amountMinor: 50, description: null }] },
+  ];
+  for (const conflict of conflicts) {
+    // Old observation time cannot conceal a contradiction of retained financial evidence.
+    expect(() =>
+      decideCheckout(state, snapshot({ transactions: [{ ...movement, ...conflict }], observedAt: time(0) })),
+    ).toThrow(MovementIntegrityError);
+    expect(state).toEqual(before);
+  }
+  expect(() =>
+    decideCheckout(
+      { ...state, order: { ...state.order, id: 'another_order' } },
+      snapshot({ transactions: [movement] }),
+    ),
+  ).toThrow(MovementIntegrityError);
+});
+
+test('repeated keys in one snapshot have one effect and conflicting copies fail', () => {
+  const movement = transaction('txn_batch');
+  expect(decideCheckout(initial(), snapshot({ transactions: [movement, structuredClone(movement)] }))).toMatchObject({
+    changed: true,
+    newTransactions: [movement],
+  });
+  expect(() =>
+    decideCheckout(initial(), snapshot({ transactions: [movement, { ...movement, sourceId: 'ch_other' }] })),
+  ).toThrow(MovementIntegrityError);
 });

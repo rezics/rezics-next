@@ -1,7 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
 import pg, { type PoolClient } from 'pg';
 import * as store from '../../src/commerce/store.ts';
-import type { CheckoutDecision, Offer, StripeTransaction } from '../../src/commerce/model.ts';
+import { decideCheckout, MovementIntegrityError } from '../../src/commerce/settlement.ts';
+import type { CheckoutDecision, CheckoutSnapshot, Offer, StripeTransaction } from '../../src/commerce/model.ts';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -258,4 +259,76 @@ test('store statement counts do not grow with unrelated rows', async () => {
   for (let i = 0; i < buffers[1]!.length; i++) {
     expect(buffers[2]![i]!).toBeLessThanOrEqual(buffers[1]![i]! + 12);
   }
+});
+
+test('named movement reads retain economics and detect a collision with another order on the buyer route', async () => {
+  await fixture(async (c) => {
+    await store.recordCheckoutSession(
+      c,
+      route,
+      id(4),
+      { id: 'cs_test_integrity', url: 'https://example.test/checkout', expiresAt: time },
+      context,
+    );
+    await store.applyCheckoutDecision(
+      c,
+      route,
+      (await store.readSettlementState(c, route, id(4), [transaction.id]))!,
+      grant,
+      options,
+    );
+    const retained = (await store.readSettlementState(c, route, id(4), [transaction.id]))!;
+    expect(retained.retainedTransactions).toEqual([{ ...transaction, orderId: id(4) }]);
+    const snapshot: CheckoutSnapshot = {
+      sessionId: 'cs_test_integrity',
+      clientReferenceId: id(4),
+      metadataOrderId: id(4),
+      livemode: false,
+      status: 'complete',
+      paymentStatus: 'paid',
+      currency: 'usd',
+      amountSubtotalMinor: 1200,
+      amountTaxMinor: 0,
+      amountTotalMinor: 1200,
+      paymentIntentId: 'pi_paid',
+      paymentIntentStatus: 'succeeded',
+      chargeId: 'ch_paid',
+      chargeAmountMinor: 1200,
+      refunds: [],
+      disputes: [],
+      transactions: [transaction],
+      observedAt: time,
+    };
+    expect(decideCheckout(retained, snapshot)).toEqual({ changed: false });
+    for (const change of [{ amountMinor: 1201, netMinor: 1101 }, { currency: 'eur' }, { sourceId: 'ch_other' }]) {
+      expect(() => decideCheckout(retained, { ...snapshot, transactions: [{ ...transaction, ...change }] })).toThrow(
+        MovementIntegrityError,
+      );
+      expect(await store.readSettlementState(c, route, id(4), [transaction.id])).toEqual(retained);
+    }
+    await store.insertOrder(c, route, { id: id(7), buyerAccountId: id(2), offer }, context);
+    await store.recordCheckoutSession(
+      c,
+      route,
+      id(7),
+      { id: 'cs_test_other', url: 'https://example.test/checkout', expiresAt: time },
+      context,
+    );
+    const other = (await store.readSettlementState(c, route, id(7), [transaction.id]))!;
+    expect(other.transactionIds).toEqual([]);
+    expect(other.retainedTransactions).toEqual(retained.retainedTransactions);
+    expect(() =>
+      decideCheckout(other, {
+        ...snapshot,
+        sessionId: 'cs_test_other',
+        clientReferenceId: id(7),
+        metadataOrderId: id(7),
+      }),
+    ).toThrow(MovementIntegrityError);
+    await expect(store.readNamedOrderTransactions(c, route, id(7), [transaction.id])).rejects.toBeInstanceOf(
+      MovementIntegrityError,
+    );
+    expect(await store.readOrderTransactions(c, route, id(4))).toEqual([transaction]);
+    expect(await store.readOrderTransactions(c, route, id(7))).toEqual([]);
+  });
 });

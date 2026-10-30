@@ -5,6 +5,7 @@ import {
   type EntitlementAction,
   type Settlement,
   type SettlementState,
+  type StripeTransaction,
 } from './model.ts';
 
 /** A snapshot belongs to another session or contradicts an already paid order. */
@@ -13,6 +14,47 @@ export class CheckoutMismatchError extends Error {
     super(message);
     this.name = 'CheckoutMismatchError';
   }
+}
+
+/** Sanitized reconciliation failure; never include provider payloads or another order's identity. */
+export class MovementIntegrityError extends CheckoutMismatchError {
+  constructor() {
+    super('Conflicting immutable payment movement evidence');
+    this.name = 'MovementIntegrityError';
+  }
+}
+
+/** Descriptions are mutable; fee classification and amounts determine the captured royalty basis. */
+export function movementEconomics(transaction: StripeTransaction): string {
+  return JSON.stringify([
+    transaction.kind,
+    transaction.sourceId,
+    transaction.currency,
+    transaction.amountMinor,
+    transaction.feeMinor,
+    transaction.netMinor,
+    transaction.exchangeRate,
+    new Date(transaction.created).toISOString(),
+    transaction.feeDetails.map(({ type, amountMinor }) => JSON.stringify([type, amountMinor])).sort(),
+  ]);
+}
+
+/** Compare only incoming keys. Identical copies in a batch also represent one movement. */
+function newMovements(state: SettlementState, transactions: readonly StripeTransaction[]): StripeTransaction[] {
+  const retained = new Map(state.retainedTransactions.map((transaction) => [transaction.id, transaction]));
+  const incoming = new Map<string, StripeTransaction>();
+  for (const transaction of transactions) {
+    const previous = retained.get(transaction.id);
+    const copy = incoming.get(transaction.id);
+    const economics = movementEconomics(transaction);
+    if (
+      (previous && (previous.orderId !== state.order.id || movementEconomics(previous) !== economics)) ||
+      (copy && movementEconomics(copy) !== economics)
+    )
+      throw new MovementIntegrityError();
+    if (!previous && !copy) incoming.set(transaction.id, transaction);
+  }
+  return [...incoming.values()];
 }
 
 /** Reject before opening a command, including when a trusted port supplies a snapshot directly. */
@@ -68,6 +110,7 @@ export function decideCheckout(
   if (snapshot.sessionId !== state.order.checkoutSessionId) {
     throw new CheckoutMismatchError('Checkout Session differs from the recorded session');
   }
+  const newTransactions = newMovements(state, snapshot.transactions);
   if (
     precedence === 'legacy-time' &&
     state.order.observedAt !== null &&
@@ -97,8 +140,6 @@ export function decideCheckout(
     entitlement = { kind: 'reason', reason };
   }
 
-  const recordedIds = new Set(state.transactionIds);
-  const newTransactions = snapshot.transactions.filter((transaction) => !recordedIds.has(transaction.id));
   if (settlement === state.order.settlement && entitlement.kind === 'none' && newTransactions.length === 0) {
     return { changed: false };
   }

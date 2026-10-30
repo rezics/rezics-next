@@ -32,7 +32,7 @@ import transactionsInsert from './store-transactions-insert.sql';
 import transactionsCount from './store-transactions-count.sql';
 import transactionsProbe from './store-transactions-probe.sql';
 import transactionsNamed from './store-transactions-named.sql';
-import { assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
+import { assertTransactionBound, CheckoutMismatchError, MovementIntegrityError } from './settlement.ts';
 import { MAX_ORDER_TRANSACTIONS } from './model.ts';
 
 type Client = Pick<PoolClient, 'query'>;
@@ -268,7 +268,10 @@ export async function listEntitlements(
 }
 function asTransaction(row: Awaited<ReturnType<typeof transactionsRead.run>>[number]): StripeTransaction {
   return {
-    ...row,
+    id: row.id,
+    kind: row.kind,
+    sourceId: row.sourceId,
+    currency: row.currency,
     amountMinor: Number(row.amountMinor),
     feeMinor: Number(row.feeMinor),
     netMinor: Number(row.netMinor),
@@ -286,7 +289,8 @@ export async function readNamedOrderTransactions(
   ids: readonly string[],
 ): Promise<StripeTransaction[]> {
   assertTransactionBound(ids);
-  const rows = await transactionsNamed.run(queryClient(client), { route, order_id: orderId, ids: [...ids] });
+  const rows = await transactionsNamed.run(queryClient(client), { route, ids: [...ids] });
+  if (rows.some((row) => row.orderId !== orderId)) throw new MovementIntegrityError();
   return rows.map(asTransaction);
 }
 
@@ -308,11 +312,12 @@ export async function readSettlementState(
   const order = await readOrder(client, route, orderId);
   if (!order) return null;
   const entitlement = await readOrderEntitlement(client, route, orderId);
-  const transactions = await transactionsProbe.run(queryClient(client), { route, order_id: orderId, ids: [...ids] });
+  const transactions = await transactionsProbe.run(queryClient(client), { route, ids: [...ids] });
   return {
     order,
     entitlement,
-    transactionIds: transactions.map((t) => t.id),
+    transactionIds: transactions.filter((t) => t.orderId === orderId).map((t) => t.id),
+    retainedTransactions: transactions.map((row) => ({ ...asTransaction(row), orderId: row.orderId })),
   };
 }
 
@@ -371,7 +376,7 @@ export async function applyCheckoutDecision(
     ),
   );
   if (decision.newTransactions.length) {
-    await transactionsInsert.run(queryClient(client), {
+    const inserted = await transactionsInsert.run(queryClient(client), {
       route,
       order_id: order.id,
       transactions: decision.newTransactions.map((t) => ({
@@ -388,6 +393,7 @@ export async function applyCheckoutDecision(
       })),
       ...write(context),
     });
+    if (inserted.length !== decision.newTransactions.length) throw new MovementIntegrityError();
   }
   let entitlement = currentEntitlement ? asEntitlement(currentEntitlement) : null;
   if (action.kind === 'grant') {
