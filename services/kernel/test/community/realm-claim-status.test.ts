@@ -18,7 +18,12 @@ import {
 let system: NativeContentSystem;
 let at: string;
 const context = () => ({ idempotencyKey: crypto.randomUUID(), deadline: Date.now() + 30_000 });
-const deps = () => ({ pool: system.database.pool, access: system.access, clock: () => new Date(at) });
+const deps = () => ({
+  pool: system.database.pool,
+  access: system.access,
+  routeKey: system.routeKey,
+  clock: () => new Date(at),
+});
 const claimant = () => system.actors.author;
 const owner = () => system.actors.other;
 const base = (realmId: string) => `/v1/realms/${realmId}/claimRequests`;
@@ -185,6 +190,7 @@ test('obsolete pending and approved receipts preserve original facts across nati
   await orphan(realm.realmId);
   const first = await requestRealmClaim(deps(), claimant().actor, realm.realmId, context());
   const original = await status(`${base(realm.realmId)}/${first.value.requestId}`);
+  if (!original) throw new Error('The original native claim receipt is missing');
   // A later actual source episode can differ by less than JavaScript Date precision.
   await system.database.pool.query(
     `UPDATE community.realm SET ownership_state='owned', orphaned_at=NULL, claim_eligible_at=NULL
@@ -203,6 +209,7 @@ test('obsolete pending and approved receipts preserve original facts across nati
   const second = await requestRealmClaim(deps(), claimant().actor, realm.realmId, context());
   expect(second.value.requestId).not.toBe(first.value.requestId);
   const current = await status(`${base(realm.realmId)}/mine`);
+  if (!current) throw new Error('The current native claim receipt is missing');
   expect(current).toMatchObject({ requestId: second.value.requestId, currentEpisode: true });
   expect(current?.orphanedAt).toBe(original?.orphanedAt);
   await seedGovernanceAuthority(
