@@ -73,7 +73,8 @@ export function planReads(
         (read.kind !== 'links' &&
           read.kind !== 'relations' &&
           read.kind !== 'subjectThreads' &&
-          node.type !== 'TypeList')
+          read.kind !== 'search') ||
+        (read.kind === 'search' && node.type !== 'TypeList')
       )
         throw new PageContinuationError('node');
       if (!page.continuation.cursor || (read.kind === 'subjectThreads' && page.continuation.cursor.length > 4096))
