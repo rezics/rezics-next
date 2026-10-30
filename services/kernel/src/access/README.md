@@ -3015,9 +3015,8 @@ and cost debt, including measured growth evidence and full native acceptance, re
 
 Access captures current/new/former direct native grant occurrences before destructive mutation, with original creator
 and resource type retained separately. Initialization reads its committed-in-transaction rows after the sibling CTEs
-to capture the actual first holder. The Semantic `record_erasure_locator` sink is absent from this checkout, so exact
-Context-owner occurrences remain `pending`; `deliverContextRoleProvenance` does not call a guessed SQL interface or
-mark delivery complete. This is historical provenance, never current permission or certification of former-owner
+to capture the actual first holder. The native Context delivery port described above enrolls creator and owner occurrences
+through Semantic's actual Source sink; unavailable or unresolved occurrences remain `pending`. This is historical provenance, never current permission or certification of former-owner
 absence. Existing historical rows have no backfill, and Access's own provenance retention/cleanup remains its
 separate obligation.
 
