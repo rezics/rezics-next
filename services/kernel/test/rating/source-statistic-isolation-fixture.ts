@@ -25,8 +25,8 @@ const operationScopes = [
   'subject:create',
   'subject:read',
 ];
-// Native setup grants these two actions to its personas; exercised actors receive only operationScopes.
-const nativeFixtureScopes = [...operationScopes, 'space:create', 'realm:create'];
+// Native setup grants these actions to its personas; exercised actors receive only operationScopes.
+const nativeFixtureScopes = [...operationScopes, 'account:suspend', 'space:create', 'realm:create'];
 
 export type IsolationActor = ContentCredential;
 export type IsolationRequestOptions = {
