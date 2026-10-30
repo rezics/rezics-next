@@ -821,7 +821,9 @@ export function SubjectSourcesLink() {
   const href = subjectHref({ id: subject, label: value?.subjectLabel ?? '' }, locale).href;
   return (
     <p className="text-sm">
-      <Link href={`${href}/sources`}>{m.sources_open_detail({}, { locale: locale as never })}</Link>
+      <Link className="text-primary underline underline-offset-4" href={`${href}/sources`}>
+        {m.sources_open_detail({}, { locale: locale as never })}
+      </Link>
     </p>
   );
 }

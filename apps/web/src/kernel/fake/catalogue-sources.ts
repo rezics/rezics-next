@@ -28,7 +28,7 @@ export function catalogueSourcesFixture(scenario: SourcesScenario = 'selected-fa
       },
     ],
   };
-  const fact = (property: string, datatype: 'string' | 'time', content: unknown) => ({
+  const fact = (property: string, datatype: 'external-id' | 'time', content: unknown) => ({
     id: crypto.randomUUID(),
     rank: 'normal' as const,
     property: { id: property, data_type: datatype },
@@ -44,7 +44,7 @@ export function catalogueSourcesFixture(scenario: SourcesScenario = 'selected-fa
           'schema:datePublished': [
             fact('schema:datePublished', 'time', { time: '+1943-04-06T00:00:00Z', precision: 11 }),
           ],
-          'schema:isbn': [fact('schema:isbn', 'string', '9780156012195')],
+          'schema:isbn': [fact('schema:isbn', 'external-id', '9780156012195')],
         };
   // Reuse returned cover credit while keeping the detailed page free of media fetching.
   Object.assign(read.subject, {

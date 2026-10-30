@@ -48,6 +48,7 @@ function SourcesStory({
 }
 const meta = {
   title: 'Pages/Subject/Sources',
+  id: 'pages-subject-selected-sources',
   component: SourcesStory,
   parameters: { layout: 'fullscreen' },
   render: (args) => <SourcesStory key={`${getLocale()}:${args.scenario}:${args.loading}`} {...args} />,

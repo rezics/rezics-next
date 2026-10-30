@@ -125,9 +125,9 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
               {field.facts.map((fact, factIndex) => (
                 <li key={factIndex} className="min-w-0 space-y-2 break-words">
                   <div className="font-medium">
-                    {fact.snak.property.data_type === 'document' ? (
+                    {fact.display === 'document' ? (
                       m.sources_authored({}, o)
-                    ) : fact.snak.property.data_type === 'media' ? (
+                    ) : fact.display === 'media' ? (
                       m.sources_media({}, o)
                     ) : (
                       <CandidateValue snak={fact.snak} related={page.related} locale={locale} />

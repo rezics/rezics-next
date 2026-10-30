@@ -64,7 +64,7 @@ Library state, reader preferences, own reactions, own ratings and imported sugge
 preparation and hydration; their requests use the existing private BFF and `no-store`. Anonymous HTML and its
 dehydrated data carry no private values. Public failure never initiates a privileged fallback.
 
-#### Selected-fact sources
+### Selected-fact sources
 
 The overview's Sources entry also opens `/subjects/{id}/{slug}/sources`, a companion reader outside the
 Composition view template. It uses the ordinary anonymous `GET /v1/subjects/{id}` with the existing language chain,
@@ -90,7 +90,7 @@ The private review remains explicitly opened after session preparation and uses 
 no candidate or authenticated overlay enters the public sources response. Back to subject returns to that same
 public subject. Relation-edge slots continue through their existing target-aware readers.
 
-## Open owner joins
+### Open owner joins
 
 These joins complete the adopted journey; naming one here does not claim it is implemented:
 

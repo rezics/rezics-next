@@ -24,6 +24,7 @@ export type SourceDefinitions = {
 export type SourcePart = { label: ReturnType<typeof pageText>; snak: Snak };
 export type SourceFact = {
   snak: Snak;
+  display?: 'document' | 'media';
   qualifiers: SourcePart[];
   citations: SourcePart[][];
 };
@@ -113,7 +114,13 @@ export function explainSubjectSources(
       return [
         {
           // Locators and digests do not cross the presentation boundary.
-          snak: { property: statement.property, value: locator ? { type: 'somevalue' } : statement.value },
+          snak: {
+            property: statement.property,
+            value: locator && statement.value.type === 'value' ? { type: 'somevalue' } : statement.value,
+          },
+          ...(locator && statement.value.type === 'value'
+            ? { display: statement.property.data_type === 'document' ? ('document' as const) : ('media' as const) }
+            : {}),
           qualifiers: parts(statement.qualifiers.filter((snak) => snak.property.id !== 'rezics:spoilerLevel')),
           citations: statement.references
             .map(({ parts: citation }) => parts(citation))
