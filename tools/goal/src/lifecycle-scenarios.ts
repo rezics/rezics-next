@@ -150,13 +150,15 @@ export const MANAGER_INCIDENT_REGRESSIONS: readonly RegressionCase[] = [
     id: 'landing-conflict-bounded-recovery',
     incident: 'Landing train: a conflict loops hundreds of retries instead of bounded recovery',
     file: 'tools/goal/src/rebase-conflict.test.ts',
-    testName: 'a rebase conflict starts a resolution attempt, not a fix round or a consultation, and the second goes to the manager',
+    testName:
+      'a rebase conflict starts a resolution attempt, not a fix round or a consultation, and the second goes to the manager',
   },
   {
     id: 'landing-unfreeze-retains-file',
     incident: 'Landing train: unfreezing deletes an existing acceptance file',
     file: 'tools/goal/src/unfreeze-keeps-files.test.ts',
-    testName: 'when a reshaped brief stops freezing a file that exists on the task base, the file is restored to its base content, not deleted',
+    testName:
+      'when a reshaped brief stops freezing a file that exists on the task base, the file is restored to its base content, not deleted',
   },
   {
     id: 'landing-format-only-effective-change',
@@ -204,13 +206,15 @@ export const MANAGER_INCIDENT_REGRESSIONS: readonly RegressionCase[] = [
     id: 'notice-long-attempt-deduplication',
     incident: 'Notices: a long attempt notice repeats every minute',
     file: 'tools/goal/src/long-attempt-notice.test.ts',
-    testName: 'a long attempt is reported once when it crosses the threshold, then at most once an hour while its last command and commit count are unchanged',
+    testName:
+      'a long attempt is reported once when it crosses the threshold, then at most once an hour while its last command and commit count are unchanged',
   },
   {
     id: 'notice-stale-watchdog-alert',
     incident: 'Notices: stale watchdog results cause repeated alerts',
     file: 'tools/goal/src/watchdog.test.ts',
-    testName: 'a sweep judges the probe results the previous sweep started, and two failures in a row report the host once',
+    testName:
+      'a sweep judges the probe results the previous sweep started, and two failures in a row report the host once',
   },
 ];
 
@@ -330,8 +334,7 @@ export async function runNamedLifecycleRegressions(options: {
     const passCount = Number(/(?:^|\s)(\d+)\s+pass\b/i.exec(output)?.[1] ?? 0);
     const expectedCount = new Set(cases.map(({ testName }) => testName)).size;
     const capacityTimeout =
-      result.timedOut ||
-      (/test timed out after \d+ms/i.test(output) && /Waiting for host capacity/i.test(output));
+      result.timedOut || (/test timed out after \d+ms/i.test(output) && /Waiting for host capacity/i.test(output));
     const status: ExecutedRegression['status'] = capacityTimeout
       ? 'unverified'
       : result.status === 0
@@ -371,7 +374,7 @@ export async function runNamedLifecycleRegressions(options: {
         if (testCase.scenarioId) {
           let scenarioEvidence: unknown;
           if (testCase.scenarioId === 'small-isolated-promotion' && complete) {
-            if (!await Bun.file(promotionEvidencePath).exists())
+            if (!(await Bun.file(promotionEvidencePath).exists()))
               throw new Error('small promotion passed without machine-readable scenario evidence');
             try {
               scenarioEvidence = JSON.parse(readFileSync(promotionEvidencePath, 'utf8'));
@@ -427,7 +430,11 @@ export async function runNamedLifecycleRegressions(options: {
         passed.has('landing-orphaned-queue-entry'),
     ),
     evidence: {
-      regressions: ['landing-conflict-bounded-recovery', 'landing-integrated-batch-member', 'landing-orphaned-queue-entry'],
+      regressions: [
+        'landing-conflict-bounded-recovery',
+        'landing-integrated-batch-member',
+        'landing-orphaned-queue-entry',
+      ],
       boundary: 'real Git, MergeTrain and durable landing queue fixtures',
     },
   });
@@ -438,7 +445,9 @@ export async function runNamedLifecycleRegressions(options: {
   });
   options.onScenario({
     id: 'all-manager-incidents',
-    status: scenarioStatus(incidents.length === MANAGER_INCIDENT_REGRESSIONS.length && passed.size === incidents.length),
+    status: scenarioStatus(
+      incidents.length === MANAGER_INCIDENT_REGRESSIONS.length && passed.size === incidents.length,
+    ),
     evidence: { count: incidents.length, ids: incidents.map(({ id }) => id) },
   });
   options.onScenario({
@@ -448,7 +457,8 @@ export async function runNamedLifecycleRegressions(options: {
       incident: 'one gate host runs root and promoted acceptance groups sequentially',
       source: 'dev:scripts/gate.ts',
       supportedSeam: 'runRemoteGroups starts both runRemoteGroup calls with Promise.all',
-      existingFixture: 'tools/goal/src/root-gate.test.ts exercises local workspace concurrency, not remote group dispatch',
+      existingFixture:
+        'tools/goal/src/root-gate.test.ts exercises local workspace concurrency, not remote group dispatch',
       limitation: 'No remote-host fixture exercises group start timing; remote hosts remain untouched.',
     },
   });
@@ -543,7 +553,10 @@ export async function runSmallPromotionScenario(): Promise<SmallPromotionEvidenc
       publishedMain,
       mainBaseIsAncestor,
       mainAncestryVerifiedBeforePublication: ancestryChecks.length > 0 && ancestryChecks.every(Boolean),
-      checkedCommitIsPublished: checkedCommits.length > 0 && checkedCommits.every((commit) => commit === candidate) && publishedMain === candidate,
+      checkedCommitIsPublished:
+        checkedCommits.length > 0 &&
+        checkedCommits.every((commit) => commit === candidate) &&
+        publishedMain === candidate,
       infrastructureFailureRetries,
       infrastructureFailureClassified,
       elapsedMs,
@@ -552,8 +565,10 @@ export async function runSmallPromotionScenario(): Promise<SmallPromotionEvidenc
     if (!evidence.mainAncestryVerifiedBeforePublication)
       throw new Error('the promotion did not gate a candidate descended from main before publication');
     if (!evidence.checkedCommitIsPublished) throw new Error('promotion did not publish the exact checked candidate');
-    if (infrastructureFailureRetries !== 1) throw new Error('promotion did not classify and retry the injected infrastructure failure');
-    if (!infrastructureFailureClassified) throw new Error('promotion did not persist the infrastructure-only failure classification and passing retry');
+    if (infrastructureFailureRetries !== 1)
+      throw new Error('promotion did not classify and retry the injected infrastructure failure');
+    if (!infrastructureFailureClassified)
+      throw new Error('promotion did not persist the infrastructure-only failure classification and passing retry');
     if (elapsedMs >= 60_000) throw new Error(`small promotion exceeded its bounded scenario time: ${elapsedMs}ms`);
     return evidence;
   } finally {

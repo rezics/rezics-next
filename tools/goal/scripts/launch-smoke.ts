@@ -194,12 +194,7 @@ async function stopWorkerCheck(resultPath: string): Promise<void> {
   try {
     const record = JSON.parse(readFileSync(resultPath, 'utf8')) as Record<string, unknown>;
     const pid = Number(record.runnerPid);
-    if (
-      record.status !== 'running' ||
-      record.runnerHost !== hostname() ||
-      !Number.isSafeInteger(pid) ||
-      pid <= 0
-    )
+    if (record.status !== 'running' || record.runnerHost !== hostname() || !Number.isSafeInteger(pid) || pid <= 0)
       return;
     try {
       process.kill(-pid, 'SIGTERM');
@@ -280,10 +275,13 @@ async function exerciseWorkerCheck(
       throw new Error(`dev worker-check wait failed: ${wait.stderr.trim() || wait.error || wait.status}`);
     const terminal = await waitForCheck(resultPath, deadline);
     if (terminal.infrastructureFailureFinal === true || terminal.infrastructureFailure)
-      throw new Error(`capacity timeout: dev worker-check infrastructure failure: ${String(terminal.infrastructureFailure ?? 'final infrastructure failure')}`);
+      throw new Error(
+        `capacity timeout: dev worker-check infrastructure failure: ${String(terminal.infrastructureFailure ?? 'final infrastructure failure')}`,
+      );
     if (terminal.id !== id || terminal.status !== 'finished' || terminal.exitCode !== 0)
       throw new Error('dev worker-check did not persist a passing terminal result record');
-    if (terminal.log !== first.log) throw new Error('dev worker-check changed its recorded log between start and finish');
+    if (terminal.log !== first.log)
+      throw new Error('dev worker-check changed its recorded log between start and finish');
     if (!existsSync(join(tree, String(terminal.log)))) throw new Error('dev worker-check result log is missing');
     return {
       id,
@@ -315,13 +313,24 @@ function assertCodexArgv(
   const tier = `service_tier=${JSON.stringify(options.serviceTier)}`;
   if (
     start[0] !== 'exec' ||
-    !has(start, '--json', '-m', options.model, '-c', `model_reasoning_effort=${options.effort}`, '-C', options.worktree) ||
+    !has(
+      start,
+      '--json',
+      '-m',
+      options.model,
+      '-c',
+      `model_reasoning_effort=${options.effort}`,
+      '-C',
+      options.worktree,
+    ) ||
     !has(start, '-c', tier) ||
     schemaIndex < 0 ||
     start[schemaIndex + 1] !== options.schema ||
     start.includes('resume')
   )
-    throw new Error('actual Codex start argv did not preserve the selected model, effort, service tier, schema, and worktree');
+    throw new Error(
+      'actual Codex start argv did not preserve the selected model, effort, service tier, schema, and worktree',
+    );
   const resumeIndex = resume.indexOf('resume');
   const directoryIndex = resume.indexOf('-C');
   if (
@@ -335,7 +344,9 @@ function assertCodexArgv(
     !has(resume, '--json', '-m', options.model, '-c', `model_reasoning_effort=${options.effort}`, '-c', tier) ||
     !existsSync(options.schema)
   )
-    throw new Error('actual Codex resume argv did not preserve exec option order, session, selected settings, and schema');
+    throw new Error(
+      'actual Codex resume argv did not preserve exec option order, session, selected settings, and schema',
+    );
 }
 
 function fakeStep(
@@ -558,11 +569,14 @@ function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number
     child.stderr.on('data', (chunk: Buffer) => forward(chunk, 'stderr'));
     let timedOut = false;
     let forceKill: ReturnType<typeof setTimeout> | undefined;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      signalChildGroup(child, 'SIGTERM');
-      forceKill = setTimeout(() => signalChildGroup(child, 'SIGKILL'), 3000);
-    }, Math.max(1, timeoutMs));
+    const timer = setTimeout(
+      () => {
+        timedOut = true;
+        signalChildGroup(child, 'SIGTERM');
+        forceKill = setTimeout(() => signalChildGroup(child, 'SIGKILL'), 3000);
+      },
+      Math.max(1, timeoutMs),
+    );
     child.once('error', (error) => {
       clearTimeout(timer);
       if (forceKill) clearTimeout(forceKill);
@@ -579,7 +593,9 @@ function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number
       }
       if (code !== 0) {
         const output = `${stdout}\n${stderr}`;
-        const failedStep = output.match(/(?:candidate|setup|start|wake|success|lifecycle regressions): failed:[^\r\n]*/)?.[0];
+        const failedStep = output.match(
+          /(?:candidate|setup|start|wake|success|lifecycle regressions): failed:[^\r\n]*/,
+        )?.[0];
         reject(new Error(failedStep ?? `inner smoke exited ${code ?? signal ?? 'unknown'}`));
         return;
       }
@@ -685,7 +701,8 @@ async function runRealSmoke(root: string, report: Reporter, requestedReportPath?
       report,
     );
     const completed = readReport(evidencePath);
-    if (completed.status !== 'passed') throw new Error('inner lifecycle suite exited without complete passing evidence');
+    if (completed.status !== 'passed')
+      throw new Error('inner lifecycle suite exited without complete passing evidence');
     report(`evidence: ${evidencePath}`);
   } catch (error) {
     const detail = message(error);
@@ -821,7 +838,14 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   );
   const evidence: SmokeReport = existsSync(reportPath)
     ? readReport(reportPath)
-    : { version: 1, status: 'running', startedAt: new Date().toISOString(), scenarios: [], incidents: [], suiteRegressions: [] };
+    : {
+        version: 1,
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        scenarios: [],
+        incidents: [],
+        suiteRegressions: [],
+      };
   const persistEvidence = () => persistReport(tree, reportPath, evidence);
   const importModule = async <T>(path: string): Promise<T> => (await import(pathToFileURL(path).href)) as T;
   const [
@@ -877,10 +901,9 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   };
   const routing = readRouting(settings.routingFile);
   const selected = routing.classes.specification.first;
-  if (selected.cli !== 'codex') throw new Error('the configured specification route must select Codex for real provider smoke');
-  const codexPools = settings.pools.filter(
-    (pool) => pool.cli === 'codex' && pool.classes.includes(selected.poolClass),
-  );
+  if (selected.cli !== 'codex')
+    throw new Error('the configured specification route must select Codex for real provider smoke');
+  const codexPools = settings.pools.filter((pool) => pool.cli === 'codex' && pool.classes.includes(selected.poolClass));
   if (!codexPools.length) throw new Error(`no configured Codex pool admits route class ${selected.poolClass}`);
   const model = selected.model;
   const effort = selected.effort;
@@ -894,7 +917,8 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   const codexInvocationBudget = join(codexLogDirectory, 'invocation-budget.jsonl');
   for (const [index, pool] of codexPools.entries()) {
     const executable = Bun.which(pool.command);
-    if (!executable) throw new Error(`configured Codex executable is unavailable for pool ${pool.name}: ${pool.command}`);
+    if (!executable)
+      throw new Error(`configured Codex executable is unavailable for pool ${pool.name}: ${pool.command}`);
     const logPath = join(codexLogDirectory, `pool-${index}.jsonl`);
     pool.command = recordCodexArgv(
       join(codexLogDirectory, `wrapper-${index}`),
@@ -918,7 +942,9 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   );
   if (systemdErrors.length) throw new Error(systemdErrors[0]!);
   if (systemdProbe.error || systemdProbe.status !== 0)
-    throw new Error(`real systemd worker scope failed: ${systemdProbe.stderr?.toString().trim() || systemdProbe.error?.message || systemdProbe.status}`);
+    throw new Error(
+      `real systemd worker scope failed: ${systemdProbe.stderr?.toString().trim() || systemdProbe.error?.message || systemdProbe.status}`,
+    );
   const systemdCalls = parseJsonLines<string[]>(systemdRecorder.logPath);
   if (
     systemdCalls.length !== 1 ||
@@ -1116,10 +1142,7 @@ Do not poll or start another check. Return exactly the required result fields. F
         if (taskId) {
           const task = store.task(taskId);
           const attempt = store.attempt({ taskId, attempt: task.currentAttempt });
-          const details = [
-            readLogTail(attempt.logPath),
-            readLogTail(`${attempt.logPath}.err`),
-          ]
+          const details = [readLogTail(attempt.logPath), readLogTail(`${attempt.logPath}.err`)]
             .filter(Boolean)
             .join('\n');
           if (details) {
@@ -1231,7 +1254,9 @@ Do not poll or start another check. Return exactly the required result fields. F
       ({ id }) => !suite.some((record) => record.id === id && record.status === 'passed'),
     );
     if (missingSuiteTests.length)
-      throw new Error(`lifecycle suite regressions are incomplete: ${missingSuiteTests.map(({ id }) => id).join(', ')}`);
+      throw new Error(
+        `lifecycle suite regressions are incomplete: ${missingSuiteTests.map(({ id }) => id).join(', ')}`,
+      );
     lifecycle.assertLifecycleComplete({ scenarios: evidence.scenarios, incidents: evidence.incidents });
     evidence.status = 'passed';
     evidence.finishedAt = new Date().toISOString();

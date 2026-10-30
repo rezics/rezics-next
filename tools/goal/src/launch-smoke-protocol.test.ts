@@ -70,7 +70,5 @@ test('provider result extraction reads the strict JSON from a Codex agent_messag
     { type: 'turn.completed' },
   ].map((event) => JSON.stringify(event));
 
-  expect(parseWorkerResult(parseProviderObject(events.join('\n'), 'waiting'), 'waiting', checkId)).toEqual(
-    waiting,
-  );
+  expect(parseWorkerResult(parseProviderObject(events.join('\n'), 'waiting'), 'waiting', checkId)).toEqual(waiting);
 });

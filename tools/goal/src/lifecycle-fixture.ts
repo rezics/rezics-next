@@ -127,11 +127,14 @@ export async function runBoundedProcess(
     };
     child.stdout.on('data', (chunk: Buffer) => (stdout = append(stdout, chunk)));
     child.stderr.on('data', (chunk: Buffer) => (stderr = append(stderr, chunk)));
-    timeout = setTimeout(() => {
-      timedOut = true;
-      signalOwnedProcessGroup(child, 'SIGTERM');
-      forceKill = setTimeout(() => signalOwnedProcessGroup(child, 'SIGKILL'), 1000);
-    }, Math.max(1, options.timeoutMs));
+    timeout = setTimeout(
+      () => {
+        timedOut = true;
+        signalOwnedProcessGroup(child, 'SIGTERM');
+        forceKill = setTimeout(() => signalOwnedProcessGroup(child, 'SIGKILL'), 1000);
+      },
+      Math.max(1, options.timeoutMs),
+    );
     child.once('error', (error) => {
       spawnError = error.message;
     });
