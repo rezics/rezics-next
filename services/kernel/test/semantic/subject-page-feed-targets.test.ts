@@ -8,7 +8,6 @@ import { setupPresentation } from '../../src/presentation/setup.ts';
 import type { Access } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent, unverifyAccountAgent, verifyAccountAgent } from '../../src/semantic/account-agents.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import {
   readPublicSubjectPageCandidates,
@@ -159,7 +158,7 @@ test('actual views and feed entries are withheld until native presentation is re
   expect(((await native.json()) as { views: string[] }).views).toEqual(bookViews);
 }, 120_000);
 
-test('native publication feed emits reciprocal public Account destinations and omits handleless identities without inventing navigation', async () => {
+test('Native publication feed includes only currently listable canonical Subject or Account destinations with genuine eligible views and no invented handleless navigation', async () => {
   const handle = uniqueHandle();
   const named = await linked(handle);
   const handleless = await linked(null);

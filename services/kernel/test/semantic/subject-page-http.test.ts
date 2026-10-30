@@ -5,6 +5,7 @@ import { setupPresentation } from '../../src/presentation/setup.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import type { PublicSubjectPageCandidate } from '../../src/semantic/subject-page-navigation.ts';
 import { pageSubjectPageCandidates } from '../../src/semantic/subject-page-candidates.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
@@ -37,6 +38,8 @@ type Entry = {
   labels: { language: string; value: string }[];
   lastModified?: string;
   originalLanguage?: string;
+  target?: PublicSubjectPageCandidate['target'];
+  views?: string[];
 };
 type Page = { subjectPages: Entry[]; next: string | null };
 const subjects: Record<string, any> = {};

@@ -49,7 +49,8 @@ export function createSubjectPageFeed(config: {
           clock: config.clock,
           ...(sourceCursor ? { cursor: sourceCursor } : {}),
         });
-        const subjectPages: (PublicationEntry & Pick<PublicSubjectPageCandidate, 'target' | 'views'>)[] = [];
+        const subjectPages: (PublicationEntry & { target: PublicSubjectPageCandidate['target']; views: string[] })[] =
+          [];
         // Every raw key, including rejected/duplicate work, belongs to the original candidate window.
         for (let offset = 0; offset < window.candidates.length; offset += 100) {
           const batch = window.candidates.slice(offset, offset + 100);
@@ -69,7 +70,7 @@ export function createSubjectPageFeed(config: {
           const current = await navigation.finish();
           for (const entry of entries) {
             const candidate = current.get(entry.id);
-            if (candidate) subjectPages.push({ ...entry, target: candidate.target, views: candidate.views });
+            if (candidate) subjectPages.push({ ...entry, target: candidate.target, views: [...candidate.views] });
           }
         }
         const next =
