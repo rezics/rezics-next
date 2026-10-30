@@ -94,6 +94,7 @@ function ContextReviewRoute() {
     <article className="mx-auto w-full max-w-4xl space-y-8">
       <SubjectFrame
         frame={frame}
+        context={context}
         locale={getLocale()}
         link={SubjectLink}
         unlabelled={m.subject_value_unlabelled()}

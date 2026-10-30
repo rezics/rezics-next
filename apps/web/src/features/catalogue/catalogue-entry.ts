@@ -30,7 +30,11 @@ export const catalogueEntries = {
     label: m.catalogue_terms_title({}, options(address.locale)),
     href: `${subject(address)}/terms`,
   }),
-  recipe: ({ id, label, locale }: Locale & { id?: string; label?: string }): CatalogueEntry => ({
+  recipe: ({
+    id,
+    label,
+    locale,
+  }: Locale & { id?: string | undefined; label?: string | undefined }): CatalogueEntry => ({
     group: id ? 'edit' : 'create',
     label: id ? m.recipe_edit({}, options(locale)) : m.recipe_title({}, options(locale)),
     href: id ? `${subject({ id, label: label ?? '', locale })}/recipe` : `/${locale}/catalogue/recipe`,

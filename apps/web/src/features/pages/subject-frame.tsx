@@ -196,6 +196,7 @@ export function SubjectFrame({
   view,
   base: tabBase,
   realm,
+  context,
   navigation,
 }: {
   frame: SubjectFrameData;
@@ -214,6 +215,8 @@ export function SubjectFrame({
   /** The page-view address when this subject is embedded in a routed Zone. */
   base?: string;
   realm?: string | undefined;
+  /** A companion review route may select a Context independently of its public overview read. */
+  context?: string | undefined;
 }) {
   const title = frame.title.text || unlabelled;
   const base = subjectHref({ id: frame.id, label: title }, locale).href;
@@ -256,7 +259,7 @@ export function SubjectFrame({
           )}
         </div>
         <div data-slot="actions">
-          <EditorialEntry id={frame.id} label={title} locale={locale} context={frame.context} realm={realm}>
+          <EditorialEntry id={frame.id} label={title} locale={locale} context={context ?? frame.context} realm={realm}>
           {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
           <CreateSubjectEntry locale={locale} />
           <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
