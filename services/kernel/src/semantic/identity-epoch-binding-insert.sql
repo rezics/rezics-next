@@ -1,7 +1,8 @@
 WITH parameters AS (SELECT $3::text p3), claimed AS (
  INSERT INTO semantic.identity_epoch_receipt_binding(partition_no,receipt_key,intent_digest,generation,state,account_id)
  VALUES($1,$2,(SELECT p3 FROM parameters),1,'pending',$12)
- ON CONFLICT(partition_no,receipt_key) DO UPDATE SET generation=semantic.identity_epoch_receipt_binding.generation+1,state='pending'
+ ON CONFLICT(partition_no,receipt_key) DO UPDATE SET generation=semantic.identity_epoch_receipt_binding.generation+1,state='pending',
+ accepted_job=NULL,accepted_epoch=NULL
  WHERE semantic.identity_epoch_receipt_binding.state='not-applied'
  AND semantic.identity_epoch_receipt_binding.intent_digest=excluded.intent_digest
  RETURNING partition_no,receipt_key,generation

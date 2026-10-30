@@ -141,7 +141,9 @@ receiving support remains retryably unavailable. Ordinary post-admission arm doe
 
 Cancellation closes every planned native attempt, including unknown deliveries, before reconciling every
 exported Source ticket. Only complete cancellation custody or real publication releases the same reservation
-and bridge. Existing WorkModule wakeups advance each retained unit and reopen capacity without a new queue.
+and bridge. Replaying the original receipt reauthorizes and collects a fresh cap cut; only complete native
+closure of the cancelled attempt retires its history pointer and permits a new generation with the same intent
+and receipt. Missing closure remains unavailable. Existing WorkModule wakeups advance each retained unit and reopen capacity without a new queue.
 Native framework, erasure roles, SQL/index/FK work and physical copies remain charged separately from public
 probe work; the runtime feasibility evidence required by the protocol is not supplied by body counters alone.
 

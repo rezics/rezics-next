@@ -1,4 +1,5 @@
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
+import { withReadTransaction } from './read.ts';
 import { SEMANTIC_ERASURE_STORES } from './account-erasure-stores.ts';
 
 /** Explicit account input of a native platform producer, in the producer's own home/transaction.
@@ -43,12 +44,12 @@ export async function semanticCopyRoles(
 export async function identityErasureRoles(pool: import('pg').Pool, jobId: string): Promise<SemanticCopyRole[]> {
   const { routeOf, partitionOf } = await import('../route/route.ts');
   const partition = partitionOf(routeOf(jobId)!);
-  const result = await pool.query<SemanticCopyRole>(
+  const result = await withReadTransaction(pool, tx => tx.query<SemanticCopyRole>(
     `SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j
      JOIN semantic.erasure_locator l ON l.partition_no=j.partition_no AND l.store='identity_epoch_job' AND l.record_key=j.erasure_key
      WHERE j.partition_no=$1 AND j.job_id=$2 ORDER BY l.account_id,l.role LIMIT 9`,
     [partition, jobId],
-  );
+  ));
   if (result.rows.length > 8) throw new TypeError('Identity producer role bound exceeded');
   return result.rows;
 }

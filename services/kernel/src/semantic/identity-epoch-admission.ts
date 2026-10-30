@@ -206,9 +206,13 @@ export async function bindIdentityEpochReceipt(
   input: IdentityAdmissionInput,
 ): Promise<IdentityReceiptBinding> {
   const existing = await lookupIdentityBinding(pool, authority, input);
+  let cancelled = false;
   if (existing) {
     const data = identityBindingData(existing);
-    if (data.state === 'accepted') return existing;
+    if (data.state === 'accepted') {
+      cancelled = (await identityBindingJob(pool, data))?.state === 'cancelled';
+      if (!cancelled) return existing;
+    }
     if (data.state === 'pending' && (await identityBindingJob(pool, data))) {
       await acceptIdentityBinding(pool, authority, input, existing);
       return (await lookupIdentityBinding(pool, authority, input))!;
@@ -246,9 +250,9 @@ export async function bindIdentityEpochReceipt(
   const scope = createHash('sha256')
     .update(json([input.intent, fingerprint(second)]))
     .digest('hex');
-  if (existing && identityBindingData(existing).state === 'pending') {
+  if (existing && (identityBindingData(existing).state === 'pending' || cancelled)) {
     const prior = identityBindingData(existing);
-    if (prior.scope === scope && prior.job.epoch === BigInt(state.allocated_epoch) + 1n) return existing;
+    if (!cancelled && prior.scope === scope && prior.job.epoch === BigInt(state.allocated_epoch) + 1n) return existing;
     if (!(await closeUnreservedBinding(pool, authority, input, existing))) {
       await acceptIdentityBinding(pool, authority, input, existing);
       return (await lookupIdentityBinding(pool, authority, input))!;
@@ -273,7 +277,14 @@ async function closeUnreservedBinding(
   const first = await runCommand(pool, { partition: data.home }, async (tx) => {
     await tx.query(selectControl.sql, [data.home]);
     const existingJob = (await tx.query(job.sql, [data.home, data.job.jobId, data.job.epoch.toString()])).rows[0];
-    if (existingJob) return noEffect(false);
+    if (existingJob) {
+      if (existingJob.state !== 'cancelled') return noEffect(false);
+      const unresolved = (await tx.query(`SELECT resource_home FROM semantic.identity_epoch_admission_plan
+        WHERE partition_no=$1 AND job_id=$2 AND (closed_transaction_id IS NULL OR NOT released) LIMIT 1`,
+        [data.home,data.job.jobId])).rows[0];
+      if (unresolved) throw unavailable();
+      return noEffect(true);
+    }
     const duplicate = (await tx.query(receipt.sql, [data.home, data.job.jobId, data.job.epoch.toString(), 'closed']))
       .rows[0];
     if (duplicate) return noEffect(true);
@@ -307,14 +318,14 @@ async function closeUnreservedBinding(
   }
   await runCommand(pool, { ...authority, partition: data.partition }, async (tx) => {
     const current = await lookupLocalBinding(tx, input, binding);
-    if (current.state !== 'pending') return noEffect(null);
+    if (current.state !== 'pending' && current.state !== 'accepted') return noEffect(null);
     for (const r of receipts)
       await tx.query(
         `INSERT INTO semantic.identity_epoch_receipt_closure VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
         [data.partition, data.key, data.generation, r.partition, r.transactionId, r.epoch, r.position.toString()],
       );
     await tx.query(
-      `UPDATE semantic.identity_epoch_receipt_binding SET state='not-applied' WHERE partition_no=$1 AND receipt_key=$2 AND generation=$3 AND state='pending'`,
+      `UPDATE semantic.identity_epoch_receipt_binding SET state='not-applied' WHERE partition_no=$1 AND receipt_key=$2 AND generation=$3 AND state IN ('pending','accepted')`,
       [data.partition, data.key, data.generation],
     );
     return {
@@ -819,7 +830,13 @@ async function stepIdentityEpochAdmissionWithinDeadline(pool: Pool, ref: Identit
       // A real wake commits with source-validation custody; no fanout is hidden in this step.
       return { job: ref, state: saved.state, work: measured };
     }
-    await stepIdentityEpochPrearm(pool, ref, measured);
+    try {
+      await stepIdentityEpochPrearm(pool, ref, measured);
+    } catch (error) {
+      if (!(error instanceof IdentityEpochStoreError) || error.code !== 'identity_effect_stale') throw error;
+      await cancelIdentityEpochAdmission(pool, ref);
+      return { job: ref, state: 'cancelling', work: measured };
+    }
     return { job: ref, state: saved.state, work: measured };
   }
   const next = planned.find(p => closing ? !p.closed_transaction_id : preparing ? !p.prepared_transaction_id : !p.acquired_transaction_id);

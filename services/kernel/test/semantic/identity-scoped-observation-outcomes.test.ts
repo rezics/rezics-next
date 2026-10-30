@@ -50,8 +50,8 @@ async function observe(f: EpochFixture, original: string): Promise<IdentityScope
   }
   throw new Error('Finite native registration did not finish');
 }
-async function prepare(f: EpochFixture, original: string, terminal: string) {
-  const actor = await f.actor(), key = randomUUID();
+async function prepare(f: EpochFixture, original: string, terminal: string, key = randomUUID()) {
+  const actor = await f.actor();
   return identityEpochStore.prepareAdmission(f.pool, {
     basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
     authorization: await f.authorization('subject:merge'), deadline: Date.now() + 5000,
@@ -121,7 +121,8 @@ test('Claim-free native preparation cancels every planned attempt before releasi
   try {
     const original = (await f.create('Cancelled original', 0x8810)).id;
     const terminal = (await f.create('Cancelled terminal', 0x8820)).id;
-    const job = await prepare(f, original, terminal);
+    const key = randomUUID();
+    const job = await prepare(f, original, terminal, key);
     expect(await readIdentityPrearmTicket(f.pool, { job, pageId: randomUUID(), ordinal: 0,
       directory: { partition: partitionOf(routeOf(job.jobId)!), transactionId: randomUUID(), epoch: 1, position: 1n } })).toBeNull();
     await cancelIdentityEpochAdmission(f.pool, job);
@@ -138,5 +139,18 @@ test('Claim-free native preparation cancels every planned attempt before releasi
       WHERE p.partition_no=$1 AND p.job_id=$2`, [partitionOf(routeOf(job.jobId)!),job.jobId])).rows;
     expect(planned.length).toBeGreaterThan(0);
     for (const home of planned) { expect(home.state).toBe('closed'); expect(home.released).toBe(true); }
+    const resumed = await prepare(f, original, terminal, key);
+    expect(resumed.jobId).not.toBe(job.jobId);
+    expect(resumed.epoch).toBeGreaterThan(job.epoch);
+    expect((await identityEpochStore.readJob(f.pool, resumed))?.state).toBe('preparing');
+    for (let step = 0; step < 100; step++) {
+      if ((await stepIdentityEpochAdmission(f.pool, resumed)).state === 'pending') break;
+    }
+    expect((await identityEpochStore.readJob(f.pool, resumed))?.state).toBe('pending');
+    const receipts = (await f.pool.query(`SELECT receipt_key,receipt,intent FROM semantic.identity_epoch_job
+      WHERE partition_no=$1 AND job_id=ANY($2::uuid[]) ORDER BY epoch`,
+      [partitionOf(routeOf(job.jobId)!),[job.jobId,resumed.jobId]])).rows;
+    expect(receipts).toHaveLength(2);
+    expect(receipts[0]).toEqual(receipts[1]);
   } finally { await f.close(); }
 }, 120000);
