@@ -33,9 +33,7 @@ test('member DELETE sends the loaded parent revision in one bodyless request wit
   expect(requests).toHaveLength(1);
   const request = requests[0]!;
   expect(request.method).toBe('DELETE');
-  expect(request.url).toBe(
-    `https://kernel.example.test/v1/collections/${collectionId}/members/${memberId}?revision=7`,
-  );
+  expect(request.url).toBe(`https://kernel.example.test/v1/collections/${collectionId}/members/${memberId}?revision=7`);
   expect(request.body).toBeNull();
   expect(request.headers.get('authorization')).toBe('Bearer access-token');
   expect(request.headers.get('idempotency-key')).toBe(idempotencyKey);
