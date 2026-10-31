@@ -1,11 +1,11 @@
 import provenance from './scope-leaf-selection-provenance.sql';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
-import { CommandUnavailableError, type CommandTransaction } from '../command/command.ts';
+import type { CommandTransaction } from '../command/command.ts';
 import { tupleRoute, type ImportedFieldGroup } from '../content/imported-contract.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from '../content/source-fences.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { readPartition } from '../partition/partition.ts';
+import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf } from '../route/route.ts';
 
 const FIELD_GROUPS = new Set<ImportedFieldGroup>(['facts', 'summary', 'cover']);
@@ -117,10 +117,7 @@ export async function readAnchoredFences(
   return withConnection(pool, async (connection) => {
     await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
-      const state = await readPartition(connection, partition);
-      if (!state) throw new CommandUnavailableError('deadline', partition);
-      if (state.writeState === 'moved') throw new CommandUnavailableError('moved', partition, state.movedTo);
-      const fences = await readFences(connection, tuples);
+      const fences = await readFences(await partitionReadClient(connection, partition), tuples);
       await connection.query('COMMIT');
       return fences;
     } catch (error) {

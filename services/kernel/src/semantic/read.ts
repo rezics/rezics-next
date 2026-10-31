@@ -1,33 +1,64 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { deadlineFor } from '../request/deadline.ts';
 
-/** Keep a semantic read's snapshot and statements within the shared request budget. */
-export function withReadTransaction<T>(pool: Pool, read: (client: PoolClient) => Promise<T>): Promise<T> {
-  const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    let result: T;
+const snapshots = new AsyncLocalStorage<ReadonlyMap<Pool, { client: PoolClient; deadline: number; live: boolean }>>();
+
+/** Only this executor's live checked-out RR clients qualify; a pool.query facade never does. */
+export function currentReadSnapshot(pool: Pool): PoolClient | undefined {
+  const snapshot = snapshots.getStore()?.get(pool);
+  return snapshot?.live ? snapshot.client : undefined;
+}
+
+/** One physical-pool snapshot across independently bound logical partition reads. */
+export function withReadTransaction<T>(
+  pool: Pool,
+  read: (client: PoolClient) => Promise<T>,
+  requestDeadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS),
+): Promise<T> {
+  const inherited = snapshots.getStore()?.get(pool);
+  const owned = inherited?.live ? inherited : undefined;
+  const deadline = Math.min(requestDeadline, owned?.deadline ?? Infinity);
+  requireAccessDeadline(deadline);
+  if (owned) {
+    return (async () => {
+      const result = await read(owned.client);
+      requireAccessDeadline(deadline);
+      return result;
+    })();
+  }
+  return withConnection(pool, async (connection) => {
+    // Keep the native client lifetime/discard owner; all queries use its real connection
+    // with the original request's remaining budget, including native Access queries.
+    const client = deadlineClient(connection, deadline) as PoolClient;
+    const snapshot = { client, deadline, live: true };
     try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       requireAccessDeadline(deadline);
       const remaining = Math.max(1, Math.floor(deadline - Date.now()));
       await client.query(`SET LOCAL statement_timeout = '${remaining}ms'`);
-      requireAccessDeadline(deadline);
-      result = await read(client);
+      const next = new Map(snapshots.getStore());
+      next.set(pool, snapshot);
+      const result = await snapshots.run(next, () => read(client));
       requireAccessDeadline(deadline);
       await client.query('COMMIT');
+      requireAccessDeadline(deadline);
+      return result;
     } catch (error) {
       try {
-        await client.query('ROLLBACK');
+        // Cleanup must still run after the request expires.
+        await connection.query('ROLLBACK');
       } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
+        discardConnection(connection, rollbackError as Error);
       }
       requireAccessDeadline(deadline);
       throw error;
+    } finally {
+      snapshot.live = false;
     }
-    requireAccessDeadline(deadline);
-    return result;
   });
 }

@@ -4,7 +4,7 @@ import type { DiscoverySearch } from '../discovery-service.ts';
 import { DiscoveryPageSchema, discoveryHttpPage, type DiscoveryHttpPage } from '../discovery-http.ts';
 import { chooseLabel } from '../../semantic/language.ts';
 import { compileKinds } from '../query.ts';
-import { readSubjectSummaries, type SubjectSummary } from '../../semantic/summaries.ts';
+import { readSubjectSummaries, summaryAuthorization, type SubjectSummary } from '../../semantic/summaries.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from '../../semantic/http/summaries.ts';
 import { activeRelease } from '../../semantic/definitions.ts';
 import { relatedReadEligibility } from '../../semantic/eligibility.ts';
@@ -185,12 +185,10 @@ export function searchRoutes<App>(
             pool,
             routeKey,
             release: active.release,
-            async authorize(connection, id, batch) {
-              const route = routeOf(id);
-              if (route === null) return false;
-              const check = await authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
-              return check(connection);
-            },
+            authorize: summaryAuthorization(async (id, batch) => {
+              const route = routeOf(id)!;
+              return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+            }),
           },
           page.subjects.map((subject) => subject.id),
           { languages },

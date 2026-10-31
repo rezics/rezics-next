@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
+import { partitionReadClient } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -35,7 +36,7 @@ export async function readCurrentSubjectSummaries(
   const read = async (client: Pick<PoolClient, 'query'>, keys: readonly string[]) => {
     const result = new Map<string, State>();
     for (const [partition, batch] of groups(keys)) {
-      const rows = await statesRead.run(client, {
+      const rows = await statesRead.run(await partitionReadClient(client, partition), {
         partition_no: partition,
         routes: batch.map((id) => routeOf(id)!),
         subject_ids: batch,
@@ -44,15 +45,19 @@ export async function readCurrentSubjectSummaries(
     }
     return result;
   };
-  const observed = await withReadTransaction(deps.pool, async (connection) => {
-    const client = deadlineClient(connection, deps.deadline);
-    const original = await read(client, ids);
-    const terminals = ids.flatMap((id) => {
-      const row = original.get(id);
-      return row?.visibility === 'visible' && row.redirect ? [row.redirect] : [];
-    });
-    return new Map([...original, ...(await read(client, terminals))]);
-  });
+  const observed = await withReadTransaction(
+    deps.pool,
+    async (connection) => {
+      const client = deadlineClient(connection, deps.deadline);
+      const original = await read(client, ids);
+      const terminals = ids.flatMap((id) => {
+        const row = original.get(id);
+        return row?.visibility === 'visible' && row.redirect ? [row.redirect] : [];
+      });
+      return new Map([...original, ...(await read(client, terminals))]);
+    },
+    deps.deadline,
+  );
   const keys = [
     ...new Set([
       ...ids,
@@ -86,19 +91,23 @@ export async function readCurrentSubjectSummaries(
   };
   const checkCurrent = async () => {
     const checks = await prepare();
-    return withReadTransaction(deps.pool, async (connection) => {
-      // A new wrapper also prevents reuse of eligibility's client-local snapshot cache.
-      const client = deadlineClient({ query: connection.query.bind(connection) }, deps.deadline);
-      const current = await read(client, keys);
-      const allowed = new Set<string>();
-      for (const id of keys) {
-        const before = observed.get(id),
-          now = current.get(id);
-        if (JSON.stringify(before) !== JSON.stringify(now)) throw new ProblemError('dependency_unavailable');
-        if (now?.visibility === 'visible' && (await checks.get(id)!(client))) allowed.add(id);
-      }
-      return allowed;
-    });
+    return withReadTransaction(
+      deps.pool,
+      async (connection) => {
+        // A new wrapper also prevents reuse of eligibility's client-local snapshot cache.
+        const client = deadlineClient({ query: connection.query.bind(connection) }, deps.deadline);
+        const current = await read(client, keys);
+        const allowed = new Set<string>();
+        for (const id of keys) {
+          const before = observed.get(id),
+            now = current.get(id);
+          if (JSON.stringify(before) !== JSON.stringify(now)) throw new ProblemError('dependency_unavailable');
+          if (now?.visibility === 'visible' && (await checks.get(id)!(client))) allowed.add(id);
+        }
+        return allowed;
+      },
+      deps.deadline,
+    );
   };
   const allowed = await checkCurrent();
   const resolved = new Map<string, string>();

@@ -3,21 +3,22 @@ import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
 import { checkMediaObjects, type CoverReference } from '../content/cover-reference.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
-import type { SourceFenceTuple } from '../content/source-fences.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
+import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { fenceKey, readAnchoredFences } from './fences.ts';
+import { fenceKey } from './fences.ts';
+import { partitionReadClient, partitionReadClients } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from './definitions.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
 import { relatedReadEligibility } from './eligibility.ts';
 import type { Statement } from './item.ts';
 import { slotId } from './slots.ts';
 import { chooseLabel } from './language.ts';
 import readSummaries from './summaries-read.sql';
 import readRepresentativeEditions from './summaries-representative-editions.sql';
-import { withReadTransaction } from './read.ts';
+import { currentReadSnapshot, withReadTransaction } from './read.ts';
 
 export type CoverSummary = {
   media: string;
@@ -37,6 +38,7 @@ export type SubjectSummary = {
   cover: CoverSummary | null;
 };
 export type SummaryDependencies = {
+  /** Compatibility input; the executor binds the live same-pool snapshot, never a pool.query facade. */
   client: Pick<PoolClient, 'query'>;
   pool: Pool;
   /** Trusted server routing configuration; never selected by the reader. */
@@ -56,6 +58,37 @@ export type SummaryReaderDependencies = {
   deadline: number;
   maySeeCover?: SummaryDependencies['maySeeCover'];
 };
+type SummaryAuthorize = SummaryDependencies['authorize'];
+type Batches = readonly (readonly string[])[];
+const preparations = new WeakMap<SummaryAuthorize, (batches: Batches) => Promise<SummaryAuthorize>>();
+
+/** Preserve the callable related-read adapter, and expose preparation to the batch owner.
+ * Preparation never runs while the final snapshot is checked out. Only the returned
+ * native checks execute on that snapshot; no allow decision is retained.
+ */
+export function summaryAuthorization(
+  prepare: (id: string, batch: readonly string[]) => Promise<AccessCheck>,
+): SummaryAuthorize {
+  const authorize: SummaryAuthorize = async (client, id, batch) =>
+    routeOf(id) === null ? false : (await prepare(id, batch))(client);
+  preparations.set(authorize, async (batches) => {
+    const checks = new Map<string, AccessCheck>();
+    for (const batch of batches) {
+      for (const id of new Set(batch)) {
+        if (routeOf(id) !== null && !checks.has(id)) checks.set(id, await prepare(id, batch));
+      }
+    }
+    return async (client, id) => (await checks.get(id)?.(client)) ?? false;
+  });
+  return authorize;
+}
+
+class SummaryPlanChanged extends Error {
+  constructor(readonly representatives: Map<string, string>) {
+    super('Subject summary representative plan changed');
+  }
+}
+
 type StoredStatement = Pick<Statement, 'rank' | 'value'> & {
   qualifiers?: { property: string; value: Statement['value'] }[];
 };
@@ -89,42 +122,69 @@ export async function readSubjectSummaries(
   if (ids.length > 256) throw new RangeError('Subject summaries accept at most 256 ids');
   const results = new Map<string, SubjectSummary | null>(ids.map((id) => [id, null]));
   if (!ids.length) return results;
-  if ('access' in deps) {
-    const reader = deps;
-    const active = await activeRelease(reader.pool);
-    if (!active) return results;
-    const checks = new Map<string, ReturnType<typeof accessCheck>>();
-    const client = { query: reader.pool.query.bind(reader.pool) };
-    return readSubjectSummaries(
-      {
-        client,
-        pool: reader.pool,
-        routeKey: reader.routeKey,
-        deadline: reader.deadline,
-        release: active.release,
-        ...(reader.maySeeCover ? { maySeeCover: reader.maySeeCover } : {}),
-        async authorize(connection, id, batch) {
-          const route = routeOf(id);
-          if (route === null) return false;
-          let check = checks.get(id);
-          if (!check) {
-            check = accessCheck(
-              reader.access,
-              reader.actor,
-              'subject:read',
-              { route, id, eligibility: relatedReadEligibility({ route, id }, batch) },
-              { pool: reader.pool, deadline: reader.deadline },
-            );
-            checks.set(id, check);
+  const deadline = deps.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const authorize =
+    'access' in deps
+      ? summaryAuthorization(async (id, batch) =>
+          accessCheck(
+            deps.access,
+            deps.actor,
+            'subject:read',
+            { route: routeOf(id)!, id, eligibility: relatedReadEligibility({ route: routeOf(id)!, id }, batch) },
+            { pool: deps.pool, deadline },
+          ),
+        )
+      : deps.authorize;
+  const prepare = preparations.get(authorize);
+  const owned = currentReadSnapshot(deps.pool);
+  // An already-owned snapshot can use previously prepared checks, but must never
+  // acquire preparation evidence through another same-pool checkout.
+  if (owned && prepare) throw new AccessUnavailableError('contention');
+  let plan: Map<string, string> | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    requireAccessDeadline(deadline);
+    const planned = [...new Set(plan?.values() ?? [])].filter((id) => !results.has(id));
+    const ready = prepare ? await prepare([[...results.keys()], planned]) : authorize;
+    try {
+      return await withReadTransaction(
+        deps.pool,
+        async (client) => {
+          const active = 'access' in deps ? await activeRelease(client) : null;
+          if ('access' in deps && !active) {
+            await partitionReadClient(client, 0);
+            return results;
           }
-          return (await check)(connection);
+          const release = 'access' in deps ? active!.release : deps.release;
+          return projectSummaries(
+            { ...deps, client, release, authorize: ready, deadline },
+            [...results.keys()],
+            languages,
+            plan,
+            Boolean(prepare),
+            'access' in deps,
+          );
         },
-      },
-      ids,
-      { languages },
-    );
+        deadline,
+      );
+    } catch (error) {
+      if (!(error instanceof SummaryPlanChanged) || owned) throw error;
+      plan = error.representatives;
+    }
   }
-  const storage = deps;
+  throw new AccessUnavailableError('contention');
+}
+
+async function projectSummaries(
+  storage: SummaryDependencies & { deadline: number },
+  ids: readonly string[],
+  languages: readonly string[],
+  expectedPlan: Map<string, string> | undefined,
+  needsPreparation: boolean,
+  releaseHome: boolean,
+): Promise<Map<string, SubjectSummary | null>> {
+  const deps = storage;
+  const results = new Map<string, SubjectSummary | null>(ids.map((id) => [id, null]));
+  const partitions = new Set<number>(releaseHome ? [0] : []);
   async function read(batch: readonly string[]): Promise<Map<string, Row>> {
     const groups = new Map<number, string[]>();
     for (const id of new Set(batch)) {
@@ -148,16 +208,10 @@ export async function readSubjectSummaries(
         })),
       };
       const subjects = group.map((id) => ({ route: routeOf(id)!, id }));
-      const representatives = storage.pool
-        ? await withReadTransaction(storage.pool, async (client) => {
-            const found = await readRepresentativeEditions.run(client, { partition_no: partition, subjects });
-            return found.map((row) => ({ id: row.id, slot_id: row.slot_id, ordinal: Number(row.ordinal) }));
-          })
-        : (await readRepresentativeEditions.run(storage.client, { partition_no: partition, subjects })).map((row) => ({
-            id: row.id,
-            slot_id: row.slot_id,
-            ordinal: Number(row.ordinal),
-          }));
+      partitions.add(partition);
+      const representatives = (
+        await readRepresentativeEditions.run(storage.client, { partition_no: partition, subjects })
+      ).map((row) => ({ id: row.id, slot_id: row.slot_id, ordinal: Number(row.ordinal) }));
       const summaryParameters = { ...parameters, representatives };
       const found = (await readSummaries.run(storage.client, summaryParameters)) as Row[];
       for (const row of found) if (await storage.authorize(storage.client, row.id, batch)) rows.set(row.id, row);
@@ -195,6 +249,16 @@ export async function readSubjectSummaries(
       if (edition) representatives.set(row.id, edition);
     }
   }
+  // The first attempt may be a bounded planning read. Release it before
+  // preparing the newly addressed edition keys; re-read and compare the exact
+  // selection under the final snapshot. Churn cannot renew the request budget.
+  const changedPlan = expectedPlan
+    ? JSON.stringify([...expectedPlan].sort()) !== JSON.stringify([...representatives].sort())
+    : [...representatives.values()].some((id) => !results.has(id));
+  if (needsPreparation && changedPlan) {
+    await partitionReadClients(deps.client, [...partitions]);
+    throw new SummaryPlanChanged(representatives);
+  }
   const editions = await read([...new Set(representatives.values())].filter((id) => !subjects.has(id)));
   for (const [id, edition] of representatives) {
     const row = subjects.get(edition) ?? editions.get(edition);
@@ -206,6 +270,13 @@ export async function readSubjectSummaries(
       [...covers].filter(([subject, media]) => deps.maySeeCover?.(media, subject) !== false).map(([, media]) => media),
     ),
   ];
+  for (const partition of new Set(
+    mediaIds.flatMap((id) => {
+      const route = routeOf(id);
+      return route === null ? [] : [partitionOf(route)];
+    }),
+  ))
+    partitions.add(partition);
   const media: Map<string, CoverReference | null> = mediaIds.length
     ? await checkMediaObjects(deps.client, mediaIds, 'cover')
     : new Map();
@@ -225,15 +296,15 @@ export async function readSubjectSummaries(
     group.push(tuple);
     homes.set(partition, group);
   }
+  // The same RR snapshot also binds every home that produced facts, including
+  // empty/missing probes. Batched partition metadata is not a cross-home row join.
+  const anchored = await partitionReadClients(deps.client, [...partitions, ...homes.keys()]);
   const unfenced = new Set<string>();
-  // Reader calls retain their existing aggregate deadline. Storage-level calls
-  // retain the request's budget, or the existing per-read budget outside a request;
-  // do not impose a new aggregate timeout on their caller-owned authorization work.
-  const deadline = deps.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const deadline = deps.deadline;
   for (const [partition, group] of homes) {
     for (let offset = 0; offset < group.length; offset += 100) {
       requireAccessDeadline(deadline);
-      const fences = await readAnchoredFences(deps.pool, partition, group.slice(offset, offset + 100));
+      const fences = await readFences(anchored.get(partition)!, group.slice(offset, offset + 100));
       requireAccessDeadline(deadline);
       for (const fence of fences) if (!fence.takenDown) unfenced.add(fenceKey(fence));
     }

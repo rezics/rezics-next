@@ -6,7 +6,7 @@ import {
   StatementDisclosureDeniedError,
   StatementDisclosureNotFoundError,
 } from '../statement-disclosure.ts';
-import { readSubjectSummaries } from '../summaries.ts';
+import { readSubjectSummaries, summaryAuthorization } from '../summaries.ts';
 import { languageRanges } from '../language.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from './summaries.ts';
 import { SourceSchema, BatchReferenceSchema } from '@rezics/definitions/bulk';
@@ -965,21 +965,10 @@ function subjectRoutes(
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const languages = languageRanges(request.headers.get('accept-language'), query.language);
-        const checksById = new Map<string, Promise<import('../../request/access.ts').AccessCheck>>();
-        const authorizeSummary: import('../summaries.ts').SummaryDependencies['authorize'] = async (
-          client,
-          id,
-          batch,
-        ) => {
-          const route = routeOf(id);
-          if (route === null) return false;
-          let pending = checksById.get(id);
-          if (!pending) {
-            pending = authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
-            checksById.set(id, pending);
-          }
-          return (await pending)(client);
-        };
+        const authorizeSummary = summaryAuthorization(async (id, batch) => {
+          const route = routeOf(id)!;
+          return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+        });
         const result = await admission.run('normal', job, () =>
           readSubject(pool, params.id, async () => false, query.context ?? GLOBAL_CONTEXT, routeKey, {
             languages,
@@ -987,7 +976,6 @@ function subjectRoutes(
             seen: [...session.components],
             deadline: job.deadline,
             prepareAuthorize: (id) => {
-              checksById.clear();
               const resource = { route: routeOf(id)!, id };
               return authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
             },
@@ -2252,7 +2240,6 @@ function subjectRoutes(
         const seen = [...session.components];
         await admission.run('normal', job, () => waitForSubjectLinks(pool, seen, params.id, job.deadline));
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
-        const summaryChecks = new Map<string, Promise<import('../../request/access.ts').AccessCheck>>();
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
             readStatementAs(pool, access(), actor, job.deadline, () =>
@@ -2265,16 +2252,10 @@ function subjectRoutes(
                 limit: query.limit ?? 12,
                 languages: languageRanges(request.headers.get('accept-language')),
                 release: active.release,
-                async authorizeSummary(client, id, batch) {
-                  const route = routeOf(id);
-                  if (route === null) return false;
-                  let pending = summaryChecks.get(id);
-                  if (!pending) {
-                    pending = authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
-                    summaryChecks.set(id, pending);
-                  }
-                  return (await pending)(client);
-                },
+                authorizeSummary: summaryAuthorization(async (id, batch) => {
+                  const route = routeOf(id)!;
+                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                }),
                 authorize: check,
               }),
             ),
@@ -2426,16 +2407,10 @@ function subjectRoutes(
                 languages: languageRanges(request.headers.get('accept-language'), query.language),
                 release: active.release,
                 includeLabels: true,
-                async authorizeSummary(client, id, batch) {
-                  const route = routeOf(id);
-                  if (route === null) return false;
-                  const check = await authorize({
-                    route,
-                    id,
-                    eligibility: relatedReadEligibility({ route, id }, batch),
-                  });
-                  return check(client);
-                },
+                authorizeSummary: summaryAuthorization(async (id, batch) => {
+                  const route = routeOf(id)!;
+                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                }),
                 ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
                 authorize: check,
                 seen,
@@ -2551,16 +2526,10 @@ function subjectRoutes(
                 languages: languageRanges(request.headers.get('accept-language'), query.language),
                 ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
                 release: active.release,
-                async authorizeSummary(client, id, batch) {
-                  const route = routeOf(id);
-                  if (route === null) return false;
-                  const relatedCheck = await authorize({
-                    route,
-                    id,
-                    eligibility: relatedReadEligibility({ route, id }, batch),
-                  });
-                  return relatedCheck(client);
-                },
+                authorizeSummary: summaryAuthorization(async (id, batch) => {
+                  const route = routeOf(id)!;
+                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                }),
                 authorize: check,
                 seen,
                 caughtUp,

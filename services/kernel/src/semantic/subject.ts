@@ -798,7 +798,9 @@ export async function readSubject(
             routeKey,
             deadline,
             release: active.release,
-            authorize: summaries.authorize ?? (async (_connection, subject) => subject === id),
+            authorize:
+              summaries.authorize ??
+              (async (connection, subject) => subject === id && authorize(connection as PoolClient)),
           },
           [id],
           { languages: summaries.languages ?? [] },
