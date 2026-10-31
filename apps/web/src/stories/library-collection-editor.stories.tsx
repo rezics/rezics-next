@@ -67,7 +67,7 @@ function renderEditor(mode: CollectionStoryMode = 'private') {
 async function openEditor(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await canvas.findByRole('heading', { level: 1, name: 'Books I come back to' });
-  const trigger = canvas.getByRole('button', { name: m.library_collection_actions(), exact: true });
+  const trigger = canvas.getByRole('button', { name: m.library_collection_actions() });
   await userEvent.click(trigger);
   const menu = await menuForTrigger(trigger, m.library_collection_actions());
   const edit = menu.getByText(m.library_collection_edit(), { exact: true });
@@ -80,7 +80,7 @@ async function menuForTrigger(trigger: HTMLElement, title: string) {
   const sheet = view.matchMedia('(max-width: 767px)').matches || view.matchMedia('(pointer: coarse)').matches;
   const panel = await waitFor(() => {
     if (sheet) {
-      const dialog = within(trigger.ownerDocument.body).getByRole('dialog', { name: title, exact: true });
+      const dialog = within(trigger.ownerDocument.body).getByRole('dialog', { name: title });
       expect(dialog).toBeVisible();
       return dialog;
     }
@@ -103,7 +103,7 @@ function rowAction(row: HTMLElement, action: string) {
   const title = within(row).getByRole('link').textContent!;
   const position = Array.from(row.parentElement!.children).indexOf(row) + 1;
   const context = m.library_member_occurrence({ title, position });
-  return within(row).getByRole('button', { name: `${action}: ${context}`, exact: true });
+  return within(row).getByRole('button', { name: `${action}: ${context}` });
 }
 
 export const Details: Story = {

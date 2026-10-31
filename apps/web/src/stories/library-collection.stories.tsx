@@ -64,10 +64,7 @@ async function menuForTrigger(trigger: HTMLElement) {
   const sheet = view.matchMedia('(max-width: 767px)').matches || view.matchMedia('(pointer: coarse)').matches;
   const panel = await waitFor(() => {
     if (sheet) {
-      const dialog = within(trigger.ownerDocument.body).getByRole('dialog', {
-        name: m.library_collection_actions(),
-        exact: true,
-      });
+      const dialog = within(trigger.ownerDocument.body).getByRole('dialog', { name: m.library_collection_actions() });
       expect(dialog).toBeVisible();
       return dialog;
     }
