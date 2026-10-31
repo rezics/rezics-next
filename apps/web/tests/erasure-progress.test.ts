@@ -444,3 +444,148 @@ test('Default erasure page recovers an unavailable session through explicit read
     mock.restore();
   }
 });
+
+test('Default erasure progress explains accepted deletion, ongoing removal and required retention in ordinary language while preserving every native status distinction and diagnostics', async () => {
+  const { getLocale, locales, setLocale } = await import('../src/paraglide/runtime.js');
+  const { dirname } = await import('node:path');
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window();
+  const previousLocale = getLocale();
+  const returnTo = `/fr/platform/accounts/${accountId}/erasure`;
+  const render = (page: Page, sessionRecovery = false) => {
+    const host = window.document.createElement('div');
+    host.innerHTML = renderToStaticMarkup(
+      createElement(ErasureProgressView, { page, returnTo, sessionRecovery, reload() {} }),
+    );
+    return host;
+  };
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      const labels = [
+        ['access', m.erasure_participant_access()],
+        ['auth', m.erasure_participant_auth()],
+        ['library', m.erasure_participant_library()],
+        ['commerce', m.erasure_participant_commerce()],
+        ['content', m.erasure_participant_content()],
+        ['community', m.erasure_participant_community()],
+        ['semantic', m.erasure_participant_semantic()],
+        ['search', m.erasure_participant_search()],
+        ['imports', m.erasure_participant_imports()],
+        ['shared-history', m.erasure_participant_history()],
+        ['delivery', m.erasure_participant_delivery()],
+        ['future-service', m.erasure_participant_other()],
+      ] as const;
+      const observations: ErasureStatus[] = [
+        { ...pending(), pendingParticipants: labels.map(([name]) => name) },
+        { ...pending(), pendingParticipants: [], lateItems: false, effectsFrontier: false },
+        {
+          ...pending(),
+          pendingParticipants: [],
+          retentionOutstanding: true,
+          lateItems: false,
+          effectsFrontier: false,
+        },
+        {
+          ...pending(),
+          state: 'retention-outstanding',
+          completedAt,
+          pendingParticipants: [],
+          retentionOutstanding: true,
+          lateItems: false,
+          effectsFrontier: false,
+        },
+        {
+          ...pending(),
+          state: 'complete',
+          completedAt,
+          pendingParticipants: [],
+          lateItems: false,
+          effectsFrontier: false,
+        },
+      ];
+      for (const observation of observations) {
+        const host = render(ready(observation));
+        const details = host.querySelector('details')!;
+        expect(details.open).toBe(false);
+        expect(details.textContent).toContain(accountId);
+        // Preserve native values independently, including false flags and the absent completion date.
+        for (const [field, value] of [
+          ['state', observation.state],
+          ['at', at],
+          ['completedAt', observation.completedAt ?? 'null'],
+          ['retentionOutstanding', String(observation.retentionOutstanding)],
+          ['lateItems', String(observation.lateItems)],
+          ['effectsFrontier', String(observation.effectsFrontier)],
+        ]) {
+          const codes = details.querySelectorAll('dt code');
+          const label = Array.from(codes as NodeListOf<Element>).find((code) => code.textContent === field)!;
+          expect(label.parentElement?.nextElementSibling?.textContent).toBe(value);
+        }
+        for (const name of observation.pendingParticipants) expect(details.textContent).toContain(name);
+        details.remove();
+        const primary = host.textContent;
+        expect(host.querySelector('h1')?.textContent).toBe(m.erasure_title());
+        expect(primary).toContain(m.erasure_accepted());
+        expect(primary).toContain(m.erasure_barrier_help());
+        expect(primary).not.toContain(accountId);
+        expect(primary).not.toMatch(
+          /effectsFrontier|retentionOutstanding|pendingParticipants|shared-history|future-service/,
+        );
+        expect(host.querySelector('time')?.getAttribute('dateTime')).toBe(at);
+        expect(host.querySelectorAll('time')).toHaveLength(observation.completedAt ? 2 : 1);
+        expect(primary).toContain(
+          observation.retentionOutstanding ? m.erasure_retained_yes() : m.erasure_retained_no(),
+        );
+        expect(primary).toContain(observation.lateItems ? m.erasure_late_yes() : m.erasure_late_no());
+        expect(primary).toContain(
+          observation.effectsFrontier ? m.erasure_frontier_yes() : m.erasure_frontier_no(),
+        );
+        if (observation.state === 'pending') {
+          expect(host.querySelector('h2')?.textContent).toBe(m.erasure_pending());
+          expect(primary).toContain(m.erasure_pending_help());
+          if (observation.pendingParticipants.length) {
+            for (const [, label] of labels) expect(primary).toContain(label);
+          } else expect(primary).toContain(m.erasure_no_pending_names());
+        } else {
+          expect(host.querySelector('h2')?.textContent).toBe(
+            observation.state === 'complete' ? m.erasure_complete() : m.erasure_retention(),
+          );
+          expect(primary).toContain(
+            observation.state === 'complete' ? m.erasure_complete_help() : m.erasure_retention_help(),
+          );
+          expect(host.querySelectorAll('time')[1]?.getAttribute('dateTime')).toBe(completedAt);
+        }
+        expect(host.querySelector('[aria-live="polite"]')).not.toBeNull();
+        expect(host.querySelector('button')?.textContent).toBe(m.erasure_reload());
+      }
+      for (const [status, message] of [
+        ['signed-out', m.erasure_signed_out()],
+        ['denied', m.erasure_denied()],
+        ['missing', m.erasure_missing()],
+        ['unavailable', m.erasure_unavailable()],
+        ['loading', m.erasure_loading()],
+      ] as const) {
+        const host = render({ status });
+        expect(host.querySelector('[role="status"]')?.textContent).toBe(message);
+        expect(host.textContent).not.toContain(m.erasure_accepted());
+        expect(host.textContent).not.toContain(accountId);
+        expect(host.querySelector('details')).toBeNull();
+        if (status === 'signed-out') {
+          expect(host.querySelector('a')?.getAttribute('href')).toBe(
+            `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`,
+          );
+          expect(host.querySelector('button')).toBeNull();
+        } else if (status === 'loading') expect(host.querySelector('button')?.disabled).toBe(true);
+      }
+      const recovery = render({ status: 'unavailable' }, true);
+      expect(recovery.querySelector('[role="status"]')?.textContent).toBe(m.erasure_session_unavailable());
+      expect(recovery.querySelector('button')?.textContent).toBe(m.erasure_retry_session());
+    }
+  } finally {
+    setLocale(previousLocale, { reload: false });
+    await window.happyDOM.close();
+  }
+});

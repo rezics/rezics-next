@@ -73,7 +73,7 @@ export function ErasureProgressView({
 }) {
   const value = page.status === 'ready' ? page.value : null;
   return (
-    <article className="mx-auto flex w-full max-w-2xl flex-col gap-6 pb-8">
+    <article className="mx-auto flex w-full min-w-0 max-w-2xl flex-col gap-6 pb-8 [overflow-wrap:anywhere]">
       <header className="flex flex-col gap-3">
         <PageHeading>{m.erasure_title()}</PageHeading>
         <p className="text-muted-foreground">{m.erasure_intro()}</p>
@@ -82,6 +82,7 @@ export function ErasureProgressView({
         {value ? (
           <Card>
             <CardHeader>
+              <p className="font-medium">{m.erasure_accepted()}</p>
               <CardTitle>
                 <h2>
                   {value.state === 'complete'
@@ -100,11 +101,16 @@ export function ErasureProgressView({
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <dl className="grid gap-2">
-                <dt className="font-medium">{m.erasure_barrier()}</dt>
-                <dd>{date(value.at)}</dd>
-                <dt className="font-medium">{m.erasure_completed_at()}</dt>
-                <dd>{value.completedAt ? date(value.completedAt) : m.erasure_not_reported()}</dd>
+              <dl className="grid gap-4">
+                <div className="grid gap-1">
+                  <dt className="font-medium">{m.erasure_barrier()}</dt>
+                  <dd>{date(value.at)}</dd>
+                  <dd className="text-muted-foreground">{m.erasure_barrier_help()}</dd>
+                </div>
+                <div className="grid gap-1">
+                  <dt className="font-medium">{m.erasure_completed_at()}</dt>
+                  <dd>{value.completedAt ? date(value.completedAt) : m.erasure_not_reported()}</dd>
+                </div>
               </dl>
               <section aria-labelledby="erasure-participants" className="flex flex-col gap-2">
                 <h3 id="erasure-participants" className="font-medium">
@@ -120,20 +126,32 @@ export function ErasureProgressView({
                   <p>{m.erasure_no_pending_names()}</p>
                 )}
               </section>
-              <ul className="flex list-inside list-disc flex-col gap-2">
-                <li>{value.retentionOutstanding ? m.erasure_retained_yes() : m.erasure_retained_no()}</li>
-                <li>{value.lateItems ? m.erasure_late_yes() : m.erasure_late_no()}</li>
-                <li>{value.effectsFrontier ? m.erasure_frontier_yes() : m.erasure_frontier_no()}</li>
-              </ul>
-              <details className="rounded-lg border p-4">
-                <summary className="cursor-pointer font-medium focus-visible:outline-ring">
+              <section aria-labelledby="erasure-retained" className="flex flex-col gap-2">
+                <h3 id="erasure-retained" className="font-medium">
+                  {m.erasure_retained_heading()}
+                </h3>
+                <p>{value.retentionOutstanding ? m.erasure_retained_yes() : m.erasure_retained_no()}</p>
+              </section>
+              <section aria-labelledby="erasure-remaining" className="flex flex-col gap-2">
+                <h3 id="erasure-remaining" className="font-medium">
+                  {m.erasure_remaining_work()}
+                </h3>
+                <ul className="flex list-inside list-disc flex-col gap-2">
+                  <li>{value.lateItems ? m.erasure_late_yes() : m.erasure_late_no()}</li>
+                  <li>{value.effectsFrontier ? m.erasure_frontier_yes() : m.erasure_frontier_no()}</li>
+                </ul>
+              </section>
+              <details aria-live="off" className="rounded-lg border p-4">
+                <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
                   {m.erasure_details()}
                 </summary>
                 <dl className="mt-4 grid gap-2">
-                  <dt className="font-medium">{m.erasure_account()}</dt>
-                  <dd className="break-all font-mono text-sm">{value.accountId}</dd>
+                  <div className="grid gap-1">
+                    <dt className="font-medium">{m.erasure_account()}</dt>
+                    <dd className="break-all font-mono text-sm">{value.accountId}</dd>
+                  </div>
                   {value.pendingParticipants.length ? (
-                    <>
+                    <div className="grid gap-1">
                       <dt className="font-medium">{m.erasure_participant_identifiers()}</dt>
                       <dd>
                         <ul className="flex flex-col gap-2">
@@ -144,8 +162,25 @@ export function ErasureProgressView({
                           ))}
                         </ul>
                       </dd>
-                    </>
+                    </div>
                   ) : null}
+                  {[
+                    ['state', value.state],
+                    ['at', value.at],
+                    ['completedAt', value.completedAt ?? 'null'],
+                    ['retentionOutstanding', String(value.retentionOutstanding)],
+                    ['lateItems', String(value.lateItems)],
+                    ['effectsFrontier', String(value.effectsFrontier)],
+                  ].map(([field, observation]) => (
+                    <div key={field} className="grid gap-1">
+                      <dt>
+                        <code>{field}</code>
+                      </dt>
+                      <dd className="break-all">
+                        <code>{observation}</code>
+                      </dd>
+                    </div>
+                  ))}
                 </dl>
               </details>
             </CardContent>
@@ -160,14 +195,19 @@ export function ErasureProgressView({
       </section>
       {page.status === 'signed-out' ? (
         <a
-          className="self-start font-medium text-primary underline underline-offset-4"
+          className="inline-flex min-h-11 max-w-full items-center self-start py-2 font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
           href={erasureSignInHref(returnTo)}
         >
           {m.erasure_sign_in()}
         </a>
       ) : null}
       {reload && page.status !== 'signed-out' ? (
-        <Button className="self-start" variant="outline" disabled={page.status === 'loading'} onClick={reload}>
+        <Button
+          className="h-auto min-h-11 max-w-full self-start whitespace-normal py-3"
+          variant="outline"
+          disabled={page.status === 'loading'}
+          onClick={reload}
+        >
           {sessionRecovery ? m.erasure_retry_session() : m.erasure_reload()}
         </Button>
       ) : null}
