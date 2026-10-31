@@ -44,11 +44,31 @@ export const History: Story = {
     );
   },
 };
-export const SecondPage: Story = { render: () => render('second-page') };
+export const SecondPage: Story = {
+  render: () => render('second-page'),
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByRole('link', { name: m.creator_offers_restart() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/creator/offers`,
+    );
+    await expect(view.queryByRole('link', { name: m.creator_offers_next() })).toBeNull();
+  },
+};
 export const Empty: Story = { render: () => render('empty') };
 export const Denied: Story = { render: () => render('denied') };
 export const Unavailable: Story = { render: () => render('unavailable') };
 export const Error: Story = { render: () => render('error') };
-export const Stale: Story = { render: () => render('stale') };
+export const Stale: Story = {
+  render: () => render('stale'),
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByRole('link', { name: m.creator_offers_restart() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/creator/offers`,
+    );
+    await expect(view.queryByRole('link', { name: m.creator_offers_next() })).toBeNull();
+  },
+};
 export const Preparing: Story = { render: () => render('preparing') };
 export const LongTitle: Story = { render: () => render('long-title') };

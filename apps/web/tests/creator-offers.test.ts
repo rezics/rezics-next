@@ -14,6 +14,7 @@ const { loadCreatorOffers, creatorOffersSearch, unavailableCreatorOffersCaller }
   await import('../src/checkout/creator-offers');
 const { CreatorOffersPage, creatorOffersHref } = await import('../src/checkout/creator-offers-page');
 const { isSignedInPath } = await import('../src/session/guard');
+const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
 const request = () =>
   new Request('https://site.test/en/creator/offers', { headers: { authorization: 'Bearer current-creator' } });
 
@@ -186,6 +187,56 @@ test('seller rows localize separate currencies and retain unknown delisted histo
     }),
   );
   expect(closedPublicPage).not.toContain(`href="/en/offers/${creatorOfferFixture.id}"`);
+});
+
+test('Creator offer history exposes genuine localized keyboard-accessible next and restart navigation links preserving the native signed cursor', () => {
+  const originalLocale = getLocale();
+  const signedCursor = 'native.signed+next/=%2F';
+  function expectNativeLink(html: string, label: string, href: string) {
+    const links = [...html.matchAll(/<a\b([^>]*)>([^<]*)<\/a>/g)].filter((match) => match[2] === label);
+    expect(links).toHaveLength(1);
+    expect(links[0]![1]).toContain(`href="${href}"`);
+    // An anchor with href keeps native Tab/Enter behavior without button semantics or focus overrides.
+    expect(links[0]![1]).not.toMatch(/\b(?:role|tabindex|aria-disabled)=/i);
+  }
+  try {
+    for (const { locale, next, restart, pagination } of [
+      { locale: 'en', next: 'Next page', restart: 'First page', pagination: 'Offer pages' },
+      { locale: 'zh-Hans', next: '下一页', restart: '第一页', pagination: '报价分页' },
+    ] as const) {
+      setLocale(locale, { reload: false });
+      const first = renderToString(
+        createElement(CreatorOffersPage, {
+          locale,
+          page: { kind: 'ready', offers: [creatorOfferFixture, delistedCreatorOfferFixture], next: signedCursor },
+        }),
+      );
+      const firstNavigation = first.match(/<nav\b[^>]*>[\s\S]*?<\/nav>/)![0];
+      expect(firstNavigation).toContain(`aria-label="${pagination}"`);
+      expectNativeLink(firstNavigation, next, `/${locale}/creator/offers?cursor=native.signed%2Bnext%2F%3D%252F`);
+      expect(firstNavigation).not.toContain(restart);
+
+      const last = renderToString(
+        createElement(CreatorOffersPage, {
+          locale,
+          cursor: signedCursor,
+          page: { kind: 'ready', offers: [delistedCreatorOfferFixture], next: null },
+        }),
+      );
+      const lastNavigation = last.match(/<nav\b[^>]*>[\s\S]*?<\/nav>/)![0];
+      expectNativeLink(lastNavigation, restart, `/${locale}/creator/offers`);
+      expect(lastNavigation).not.toContain(next);
+
+      for (const kind of ['stale', 'error'] as const) {
+        const failed = renderToString(
+          createElement(CreatorOffersPage, { locale, cursor: signedCursor, page: { kind } }),
+        );
+        expectNativeLink(failed, restart, `/${locale}/creator/offers`);
+      }
+    }
+  } finally {
+    setLocale(originalLocale, { reload: false });
+  }
 });
 
 test('served route is guarded and no-store in eight locales with additive offer.list shell navigation', async () => {

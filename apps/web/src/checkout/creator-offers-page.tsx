@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import {
@@ -162,20 +162,18 @@ export function CreatorOffersPage({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <PageHeading id="creator-offers-heading">{m.creator_offers_heading()}</PageHeading>
         {page.kind !== 'preparing' && (
-          <Button variant="outline" className="min-h-11" nativeButton={false} render={<a href={href} />}>
+          <a href={href} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>
             {m.creator_offers_refresh()}
-          </Button>
+          </a>
         )}
       </div>
       {data && (
-        <Button
-          variant="outline"
-          className="min-h-11"
-          nativeButton={false}
-          render={<a href={`/${locale}/creator/offers/new`} />}
+        <a
+          href={`/${locale}/creator/offers/new`}
+          className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
         >
           {m.creator_new_offer()}
-        </Button>
+        </a>
       )}
       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.creator_offers_intro()}</p>
       {page.kind !== 'ready' ? (
@@ -185,14 +183,12 @@ export function CreatorOffersPage({
         >
           <p>{notice}</p>
           {page.kind !== 'preparing' && (
-            <Button
-              variant="outline"
-              className="min-h-11"
-              nativeButton={false}
-              render={<a href={restart ? creatorOffersHref(locale) : href} />}
+            <a
+              href={restart ? creatorOffersHref(locale) : href}
+              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
             >
               {restart ? m.creator_offers_restart() : m.creator_offers_retry()}
-            </Button>
+            </a>
           )}
         </div>
       ) : (
@@ -237,24 +233,20 @@ export function CreatorOffersPage({
           )}
           <nav aria-label={m.creator_offers_pagination()} className="flex flex-wrap gap-3">
             {cursor && (
-              <Button
-                variant="outline"
-                className="min-h-11"
-                nativeButton={false}
-                render={<a href={creatorOffersHref(locale)} />}
+              <a
+                href={creatorOffersHref(locale)}
+                className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
               >
                 {m.creator_offers_restart()}
-              </Button>
+              </a>
             )}
             {page.next && (
-              <Button
-                variant="outline"
-                className="min-h-11"
-                nativeButton={false}
-                render={<a href={creatorOffersHref(locale, page.next)} />}
+              <a
+                href={creatorOffersHref(locale, page.next)}
+                className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
               >
                 {m.creator_offers_next()}
-              </Button>
+              </a>
             )}
           </nav>
         </>
