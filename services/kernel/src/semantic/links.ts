@@ -1079,7 +1079,8 @@ export async function listSubjectLinks(
       language: languages.join(',') || null,
     },
   };
-  const release = options.type || options.filter ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
+  const release =
+    options.type || options.filter ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
   const matches = (type: string) => !options.type || (!!release && matchesTarget(release, type, [options.type]));
   let cursor: { epoch: number; after: CursorKey[] } | null = null;
   if (options.cursor !== undefined) {
@@ -1270,9 +1271,7 @@ export async function listSubjectLinks(
       current.value.type !== 'value' ||
       current.value.content !== options.subject ||
       (options.filter &&
-        !current.qualifiers.some(
-          (snak) => snak.value.type === 'value' && snak.value.content === options.filter,
-        ))
+        !current.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
     )
       return [];
     const summary = summaries.get(link.subject) ?? null;
@@ -1395,142 +1394,144 @@ export async function listSubjectRelations(
       ? await options.prepareAuthorization()
       : options.authorize;
   const page = await withReadTransaction<SubjectRelationsPage>(pool, async (client) => {
-      const partition = await readPartition(client, partitionOf(route));
-      const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
-        visibility: string;
-      } | null;
-      if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
-      const redirect = await redirectOf(client, options.subject);
-      if (redirect) throw new SubjectRedirectError(options.subject, redirect);
-      if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
-      const scanLimit = options.type ? 4 * options.limit : options.limit;
-      let rows = (await listOutboundLinksByProperty.run(client, {
-        context_id: context,
-        route,
-        subject_id: options.subject,
-        property: options.property,
-        filter_value: options.filter ?? NIL_UUID,
-        after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-        after_target: typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID,
-        after_statement: typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID,
-        page_limit: scanLimit + 1,
-      })) as {
-        statement: string;
-        slot: string;
-        target: string | null;
-        type: string;
-        external: string | null;
-        value: 'value' | 'somevalue' | 'novalue';
-        order_key: string;
-      }[];
-      const privatePage = await privateLinks(client, {
+    const partition = await readPartition(client, partitionOf(route));
+    const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+      visibility: string;
+    } | null;
+    if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
+    const redirect = await redirectOf(client, options.subject);
+    if (redirect) throw new SubjectRedirectError(options.subject, redirect);
+    if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+    const scanLimit = options.type ? 4 * options.limit : options.limit;
+    let rows = (await listOutboundLinksByProperty.run(client, {
+      context_id: context,
+      route,
+      subject_id: options.subject,
+      property: options.property,
+      filter_value: options.filter ?? NIL_UUID,
+      after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+      after_target: typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID,
+      after_statement: typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID,
+      page_limit: scanLimit + 1,
+    })) as {
+      statement: string;
+      slot: string;
+      target: string | null;
+      type: string;
+      external: string | null;
+      value: 'value' | 'somevalue' | 'novalue';
+      order_key: string;
+    }[];
+    const privatePage = await privateLinks(client, {
+      subject: options.subject,
+      property: options.property,
+      after: cursor?.after,
+      limit: scanLimit + 1,
+    });
+    const privateRows = privatePage.entries.map((row) => ({
+      statement: row.candidate_id,
+      slot: row.slot_id,
+      target: row.target_id,
+      type: row.target_type,
+      external: null,
+      value: 'value' as const,
+      order_key: row.order_key,
+    }));
+    rows = [...rows, ...privateRows]
+      .sort((a, b) =>
+        a.order_key < b.order_key
+          ? -1
+          : a.order_key > b.order_key
+            ? 1
+            : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
+              ? -1
+              : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
+                ? 1
+                : a.statement.localeCompare(b.statement),
+      )
+      .slice(0, scanLimit + 1);
+    const visibleRows = rows.slice(0, scanLimit);
+    const selected: typeof visibleRows = [];
+    let examined = 0;
+    for (const row of visibleRows) {
+      examined++;
+      if (!options.type || (row.type !== '' && matchesTarget(options.release, row.type, [options.type])))
+        selected.push(row);
+      if (selected.length === options.limit) break;
+    }
+    const filterProperties = options.release.properties[options.property]?.relation?.filter;
+    const current = await currentRelationFacts(
+      client,
+      options.routeKey,
+      selected.map((row) => ({
         subject: options.subject,
         property: options.property,
-        after: cursor?.after,
-        limit: scanLimit + 1,
-      });
-      const privateRows = privatePage.entries.map((row) => ({
-        statement: row.candidate_id,
-        slot: row.slot_id,
-        target: row.target_id,
-        type: row.target_type,
-        external: null,
-        value: 'value' as const,
-        order_key: row.order_key,
-      }));
-      rows = [...rows, ...privateRows]
-        .sort((a, b) =>
-          a.order_key < b.order_key
-            ? -1
-            : a.order_key > b.order_key
-              ? 1
-              : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
-                ? -1
-                : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
-                  ? 1
-                  : a.statement.localeCompare(b.statement),
-        )
-        .slice(0, scanLimit + 1);
-      const visibleRows = rows.slice(0, scanLimit);
-      const selected: typeof visibleRows = [];
-      let examined = 0;
-      for (const row of visibleRows) {
-        examined++;
-        if (!options.type || (row.type !== '' && matchesTarget(options.release, row.type, [options.type])))
-          selected.push(row);
-        if (selected.length === options.limit) break;
-      }
-      const filterProperties = options.release.properties[options.property]?.relation?.filter;
-      const current = await currentRelationFacts(
-        client,
-        options.routeKey,
-        selected.map((row) => ({
+        candidate: row.statement,
+        target: row.target,
+        external: row.external,
+        value: row.value,
+        context,
+        defaults,
+        slot: row.slot,
+        ...(options.filter === undefined ? {} : { filter: options.filter }),
+        ...(filterProperties === undefined
+          ? {}
+          : { filterProperties: Array.isArray(filterProperties) ? filterProperties : [filterProperties] }),
+        requireRelation: true,
+      })),
+    );
+    const holder = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+      type?: string;
+    } | null;
+    const relations: SubjectRelation[] = [];
+    const releases = new Map<string, Release>();
+    for (const row of selected) {
+      const fact = current.get(
+        currentRelationKey({
           subject: options.subject,
           property: options.property,
           candidate: row.statement,
-          target: row.target,
-          external: row.external,
-          value: row.value,
-          context,
-          defaults,
-          slot: row.slot,
-          ...(options.filter === undefined ? {} : { filter: options.filter }),
-          ...(filterProperties === undefined
-            ? {}
-            : { filterProperties: Array.isArray(filterProperties) ? filterProperties : [filterProperties] }),
-          requireRelation: true,
-        })),
+        }),
       );
-      const holder = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
-        type?: string;
-      } | null;
-      const relations: SubjectRelation[] = [];
-      const releases = new Map<string, Release>();
-      for (const row of selected) {
-        const fact = current.get(currentRelationKey({
-          subject: options.subject,
-          property: options.property,
-          candidate: row.statement,
-        }));
-        if (!fact) continue;
-        const digest = fact.fact_release ?? '';
-        let release = releases.get(digest);
-        if (!release) {
-          release = digest ? (await readRelease(client, digest)) ?? undefined : options.release;
-          if (!release) continue;
-          releases.set(digest, release);
-        }
-        const statement = resolveItem(options.subject, [fact], holder?.type ?? '', factDataTypes(release, [fact]), {
-          revision: fact.fact_revision ?? 1,
-          release: digest,
-          context,
-        }).statements[options.property]?.[0];
-        if (!statement) continue;
-        relations.push({
-          statement,
-          target: row.target,
-          external: row.external,
-          ...(row.target === null ? {} : { type: row.type }),
-        });
+      if (!fact) continue;
+      const digest = fact.fact_release ?? '';
+      let release = releases.get(digest);
+      if (!release) {
+        release = digest ? ((await readRelease(client, digest)) ?? undefined) : options.release;
+        if (!release) continue;
+        releases.set(digest, release);
       }
-      const last = visibleRows[examined - 1];
-      return {
-        relations,
-        freshness: {
-          consistency: 'eventual',
-          target_seconds: FRESHNESS_TARGET_SECONDS,
-          caught_up: caughtUp,
-        },
-        next:
-          rows.length > examined && last
-            ? encodeCursor(ring, binding, {
-                epoch: partition.epoch,
-                after: [last.order_key, last.target ?? NIL_UUID, last.statement],
-              })
-            : null,
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-      };
-    });
+      const statement = resolveItem(options.subject, [fact], holder?.type ?? '', factDataTypes(release, [fact]), {
+        revision: fact.fact_revision ?? 1,
+        release: digest,
+        context,
+      }).statements[options.property]?.[0];
+      if (!statement) continue;
+      relations.push({
+        statement,
+        target: row.target,
+        external: row.external,
+        ...(row.target === null ? {} : { type: row.type }),
+      });
+    }
+    const last = visibleRows[examined - 1];
+    return {
+      relations,
+      freshness: {
+        consistency: 'eventual',
+        target_seconds: FRESHNESS_TARGET_SECONDS,
+        caught_up: caughtUp,
+      },
+      next:
+        rows.length > examined && last
+          ? encodeCursor(ring, binding, {
+              epoch: partition.epoch,
+              after: [last.order_key, last.target ?? NIL_UUID, last.statement],
+            })
+          : null,
+      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+    };
+  });
   const statements = await currentRelationStatements(
     pool,
     page.relations.map((entry) => ({
