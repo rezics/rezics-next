@@ -332,7 +332,7 @@ test('terminal activation consumption preserves the exact original native outcom
       epoch: number;
       position: string;
       transaction_id: string;
-      response: unknown;
+      response: typeof original.outcome.value;
     }>(
       `SELECT epoch,position::text,transaction_id,response FROM core.receipt
        WHERE partition_no=$1 AND transaction_id=$2 AND command_kind='access.actor-activated'`,
@@ -424,11 +424,12 @@ test('a lost activation reply is replayed with its original key, unavailable evi
   const person = await f.login({ accountId, email });
   const evidence = f.bindings.workflowPorts.provisioningEvidence;
   const readOriginal = f.bindings.workflowPorts.readOriginalLifecycleResult;
+  if (!readOriginal) throw new Error('Missing installed original lifecycle result reader');
   f.bindings.workflowPorts.provisioningEvidence = async () => null;
   f.bindings.workflowPorts.readOriginalLifecycleResult = async (input) =>
     input.kind === 'activation' && input.source.registrationId === stage.registration_id
       ? null
-      : (readOriginal?.(input) ?? null);
+      : readOriginal(input);
   const deletion = f.delete(person);
   try {
     await eventually(
