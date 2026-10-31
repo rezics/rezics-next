@@ -87,7 +87,8 @@ test('Permanent SDK writer refusal omits private workflow identity', async () =>
   owned.add(workflowID);
   await client.enqueue(options(workflowID), workflowID);
   await retireSdkWorkflowWriters(workflowID, client);
-  await expect(database.query(family[0][3], [workflowID])).rejects.toSatisfy((error: pg.DatabaseError) => {
+  await expect(database.query(family[0][3], [workflowID])).rejects.toSatisfy((error: unknown) => {
+    if (!(error instanceof Error) || !('code' in error)) return false;
     const diagnostic = `${String(error)} ${JSON.stringify(error)}`;
     return (
       error.code === 'P0001' &&
