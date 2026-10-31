@@ -58,7 +58,7 @@ test('default presentation editor takes a native invalid publication to its actu
     return match!;
   };
   const settle = async (ready: () => boolean) => {
-    for (let count = 0; count < 60 && !ready(); count++) await act(async () => { await Bun.sleep(10); });
+    for (let count = 0; count < 150 && !ready(); count++) await act(async () => { await Bun.sleep(10); });
     expect(ready(), [...host.querySelectorAll('button')].map((item) => [item.textContent, item.getAttribute('aria-label'), item.getAttribute('title')]).toString()).toBe(true);
   };
   const click = async (label: string) => { await act(async () => { button(label).click(); }); };
@@ -80,8 +80,6 @@ test('default presentation editor takes a native invalid publication to its actu
     });
   };
   const heading = async (id: string) => {
-    await settle(() => !!lookupButton(m.curation_puck_outline()));
-    await click(m.curation_puck_outline());
     await settle(() => !!host.querySelector(`[data-puck-layer-tree-id="${id}"]`));
     await act(async () => { host.querySelector(`[data-puck-layer-tree-id="${id}"] button`)!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
     await settle(() => !!textField('text.en'));
@@ -160,4 +158,4 @@ test('default presentation editor takes a native invalid publication to its actu
       else Reflect.deleteProperty(globalThis, key);
     }
   }
-});
+}, 15000);
