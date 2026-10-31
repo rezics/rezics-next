@@ -2265,7 +2265,7 @@
   "setup_context_next": "下一頁 Context",
   "setup_context_denied": "此 Context 或搜尋已無法供你使用。請選擇其他 Context，或在存取權限變更後重試。",
   "setup_context_unavailable": "Context 查詢目前無法使用。請保留草稿並重試，或在下方載入已知參照。",
-  "setup_context_keep_draft": "重試期間，你輸入的內容和已儲存步驟都會保留。儲存領域設定時會重新檢查所選項目。",
+  "setup_context_keep_draft": "重試期間，你輸入的內容和已儲存步驟都會保留。儲存領域設定時會重新檢查所選的 Context。",
   "space_setup_scheme_label": "看板方案",
   "space_setup_board_scheme_choices_hint": "選擇已安裝的 SKOS 方案。儲存後，可供新看板選擇的主題會改變；既有看板會保留其身分。",
   "space_setup_board_choice_search": "依名稱搜尋",
