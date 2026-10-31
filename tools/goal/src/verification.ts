@@ -765,6 +765,8 @@ export function validateHistoricalProofReaderSource(source: HistoricalProofReade
 /** Import validated current producer code; historical cwd is passed only as data to its read APIs. */
 export async function loadHistoricalProofReader(registry: string, source: HistoricalProofReaderSource): Promise<HistoricalProofReader> {
   const commit = validateHistoricalProofReaderSource(source);
+  // Even a failed import can populate Bun's module cache. Never reuse that root for another captured revision.
+  importedHistoricalSources.set(source.root, commit);
   const wrapper = join(source.root, 'scripts/worker-check.ts');
   const reader = await loadProofReader(wrapper);
   const custody: unknown = await import(pathToFileURL(join(wrapper, '../check-custody.ts')).href);
@@ -772,7 +774,6 @@ export async function loadHistoricalProofReader(registry: string, source: Histor
     throw new Error('Native historical v1 registration validator unavailable');
   if (validateHistoricalProofReaderSource(source) !== commit)
     throw new Error('Historical reader source changed during import');
-  importedHistoricalSources.set(source.root, commit);
   const validRegistration = custody.validRegistration;
   return {
     ...reader,

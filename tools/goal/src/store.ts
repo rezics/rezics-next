@@ -404,7 +404,7 @@ export class WorkerStore implements AttemptFence {
       const previous = this.db.query(`SELECT body FROM worker_events
         WHERE kind='historical-proof-reader-unavailable' ORDER BY sequence DESC LIMIT 1`)
         .get() as { body: string } | null;
-      const body = JSON.stringify({ cause });
+      const body = JSON.stringify({ cause: cause.slice(0, 2000) });
       if (previous?.body === body) return;
       this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
         .run(check.taskId, check.attempt, 'historical-proof-reader-unavailable', new Date().toISOString(), body);
