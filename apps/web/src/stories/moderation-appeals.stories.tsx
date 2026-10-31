@@ -3,21 +3,9 @@ import { expect, userEvent, within } from 'storybook/test';
 import { ModerationAppealsView } from '../moderation/appeals-tab';
 import type { Appeal } from '../moderation/appeals-read';
 import type { ModerationTarget } from '../moderation/reports-page';
-
-const meta = {
-  title: 'Pages/Moderation appeals',
-  parameters: {
-    layout: 'fullscreen',
-    viewport: {
-      viewports: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-    },
-  },
-} satisfies Meta;
-export default meta;
-type Story = StoryObj<typeof meta>;
+import { m } from '../paraglide/messages.js';
+import { AppShell } from '../shell/shell';
+import { PatternStory } from './page';
 
 // This fixed response is copied from the native fixture's successful GET /v1/boards/:id/appeals receipt.
 const pendingAppeal = {
@@ -40,64 +28,65 @@ const withheldTarget: ModerationTarget = {
   value: null,
 };
 
-function makeStory(
-  state: 'pending' | 'empty',
-  locale: 'en' | 'zh-Hant' | 'zh-Hans' | 'ja' | 'ko' | 'de' | 'fr' | 'es',
-  theme: 'light' | 'dark',
-  viewport: 'phone390' | 'desktop1280',
-): Story {
-  const appeals = state === 'pending' ? [pendingAppeal] : [];
-  const targets = state === 'pending' ? [withheldTarget] : [];
-  return {
-    name: `${state} appeal · ${locale} · ${theme} · ${viewport}`,
-    globals: { locale, theme },
-    parameters: { viewport: { defaultViewport: viewport } },
-    render: () => <ModerationAppealsView appeals={appeals} targets={targets} next={null} />,
-  };
-}
+const meta = {
+  title: 'Pages/Moderation appeals',
+  component: ModerationAppealsView,
+  parameters: { layout: 'fullscreen' },
+  decorators: [
+    (Story) => (
+      <PatternStory visitor="Signed In" path="/boards/community/moderation?tab=appeals">
+        <AppShell>
+          <Story />
+        </AppShell>
+      </PatternStory>
+    ),
+  ],
+  args: { next: null },
+} satisfies Meta<typeof ModerationAppealsView>;
+export default meta;
+type Story = StoryObj<typeof meta>;
 
-export const PendingEnglishLightPhone: Story = {
-  ...makeStory('pending', 'en', 'light', 'phone390'),
+export const Pending: Story = {
+  args: { appeals: [pendingAppeal], targets: [withheldTarget] },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const reports = canvas.getByRole('link', { name: /^Reports$/ });
-    const statement = canvas.getByRole('textbox', { name: /^Statement$/ });
-    const uphold = canvas.getByRole('button', { name: /^Uphold$/ });
+    const main = await canvas.findByRole('main');
+    const view = within(main);
+    await expect(canvas.getByRole('heading', { level: 1 })).toHaveTextContent(m.moderation_appeals_heading());
+    const reports = view.getByRole('link', { name: m.moderation_reports_tab() });
+    const statement = view.getByRole('textbox', { name: m.moderation_statement_label() });
+    const uphold = view.getByRole('button', { name: m.moderation_appeal_uphold_action() });
+
+    // The shell's skip target anchors keyboard progression inside the appeals page.
+    main.focus();
+    await expect(main).toHaveFocus();
     await userEvent.tab();
     await expect(reports).toHaveFocus();
     await userEvent.tab();
     await expect(statement).toHaveFocus();
+    await expect(uphold).toBeDisabled();
+    await userEvent.type(statement, 'Illustrative independent review statement.');
+    await expect(statement).toHaveValue('Illustrative independent review statement.');
+    await expect(uphold).toBeEnabled();
     await userEvent.tab();
     await expect(uphold).toHaveFocus();
-    await expect(canvas.getByText(pendingAppeal.decision.statement)).toBeInTheDocument();
-    await expect(canvas.getByText(pendingAppeal.decision.target.id)).toBeInTheDocument();
-    await expect(canvas.getByText(pendingAppeal.statement)).toBeInTheDocument();
+
+    await expect(view.getByText(pendingAppeal.decision.statement)).toBeInTheDocument();
+    await expect(view.getByText(pendingAppeal.decision.target.id)).toBeInTheDocument();
+    await expect(view.getByText(pendingAppeal.statement)).toBeInTheDocument();
+    await expect(view.getByRole('blockquote').textContent).toBe(m.moderation_target_unavailable());
+    await expect(view.queryByText(m.moderation_appeals_empty())).not.toBeInTheDocument();
   },
 };
-export const PendingEnglishLightDesktop: Story = makeStory('pending', 'en', 'light', 'desktop1280');
-export const PendingEnglishDarkPhone: Story = makeStory('pending', 'en', 'dark', 'phone390');
-export const PendingEnglishDarkDesktop: Story = makeStory('pending', 'en', 'dark', 'desktop1280');
-export const PendingChineseTraditionalLightPhone: Story = makeStory('pending', 'zh-Hant', 'light', 'phone390');
-export const PendingChineseTraditionalLightDesktop: Story = makeStory('pending', 'zh-Hant', 'light', 'desktop1280');
-export const PendingChineseSimplifiedLightPhone: Story = makeStory('pending', 'zh-Hans', 'light', 'phone390');
-export const PendingChineseSimplifiedLightDesktop: Story = makeStory('pending', 'zh-Hans', 'light', 'desktop1280');
-export const PendingJapaneseLightPhone: Story = makeStory('pending', 'ja', 'light', 'phone390');
-export const PendingJapaneseLightDesktop: Story = makeStory('pending', 'ja', 'light', 'desktop1280');
-export const PendingJapaneseDarkPhone: Story = makeStory('pending', 'ja', 'dark', 'phone390');
-export const PendingJapaneseDarkDesktop: Story = makeStory('pending', 'ja', 'dark', 'desktop1280');
-export const PendingKoreanLightPhone: Story = makeStory('pending', 'ko', 'light', 'phone390');
-export const PendingKoreanLightDesktop: Story = makeStory('pending', 'ko', 'light', 'desktop1280');
-export const PendingGermanLightPhone: Story = makeStory('pending', 'de', 'light', 'phone390');
-export const PendingGermanLightDesktop: Story = makeStory('pending', 'de', 'light', 'desktop1280');
-export const PendingFrenchLightPhone: Story = makeStory('pending', 'fr', 'light', 'phone390');
-export const PendingFrenchLightDesktop: Story = makeStory('pending', 'fr', 'light', 'desktop1280');
-export const PendingSpanishLightPhone: Story = makeStory('pending', 'es', 'light', 'phone390');
-export const PendingSpanishLightDesktop: Story = makeStory('pending', 'es', 'light', 'desktop1280');
-export const EmptyEnglishLightPhone: Story = makeStory('empty', 'en', 'light', 'phone390');
-export const EmptyEnglishLightDesktop: Story = makeStory('empty', 'en', 'light', 'desktop1280');
-export const EmptyEnglishDarkPhone: Story = makeStory('empty', 'en', 'dark', 'phone390');
-export const EmptyEnglishDarkDesktop: Story = makeStory('empty', 'en', 'dark', 'desktop1280');
-export const EmptyChineseSimplifiedLightPhone: Story = makeStory('empty', 'zh-Hans', 'light', 'phone390');
-export const EmptyChineseSimplifiedLightDesktop: Story = makeStory('empty', 'zh-Hans', 'light', 'desktop1280');
-export const EmptyChineseSimplifiedDarkPhone: Story = makeStory('empty', 'zh-Hans', 'dark', 'phone390');
-export const EmptyChineseSimplifiedDarkDesktop: Story = makeStory('empty', 'zh-Hans', 'dark', 'desktop1280');
+
+export const Empty: Story = {
+  args: { appeals: [], targets: [] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const view = within(await canvas.findByRole('main'));
+    await expect(canvas.getByRole('heading', { level: 1 })).toHaveTextContent(m.moderation_appeals_heading());
+    await expect(view.getByText(m.moderation_appeals_empty())).toBeVisible();
+    await expect(view.queryByRole('list')).not.toBeInTheDocument();
+    await expect(view.queryByRole('textbox')).not.toBeInTheDocument();
+  },
+};
