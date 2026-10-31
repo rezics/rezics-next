@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+// Load through the same Kernel entry point as the released fixture, without installing it.
+import '../../src/http/kernel.ts';
 import { releasedDiscoveryRuntime } from './support/released-discovery-runtime.ts';
 
 test('explicit kernelPool selects instrumentation and refuses process crash/restart before acquiring resources', async () => {
