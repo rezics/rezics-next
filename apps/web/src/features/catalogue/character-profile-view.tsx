@@ -19,6 +19,7 @@ import { RelationEditor } from './relation-editor';
 import type { CreateResult } from './create-subject';
 import { CharacterProfileCreate } from './character-profile-create';
 import { CharacterClassification } from './character-profile-classification';
+import { DefinitionMeaning } from './definition-meaning';
 import {
   characterFacts,
   characterGroups,
@@ -116,11 +117,8 @@ export function CharacterProfile({
               {pageText(current.release.types[characterType]!.labels, locale).text}{' '}
               <code className="text-sm">{characterType}</code>
             </p>
-            <p
-              lang={pageText(current.release.types[characterType]!.descriptions, locale).lang}
-              className="text-sm text-muted-foreground"
-            >
-              {pageText(current.release.types[characterType]!.descriptions, locale).text}
+            <p className="text-sm text-muted-foreground">
+              <DefinitionMeaning values={current.release.types[characterType]!.descriptions} locale={locale} />
             </p>
             {character ? (
               <>

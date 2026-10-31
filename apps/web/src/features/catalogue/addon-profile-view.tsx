@@ -15,6 +15,7 @@ import type { FactsTransport } from './subject-facts';
 import { RelationEditor } from './relation-editor';
 import { EditorFailure } from './statement-editor-view';
 import { AddonProfileCreate } from './addon-profile-create';
+import { DefinitionMeaning } from './definition-meaning';
 import { CharacterClassification } from './character-profile-classification';
 import { addonFacts, addonType, type AddonAddress, type AddonRead, type AddonTransport } from './addon-profile';
 
@@ -57,7 +58,6 @@ export function AddonProfile({
   const label = pageText(read?.public?.subject.labels, locale);
   const href = read?.public ? subjectHref({ id: read.public.subject.id, label: label.text }, locale).href : undefined;
   const profileLabel = pageText(read?.release.types[addonType]?.labels, locale);
-  const profileDescription = pageText(read?.release.types[addonType]?.descriptions, locale);
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <ViewHeadingActions
@@ -82,7 +82,9 @@ export function AddonProfile({
             <p>
               <span lang={profileLabel.lang}>{profileLabel.text}</span> <code>{addonType}</code>
             </p>
-            <p lang={profileDescription.lang}>{profileDescription.text}</p>
+            <p>
+              <DefinitionMeaning values={read.release.types[addonType]?.descriptions} locale={locale} />
+            </p>
             {read.public && (
               <p lang={label.lang} className="font-medium">
                 {label.text}

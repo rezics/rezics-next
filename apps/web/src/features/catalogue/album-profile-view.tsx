@@ -9,7 +9,8 @@ import type { CandidateTransport } from '../../subject/candidate-review';
 import { relationFields, type RelationTransport } from '../../subject/relation-candidates';
 import { subjectHref } from '../../subject/subject-href';
 import { albumFields, albumType, type AlbumTransport } from './album-profile';
-import { AlbumMeaning, AlbumProfileCreate } from './album-profile-create';
+import { AlbumProfileCreate } from './album-profile-create';
+import { DefinitionMeaning } from './definition-meaning';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { RelationEditor } from './relation-editor';
@@ -67,7 +68,7 @@ export function AlbumProfile({
         <p className="max-w-prose text-muted-foreground">{m.album_grain({}, o)}</p>
         {read && (
           <div className="flex flex-wrap items-center gap-3">
-            <AlbumMeaning values={read.release.types[albumType]?.labels} locale={locale} />
+            <DefinitionMeaning values={read.release.types[albumType]?.labels} locale={locale} />
             <DefinitionGuideLink
               locale={locale}
               address={{
@@ -194,7 +195,9 @@ function AlbumCorrections({
       <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5">
         <h2 className="text-xl font-semibold">{m.album_identity({}, o)}</h2>
         <p className="text-lg font-semibold">
-          <AlbumMeaning values={label} locale={locale} />
+          <span lang={pickText(label ?? {}, locale).lang ?? undefined}>
+            {title || m.subject_value_unlabelled({}, o)}
+          </span>
         </p>
         <code className="block break-all text-xs text-muted-foreground">
           {subject!.id} · {subject!.type}
@@ -290,7 +293,7 @@ function AlbumCorrections({
           .map((property) => (
             <section key={property} className="space-y-2">
               <h3 className="font-semibold">
-                <AlbumMeaning values={current.release.properties[property]!.labels} locale={locale} />
+                <DefinitionMeaning values={current.release.properties[property]!.labels} locale={locale} />
               </h3>
               <SelectedFacts property={property} read={current} locale={locale} />
             </section>
@@ -322,7 +325,7 @@ function AlbumCorrections({
           {fields!.classifications.map((property) => (
             <div key={property} className="space-y-2">
               <h3 className="font-medium">
-                <AlbumMeaning values={current.release.properties[property]!.labels} locale={locale} />
+                <DefinitionMeaning values={current.release.properties[property]!.labels} locale={locale} />
               </h3>
               {(subject!.statements[property] ?? []).map((statement) => (
                 <div key={statement.id}>

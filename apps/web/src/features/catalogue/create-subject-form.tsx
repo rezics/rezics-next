@@ -9,6 +9,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { DefinitionGuideLink } from './definition-guide-view';
+import { DefinitionMeaning } from './definition-meaning';
 import { GameProfileEntry } from './game-profile-entry';
 import type { ReactNode } from 'react';
 import type { InitialSubject } from './create-subject';
@@ -369,8 +370,14 @@ export function CreateSubjectForm({
                     <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
                   </>
                 )}
-                <FieldDescription id="create-type-help" lang={profile?.descriptionLanguage?.(type)}>
-                  {types.find((entry) => entry.id === type)?.description}
+                <FieldDescription id="create-type-help">
+                  {type && (
+                    <DefinitionMeaning
+                      text={types.find((entry) => entry.id === type)?.description}
+                      language={profile?.descriptionLanguage?.(type)}
+                      locale={locale}
+                    />
+                  )}
                 </FieldDescription>
                 <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/new` }} />
                 {invalid('create-type') && <FieldError>{m.catalogue_create_invalid_field({}, options)}</FieldError>}

@@ -7,6 +7,7 @@ import { useState, type ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { unitSymbols } from './statement-editor';
+import { DefinitionMeaning as Meaning } from './definition-meaning';
 import {
   definitionGuideHref,
   definitionText,
@@ -17,21 +18,6 @@ import {
   type GuideRelease,
   type GuideTransport,
 } from './definition-guide';
-
-function Meaning({ values, locale }: { values?: Record<string, string> | undefined; locale: string }) {
-  const chosen = definitionText(values, locale);
-  const o = { locale: locale as never };
-  return chosen.text ? (
-    <span lang={chosen.lang ?? undefined}>
-      {chosen.text}
-      {chosen.lang && chosen.lang !== locale && (
-        <span className="ms-2 text-sm text-muted-foreground">{m.guide_fallback({ language: chosen.lang }, o)}</span>
-      )}
-    </span>
-  ) : (
-    <span className="text-muted-foreground">{m.guide_missing({}, o)}</span>
-  );
-}
 
 function Kind({ datatype, locale }: { datatype: string; locale: string }) {
   const o = { locale: locale as never };

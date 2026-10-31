@@ -21,15 +21,7 @@ import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
 import { QualifierInput } from './relation-editor';
 import type { StatementInput } from './statement-editor';
 import { ScalarControl } from './statement-editor-view';
-
-export function AlbumMeaning({ values, locale }: { values?: Record<string, string> | undefined; locale: string }) {
-  const selected = pickText(values ?? {}, locale);
-  return (
-    <span lang={selected.lang ?? undefined}>
-      {selected.text || m.subject_value_unlabelled({}, { locale: locale as never })}
-    </span>
-  );
-}
+import { DefinitionMeaning } from './definition-meaning';
 
 type Row = { id: string; statement: StatementInput };
 
@@ -419,16 +411,14 @@ function AlbumInitialField({
       className="min-w-0 space-y-4 rounded-xl border border-border p-4 sm:p-5"
     >
       <legend className="px-2 font-semibold">
-        <AlbumMeaning values={definition?.labels} locale={locale} />
+        <DefinitionMeaning values={definition?.labels} locale={locale} />
       </legend>
       {(!definition || !release.types[albumType]?.properties.includes(statement.property.id)) && (
         <p role="alert">{m.correction_stale({}, o)}</p>
       )}
-      {definition?.descriptions && (
-        <p className="text-sm text-muted-foreground">
-          <AlbumMeaning values={definition.descriptions} locale={locale} />
-        </p>
-      )}
+      <p className="text-sm text-muted-foreground">
+        <DefinitionMeaning values={definition?.descriptions} locale={locale} />
+      </p>
       {definition?.datatype === 'wikibase-item' ? (
         <EntityPicker
           label={named(statement.property.id)}

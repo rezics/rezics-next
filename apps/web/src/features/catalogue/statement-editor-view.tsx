@@ -9,6 +9,7 @@ import { CandidateValue, pageText } from '../pages/data';
 import { isRecord } from '../pages/shared';
 import { m } from '../../paraglide/messages.js';
 import { DefinitionGuideLink } from './definition-guide-view';
+import { DefinitionMeaning } from './definition-meaning';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { subjectHref } from '../../subject/subject-href';
 import { ContributionLifecycle } from './contribution-lifecycle-view';
@@ -462,9 +463,9 @@ export function StatementFields({
             returnTo: guideReturn,
           }}
         />
-        {definition?.descriptions && (
-          <p className="text-sm text-muted-foreground">{pageText(definition.descriptions, locale).text}</p>
-        )}
+        <p className="text-sm text-muted-foreground">
+          <DefinitionMeaning values={definition?.descriptions} locale={locale} />
+        </p>
         {valueControl ?? (
           <ScalarControl
             part={draft}
