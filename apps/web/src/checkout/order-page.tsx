@@ -181,7 +181,7 @@ export function OrderPage({
             )}
             <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 text-sm">
               <dt className="text-muted-foreground">{m.order_currency()}</dt>
-              <dd>{money?.currency?.toUpperCase() || m.statements_amount_unavailable()}</dd>
+              <dd>{money?.currency?.toUpperCase() || m.order_currency_unavailable()}</dd>
               <dt className="text-muted-foreground">
                 {money?.taxBehavior === 'exclusive' ? m.order_recorded_price_exclusive() : m.order_recorded_price()}
               </dt>
@@ -259,7 +259,7 @@ export function OrderPage({
           <AlertDescription className="text-foreground">{m.order_confirming()}</AlertDescription>
         </Alert>
       )}
-      {order.settlement === 'failed' && !checkout && (
+      {order.settlement === 'failed' && !canceled && (
         <Alert role="status">
           <AlertDescription className="space-y-3 text-foreground">
             <p>{m.order_failed_detail()}</p>

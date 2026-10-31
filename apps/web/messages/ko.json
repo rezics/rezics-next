@@ -3767,6 +3767,7 @@
   "author_erasure_checking": "확인 중…",
   "author_erasure_back_thread": "스레드로 돌아가기",
   "order_currency": "통화",
+  "order_currency_unavailable": "통화 정보를 확인할 수 없습니다",
   "order_recorded_price": "기록된 단가",
   "order_recorded_price_exclusive": "기록된 단가(세금 별도)",
   "order_paid_total": "기록된 결제 총액",

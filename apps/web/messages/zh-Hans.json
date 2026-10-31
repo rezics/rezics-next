@@ -3768,6 +3768,7 @@
   "author_erasure_checking": "正在检查…",
   "author_erasure_back_thread": "返回讨论串",
   "order_currency": "币种",
+  "order_currency_unavailable": "币种信息不可用",
   "order_recorded_price": "记录的单价",
   "order_recorded_price_exclusive": "记录的单价（不含税）",
   "order_paid_total": "记录的实付总额",

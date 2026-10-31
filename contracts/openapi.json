@@ -118437,6 +118437,12 @@
                     "order": {
                       "additionalProperties": false,
                       "properties": {
+                        "amountTaxMinor": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
                         "checkoutExpiresAt": {
                           "type": [
                             "string",
@@ -118568,6 +118574,9 @@
                         "createdAt": {
                           "type": "string"
                         },
+                        "currency": {
+                          "type": "string"
+                        },
                         "entitlementId": {
                           "type": [
                             "string",
@@ -118608,6 +118617,59 @@
                         },
                         "offerId": {
                           "type": "string"
+                        },
+                        "recordedCharge": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "amountTaxMinor": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "amountTotalMinor": {
+                              "type": "integer"
+                            },
+                            "currency": {
+                              "type": "string"
+                            },
+                            "moneyUnit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "exponent": {
+                                  "enum": [
+                                    0,
+                                    2
+                                  ],
+                                  "type": "string"
+                                },
+                                "factsVersion": {
+                                  "const": "stripe-money-v1",
+                                  "type": "string"
+                                },
+                                "system": {
+                                  "const": "stripe-api",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "system",
+                                "exponent",
+                                "factsVersion"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "currency",
+                            "moneyUnit",
+                            "amountTotalMinor",
+                            "amountTaxMinor"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
                         },
                         "settlement": {
                           "enum": [
@@ -118809,8 +118871,14 @@
                             "null"
                           ]
                         },
+                        "taxCode": {
+                          "type": "string"
+                        },
                         "title": {
                           "type": "string"
+                        },
+                        "unitAmountMinor": {
+                          "type": "integer"
                         }
                       },
                       "required": [
@@ -118820,6 +118888,11 @@
                         "id",
                         "offerId",
                         "title",
+                        "currency",
+                        "unitAmountMinor",
+                        "taxCode",
+                        "amountTaxMinor",
+                        "recordedCharge",
                         "targetSubjectId",
                         "subject",
                         "settlement",

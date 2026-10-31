@@ -3770,6 +3770,7 @@
   "library_selection_unknown_label": "Unknown",
   "library_selection_not_attempted": "Not attempted",
   "order_currency": "Currency",
+  "order_currency_unavailable": "Currency unavailable",
   "order_recorded_price": "Recorded unit price",
   "order_recorded_price_exclusive": "Recorded unit price (excluding tax)",
   "order_paid_total": "Recorded paid total",

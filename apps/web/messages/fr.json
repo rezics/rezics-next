@@ -3767,6 +3767,7 @@
   "author_erasure_checking": "Vérification…",
   "author_erasure_back_thread": "Retour à la discussion",
   "order_currency": "Devise",
+  "order_currency_unavailable": "Devise indisponible",
   "order_recorded_price": "Prix unitaire enregistré",
   "order_recorded_price_exclusive": "Prix unitaire enregistré (hors taxes)",
   "order_paid_total": "Total payé enregistré",

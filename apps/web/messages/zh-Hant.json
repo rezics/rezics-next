@@ -3767,6 +3767,7 @@
   "author_erasure_checking": "檢查中…",
   "author_erasure_back_thread": "返回討論串",
   "order_currency": "幣別",
+  "order_currency_unavailable": "幣別資訊無法取得",
   "order_recorded_price": "記錄的單價",
   "order_recorded_price_exclusive": "記錄的單價（未稅）",
   "order_paid_total": "記錄的實付總額",

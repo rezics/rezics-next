@@ -3767,6 +3767,7 @@
   "author_erasure_checking": "Comprobando…",
   "author_erasure_back_thread": "Volver al hilo",
   "order_currency": "Moneda",
+  "order_currency_unavailable": "Moneda no disponible",
   "order_recorded_price": "Precio unitario registrado",
   "order_recorded_price_exclusive": "Precio unitario registrado (sin impuestos)",
   "order_paid_total": "Total pagado registrado",

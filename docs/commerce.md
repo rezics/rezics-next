@@ -5,6 +5,7 @@ Order page BFF. Its accepted price is the order's captured `currency`, `unitAmou
 `taxBehavior` and `taxCode`, never the offer's current terms. The recorded unit price is labelled separately from
 the recorded paid total. Exclusive tax is named only when that mode was captured. The order placement date is
 not presented as a settlement date.
+Missing currency has its own unavailable label in every supported locale; it is not described as a missing amount.
 
 `recordedCharge` is nullable. A historically paid order exposes the retained Checkout integration observation's
 actual `amount_total` and optional tax, with its own recorded currency and unit. This is the integration currency
@@ -24,6 +25,7 @@ owned by the [native Commerce contract](../services/kernel/src/commerce/README.m
 Payment and current access have separate labels. Failed, canceled and unresolved orders never render a purchased
 benefit's confirmation. Paid orders retain their receipt after revocation, and an incidental cancel return cannot
 override native paid settlement. Unavailable access, no entitlement and access requiring refresh remain distinct.
+An authoritative failed payment retains its explanation and return-to-offer link after a success return URL.
 The known benefit's primary reader link requires an active, associated current native entitlement, unrevoked state
 and matching captured terms. The Content reader reauthorizes the viewer and source when opened. Status polling
 updates only settlement and marks access for refresh; it cannot authorize a reader link.

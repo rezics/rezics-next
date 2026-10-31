@@ -3767,6 +3767,7 @@
   "author_erasure_checking": "確認中…",
   "author_erasure_back_thread": "スレッドに戻る",
   "order_currency": "通貨",
+  "order_currency_unavailable": "通貨情報を取得できません",
   "order_recorded_price": "記録された単価",
   "order_recorded_price_exclusive": "記録された単価（税抜）",
   "order_paid_total": "記録された支払総額",

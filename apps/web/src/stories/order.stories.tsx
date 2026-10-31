@@ -41,6 +41,11 @@ export const Failed: Story = {
   play: orderFailedReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths['order-failed']} />,
 };
+export const FailedAfterReturn: Story = {
+  name: 'Buyer, failed payment after checkout return',
+  play: orderFailedReady,
+  render: () => <PageStory visitor="Signed In" path={`${pagePaths['order-failed']}?checkout=success`} />,
+};
 export const Canceled: Story = {
   name: 'Buyer, canceled',
   play: orderCanceledReady,

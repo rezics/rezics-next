@@ -3767,6 +3767,7 @@
   "author_erasure_checking": "Wird geprüft …",
   "author_erasure_back_thread": "Zurück zum Thread",
   "order_currency": "Währung",
+  "order_currency_unavailable": "Währung nicht verfügbar",
   "order_recorded_price": "Gespeicherter Stückpreis",
   "order_recorded_price_exclusive": "Gespeicherter Stückpreis (ohne Steuern)",
   "order_paid_total": "Gespeicherter Zahlungsbetrag",
