@@ -20,6 +20,7 @@ import {
   bindNativeOwnerFilterRead,
   releaseNativeOwnerFilterRead,
   revalidateNativeOwnerFilter,
+  withNativeOwnerFilterSource,
 } from './owner-filter-native-binding.ts';
 import { readNativeOwnerFilterClosure } from './owner-filter-native-closure.ts';
 import { createMembersPreparation } from './members-preparation.ts';
@@ -95,7 +96,9 @@ export async function readOwnerFilterCandidateClosure(
   subjectId: string,
   work: NativeCollectionWork,
 ): Promise<Unavailable | Readonly<{ status: 'complete'; closure: OwnerFilterCandidateClosure }>> {
-  return readNativeOwnerFilterClosure(binding, source, subjectId, work);
+  return withNativeOwnerFilterSource(binding, work, () =>
+    readNativeOwnerFilterClosure(binding, source, subjectId, work),
+  );
 }
 
 const zero: WorkDimensions = {
@@ -248,12 +251,24 @@ export async function readBoundOwnerFilterPage(
   options: CollectionMemberQuery,
   binding: OwnerFilterReadBinding,
 ): Promise<{ members: { kind: 'dynamic'; subjectId: string }[]; next: string | null } | { preparing: true }> {
+  const work = new NativeCollectionWork(binding.input.allowance, binding.input.deadline);
+  return withNativeOwnerFilterSource(binding, work, () =>
+    readWorkingOwnerFilterPage(deps, admission, options, binding, work),
+  );
+}
+
+async function readWorkingOwnerFilterPage(
+  deps: Dependencies,
+  admission: CollectionMemberAdmission,
+  options: CollectionMemberQuery,
+  binding: OwnerFilterReadBinding,
+  work: NativeCollectionWork,
+): Promise<{ members: { kind: 'dynamic'; subjectId: string }[]; next: string | null } | { preparing: true }> {
   const input = binding.input;
   const limit = options.limit ?? 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
   requireAccessDeadline(input.deadline);
   const source = createCollectionSource(deps);
-  const work = new NativeCollectionWork(input.allowance, input.deadline);
   const prepared = await work.compose((allowance) => source.prepare({ ...input, allowance }));
   const current = prepared.source;
   if (

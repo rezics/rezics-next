@@ -384,6 +384,7 @@ async function bindOwner(
     kind: string;
     builtin: string | null;
     visibility: string;
+    ruleReady: boolean;
   }>(sourceQuery, values);
   if (
     !source ||
@@ -402,7 +403,11 @@ async function bindOwner(
       if (!output) throw new Refused('output_authority');
       outputMembers = output.members;
     }
-  } else if (source.kind === 'dynamic' && source.visibility !== 'private') {
+  } else if (
+    source.kind === 'dynamic' &&
+    source.visibility !== 'private' &&
+    (identity.scope !== 'private_builtin' || source.builtin !== null || !source.ruleReady)
+  ) {
     throw new Refused('output_authority');
   }
   if (

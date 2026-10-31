@@ -190,7 +190,7 @@ import {
   type NativeSourceFrontier,
 } from './native-source-custody.ts';
 import {
-  readNativeCollectionMetadata,
+  readNativeCollectionWorkingMetadata,
   readNativeCollectionRawPage,
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
@@ -342,7 +342,7 @@ async function scope(pool: Pool, metadata: NativeCollectionMetadata, l: Collecti
 }
 async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedger) {
   const { metadata } = await l.run((allowance) =>
-    readNativeCollectionMetadata(pool, input, { deadline: input.deadline, allowance }),
+    readNativeCollectionWorkingMetadata(pool, input, { deadline: input.deadline, allowance }),
   );
   if (!metadata || metadata.state !== 'active' || metadata.authority === 'unavailable_output') return null;
   // Public capture remains solely Semantic-owned. A Library capture is never substituted for public proof.
@@ -370,6 +370,7 @@ async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedg
             metadata.profileId,
             metadata.stateSetId,
             metadata.stateId,
+            ...(metadata.ruleReady ? [metadata.ruleRevision, metadata.ruleReleaseDigest] : []),
           ])
         : null,
     // Bind coverage into the actual generation commitment. An entry-only generation from an earlier
@@ -813,7 +814,7 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
   try {
     const context = contexts.get(pool);
     const { metadata } = await l.run((allowance) =>
-      readNativeCollectionMetadata(pool, input, { deadline: input.deadline, allowance }),
+      readNativeCollectionWorkingMetadata(pool, input, { deadline: input.deadline, allowance }),
     );
     if (
       !context ||

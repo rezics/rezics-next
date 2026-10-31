@@ -3,6 +3,60 @@ import { createOwnerFilterFixture, ownerRecord, ownerStatus, ownerString } from 
 import { discoveryKey } from '../support/released-discovery.ts';
 import { routeOf } from '../../src/route/route.ts';
 
+test('post-activation owner working queries keep private exclusions and leave the selected public set unchanged', async () => {
+  const f = await createOwnerFilterFixture();
+  try {
+    const filter = { and: [f.leaves.presence, { not: f.leaves.label }] };
+    const created = await f.native.request(
+      'alice',
+      'POST',
+      '/v1/collections',
+      {
+        membershipKind: 'dynamic',
+        title: 'Separate working graph',
+        visibility: 'private',
+        rule: { filter },
+      },
+      discoveryKey(),
+    );
+    ownerStatus(created, 201);
+    ownerRecord(created.body.collection);
+    const id = ownerString(created.body.collection.id);
+    const published = await f.native.request(
+      'alice',
+      'POST',
+      `/v1/collections/${id}:publishSelected`,
+      {
+        revision: created.body.collection.revision,
+        subjectIds: [f.subjects.entry.id],
+      },
+      discoveryKey(),
+    );
+    ownerStatus(published, 200);
+    const expected = [f.subjects.entry.id, f.subjects.sessionOnly.id, f.subjects.copyOnly.id].sort();
+    expect(await f.members(filter, 'alice', id)).toEqual(expected);
+    const selected = await f.native.inspect<{ subject: string }>(
+      `SELECT m.subject_id::text AS subject FROM library.collection_source_output_member m
+       JOIN library.collection_source_output_head h USING (route,collection_id,generation)
+       WHERE m.route=$1 AND m.collection_id=$2 ORDER BY m.subject_id`,
+      [routeOf(id), id],
+    );
+    expect(selected.rows).toEqual([{ subject: f.subjects.entry.id }]);
+    const reduced = await f.native.scoped('alice', ['collection:read', 'subject:read']);
+    ownerStatus(await reduced.request('GET', f.path(filter, undefined, id)), 403);
+    ownerStatus(await f.native.request('bob', 'GET', f.path(filter, undefined, id)), 422);
+    const unchanged = await f.native.inspect<{ subject: string }>(
+      `SELECT m.subject_id::text AS subject FROM library.collection_source_output_member m
+       JOIN library.collection_source_output_head h USING (route,collection_id,generation)
+       WHERE m.route=$1 AND m.collection_id=$2 ORDER BY m.subject_id`,
+      [routeOf(id), id],
+    );
+    expect(unchanged.rows).toEqual(selected.rows);
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
 test('Current native owner-filter admission binds actual Source time scope and complete originals instead of unconditional unavailable', async () => {
   const f = await createOwnerFilterFixture();
   try {

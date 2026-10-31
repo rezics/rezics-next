@@ -228,6 +228,69 @@ test('two completed generations retain exact custody and a third refuses without
   expect(await native(collection.id)).toEqual(before);
 }, 120_000);
 
+test('A real owner prepares and republishes an explicit selection after public activation while existing complete public output remains separately authoritative', async () => {
+  const a = await f.subject('Published selection A');
+  await f.entry(a);
+  const collection = await saved();
+  const first = await f.send('POST', path(collection.id), { revision: collection.revision, subjectIds: [a] });
+  expect(first.status).toBe(200);
+  const outputA = await first.json();
+  const before = await native(collection.id);
+
+  // This ordinary private write occurs AFTER activation. A cannot certify its private membership.
+  const b = await f.subject('New private working selection B');
+  await f.entry(b);
+  expect(await native(collection.id)).toEqual(before);
+  const query = new URLSearchParams({ filter: JSON.stringify({ owner: { presence: true } }), sort: 'id' });
+  const working = await f.send('GET', `/v1/collections/${collection.id}/members?${query}`);
+  expect(working.status).toBe(200);
+  const page = await working.json();
+  expect(page.members.map((row: { subjectId: string }) => row.subjectId)).toContain(b);
+  expect(await native(collection.id)).toEqual(before);
+  const scopes = await f.database.admin.query<{ scope: string; account: string; generation: string; capture: string }>(
+    `SELECT identity->>'scope' AS scope,identity->>'accountId' AS account,
+            identity->>'generation' AS generation,capture_id::text AS capture
+     FROM library.canonical_source_scope
+     WHERE route=$1 AND collection_id=$2 AND identity->>'generation'=$3 AND capture_id IS NOT NULL`,
+    [routeOf(collection.id), collection.id, before.collection.source_generation],
+  );
+  expect(scopes.rows).toEqual([
+    {
+      scope: 'private_builtin',
+      account: f.runtime.identity.ordinary.accountId,
+      generation: before.collection.source_generation,
+      capture: expect.any(String),
+    },
+  ]);
+  expect((await f.send('GET', `/v1/collections/${collection.id}/members?${query}`, undefined, f.other)).status).toBe(
+    422,
+  );
+  expect(await native(collection.id)).toEqual(before);
+
+  // The CAS is observed from the actual ordinary response, never manufactured from a generation.
+  const detail = await f.send('GET', `/v1/collections/${collection.id}`);
+  expect(detail.status).toBe(200);
+  const revision = (await detail.json()).collection.revision;
+  const second = await f.send('POST', path(collection.id), { revision, subjectIds: [b] });
+  expect(second.status).toBe(200);
+  const outputB = await second.json();
+  const after = await native(collection.id);
+  expect(after.members).toEqual([b]);
+  expect(after.selected.generation).toBe(outputB.publication.generation);
+  expect(after.generations).toContainEqual({
+    generation: outputA.publication.generation,
+    state: 'complete',
+    expected_members: '1',
+    written_members: '1',
+  });
+  const retainedA = await f.database.admin.query<{ subject: string }>(
+    `SELECT subject_id::text AS subject FROM library.collection_source_output_member
+     WHERE route=$1 AND collection_id=$2 AND generation=$3 ORDER BY subject_id`,
+    [routeOf(collection.id), collection.id, outputA.publication.generation],
+  );
+  expect(retainedA.rows).toEqual([{ subject: a }]);
+}, 120_000);
+
 test('closed explicit intent rejects omission, duplicates and manufactured proof; curated and logical builtins stay unsupported', async () => {
   const collection = await f.collection({}, f.owner);
   const id = await f.subject('Raw native input');

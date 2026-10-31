@@ -19,6 +19,7 @@ import { nativeSourceFence } from './canonical-source-store.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
 import { grantCapable } from './collection-reads.ts';
+import { admittedOwnerWorkingSource } from './owner-filter-working-source.ts';
 import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { NativeOrdinalKey, NativeOrdinalRow } from './collection-source-order.ts';
@@ -54,6 +55,9 @@ type Header = Ref & {
   profileId: string | null;
   stateSetId: string | null;
   stateId: string | null;
+  ruleRevision?: string | null;
+  ruleReleaseDigest?: string | null;
+  ruleReady?: boolean;
 };
 /** Private observation only. Possession grants no source or subject access. */
 export type NativeCollectionMetadata = Readonly<
@@ -67,6 +71,8 @@ export type NativeCollectionMetadata = Readonly<
     outputPublication: CollectionOutputPublication | null;
   }
 >;
+// Server-local provenance of structural working metadata, never a serialized permission bit.
+const workingMetadata = new WeakSet<NativeCollectionMetadata>();
 export type NativeCollectionWitness = Readonly<{
   incarnation: string;
   sourceGeneration: string;
@@ -400,9 +406,44 @@ async function observe(
     },
   });
 }
-export function readNativeCollectionMetadata(pool: Pool, ref: Ref, options: Options) {
+/** Structural producer read only. Maintenance/custody do not obtain reader authority from this result. */
+async function observeWorking(client: QueryClient, ref: Ref, work: NativeCollectionWork) {
+  const metadata = await observe(client, ref, work);
+  if (!metadata || metadata.membershipKind !== 'dynamic' || metadata.visibility === 'private') return metadata;
+  if (!metadata.curatorAccountId || metadata.builtinKind !== null || !metadata.ruleReady) return null;
+  const factFence =
+    (await client.query<{ generation: string }>(fenceSQL, [ref.route, metadata.curatorAccountId])).rows[0]
+      ?.generation ?? null;
+  const working: NativeCollectionMetadata = Object.freeze({
+    ...metadata,
+    authority: 'private_builtin',
+    factFence,
+    outputGeneration: null,
+    outputPublication: null,
+  });
+  workingMetadata.add(working);
+  return working;
+}
+
+export function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref, options: Options) {
   return call(pool, options, async (work) => ({
-    metadata: await readOnly(pool, options, work, (client) => observe(client, ref, work)),
+    metadata: await readOnly(pool, options, work, (client) => observeWorking(client, ref, work)),
+  }));
+}
+
+export function readNativeCollectionMetadata(pool: Pool, ref: Ref, options: Options) {
+  const owner = admittedOwnerWorkingSource(pool, ref.collectionId);
+  return call(pool, options, async (work) => ({
+    metadata: await readOnly(pool, options, work, async (client) => {
+      const metadata = await (owner ? observeWorking(client, ref, work) : observe(client, ref, work));
+      if (
+        owner &&
+        metadata?.membershipKind === 'dynamic' &&
+        (owner.actor.kind !== 'account' || metadata.curatorAccountId !== owner.actor.accountId)
+      )
+        throw new ProblemError('not_found');
+      return metadata;
+    }),
   }));
 }
 /** Raw source discovery stays separate from Source.prepare and never executes the built-in query recursively. */
@@ -430,6 +471,9 @@ export function authorizeNativeCollectionMetadata(
 ) {
   if (context.tx) throw new ProblemError('semantic_not_ready');
   authoritativeTimeValue(context.at);
+  const owner = workingMetadata.has(metadata) ? admittedOwnerWorkingSource(pool, metadata.collectionId) : undefined;
+  if (workingMetadata.has(metadata) && (!owner || owner.actor !== context.actor || owner.at !== context.at))
+    throw new ProblemError('not_found');
   return call(pool, context, async (work) => {
     const access = accessRoot(context.access);
     try {
@@ -477,7 +521,7 @@ export function authorizeNativeCollectionMetadata(
       current ??= await observe(client, metadata, work);
       if (!allowed || !current || current.state !== 'active' || current.incarnation !== metadata.incarnation)
         return { authorized: false };
-      if (current.visibility !== 'private') return { authorized: true };
+      if (current.visibility !== 'private' && !owner) return { authorized: true };
       const actor = context.actor;
       if (
         actor.kind !== 'account' ||
@@ -510,7 +554,9 @@ export function authorizeNativeCollectionMetadata(
   });
 }
 async function currentSource(client: QueryClient, metadata: NativeCollectionMetadata, work: NativeCollectionWork) {
-  const current = await observe(client, metadata, work);
+  const current = await (workingMetadata.has(metadata)
+    ? observeWorking(client, metadata, work)
+    : observe(client, metadata, work));
   if (!current || current.state !== 'active') throw new ProblemError('not_found');
   if (
     current.incarnation !== metadata.incarnation ||

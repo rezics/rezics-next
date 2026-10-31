@@ -1,4 +1,7 @@
-/** The sole Collection Source ABI and native runtime composition. */
+/** The sole Collection Source ABI and native runtime composition.
+ * Ordinary owner-working calls use the registered server query context, never a caller purpose flag.
+ * A selected public output and its curator's private working capture remain separate authorities.
+ */
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
@@ -329,6 +332,9 @@ export function createCollectionSource(dependencies: {
     if (!allowed.authorized) throw new ProblemError('not_found');
   }
   async function ready(input: CollectionSourceContext, metadata: NativeCollectionMetadata, l: CollectionSourceLedger) {
+    // The private canonical producer below cannot certify a public/frozen output capture.
+    if (metadata.authority !== 'curated' && metadata.authority !== 'private_builtin')
+      throw new ProblemError('dependency_unavailable');
     const result = await useCanonical(l, () =>
       readCanonicalSourceState(dependencies.pool, {
         route: metadata.route,

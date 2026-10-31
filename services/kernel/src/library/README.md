@@ -143,6 +143,22 @@ Current implementation evidence is narrower than the capability:
   Source for publication replay after public activation. Those cases remain unavailable. The Semantic scope/public-capture
   modules retain their own producer qualifications. Combined native journey and physical-bound proof of this closure
   remains controller-owned after actual runtime release; source typing does not certify those outcomes.
+  their null built-in kind. The admitted actual curator can also bind that private working Source after selected
+  public activation. `owner-filter-working-source.ts` carries the immutable native query admission, actor, actual
+  time/attempt and transferred ledger through all ordinary Source and closure calls. Working metadata uses the
+  current native curator/incarnation/epoch/source/rule/fact fences, with no public output generation or receipt.
+  The existing canonical capture/repair producer and native custody retain a distinct `private_builtin` identity
+  for the working facts; public output never certifies that capture. Private working reads require an explicit
+  owner filter on the existing members route; the ordinary unfiltered public/unlisted request continues to read
+  selected COMPLETE output. Current Collection/account and every expanded family scope/gate/Access are still
+  checked before and after work. Neither working reads nor preparation update the public head, output members or
+  its cursor basis. Publication B uses the existing native atomic output hooks and observed Collection revision;
+  failed/refused B retains A, and a third retained allocation still refuses without actual disposition.
+  This adds no whole-query publication or complete independent private-support originals for a state-only Source.
+  The Semantic scope/public-capture
+  modules retain their own producer qualifications. Complete native population,
+  current disclosure, retained preparation/default worker integration and physical bounds still require the
+  real producer bodies and combined native verification; source typing does not certify those outcomes.
 - `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
   the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.

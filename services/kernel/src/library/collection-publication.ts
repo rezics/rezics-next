@@ -39,6 +39,7 @@ import {
   completeCollectionSourceOutput,
 } from './collection-source-output.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
+import { revalidateNativeOwnerFilter, withNativeOwnerFilterSource } from './owner-filter-native-binding.ts';
 import { admitCollectionMemberQuery } from './owner-filter.ts';
 import {
   bindOwnerFilterRead,
@@ -163,8 +164,8 @@ type Prepared = {
 };
 
 /** Native preparation releases the parent before Source, identity, disclosure and private fact homes.
- * bindOwnerFilterRead and readOwnerFilterCandidateClosure are the EXISTING owned unavailable adapters.
- * Their absence is unavailability even for [], never proof of an empty Source or a successful publication.
+ * The actual admitted owner binding selects private working capture, including after output A activates.
+ * Missing capture is unavailability even for [], never proof of an empty Source or a successful publication.
  */
 async function prepareSelection(
   deps: Dependencies,
@@ -219,107 +220,110 @@ async function prepareSelection(
   )
     throw unavailable();
   const work = new NativeCollectionWork(binding.input.allowance, deadline);
-  // One transferred reservation, never another raw100 allowance. Hold the entire known output work
-  // before verification: parent CAS, <=100 children, checkpoints, two retained headers and ordinary event/receipt.
-  // Conservative plan-work charges are not a claim of measured native/whole-command physical proof.
-  const output = work.reserve({
-    ...zero,
-    candidateKeys: raw.length,
-    nativeRows: 2048 + raw.length * 32,
-    nativePoints: 128 + raw.length * 8,
-    statements: 64,
-    bytes: 65536 + raw.length * 512,
-    emptySeeks: 32,
-  });
-  const source = createCollectionSource(deps);
-  const prepared = await work.compose((allowance) => source.prepare({ ...binding.input, allowance }));
-  if (
-    prepared.source.observation.collectionId !== collectionId ||
-    prepared.source.observation.route !== route ||
-    prepared.source.observation.revision !== saved.header.revision ||
-    prepared.source.observation.incarnation !== binding.scope.key.source.identity.incarnation ||
-    prepared.source.observation.authority.kind !== 'private_builtin' ||
-    prepared.source.observation.authority.curatorAccountId !== actor.accountId
-  )
-    throw unavailable();
-  await currentScope(deps, binding, work);
-  async function resolveCurrent(originalId: string) {
-    // Raw selections AND every complete-original fact reference pay original/terminal disclosure.
-    // Source membership may return after one positive alias; it does not authorize the remaining closure.
-    const disclosure = work.reserve({
+  return withNativeOwnerFilterSource(binding, work, async () => {
+    // One transferred reservation, never another raw100 allowance. Hold the entire known output work
+    // before verification: parent CAS, <=100 children, checkpoints, two retained headers and ordinary event/receipt.
+    // Conservative plan-work charges are not a claim of measured native/whole-command physical proof.
+    const output = work.reserve({
       ...zero,
-      candidateKeys: 1,
-      nativeRows: 8192,
-      nativePoints: 128,
-      statements: 128,
-      bytes: 1024 * 1024,
+      candidateKeys: raw.length,
+      nativeRows: 2048 + raw.length * 32,
+      nativePoints: 128 + raw.length * 8,
+      statements: 64,
+      bytes: 65536 + raw.length * 512,
+      emptySeeks: 32,
     });
-    disclosure.dispatch();
-    let resolved;
-    try {
-      resolved = await resolveSubject(
-        deps,
-        actor,
-        originalId,
-        attempt.time,
-        commandAccessContext({ pool: deps.pool, deadline }, attempt),
-      );
-    } finally {
-      disclosure.settle();
-    }
-    if (!resolved) throw new ProblemError('not_found');
-    return resolved;
-  }
-  const verified: string[] = [];
-  for (const originalId of raw) {
-    const resolved = await resolveCurrent(originalId);
-    const membership = await work.compose((allowance) =>
-      source.containsSubject({
-        ...binding.input,
-        source: prepared.source,
-        allowance,
-        subjectId: resolved.subjectId,
-      }),
-    );
-    if (!sameSource(prepared.source.observation, membership.observation) || membership.result === 'not_proven')
+    const source = createCollectionSource(deps);
+    const prepared = await work.compose((allowance) => source.prepare({ ...binding.input, allowance }));
+    if (
+      prepared.source.observation.collectionId !== collectionId ||
+      prepared.source.observation.route !== route ||
+      prepared.source.observation.revision !== saved.header.revision ||
+      prepared.source.observation.incarnation !== binding.scope.key.source.identity.incarnation ||
+      prepared.source.observation.authority.kind !== 'private_builtin' ||
+      prepared.source.observation.authority.curatorAccountId !== actor.accountId
+    )
       throw unavailable();
-    if (!membership.result) throw new ProblemError('not_found');
-    const closure = await readOwnerFilterCandidateClosure(binding, prepared.source, resolved.subjectId, work);
-    if (closure.status !== 'complete') throw unavailable();
-    if (closure.closure.subjectId !== resolved.subjectId) throw unavailable();
-    // A canonical positive obtained from another alias cannot silently authorize an unobserved raw reference.
-    if (!closure.closure.originals.some((original) => original.subjectId === originalId)) throw unavailable();
-    for (const original of closure.closure.originals) {
-      const current = await resolveCurrent(original.subjectId);
-      if (current.subjectId !== resolved.subjectId) throw unavailable();
-    }
-    const snapshot = work.reserve({ ...zero, nativePoints: 1, statements: 3, bytes: 256 });
-    snapshot.dispatch();
-    let match;
-    try {
-      match = await withConnection(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const result = await readOwnerFilterCandidate(client, admission, closure.closure, work);
-          await client.query('COMMIT');
-          return result;
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
-        }
+    await currentScope(deps, binding, work);
+    async function resolveCurrent(originalId: string) {
+      // Raw selections AND every complete-original fact reference pay original/terminal disclosure.
+      // Source membership may return after one positive alias; it does not authorize the remaining closure.
+      const disclosure = work.reserve({
+        ...zero,
+        candidateKeys: 1,
+        nativeRows: 8192,
+        nativePoints: 128,
+        statements: 128,
+        bytes: 1024 * 1024,
       });
-    } finally {
-      snapshot.settle();
+      disclosure.dispatch();
+      let resolved;
+      try {
+        resolved = await resolveSubject(
+          deps,
+          actor,
+          originalId,
+          attempt.time,
+          commandAccessContext({ pool: deps.pool, deadline }, attempt),
+        );
+      } finally {
+        disclosure.settle();
+      }
+      if (!resolved) throw new ProblemError('not_found');
+      return resolved;
     }
-    if (match === 'not_proven') throw unavailable();
-    if (!match) throw new ProblemError('not_found');
-    verified.push(resolved.subjectId);
-  }
-  const final = await work.compose((allowance) => source.prepare({ ...binding.input, allowance }));
-  if (!sameSource(prepared.source.observation, final.source.observation)) throw conflict();
-  await currentScope(deps, binding, work);
-  return { ...saved, checks, binding, work, output, subjectIds: [...new Set(verified)].sort() };
+    const verified: string[] = [];
+    for (const originalId of raw) {
+      const resolved = await resolveCurrent(originalId);
+      const membership = await work.compose((allowance) =>
+        source.containsSubject({
+          ...binding.input,
+          source: prepared.source,
+          allowance,
+          subjectId: resolved.subjectId,
+        }),
+      );
+      if (!sameSource(prepared.source.observation, membership.observation) || membership.result === 'not_proven')
+        throw unavailable();
+      if (!membership.result) throw new ProblemError('not_found');
+      const closure = await readOwnerFilterCandidateClosure(binding, prepared.source, resolved.subjectId, work);
+      if (closure.status !== 'complete') throw unavailable();
+      if (closure.closure.subjectId !== resolved.subjectId) throw unavailable();
+      // A canonical positive obtained from another alias cannot silently authorize an unobserved raw reference.
+      if (!closure.closure.originals.some((original) => original.subjectId === originalId)) throw unavailable();
+      for (const original of closure.closure.originals) {
+        const current = await resolveCurrent(original.subjectId);
+        if (current.subjectId !== resolved.subjectId) throw unavailable();
+      }
+      const snapshot = work.reserve({ ...zero, nativePoints: 1, statements: 3, bytes: 256 });
+      snapshot.dispatch();
+      let match;
+      try {
+        match = await withConnection(deps.pool, async (connection) => {
+          const client = deadlineClient(connection, deadline);
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          try {
+            const result = await readOwnerFilterCandidate(client, admission, closure.closure, work);
+            await client.query('COMMIT');
+            return result;
+          } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+          }
+        });
+      } finally {
+        snapshot.settle();
+      }
+      if (match === 'not_proven') throw unavailable();
+      if (!match) throw new ProblemError('not_found');
+      verified.push(resolved.subjectId);
+    }
+    const final = await work.compose((allowance) => source.prepare({ ...binding.input, allowance }));
+    if (!sameSource(prepared.source.observation, final.source.observation)) throw conflict();
+    await revalidateNativeOwnerFilter(binding, work);
+    await currentScope(deps, binding, work);
+    return { ...saved, checks, binding, work, output, subjectIds: [...new Set(verified)].sort() };
+  });
 }
 
 export function createCollectionPublications(deps: Dependencies) {

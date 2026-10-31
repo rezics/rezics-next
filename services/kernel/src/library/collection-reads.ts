@@ -680,7 +680,10 @@ export function createCollectionReads(
       )
         throw new ProblemError('stale_cursor');
     };
-    if (collection.visibility !== 'private') {
+    if (
+      collection.visibility !== 'private' &&
+      !(options.filter !== undefined && viewer.kind === 'account' && viewer.accountId === collection.curatorAccountId)
+    ) {
       // Explicit COMPLETE output is the entire public read authority. Never load the curator's rule here.
       if (options.filter !== undefined || (options.sort !== undefined && options.sort !== 'id'))
         throw new ProblemError('unsupported_query');
@@ -699,6 +702,7 @@ export function createCollectionReads(
         },
       });
     }
+    // An explicit admitted owner query selects the private working graph even after public activation.
     // A management grant is insufficient to execute another curator's private predicates.
     if (
       viewer.kind !== 'account' ||
