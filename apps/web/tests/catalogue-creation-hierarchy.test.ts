@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 
@@ -25,6 +25,7 @@ test('A contributor starts the actual creation task before alternative editors a
   const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
   const { within } = await import(Bun.resolveSync('@testing-library/dom', storybook));
   const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
+  mock.module('cloudflare:workers', () => ({ env: {} }));
   const { CreateSubjectForm } = await import('../src/features/catalogue/create-subject-form');
   const { StoryArcProfile } = await import('../src/features/catalogue/story-arc-profile-view');
   const { catalogueCreateFixture } = await import('../src/kernel/fake/catalogue-create');
