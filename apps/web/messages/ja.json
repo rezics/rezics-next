@@ -2687,7 +2687,7 @@
   "creator_editions_create": "版を作成",
   "creator_editions_denied": "現在の権限ではこれらの版を表示できません。アクセス権が変わった後に、もう一度確認してください。",
   "creator_editions_draft": "下書き",
-  "creator_editions_empty": "まだ戻る版はありません。自分が作成したリビジョンから版を作成してください。",
+  "creator_editions_empty": "まだ版はありません。自分が作成したリビジョンから版を作成してください。",
   "creator_editions_heading": "自分の版",
   "creator_editions_intro": "下書きに戻るか、公開済みの固定版の次の手順を管理します。",
   "creator_editions_licence": "ライセンス",
