@@ -1,3 +1,4 @@
+import { normalizeRealmBanTargetHandle, type BanTargetState } from './realm-ban-target';
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import { MediaProblem } from '../media/kernel';
@@ -153,5 +154,46 @@ export async function writeRealmBan(
     if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
     if (error instanceof MediaProblem && error.problem.status === 403) return { ok: false, reason: 'forbidden' };
     return { ok: false, reason: 'unavailable' };
+  }
+}
+
+/** One exact native claim/forward/current identity read, never a public URL fetch or prefix search. */
+export async function loadRealmBanTarget(
+  client: KernelClient,
+  request: Request,
+  env: Partial<SessionEnv>,
+  handle: string,
+  signal: AbortSignal = request.signal,
+): Promise<BanTargetState> {
+  const normalized = normalizeRealmBanTargetHandle(handle);
+  if (!normalized) return { state: 'invalid' };
+  try {
+    const stale = await prepareSession(request, env);
+    const authorization = viewerCredential(request);
+    if (stale || !authorization) return { state: 'signed-out' };
+    const result = await client.accounts.get({
+      query: { handle: normalized },
+      headers: { authorization },
+      fetch: { signal },
+    });
+    if (signal.aborted) return { state: 'unavailable' };
+    if (result.status === 401) return { state: 'signed-out' };
+    if (result.status === 403) return { state: 'refused' };
+    if (result.status === 400 || result.status === 422) return { state: 'invalid' };
+    if (result.status === 404) return { state: 'missing' };
+    if (result.error || result.status !== 200 || !result.data || result.data.accounts.length > 1)
+      return { state: 'unavailable' };
+    const account = result.data.accounts[0];
+    if (!account || account.state !== 'active') return { state: 'missing' };
+    if (!account.handle || !normalizeRealmBanTargetHandle(account.handle)) return { state: 'unavailable' };
+    const movedTo = 'movedTo' in account ? account.movedTo : undefined;
+    if (
+      (movedTo !== undefined && movedTo !== account.handle) ||
+      (account.handle.toLowerCase() !== normalized && movedTo !== account.handle)
+    )
+      return { state: 'unavailable' };
+    return { state: 'ready', target: { lookupHandle: normalized, account: { ...account, handle: account.handle } } };
+  } catch {
+    return { state: 'unavailable' };
   }
 }

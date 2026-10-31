@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useSession } from '../session/query';
-import { changeRealmBan, readRealmBans } from './space-actions';
+import { changeRealmBan, readRealmBans, resolveRealmBanTarget } from './space-actions';
 import { RealmBansControl } from './realm-bans-control';
 import type { BanWriteInput, BanWriteResult } from './realm-bans';
 
@@ -18,6 +18,10 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
     },
     [csrfToken],
   );
+  const resolve = useCallback(
+    (handle: string, signal: AbortSignal) => resolveRealmBanTarget({ data: handle, signal }),
+    [subject, csrfToken],
+  );
   if (state !== 'signed-in' || !subject) return null;
   return (
     <RealmBansControl
@@ -25,6 +29,7 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
       realmId={realmId}
       read={read}
       write={write}
+      resolve={resolve}
       ready={csrfToken !== null}
     />
   );

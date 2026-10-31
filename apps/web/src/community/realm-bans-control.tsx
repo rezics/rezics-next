@@ -2,14 +2,24 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
+import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
+import { initials } from '@rezics/ui/avatar-initials';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
+import {
+  parseRealmBanTarget,
+  revalidateRealmBanTarget,
+  type BanTargetState,
+  type RealmBanTarget,
+  type ResolveBanTarget,
+} from './realm-ban-target';
 import type { BanReadState, BanWriteInput, BanWriteResult } from './realm-bans';
 
 export type RealmBansControlProps = {
   realmId: string;
   initial?: BanReadState;
   ready: boolean;
+  resolve?: ResolveBanTarget;
   read: (cursor?: string) => Promise<BanReadState>;
   write: (input: BanWriteInput) => Promise<BanWriteResult>;
 };
@@ -61,11 +71,76 @@ function writeMessage(reason: Extract<BanWriteResult, { ok: false }>['reason']) 
   }
 }
 
+function targetMessage(state: BanTargetState['state']) {
+  switch (state) {
+    case 'pending':
+      return m.realm_bans_target_pending();
+    case 'invalid':
+      return m.realm_bans_target_invalid();
+    case 'missing':
+      return m.realm_bans_target_missing();
+    case 'refused':
+      return m.realm_bans_target_refused();
+    case 'signed-out':
+      return m.realm_bans_signed_out();
+    case 'unavailable':
+      return m.realm_bans_target_unavailable();
+    case 'changed':
+      return m.realm_bans_target_changed();
+    default:
+      return '';
+  }
+}
+
+function TargetPreview({ target }: { target: RealmBanTarget }) {
+  const { account, lookupHandle } = target;
+  return (
+    <div className="flex items-center gap-3 rounded-xl bg-muted p-4">
+      <Avatar aria-hidden="true">
+        <AvatarFallback>{initials(account.displayName || account.handle)}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 space-y-1 break-words text-sm">
+        {account.displayName ? <p className="font-medium">{account.displayName}</p> : null}
+        <p>@{account.handle}</p>
+        {'movedTo' in account && account.movedTo ? (
+          <p>{m.realm_bans_target_moved({ former: lookupHandle, current: account.movedTo })}</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+const unavailableTarget: ResolveBanTarget = async () => ({ state: 'unavailable' });
+
 /** A complete Realm management region, composed from shadcn fields and buttons; no registry equivalent exists. */
-export function RealmBansControl({ realmId, initial, ready, read, write }: RealmBansControlProps) {
+export function RealmBansControl({
+  realmId,
+  initial,
+  ready,
+  read,
+  write,
+  resolve = unavailableTarget,
+}: RealmBansControlProps) {
   const id = useId();
   const [view, setView] = useState<BanReadState>(initial ?? { state: 'loading' });
-  const [accountId, setAccountId] = useState('');
+  const [query, setQuery] = useState('');
+  const [target, setTarget] = useState<BanTargetState>({ state: 'idle' });
+  const [selected, setSelected] = useState<RealmBanTarget | null>(null);
+  const [banConfirm, setBanConfirm] = useState(false);
+  const lookup = useRef<AbortController | null>(null);
+  const invalidateTarget = useCallback(() => {
+    lookup.current?.abort();
+    lookup.current = null;
+    setTarget({ state: 'idle' });
+    setSelected(null);
+    setBanConfirm(false);
+  }, []);
+  useEffect(() => {
+    invalidateTarget();
+    return () => {
+      lookup.current?.abort();
+    };
+  }, [realmId, ready, resolve, invalidateTarget]);
   const [reason, setReason] = useState('');
   const [confirm, setConfirm] = useState<string | null>(null);
   const [result, setResult] = useState<BanWriteResult | null>(null);
@@ -76,6 +151,7 @@ export function RealmBansControl({ realmId, initial, ready, read, write }: Realm
 
   const refresh = useCallback(
     async (cursor?: string) => {
+      invalidateTarget();
       const current = ++generation.current;
       setView({ state: 'loading' });
       let next: BanReadState;
@@ -92,7 +168,7 @@ export function RealmBansControl({ realmId, initial, ready, read, write }: Realm
         }
       }
     },
-    [read],
+    [read, invalidateTarget],
   );
 
   useEffect(() => {
@@ -120,16 +196,75 @@ export function RealmBansControl({ realmId, initial, ready, read, write }: Realm
     if (next.ok) {
       setConfirm(null);
       if (input.action === 'ban') {
-        setAccountId('');
+        invalidateTarget();
+        setQuery('');
         setReason('');
       }
       void refresh();
     } else if (next.reason === 'forbidden' || next.reason === 'signed-out' || next.reason === 'closed') {
+      invalidateTarget();
       setView({ state: next.reason });
       setConfirm(null);
     }
     working.current = false;
     setBusy(false);
+  }
+
+  async function findTarget() {
+    if (!ready || busy || retry || view.state !== 'ready') return;
+    invalidateTarget();
+    const handle = parseRealmBanTarget(query, window.location.origin);
+    if (!handle) {
+      setTarget({ state: 'invalid' });
+      return;
+    }
+    const controller = new AbortController();
+    lookup.current = controller;
+    setTarget({ state: 'pending' });
+    let next: BanTargetState;
+    try {
+      next = await resolve(handle, controller.signal);
+    } catch {
+      next = { state: 'unavailable' };
+    }
+    if (!controller.signal.aborted && lookup.current === controller) {
+      setTarget(next);
+      if (next.state === 'signed-out') setView({ state: 'signed-out' });
+    }
+  }
+
+  async function submitBan() {
+    if (!ready || working.current || retry || view.state !== 'ready' || !selected || !banConfirm) return;
+    const reviewed = selected;
+    const controller = new AbortController();
+    lookup.current?.abort();
+    lookup.current = controller;
+    working.current = true;
+    setBusy(true);
+    setTarget({ state: 'pending' });
+    let current: BanTargetState;
+    try {
+      current = await revalidateRealmBanTarget(resolve, reviewed, controller.signal);
+    } catch {
+      current = { state: 'unavailable' };
+    }
+    working.current = false;
+    setBusy(false);
+    if (controller.signal.aborted || lookup.current !== controller) return;
+    if (current.state !== 'ready') {
+      invalidateTarget();
+      setTarget(current);
+      if (current.state === 'signed-out') setView({ state: 'signed-out' });
+      return;
+    }
+    setTarget(current);
+    await change({
+      realmId,
+      accountId: reviewed.account.id,
+      reason,
+      action: 'ban',
+      idempotencyKey: crypto.randomUUID(),
+    });
   }
 
   const disabled = !ready || busy || retry !== null;
@@ -162,14 +297,7 @@ export function RealmBansControl({ realmId, initial, ready, read, write }: Realm
             className="max-w-xl space-y-4"
             onSubmit={(event) => {
               event.preventDefault();
-              if (!disabled)
-                void change({
-                  realmId,
-                  accountId: accountId.trim(),
-                  reason,
-                  action: 'ban',
-                  idempotencyKey: crypto.randomUUID(),
-                });
+              if (!disabled && selected) setBanConfirm(true);
             }}
           >
             <Field>
@@ -179,13 +307,53 @@ export function RealmBansControl({ realmId, initial, ready, read, write }: Realm
                 required
                 autoComplete="off"
                 spellCheck={false}
-                maxLength={36}
-                pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"
-                value={accountId}
+                maxLength={2048}
+                aria-describedby={`${id}-target-help`}
+                value={query}
                 disabled={disabled}
-                onChange={(event) => setAccountId(event.target.value)}
+                onChange={(event) => {
+                  invalidateTarget();
+                  setQuery(event.target.value);
+                }}
               />
+              <p id={`${id}-target-help`} className="text-sm text-muted-foreground">
+                {m.realm_bans_target_help()}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={disabled || !query.trim() || target.state === 'pending'}
+                onClick={() => void findTarget()}
+              >
+                {m.realm_bans_target_lookup()}
+              </Button>
             </Field>
+            {target.state === 'ready' ? (
+              <div className="space-y-3">
+                <TargetPreview target={target.target} />
+                {selected ? (
+                  <p role="status" className="text-sm">
+                    {m.realm_bans_target_selected()}
+                  </p>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={disabled}
+                    onClick={() => {
+                      setSelected(target.target);
+                      setBanConfirm(false);
+                    }}
+                  >
+                    {m.realm_bans_target_select()}
+                  </Button>
+                )}
+              </div>
+            ) : target.state !== 'idle' ? (
+              <p role="status" className="text-sm">
+                {targetMessage(target.state)}
+              </p>
+            ) : null}
             <Field>
               <FieldLabel htmlFor={`${id}-reason`}>{m.realm_bans_reason()}</FieldLabel>
               <Textarea
@@ -193,12 +361,30 @@ export function RealmBansControl({ realmId, initial, ready, read, write }: Realm
                 maxLength={1024}
                 value={reason}
                 disabled={disabled}
-                onChange={(event) => setReason(event.target.value)}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                  setBanConfirm(false);
+                }}
               />
             </Field>
-            <Button type="submit" disabled={disabled || !accountId.trim()}>
+            <Button type="submit" disabled={disabled || !selected || target.state !== 'ready'}>
               {m.realm_bans_ban()}
             </Button>
+            {banConfirm && selected ? (
+              <div className="space-y-3 rounded-xl border p-4">
+                <p className="text-sm">{m.realm_bans_ban_confirm()}</p>
+                <TargetPreview target={selected} />
+                <p className="whitespace-pre-wrap break-words text-sm">{reason || m.realm_bans_no_reason()}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" disabled={disabled} onClick={() => void submitBan()}>
+                    {m.realm_bans_confirm_ban()}
+                  </Button>
+                  <Button type="button" variant="ghost" disabled={disabled} onClick={() => setBanConfirm(false)}>
+                    {m.realm_bans_cancel()}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </form>
           <h3 className="font-semibold">{m.realm_bans_current()}</h3>
           {view.page.items.length === 0 ? (

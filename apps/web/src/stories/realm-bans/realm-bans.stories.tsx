@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { PatternStory } from '../page';
-import { exampleAccountId, RealmBansExample } from './example';
+import { RealmBansExample } from './example';
 
 const meta = {
   title: 'Patterns/Community/Realm bans',
@@ -24,9 +24,12 @@ type Story = StoryObj<typeof meta>;
 
 export async function submitBan({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
-  await userEvent.type(await canvas.findByRole('textbox', { name: m.realm_bans_account() }), exampleAccountId);
+  await userEvent.type(await canvas.findByRole('textbox', { name: m.realm_bans_account() }), '@river');
+  await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_target_lookup() }));
+  await userEvent.click(await canvas.findByRole('button', { name: m.realm_bans_target_select() }));
   await userEvent.type(canvas.getByRole('textbox', { name: m.realm_bans_reason() }), 'Repeated disruption');
   await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_ban() }));
+  await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_confirm_ban() }));
   return canvas;
 }
 
@@ -124,7 +127,7 @@ export const RoleRemovalRequired: Story = {
   play: async (context) => {
     const canvas = await submitBan(context);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.realm_bans_role_required());
-    await expect(canvas.getByRole('textbox', { name: m.realm_bans_account() })).toHaveValue(exampleAccountId);
+    await expect(canvas.getByRole('textbox', { name: m.realm_bans_account() })).toHaveValue('@river');
   },
 };
 export const Revoked: Story = {

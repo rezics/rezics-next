@@ -1,6 +1,6 @@
-import { expect, test } from 'bun:test';
+import { expect, test, mock } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { RealmBanOutcome, RealmBansControl } from '../src/community/realm-bans-control';
 import { loadRealmBans, writeRealmBan, type BanWriteInput } from '../src/community/realm-bans';
@@ -175,4 +175,223 @@ test('Realm ban lists and intents are scoped to the current signed-in subject', 
   expect(control).toContain('const [confirm, setConfirm] = useState<string | null>(null);');
   expect(control).toContain('const [retry, setRetry] = useState<BanWriteInput | null>(null);');
   expect(control).toContain('if (generation.current !== current) return;');
+});
+
+test('A Realm moderator selects a current account by exact handle or same-site profile URL and reviews its current identity before the original native ban command', async () => {
+  const { dirname } = await import('node:path');
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.example.test/en/@moderator' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const originalFetch = globalThis.fetch;
+  const start = await import('../.storybook/react-start');
+  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start/server', () => ({ getRequest: () => request(), setResponseHeader() {} }));
+  mock.module('cloudflare:workers', () => ({ env: { KERNEL_ORIGIN: 'https://kernel.example.test' } }));
+  const calls: Request[] = [];
+  const identity = {
+    id: accountId,
+    kind: 'actor',
+    state: 'active',
+    handle: 'river',
+    displayName: 'River 林',
+    automated: false,
+    operatorId: null,
+    movedTo: 'river',
+    subject: null,
+    verified: false,
+  };
+  let current = { ...identity };
+  let lookupStatus = 200;
+  let loseResponse = false;
+  let banned = false;
+  let late: ((response: Response) => void) | null = null;
+  let deferLookup = false;
+  globalThis.fetch = (async (url, init) => {
+    const next = new Request(url, init);
+    calls.push(next);
+    expect(next.headers.get('authorization')).toBe(authorization);
+    const path = new URL(next.url);
+    if (path.pathname === '/v1/accounts') {
+      expect([...path.searchParams.keys()]).toEqual(['handle']);
+      expect(path.searchParams.get('handle')).toBe('former');
+      if (deferLookup)
+        return new Promise<Response>((resolve) => {
+          late = resolve;
+        });
+      return lookupStatus === 200
+        ? Response.json({ accounts: [current] })
+        : Response.json({ code: 'forbidden' }, { status: lookupStatus });
+    }
+    if (next.method === 'GET') {
+      expect(path.pathname).toBe(`/v1/realms/${realmId}/bans`);
+      return Response.json({
+        items: banned ? [{ accountId, reason: ban.reason, actor: laterAccount, at: ban.at }] : [],
+        next: null,
+      });
+    }
+    expect(path.pathname).toBe(`/v1/realms/${realmId}/bans/${accountId}`);
+    if (next.method === 'DELETE') {
+      banned = false;
+      return new Response(null, { status: 204 });
+    }
+    expect(next.method).toBe('PUT');
+    expect(await next.clone().json()).toEqual({ reason: ban.reason });
+    banned = true;
+    if (loseResponse) {
+      loseResponse = false;
+      throw new TypeError('Response lost');
+    }
+    return Response.json({ ban });
+  }) as typeof fetch;
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { RealmBansPanel } = await import('../src/community/realm-bans-panel');
+  const { sessionQuery } = await import('../src/session/query');
+  const { m } = await import('../src/paraglide/messages.js');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', csrfToken: 'current-token', subject: laterAccount });
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const render = () =>
+    root.render(createElement(QueryClientProvider, { client }, createElement(RealmBansPanel, { realmId })));
+  const settle = () =>
+    act(async () => {
+      await Bun.sleep(5);
+    });
+  const button = (label: string) => {
+    const found = [...host.querySelectorAll('button')].find((node) => node.textContent === label);
+    if (!found) throw new Error(`Missing button: ${label}`);
+    return found;
+  };
+  const click = async (label: string) => {
+    await act(async () => {
+      button(label).click();
+    });
+    await settle();
+  };
+  const enter = async (value: string, selector = 'input') => {
+    const field = host.querySelector(selector)!;
+    const prototype = selector === 'input' ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(field, value);
+      field.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+  };
+  const lookUp = async (value = '@FORMER') => {
+    await enter(value);
+    await click(m.realm_bans_target_lookup());
+  };
+  const review = async () => {
+    await click(m.realm_bans_target_select());
+    await enter(ban.reason, 'textarea');
+    await click(m.realm_bans_ban());
+  };
+  const writes = () => calls.filter((call) => call.method === 'PUT');
+  try {
+    await act(async () => {
+      render();
+    });
+    await settle();
+    for (const value of [
+      accountId,
+      'https://outside.test/en/@former',
+      '/accounts/' + accountId + '/profile',
+      '/en/@former/posts',
+      '@名字',
+    ]) {
+      const before = calls.length;
+      await lookUp(value);
+      expect(host.textContent).toContain(m.realm_bans_target_invalid());
+      expect(calls).toHaveLength(before);
+    }
+    await lookUp('https://site.example.test/en/@FORMER');
+    expect(host.textContent).toContain('River 林');
+    expect(host.textContent).toContain('@river');
+    expect(host.textContent).toContain(m.realm_bans_target_moved({ former: 'former', current: 'river' }));
+    expect(button(m.realm_bans_ban()).disabled).toBe(true); // No automatic first-result selection.
+    await review();
+    current = { ...identity, handle: 'elsewhere', movedTo: 'elsewhere' };
+    await click(m.realm_bans_confirm_ban());
+    expect(host.textContent).toContain(m.realm_bans_target_changed());
+    expect(writes()).toHaveLength(0);
+    for (const changed of [
+      { ...identity, id: laterAccount },
+      { ...identity, displayName: 'Changed name' },
+    ]) {
+      current = { ...identity };
+      await lookUp();
+      await review();
+      current = changed;
+      await click(m.realm_bans_confirm_ban());
+      expect(host.textContent).toContain(m.realm_bans_target_changed());
+      expect(writes()).toHaveLength(0);
+    }
+    current = { ...identity };
+    await lookUp();
+    await review();
+    lookupStatus = 403;
+    await click(m.realm_bans_confirm_ban());
+    expect(host.textContent).toContain(m.realm_bans_target_refused());
+    expect(writes()).toHaveLength(0);
+    lookupStatus = 200;
+    deferLookup = true;
+    await lookUp();
+    expect(host.textContent).toContain(m.realm_bans_target_pending());
+    await enter('@another');
+    deferLookup = false;
+    await act(async () => {
+      late!(Response.json({ accounts: [identity] }));
+    });
+    expect(host.textContent).not.toContain('River 林');
+    await lookUp();
+    await review();
+    loseResponse = true;
+    await click(m.realm_bans_confirm_ban());
+    expect(host.textContent).toContain(m.realm_bans_write_unavailable());
+    const lookups = calls.filter((call) => new URL(call.url).pathname === '/v1/accounts').length;
+    current = { ...identity, id: laterAccount };
+    await click(m.realm_bans_retry());
+    expect(calls.filter((call) => new URL(call.url).pathname === '/v1/accounts')).toHaveLength(lookups);
+    expect(writes()).toHaveLength(2);
+    expect(writes()[0]!.headers.get('idempotency-key')).toBe(writes()[1]!.headers.get('idempotency-key'));
+    expect(await writes()[1]!.clone().json()).toEqual({ reason: ban.reason });
+    expect(host.textContent).toContain(m.realm_bans_active());
+    // Unban still addresses the returned native row, without a public identity read.
+    await click(m.realm_bans_unban());
+    await click(m.realm_bans_confirm());
+    expect(calls.filter((call) => new URL(call.url).pathname === '/v1/accounts')).toHaveLength(lookups);
+    expect(host.textContent).toContain(m.realm_bans_lifted());
+    await lookUp();
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', csrfToken: 'new-token', subject: accountId });
+    });
+    await settle();
+    expect(host.textContent).not.toContain('River 林');
+    expect(host.querySelector('input')!.value).toBe('');
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    client.clear();
+    globalThis.fetch = originalFetch;
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    mock.restore();
+    await window.happyDOM.close();
+  }
 });

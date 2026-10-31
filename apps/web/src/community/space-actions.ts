@@ -30,7 +30,7 @@ import {
   type SpacePageData,
 } from './space';
 import { changePublication, type PublicationChange, type PublicationOutcome } from './publication-controls';
-import { loadRealmBans, validateBanRead, validateBanWrite, writeRealmBan } from './realm-bans';
+import { loadRealmBans, loadRealmBanTarget, validateBanRead, validateBanWrite, writeRealmBan } from './realm-bans';
 import {
   realmAppearanceReadSchema,
   realmAppearanceCommandSchema,
@@ -310,6 +310,16 @@ export const readRealmBans = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return loadRealmBans(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export const resolveRealmBanTarget = createServerFn({ method: 'GET' })
+  .validator((handle: unknown) => {
+    if (typeof handle !== 'string' || handle.length > 64) throw new Error('Invalid account handle');
+    return handle;
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadRealmBanTarget(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 
 export const changeRealmBan = createServerFn({ method: 'POST' })

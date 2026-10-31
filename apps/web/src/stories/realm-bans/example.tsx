@@ -1,3 +1,4 @@
+import type { ResolveBanTarget } from '../../community/realm-ban-target';
 import { useMemo } from 'react';
 import { RealmBansControl } from '../../community/realm-bans-control';
 import type { BanReadState, BanWriteInput, BanWriteResult, RealmBanPage } from '../../community/realm-bans';
@@ -43,6 +44,24 @@ export function RealmBansExample({ scenario = 'current' }: { scenario?: Scenario
       : { state: 'ready', page: { items, next: scenario === 'current' ? 'more-bans' : null } };
     return {
       initial,
+      resolve: (async (handle) =>
+        handle === 'river'
+          ? {
+              state: 'ready',
+              target: {
+                lookupHandle: handle,
+                account: {
+                  id: exampleAccountId,
+                  kind: 'actor',
+                  state: 'active',
+                  handle: 'river',
+                  displayName: 'River 林',
+                  automated: false,
+                  operatorId: null,
+                },
+              },
+            }
+          : { state: 'missing' }) satisfies ResolveBanTarget,
       read: async (cursor?: string): Promise<BanReadState> => {
         if (scenario === 'forbidden' || scenario === 'revoked') return { state: 'forbidden' };
         if (scenario === 'closed') return { state: 'closed' };
@@ -95,6 +114,7 @@ export function RealmBansExample({ scenario = 'current' }: { scenario?: Scenario
       initial={boundary.initial}
       read={boundary.read}
       write={boundary.write}
+      resolve={boundary.resolve}
       ready
     />
   );
