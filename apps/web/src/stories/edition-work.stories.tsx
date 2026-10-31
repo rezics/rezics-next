@@ -45,12 +45,13 @@ export const EditionsOverTwelve: Story = {
     await pageReady(context);
     await within(context.canvasElement).findByText('Edition 12');
     const stream = context.canvasElement.querySelector('[data-node="editions"]') as HTMLElement;
+    const moreEditions = m.subject_section_more({ label: 'Editions' });
     await expect(within(stream).queryByText('Edition 15')).toBeNull();
-    await expect(within(stream).getByRole('link', { name: m.subject_relations_more() })).toHaveAttribute(
+    await expect(within(stream).getByRole('link', { name: moreEditions })).toHaveAttribute(
       'href',
       expect.stringContaining(`node=editions&cursor=fixture-editions-next&realm=${traversalRealm}`),
     );
-    await userEvent.click(within(stream).getByRole('link', { name: m.subject_relations_more() }));
+    await userEvent.click(within(stream).getByRole('link', { name: moreEditions }));
     await expect(await within(stream).findByText('Edition 15')).toBeVisible();
     await expect(within(stream).getByText('Edition 12')).toBeVisible();
     await expect(stream.querySelector('[data-slot="continue-group"]')).toBeNull();
@@ -65,12 +66,14 @@ export const IndependentRoles: Story = {
     const author = context.canvasElement.querySelector('[data-node="author"]') as HTMLElement;
     const illustrator = context.canvasElement.querySelector('[data-node="illustrator"]') as HTMLElement;
     const untouched = illustrator.innerHTML;
-    await userEvent.click(within(author).getByRole('link', { name: m.subject_relations_more() }));
+    const moreWrittenWorks = m.subject_section_more({ label: 'Written works' });
+    const moreIllustratedWorks = m.subject_section_more({ label: 'Illustrated works' });
+    await userEvent.click(within(author).getByRole('link', { name: moreWrittenWorks }));
     await expect(await within(author).findByText('author 15')).toBeVisible();
     await expect(illustrator.innerHTML).toBe(untouched);
     await expect(author.querySelector('[data-slot="continue-group"]')).toBeNull();
     const completedAuthor = author.innerHTML;
-    await userEvent.click(within(illustrator).getByRole('link', { name: m.subject_relations_more() }));
+    await userEvent.click(within(illustrator).getByRole('link', { name: moreIllustratedWorks }));
     await expect(await within(illustrator).findByText('illustrator 14')).toBeVisible();
     await expect(illustrator.querySelector('[data-slot="continue-group"]')).toBeNull();
     await expect(author.innerHTML).toBe(completedAuthor);
@@ -93,7 +96,9 @@ export const RoleConflict: Story = {
     const author = context.canvasElement.querySelector('[data-node="author"]') as HTMLElement;
     const illustrator = context.canvasElement.querySelector('[data-node="illustrator"]') as HTMLElement;
     const untouched = illustrator.innerHTML;
-    await userEvent.click(within(author).getByRole('link', { name: m.subject_relations_more() }));
+    const moreWrittenWorks = m.subject_section_more({ label: 'Written works' });
+    const moreIllustratedWorks = m.subject_section_more({ label: 'Illustrated works' });
+    await userEvent.click(within(author).getByRole('link', { name: moreWrittenWorks }));
     await expect(await within(author).findByRole('alert')).toBeVisible();
     await expect(within(author).getByRole('alert')).toHaveTextContent(m.subject_relation_invalid());
     await expect(within(author).getByText('author 12')).toBeVisible();
@@ -102,7 +107,7 @@ export const RoleConflict: Story = {
       'href',
       expect.stringContaining(`node=author&realm=${traversalRealm}`),
     );
-    await userEvent.click(within(illustrator).getByRole('link', { name: m.subject_relations_more() }));
+    await userEvent.click(within(illustrator).getByRole('link', { name: moreIllustratedWorks }));
     await expect(await within(illustrator).findByText('illustrator 14')).toBeVisible();
     await expect(within(author).getByRole('alert')).toHaveTextContent(m.subject_relation_invalid());
   },
