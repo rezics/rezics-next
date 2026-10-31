@@ -14,6 +14,8 @@ import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
+import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
+import { candidateContext } from '../../subject/candidates';
 import type { KernelClient } from '@rezics/client';
 import {
   planReads,
@@ -311,6 +313,9 @@ export function SubjectFrame({
               {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
               {(frame.type === 'schema:ComicSeries' || frame.type === 'schema:PublicationVolume') && (
                 <MangaProfileEntry id={frame.id} label={title} locale={locale} />
+              )}
+              {!realm && (context ?? frame.context) === candidateContext && frame.type === 'schema:MusicAlbum' && (
+                <AlbumProfileEntry id={frame.id} label={title} locale={locale} />
               )}
               <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
               {view === 'contents' && (

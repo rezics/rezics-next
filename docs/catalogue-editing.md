@@ -508,3 +508,56 @@ The Storybook page is **Pages/Catalogue/Person and organization catalogue editor
 theme use globals. Connected relationship writes are deliberately unavailable in the preview; real routes bind
 the existing session relation editor. These fixtures do not establish native execution or visual acceptance;
 Web owns normal phone390/desktop1280, light/dark captures.
+
+## Browser flow: released album catalogue editor
+
+The existing catalogue creation row offers **Create album** at `/{locale}/catalogue/album`. An admitted album's
+current reader and compact work frame offer **Edit album profile** through the existing Contribute menu at
+`/{locale}/subjects/{id}/{slug}/album`, only when the current native Context is Global and no Realm is selected.
+The shared destination descriptor also preserves the menu's exact signed-out return address.
+These private, noindex pages retain the exact native subject ID and `schema:MusicAlbum` Type. Canonical slug
+corrections keep that identity; a different resolved ID is not silently edited. Realm/context addresses do not
+fall through to a Global write.
+
+This is a profile for the already emitted creative-work Type, not a recording, release or personal copy. Controls
+come from the effective active definitions release: no publication date is invented or required by the profile.
+Native dates and scalar details, artist/part relations, classifications and authored text have distinct groups.
+Definitions retain their actual metadata language and fallback attribution. Existing names, descriptions and
+aliases show their own languages and link to the terms adapter described above. `schema:name` proposals do not
+patch the title maps; the pending native terms producer remains unavailable.
+
+Creation reuses native subject input validation and the existing session BFF's `POST /v1/subjects`. It sends only
+explicitly entered terms and added assertions, qualifiers and citations; it sends no ingestion Source metadata.
+There are no default artist, date, role, part or classification assertions. Actual target search, scalar controls
+and qualified relation controls are shared with the existing editors. Artist credits use `schema:contributor`
+with admitted person/organization targets. Its emitted qualifiers supply credited-as text, a role concept,
+position and an applies-to-part target. Positions follow the native string constraint; applies-to-part currently
+accepts a story arc, not an invented track. `wdt:P361` part-of-work has no order qualifier. Series membership uses
+its separate native relation and position. No track, recording, audio store, streaming service or lyric controls
+are supplied. The initial classification picker is native; correction currently displays selected classifications
+without inventing another proposal producer.
+
+Correction reuses the scalar multi-field staging and per-field partial results, exact candidate review, qualified
+relation editor and original authored-text composer. Unchanged language maps, qualifiers and references remain
+intact. Blank values do not imply clearing. An original summary is a separate authored document with an explicit
+language and licence. Successful proposals remain awaiting review; neither a proposal nor an aggregate submit
+claims publication. Exact returned subject/candidate IDs lead to the actual native reader or review. Failed
+creation readback retains the created ID and retries the read rather than creating again.
+
+Invalid, denied and conflicting creation results retain the draft and submitted command for comparison, with an
+explicit choice to review a new attempt. Uncertain delivery freezes the exact payload/key for retry. Stale metadata
+cannot prevent native receipt replay: retries use the same native POST without a new definitions preflight. Metadata
+is reloaded without discarding entered rows; withdrawn fields remain visible for deliberate removal. Correction
+reload failures retain staged scalar and relation drafts, and disable further edits until a successful reload.
+Only emitted support is offered; unknown rights remain unknown and no provider prose, covers or permissions are
+inferred.
+
+The focused payload regressions live in `apps/web/tests/catalogue-album-profile.test.ts`. Connected story examples
+live in **Pages/Catalogue/Released album catalogue editor**, under the ID prefix
+`pages-catalogue-released-album-catalogue-editor--`. The state IDs are `ready`, `loading`, `empty`, `signed-out`,
+`unavailable`, `concealed`, `correction`, `denied`, `invalid`, `conflict`, `stale-metadata`, `reader-unavailable`,
+`created`, `retry`, `proposed` and `credit-correction`. They exercise existing generated request helpers against
+explicit fictional examples, using the recorded emitted definitions and genuinely empty `sourceRecords: []`.
+They are not native integration or visual evidence. Locale, phone390/desktop1280 viewport and light/dark theme
+use globals. Web owns normal captures and visual acceptance; native integration and the terms write binding
+remain pending.

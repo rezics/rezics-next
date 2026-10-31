@@ -31,6 +31,7 @@ import {
 } from '../../subject/relation-candidates';
 
 type Snak = RelationDraft['qualifiers'][number];
+export { QualifierInput };
 const blankDraft = (property: string): RelationDraft => ({
   property: { id: property, data_type: 'wikibase-item' },
   value: { type: 'somevalue' },

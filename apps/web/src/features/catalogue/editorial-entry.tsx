@@ -15,6 +15,7 @@ import { CharacterProfileEntry } from './character-profile-entry';
 import { AddonProfileEntry } from './addon-profile-entry';
 import { StoryArcProfileEntry, storyArcEntry } from './story-arc-profile-entry';
 import { LiteraryProfileEntry } from './literary-profile-entry';
+import { AlbumProfileEntry } from './album-profile-entry';
 import { SubjectFactsEntry } from './subject-facts-entry';
 import { SubjectTermsEntry } from './subject-terms-entry';
 import { SubjectChangesLink } from './subject-changes-link';
@@ -62,6 +63,7 @@ export function collectEditorialEntries(children: ReactNode): { entries: Catalog
       match(node, AddonProfileEntry, catalogueEntries.addon) ??
       match(node, StoryArcProfileEntry, storyArcEntry) ??
       match(node, LiteraryProfileEntry, catalogueEntries.literary) ??
+      match(node, AlbumProfileEntry, catalogueEntries.album) ??
       match(node, PublicationEditorEntry, catalogueEntries.publication) ??
       match(node, SubjectChangesLink, catalogueEntries.changes);
     if (entry) entries.push(entry);

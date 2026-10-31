@@ -25,6 +25,10 @@ import {
   type FactsTransport,
 } from './subject-facts';
 
+// Profile-guided editors share the existing field controls, partial outcomes and exact review.
+export { FactField, ExactReview };
+export { SelectedFacts };
+
 type ReviewAddress = { property: string; candidate: string; session?: string | undefined };
 export type FactsProfile = {
   properties: (read: FactsCurrent) => string[];

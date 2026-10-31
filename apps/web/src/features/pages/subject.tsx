@@ -12,6 +12,7 @@ import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
+import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
@@ -452,6 +453,9 @@ export function SubjectPage({
               type={read.subject.type}
               locale={locale}
             />
+          )}
+          {read.subject.type === 'schema:MusicAlbum' && (page.context?.id ?? read.subject.context) === candidateContext && (
+            <AlbumProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           )}
           {read.subject.type === 'schema:Recipe' && (
             <RecipeEditorEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
