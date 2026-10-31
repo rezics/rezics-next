@@ -12,7 +12,7 @@ const state: SearchLoaderDeps = {
   languages: ['ja', 'en'],
   filter: ' {"not":{"type":{"in":["schema:Movie"]}}} ',
   condition: { statement: { property: 'schema:author', in: ['mira'] } },
-  ranges: { 'schema:datePublished': { gte: 1900, lt: 2027 } },
+  ranges: { 'schema:datePublished': { gte: 1900, lte: 2026 } },
   facets: { 'schema:genre': ['fiction', 'science + / ='], 'schema:keywords': ['星'] },
   cursor: '+/='.repeat(1621) + 'x',
   sort: undefined,
