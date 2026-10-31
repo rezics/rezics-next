@@ -149,8 +149,17 @@ export async function nativeStoreBlocker(
     const row = await tx.query(`SELECT 1 FROM access.${store} WHERE route=$1 AND account_id=$2`, [...key]);
     if (row.rowCount) return 'account-discovery-consumer';
   }
-  if (store === 'agent_identity_technical_source' || store === 'agent_identity_technical_role')
-    return 'verification-source-custody';
+  if (store === 'agent_identity_technical_source' || store === 'agent_identity_technical_role') {
+    // Saved pages can still name role rows physically removed by the privacy migration.
+    // Only a remaining genuine technical locator is a pending custody obligation.
+    const row = await tx.query(
+      `SELECT 1 FROM access.${store} WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4${
+        store === 'agent_identity_technical_role' ? ' AND role_account_id=$5' : ''
+      }`,
+      [...key],
+    );
+    return row.rowCount ? 'verification-source-custody' : null;
+  }
   if (store === 'agent_identity_intent' || store === 'agent_identity_recovery') {
     const row = await tx.query(
       `SELECT 1 FROM access.${store} WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,

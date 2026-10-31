@@ -3730,16 +3730,25 @@ A null result registers no callback and enrolls no inventory. Replay locks the s
 accepted claim and current owner rather than creating another obligation.
 
 Technical payload excludes personal reasons, requester/decider attribution, barrier and private
-JSON. Normalized `agent_identity_technical_role` rows enroll the existing subject/actor/editor
-accounts through native discovery for every retained locator in the parent. These associations
-are personal custody and stay pending. New groups append after saved native phase identities.
-Undo-only reads resolve this native receiver without an Account activity check or recursive
-personal-source lookup. Ordinary admission retains the original active source checks and cannot
-obtain a new source capability from the receiver. The receiver does not minimize the original
-personal row or discharge any consumer; those owner boundaries remain unavailable in this base.
+JSON. Native `agent_identity_technical_role` inventory covers only the source Account subject
+actually retained by the closed technical payload. Graph subjects, releases, jobs and receipts
+keep their real native identities; they do not create extra Account actor associations. Original
+requester/decider, principal, acting-human and inherited History roles are never mirrored. The
+remaining source Account association is personal custody and stays pending through native discovery.
+Saved discovery phases retain their identities; a removed historical role row no longer blocks a
+saved page. The forward privacy migration removes those copied IDs and original-role masks in
+100-raw-key pages (under 64 KiB, each locator under 1 KiB), preserving both immutable receipts.
+Its temporary native guard permits only the exact owner-migration cleanup, then restores refusal;
+future inventory is constrained to the retained subject.
 
-The normalized inventory consumes the real original native serializer inventory's bounded role
-union, including inherited undo roles, principals and acting humans. It keeps existing role bits
-and the original restore domain generation. It neither invents a History artifact nor copies any
-artifact payload. Only the original source's three closed role meanings are returned to mechanical
-undo consumers; every native role association remains discoverable and pending separately.
+First acceptance validates the genuine original source, its erased-role association, native
+component/digest and accepted current job before writing. Replay and undo-only reads resolve the
+same receiver without the erased personal roles or a current Account relationship. They validate
+the exact immutable technical source, accepted binding/job, receiving receipt, owner epoch,
+restore generation and retained inventory. Source's already-bound retained/reference/terminal
+receipt owns barrier, erased-role and root/copy authority; technical verification neither queries
+that terminal row recursively nor substitutes for erasure or all-copy proof. Reads use fixed native
+source/receiver/binding keys and actual retained locator keys, O(k log N), without scanning the
+original History scope. Ordinary admission retains the original active source checks and cannot
+obtain a new source capability from the receiver. Original personal minimization and consumer
+closure remain independently owned.

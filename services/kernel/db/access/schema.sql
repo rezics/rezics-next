@@ -4205,8 +4205,8 @@ CREATE TABLE access.agent_identity_technical_source (
 CREATE INDEX erasure_agent_identity_technical_source_account ON access.agent_identity_technical_source
  (account_id,route,direction,receipt_id);
 
--- Normalized native all-role inventory, not business attribution in the technical payload.
--- Each row covers all retained Account/Agent/Subject/job/receipt/workflow locators in its parent.
+-- Native inventory of the Account subject actually retained in the technical payload.
+-- Original requester/decider and inherited History attribution are not technical input.
 CREATE TABLE access.agent_identity_technical_role (
  route integer NOT NULL,
  account_id uuid NOT NULL,
@@ -4214,7 +4214,7 @@ CREATE TABLE access.agent_identity_technical_role (
  receipt_id uuid NOT NULL,
  role_account_id uuid NOT NULL,
  roles integer NOT NULL CHECK(roles BETWEEN 1 AND 262143),
- source_roles smallint NOT NULL CHECK(source_roles BETWEEN 0 AND 7),
+ CONSTRAINT identity_technical_retained_subject CHECK(role_account_id=account_id AND roles=32),
  PRIMARY KEY(route,account_id,direction,receipt_id,role_account_id),
  FOREIGN KEY(route,account_id,direction,receipt_id)
   REFERENCES access.agent_identity_technical_source(route,account_id,direction,receipt_id)
@@ -4237,7 +4237,7 @@ BEGIN
   OR NOT EXISTS(SELECT 1 FROM access.agent_identity_technical_role r
     WHERE (r.route,r.account_id,r.direction,r.receipt_id)=
       (NEW.route,NEW.account_id,NEW.direction,NEW.receipt_id)
-      AND r.role_account_id=NEW.account_id AND (r.source_roles & 1)<>0) THEN
+      AND r.role_account_id=NEW.account_id AND r.roles=32) THEN
   RAISE EXCEPTION 'Accounts technical custody lacks same-command native receiving fence/inventory' USING ERRCODE='23514';
  END IF;
  RETURN NEW;

@@ -220,6 +220,8 @@ export const ERASURE_DISCOVERY_ROLES: readonly (readonly [string, string, Routin
     '',
   ],
   ['erasure_continuation_role', 'account_id', 'partitions', 'route:int,artifact:text,row_id:uuid', ''],
+  // Technical role rows are constrained to the retained source Account subject.
+  // Keep saved discovery phase identities; historical attribution rows are removed.
   [
     'agent_identity_technical_source',
     'account_id',
