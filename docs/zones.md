@@ -208,8 +208,10 @@ implement scans or an unreviewed query engine to fill this dependency. Refer als
 ## Configuration, publication and Access
 
 The resource base mounts create, metadata, owned listing, configuration, publish, delete and restore.
-The independent static runtime additionally mounts `readPage`; source lists, union evaluation and destructive
-lifecycle work remain separate implementations.
+The single mounted `readPage` runtime composes static documents and native source union/current-membership
+providers. Native ordered provider bodies remain dependencies described in the
+[runtime inventory](../services/kernel/src/zones/README.md); GET source lists and destructive lifecycle work
+remain separate implementations.
 The code-first `Zone*Schema` exports in `src/zones/contract.ts` define the resource envelopes.
 
 Creation authorizes the parent before touching the new partition. Allocate a routed Zone ID and copy the

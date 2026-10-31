@@ -3,12 +3,15 @@ import type { TSchema } from 'typebox';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-/** Resource routes and independent static pages; source-dependent execution has separate owners. */
+import type { SearchService } from '../search/service-scope.ts';
+/** Resource routes and the one common-page composition over native source owners. */
 export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: {
     pool: Pool;
     access: () => Access;
     tokens: KeyRing;
     clock: () => Date;
+    routeKey: Uint8Array;
+    search?: SearchService;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{

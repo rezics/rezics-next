@@ -26,10 +26,6 @@ type WorkOptions = Readonly<{
 export declare function readCollectionKindPreparationWorkDefinition(work: CollectionKindPreparationWorkContext, options: WorkOptions): Promise<CollectionKindWorkDefinition>;
 /** Dispatch only; the original native modules remain the sole episode and result authorities. */
 export declare function readScopeWorkDefinition(work: ScopeWorkContext, options: WorkOptions): Promise<Readonly<{
-    definition: import("../library/members-preparation.ts").PreparationDefinition;
-    sourceIdentity: import("../library/native-source-custody.ts").NativeSourceIdentity;
-    observation: import("../library/collection-source.ts").CollectionSourceObservation;
-}> | Readonly<{
     releaseDigest: string;
     audience: string;
     sourceIdentity: import("../library/native-source-custody.ts").NativeSourceIdentity;
@@ -37,6 +33,10 @@ export declare function readScopeWorkDefinition(work: ScopeWorkContext, options:
     identityObservation: import("../semantic/identity-scope-types.ts").IdentityScopeObservation;
     repairReceipt: import("../semantic/identity-epoch-contract.ts").IdentityNativeReceipt;
     custody: import("../library/native-source-custody.ts").NativeSourceCustody;
+}> | Readonly<{
+    definition: import("../library/members-preparation.ts").PreparationDefinition;
+    sourceIdentity: import("../library/native-source-custody.ts").NativeSourceIdentity;
+    observation: import("../library/collection-source.ts").CollectionSourceObservation;
 }>>;
 export declare function admitScopeWork(work: ScopeWorkContext, options: WorkOptions): Promise<AuthoritativeTime>;
 /** Read the actual immutable producer inputs on each use, with no retained admission verdict. */

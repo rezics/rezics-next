@@ -71,7 +71,7 @@ CREATE TABLE zones.page_preparation (
     revision bigint NOT NULL,
     "position" jsonb NOT NULL,
     CONSTRAINT page_preparation_basis_check CHECK ((basis ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT page_preparation_position_check CHECK ((octet_length(("position")::text) <= 524288)),
+    CONSTRAINT page_preparation_position_check CHECK ((octet_length(("position")::text) <= 1048576)),
     CONSTRAINT page_preparation_request_check CHECK ((request ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT page_preparation_revision_check CHECK ((revision > 0)),
     CONSTRAINT page_preparation_route_check CHECK (((route >= 0) AND (route <= 65535))),
