@@ -112,7 +112,7 @@ export const DeclaredRecordingRefused: Story = {
     const amount = dialog.getByRole('spinbutton', { name: m.library_progress_amount() });
     await userEvent.clear(amount);
     await userEvent.type(amount, '3');
-    await userEvent.click(dialog.getByRole('button', { name: m.library_progress_record(), exact: true }));
+    await userEvent.click(dialog.getByRole('button', { name: m.library_progress_record() }));
     await canvas.findByRole('alert');
     await canvas.findByText(m.library_progress_no_longer_offered());
     expect(canvas.queryByRole('button', { name: m.library_progress_update() })).not.toBeInTheDocument();
