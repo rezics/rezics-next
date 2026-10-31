@@ -57,7 +57,10 @@ import partitionRead from '../partition/read.sql';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { identitySourceConsumerLibraryWork } from './identity-source-consumer-maintenance.ts';
-import type { IdentitySourceConsumerContext, IdentitySourceScopeConsumerWork } from './identity-source-consumer-custody.ts';
+import type {
+  IdentitySourceConsumerContext,
+  IdentitySourceScopeConsumerWork,
+} from './identity-source-consumer-custody.ts';
 
 /** Resolve the retained registration/capture using the existing Source frame.
  * The historical capture allowance is never consulted as a remaining balance.
@@ -76,8 +79,11 @@ export async function readIdentityScopeConsumerWork(
   return withRequestDeadline(context.deadline, async () => {
     try {
       const current = await instrumentNativeCollectionWork(pool, budget, scopeConsumerFootprint, () =>
-        withReadTransaction(pool, async (tx) =>
-          (await tx.query<{ source_generation: string }>(consumerWork.sql, values)).rows[0]));
+        withReadTransaction(
+          pool,
+          async (tx) => (await tx.query<{ source_generation: string }>(consumerWork.sql, values)).rows[0],
+        ),
+      );
       if (!current || current.source_generation !== source.identity.generation) return null;
       // This immutable ceiling describes the same ledger. Source's compose transfers
       // work and settles the real owner's receipt; no second allocation is created.
@@ -106,10 +112,17 @@ export async function readIdentityScopeConsumerWork(
 function scopeConsumerValues(ticket: IdentityPrearmTicketData): unknown[] {
   if (ticket.scope.source.kind !== 'library') throw new TypeError('Native Library scope required');
   return [
-    ...params(ticket.scope), ticket.registration, ticket.captureId,
-    ticket.locator.job.jobId, ticket.locator.job.epoch.toString(), json(ticket.attempt),
-    json(ticket.scope.source), ticket.scope.source.identity.ownerEpoch,
-    ticket.locator.directory.transactionId, ticket.locator.pageId, ticket.locator.ordinal,
+    ...params(ticket.scope),
+    ticket.registration,
+    ticket.captureId,
+    ticket.locator.job.jobId,
+    ticket.locator.job.epoch.toString(),
+    json(ticket.attempt),
+    json(ticket.scope.source),
+    ticket.scope.source.identity.ownerEpoch,
+    ticket.locator.directory.transactionId,
+    ticket.locator.pageId,
+    ticket.locator.ordinal,
   ];
 }
 
@@ -122,30 +135,50 @@ function scopeConsumerFootprint(sql: string, values: readonly unknown[]): WorkDi
   let rows: number;
   let outputBytes: number;
   if (sql === consumerCurrent.sql || sql === consumerWork.sql) {
-    rows = 7; outputBytes = 6144;
+    rows = 7;
+    outputBytes = 6144;
   } else if (sql === consumerReceipt.sql) {
-    rows = 3; outputBytes = 2048;
-  } else if (sql === consumerConflict.sql || sql === consumerNative.sql || sql === partitionRead.sql ||
-    sql === commandNoEffect.sql) {
-    rows = 1; outputBytes = 1024;
+    rows = 3;
+    outputBytes = 2048;
+  } else if (
+    sql === consumerConflict.sql ||
+    sql === consumerNative.sql ||
+    sql === partitionRead.sql ||
+    sql === commandNoEffect.sql
+  ) {
+    rows = 1;
+    outputBytes = 1024;
   } else if (sql === commandTime.sql) {
-    rows = 0; outputBytes = 128;
+    rows = 0;
+    outputBytes = 128;
   } else if (sql === insertNativeCommit.sql) {
-    rows = 2; outputBytes = 128;
+    rows = 2;
+    outputBytes = 128;
   } else if (sql === consumerInsert.sql) {
     // One insert, two FK points and seven exact-key rows in the deferred native
     // fence constraint. None of these charges depends on returned row counts.
-    rows = 1 + 2 + 7; outputBytes = 0;
-  } else if (sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' ||
-    sql === 'BEGIN ISOLATION LEVEL SERIALIZABLE' || sql === 'COMMIT' || sql === 'ROLLBACK' ||
-    sql === "SET LOCAL lock_timeout = '200ms'" || /^SET LOCAL statement_timeout = '[1-9][0-9]{0,15}ms'$/.test(sql)) {
-    rows = 0; outputBytes = 0;
+    rows = 1 + 2 + 7;
+    outputBytes = 0;
+  } else if (
+    sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' ||
+    sql === 'BEGIN ISOLATION LEVEL SERIALIZABLE' ||
+    sql === 'COMMIT' ||
+    sql === 'ROLLBACK' ||
+    sql === "SET LOCAL lock_timeout = '200ms'" ||
+    /^SET LOCAL statement_timeout = '[1-9][0-9]{0,15}ms'$/.test(sql)
+  ) {
+    rows = 0;
+    outputBytes = 0;
   } else {
     return undefined;
   }
   return {
-    candidateKeys: 0, identityMetadataRows: 0, nativeRows: rows, nativePoints: rows,
-    witnessKeys: 0, statements: 1,
+    candidateKeys: 0,
+    identityMetadataRows: 0,
+    nativeRows: rows,
+    nativePoints: rows,
+    witnessKeys: 0,
+    statements: 1,
     bytes: Buffer.byteLength(sql) + Buffer.byteLength(json(values)) + outputBytes,
     emptySeeks: 0,
   };
@@ -1871,12 +1904,7 @@ export async function retainIdentityScopeConsumerFence(
       scopeConsumerValues(ticket),
     )
   ).rows[0];
-  if (
-    !current ||
-    current.source_generation !== source.identity.generation ||
-    !same(current.seal, seal)
-  )
-    return null;
+  if (!current || current.source_generation !== source.identity.generation || !same(current.seal, seal)) return null;
   const sealDigest = digest(seal);
   const receiptValues = [
     ...params(ticket.scope),
@@ -1915,28 +1943,22 @@ export async function retainIdentityScopeConsumerFence(
   }
   // Check the natural key before any write; a different seal cannot replace an
   // immutable retained obligation. The summary lock also serializes all writers.
-  const conflict = await tx.query(
-    consumerConflict.sql,
-    receiptValues.slice(0, 6),
-  );
+  const conflict = await tx.query(consumerConflict.sql, receiptValues.slice(0, 6));
   if (conflict.rows.length) return null;
   const receipt = await writeIdentityScopeConsumerNativeCommit(tx);
-  await tx.query(
-    consumerInsert.sql,
-    [
-      ...params(ticket.scope),
-      ticket.registration,
-      ticket.captureId,
-      ticket.locator.job.jobId,
-      ticket.locator.job.epoch.toString(),
-      json(ticket.attempt),
-      current.source_generation,
-      current.version,
-      sealDigest,
-      receipt.epoch,
-      receipt.position.toString(),
-      receipt.transactionId,
-    ],
-  );
+  await tx.query(consumerInsert.sql, [
+    ...params(ticket.scope),
+    ticket.registration,
+    ticket.captureId,
+    ticket.locator.job.jobId,
+    ticket.locator.job.epoch.toString(),
+    json(ticket.attempt),
+    current.source_generation,
+    current.version,
+    sealDigest,
+    receipt.epoch,
+    receipt.position.toString(),
+    receipt.transactionId,
+  ]);
   return receipt;
 }

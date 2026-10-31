@@ -8,14 +8,9 @@ import selectNativeCommit from './identity-scoped-consumer-native.sql';
  * A returned locator is uncommitted until that command commits; it grants no authority.
  * This uses the same partition lock and component allocator as the original writer.
  */
-export async function writeIdentityScopeConsumerNativeCommit(
-  tx: CommandTransaction,
-): Promise<IdentityNativeReceipt> {
+export async function writeIdentityScopeConsumerNativeCommit(tx: CommandTransaction): Promise<IdentityNativeReceipt> {
   const command = currentCommand(tx);
-  const prior = await tx.query<{ purpose: string }>(
-    selectNativeCommit.sql,
-    [command.partition, command.transactionId],
-  );
+  const prior = await tx.query<{ purpose: string }>(selectNativeCommit.sql, [command.partition, command.transactionId]);
   if (prior.rows.length) throw new TypeError('Scope consumer fence requires its own native component');
   const inserted = await tx.query(insertNativeCommit.sql, [
     command.partition,
@@ -24,10 +19,10 @@ export async function writeIdentityScopeConsumerNativeCommit(
   ]);
   if (inserted.rowCount !== 1) throw new TypeError('Scope consumer fence lost its native owner');
   const row = (
-    await tx.query<{ epoch: number; position: string }>(
-      selectNativeCommit.sql,
-      [command.partition, command.transactionId],
-    )
+    await tx.query<{ epoch: number; position: string }>(selectNativeCommit.sql, [
+      command.partition,
+      command.transactionId,
+    ])
   ).rows[0];
   if (!row) throw new TypeError('Scope consumer fence has no native component');
   return Object.freeze({

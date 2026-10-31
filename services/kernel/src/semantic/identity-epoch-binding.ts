@@ -177,7 +177,9 @@ async function read(tx: CommandTransaction, input: IdentityAdmissionInput) {
     await assertOriginalConsumerOpen(tx, input.receipt);
     if (input.intent.kind === 'unmerge' && input.intent.verificationReceipt)
       await assertOriginalConsumerOpen(tx, {
-        kind: 'account-agent.verify', account: input.receipt.account, receipt: input.intent.verificationReceipt,
+        kind: 'account-agent.verify',
+        account: input.receipt.account,
+        receipt: input.intent.verificationReceipt,
       });
   }
   if (row && row.intent_digest !== identityBindingDigest(input)) throw new IdempotencyConflictError(home);
@@ -193,9 +195,10 @@ export async function readIdentityBinding(tx: CommandTransaction, input: Identit
  */
 export async function readAcceptedAccountIdentityBinding(
   tx: CommandTransaction,
-  input: IdentityAdmissionInput & Readonly<{
-    receipt: Extract<IdentityAdmissionInput['receipt'], { kind: 'account-agent.verify' | 'account-agent.unverify' }>;
-  }>,
+  input: IdentityAdmissionInput &
+    Readonly<{
+      receipt: Extract<IdentityAdmissionInput['receipt'], { kind: 'account-agent.verify' | 'account-agent.unverify' }>;
+    }>,
 ): Promise<IdentityReceiptBinding | null> {
   if (input.receipt.kind !== 'account-agent.verify' && input.receipt.kind !== 'account-agent.unverify') return null;
   const partition = identityReceiptPartition(input.receipt);
@@ -307,15 +310,21 @@ export async function claimIdentityBinding(
         const undo = source.input.intent;
         const changed = await tx.query(consumerUndo.sql, [
           partition,
-          identityReceiptKey({ kind: 'account-agent.verify', account: input.receipt.account,
-            receipt: undo.verificationReceipt! }),
+          identityReceiptKey({
+            kind: 'account-agent.verify',
+            account: input.receipt.account,
+            receipt: undo.verificationReceipt!,
+          }),
           undo.undoJob.jobId,
           undo.undoJob.epoch.toString(),
           identityReceiptKey(input.receipt),
           transactionId,
         ]);
         if (changed.rowCount !== 1)
-          throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Original native undo generation is unavailable');
+          throw new IdentityEpochStoreError(
+            'identity_epoch_unavailable',
+            'Original native undo generation is unavailable',
+          );
       }
     });
     return {
@@ -382,14 +391,21 @@ export async function readAccountIdentityUndo(
 ) {
   return (
     await runCommand(pool, { partition: identityReceiptPartition(receipt) }, async (tx) => {
-      const guard = (await tx.query<{ consumer_terminal_custody: string | null }>(consumerGuard.sql, [
-        identityReceiptPartition(receipt), identityReceiptKey(receipt),
-      ])).rows[0];
-      const source = guard?.consumer_terminal_custody != null
-        ? await readAccountIdentityTechnicalSource(tx, receipt)
-        : await readAccountIdentitySource(tx, receipt, undefined, true);
+      const guard = (
+        await tx.query<{ consumer_terminal_custody: string | null }>(consumerGuard.sql, [
+          identityReceiptPartition(receipt),
+          identityReceiptKey(receipt),
+        ])
+      ).rows[0];
+      const source =
+        guard?.consumer_terminal_custody != null
+          ? await readAccountIdentityTechnicalSource(tx, receipt)
+          : await readAccountIdentitySource(tx, receipt, undefined, true);
       if (!source)
-        throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Original Source requires accepted technical undo custody');
+        throw new IdentityEpochStoreError(
+          'identity_epoch_unavailable',
+          'Original Source requires accepted technical undo custody',
+        );
       const row = (
         await tx.query<BindingRow>(selectClaim.sql, [identityReceiptPartition(receipt), identityReceiptKey(receipt)])
       ).rows[0];
@@ -417,11 +433,17 @@ async function assertOriginalConsumerOpen(
   tx: CommandTransaction,
   receipt: Exclude<IdentityAdmissionInput['receipt'], { kind: 'subject.merge' }>,
 ): Promise<void> {
-  const row = (await tx.query<{ consumer_terminal_custody: string | null }>(consumerGuard.sql, [
-    identityReceiptPartition(receipt), identityReceiptKey(receipt),
-  ])).rows[0];
+  const row = (
+    await tx.query<{ consumer_terminal_custody: string | null }>(consumerGuard.sql, [
+      identityReceiptPartition(receipt),
+      identityReceiptKey(receipt),
+    ])
+  ).rows[0];
   if (row?.consumer_terminal_custody != null)
-    throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Original Source consumer requires accepted technical input');
+    throw new IdentityEpochStoreError(
+      'identity_epoch_unavailable',
+      'Original Source consumer requires accepted technical input',
+    );
 }
 
 /** Resolve native generations with Source's live maintenance allocation. Each
@@ -438,29 +460,59 @@ export async function readIdentitySourceConsumerWork(
   reference = structuredClone(reference);
   // Retained Source, its commit, binding/claim/commit, original/undo commits,
   // owner and installed-hook catalogue point: nine exact points, including misses.
-  const reserve = (touches: number) => reserveIdentitySourceConsumerNativeWork(pool, context.identityConsumerWork, {
-    rows: touches, points: touches, statements: 5, bytes: 8192, engineRequests: 0,
-  });
+  const reserve = (touches: number) =>
+    reserveIdentitySourceConsumerNativeWork(pool, context.identityConsumerWork, {
+      rows: touches,
+      points: touches,
+      statements: 5,
+      bytes: 8192,
+      engineRequests: 0,
+    });
   return withRequestDeadline(context.deadline, async () => {
     try {
       if (!reserve(9)) return null;
-      const row = await withReadTransaction(pool, async (tx) =>
-        (await tx.query<{
-          replay_generation: string; undo_generation: string; restore_generation: string;
-          scope_digest: string; job_home: number;
-        }>(consumerWork.sql, [
-          reference.source.partition, identityReceiptKey(reference.receipt), reference.sourceDigest,
-          reference.job.jobId, reference.job.epoch.toString(), json(identityReceiptValue(reference.receipt)),
-          reference.source.epoch, reference.source.position.toString(), reference.source.transactionId,
-          reference.barrier.accountId, reference.barrier.accountRoute, reference.barrier.version,
-          reference.barrier.at, reference.erasedRole,
-        ])).rows[0] ?? null);
+      const row = await withReadTransaction(
+        pool,
+        async (tx) =>
+          (
+            await tx.query<{
+              replay_generation: string;
+              undo_generation: string;
+              restore_generation: string;
+              scope_digest: string;
+              job_home: number;
+            }>(consumerWork.sql, [
+              reference.source.partition,
+              identityReceiptKey(reference.receipt),
+              reference.sourceDigest,
+              reference.job.jobId,
+              reference.job.epoch.toString(),
+              json(identityReceiptValue(reference.receipt)),
+              reference.source.epoch,
+              reference.source.position.toString(),
+              reference.source.transactionId,
+              reference.barrier.accountId,
+              reference.barrier.accountRoute,
+              reference.barrier.version,
+              reference.barrier.at,
+              reference.erasedRole,
+            ])
+          ).rows[0] ?? null,
+      );
       if (!row || !reserve(4)) return null;
       // Release Source before checking its exact accepted job/control/native owner.
-      const job = await withReadTransaction(pool, async (tx) =>
-        (await tx.query<{ scope_digest: string }>(consumerJob.sql, [
-          row.job_home, reference.job.jobId, reference.job.epoch.toString(), row.scope_digest,
-        ])).rows[0]);
+      const job = await withReadTransaction(
+        pool,
+        async (tx) =>
+          (
+            await tx.query<{ scope_digest: string }>(consumerJob.sql, [
+              row.job_home,
+              reference.job.jobId,
+              reference.job.epoch.toString(),
+              row.scope_digest,
+            ])
+          ).rows[0],
+      );
       if (!job || job.scope_digest !== row.scope_digest) return null;
       const balance = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, context.deadline);
       if (!balance) return null;
@@ -473,8 +525,10 @@ export async function readIdentitySourceConsumerWork(
         undoGeneration: row.undo_generation,
         restoreGeneration: row.restore_generation,
         allowance: Object.freeze({
-          rows: balance.rows - 4, points: balance.points - 4,
-          statements: balance.statements - 6, bytes: balance.bytes - 8192,
+          rows: balance.rows - 4,
+          points: balance.points - 4,
+          statements: balance.statements - 6,
+          bytes: balance.bytes - 8192,
           engineRequests: balance.engineRequests,
         }),
       });
@@ -495,43 +549,88 @@ function validConsumerReference(reference: IdentitySourceConsumerReference): boo
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
   const maxNative = 9223372036854775807n;
   const { receipt, source, barrier } = reference;
-  return (receipt.kind === 'account-agent.verify' || receipt.kind === 'account-agent.unverify') &&
-    uuid.test(receipt.account) && uuid.test(receipt.receipt) && uuid.test(source.transactionId) &&
-    source.partition === identityReceiptPartition(receipt) && Number.isSafeInteger(source.epoch) && source.epoch > 0 &&
-    source.epoch <= 2147483647 && typeof source.position === 'bigint' && source.position > 0n &&
-    source.position <= maxNative && /^[0-9a-f]{64}$/.test(reference.sourceDigest) &&
-    uuid.test(reference.job.jobId) && typeof reference.job.epoch === 'bigint' && reference.job.epoch > 0n &&
+  return (
+    (receipt.kind === 'account-agent.verify' || receipt.kind === 'account-agent.unverify') &&
+    uuid.test(receipt.account) &&
+    uuid.test(receipt.receipt) &&
+    uuid.test(source.transactionId) &&
+    source.partition === identityReceiptPartition(receipt) &&
+    Number.isSafeInteger(source.epoch) &&
+    source.epoch > 0 &&
+    source.epoch <= 2147483647 &&
+    typeof source.position === 'bigint' &&
+    source.position > 0n &&
+    source.position <= maxNative &&
+    /^[0-9a-f]{64}$/.test(reference.sourceDigest) &&
+    uuid.test(reference.job.jobId) &&
+    typeof reference.job.epoch === 'bigint' &&
+    reference.job.epoch > 0n &&
     reference.job.epoch <= maxNative &&
-    uuid.test(barrier.accountId) && barrier.accountRoute === routeOf(barrier.accountId) &&
-    Number.isSafeInteger(barrier.version) && barrier.version > 0 && barrier.version <= 2147483647 &&
-    typeof barrier.at === 'string' && Buffer.byteLength(barrier.at) <= 64 && Number.isFinite(Date.parse(barrier.at)) &&
-    ['subject', 'requester', 'decider'].includes(reference.erasedRole);
+    uuid.test(barrier.accountId) &&
+    barrier.accountRoute === routeOf(barrier.accountId) &&
+    Number.isSafeInteger(barrier.version) &&
+    barrier.version > 0 &&
+    barrier.version <= 2147483647 &&
+    typeof barrier.at === 'string' &&
+    Buffer.byteLength(barrier.at) <= 64 &&
+    Number.isFinite(Date.parse(barrier.at)) &&
+    ['subject', 'requester', 'decider'].includes(reference.erasedRole)
+  );
 }
 async function currentConsumerClaim(
   tx: CommandTransaction,
   reference: IdentitySourceConsumerReference,
   expected: IdentitySourceConsumerGeneration,
 ): Promise<ConsumerClaim | null> {
-  if (!validConsumerReference(reference) || currentCommand(tx).partition !== reference.source.partition ||
-    currentCommand(tx).basis !== null || Date.now() >= currentCommandResources(tx).deadline ||
-    !expected || ![expected.replayGeneration, expected.undoGeneration, expected.restoreGeneration]
-      .every((value) => typeof value === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(value) &&
-        BigInt(value) <= 9223372036854775807n)) return null;
+  if (
+    !validConsumerReference(reference) ||
+    currentCommand(tx).partition !== reference.source.partition ||
+    currentCommand(tx).basis !== null ||
+    Date.now() >= currentCommandResources(tx).deadline ||
+    !expected ||
+    ![expected.replayGeneration, expected.undoGeneration, expected.restoreGeneration].every(
+      (value) =>
+        typeof value === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9223372036854775807n,
+    )
+  )
+    return null;
   reference = structuredClone(reference);
   expected = { ...expected };
-  const row = (await tx.query<ConsumerClaim>(consumerClaim.sql, [
-    reference.source.partition, identityReceiptKey(reference.receipt), reference.sourceDigest,
-    reference.job.jobId, reference.job.epoch.toString(), json(identityReceiptValue(reference.receipt)),
-    reference.source.epoch, reference.source.position.toString(), reference.source.transactionId,
-    reference.barrier.accountId, reference.barrier.accountRoute, reference.barrier.version,
-    reference.barrier.at, reference.erasedRole,
-  ])).rows[0];
-  if (!row || String(row.generation) !== expected.replayGeneration || row.undo_generation !== expected.undoGeneration ||
-    row.restore_generation !== expected.restoreGeneration) return null;
+  const row = (
+    await tx.query<ConsumerClaim>(consumerClaim.sql, [
+      reference.source.partition,
+      identityReceiptKey(reference.receipt),
+      reference.sourceDigest,
+      reference.job.jobId,
+      reference.job.epoch.toString(),
+      json(identityReceiptValue(reference.receipt)),
+      reference.source.epoch,
+      reference.source.position.toString(),
+      reference.source.transactionId,
+      reference.barrier.accountId,
+      reference.barrier.accountRoute,
+      reference.barrier.version,
+      reference.barrier.at,
+      reference.erasedRole,
+    ])
+  ).rows[0];
+  if (
+    !row ||
+    String(row.generation) !== expected.replayGeneration ||
+    row.undo_generation !== expected.undoGeneration ||
+    row.restore_generation !== expected.restoreGeneration
+  )
+    return null;
   const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
-  if (source.partition !== reference.source.partition || source.epoch !== reference.source.epoch ||
-    source.position !== reference.source.position || source.transactionId !== reference.source.transactionId ||
-    source.digest !== reference.sourceDigest || identityBindingDigest(source.input) !== reference.sourceDigest) return null;
+  if (
+    source.partition !== reference.source.partition ||
+    source.epoch !== reference.source.epoch ||
+    source.position !== reference.source.position ||
+    source.transactionId !== reference.source.transactionId ||
+    source.digest !== reference.sourceDigest ||
+    identityBindingDigest(source.input) !== reference.sourceDigest
+  )
+    return null;
   return row;
 }
 
@@ -561,12 +660,16 @@ export async function verifyIdentitySourceConsumerCut(
   const row = await currentConsumerClaim(tx, reference, expected);
   if (!row) return false;
   if (row.terminal_custody === null) return true;
-  return (await tx.query<{ current: boolean }>(consumerTerminal.sql, [
-    reference.source.partition,
-    row.terminal_custody,
-    row.terminal_sequence,
-    json(reference),
-    json(expected),
-    currentCommand(tx).transactionId,
-  ])).rows[0]?.current === true;
+  return (
+    (
+      await tx.query<{ current: boolean }>(consumerTerminal.sql, [
+        reference.source.partition,
+        row.terminal_custody,
+        row.terminal_sequence,
+        json(reference),
+        json(expected),
+        currentCommand(tx).transactionId,
+      ])
+    ).rows[0]?.current === true
+  );
 }
