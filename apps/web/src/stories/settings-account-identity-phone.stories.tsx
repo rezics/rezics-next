@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { env } from '../../.storybook/cloudflare-workers';
 import { m } from '../paraglide/messages.js';
+import type { EditableProfile } from '../settings/editable-profile-source';
 import { PageStory, pageReady } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
 
@@ -51,22 +52,32 @@ export const AccountIdentityAndSafety: Story = {
         // The same bounded current-account discovery envelope as the native rename fixtures.
         if (JSON.stringify(body) === JSON.stringify({ resources: [{ type: 'access.account', id: accountId }] }))
           return Response.json({
-            resources: [{ type: 'access.account', id: accountId, viewerActions: [
-              { action: 'account:update', operations: ['account.update'] },
-            ] }],
+            resources: [{
+              type: 'access.account',
+              id: accountId,
+              viewerActions: [{ action: 'account:update', operations: ['account.update'] }],
+            }],
           });
       }
       if (url.pathname === `/v1/accounts/${accountId}/profile` && request.method === 'GET') {
         if (unavailable) {
-          await new Promise<void>((resolve) => { releaseRead = resolve; });
-          return Response.json({
-            type: 'https://rezics.com/problems/dependency_unavailable', title: 'Service unavailable',
-            code: 'dependency_unavailable', retryable: true, request_id: 'account-identity-read',
-          }, { status: 503 });
+          await new Promise<void>((resolve) => {
+            releaseRead = resolve;
+          });
+          return Response.json(
+            {
+              type: 'https://rezics.com/problems/dependency_unavailable',
+              title: 'Service unavailable',
+              code: 'dependency_unavailable',
+              retryable: true,
+              request_id: 'account-identity-read',
+            },
+            { status: 503 },
+          );
         }
         // Keep the existing private profile recording and change only its supplied current handle.
         const response = await originalFetch(request);
-        const recorded = await response.json();
+        const recorded = (await response.json()) as { profile: EditableProfile };
         return Response.json({ ...recorded, profile: { ...recorded.profile, handle } }, { status: response.status });
       }
       return originalFetch(request);
@@ -150,10 +161,14 @@ export const AccountIdentityAndSafety: Story = {
         await expect(continuation).toHaveAttribute('referrerpolicy', 'no-referrer');
         const beforeNavigation = [...calls];
         let destination: string | undefined;
-        continuation.addEventListener('click', (event) => {
-          event.preventDefault(); // Keep the real external document link inside this recorded preview.
-          destination = (event.currentTarget as HTMLAnchorElement).href;
-        }, { once: true });
+        continuation.addEventListener(
+          'click',
+          (event) => {
+            event.preventDefault(); // Keep the real external document link inside this recorded preview.
+            destination = (event.currentTarget as HTMLAnchorElement).href;
+          },
+          { once: true },
+        );
         await userEvent.click(continuation);
         await expect(destination).toBe('https://auth.example.test/account/rename');
         await expect(calls).toEqual(beforeNavigation);
@@ -166,7 +181,7 @@ export const AccountIdentityAndSafety: Story = {
 
         unavailable = true;
         await userEvent.click(reload);
-        await waitFor(() => expect(releaseRead).toBeTypeOf('function'));
+        await waitFor(() => expect(typeof releaseRead).toBe('function'));
         await expect(reload).toBeDisabled();
         await expect(account.queryByText(`@${handle}`)).toBeNull();
         await expect(account.queryByText(m.settings_account_reference_details())).toBeNull();
