@@ -1,3 +1,5 @@
+import { readProofObservation, proofSourceUnchanged } from './verification.ts';
+import { parseAgentExit } from './agents.ts';
 import type { LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
 import { makeRecord, readLogTail, readMeasurement, reportedApproaches, reportsSuccess } from './records.ts';
@@ -55,10 +57,12 @@ export async function settle(
       maxLogBytes: 256 * 1024,
       ...(logStartOffset !== undefined ? { logStartOffset } : {}),
     }).waitingChecks;
-    if (!pendingChecks?.length) removeAttemptContainers(ref.taskId, ref.attempt);
+    const proofTask = store.task(ref.taskId).brief.kind === 'verification';
+    const proofObservation = proofTask ? await readProofObservation(store.task(ref.taskId)) : undefined;
+    if (!proofTask && !pendingChecks?.length) removeAttemptContainers(ref.taskId, ref.attempt);
     store.assertCurrent(ref);
     await terminateProcessGroup(store.attempt(ref).process, tasks.settings.terminationGraceMs);
-    if (!pendingChecks?.length) {
+    if (!proofTask && !pendingChecks?.length) {
       if (!store.task(ref.taskId).workspace)
         await stopProcessesUnder(store.task(ref.taskId).worktree, tasks.settings.terminationGraceMs);
     }
@@ -84,6 +88,7 @@ export async function settle(
       );
       if (
         resuming &&
+        !proofTask &&
         code !== 0 &&
         !measurement.session &&
         !measurement.failureKind &&
@@ -122,7 +127,22 @@ export async function settle(
         });
         return;
       }
-      if (pendingChecks?.length) {
+      const proofExit = proofTask ? parseAgentExit(measurement.result, agentAdapter(current.profile.cli)) : null;
+      const bareWaiting =
+        proofExit &&
+        typeof proofExit === 'object' &&
+        'checks' in proofExit &&
+        Array.isArray(proofExit.checks) &&
+        proofExit.checks.length === 1 &&
+        proofExit.checks[0] === task.proofRun?.binding.checkId;
+      if (
+        pendingChecks?.length &&
+        (!proofTask ||
+          (bareWaiting &&
+            pendingChecks.length === 1 &&
+            pendingChecks[0] === task.proofRun?.binding.checkId &&
+            proofObservation?.status === 'running'))
+      ) {
         store.updateAttempt(ref, (attempt) => {
           attempt.state = 'waiting';
           attempt.checks = pendingChecks;
@@ -192,7 +212,47 @@ export async function settle(
       });
       store.putRecord(makeRecord(task, attempt, finalMeasurement));
       evidenceBundle(task, store.attempt(ref));
-      if (finalMeasurement.failureKind) return;
+      if (finalMeasurement.failureKind && !proofTask) return;
+      if (proofTask && proofObservation) {
+        const run = task.proofRun;
+        if (run?.status === 'bound') store.observeProof(run.binding, proofObservation);
+        const exit = parseAgentExit(finalMeasurement.result, agentAdapter(attempt.profile.cli));
+        const structured = Boolean(
+          exit &&
+          typeof exit === 'object' &&
+          'status' in exit &&
+          exit.status === 'success' &&
+          'checks' in exit &&
+          Array.isArray(exit.checks) &&
+          exit.checks.length === 0,
+        );
+        const unchanged = proofSourceUnchanged(task, tasks.settings.integrationBranch);
+        const verified =
+          !finalMeasurement.failureKind &&
+          !finalMeasurement.blocker &&
+          code === 0 &&
+          structured &&
+          unchanged &&
+          proofObservation.status === 'terminal' &&
+          proofObservation.passed;
+        const proofRecord = makeRecord(task, attempt, finalMeasurement, verified ? 'verified' : 'stopped');
+        proofRecord.proof = proofObservation;
+        store.putRecord(proofRecord);
+        store.updateTask(ref, (current) => {
+          current.state = verified ? 'verified' : 'stopped';
+        });
+        store.updateAttempt(ref, (current) => {
+          current.failureKind = verified ? null : 'tool';
+          current.result = `${finalMeasurement.result}\n${proofObservation.cause}${unchanged ? '' : '; captured source changed'}`;
+        });
+        store.event(ref, verified ? 'proof-verified' : 'proof-failed', {
+          binding: run?.binding,
+          observation: proofObservation,
+          unchanged,
+          structured,
+        });
+        return;
+      }
       tasks.commitFinishedWork(task, ref.attempt);
       finished = true;
     });

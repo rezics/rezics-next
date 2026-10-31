@@ -22,7 +22,7 @@ import { firstFailure, gateEnvironment } from './merge.ts';
 
 const ref = (branch: string) => `refs/heads/${branch}`;
 const verifiedBranch = 'dev-verified';
-const skippedKinds = new Set(['specification', 'research']);
+const skippedKinds = new Set(['specification', 'research', 'verification']);
 const MAX_FINDING_ASSERTIONS = 64;
 const MAX_EXISTING_PROBES = 8;
 const FINDING_LIMIT = 2000;
