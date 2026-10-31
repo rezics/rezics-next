@@ -2517,7 +2517,7 @@
   "album_scope": "Este perfil no incluye campos de pistas, audio, servicios de reproducción ni letras. Solo están disponibles los campos de la definición actual del catálogo.",
   "album_missing": "La definición publicada del álbum no está disponible. Los borradores introducidos se conservan aquí mientras se recargan las definiciones.",
   "album_identity": "Identidad del álbum",
-  "album_terms_help": "Los nombres se editan con el editor de nombres existente. La operación sigue sin estar disponible hasta que se entregue su función nativa; una afirmación de nombre no cambia estos títulos.",
+  "album_terms_help": "Los nombres se editan con el editor de nombres existente, que muestra su disponibilidad actual. Una afirmación de nombre no cambia estos títulos.",
   "album_facts": "Fechas y detalles del catálogo",
   "album_credits_parts": "Artistas, funciones y partes",
   "album_credits_help": "Usa Colaborador para un artista y elige un concepto de función existente si la conoces. Posición ordena los créditos o los miembros de una serie; Parte de la obra no tiene un calificador de orden. Se aplica a la parte acepta un arco narrativo, no una pista del álbum.",

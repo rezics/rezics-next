@@ -2737,7 +2737,7 @@
   "album_scope": "This profile has no track, audio, streaming or lyrics fields. Only fields in the current catalogue release are available.",
   "album_missing": "The released album profile is unavailable. Any entered draft stays here while definitions are reloaded.",
   "album_identity": "Album identity",
-  "album_terms_help": "Names use the existing terms editor. That operation stays unavailable until its native producer is delivered; a name statement does not change these titles.",
+  "album_terms_help": "Names use the existing terms editor, which shows current availability. A name statement does not change these titles.",
   "album_facts": "Dates and catalogue details",
   "album_credits_parts": "Artists, roles and parts",
   "album_credits_help": "Use Contributor for an artist, with an existing role concept where known. Position orders credits or series membership; Part of work has no order qualifier. Applies to part accepts a story arc, not an album track.",

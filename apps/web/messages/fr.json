@@ -2517,7 +2517,7 @@
   "album_scope": "Ce profil ne contient aucun champ pour les pistes, l’audio, la diffusion en continu ou les paroles. Seuls les champs de la définition actuelle du catalogue sont disponibles.",
   "album_missing": "La définition publiée de l’album est indisponible. Les brouillons saisis restent ici pendant le rechargement des définitions.",
   "album_identity": "Identité de l’album",
-  "album_terms_help": "Les noms utilisent l’éditeur de noms existant. Cette opération reste indisponible jusqu’à la livraison de sa fonction native ; un énoncé de nom ne modifie pas ces titres.",
+  "album_terms_help": "Les noms utilisent l’éditeur de noms existant, qui indique sa disponibilité actuelle. Un énoncé de nom ne modifie pas ces titres.",
   "album_facts": "Dates et détails du catalogue",
   "album_credits_parts": "Artistes, rôles et parties",
   "album_credits_help": "Utilisez Contributeur pour un artiste et choisissez un concept de rôle existant si le rôle est connu. Position ordonne les crédits ou les membres d’une série ; Partie de l’œuvre n’a pas de qualificatif d’ordre. S’applique à la partie accepte un arc narratif, pas une piste d’album.",

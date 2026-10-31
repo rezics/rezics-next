@@ -524,7 +524,7 @@ come from the effective active definitions release: no publication date is inven
 Native dates and scalar details, artist/part relations, classifications and authored text have distinct groups.
 Definitions retain their actual metadata language and fallback attribution. Existing names, descriptions and
 aliases show their own languages and link to the terms adapter described above. `schema:name` proposals do not
-patch the title maps; the pending native terms producer remains unavailable.
+patch the title maps. The terms editor binds the mounted native writer and reports its actual availability.
 
 Creation reuses native subject input validation and the existing session BFF's `POST /v1/subjects`. It sends only
 explicitly entered terms and added assertions, qualifiers and citations; it sends no ingestion Source metadata.
@@ -559,5 +559,5 @@ live in **Pages/Catalogue/Released album catalogue editor**, under the ID prefix
 `created`, `retry`, `proposed` and `credit-correction`. They exercise existing generated request helpers against
 explicit fictional examples, using the recorded emitted definitions and genuinely empty `sourceRecords: []`.
 They are not native integration or visual evidence. Locale, phone390/desktop1280 viewport and light/dark theme
-use globals. Web owns normal captures and visual acceptance; native integration and the terms write binding
-remain pending.
+use globals. The shared terms writer is bound through the existing editor. Native integration and visual
+acceptance remain separate; Web owns normal captures.

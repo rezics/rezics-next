@@ -2517,7 +2517,7 @@
   "album_scope": "Dieses Profil enthält keine Felder für Titelspuren, Audio, Streaming oder Liedtexte. Verfügbar sind nur Felder der aktuellen Katalogdefinition.",
   "album_missing": "Die veröffentlichte Albumdefinition ist nicht verfügbar. Eingegebene Entwürfe bleiben beim Neuladen der Definitionen erhalten.",
   "album_identity": "Identität des Albums",
-  "album_terms_help": "Namen werden im vorhandenen Namenseditor bearbeitet. Dieser Vorgang bleibt bis zur Bereitstellung der nativen Schreibfunktion nicht verfügbar; eine Namensaussage ändert diese Titel nicht.",
+  "album_terms_help": "Namen werden im vorhandenen Namenseditor bearbeitet. Dort wird die aktuelle Verfügbarkeit angezeigt. Eine Namensaussage ändert diese Titel nicht.",
   "album_facts": "Daten und Katalogangaben",
   "album_credits_parts": "Künstler, Rollen und Bestandteile",
   "album_credits_help": "Verwende Mitwirkender für Künstler und wähle bei bekannter Rolle einen vorhandenen Rollenbegriff. Position ordnet Mitwirkende oder Serienmitglieder; Teil des Werks hat keinen Ordnungsqualifikator. Gilt für Teil akzeptiert einen Handlungsbogen, keinen Albumtitel.",
