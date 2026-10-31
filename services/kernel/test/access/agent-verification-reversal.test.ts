@@ -2306,6 +2306,7 @@ test('Default History maintenance passes one genuinely funded Source native and 
     let failAfterRead = false;
     readSpy.mockImplementation(async (selectedPool, selected, context) => {
       expect(selectedPool).toBe(pool);
+      if (!active) throw new Error('Source staging must remain inside its original live callback');
       expect(context).toBe(active);
       expect(selected).toEqual(reference);
       const answer = await readConsumer(selectedPool, selected, context);
