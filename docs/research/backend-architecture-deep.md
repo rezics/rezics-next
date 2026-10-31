@@ -137,10 +137,19 @@ perform up to 1,000 owner/data statements: `(2 source + 3 control) × 100 × 2`,
 reader to the stronger architecture rule. **Impact:** a bounded result can incur hundreds of round trips and observe
 inconsistent label/edition/cover inputs. Current disclosure checks reduce risk, but this audit does not establish
 that every dependency shares a safe snapshot or demonstrate an actual information leak.
+The same class also appears in [graph traversal](../../services/kernel/src/semantic/graph.ts): `visibleIdsFor`
+and expansion reads group by partition. At the HTTP maximum of eight properties, both directions and depth two,
+the first frontier can contain 400 distinct neighbours (`8 × 2 × 25`); the next expansion plan can contain 6,400
+descriptors. The expansion loop can visit 400 partition groups even after the remaining edge budget reaches zero.
+The 500-edge output cap therefore does not by itself state the statement or intermediate-descriptor bound.
+[Expansion SQL](../../services/kernel/src/semantic/read-graph-expansions.sql) keeps its joins in the selected
+partition and limits edge candidates; the defect is not an illicit cross-partition join.
+
 **Owner/correction:** Semantic plus the shared database resolver; use database-grouped full-key batches and a
 single pinned RR client for all row kinds. Preserve final current-authority checks rather than removing them.
 [Content `batchSnapshot`](../../services/kernel/src/content/reads.ts) and Rating's public-figure batch contract
-provide existing local patterns; reuse their ownership model instead of adding another read framework.
+provide existing same-database snapshot patterns. Content currently operates on its supplied pool; it is not
+evidence of a complete multi-database placement resolver. Reuse the local pattern rather than add another framework.
 
 ### F2. Collection size and ordering are designed around a small owner
 
@@ -222,7 +231,7 @@ the display value. Retain the structural engine; add a capability only for an ad
 ### F6. Production composition leaves working modules unavailable or unreachable
 
 **Class:** integration closure failure.
-[Server setup](../../services/kernel/src/server.ts) installs the real
+[Server setup](../../services/kernel/src/server.ts), when Search is configured, installs the real
 [public Filter runtime](../../services/kernel/src/search/public-runtime.ts). It does not provide the optional
 shelf native binding to [Kernel composition](../../services/kernel/src/http/kernel.ts).
 [Default shelf reads](../../services/kernel/src/library/shelf-reader-defaults.ts) therefore use a generation
@@ -263,8 +272,10 @@ privacy heads: these are different axes and need separately attributed evidence.
 ### F8. Documentation drift obscures both real work and real gaps
 
 **Class:** stale capability accounting and incompatible operation contracts.
-[Search README](../../services/kernel/src/search/README.md) describes provisional/unavailable bindings while
-`public-runtime.ts` and server setup now install real sources. Search/Zone status statements about missing
+[Search README](../../services/kernel/src/search/README.md) describes a provisional/unavailable source binding while
+`public-runtime.ts` and configured server setup now install real sources. This supersedes a blanket missing-source
+claim, not the separate missing facet composition: server setup does not pass `facetProvider`, whose omission
+retains the documented `503 index_not_ready`. Search/Zone status statements about missing
 `scope-source.ts` preparation are superseded by substantive current bodies, although their large-owner limits
 remain. [Semantic status](design-status-semantic.md) describes a missing coordinator while
 [the coordinator](../../services/kernel/src/semantic/identity-epoch-coordinator.ts) now exists.
@@ -391,14 +402,14 @@ The 10-connection server pool is a resource cap, not evidence that 512 sequentia
 | --- | --- | --- | --- |
 | Subject summaries: up to 256 full subject keys | Partition loop, representatives, subjects, editions, per-row authorization, media and fences | 256 distinct partitions in one database can yield at least 512 first-stage statements | Violates database batching contract; batch all row kinds in one RR context |
 | Identity observations: up to 100 original keys | Two collections of exact source/control owner and state reads | Up to 1,000 owner/data statements for 100 distinct source/control homes | Relevant-key proof is useful; separate RR per home is still the wrong physical batching |
-| Content batch hydration | Full keys grouped by actual pool; one read-only RR client per database, batched partitions/kinds | Output and ancestor expansion remain bounded; chain length at most 32 | Reuse this pattern; still require final current disclosure where mandated |
+| Content batch hydration | Full keys at the supplied pool; one read-only RR client, batched partitions/kinds | Output and ancestor expansion remain bounded; chain length at most 32 | Positive same-database pattern, not a general placement resolver; retain final current disclosure where mandated |
 | Public figure hydration | Up to 256 requested figure keys in caller RR | Contract names two statements: question rows plus full-key fields/pending guards | Positive shared-reader example, not a claim about an entire page's Access cost |
 | Collection add/restore | One owner, uniqueness/count/order checks | Rejected beyond 5,000, long before 1,000,000 | Admission failure, not a measured slowdown |
 | Collection point/member placement | `readMemberOn` scans a capped owner; gap repair respaces all members | Raising cap makes one-member lookup/repair O(1,000,000) | Exact lookup plus bounded order maintenance and retained publication |
 | Native scope preparation | Bounded ordinal/order prefix of at most 99 and exhaustion check | A million-member owner generally needs retained preparation; refusal is honest | Do not call the small-owner direct path a scalable complete capability |
 | Composed useful lists | 16 reads, 128 slots; direct candidates `min(600, 6s+3)` and ready `2s+2` | Sixteen direct reads of eight slots admit 816 candidates total | Adopted global budget is 6,784 Access points, 14,080 examined rows, 72 statements/backend, 96 engine operations; all sources must debit it |
 | Query-level privacy coverage | Fixed 4,096 homes with indexed coverage/control summaries | Adopted coverage query is two statements and `64 + 2 × (unacknowledged + changed homes)` rows | Returned-hit checks alone cannot make NOT, counts, exclusion or ordering safe; no page-wide 8,192-head scan shortcut |
-| Public graph | Depth 1 or 2, bounded requested properties and edges; summary chunks of 256 | At most configured expansion, but hydration still inherits F1 | Local graph joins are not cross-partition joins; account for their exact partition predicate |
+| Public graph | Depth 1 or 2, up to eight properties, both directions, 25 edges/expansion, 500 total edges; summary chunks of 256 | Up to 400 first-frontier neighbours and 6,400 second-round expansion descriptors; up to 400 second-round partition query groups | Bounded but expensive; partition loops and later hydration inherit F1. Local joins are not cross-partition joins. |
 | Definitions and facets | Release admission plus first-use whole-type cache | 200,000 types rejected at 1,024; whole manifest/client payload would grow with catalogue | Separate cold compilation from bounded keyed runtime lookup |
 | Progress | Bounded scalar/cursor input or 20,000 sparse completed units; updates at most 100 | Does not enumerate every unit of a huge work | Keep explicit structural limits and session-local/unverified labels |
 | Home/follows | Fixed admitted descriptors; selected cursor page rather than one block/follow/type | 10,000 follows or 200,000 kinds must not generate 10,000/200,000 queries or controls | First scope can deliver bounded Continue/catalogue rows; a native mixed feed needs its own adopted scope and mounted plan |
@@ -572,6 +583,10 @@ terms; no implementation or long passages are reproduced. Standards are cited by
   [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) provides canonical JSON and
   [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562) UUID formats. A routed UUID convention must be evaluated against
   its chosen format, not called invalid merely because some bits have application meaning.
+- [RE2's project documentation](https://github.com/google/re2) describes a safe alternative to backtracking engines;
+  [fractional-indexing documentation](https://github.com/rocicorp/fractional-indexing) documents the ordering-key
+  primitive already imported locally (CC0-1.0). These are documentation comparisons, not additional cloned source
+  audits or proposals to copy implementations. The missing bounded Collection maintenance policy remains local.
 - [Google pagination guidance](https://google.aip.dev/158) supports opaque continuation. A cursor is not a grant,
   a guarantee of cheap filtering, or permission to reuse another viewer's response.
 
