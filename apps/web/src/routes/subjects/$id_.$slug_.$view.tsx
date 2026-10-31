@@ -7,6 +7,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { subjectPageType } from '../../features/pages/subject';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
+import { SubjectLibraryLeaf } from '../../features/pages/subject-library-leaf';
 import { subjectTabs } from '../../features/pages/views';
 import {
   subjectCanonicalQuery,
@@ -274,6 +275,7 @@ function SubjectViewRoute() {
           tabs={tabs}
           tabLabels={viewTabLabels()}
           view={view}
+          library={<SubjectLibraryLeaf frame={frame} locale={locale} session={browserSession} />}
         />
       }
       {...(nonce !== undefined ? { nonce } : {})}

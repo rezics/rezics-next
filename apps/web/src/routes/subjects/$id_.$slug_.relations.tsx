@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { RelationsView } from '../../features/pages/relations-view';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
+import { SubjectLibraryLeaf } from '../../features/pages/subject-library-leaf';
 import { pageRelationProperties, subjectPageType } from '../../features/pages/subject';
 import { subjectTabs } from '../../features/pages/views';
 import { useSession } from '../../session/query';
@@ -264,6 +265,7 @@ function RelationsRoute() {
       tabs={tabs}
       tabLabels={viewTabLabels()}
       view="relations"
+      library={<SubjectLibraryLeaf frame={frame} locale={getLocale()} session={browserSession} />}
     />
   );
   if (data.configured)

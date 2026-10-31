@@ -204,7 +204,7 @@ function withCurrent(tabs: readonly ViewTab[], view: View): readonly ViewTab[] {
 
 /**
  * The compact header every subject view starts with, and the view tabs under it: which subject the reader is on, and
- * the way to every other view. The summary, reactions and library controls stay on the overview.
+ * the way to every other view. Ordinary reader hosts may supply the shared Library leaf; companion editors omit it.
  */
 export function SubjectFrame({
   frame,
@@ -222,6 +222,7 @@ export function SubjectFrame({
   realm,
   context,
   navigation,
+  library,
 }: {
   frame: SubjectFrameData;
   locale: string;
@@ -236,6 +237,8 @@ export function SubjectFrame({
   view: View;
   /** Optional companion-view navigation, retaining the shared compact subject header. */
   navigation?: ReactNode;
+  /** The existing Library leaf, supplied only by a successful ordinary subject reader. */
+  library?: ReactNode;
   /** The page-view address when this subject is embedded in a routed Zone. */
   base?: string;
   realm?: string | undefined;
@@ -344,6 +347,7 @@ export function SubjectFrame({
           />
         )}
       </header>
+      {library ? <div data-slot="subject-library">{library}</div> : null}
       {navigation ?? (
         <ViewTabs
           tabs={withCurrent(tabs, view)}
