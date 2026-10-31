@@ -9,6 +9,7 @@ import type { EditFailure, RevisedPost, WriteFailure } from './actions';
 type Refusal = (status: number, headers: HeadersInit | undefined, body?: unknown) => WriteFailure;
 type StartedThread = NonNullable<Awaited<ReturnType<KernelClient['threads']['post']>>['data']>['thread'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const nativeSubjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 type StartThreadBase = {
   boardId: string;
@@ -21,9 +22,31 @@ type StartThreadBase = {
 export type VoteCitation = { questionId: string; units: number; revision: number };
 export type StartThreadInput = StartThreadBase &
   (
-    | { kind: 'review'; subjectId: string; voteCitation?: VoteCitation }
-    | { kind?: undefined; subjectId?: string; voteCitation?: undefined }
+    | { kind: 'review'; subjectId: string; subjectIds?: never; voteCitation?: VoteCitation }
+    | ({ kind?: undefined; voteCitation?: undefined } & (
+        | { subjectIds: string[]; subjectId?: never }
+        | { subjectId?: string; subjectIds?: never }
+      ))
   );
+
+/** Validate without coercion, deduplication or truncation; order is part of the command intent. */
+export function discussionSubjectIds(input: object): string[] {
+  if ('subjectIds' in input) {
+    const ids = input.subjectIds;
+    if ('subjectId' in input || !Array.isArray(ids) || ids.length > 128) throw new Error('Invalid discussion subjects');
+    const seen = new Set<string>();
+    for (const id of ids) {
+      if (typeof id !== 'string' || !nativeSubjectId.test(id) || seen.has(id))
+        throw new Error('Invalid discussion subjects');
+      seen.add(id);
+    }
+    return [...ids];
+  }
+  // Keep the original single-preset caller contract; the native command repeats reference validation.
+  if (!('subjectId' in input) || input.subjectId === undefined) return [];
+  if (typeof input.subjectId !== 'string' || !uuid.test(input.subjectId)) throw new Error('Invalid discussion subject');
+  return [input.subjectId];
+}
 
 /** Reads the optional author-owned review id returned by the native conflict response. */
 export function findExistingReview(problem: unknown): string | undefined {
@@ -39,6 +62,8 @@ export async function startThreadRequest(
   client: KernelClient,
   refusal: Refusal,
 ): Promise<{ ok: true; thread: StartedThread } | WriteFailure> {
+  if (input.kind === 'review' && 'subjectIds' in input) throw new Error('Invalid review draft');
+  const subjectIds = input.kind === 'review' ? [input.subjectId] : discussionSubjectIds(input);
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   if (!authorization) throw new Error('A signed-in session is required to post.');
@@ -52,10 +77,10 @@ export async function startThreadRequest(
         ...(input.kind === 'review'
           ? {
               kind: 'review' as const,
-              subjectIds: [input.subjectId],
+              subjectIds,
               ...(input.voteCitation ? { voteCitation: input.voteCitation } : {}),
             }
-          : { subjectIds: input.subjectId ? [input.subjectId] : [] }),
+          : { subjectIds }),
         visibility: 'published',
         ...(input.mediaIds === undefined || input.mediaIds.length === 0 ? {} : { mediaIds: input.mediaIds }),
       },

@@ -15,6 +15,8 @@ import type { VoteCitation } from '../../threads/post-writes';
 import { readNewThreadPage } from '../../threads/reads';
 import { PageHeading } from '../../shell/page-heading';
 import { canSubmitThread } from '../../threads/review-policy';
+import { DiscussionSubjects } from '../../threads/discussion-subjects';
+import { contentSubjectPreset } from '../../threads/content-subject-search';
 
 type NewThreadSearch = { subject?: string; subjectTitle?: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -41,9 +43,13 @@ export const Route = createFileRoute('/boards/$id_/new')({
 function NewThreadPage() {
   const { board, idempotencyKey } = Route.useLoaderData();
   const { subject: presetSubject, subjectTitle: presetSubjectTitle } = Route.useSearch();
-  const { csrfToken } = useSession();
+  const { csrfToken, subject: accountId, state: sessionState } = useSession();
+  const searchScope = JSON.stringify([getLocale(), sessionState, accountId, csrfToken]);
   const review = board.purpose === 'reviews';
   const [subjectId, setSubjectId] = useState<string | null>(presetSubject ?? null);
+  const [discussionSubjects, setDiscussionSubjects] = useState(() =>
+    presetSubject ? [contentSubjectPreset(presetSubject, presetSubjectTitle ?? m.thread_discussion_subject())] : [],
+  );
   const [voteCitation, setVoteCitation] = useState<VoteCitation | undefined>();
   const [metadataLocked, setMetadataLocked] = useState(false);
   const metadataLockedRef = useRef(false);
@@ -61,9 +67,7 @@ function NewThreadPage() {
   }, []);
   const submissionContext = review
     ? { kind: 'review' as const, subjectId: subjectId!, ...(voteCitation ? { voteCitation } : {}) }
-    : subjectId
-      ? { subjectId }
-      : {};
+    : { subjectIds: discussionSubjects.map((subject) => subject.id) };
 
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
@@ -79,9 +83,18 @@ function NewThreadPage() {
             onSubjectChange={handleSubjectChange}
             onVoteCitationChange={handleVoteCitationChange}
             disabled={metadataLocked}
+            searchScope={searchScope}
           />
-        ) : null}
-        {!review && presetSubjectTitle ? <p className="text-sm text-muted-foreground">{presetSubjectTitle}</p> : null}
+        ) : (
+          <DiscussionSubjects
+            value={discussionSubjects}
+            onValueChange={(items) => {
+              if (!metadataLockedRef.current) setDiscussionSubjects(items);
+            }}
+            disabled={metadataLocked}
+            searchScope={searchScope}
+          />
+        )}
         <PostComposer
           initialKey={idempotencyKey}
           titleRequired

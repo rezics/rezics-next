@@ -12,6 +12,7 @@ import { replyParentId } from './reply-context-intent';
 import { replyToThreadRequest } from './reply-context-request';
 import {
   erasePostRequest,
+  discussionSubjectIds,
   findExistingReview,
   restorePostRequest,
   revisePostRequest,
@@ -123,6 +124,7 @@ function validateThreadDraft(input: unknown): StartThreadInput {
   if ('kind' in input && input.kind !== undefined) {
     if (
       input.kind !== 'review' ||
+      'subjectIds' in input ||
       !('subjectId' in input) ||
       typeof input.subjectId !== 'string' ||
       !uuid.test(input.subjectId)
@@ -136,16 +138,15 @@ function validateThreadDraft(input: unknown): StartThreadInput {
       ...(voteCitation ? { voteCitation } : {}),
     };
   }
-  if (
-    ('subjectId' in input &&
-      input.subjectId !== undefined &&
-      (typeof input.subjectId !== 'string' || !uuid.test(input.subjectId))) ||
-    ('voteCitation' in input && input.voteCitation !== undefined)
-  )
-    throw new Error('Invalid discussion draft');
+  if ('voteCitation' in input && input.voteCitation !== undefined) throw new Error('Invalid discussion draft');
+  const subjectIds = discussionSubjectIds(input);
   return {
     ...base,
-    ...('subjectId' in input && typeof input.subjectId === 'string' ? { subjectId: input.subjectId } : {}),
+    ...('subjectIds' in input
+      ? { subjectIds }
+      : 'subjectId' in input && typeof input.subjectId === 'string'
+        ? { subjectId: subjectIds[0]! }
+        : {}),
   };
 }
 

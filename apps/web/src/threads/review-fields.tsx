@@ -1,13 +1,9 @@
-import { pickText } from '@rezics/composition';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { EntityPicker, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { useEffect, useState } from 'react';
-import { coverOf, coverSubject } from '../media/summary';
 import { coverSrc } from '../media/cover-src';
 import { kernelClient } from '../kernel/client';
-import { hitYear } from '../search/results';
-import type { SuggestionResult } from '../search/suggestions';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { env } from 'cloudflare:workers';
@@ -18,6 +14,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { selectedReviewSubject } from './review-policy';
 import { loadCurrentReviewVote, selectedVoteCitation, type CurrentReviewVote } from './review-vote';
+import { contentSubjectPreset, searchContentSubjects } from './content-subject-search';
 
 export { STANDARD_QUESTION_ID } from './review-vote';
 export type { CurrentReviewVote } from './review-vote';
@@ -45,46 +42,23 @@ export const readCurrentReviewVote = createServerFn({ method: 'GET' })
     return loadCurrentReviewVote(kernelClient(), data.subjectId, authorization);
   });
 
-async function search(text: string, signal: AbortSignal): Promise<EntityPickerSubject[]> {
-  const locale = getLocale();
-  const response = await fetch(
-    `/api/search/suggestions?q=${encodeURIComponent(text)}&locale=${encodeURIComponent(locale)}`,
-    { signal },
-  );
-  if (!response.ok) throw new Error('Suggestions unavailable');
-  const result = (await response.json()) as SuggestionResult;
-  return result.subjects.map((subject) => {
-    const title = pickText(subject.labels, locale).text;
-    return {
-      id: subject.id,
-      title,
-      types: coverSubject(subject.id, title, subject.summary, subject.type).types,
-      typeLabel: pickText(result.types[subject.type] ?? {}, locale).text,
-      year: hitYear(subject.facts) ?? null,
-      cover: coverOf(subject.summary),
-    };
-  });
-}
-
-function presetSubject(id: string, title: string): EntityPickerSubject {
-  return { id, title, types: [], typeLabel: '', cover: null };
-}
-
 export function ReviewFields({
   initialSubjectId,
   initialSubjectTitle,
   disabled = false,
+  searchScope,
   onSubjectChange,
   onVoteCitationChange,
 }: {
   initialSubjectId?: string;
   initialSubjectTitle?: string;
   disabled?: boolean;
+  searchScope?: string;
   onSubjectChange: (subjectId: string | null) => void;
   onVoteCitationChange: (citation: CurrentReviewVote | undefined) => void;
 }) {
   const [subject, setSubject] = useState<EntityPickerSubject | null>(() =>
-    initialSubjectId ? presetSubject(initialSubjectId, initialSubjectTitle ?? m.thread_review_subject()) : null,
+    initialSubjectId ? contentSubjectPreset(initialSubjectId, initialSubjectTitle ?? m.thread_review_subject()) : null,
   );
   const [readVote, setReadVote] = useState<{ subjectId: string; vote: CurrentReviewVote } | null>(null);
   const [citingVote, setCitingVote] = useState(false);
@@ -128,8 +102,9 @@ export function ReviewFields({
     >
       <Label>{m.thread_review_subject()}</Label>
       <EntityPicker
+        key={searchScope}
         label={m.thread_review_subject()}
-        search={search}
+        search={searchContentSubjects}
         src={coverSrc}
         value={subject ? [subject] : []}
         disabled={disabled}

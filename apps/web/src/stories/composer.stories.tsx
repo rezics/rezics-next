@@ -1,10 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { pickText } from '@rezics/composition';
 import { useLayoutEffect } from 'react';
 import { PageStory, pagePaths, newThreadReady } from './page';
 import { m } from '../paraglide/messages.js';
 import type { DocumentSnapshot } from '@rezics/document';
 import { InlinePostEditor, PostComposer } from '../threads/composer';
+import { suggestionResponse } from '../search/suggestions';
+import { getLocale } from '../paraglide/runtime.js';
+import searchRecording from '../kernel/recorded/search.json';
 
 const meta = {
   title: 'Pages/Community/Post Editor',
@@ -17,6 +21,8 @@ type Story = StoryObj<typeof meta>;
 
 const reply = () => <PageStory visitor="Signed In" path={pagePaths['thread']} />;
 const newThread = () => <PageStory visitor="Signed In" path={pagePaths['board-new']} />;
+let subjectQueries: string[] = [];
+let releaseLateSubjects: (() => void) | undefined;
 const emptyReplyPlay: NonNullable<Story['play']> = async ({ canvasElement }) => {
   const view = within(canvasElement);
   const send = await view.findByRole('button', { name: m.thread_write_send() });
@@ -173,6 +179,71 @@ export const NewThreadLong: Story = {
   name: 'New thread / Long',
   render: newThread,
   play: longThreadPlay,
+};
+export const NewThreadSubjects: Story = {
+  name: 'New thread / Choose subjects',
+  render: () => (
+    <PageStory
+      visitor="Signed In"
+      path={`${pagePaths['board-new']}?subject=${searchRecording.subjects[0]!.id}&subjectTitle=Original%20title%20hint`}
+    />
+  ),
+  beforeEach: () => {
+    const original = globalThis.fetch;
+    subjectQueries = [];
+    releaseLateSubjects = undefined;
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
+      if (url.pathname !== '/api/search/suggestions') return original(input, init);
+      subjectQueries.push(url.searchParams.get('q')!);
+      if (url.searchParams.get('q') === 'old')
+        await new Promise<void>((resolve) => {
+          releaseLateSubjects = resolve;
+        });
+      if (url.searchParams.get('q') === 'unavailable') return new Response(null, { status: 503 });
+      return suggestionResponse(new Request(url, init), {});
+    }) as typeof fetch;
+    return () => {
+      releaseLateSubjects?.();
+      globalThis.fetch = original;
+    };
+  },
+  play: async (context) => {
+    await newThreadReady(context);
+    const canvas = within(context.canvasElement);
+    const region = within(canvas.getByRole('region', { name: m.thread_discussion_subjects() }));
+    await expect(region.getByText('Original title hint')).toBeVisible();
+    await userEvent.click(region.getByRole('button'));
+    await expect(region.queryByRole('listitem')).toBeNull();
+    const body = canvas.getByRole('textbox', { name: m.thread_new_body_label() });
+    await userEvent.click(body);
+    await userEvent.keyboard('Keep this draft while choosing subjects.');
+    const input = region.getByRole('combobox');
+    await userEvent.type(input, 'The');
+    for (const subject of searchRecording.subjects) {
+      const title = pickText(subject.labels, getLocale()).text;
+      await userEvent.click(await screen.findByRole('option', { name: new RegExp(title) }));
+    }
+    await expect(region.getAllByRole('listitem')).toHaveLength(2);
+    await userEvent.clear(input);
+    await userEvent.type(input, 'old');
+    await waitFor(() => expect(releaseLateSubjects).toBeDefined());
+    await userEvent.clear(input);
+    await userEvent.type(input, 'The');
+    await screen.findAllByRole('option');
+    releaseLateSubjects?.();
+    await userEvent.clear(input);
+    await userEvent.type(input, 'unavailable');
+    await waitFor(() => expect(subjectQueries).toEqual(['The', 'old', 'The', 'unavailable']));
+    await waitFor(() => expect(screen.queryByRole('option')).toBeNull());
+    await expect(region.getAllByRole('listitem')).toHaveLength(2);
+    await expect(body).toHaveTextContent('Keep this draft while choosing subjects.');
+    await userEvent.keyboard('{Escape}');
+    for (const remove of region.getAllByRole('button')) await userEvent.click(remove);
+    await expect(region.queryByRole('listitem')).toBeNull();
+    await userEvent.type(canvas.getByRole('textbox', { name: m.thread_title_label() }), 'No references required');
+    await expect(canvas.getByRole('button', { name: m.thread_write_send() })).toBeEnabled();
+  },
 };
 export const ReplyPastedImageUploading: Story = {
   name: 'Reply / Pasted image uploading again',
