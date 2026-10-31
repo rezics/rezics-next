@@ -381,7 +381,8 @@ export class WorkerStore implements AttemptFence {
         return [...new Set(attempt.checks ?? [])]
           .filter(
             (checkId) =>
-              nativeCheckId.test(checkId) && !this.db
+              nativeCheckId.test(checkId) &&
+              !this.db
                 .query(`SELECT 1 FROM worker_events
           WHERE task_id=? AND attempt=? AND kind='historical-proof-terminal' AND json_extract(body,'$.checkId')=?`)
                 .get(row.task_id, row.attempt, checkId),
@@ -390,28 +391,42 @@ export class WorkerStore implements AttemptFence {
       });
   }
   classifyHistoricalProof(check: HistoricalProofCheck, admission: HistoricalProofAdmission): void {
-    this.db.transaction(() => {
-      if (!this.historicalProofChecks().some((entry) => isDeepStrictEqual(entry, check))) return;
-      const previous = this.db.query(`SELECT body FROM worker_events WHERE task_id=? AND attempt=?
+    this.db
+      .transaction(() => {
+        if (!this.historicalProofChecks().some((entry) => isDeepStrictEqual(entry, check))) return;
+        const previous = this.db
+          .query(`SELECT body FROM worker_events WHERE task_id=? AND attempt=?
         AND kind='historical-proof-classified' AND json_extract(body,'$.checkId')=? ORDER BY sequence DESC LIMIT 1`)
-        .get(check.taskId, check.attempt, check.checkId) as { body: string } | null;
-      const body = { checkId: check.checkId, admission };
-      if (previous && isDeepStrictEqual(JSON.parse(previous.body), body)) return;
-      this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-        .run(check.taskId, check.attempt, 'historical-proof-classified', new Date().toISOString(), JSON.stringify(body));
-    }).immediate();
+          .get(check.taskId, check.attempt, check.checkId) as { body: string } | null;
+        const body = { checkId: check.checkId, admission };
+        if (previous && isDeepStrictEqual(JSON.parse(previous.body), body)) return;
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(
+            check.taskId,
+            check.attempt,
+            'historical-proof-classified',
+            new Date().toISOString(),
+            JSON.stringify(body),
+          );
+      })
+      .immediate();
   }
   /** Diagnostic only: a missing reader cannot reclassify history or release logical/physical custody. */
   historicalProofReaderUnavailable(check: HistoricalProofCheck, cause: string): void {
-    this.db.transaction(() => {
-      const previous = this.db.query(`SELECT body FROM worker_events
+    this.db
+      .transaction(() => {
+        const previous = this.db
+          .query(`SELECT body FROM worker_events
         WHERE kind='historical-proof-reader-unavailable' ORDER BY sequence DESC LIMIT 1`)
-        .get() as { body: string } | null;
-      const body = JSON.stringify({ cause: cause.slice(0, 2000) });
-      if (previous?.body === body) return;
-      this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-        .run(check.taskId, check.attempt, 'historical-proof-reader-unavailable', new Date().toISOString(), body);
-    }).immediate();
+          .get() as { body: string } | null;
+        const body = JSON.stringify({ cause: cause.slice(0, 2000) });
+        if (previous?.body === body) return;
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(check.taskId, check.attempt, 'historical-proof-reader-unavailable', new Date().toISOString(), body);
+      })
+      .immediate();
   }
   /** Only the current running/waiting check IDs count; optional historical custody cannot gate execution. */
   historicalProofSlots(goal?: string): HistoricalProofCheck[] {
@@ -437,7 +452,8 @@ export class WorkerStore implements AttemptFence {
   }
   /** Current ordinary proof incarnations reserve one slot before preparation, across waits and controller crashes. */
   private ordinaryProofSlots(goal: string): { taskId: string; attempt: number; state: Attempt['state'] }[] {
-    return this.db.query(`SELECT t.id AS taskId, a.attempt, json_extract(a.body,'$.state') AS state
+    return this.db
+      .query(`SELECT t.id AS taskId, a.attempt, json_extract(a.body,'$.state') AS state
       FROM worker_tasks t JOIN worker_attempts a ON a.task_id=t.id AND a.attempt=json_extract(t.body,'$.currentAttempt')
       WHERE json_extract(t.body,'$.brief.goal')=? AND json_extract(t.body,'$.brief.kind')='verification'
       AND json_extract(t.body,'$.proofAuthorization.fingerprint') IS NOT NULL
@@ -447,20 +463,26 @@ export class WorkerStore implements AttemptFence {
   }
   proofCapacityAvailable(goal: string, taskId: string): boolean {
     const ordinary = this.ordinaryProofSlots(goal);
-    const historical = this.historicalProofSlots(goal).filter((check) =>
-      !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt));
+    const historical = this.historicalProofSlots(goal).filter(
+      (check) => !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt),
+    );
     // An orphaned pending preparation may be replaced, but an active command cannot be retried by admission.
-    return ordinary.filter((slot) => slot.taskId !== taskId).length + historical.length < 3 &&
+    return (
+      ordinary.filter((slot) => slot.taskId !== taskId).length + historical.length < 3 &&
       !ordinary.some((slot) => slot.taskId === taskId && slot.state !== 'pending') &&
-      !historical.some((check) => check.taskId === taskId);
+      !historical.some((check) => check.taskId === taskId)
+    );
   }
   proofCapacityReason(goal: string, taskId: string): string {
     const ordinary = this.ordinaryProofSlots(goal);
-    const checks = this.historicalProofSlots(goal).filter((check) =>
-      !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt));
-    return `Proof cap 3 pending: ${ordinary.length} current ordinary runs; current running/waiting checks: ` +
+    const checks = this.historicalProofSlots(goal).filter(
+      (check) => !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt),
+    );
+    return (
+      `Proof cap 3 pending: ${ordinary.length} current ordinary runs; current running/waiting checks: ` +
       (checks.map((check) => `${check.checkId} (${check.taskId}/${check.attempt})`).join(', ') || 'none') +
-      `; requesting task ${taskId}. Historical and stopped/exited runs do not occupy logical slots; physical leases remain independent`;
+      `; requesting task ${taskId}. Historical and stopped/exited runs do not occupy logical slots; physical leases remain independent`
+    );
   }
   /** The existing store write transaction owns admission across every controller and detached model exit. */
   reserveProof(binding: ProofBinding): ProofReservation | null {
@@ -480,10 +502,14 @@ export class WorkerStore implements AttemptFence {
       const existing = this.proofReservation(binding.taskId, binding.attempt);
       if (existing) return existing;
       const ordinary = this.ordinaryProofSlots(binding.goal);
-      const historical = this.historicalProofSlots(binding.goal).filter((check) =>
-        !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt));
-      if (ordinary.filter((slot) => slot.taskId !== binding.taskId).length + historical.length >= 3 ||
-          historical.some((check) => check.taskId === binding.taskId)) return null;
+      const historical = this.historicalProofSlots(binding.goal).filter(
+        (check) => !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt),
+      );
+      if (
+        ordinary.filter((slot) => slot.taskId !== binding.taskId).length + historical.length >= 3 ||
+        historical.some((check) => check.taskId === binding.taskId)
+      )
+        return null;
       const run: ProofReservation = { binding: structuredClone(binding), status: 'reserved' };
       this.db
         .query('INSERT INTO worker_proof_reservations VALUES (?,?,?,?,?,?)')
@@ -560,50 +586,76 @@ export class WorkerStore implements AttemptFence {
   }
   /** Release logical permits only. Never signal checks, rewrite observations or release physical leases. */
   releaseExitedProofReservations(ref: AttemptRef, requireExitedOwners = false): string[] {
-    return this.db.transaction(() => {
-      const task = this.task(ref.taskId);
-      if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
-      const current = ref.attempt ? this.attempt(ref) : undefined;
-      if (!current || !['stopped', 'exited', 'cancelled', 'superseded'].includes(current.state) ||
-          ['running', 'landing'].includes(task.state))
-        throw new Error('logical proof release requires a stopped or exited current attempt');
-      const reservation = this.proofReservation(task.id, ref.attempt);
-      const starts = this.events(task.id, ref.attempt)
-        .filter((event) => ['proof-reserved', 'proof-binding', 'proof-command-ready'].includes(event.kind));
-      if (task.brief.kind !== 'verification' && !reservation && !starts.length) return [];
-      const owners = [current];
-      if (owners.some((owner) => !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) ||
-          [owner.process, owner.driver, ...(owner.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)))) {
-        if (requireExitedOwners) throw new Error('logical proof release refuses live or uncertain worker/driver ownership');
-        return []; // An unrelated host sweep/settler must continue without granting continuation authority.
-      }
-      const released: string[] = [];
-      for (const run of reservation && reservation.status !== 'released' ? [reservation] : []) {
-        const owner = this.attempt(run.binding);
-        if (!['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state)) continue;
-        run.status = 'released';
-        run.logicalRelease = {
-          reason: 'Ordinary proof policy: stopped or exited logical run; native custody remains independent and may be unknown',
-          at: new Date().toISOString(),
-        };
-        this.saveProof(run);
-        this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-          .run(task.id, run.binding.attempt, 'proof-logical-released', run.logicalRelease.at, JSON.stringify(run));
-        released.push(run.binding.checkId);
-      }
-      // Retain the policy disposition for this generation, including ordinary runs without optional bindings.
-      // It is evidence only: a stopped/exited retry never requires this event or physical cleanup.
-      for (const owner of owners) {
-        if (this.events(task.id, owner.attempt).some((event) => event.kind === 'proof-logical-reconciled')) continue;
-        this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-          .run(task.id, owner.attempt, 'proof-logical-reconciled', new Date().toISOString(), JSON.stringify({
-            reason: 'Ordinary proof policy: exited logical incarnation may be followed by a newly authorized capture; physical custody remains unknown or independently recorded',
-            expectedAttempt: ref.attempt, state: owner.state,
-            process: owner.process, driver: owner.driver, auxiliaryProcesses: owner.auxiliaryProcesses ?? [], checks: owner.checks,
-          }));
-      }
-      return released;
-    }).immediate();
+    return this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+        const current = ref.attempt ? this.attempt(ref) : undefined;
+        if (
+          !current ||
+          !['stopped', 'exited', 'cancelled', 'superseded'].includes(current.state) ||
+          ['running', 'landing'].includes(task.state)
+        )
+          throw new Error('logical proof release requires a stopped or exited current attempt');
+        const reservation = this.proofReservation(task.id, ref.attempt);
+        const starts = this.events(task.id, ref.attempt).filter((event) =>
+          ['proof-reserved', 'proof-binding', 'proof-command-ready'].includes(event.kind),
+        );
+        if (task.brief.kind !== 'verification' && !reservation && !starts.length) return [];
+        const owners = [current];
+        if (
+          owners.some(
+            (owner) =>
+              !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) ||
+              [owner.process, owner.driver, ...(owner.auxiliaryProcesses ?? [])].some(
+                (identity) => identity && sameProcess(identity),
+              ),
+          )
+        ) {
+          if (requireExitedOwners)
+            throw new Error('logical proof release refuses live or uncertain worker/driver ownership');
+          return []; // An unrelated host sweep/settler must continue without granting continuation authority.
+        }
+        const released: string[] = [];
+        for (const run of reservation && reservation.status !== 'released' ? [reservation] : []) {
+          const owner = this.attempt(run.binding);
+          if (!['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state)) continue;
+          run.status = 'released';
+          run.logicalRelease = {
+            reason:
+              'Ordinary proof policy: stopped or exited logical run; native custody remains independent and may be unknown',
+            at: new Date().toISOString(),
+          };
+          this.saveProof(run);
+          this.db
+            .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+            .run(task.id, run.binding.attempt, 'proof-logical-released', run.logicalRelease.at, JSON.stringify(run));
+          released.push(run.binding.checkId);
+        }
+        // Retain the policy disposition for this generation, including ordinary runs without optional bindings.
+        // It is evidence only: a stopped/exited retry never requires this event or physical cleanup.
+        for (const owner of owners) {
+          if (this.events(task.id, owner.attempt).some((event) => event.kind === 'proof-logical-reconciled')) continue;
+          this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)').run(
+            task.id,
+            owner.attempt,
+            'proof-logical-reconciled',
+            new Date().toISOString(),
+            JSON.stringify({
+              reason:
+                'Ordinary proof policy: exited logical incarnation may be followed by a newly authorized capture; physical custody remains unknown or independently recorded',
+              expectedAttempt: ref.attempt,
+              state: owner.state,
+              process: owner.process,
+              driver: owner.driver,
+              auxiliaryProcesses: owner.auxiliaryProcesses ?? [],
+              checks: owner.checks,
+            }),
+          );
+        }
+        return released;
+      })
+      .immediate();
   }
   private saveProof(run: ProofReservation): void {
     this.db
@@ -943,12 +995,22 @@ export class WorkerStore implements AttemptFence {
     if (!before.currentAttempt || after.brief.kind !== 'verification') return;
     if (before.brief.kind === 'verification') {
       if (proofFingerprint(before.brief) === proofFingerprint(after.brief)) return;
-      this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-        .run(before.id, before.currentAttempt, 'proof-registration-replaced', new Date().toISOString(), JSON.stringify({
-          previousFingerprint: proofFingerprint(before.brief), newFingerprint: proofFingerprint(after.brief),
-          brief: before.brief, briefPath: before.briefPath, authorization: before.proofAuthorization,
-          worktree: before.worktree, base: before.base, proofRun: before.proofRun,
-        }));
+      this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)').run(
+        before.id,
+        before.currentAttempt,
+        'proof-registration-replaced',
+        new Date().toISOString(),
+        JSON.stringify({
+          previousFingerprint: proofFingerprint(before.brief),
+          newFingerprint: proofFingerprint(after.brief),
+          brief: before.brief,
+          briefPath: before.briefPath,
+          authorization: before.proofAuthorization,
+          worktree: before.worktree,
+          base: before.base,
+          proofRun: before.proofRun,
+        }),
+      );
     }
     const ref = { taskId: before.id, attempt: before.currentAttempt };
     if (!this.record(ref)) {
@@ -968,21 +1030,28 @@ export class WorkerStore implements AttemptFence {
     const task = this.task(ref.taskId);
     if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
     const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
-    const retryable = ['ready', 'held', 'stopped'].includes(task.state) ||
+    const retryable =
+      ['ready', 'held', 'stopped'].includes(task.state) ||
       (['running', 'landing'].includes(task.state) && attempt?.state === 'exited');
-    if (!retryable)
-      throw new StaleAttemptError(ref, task.currentAttempt);
+    if (!retryable) throw new StaleAttemptError(ref, task.currentAttempt);
     if (attempt) {
-      if (!['stopped', 'exited'].includes(attempt.state) ||
-          [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)))
+      if (
+        !['stopped', 'exited'].includes(attempt.state) ||
+        [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some(
+          (identity) => identity && sameProcess(identity),
+        )
+      )
         throw new StaleAttemptError(ref, task.currentAttempt);
     }
     this.assertProofContract(task, brief);
   }
   private assertProofContract(task: Task, brief: Brief): void {
-    if (task.brief.kind === 'verification' && task.brief.proof && !isDeepStrictEqual(
-      { ...task.brief.proof, sourceCommit: brief.proof?.sourceCommit }, brief.proof,
-    )) throw new Error('proof refresh must retain the exact original metadata');
+    if (
+      task.brief.kind === 'verification' &&
+      task.brief.proof &&
+      !isDeepStrictEqual({ ...task.brief.proof, sourceCommit: brief.proof?.sourceCommit }, brief.proof)
+    )
+      throw new Error('proof refresh must retain the exact original metadata');
     if (task.brief.kind === 'verification' && !isDeepStrictEqual(task.brief.acceptance, brief.acceptance))
       throw new Error('proof command may never be replaced: proof refresh must retain the exact original acceptance');
   }
@@ -991,11 +1060,16 @@ export class WorkerStore implements AttemptFence {
     const task = this.task(ref.taskId);
     if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
     const attempt = this.attempt(ref);
-    if (attempt.state !== 'pending' ||
-        [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)) ||
-        this.proofReservation(task.id, ref.attempt) ||
-        this.events(task.id, ref.attempt).some((event) =>
-          ['proof-reserved', 'proof-binding', 'proof-command-ready'].includes(event.kind)))
+    if (
+      attempt.state !== 'pending' ||
+      [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some(
+        (identity) => identity && sameProcess(identity),
+      ) ||
+      this.proofReservation(task.id, ref.attempt) ||
+      this.events(task.id, ref.attempt).some((event) =>
+        ['proof-reserved', 'proof-binding', 'proof-command-ready'].includes(event.kind),
+      )
+    )
       throw new Error('a current prepared or reserved proof source may never be replaced');
   }
   recordExplicitRetry(ref: AttemptRef, update: (task: Task) => void, options: RetryIntent['options']): void {
@@ -1347,8 +1421,7 @@ export class WorkerStore implements AttemptFence {
         }
         this.saveAttempt(old);
         // A new capture cannot recalculate the old proof's report/evidence using its new contract or logs.
-        if (!previous || previous.taskKind !== 'verification')
-          this.saveRecord(record);
+        if (!previous || previous.taskKind !== 'verification') this.saveRecord(record);
       }
     });
   }

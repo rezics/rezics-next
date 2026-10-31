@@ -1,4 +1,11 @@
-import { proofProtocolAuthorized, proofSourceUnchanged, registeredProof, ordinaryProofCommand, type ProofAuthorization, type ProofReservation } from './verification.ts';
+import {
+  proofProtocolAuthorized,
+  proofSourceUnchanged,
+  registeredProof,
+  ordinaryProofCommand,
+  type ProofAuthorization,
+  type ProofReservation,
+} from './verification.ts';
 import { type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
 import {
   closeSync,
@@ -225,8 +232,13 @@ export function workerPrompt(
       `The main checkout ${mainCheckout} is read-only.`,
       task.brief.markdown,
       'Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.',
-      workerCheckProtocol(task.worktree, task.brief, join(mainCheckout, '.temp', 'goal'),
-        task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined, task.proofAuthorization),
+      workerCheckProtocol(
+        task.worktree,
+        task.brief,
+        join(mainCheckout, '.temp', 'goal'),
+        task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined,
+        task.proofAuthorization,
+      ),
     ].join('\n\n');
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. The AGENTS.md that applies is already in your instructions; follow it.`,
@@ -282,7 +294,8 @@ export function attemptEnvironment(
     GOAL_TASK_ID: task.id,
     GOAL_ATTEMPT: String(attempt.attempt),
     ...(task.proofRun?.native && task.proofRun.binding.attempt === attempt.attempt
-      ? { GOAL_CHECK_REGISTRY: task.proofRun.native.registry } : {}),
+      ? { GOAL_CHECK_REGISTRY: task.proofRun.native.registry }
+      : {}),
     KERNEL_CHECK_AFFECTED: task.base,
     ...remoteCheckEnvironment(stateDirectory),
     // The worker check wrapper appends its full wait here, in milliseconds per line; the class limit adds it back.

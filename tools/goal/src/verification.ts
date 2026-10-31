@@ -287,7 +287,8 @@ function fileCommand(argv: string[]): { prefix: string[]; files: string[] } | un
     ['services/kernel', 'services/auth'].some((cwd) =>
       same(argv.slice(index, index + 5), ['bun', 'run', '--cwd', cwd, 'check']),
     )
-  ) index += 5;
+  )
+    index += 5;
   else {
     if (argv[index++] !== 'bun') return;
     if (argv[index] === '--cwd' && argv[index + 1]) index += 2;
@@ -318,11 +319,16 @@ export function originalCommandMatches(command: string[], originals: string[][])
 }
 /** Shared authentication for proof registration and logical-only release. */
 export function authenticateProofManager(
-  store: WorkerStore, manager: string, actor: AuthenticatedManager | null | undefined, operations?: string,
+  store: WorkerStore,
+  manager: string,
+  actor: AuthenticatedManager | null | undefined,
+  operations?: string,
 ): asserts actor is AuthenticatedManager {
   if (!actor || ![manager, operations].includes(actor.id))
     throw new Error('proof registration requires the authenticated owning or operations manager');
-  const session = store.db.query('SELECT state FROM manager_sessions WHERE id=?').get(actor.id) as { state: string } | null;
+  const session = store.db.query('SELECT state FROM manager_sessions WHERE id=?').get(actor.id) as {
+    state: string;
+  } | null;
   const state: unknown = session ? JSON.parse(session.state) : null;
   if (!isObject(state) || state.status !== 'running' || state.threadId !== actor.sessionId)
     throw new Error('proof registration requires a live authenticated manager session');
@@ -426,14 +432,26 @@ export function proofProtocolAuthorized(brief: Partial<Brief>, run?: ProofReserv
 }
 /** A saved authorization, never a kind label alone, grants ordinary original-command execution. */
 export function registeredProof(brief: Partial<Brief>, authorization?: ProofAuthorization): boolean {
-  return Boolean(brief.kind === 'verification' && brief.proof && brief.goal && brief.manager && brief.acceptance &&
-    authorization?.fingerprint === proofFingerprint({
-      goal: brief.goal, manager: brief.manager, kind: brief.kind, proof: brief.proof, acceptance: brief.acceptance,
-    }));
+  return Boolean(
+    brief.kind === 'verification' &&
+    brief.proof &&
+    brief.goal &&
+    brief.manager &&
+    brief.acceptance &&
+    authorization?.fingerprint ===
+      proofFingerprint({
+        goal: brief.goal,
+        manager: brief.manager,
+        kind: brief.kind,
+        proof: brief.proof,
+        acceptance: brief.acceptance,
+      }),
+  );
 }
 /** Preserve the original wrapped invocation; compare its recorded child without executing another wrapper. */
 export function ordinaryProofCommand(argv: string[]): { invocation: string[]; recordedArgv: string[] } {
-  if (!originalCommandHasInputs(argv)) throw new Error('proof cannot execute a broad root, gate or nested wrapper campaign');
+  if (!originalCommandHasInputs(argv))
+    throw new Error('proof cannot execute a broad root, gate or nested wrapper campaign');
   const offset = commandOffset(argv);
   const wrapped = same(argv.slice(offset, offset + 4), ['bun', 'scripts/worker-check.ts', '--local', '--']);
   return {
@@ -443,19 +461,38 @@ export function ordinaryProofCommand(argv: string[]): { invocation: string[]; re
 }
 /** Ordinary wrapper facts authorize a result; native token/custody/cleanup are optional evidence only. */
 export function observeOrdinaryProof(task: Task, checkId: string, record: unknown): ProofObservation {
-  const result = (status: ProofObservation['status'], passed: boolean, cause: string): ProofObservation =>
-    ({ status, passed, cause, record, physical: [] });
+  const result = (status: ProofObservation['status'], passed: boolean, cause: string): ProofObservation => ({
+    status,
+    passed,
+    cause,
+    record,
+    physical: [],
+  });
   if (!registeredProof(task.brief, task.proofAuthorization))
     return result('unknown', false, 'Authenticated original proof registration unavailable');
-  if (!nativeCheckId.test(checkId) || !isObject(record) || record.id !== checkId || record.cwd !== task.worktree ||
-      !same(record.argv, ordinaryProofCommand(task.brief.acceptance.command).recordedArgv) ||
-      !isObject(record.ownership) || record.ownership.taskId !== task.id || record.ownership.attempt !== task.currentAttempt)
-    return result('unknown', false, 'Ordinary proof result does not match this current owner, cwd and exact original argv');
+  if (
+    !nativeCheckId.test(checkId) ||
+    !isObject(record) ||
+    record.id !== checkId ||
+    record.cwd !== task.worktree ||
+    !same(record.argv, ordinaryProofCommand(task.brief.acceptance.command).recordedArgv) ||
+    !isObject(record.ownership) ||
+    record.ownership.taskId !== task.id ||
+    record.ownership.attempt !== task.currentAttempt
+  )
+    return result(
+      'unknown',
+      false,
+      'Ordinary proof result does not match this current owner, cwd and exact original argv',
+    );
   if (record.status === 'running') return result('running', false, `Original check ${checkId} is running`);
   if (record.status !== 'finished' || typeof record.exitCode !== 'number' || !Number.isInteger(record.exitCode))
     return result('unknown', false, 'Original wrapper terminal exit status unavailable');
-  return result('terminal', record.exitCode === 0,
-    `Original check ${checkId}: exit ${record.exitCode}; ${String(record.failureSummary ?? record.infrastructureFailureFinal ?? '')}; log ${String(record.log ?? 'unavailable')}`);
+  return result(
+    'terminal',
+    record.exitCode === 0,
+    `Original check ${checkId}: exit ${record.exitCode}; ${String(record.failureSummary ?? record.infrastructureFailureFinal ?? '')}; log ${String(record.log ?? 'unavailable')}`,
+  );
 }
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -666,8 +703,13 @@ export async function readReservationObservation(
   }
 }
 export async function readProofObservation(task: Task, checkIds?: string[]): Promise<ProofObservation> {
-  const unknown = (cause: string, record: unknown = null): ProofObservation =>
-    ({ status: 'unknown', passed: false, cause, record, physical: [] });
+  const unknown = (cause: string, record: unknown = null): ProofObservation => ({
+    status: 'unknown',
+    passed: false,
+    cause,
+    record,
+    physical: [],
+  });
   const directory = join(task.worktree, '.temp/goal/checks/results');
   try {
     if (checkIds?.length && (checkIds.length !== 1 || !nativeCheckId.test(checkIds[0]!)))
@@ -678,20 +720,28 @@ export async function readProofObservation(task: Task, checkIds?: string[]): Pro
     const owned: { id: string; record: unknown }[] = [];
     for (const id of ids) {
       let record: unknown;
-      try { record = JSON.parse(readFileSync(join(directory, `${id}.json`), 'utf8')); }
-      catch (error) {
+      try {
+        record = JSON.parse(readFileSync(join(directory, `${id}.json`), 'utf8'));
+      } catch (error) {
         if (checkIds?.includes(id)) return unknown(`Original wrapper result unreadable: ${String(error)}`);
         continue; // An unrelated historical result is not this current invocation's evidence.
       }
-      if ((isObject(record) && isObject(record.ownership) &&
-          record.ownership.taskId === task.id && record.ownership.attempt === task.currentAttempt) || checkIds?.includes(id))
+      if (
+        (isObject(record) &&
+          isObject(record.ownership) &&
+          record.ownership.taskId === task.id &&
+          record.ownership.attempt === task.currentAttempt) ||
+        checkIds?.includes(id)
+      )
         owned.push({ id, record });
     }
     if (checkIds?.length && !owned.some(({ id }) => id === checkIds[0]))
       return unknown(`Original wrapper result missing for ${checkIds[0]}`);
     if (owned.length !== 1) return unknown('Expected exactly one ordinary original invocation for this attempt', owned);
     return observeOrdinaryProof(task, owned[0]!.id, owned[0]!.record);
-  } catch (error) { return unknown(`Original wrapper result unavailable: ${String(error)}`); }
+  } catch (error) {
+    return unknown(`Original wrapper result unavailable: ${String(error)}`);
+  }
 }
 
 export type HistoricalProofCheck = { taskId: string; attempt: number; checkId: string; cwd: string };
@@ -711,21 +761,39 @@ export interface HistoricalProofReader extends Pick<ProofReader, 'record' | 'his
   valid(check: HistoricalProofCheck, registration: unknown): boolean;
 }
 function runnerIdentity(value: unknown): ProcessIdentity | undefined {
-  if (!isObject(value) || !Number.isSafeInteger(value.pid) || Number(value.pid) < 1 ||
-      typeof value.start !== 'string' || !/^\d+$/.test(value.start) ||
-      typeof value.boot !== 'string' || !nativeCheckId.test(value.boot) ||
-      !Number.isSafeInteger(value.group) || Number(value.group) < 1) return;
+  if (
+    !isObject(value) ||
+    !Number.isSafeInteger(value.pid) ||
+    Number(value.pid) < 1 ||
+    typeof value.start !== 'string' ||
+    !/^\d+$/.test(value.start) ||
+    typeof value.boot !== 'string' ||
+    !nativeCheckId.test(value.boot) ||
+    !Number.isSafeInteger(value.group) ||
+    Number(value.group) < 1
+  )
+    return;
   return { pid: Number(value.pid), start: value.start, boot: value.boot, group: Number(value.group) };
 }
 /** Pure receiving classification; missing results/identities remain unknown, never terminal or physically cleaned. */
-export function classifyHistoricalProof(check: HistoricalProofCheck, reader: HistoricalProofReader): HistoricalProofAdmission {
+export function classifyHistoricalProof(
+  check: HistoricalProofCheck,
+  reader: HistoricalProofReader,
+): HistoricalProofAdmission {
   const evidence: HistoricalProofAdmission = {
-    classification: 'historical-unknown', cause: 'Historical process identity/custody unavailable; physical resources unresolved',
-    record: null, physical: [], registrations: [], processes: [],
+    classification: 'historical-unknown',
+    cause: 'Historical process identity/custody unavailable; physical resources unresolved',
+    record: null,
+    physical: [],
+    registrations: [],
+    processes: [],
   };
   const errors: string[] = [];
-  const owned = (value: unknown) => isObject(value) && isObject(value.ownership) &&
-    value.ownership.taskId === check.taskId && value.ownership.attempt === check.attempt;
+  const owned = (value: unknown) =>
+    isObject(value) &&
+    isObject(value.ownership) &&
+    value.ownership.taskId === check.taskId &&
+    value.ownership.attempt === check.attempt;
   const inspect = (value: unknown) => {
     if (!isObject(value) || !owned(value)) return;
     const identity = runnerIdentity(value.runnerIdentity);
@@ -734,11 +802,25 @@ export function classifyHistoricalProof(check: HistoricalProofCheck, reader: His
     evidence.processes.push({ identity, host: value.runnerHost, live });
     if (live) evidence.classification = 'live';
   };
-  try { evidence.record = reader.record(check.checkId, check.cwd); } catch (error) { errors.push(String(error)); }
-  try { evidence.registrations = reader.registrations(check); } catch (error) { errors.push(String(error)); }
+  try {
+    evidence.record = reader.record(check.checkId, check.cwd);
+  } catch (error) {
+    errors.push(String(error));
+  }
+  try {
+    evidence.registrations = reader.registrations(check);
+  } catch (error) {
+    errors.push(String(error));
+  }
   const ids = new Set<string>();
   const record = evidence.record;
-  if (isObject(record) && record.custodyVersion === 1 && record.id === check.checkId && record.cwd === check.cwd && owned(record)) {
+  if (
+    isObject(record) &&
+    record.custodyVersion === 1 &&
+    record.id === check.checkId &&
+    record.cwd === check.cwd &&
+    owned(record)
+  ) {
     inspect(record);
     for (const id of [record.physicalRunId, record.waitForPhysicalRunId])
       if (typeof id === 'string' && nativeCheckId.test(id)) ids.add(id);
@@ -748,21 +830,32 @@ export function classifyHistoricalProof(check: HistoricalProofCheck, reader: His
       if (!reader.valid(check, registration)) continue;
       inspect(registration);
       if (isObject(registration) && typeof registration.physicalRunId === 'string') ids.add(registration.physicalRunId);
-    } catch (error) { errors.push(String(error)); }
+    } catch (error) {
+      errors.push(String(error));
+    }
   }
   for (const id of ids) {
     try {
       const run = reader.history(check.checkId, id, check.cwd);
       evidence.physical.push(run ?? null);
-      if (isObject(run) && run.version === 1 && run.id === check.checkId && run.cwd === check.cwd && run.physicalRunId === id)
+      if (
+        isObject(run) &&
+        run.version === 1 &&
+        run.id === check.checkId &&
+        run.cwd === check.cwd &&
+        run.physicalRunId === id
+      )
         inspect(run);
-    } catch (error) { errors.push(String(error)); }
+    } catch (error) {
+      errors.push(String(error));
+    }
   }
-  evidence.cause = evidence.classification === 'live'
-    ? `Live historical check ${check.checkId} (${check.taskId}/${check.attempt}) occupies one logical proof slot`
-    : evidence.processes.some((entry) => entry.live === false)
-      ? 'Retained historical runner identity is gone; result/physical cleanup remains unknown'
-      : 'Historical process identity/custody unavailable; physical resources unresolved';
+  evidence.cause =
+    evidence.classification === 'live'
+      ? `Live historical check ${check.checkId} (${check.taskId}/${check.attempt}) occupies one logical proof slot`
+      : evidence.processes.some((entry) => entry.live === false)
+        ? 'Retained historical runner identity is gone; result/physical cleanup remains unknown'
+        : 'Historical process identity/custody unavailable; physical resources unresolved';
   if (errors.length) evidence.cause += `; ${errors.join('; ')}`;
   return evidence;
 }
@@ -778,11 +871,19 @@ export function validateHistoricalProofReaderSource(source: HistoricalProofReade
   if (!isAbsolute(root) || realpathSync(root) !== root || git(root, ['rev-parse', '--show-toplevel']) !== root)
     throw new Error('Historical reader root must be a canonical Git checkout root');
   const commit = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
-  for (const [ancestor, descendant] of [[PROOF_PRODUCER_COMMIT, commit], [commit, `refs/heads/${integrationBranch}`]]) {
-    if (spawnSync('git', ['merge-base', '--is-ancestor', ancestor!, descendant!], {
-      cwd: integrationRoot, stdio: 'ignore',
-    }).status !== 0)
-      throw new Error('Historical reader source must contain the delivered producer and be a captured integration ancestor');
+  for (const [ancestor, descendant] of [
+    [PROOF_PRODUCER_COMMIT, commit],
+    [commit, `refs/heads/${integrationBranch}`],
+  ]) {
+    if (
+      spawnSync('git', ['merge-base', '--is-ancestor', ancestor!, descendant!], {
+        cwd: integrationRoot,
+        stdio: 'ignore',
+      }).status !== 0
+    )
+      throw new Error(
+        'Historical reader source must contain the delivered producer and be a captured integration ancestor',
+      );
   }
   if (git(root, ['status', '--porcelain', '--untracked-files=no']))
     throw new Error('Historical reader source must be Git-clean');
@@ -796,14 +897,19 @@ export function validateHistoricalProofReaderSource(source: HistoricalProofReade
     if (visited.has(path)) continue;
     visited.add(path);
     const absolute = resolve(root, path);
-    if (!path.startsWith('scripts/') || !path.endsWith('.ts') ||
-        realpathSync(absolute) !== absolute || !lstatSync(absolute).isFile())
+    if (
+      !path.startsWith('scripts/') ||
+      !path.endsWith('.ts') ||
+      realpathSync(absolute) !== absolute ||
+      !lstatSync(absolute).isFile()
+    )
       throw new Error(`Historical reader module is not a canonical native source file: ${path}`);
     const entry = git(integrationRoot, ['ls-tree', commit, '--', path]);
     if (!/^100644 blob [0-9a-f]{40}\t/.test(entry))
       throw new Error(`Historical reader module is not a captured regular file: ${path}`);
     const expected = spawnSync('git', ['show', `${commit}:${path}`], {
-      cwd: integrationRoot, maxBuffer: 8 * 1024 * 1024,
+      cwd: integrationRoot,
+      maxBuffer: 8 * 1024 * 1024,
     });
     const contents = readFileSync(absolute);
     if (expected.status !== 0 || !contents.equals(expected.stdout))
@@ -818,7 +924,10 @@ export function validateHistoricalProofReaderSource(source: HistoricalProofReade
   return commit;
 }
 /** Import validated current producer code; historical cwd is passed only as data to its read APIs. */
-export async function loadHistoricalProofReader(registry: string, source: HistoricalProofReaderSource): Promise<HistoricalProofReader> {
+export async function loadHistoricalProofReader(
+  registry: string,
+  source: HistoricalProofReaderSource,
+): Promise<HistoricalProofReader> {
   const commit = validateHistoricalProofReaderSource(source);
   // Even a failed import can populate Bun's module cache. Never reuse that root for another captured revision.
   importedHistoricalSources.set(source.root, commit);
@@ -834,41 +943,62 @@ export async function loadHistoricalProofReader(registry: string, source: Histor
     ...reader,
     registrations: (check) => {
       try {
-        return readdirSync(registry).filter((name) => {
-          const physical = name.slice(check.checkId.length + 1, -5);
-          return name.startsWith(`${check.checkId}.`) && name.endsWith('.json') && nativeCheckId.test(physical);
-        }).map((name): unknown => {
-          try { return JSON.parse(readFileSync(join(registry, name), 'utf8')); }
-          catch (error) { return { unavailable: String(error), path: join(registry, name) }; }
-        });
+        return readdirSync(registry)
+          .filter((name) => {
+            const physical = name.slice(check.checkId.length + 1, -5);
+            return name.startsWith(`${check.checkId}.`) && name.endsWith('.json') && nativeCheckId.test(physical);
+          })
+          .map((name): unknown => {
+            try {
+              return JSON.parse(readFileSync(join(registry, name), 'utf8'));
+            } catch (error) {
+              return { unavailable: String(error), path: join(registry, name) };
+            }
+          });
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
         throw error;
       }
     },
     valid: (check, registration) => {
-      if (!isObject(registration) || registration.checkId !== check.checkId ||
-          registration.resultPath !== join(check.cwd, '.temp/goal/checks/results', `${check.checkId}.json`) ||
-          !isObject(registration.ownership) || registration.ownership.taskId !== check.taskId ||
-          registration.ownership.attempt !== check.attempt || typeof registration.physicalRunId !== 'string' ||
-          !nativeCheckId.test(registration.physicalRunId)) return false;
-      return validRegistration(registration, {
-        version: 1, checkId: check.checkId, resultPath: registration.resultPath,
-        ownership: { taskId: check.taskId, attempt: check.attempt }, physicalRunId: registration.physicalRunId,
-        runnerHost: registration.runnerHost, runnerIdentity: registration.runnerIdentity,
-      }) === true;
+      if (
+        !isObject(registration) ||
+        registration.checkId !== check.checkId ||
+        registration.resultPath !== join(check.cwd, '.temp/goal/checks/results', `${check.checkId}.json`) ||
+        !isObject(registration.ownership) ||
+        registration.ownership.taskId !== check.taskId ||
+        registration.ownership.attempt !== check.attempt ||
+        typeof registration.physicalRunId !== 'string' ||
+        !nativeCheckId.test(registration.physicalRunId)
+      )
+        return false;
+      return (
+        validRegistration(registration, {
+          version: 1,
+          checkId: check.checkId,
+          resultPath: registration.resultPath,
+          ownership: { taskId: check.taskId, attempt: check.attempt },
+          physicalRunId: registration.physicalRunId,
+          runnerHost: registration.runnerHost,
+          runnerIdentity: registration.runnerIdentity,
+        }) === true
+      );
     },
   };
 }
 /** Run before admission and during recovery; all original records and physical lease accounting stay untouched. */
 export async function refreshHistoricalProofAdmission(
-  store: WorkerStore, registry: string, source: HistoricalProofReaderSource, goal?: string,
+  store: WorkerStore,
+  registry: string,
+  source: HistoricalProofReaderSource,
+  goal?: string,
 ): Promise<void> {
   const checks = store.historicalProofChecks(goal);
   if (!checks.length) return;
   let reader: HistoricalProofReader;
-  try { reader = await loadHistoricalProofReader(registry, source); }
-  catch (error) {
+  try {
+    reader = await loadHistoricalProofReader(registry, source);
+  } catch (error) {
     const cause = `Historical admission requires the trusted current native reader: ${String(error)}`;
     store.historicalProofReaderUnavailable(checks[0]!, cause);
     throw new ProofUnavailableError(cause);
@@ -934,8 +1064,7 @@ export async function historicalProofTerminal(check: HistoricalProofCheck): Prom
 
 /** Passing evidence belongs only to this exact source and integration ref, never a later source. */
 export function proofSourceUnchanged(task: Task, integrationBranch: string): boolean {
-  if (!registeredProof(task.brief, task.proofAuthorization))
-    return false;
+  if (!registeredProof(task.brief, task.proofAuthorization)) return false;
   try {
     return (
       git(task.worktree, ['rev-parse', 'HEAD']) === task.brief.proof!.sourceCommit &&
@@ -955,6 +1084,7 @@ export class ProofCapacityQueuedError extends Error {
 }
 
 function originalCommandHasInputs(argv: string[]): boolean {
-  if (/(?:^|[\s/])(?:gate(?:857)?|root-check|remote-check)(?:\.[cm]?[jt]s)?(?:\s|$)/i.test(argv.join(' '))) return false;
+  if (/(?:^|[\s/])(?:gate(?:857)?|root-check|remote-check)(?:\.[cm]?[jt]s)?(?:\s|$)/i.test(argv.join(' ')))
+    return false;
   return wholeWorkspaceCommand(argv) || fileCommand(argv) !== undefined;
 }

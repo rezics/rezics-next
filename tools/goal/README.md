@@ -1042,7 +1042,6 @@ integrated original provenance; they need no invented explicit test list. Mixed 
 Shortened selections, changed flags and broad root/gate campaigns are refused. Explicit command files must exist in
 the captured Git tree before execution can be granted. Advancing integration invalidates that capture.
 
-
 For a never-started held task, submit the typed brief on the SAME task id:
 
 ```sh

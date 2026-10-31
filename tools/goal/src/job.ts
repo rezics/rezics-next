@@ -254,7 +254,12 @@ export class WorkerJob implements GateOutcomeSink {
       if (worker) await this.follow(worker);
     } catch (error) {
       // Another process holds the task: the intent stays pending for the next sweep.
-      if (error instanceof LeaseHeldError || error instanceof ProofCapacityQueuedError || error instanceof ProofUnavailableError) return;
+      if (
+        error instanceof LeaseHeldError ||
+        error instanceof ProofCapacityQueuedError ||
+        error instanceof ProofUnavailableError
+      )
+        return;
       if (error instanceof TaskHeldForDependenciesError || error instanceof StaleAttemptError) {
         store.updateRetryIntent(ref, (value) => {
           value.status = 'started';
@@ -270,8 +275,12 @@ export class WorkerJob implements GateOutcomeSink {
   resumePendingRetries(): void {
     // Dispatch may crash after accepting READY0 but before calling start. The same durable intent owns recovery.
     for (const task of this.tasks.store.activeTasks()) {
-      if (task.currentAttempt === 0 && ['ready', 'held'].includes(task.state) &&
-          task.brief.kind === 'verification' && task.proofAuthorization)
+      if (
+        task.currentAttempt === 0 &&
+        ['ready', 'held'].includes(task.state) &&
+        task.brief.kind === 'verification' &&
+        task.proofAuthorization
+      )
         this.tasks.store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
     }
     for (const intent of this.tasks.store.retryIntents().filter((value) => value.status === 'pending'))
@@ -919,8 +928,13 @@ export class WorkerJob implements GateOutcomeSink {
       // Settled task history is not recovery work; only active permits need logical reconciliation.
       for (const run of store.activeProofReservations()) {
         const task = store.task(run.binding.taskId);
-        if (task.currentAttempt === run.binding.attempt && !['running', 'landing'].includes(task.state) &&
-            ['stopped', 'exited', 'cancelled', 'superseded'].includes(store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state))
+        if (
+          task.currentAttempt === run.binding.attempt &&
+          !['running', 'landing'].includes(task.state) &&
+          ['stopped', 'exited', 'cancelled', 'superseded'].includes(
+            store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state,
+          )
+        )
           store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
       }
     }
@@ -1043,12 +1057,19 @@ export class WorkerJob implements GateOutcomeSink {
           if (error instanceof LeaseHeldError) continue;
           throw error;
         }
-        if (task.brief.kind === 'verification' && store.events(task.id, attempt.attempt)
-          .some((event) => event.kind === 'proof-command-ready')) {
+        if (
+          task.brief.kind === 'verification' &&
+          store.events(task.id, attempt.attempt).some((event) => event.kind === 'proof-command-ready')
+        ) {
           // The launch may have crossed its process boundary before SQLite recorded a driver. Never replay it.
-          await this.endAsEnvironment(attempt,
-            new Error('Original proof launch interrupted after command preparation; execution is unknown, no automatic replay; retain native records and request authenticated fresh retry registration'),
-            false, true);
+          await this.endAsEnvironment(
+            attempt,
+            new Error(
+              'Original proof launch interrupted after command preparation; execution is unknown, no automatic replay; retain native records and request authenticated fresh retry registration',
+            ),
+            false,
+            true,
+          );
           continue;
         }
         if (this.recovering.has(attempt.taskId)) continue;
@@ -1067,7 +1088,13 @@ export class WorkerJob implements GateOutcomeSink {
       const waiting = capacityWaiters(this.tasks.settings.stateDirectory);
       for (const task of store.activeTasks()) {
         await yieldSweep();
-        if (task.brief.kind === 'verification' || task.state !== 'ready' || task.currentAttempt !== 0 || this.recovering.has(task.id)) continue;
+        if (
+          task.brief.kind === 'verification' ||
+          task.state !== 'ready' ||
+          task.currentAttempt !== 0 ||
+          this.recovering.has(task.id)
+        )
+          continue;
         if (Date.now() - Date.parse(task.createdAt) < graceMs || waiting.has(task.id)) continue;
         try {
           acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', task.id)).release();

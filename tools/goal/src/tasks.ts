@@ -511,19 +511,32 @@ export class WorkerTasks {
     return worker;
   }
   /** Authenticated reconciliation; preserves every native identity and raw historical fact. */
-  releaseProof(taskId: string, expectedAttempt: number, actor?: AuthenticatedManager | null): {
-    taskId: string; attempt: number; status: 'released'; checks: string[];
+  releaseProof(
+    taskId: string,
+    expectedAttempt: number,
+    actor?: AuthenticatedManager | null,
+  ): {
+    taskId: string;
+    attempt: number;
+    status: 'released';
+    checks: string[];
   } {
     const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       const task = this.store.task(taskId);
       if (!Number.isSafeInteger(expectedAttempt) || expectedAttempt < 1 || task.currentAttempt !== expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, task.currentAttempt);
-      authenticateProofManager(this.store, task.brief.manager,
-        actor === undefined ? authenticatedManager(this.store.db) : actor, this.settings.integration.operationsManager);
+      authenticateProofManager(
+        this.store,
+        task.brief.manager,
+        actor === undefined ? authenticatedManager(this.store.db) : actor,
+        this.settings.integration.operationsManager,
+      );
       const checks = this.store.releaseExitedProofReservations({ taskId, attempt: expectedAttempt }, true);
       return { taskId, attempt: expectedAttempt, status: 'released', checks };
-    } finally { lease.release(); }
+    } finally {
+      lease.release();
+    }
   }
   /** Authenticate a SAME-ID first/future proof start, retaining prior incarnations; never launches anything. */
   queueProofStart(
@@ -536,25 +549,37 @@ export class WorkerTasks {
     try {
       const task = this.store.task(taskId);
       const ref = { taskId, attempt: options.expectedAttempt };
-      if (!Number.isSafeInteger(options.expectedAttempt) || options.expectedAttempt < 0 || task.currentAttempt !== options.expectedAttempt)
+      if (
+        !Number.isSafeInteger(options.expectedAttempt) ||
+        options.expectedAttempt < 0 ||
+        task.currentAttempt !== options.expectedAttempt
+      )
         throw new StaleAttemptError(ref, task.currentAttempt);
       const submitted = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
       const nextBrief = submitted?.brief ?? task.brief;
-      if (nextBrief.kind !== 'verification') throw new Error('first-start receiving requires a typed verification brief');
+      if (nextBrief.kind !== 'verification')
+        throw new Error('first-start receiving requires a typed verification brief');
       this.store.assertProofRegistration(ref, nextBrief);
       this.store.assertProofFirstStart(ref, nextBrief);
       const removed = task.brief.after.filter((id) => !nextBrief.after.includes(id));
       const approved = options.removeAfter ?? [];
-      if (new Set(approved).size !== approved.length ||
-          removed.length !== approved.length || approved.some((id) => !removed.includes(id)))
+      if (
+        new Set(approved).size !== approved.length ||
+        removed.length !== approved.length ||
+        approved.some((id) => !removed.includes(id))
+      )
         throw new Error('removed after lanes must exactly match explicit removeAfter approval');
       const authorization = authorizeProof(
-        this.store, this.settings.mainCheckout, nextBrief,
+        this.store,
+        this.settings.mainCheckout,
+        nextBrief,
         actor === undefined ? authenticatedManager(this.store.db) : actor,
-        this.settings.integration.operationsManager, this.settings.integrationBranch,
+        this.settings.integration.operationsManager,
+        this.settings.integrationBranch,
       );
       const missing = preflightProof(this.settings.mainCheckout, nextBrief);
-      if (missing.length) throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
+      if (missing.length)
+        throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
       if (submitted) {
         briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-registered-${crypto.randomUUID()}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
@@ -568,10 +593,11 @@ export class WorkerTasks {
         if (briefPath) current.briefPath = briefPath;
         current.taskClass = classifyTask(nextBrief);
         current.proofAuthorization = authorization;
-        if (proofFingerprint(task.brief) !== proofFingerprint(nextBrief)) current.pendingBriefChange = {
-          previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
-          newBriefHash: briefHash(nextBrief.markdown),
-        };
+        if (proofFingerprint(task.brief) !== proofFingerprint(nextBrief))
+          current.pendingBriefChange = {
+            previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
+            newBriefHash: briefHash(nextBrief.markdown),
+          };
         this.applyRetryPriority(current, previousCritical, actor, authorization);
         current.state = this.dependenciesMet(current) ? 'ready' : 'held';
         this.store.saveRetryIntent(ref, {});
@@ -580,7 +606,12 @@ export class WorkerTasks {
       if (!this.dependenciesMet({ brief: nextBrief }))
         return { taskId, attempt: ref.attempt, status: 'waiting', reason: 'Dependencies pending' };
       if (!this.store.proofCapacityAvailable(nextBrief.goal, taskId))
-        return { taskId, attempt: ref.attempt, status: 'waiting', reason: this.store.proofCapacityReason(nextBrief.goal, taskId) };
+        return {
+          taskId,
+          attempt: ref.attempt,
+          status: 'waiting',
+          reason: this.store.proofCapacityReason(nextBrief.goal, taskId),
+        };
       return { taskId, attempt: ref.attempt, status: 'created' };
     } catch (error) {
       if (briefPath) rmSync(briefPath, { force: true });
@@ -617,12 +648,16 @@ export class WorkerTasks {
     if (nextBrief.kind === 'verification') {
       this.store.assertProofRegistration({ taskId, attempt: task.currentAttempt }, nextBrief);
       authorization = authorizeProof(
-        this.store, this.settings.mainCheckout, nextBrief,
+        this.store,
+        this.settings.mainCheckout,
+        nextBrief,
         actor === undefined ? authenticatedManager(this.store.db) : actor,
-        this.settings.integration.operationsManager, this.settings.integrationBranch,
+        this.settings.integration.operationsManager,
+        this.settings.integrationBranch,
       );
       const missing = preflightProof(this.settings.mainCheckout, nextBrief);
-      if (missing.length) throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
+      if (missing.length)
+        throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
     }
     this.assertLocalAcceptanceCustody(task, nextBrief);
     const ref = { taskId, attempt: task.currentAttempt };
@@ -738,14 +773,23 @@ export class WorkerTasks {
     authorization?: ProofAuthorization,
   ): void {
     if (!authorization) {
-      applyPriorityTransition(this.store.db, task, previousCritical, criticalPriority(task.brief, task.taskClass), actor);
+      applyPriorityTransition(
+        this.store.db,
+        task,
+        previousCritical,
+        criticalPriority(task.brief, task.taskClass),
+        actor,
+      );
       return;
     }
     if (criticalPriority(task.brief, task.taskClass)) throw new Error('proof tasks are ordinary priority only');
     if (!previousCritical) return;
     task.priorityHistory ??= [];
     task.priorityHistory.push({
-      value: 'normal', setter: authorization.manager, grantor: null, at: new Date().toISOString(),
+      value: 'normal',
+      setter: authorization.manager,
+      grantor: null,
+      at: new Date().toISOString(),
       provenance: { kind: 'manager-session', sessionId: authorization.sessionId },
     });
   }
@@ -927,16 +971,31 @@ export class WorkerTasks {
       throw new Error('Proof source is read-only; worktree differs from captured commit');
     if (tip !== captured) {
       this.store.assertProofPreparation(ref);
-      if (git(task.worktree, ['merge-base', task.base, tip]) !== task.base ||
-          git(task.worktree, ['diff', '--name-only', task.base, tip]))
-        throw new Error('Proof source is read-only; only an unreserved clean retained empty-report branch can prepare a fresh capture');
+      if (
+        git(task.worktree, ['merge-base', task.base, tip]) !== task.base ||
+        git(task.worktree, ['diff', '--name-only', task.base, tip])
+      )
+        throw new Error(
+          'Proof source is read-only; only an unreserved clean retained empty-report branch can prepare a fresh capture',
+        );
       const worktree = join(this.settings.worktreeRoot, `${task.id}-proof-${captured}`);
       if (!existsSync(worktree)) git(this.settings.mainCheckout, ['worktree', 'add', '--detach', worktree, captured]);
-      if (git(worktree, ['rev-parse', 'HEAD']) !== captured || git(worktree, ['status', '--porcelain', '--untracked-files=all']))
+      if (
+        git(worktree, ['rev-parse', 'HEAD']) !== captured ||
+        git(worktree, ['status', '--porcelain', '--untracked-files=all'])
+      )
         throw new Error('Proof captured source preparation differs from its registered commit');
-      this.store.event(ref, 'proof-source-prepared', { retainedWorktree: task.worktree, retainedBranch: task.branch,
-        retainedHead: tip, worktree, sourceCommit: captured });
-      task = this.store.updateTask(ref, (current) => { current.worktree = worktree; current.base = captured; });
+      this.store.event(ref, 'proof-source-prepared', {
+        retainedWorktree: task.worktree,
+        retainedBranch: task.branch,
+        retainedHead: tip,
+        worktree,
+        sourceCommit: captured,
+      });
+      task = this.store.updateTask(ref, (current) => {
+        current.worktree = worktree;
+        current.base = captured;
+      });
     }
     return task;
   }
@@ -947,17 +1006,30 @@ export class WorkerTasks {
       throw new ProofUnavailableError('Proof pending/unavailable: authenticated registration required');
     const head = this.branchHead(this.settings.integrationBranch, false);
     if (head !== task.brief.proof.sourceCommit)
-      throw new ProofUnavailableError(`Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> for a stopped/exited attempt before its new invocation; no separate logical release is required and every old binding/source remains evidence`);
-    if (spawnSync('git', ['cat-file', '-e', `${task.brief.proof.sourceCommit}:scripts/worker-check.ts`],
-      { cwd: this.settings.mainCheckout, stdio: 'ignore' }).status !== 0)
-      throw new ProofUnavailableError('Proof pending/unavailable: captured ordinary scripts/worker-check.ts is missing');
+      throw new ProofUnavailableError(
+        `Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> for a stopped/exited attempt before its new invocation; no separate logical release is required and every old binding/source remains evidence`,
+      );
+    if (
+      spawnSync('git', ['cat-file', '-e', `${task.brief.proof.sourceCommit}:scripts/worker-check.ts`], {
+        cwd: this.settings.mainCheckout,
+        stdio: 'ignore',
+      }).status !== 0
+    )
+      throw new ProofUnavailableError(
+        'Proof pending/unavailable: captured ordinary scripts/worker-check.ts is missing',
+      );
     const missing = preflightProof(this.settings.mainCheckout, task.brief);
-    if (missing.length) throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
+    if (missing.length)
+      throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
   }
   async refreshProofAdmission(task: Task): Promise<void> {
     if (task.brief.kind !== 'verification') return;
-    if (task.currentAttempt && ['stopped', 'exited', 'cancelled', 'superseded'].includes(
-      this.store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state))
+    if (
+      task.currentAttempt &&
+      ['stopped', 'exited', 'cancelled', 'superseded'].includes(
+        this.store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state,
+      )
+    )
       this.store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
   }
   /** `leased` when the caller already holds the task's lease. */
@@ -1010,7 +1082,8 @@ export class WorkerTasks {
         if (!this.store.proofCapacityAvailable(nextBrief.goal, task.id)) {
           this.store.saveRetryIntent({ taskId, attempt: task.currentAttempt }, {});
           this.store.event({ taskId, attempt: task.currentAttempt }, 'proof-capacity-queued', {
-            goal: nextBrief.goal, reason: this.store.proofCapacityReason(nextBrief.goal, task.id),
+            goal: nextBrief.goal,
+            reason: this.store.proofCapacityReason(nextBrief.goal, task.id),
           });
           throw new ProofCapacityQueuedError();
         }
@@ -1196,7 +1269,12 @@ export class WorkerTasks {
       const next =
         task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'stopped'
           ? this.store.retryStopped(taskId, make, oldConfigDirectory, nextBrief.kind === 'verification')
-          : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make, oldConfigDirectory, nextBrief.kind === 'verification');
+          : this.store.nextAttempt(
+              { taskId, attempt: task.currentAttempt },
+              make,
+              oldConfigDirectory,
+              nextBrief.kind === 'verification',
+            );
       this.writeTaskPriority(this.store.task(taskId));
       // Include older groups after a controller crash between superseding and termination.
       for (const previous of this.store
@@ -1243,13 +1321,23 @@ export class WorkerTasks {
           task = this.prepareProofWorktree(task, next);
           setupStep = 'installing worktree dependencies';
           installWorktreeDependencies(task.worktree);
-          if (existsSync(join(task.worktree, 'package.json')) && !existsSync(join(task.worktree, 'node_modules/.bin/bun')))
-            throw new Error('Proof dependency preparation did not provide node_modules/.bin/bun; no system Bun fallback is allowed');
+          if (
+            existsSync(join(task.worktree, 'package.json')) &&
+            !existsSync(join(task.worktree, 'node_modules/.bin/bun'))
+          )
+            throw new Error(
+              'Proof dependency preparation did not provide node_modules/.bin/bun; no system Bun fallback is allowed',
+            );
           // Ordinary shared/pinned preparation is outside SQLite, before any worker can invoke its command.
           if (this.branchHead(this.settings.integrationBranch, false) !== task.brief.proof!.sourceCommit)
-            throw new ProofUnavailableError('Proof pending/unavailable: integration source advanced; authenticated fresh registration required');
-          this.store.event(next, 'proof-command-ready', { sourceCommit: task.brief.proof!.sourceCommit,
-            argv: task.brief.acceptance.command, cwd: task.worktree });
+            throw new ProofUnavailableError(
+              'Proof pending/unavailable: integration source advanced; authenticated fresh registration required',
+            );
+          this.store.event(next, 'proof-command-ready', {
+            sourceCommit: task.brief.proof!.sourceCommit,
+            argv: task.brief.acceptance.command,
+            cwd: task.worktree,
+          });
           retryPrepared = true;
           return await this.launcher(
             this.store,

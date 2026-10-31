@@ -58,8 +58,12 @@ export async function settle(
       ...(logStartOffset !== undefined ? { logStartOffset } : {}),
     }).waitingChecks;
     const proofTask = store.task(ref.taskId).brief.kind === 'verification';
-    const proofObservation = proofTask ? await readProofObservation(store.task(ref.taskId),
-      pendingChecks?.length ? pendingChecks : currentAttempt.checks) : undefined;
+    const proofObservation = proofTask
+      ? await readProofObservation(
+          store.task(ref.taskId),
+          pendingChecks?.length ? pendingChecks : currentAttempt.checks,
+        )
+      : undefined;
     if (!proofTask && !pendingChecks?.length) removeAttemptContainers(ref.taskId, ref.attempt);
     store.assertCurrent(ref);
     await terminateProcessGroup(store.attempt(ref).process, tasks.settings.terminationGraceMs);
@@ -135,8 +139,10 @@ export async function settle(
         'checks' in proofExit &&
         Array.isArray(proofExit.checks) &&
         proofExit.checks.length === 1 &&
-        typeof proofExit.checks[0] === 'string' && nativeCheckId.test(proofExit.checks[0])
-          ? proofExit.checks[0] : undefined;
+        typeof proofExit.checks[0] === 'string' &&
+        nativeCheckId.test(proofExit.checks[0])
+          ? proofExit.checks[0]
+          : undefined;
       if (
         pendingChecks?.length &&
         (!proofTask ||
