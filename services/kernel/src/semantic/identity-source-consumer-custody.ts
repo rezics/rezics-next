@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { CommandTransaction } from '../command/command.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
@@ -6,6 +7,14 @@ import type { IdentityFrontier, IdentityJobRef, IdentityNativeReceipt, IdentityR
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
 import type { WorkAllowance } from '../library/collection-source.ts';
 import type { LibraryScopeEffectSeal } from '../library/identity-scope-effects.ts';
+import { readLibraryScopeEffectsPage, verifyLibraryScopeEffectsSeal } from '../library/identity-scope-effects.ts';
+import type { LibraryExpectedEffectAfter } from '../library/identity-scope-effects.ts';
+import type { WorkDimensions } from '../library/collection-source.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
+import { readIdentityPrearmCustodyPage, verifyIdentityPrearmCustodyCut } from './identity-epoch-prearm-custody.ts';
+import { identityScopeAddress } from './identity-scoped-observations.ts';
+import { readIdentityReceivingSelection, reconcileIdentityReceivingEffect } from './identity-receiving-effects.ts';
+import type { IdentityReceivingSelection, IdentityReceivingRecord } from './identity-receiving-effects-types.ts';
 import { readAccountIdentitySource, type AccountIdentitySource } from '../access/agent-verification-identity.ts';
 import {
   currentCommand,
@@ -31,6 +40,8 @@ import claim from './identity-source-consumer-custody-claim.sql';
 import job from './identity-source-consumer-custody-job.sql';
 import insert from './identity-source-consumer-custody-insert.sql';
 import select from './identity-source-consumer-custody-select.sql';
+import progressSQL from './identity-source-consumer-custody-progress.sql';
+import appendSQL from './identity-source-consumer-custody-append.sql';
 
 export type IdentitySourceConsumerReference = Readonly<{
   receipt: Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
@@ -55,6 +66,11 @@ export type IdentitySourceConsumerGeneration = Readonly<{
 }>;
 export type IdentitySourceConsumerWork = IdentitySourceConsumerGeneration & Readonly<{ allowance: NativeStepWork }>;
 export type IdentitySourceConsumerDisposition = 'discharged' | 'transferred';
+export type IdentitySourceScopeConsumerWork = Readonly<{
+  allowance: WorkAllowance;
+  /** Native owners provide proved SQL bounds. Unknown SQL must be refused before dispatch. */
+  footprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined;
+}>;
 
 /** Original modules supply these methods. There is deliberately no setter/default ACK.
  * See the owning contract for the native locks, writer obligations and accounting required. */
@@ -68,7 +84,7 @@ type BindingConsumerOwner = {
 };
 type ScopedConsumerOwner = {
   readIdentityScopeConsumerWork(pool: Pool, ticket: IdentityPrearmTicketData,
-    context: Readonly<{ deadline: number }>): Promise<WorkAllowance | null>;
+    context: Readonly<{ deadline: number }>): Promise<IdentitySourceScopeConsumerWork | null>;
   retainIdentityScopeConsumerFence(tx: CommandTransaction, ticket: IdentityPrearmTicketData,
     seal: LibraryScopeEffectSeal): Promise<boolean>;
 };
@@ -232,16 +248,17 @@ async function published(
   return (await read()).value?.state === 'published';
 }
 
-/** Stages an exact native source-home retention receipt, not terminal discharge. The missing
- * exhaustive receiving/undo consumer producer is described in the owner contract. Pending
- * custody retains the original bytes and every surviving verification's intent/undo support.
- */
+/** Prepare retained native custody, then advance one exhaustive consumer-cut step. Missing
+ * native fences or technical receiving authority leave the original bytes retained. */
 export async function readIdentitySourceConsumerCustody(
   pool: Pool,
   reference: IdentitySourceConsumerReference,
   context: Readonly<{ deadline: number }>,
 ): Promise<IdentitySourceConsumerCustody | null> {
   if (!valid(reference) || !Number.isFinite(context.deadline) || context.deadline <= Date.now()) return null;
+  reference = Object.freeze({ ...reference, receipt: Object.freeze({ ...reference.receipt }),
+    job: Object.freeze({ ...reference.job }), source: Object.freeze({ ...reference.source }),
+    barrier: Object.freeze({ ...reference.barrier }) });
   return withRequestDeadline(context.deadline, async () => {
     try {
       const source = await original(pool, reference, context.deadline);
@@ -257,7 +274,7 @@ export async function readIdentitySourceConsumerCustody(
       // Every foreign Source/receiver/control checkout has been released. Re-resolve the native
       // claim, source and current owner in this single original-home command. Retention alone
       // grants no cleanup, and does not assert that released foreign observations stay current.
-      await runCommand(pool, { partition: reference.source.partition, deadline: context.deadline }, async (tx) => {
+      const retained = await runCommand(pool, { partition: reference.source.partition, deadline: context.deadline }, async (tx) => {
         const current = await acceptedClaim(tx, reference);
         if (
           !current ||
@@ -271,8 +288,8 @@ export async function readIdentitySourceConsumerCustody(
         const owner = await readPartition(tx, reference.source.partition);
         if (!sameSource(reference, live) || !owner || owner.writeState !== 'active') return noEffect(null);
         const values = referenceValues(reference);
-        const existing = (await tx.query<{ transaction_id: string }>(select.sql, values)).rows[0];
-        if (existing) return noEffect(null);
+        const existing = (await tx.query<Retained>(select.sql, values)).rows[0];
+        if (existing) return noEffect(existing);
         bindSemanticProducerRoles(tx, live.roles);
         registerCommandCallback(tx, async (transactionId) => {
           await recordSemanticSourceCommit(tx, transactionId);
@@ -296,10 +313,13 @@ export async function readIdentitySourceConsumerCustody(
           ],
         };
       });
-      // Point receiving records, supplied records[], scoped observation finish(), and participant
-      // ACKs cannot prove the exhaustive original admission/replay/undo dependency cut. No proof
-      // is minted until a real producer serializes that cut against all later consumers.
-      return null;
+      // A newly inserted retained receipt is deliberately not used before its native commit.
+      // No foreign home is held while the bounded consumer continuation runs.
+      const saved = retained.value ?? (await runCommand(pool,
+        { partition: reference.source.partition, deadline: context.deadline },
+        async (tx) => noEffect((await tx.query<Retained>(select.sql, referenceValues(reference))).rows[0] ?? null),
+      )).value;
+      return saved ? await advanceConsumers(pool, reference, saved, source.roles, context.deadline) : null;
     } catch (error) {
       if (
         error instanceof IdentityEpochStoreError &&
@@ -330,39 +350,300 @@ function referenceValues(reference: IdentitySourceConsumerReference): unknown[] 
   ];
 }
 
-/** Same live source-home command only. A brand/locator is never authority: recheck the native
- * committed row and current owner/claim under local locks. Retained observations are explicitly
- * insufficient, including after T or independent History-copy closure. No foreign I/O occurs.
- */
-export async function verifyIdentitySourceConsumerCustody(
-  tx: CommandTransaction,
-  reference: IdentitySourceConsumerReference,
-  proof: IdentitySourceConsumerCustody,
+type Retained = {
+  erasure_key: string;
+  binding_generation: string;
+  transaction_id: string;
+  owner_epoch: number;
+  position: string;
+};
+type Progress = {
+  sequence: string;
+  state: 'scope' | 'directory' | IdentitySourceConsumerDisposition;
+  directory_after: IdentityFrontier | null;
+  ticket_key: string | null;
+  effect_after: LibraryExpectedEffectAfter | null;
+  seal_digest: string | null;
+  replay_generation: string;
+  undo_generation: string;
+  restore_generation: string;
+  transaction_id: string;
+  owner_epoch: number;
+  position: string;
+  native_current: boolean;
+};
+const hash = (value: unknown) => createHash('sha256').update(json(value)).digest('hex');
+const terminal = (state: Progress['state']): state is IdentitySourceConsumerDisposition =>
+  state === 'discharged' || state === 'transferred';
+const generations = (row: Progress): IdentitySourceConsumerGeneration => ({
+  replayGeneration: row.replay_generation,
+  undoGeneration: row.undo_generation,
+  restoreGeneration: row.restore_generation,
+});
+const sameGeneration = (a: IdentitySourceConsumerGeneration, b: IdentitySourceConsumerGeneration) =>
+  a.replayGeneration === b.replayGeneration && a.undoGeneration === b.undoGeneration &&
+  a.restoreGeneration === b.restoreGeneration;
+const validGeneration = (value: IdentitySourceConsumerGeneration) =>
+  [value.replayGeneration, value.undoGeneration, value.restoreGeneration].every(
+    (v) => typeof v === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(v),
+  );
+function boundedFrontier(value: IdentityFrontier): boolean {
+  return Number.isSafeInteger(value.segment) && value.segment >= 0 && value.after.length <= 8 &&
+    value.after.every((v) => v === null || typeof v === 'string' || (typeof v === 'number' && Number.isSafeInteger(v))) &&
+    Buffer.byteLength(json(value)) <= 2048;
+}
+function nativeProof(reference: IdentitySourceConsumerReference, row: Progress): IdentitySourceConsumerCustody {
+  return Object.freeze({ [locator]: Object.freeze({ partition: reference.source.partition,
+    epoch: row.owner_epoch, position: BigInt(row.position), transactionId: row.transaction_id }) }) as LocalProof;
+}
+async function owners() {
+  // Only exact original modules are consulted. Missing additive exports fail pending, with
+  // their complete native requirements published in the owner contract. No replacement producer.
+  const binding = await import('./identity-epoch-binding.ts') as Partial<BindingConsumerOwner>;
+  const scope = await import('./identity-scoped-observations.ts') as Partial<ScopedConsumerOwner>;
+  const technical = await import('../access/agent-verification-identity.ts') as Partial<TechnicalConsumerOwner>;
+  return { binding, scope, technical };
+}
+async function latest(tx: CommandTransaction, retained: Retained): Promise<Progress | null> {
+  const row = (await tx.query<Progress>(progressSQL.sql,
+    [currentCommand(tx).partition, retained.erasure_key])).rows[0] ?? null;
+  if (row && !row.native_current)
+    throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Consumer continuation lost current native provenance');
+  return row;
+}
+
+/** Native and Source accounting remain separate; no guessed conversion between units.
+ * The actual admitted reservation is supplied by the binding owner, not generated here. */
+class DirectoryWork {
+  private readonly remaining: { -readonly [K in keyof NativeStepWork]: number };
+  constructor(allowance: NativeStepWork) {
+    this.remaining = { ...allowance, rows: Math.min(100, allowance.rows) };
+    if (Object.values(this.remaining).some((v) => !Number.isSafeInteger(v) || v < 0))
+      throw new TypeError('Invalid admitted consumer work');
+  }
+  reserve(): NativeStepWork | null {
+    // The read's opaque cut saves this allowance for its independent verify. Reserve BOTH
+    // calls before either dispatch; failed/unavailable work is never refunded for reuse.
+    const allowance = Object.fromEntries(Object.entries(this.remaining).map(([k, v]) => [k, Math.floor(v / 2)])) as NativeStepWork;
+    if (allowance.rows < 1 || allowance.points < 1 || allowance.statements < 1) return null;
+    for (const k of Object.keys(this.remaining) as (keyof NativeStepWork)[]) this.remaining[k] -= allowance[k] * 2;
+    return allowance;
+  }
+}
+function matchesReceiving(ticket: IdentityPrearmTicketData, selection: IdentityReceivingSelection,
+  record: IdentityReceivingRecord): boolean {
+  if (ticket.scope.source.kind !== 'library' || ticket.scope.source.identity.scope === 'public_output') return false;
+  const identity = ticket.scope.source.identity;
+  const { effectKey: _effect, receivingEpoch: _epoch, ...source } = identity;
+  const { effectKey: _recordEffect, receivingEpoch: _recordEpoch, ...received } = record.source.native.identity;
+  return json(selection.job) === json(ticket.locator.job) && json(record.job) === json(selection.job) &&
+    selection.sourceId === identity.collectionId && selection.owner === identity.collectionId &&
+    selection.scope === ticket.scope.scopeId && record.original === selection.original &&
+    record.effectKey === selection.effectKey && record.owner === selection.owner &&
+    record.source.id === selection.sourceId && record.source.scope === selection.scope &&
+    record.source.disposition === selection.disposition && record.step === 'library-private-follow-counts' &&
+    record.version === 1 && record.source.incarnation === identity.incarnation &&
+    record.source.generation === identity.generation && json(source) === json(received) &&
+    !!selection.capture && json(selection.capture.identity) === json(record.source.native.identity) &&
+    selection.capture.frontier.captureId === record.source.native.captureId &&
+    record.source.native.captureId === ticket.captureId && record.applied !== null;
+}
+
+type Next = Readonly<{
+  state: Progress['state'];
+  directory: IdentityFrontier | null;
+  ticket: string | null;
+  after: LibraryExpectedEffectAfter | null;
+  seal: LibraryScopeEffectSeal | null;
+  fence: IdentityNativeReceipt | null;
+}>;
+async function checkpoint(pool: Pool, reference: IdentitySourceConsumerReference, retained: Retained,
+  previous: Progress | null, generation: IdentitySourceConsumerGeneration, next: Next,
+  roles: AccountIdentitySource['roles'], deadline: number,
 ): Promise<boolean> {
-  if (
-    !valid(reference) ||
-    currentCommand(tx).partition !== reference.source.partition ||
-    currentCommand(tx).basis !== null ||
-    currentCommandResources(tx).deadline <= Date.now()
-  )
-    return false;
+  if ((next.directory && !boundedFrontier(next.directory)) ||
+    (next.directory?.after.length ?? 0) + (next.directory ? 1 : 0) + (next.after ? 2 : 0) > 8 ||
+    Buffer.byteLength(json([next.directory, next.after])) > 2048) return false;
+  return (await runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) => {
+    const claim = await acceptedClaim(tx, reference);
+    if (!claim || claim.generation !== retained.binding_generation) return noEffect(false);
+    const current = await latest(tx, retained);
+    if ((current?.sequence ?? null) !== (previous?.sequence ?? null) || (current && terminal(current.state)))
+      return noEffect(false);
+    const owner = await readPartition(tx, reference.source.partition);
+    const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
+    if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
+    bindSemanticProducerRoles(tx, roles);
+    registerCommandCallback(tx, async (transactionId) => {
+      await recordSemanticSourceCommit(tx, transactionId);
+      await tx.query(appendSQL.sql, [reference.source.partition, retained.erasure_key,
+        (BigInt(previous?.sequence ?? '0') + 1n).toString(), previous?.sequence ?? null,
+        next.state, next.directory ? json(next.directory) : null, next.ticket,
+        next.after ? json(next.after) : null, next.seal ? hash(next.seal) : null,
+        next.fence?.partition ?? null, next.fence?.epoch ?? null,
+        next.fence?.position.toString() ?? null, next.fence?.transactionId ?? null,
+        generation.replayGeneration, generation.undoGeneration, generation.restoreGeneration,
+        owner.epoch, transactionId]);
+    });
+    return { value: true, events: [{ type: SEMANTIC_ERASURE_PROGRESS,
+      subject: reference.barrier.accountId, data: { accountId: reference.barrier.accountId } }] };
+  })).value;
+}
+
+/** One retained directory page and one native effect page per call. The saved cursor can
+ * advance only after each exact scope has a durable later-writer fence, including sealed zero. */
+async function advanceConsumers(pool: Pool, reference: IdentitySourceConsumerReference, retained: Retained,
+  roles: AccountIdentitySource['roles'], deadline: number): Promise<IdentitySourceConsumerCustody | null> {
+  const ports = await owners();
+  const saved = (await runCommand(pool, { partition: reference.source.partition, deadline },
+    async (tx) => noEffect(await latest(tx, retained)))).value;
+  if (saved && terminal(saved.state)) {
+    const proof = nativeProof(reference, saved);
+    return (await runCommand(pool, { partition: reference.source.partition, deadline },
+      async (tx) => noEffect(await verifyIdentitySourceConsumerCustody(tx, reference, proof)))).value ? proof : null;
+  }
+  const work = await ports.binding.readIdentitySourceConsumerWork?.(pool, reference, { deadline });
+  if (!work || !validGeneration(work)) return null;
+  const previous = saved && sameGeneration(generations(saved), work) ? saved : null;
+  const allowance = new DirectoryWork(work.allowance).reserve();
+  if (!allowance) return null;
+  const directory = await readIdentityPrearmCustodyPage(pool, { job: reference.job,
+    after: previous?.directory_after ?? null, limit: 1, allowance }, { deadline });
+  if (directory.status === 'unavailable' || !boundedFrontier(directory.frontier) || directory.tickets.length > 1) return null;
+  if (previous?.directory_after && json(directory.frontier) === json(previous.directory_after)) return null;
+  const ticket = directory.tickets[0];
+  if (ticket) {
+    if (json(ticket.locator.job) !== json(reference.job) || ticket.scope.source.kind !== 'library' ||
+      ticket.scope.source.identity.scope === 'public_output') return null;
+    const reservation = await ports.scope.readIdentityScopeConsumerWork?.(pool, ticket, { deadline });
+    if (!reservation || !ports.scope.retainIdentityScopeConsumerFence) return null;
+    const budget = new NativeCollectionWork(reservation.allowance, deadline);
+    const ticketKey = hash(ticket);
+    const prior = previous?.state === 'scope' && previous.ticket_key === ticketKey ? previous : null;
+    const key = { job: reference.job, sourceIdentity: ticket.scope.source.identity, scope: ticket.scope.scopeId };
+    const page = await budget.compose((allowance) => readLibraryScopeEffectsPage(pool,
+      { ...key, after: prior?.effect_after ?? null, limit: 1, allowance, deadline }));
+    if (page.status !== 'sealed' || page.rows.length > 1 || json(page.seal.key) !== json(key) ||
+      !boundedFrontier(page.seal.frontier) || !page.seal.generation || !page.seal.version ||
+      (!page.exhausted && (!page.after || json(page.after) === json(prior?.effect_after ?? null)))) return null;
+    if (prior?.seal_digest && prior.seal_digest !== hash(page.seal)) {
+      // A changed seal restarts this scope, never reuses its previously checked prefix.
+      await checkpoint(pool, reference, retained, saved, work, { state: 'scope',
+        directory: previous?.directory_after ?? null, ticket: ticketKey, after: null, seal: null, fence: null }, roles, deadline);
+      return null;
+    }
+    const current = await instrumentNativeCollectionWork(pool, budget, reservation.footprint, async () => {
+      for (const selection of page.rows) {
+        const record = await readIdentityReceivingSelection(pool, selection, { deadline });
+        if (!record || !matchesReceiving(ticket, selection, record) || !record.applied) return null;
+        const applied = await reconcileIdentityReceivingEffect(pool,
+          { kind: 'receiving', job: reference.job, original: selection.original,
+            effectKey: selection.effectKey, receipt: record.receipt });
+        if (json(applied) !== json(record.applied.receipt)) return null;
+      }
+      // No foreign read under this local Source command. Revalidate the SAME seal even
+      // for intermediate pages, then pin the complete cut before releasing this home.
+      return runCommand(pool, { partition: identityScopeAddress(ticket.scope).partition, deadline }, async (tx) => {
+        if (!(await verifyLibraryScopeEffectsSeal(tx, key, page.seal))) return noEffect(false);
+        if (!page.exhausted) return noEffect(true);
+        if (!(await ports.scope.retainIdentityScopeConsumerFence!(tx, ticket, page.seal))) return noEffect(false);
+        return { value: true, events: [] };
+      });
+    });
+    if (!current?.value) return null;
+    const fence = page.exhausted ? { partition: current.partition, epoch: current.epoch,
+      position: current.position, transactionId: current.transactionId } : null;
+    if (fence && fence.position <= 0n) return null;
+    if (!page.exhausted) {
+      await checkpoint(pool, reference, retained, saved, work, { state: 'scope',
+        directory: previous?.directory_after ?? null, ticket: ticketKey,
+        after: page.after, seal: page.seal, fence: null }, roles, deadline);
+      return null;
+    }
+    if (directory.status !== 'complete') {
+      await checkpoint(pool, reference, retained, saved, work, { state: 'directory', directory: directory.frontier,
+        ticket: ticketKey, after: null, seal: page.seal, fence }, roles, deadline);
+      return null;
+    }
+    // The last real scope fence is recorded before terminal transition, in the same final
+    // source command below. No opaque directory cut or in-process Library brand is persisted.
+    return finishConsumers(pool, reference, retained, saved, work, directory, ports,
+      { state: 'directory', directory: directory.frontier, ticket: ticketKey, after: null, seal: page.seal, fence }, roles, deadline);
+  }
+  if (directory.status !== 'complete') {
+    if (json(directory.frontier) === json(previous?.directory_after ?? null)) return null;
+    await checkpoint(pool, reference, retained, saved, work, { state: 'directory', directory: directory.frontier,
+      ticket: null, after: null, seal: null, fence: null }, roles, deadline);
+    return null;
+  }
+  return finishConsumers(pool, reference, retained, saved, work, directory, ports,
+    { state: 'directory', directory: directory.frontier, ticket: null, after: null, seal: null, fence: null }, roles, deadline);
+}
+
+type CompleteDirectory = Extract<Awaited<ReturnType<typeof readIdentityPrearmCustodyPage>>, { status: 'complete' }>;
+async function finishConsumers(pool: Pool, reference: IdentitySourceConsumerReference, retained: Retained,
+  previous: Progress | null, generation: IdentitySourceConsumerGeneration, directory: CompleteDirectory,
+  ports: Awaited<ReturnType<typeof owners>>, next: Next, roles: AccountIdentitySource['roles'], deadline: number,
+): Promise<IdentitySourceConsumerCustody | null> {
+  if (!ports.binding.lockIdentitySourceConsumerCut || !ports.binding.verifyIdentitySourceConsumerCut) return null;
+  if ((await verifyIdentityPrearmCustodyCut(pool, reference.job, directory.cut, { deadline })).status !== 'current') return null;
+  // Last foreign probe is released. The local binding lock also belongs to every later
+  // original-source admission/replay/undo/restore consumer, as required of the owner hook.
+  const result = await runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) => {
+    const claim = await acceptedClaim(tx, reference);
+    const saved = await latest(tx, retained);
+    if (!claim || claim.generation !== retained.binding_generation ||
+      (saved?.sequence ?? null) !== (previous?.sequence ?? null)) return noEffect(false);
+    const owner = await readPartition(tx, reference.source.partition);
+    const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
+    if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
+    const disposition = await ports.binding.lockIdentitySourceConsumerCut!(tx, reference, generation);
+    if (!disposition || (reference.receipt.kind === 'account-agent.verify' &&
+      reference.erasedRole !== 'subject' && disposition !== 'transferred')) return noEffect(false);
+    if (disposition === 'transferred') {
+      if (!ports.technical.acceptAccountIdentityTechnicalSource || !ports.technical.verifyAccountIdentityTechnicalSource) return noEffect(false);
+      if (!(await ports.technical.acceptAccountIdentityTechnicalSource(tx, reference))) return noEffect(false);
+      if (!(await ports.technical.verifyAccountIdentityTechnicalSource(tx, reference)))
+        throw new IdentityEpochStoreError('identity_effect_stale', 'Technical source acceptance lost native custody');
+    }
+    if (!(await ports.binding.verifyIdentitySourceConsumerCut!(tx, reference, generation, disposition)))
+      throw new IdentityEpochStoreError('identity_effect_stale', 'Original consumer fence changed during transfer');
+    bindSemanticProducerRoles(tx, roles);
+    registerCommandCallback(tx, async (transactionId) => {
+      await recordSemanticSourceCommit(tx, transactionId);
+      await tx.query(appendSQL.sql, [reference.source.partition, retained.erasure_key,
+        (BigInt(previous?.sequence ?? '0') + 1n).toString(), previous?.sequence ?? null,
+        disposition, json(directory.frontier), next.ticket, null, next.seal ? hash(next.seal) : null,
+        next.fence?.partition ?? null, next.fence?.epoch ?? null,
+        next.fence?.position.toString() ?? null, next.fence?.transactionId ?? null,
+        generation.replayGeneration, generation.undoGeneration, generation.restoreGeneration, owner.epoch, transactionId]);
+    });
+    return { value: true, events: [{ type: SEMANTIC_ERASURE_PROGRESS,
+      subject: reference.barrier.accountId, data: { accountId: reference.barrier.accountId } }] };
+  });
+  if (!result.value) return null;
+  const proof = Object.freeze({ [locator]: Object.freeze({ partition: result.partition, epoch: result.epoch,
+    position: result.position, transactionId: result.transactionId }) }) as LocalProof;
+  // Re-enter only this home after commit. The brand cannot replace durable live revalidation.
+  return (await runCommand(pool, { partition: reference.source.partition, deadline },
+    async (tx) => noEffect(await verifyIdentitySourceConsumerCustody(tx, reference, proof)))).value ? proof : null;
+}
+
+/** Same genuine live original-home command, fixed indexed points, no foreign checkout. */
+export async function verifyIdentitySourceConsumerCustody(
+  tx: CommandTransaction, reference: IdentitySourceConsumerReference, proof: IdentitySourceConsumerCustody,
+): Promise<boolean> {
+  if (!valid(reference) || currentCommand(tx).partition !== reference.source.partition ||
+    currentCommand(tx).basis !== null || currentCommandResources(tx).deadline <= Date.now()) return false;
   const native = (proof as LocalProof | null)?.[locator];
   if (!native || native.partition !== reference.source.partition) return false;
-  const row = (
-    await tx.query<{ transaction_id: string; owner_epoch: number; position: string }>(
-      select.sql,
-      referenceValues(reference),
-    )
-  ).rows[0];
-  if (
-    !row ||
-    row.transaction_id !== native.transactionId ||
-    row.owner_epoch !== native.epoch ||
-    BigInt(row.position) !== native.position ||
-    !(await acceptedClaim(tx, reference))
-  )
-    return false;
-  // The only currently supported native state is retained. Do not reinterpret a local receipt
-  // as terminal transfer or source discharge until the exhaustive consumer fence is delivered.
-  return false;
+  const retained = (await tx.query<Retained>(select.sql, referenceValues(reference))).rows[0];
+  if (!retained || !(await acceptedClaim(tx, reference))) return false;
+  const row = await latest(tx, retained);
+  if (!row || !terminal(row.state) || row.transaction_id !== native.transactionId ||
+    row.owner_epoch !== native.epoch || BigInt(row.position) !== native.position || !validGeneration(generations(row))) return false;
+  const ports = await owners();
+  if (!(await ports.binding.verifyIdentitySourceConsumerCut?.(tx, reference, generations(row), row.state))) return false;
+  return row.state !== 'transferred' ||
+    (await ports.technical.verifyAccountIdentityTechnicalSource?.(tx, reference)) === true;
 }

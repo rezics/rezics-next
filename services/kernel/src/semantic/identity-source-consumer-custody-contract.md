@@ -67,7 +67,8 @@ verifyIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourc
 
 `read` supplies an actual admitted native work reservation and native replay, undo
 and restore generations; it performs no fresh identity admission. It must account for
-its own failed/control work. The local `lock` resolves the exact original accepted
+its own failed/control work and reserve the fixed Source-local claim/source/progress
+commands shown in this implementation before returning the directory suballowance. The local `lock` resolves the exact original accepted
 claim under the same binding lock used by admission/replay/undo/restore. It returns
 discharged only after genuine native reversal and every surviving consumer is settled;
 it returns transferred only when the immutable technical input remains indispensable.
@@ -83,13 +84,15 @@ In `identity-scoped-observations.ts`:
 
 ```ts
 readIdentityScopeConsumerWork(pool: Pool, ticket: IdentityPrearmTicketData,
-  context: Readonly<{deadline: number}>): Promise<WorkAllowance | null>;
+  context: Readonly<{deadline: number}>): Promise<IdentitySourceScopeConsumerWork | null>;
 retainIdentityScopeConsumerFence(tx: CommandTransaction, ticket: IdentityPrearmTicketData,
   seal: LibraryScopeEffectSeal): Promise<boolean>;
 ```
 
 `read` resolves the original retained registration/capture and its actual shared
-Source reservation, including all failed/native/control work. It must not allocate
+Source reservation and its native SQL footprint, including all failed/native/control work.
+The footprint is accounting only; unknown SQL is refused before dispatch by the
+existing NativeCollectionWork instrumenter. It cannot provide discharge authority. It must not allocate
 a guessed reservation or depend on query readiness. `retain` runs on the exact
 Source home after Source has independently verified the current Library seal on
 that same transaction. It rechecks the native registration/capture/attempt and
@@ -121,7 +124,44 @@ Source's own receipt does not implement this receiver and cannot stand in for it
 These hooks are indispensable: the delivered directory proves inventory only,
 the Library seal may be invalidated by a later writer, and current Accounts undo
 reads still require the original source row. Their absence must leave the exact
-branch pending. Source does not edit these owner modules or copy their SQL.
+branch pending. Source does not edit these owner modules or copy their SQL. False acceptance/fence
+results must be effects-free; after a successful receiver write, failed local verification
+rolls the whole command back.
+
+### Source storage and transition
+
+`identity_epoch_source_consumer_terminal` is an append-only continuation chain under
+the immutable retained obligation's native key. Each append binds the previous
+sequence, original claim and current owner and has same-transaction
+`erasure_source_commit` provenance. It enrolls through the existing all-role native
+trigger. It stores bounded directory/effect cursors, seal digests and native fence
+receipts; it stores no Source payload, scope inventory, opaque directory cut or
+serialized proof brand. A changed seal restarts that scope; a changed native
+replay/undo/restore generation restarts the directory.
+
+Each invocation reads one actual admitted directory page and at most one Library
+effect selection. Every selection is resolved by `readIdentityReceivingSelection`,
+bound to its real original/job/effect/source/incarnation/scope/disposition/capture,
+and reconciled through the existing native receiving producer. Intermediate pages
+and sealed zero both require current native seal verification on the actual Source
+transaction. The directory advances only after the owning scoped operation durably
+fences that scope's later writers. A final directory cut is independently verified
+with all foreign homes released before the original-source command.
+
+That command locks the exact accepted claim and current continuation, rereads the
+original source, resolves the native consumer cut and, for transfer, obtains and
+verifies actual Accounts technical receiving acceptance. It commits a Source-owned
+discharged/transferred row with real commit provenance. The returned opaque locator
+is reconstructed only after commit and same-home native verification. Verify checks
+the exact original reference, current accepted claim/owner, latest committed receipt,
+native replay/undo/restore fence and genuine technical receiver on the same command.
+It performs no foreign reads. Neither a retained row nor a later pending continuation
+can satisfy it. A surviving requester's/decider's verification requires transfer.
+
+New continuation records still contain native personal locators through their parent
+key and are enrolled and conservatively deferred by the existing minimizer. Terminal
+Source proof alone grants neither a nonpersonal family disposition nor History copy
+closure. No existing erasure/copy producer is bypassed.
 
 ## Cost and evidence
 

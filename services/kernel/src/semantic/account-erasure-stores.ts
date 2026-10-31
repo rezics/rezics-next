@@ -52,5 +52,6 @@ export const SEMANTIC_ERASURE_STORES = [
   'identity_epoch_input',
   'identity_epoch_step',
   'identity_epoch_source_consumer_custody',
+  'identity_epoch_source_consumer_terminal',
 ] as const;
 export type SemanticErasureStore = (typeof SEMANTIC_ERASURE_STORES)[number] | 'zone' | 'write_basis';

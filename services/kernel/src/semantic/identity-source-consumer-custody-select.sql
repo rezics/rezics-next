@@ -1,4 +1,4 @@
-SELECT r.transaction_id,r.owner_epoch,n.position::text
+SELECT r.erasure_key::text,r.binding_generation::text,r.transaction_id,r.owner_epoch,n.position::text
 FROM semantic.identity_epoch_source_consumer_custody r
 JOIN semantic.erasure_source_commit n ON n.partition_no=r.partition_no AND n.transaction_id=r.transaction_id
   AND n.epoch=r.owner_epoch AND n.xmin=r.xmin

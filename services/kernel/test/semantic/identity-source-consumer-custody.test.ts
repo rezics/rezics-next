@@ -132,3 +132,30 @@ test('a retained locator or copied brand cannot authorize cleanup for any barrie
     expect(verified.value).toBe(false);
   }
 });
+
+test('Original source consumer custody requires real durable native discharge or technical undo transfer over exhaustive scope and later consumer fences independently of Account root and original copy closure', async () => {
+  const before = await originalBytes();
+  // This real published fixture supplies no native later-consumer fence or technical receiver.
+  // Publication and an immutable retained preparation cannot mint either terminal disposition.
+  const proof = await readIdentitySourceConsumerCustody(f.pool, reference, { deadline: Date.now() + 5000 });
+  expect(proof).toBeNull();
+  const terminal = await f.admin.query<{ state: string }>(
+    `SELECT t.state FROM semantic.identity_epoch_source_consumer_terminal t
+     JOIN semantic.identity_epoch_source_consumer_custody c
+       ON (c.partition_no,c.erasure_key)=(t.partition_no,t.custody_key)
+     WHERE c.partition_no=$1 AND c.receipt_key=$2 AND c.source_digest=$3
+       AND t.state IN ('discharged','transferred')`,
+    [reference.source.partition,
+      JSON.stringify([reference.receipt.kind, reference.receipt.account, reference.receipt.receipt]),
+      reference.sourceDigest],
+  );
+  expect(terminal.rows).toEqual([]);
+  expect(await originalBytes()).toBe(before);
+  // A caller cannot substitute an object that merely names a terminal disposition.
+  const manufactured = Object.freeze({ state: 'transferred', job: reference.job,
+    source: reference.source, barrier: reference.barrier }) as unknown as IdentitySourceConsumerCustody;
+  const verified = await runCommand(f.pool, { partition: reference.source.partition }, async (tx) =>
+    noEffect(await verifyIdentitySourceConsumerCustody(tx, reference, manufactured)),
+  );
+  expect(verified.value).toBe(false);
+});
