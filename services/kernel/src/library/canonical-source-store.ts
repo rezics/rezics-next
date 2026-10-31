@@ -722,9 +722,7 @@ export async function repairCanonicalSourceStep(
         );
       }
       const sequence: readonly CanonicalRawKey['driver'][] =
-        observed.metadata.authority === 'curated'
-          ? ['member']
-          : ['entry', 'label', 'session', 'copy'];
+        observed.metadata.authority === 'curated' ? ['member'] : ['entry', 'label', 'session', 'copy'];
       const nextDriver = page.exhausted
         ? (sequence[sequence.indexOf(row.driver === 'done' ? 'entry' : row.driver) + 1] ?? 'done')
         : row.driver;
