@@ -9,6 +9,7 @@ import { type CurrentNativeLeaf, type CurrentOwnerFilterPlan } from '../search/c
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { type PrepareCollectionSource } from './collection-source.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
+import type { AdmittedCollectionRule } from './collection-rules.ts';
 import { type LibraryProfilePin } from './profile.ts';
 type EntryOperand = Extract<OwnerLeaf['owner'], {
     state: unknown;
@@ -122,6 +123,8 @@ export declare function readNativeCollectionMemberAdmission(admission: Collectio
 export declare function prepareNativeCollectionMemberAuthority(deps: Dependencies, viewer: Actor, admission: CollectionMemberAdmission, at: AuthoritativeTime, deadline: number, attempt?: CommandAttempt): Promise<import("../request/access.ts").AccessCheck[]>;
 /** Shared grammar/release admission only. The returned AST certifies neither execution nor disclosure. */
 export declare function admitCollectionMemberQuery(deps: Dependencies, viewer: Actor, options: CollectionMemberQuery, deadline: number): Promise<CollectionMemberAdmission>;
+/** Stored expanded meaning keeps its accepted release; it is never reinterpreted by current activation. */
+export declare function admitSavedCollectionMemberQuery(deps: Dependencies, viewer: Actor, rule: AdmittedCollectionRule, options: CollectionMemberQuery, deadline: number): Promise<CollectionMemberAdmission>;
 /**
  * Native common-member/saved-rule composition boundary. The enclosing caller supplies its EXISTING Source
  * context and reserved allowance. Only the real Source producer can return its opaque authorized handle.
