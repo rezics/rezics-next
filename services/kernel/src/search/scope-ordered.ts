@@ -105,6 +105,5 @@ export function validateScopeOrderedPrefix(request: ScopeOrderedPrefixRequest): 
     throw new RangeError('Invalid native Scope tuple');
   if (request.order === 'collections') bounded(tuple[0] as number, 0, 2147483647);
   nameKey(tuple[tuple.length - 2]);
-  if (routeOf(tuple[tuple.length - 1] as string) === null)
-    throw new RangeError('Invalid native Scope subject ID');
+  if (routeOf(tuple[tuple.length - 1] as string) === null) throw new RangeError('Invalid native Scope subject ID');
 }

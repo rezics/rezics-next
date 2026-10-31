@@ -10,6 +10,8 @@ import { type ScopeLeafPosition } from './scope-progress.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchHit } from './query.ts';
 import { type RelationFacetMatch, type SubjectSource } from './source.ts';
+import { type ScopeNativeOrder, type ScopeOrderedPrefixRequest, type SearchScopeOrderedPrefix } from './scope-ordered.ts';
+export type { ScopeNativeOrder, ScopeNameSortTuple, ScopeCollectionsSortTuple, ScopeOrderedPrefixRequest, SearchScopeOrderedPrefix, } from './scope-ordered.ts';
 /** Independent native work reservation; none of these units are candidate keys. */
 export type ScopeNativeBudget = Omit<LeafWork, 'keys'>;
 /** One unfinished original/leaf; basis is the composite owner digest, never a native leaf basis. */
@@ -45,6 +47,10 @@ export type ScopeBasis = Readonly<{
 export type ScopePrepareOptions = Readonly<{
     releaseDigest?: string;
     order?: SearchScopeOrder;
+    /** Immutable native output definition; separate from structural Collection traversal. */
+    nativeOrder?: ScopeNativeOrder;
+    /** Required with nativeOrder, together with an explicit caller allowance. */
+    pageSize?: number;
     /** Native caller's shared root; omitted legacy calls retain the bounded compatibility ceilings. */
     allowance?: WorkAllowance;
     /** Read an already published scope without retaining, preparing or saving reader progress. */
@@ -96,6 +102,7 @@ export declare function createSearchScopeSource({ pool, client, prefix, source: 
     /** Additive native caller accounting; opaque result shapes and the legacy evaluation ABI stay unchanged. */
     work(result: PreparedSearchScope | SearchScopeEvaluation): WorkReceipt;
     prepare(filter: FilterDocument, options?: ScopePrepareOptions): Promise<PreparedSearchScope>;
+    orderedPrefix(prepared: PreparedSearchScope, request: ScopeOrderedPrefixRequest): Promise<SearchScopeOrderedPrefix>;
     prefix(prepared: PreparedSearchScope, request: {
         afterSubject: string | null;
         quota: number;

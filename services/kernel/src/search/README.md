@@ -406,6 +406,39 @@ client, prefix, Source and release reader. `createSearchScopeForService(service,
 passes the actual `LeafOptions` unchanged to `createSearchScopeSource`. Clones and injected services cannot bind.
 This enables released-filter admission; constructor ownership does not establish native readiness.
 
+`scope-ordered.ts` publishes the additive native output contract, re-exported by `scope-source.ts` on that same
+service-bound Scope. `ScopeNativeOrder` is `name | collections`; `collections` means the actual public
+`public_collection_count`, descending with missing zero, followed by `name_sort`/canonical routed UUID ascending.
+`name` uses `name_sort`/UUID ascending. The exact readonly tuples are `[name:string|null,id:string]` and
+`[count:number,name:string|null,id:string]`. Counts must be integers in 0..2147483647 without coercion. Names retain
+the actual normalized key (at most 512 UTF-16 units/1536 UTF-8 bytes), including empty strings and native null
+missing-last. Shared cursor encoding preserves null as `z` and empty as `s`, with at most 1537 bytes per encoded
+name. It does not truncate, hash, replace or re-sort keys using display labels or locale comparators.
+
+`prepare(filter, {nativeOrder, pageSize, allowance, ...})` requires size 1..100 and the existing caller allowance,
+validated before I/O. A size without a native order is invalid. Output order and size are immutable capture, query,
+basis and preparation definition material, separate from the structural `order` below and Library input sort.
+The same factory adds `orderedPrefix(prepared, {order, after, quota, budget, allowance})`. Its order discriminates
+the matching tuple in both the request and `SearchScopeOrderedPrefix`, whose hits retain real SearchHit fields
+with the exact tuple sort, basis, covered frontier, exhaustion and
+`usage:{candidates,work:WorkReceipt,public:PublicFilterCost}`. The canonical Semantic public cost is the native
+public/engine breakdown of caller-root settlement, never a second charge, refund or authority. `work(prepared)`
+remains the root preparation receipt; the native implementation must charge actual ordered preparation there.
+
+**Interface stage:** ordered prepare validates and returns `semantic_not_ready` before native work. `orderedPrefix`
+validates its request and factory-local handle, then returns the same unavailable outcome. It creates no ordered
+handle, hits, EOF or usage. Existing structural prepare, UUID prefix and evaluate still use their existing runtime.
+The single follow-on native producer must bind and check exact order/size, reject foreign factory/handle/basis/order
+before enumeration, and validate physical/source/identity/release/current privacy before and finally, including
+native completion metadata. These declarations and refusal cases do not establish native readiness.
+
+One ordered owner step admits quota 1..99 and quota+1 <= budget <= 100, within the supplied candidateKeys
+reservation. Every raw key, duplicate, reject, lookahead and reread is charged; unused lookahead never advances
+coveredThrough. All [filtered-list budgets](../../../../docs/filtered-lists.md#cost) still apply: direct
+`min(600,6s+3)` candidates and at most three refill rounds, ready `2s+2`, composed 16 reads/128 total slots, with
+their independent work axes. This interface adds no list allowance or ledger. Native filter/source/order planning,
+useful-page preparation and ordered execution remain the follow-on implementation's obligations.
+
 `service-scope-order.ts:createSearchScopeOrder({pool, options: LeafOptions, clock})` is the internal ordered
 Source adapter. `SearchScopeOrder` is `{kind:'id', source?: NativeSourceIdentity} | {kind:'ordinal',
 source: NativeSourceIdentity}`. These are native locators; they confer no authority. `prepare(order, allowance)`
