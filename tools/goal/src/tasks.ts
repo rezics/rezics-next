@@ -224,16 +224,16 @@ export type RetryOptions = {
   /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
   expectedAttempt?: number;
 };
-/** Registration is metadata only; the durable generation-zero intent is consumed by the normal host start. */
+/** Metadata-only first proof start, including an exited historical product generation with no proof start. */
 export type ProofStartOptions = {
-  expectedAttempt: 0;
+  expectedAttempt: number;
   brief?: string;
   /** Exact obsolete dependency edges explicitly approved for removal by this authenticated submission. */
   removeAfter?: string[];
 };
 export type ProofStartRegistration = {
   taskId: string;
-  attempt: 0;
+  attempt: number;
   status: 'created' | 'waiting' | 'pending';
   reason?: string;
 };

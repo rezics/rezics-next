@@ -1039,8 +1039,12 @@ remain effective. A typed READY0 contract already accepted with a valid capture 
 that first start.
 
 The public receiving method is `WorkerTasks.queueProofStart(taskId, options, actor)`, where `ProofStartOptions` is
-`{ expectedAttempt: 0; brief?: string; removeAfter?: string[] }`. It returns `ProofStartRegistration` with
-`{ taskId, attempt: 0, status: 'created' | 'waiting' | 'pending', reason?: string }`. `created` means the normal durable
+`{ expectedAttempt: number; brief?: string; removeAfter?: string[] }`. The explicit CLI is
+`retry <task> --proof-start --expected-attempt <current-generation> [--brief <file>] [--remove-after <lane>]`.
+Generation zero also retains the existing `retry --expected-attempt 0` spelling. A retained exited product/claim
+attempt does not itself constitute a proof start: the same API accepts that current generation if no registered
+proof worker, reservation or native intent has ever started. It returns `ProofStartRegistration` with
+`{ taskId, attempt: number, status: 'created' | 'waiting' | 'pending', reason?: string }`. `created` means the normal durable
 start intent was saved and is eligible; `waiting` means dependencies or owned proof capacity defer it; `pending` names
 an unavailable native invocation port. These are registration outcomes, without a worker/check id or a model launch.
 Missing inputs, stale generations, invalid captures, unauthenticated owners and invalid transitions are refused before
