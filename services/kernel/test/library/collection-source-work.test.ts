@@ -66,7 +66,9 @@ test('compose snapshots each child ceiling once and retains failed child charges
     axis,
     { enumerable: true, get: () => { reads.set(axis, (reads.get(axis) ?? 0) + 1); return Math.floor(value / 2); } },
   ]))) as WorkDimensions;
-  const childBound = Object.fromEntries(Object.entries(footprint).map(([axis, value]) => [axis, Math.floor(value / 2)])) as WorkDimensions;
+  const childBound = { ...footprint };
+  for (const axis of Object.keys(footprint) as (keyof WorkDimensions)[])
+    childBound[axis] = Math.floor(childBound[axis] / 2);
   const failure = new Error('child unavailable before returning its receipt');
   await expect(work.compose(async (allowance) => {
     expect(allowance.reservationId).toBe('native-reservation');

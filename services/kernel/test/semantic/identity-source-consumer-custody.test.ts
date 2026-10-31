@@ -189,6 +189,7 @@ test('Source funding remains one allocation across awaits and ends even when its
     expect(library?.available('nativeRows')).toBe(configured.library.nativeRows);
     throw failure;
   })).rejects.toBe(failure);
+  if (!work) throw new Error('Source maintenance did not enter its callback');
   expect(isLiveIdentitySourceConsumerMaintenance(f.pool, work, deadline)).toBe(false);
   expect(identitySourceConsumerLibraryWork(f.pool, work, deadline)).toBeNull();
   expect(await readIdentitySourceConsumerCustody(f.pool, reference, {
