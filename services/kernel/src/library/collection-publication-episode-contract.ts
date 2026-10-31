@@ -1,6 +1,6 @@
 /** Whole-query publication domain data. No declaration here admits work or authorizes a command. */
 import type { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
-import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
+import type { DurableInitiatorReader, DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import type {
   CommandAuthorization,
   CommandOutcome,

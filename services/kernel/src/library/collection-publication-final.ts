@@ -99,7 +99,9 @@ function creationOf(episode: CollectionPublicationEpisode): CollectionPublicatio
   };
 }
 
-function pending(episode: CollectionPublicationEpisode): boolean {
+function pending(
+  episode: CollectionPublicationEpisode,
+): episode is Extract<CollectionPublicationEpisode, { phase: 'staging' | 'awaiting_activation' }> {
   return episode.phase === 'staging' || episode.phase === 'awaiting_activation';
 }
 
@@ -345,10 +347,10 @@ export function createCollectionPublicationFinalActivation(
             const episode = await readFinalEpisode(tx, locator);
             const rule = await readCollectionPublicationRule(tx, locator);
             const version = await readCollectionPublicationEpisodeVersion(tx, locator);
-            const collection = (await currentCollectionQuery.run(tx, {
+            const collection = await currentCollectionQuery.run(tx, {
               route: locator.route,
               collection_id: locator.collectionId,
-            }))[0] as CurrentCollection | undefined;
+            });
             return { episode, rule, version, collection };
           });
           if (
@@ -366,9 +368,11 @@ export function createCollectionPublicationFinalActivation(
             after.collection.membershipKind !== 'dynamic' ||
             after.collection.revision !== before.rule.collectionRevision ||
             after.collection.sourceGeneration !== before.rule.sourceGeneration ||
-            after.collection.incarnation !== before.rule.incarnation
+            after.collection.incarnation !== creation.source.rule.incarnation
           )
             throw unavailable();
+          const activationEpisode = after.episode;
+          const activationVersion = after.version;
           const finalInventory = await bounded(work, {
             ...zeroScopeWork(),
             nativeRows: 3,
@@ -387,17 +391,17 @@ export function createCollectionPublicationFinalActivation(
           await completeCollectionSourceOutput(tx, creation.source.output, {
             locator,
             work,
-            version: after.version,
-            phase: after.episode.phase,
-            selected: after.episode.selected,
+            version: activationVersion,
+            phase: activationEpisode.phase,
+            selected: activationEpisode.selected,
           });
           // The output hook registered its actual provenance callback first. This callback only marks the
           // episode complete after that native row exists in this same Core transaction; the committed
           // result reader verifies the final position/xid after the deferred Core fence has completed.
           registerCommandCallback(tx, async (transactionId) => {
             if (transactionId !== currentCommand(tx).transactionId) throw unavailable();
-            const sourceGeneration = (BigInt(before.rule!.sourceGeneration) + 1n).toString();
-            const published = (await outputCommitQuery.run(tx, {
+            const sourceGeneration = (BigInt(creation.source.rule.sourceGeneration) + 1n).toString();
+            const published = await outputCommitQuery.run(tx, {
               route: locator.route,
               collection_id: locator.collectionId,
               generation: creation.source.output.generation,
@@ -405,7 +409,7 @@ export function createCollectionPublicationFinalActivation(
               transaction_id: transactionId,
               source_generation: sourceGeneration,
               visibility: creation.source.target.visibility,
-            }))[0];
+            });
             if (
               !published ||
               published.generation !== creation.source.output.generation ||
@@ -421,10 +425,10 @@ export function createCollectionPublicationFinalActivation(
               publication_id: locator.publicationId,
               owner_account_id: locator.ownerAccountId,
               collection_id: locator.collectionId,
-              version: after.version,
-              phase: after.episode!.phase,
+              version: activationVersion,
+              phase: activationEpisode.phase,
             });
-            if (changed.length !== 1) throw unavailable();
+            if (!changed) throw unavailable();
           });
           return {
             value: { locator },

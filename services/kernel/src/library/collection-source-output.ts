@@ -262,8 +262,7 @@ export async function completeCollectionSourceOutput(
       episode.source.input.identity.collectionId !== input.collectionId ||
       episode.source.input.identity.accountId !== staging.locator.ownerAccountId ||
       episode.source.rule.collectionRevision !== rule.collectionRevision ||
-      episode.source.rule.sourceGeneration !== rule.sourceGeneration ||
-      episode.source.rule.incarnation !== rule.incarnation
+      episode.source.rule.sourceGeneration !== rule.sourceGeneration
     )
       throw conflict();
 
