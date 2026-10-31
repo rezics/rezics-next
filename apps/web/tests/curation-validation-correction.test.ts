@@ -81,7 +81,10 @@ test('default presentation editor takes a native invalid publication to its actu
   };
   const heading = async (id: string) => {
     await settle(() => !!host.querySelector(`[data-puck-layer-tree-id="${id}"]`));
-    await act(async () => { host.querySelector(`[data-puck-layer-tree-id="${id}"] button`)!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+    await act(async () => {
+      const row = host.querySelector(`[data-puck-layer-tree-id="${id}"]`)!;
+      [...row.querySelectorAll('button')].find((control) => control.textContent === 'Heading')!.click();
+    });
     await settle(() => !!textField('text.en'));
   };
   try {
