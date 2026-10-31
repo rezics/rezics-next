@@ -1,4 +1,4 @@
-import type { AnyRouter } from '@tanstack/react-router';
+import type { AnyRouter, RouterHistory } from '@tanstack/react-router';
 
 type PreviewNavigateEvent = Event & {
   canIntercept: boolean;
@@ -25,20 +25,21 @@ export function bindPreviewNavigation({
   const window = document.defaultView!;
   const navigation = (window as Window & { navigation?: EventTarget }).navigation;
   const browser = window.history;
+  const history: RouterHistory = router.history;
   const frameUrl = window.location.href;
   const originalState = browser.state;
   const nativeLimitation = navigation
     ? undefined
     : 'This browser has no Navigation API; links and GET forms work here, but location.assign leaves the recorded preview.';
   const owner = window.crypto.randomUUID();
-  let index = router.history.location.state.__TSR_index;
+  let index = history.location.state.__TSR_index;
   let traversing = false;
   let journey = false;
   const stamp = () => ({ ...originalState, rezicsPageStory: { owner, index } });
   browser.replaceState(stamp(), '', frameUrl);
 
   function destination(href: string): URL | undefined {
-    const url = new URL(href, new URL(router.history.location.href, frameUrl));
+    const url = new URL(href, new URL(history.location.href, frameUrl));
     if (url.origin !== window.location.origin || !['http:', 'https:'].includes(url.protocol)) return;
     const [, params, route] = router.getMatchedRoutes(deLocalizeUrl(url).pathname);
     // Keep real page/redirect loaders; server-only byte endpoints have neither after Start's client transform.
@@ -49,8 +50,8 @@ export function bindPreviewNavigation({
     const href = `${url.pathname}${url.search}${url.hash}`;
     onLocation(href);
     // Keep the browser's exact URL encoding and repeated query values; route loaders validate as usual.
-    if (replace) router.history.replace(href);
-    else router.history.push(href);
+    if (replace) history.replace(href);
+    else history.push(href);
   }
 
   function click(event: MouseEvent): void {
@@ -85,7 +86,7 @@ export function bindPreviewNavigation({
     const target = submitter?.getAttribute('formtarget') ?? form.target;
     if (method.toLowerCase() !== 'get' || (target && target !== '_self')) return;
     const url = destination(
-      submitter?.getAttribute('formaction') ?? form.getAttribute('action') ?? router.history.location.href,
+      submitter?.getAttribute('formaction') ?? form.getAttribute('action') ?? history.location.href,
     );
     if (!url) return;
     const params = new URLSearchParams();
@@ -119,11 +120,11 @@ export function bindPreviewNavigation({
     const delta = entry.index - index;
     if (!delta) return;
     traversing = true;
-    router.history.go(delta);
+    history.go(delta);
     traversing = false;
   }
 
-  const unsubscribeHistory = router.history.subscribe(({ location, action }) => {
+  const unsubscribeHistory = history.subscribe(({ location, action }) => {
     const previous = index;
     index = location.state.__TSR_index;
     if (traversing) return;
@@ -141,7 +142,7 @@ export function bindPreviewNavigation({
     const failed = router.state.matches.find((match) => match.status === 'error' || match.status === 'notFound');
     if (failed) {
       const reason = failed.error instanceof Error ? failed.error.message : failed.status;
-      onLimitation(`Recorded PageStory route preparation for ${router.history.location.href} returned ${reason}.`);
+      onLimitation(`Recorded PageStory route preparation for ${history.location.href} returned ${reason}.`);
     }
   });
   onLimitation(nativeLimitation);
