@@ -32,7 +32,7 @@
     "@fontsource/source-serif-4": "5.3.1",
     "@inlang/paraglide-js": "2.29.3",
     "@inlang/plugin-json": "5.1.64",
-    "@puckeditor/core": "0.23.0",
+    "@puckeditor/core": "0.24.0",
     "@rezics/client": "workspace:*",
     "@rezics/composition": "workspace:*",
     "@rezics/definitions": "workspace:*",
