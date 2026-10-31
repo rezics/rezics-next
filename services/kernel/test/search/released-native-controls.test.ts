@@ -40,6 +40,21 @@ test('the released native fixture keeps original Source publication unavailable 
   expect(response.body).not.toHaveProperty('job');
 }, 30_000);
 
+test('freshness cannot turn a missing current native generation into zero lag or Source readiness', async () => {
+  const native = fixture.search!;
+  await native.indexing('paused');
+  try {
+    await expect(native.freshness()).rejects.toThrow('current generation is unavailable');
+    // A diagnostic read neither publishes a generation nor manufactures original Source evidence.
+    expect(await native.preparePublication(1, context())).toMatchObject({
+      status: 'unready',
+      reason: 'source_pending',
+    });
+  } finally {
+    await native.indexing('running');
+  }
+}, 30_000);
+
 test('request and response barriers hold actual same-prefix engine I/O without replacing the native answer', async () => {
   const native = fixture.search!;
   await native.indexing('paused');

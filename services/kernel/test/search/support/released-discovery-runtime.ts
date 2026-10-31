@@ -166,7 +166,11 @@ export function releasedDiscoveryRuntime(
     if (!config || !databaseUrl) throw new Error('Released discovery preparation has not started');
     if (options !== undefined) {
       const now = Date.now();
-      if (!Number.isSafeInteger(options.expiresAt) || options.expiresAt <= now || options.expiresAt > now + 24 * 60 * 60 * 1000)
+      if (
+        !Number.isSafeInteger(options.expiresAt) ||
+        options.expiresAt <= now ||
+        options.expiresAt > now + 24 * 60 * 60 * 1000
+      )
         throw new RangeError('Preparation expiresAt must be a safe future instant within 24 hours');
     }
     preparationClient ??= createWorkClient(databaseUrl, config.pool);
