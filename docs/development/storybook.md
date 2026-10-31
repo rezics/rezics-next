@@ -44,15 +44,21 @@ Start an isolated local catalogue from the worktree root with an unused port:
 bun run --cwd apps/web storybook --host 127.0.0.1 --port 16497 --exact-port --ci
 ```
 
-Connect an MCP HTTP client to `http://127.0.0.1:16497/mcp`. Initialize the session, list tools and read their
-descriptions before choosing a tool. The same server exposes `http://127.0.0.1:16497/manifests/components.json`
-and the canonical story index at `http://127.0.0.1:16497/index.json`. Select a different unused port for another
+Connect an MCP client using Streamable HTTP to `http://127.0.0.1:16497/mcp`. Initialize the session, list tools and read
+their descriptions before choosing a tool. Read the component manifest from the same server with:
+
+```sh
+curl --fail --show-error --max-time 120 http://127.0.0.1:16497/manifests/components.json
+```
+
+The canonical story index is at `http://127.0.0.1:16497/index.json`. Select a different unused port for another
 worktree; keep the endpoint and manifest on that worktree's server. The addon is already configured in both
 catalogues. Neither a shared dev server nor a public MCP service is required.
 
 The web configuration enables `componentsManifest` and uses `docgenServer: false`: this alpha deliberately returns
-404 for the dev JSON manifest with server-side docgen. Builder-side React docgen retains the required JSON endpoint;
-Storybook marks that mode deprecated for version 12, so revisit these flags when upgrading.
+404 for the dev JSON manifest with server-side docgen. Builder-side React docgen enables the JSON endpoint; a successful
+MCP initialization does not confirm that manifest generation has completed. Storybook marks that mode deprecated for
+version 12, so revisit these flags when upgrading.
 
 The default web preview uses `connectedStoryProviders` from `apps/web/src/stories/connected-story.tsx`.
 It supplies a missing QueryClient for connected regions such as local search history and imported subject scores.
@@ -70,10 +76,10 @@ manifest reads do not establish compatibility of browser story tests; do not ove
 
 Storybook 11 is used for its agent interface. An agent developing interface work uses the local one: the Storybook
 dev server started from its own worktree serves the MCP endpoint (`@storybook/addon-mcp`, `/mcp`) and the component
-manifest (`manifests/components.json`, enabled by `features.componentsManifest` in the web configuration), so the agent reads components, stories and
-documentation, previews stories and runs their tests against its own uncommitted changes. The published catalogue may
-also serve a read-only documentation MCP (`@storybook/mcp`) from its manifest for reading the released catalogue;
-development never depends on it.
+manifest (`manifests/components.json`, enabled by `features.componentsManifest` in the web configuration), so the agent
+reads components, stories and documentation, previews stories and runs their tests against its own uncommitted changes.
+The published catalogue may also serve a read-only documentation MCP (`@storybook/mcp`) from its manifest for reading
+the released catalogue; development never depends on it.
 
 Browsers are not forbidden, they are unnecessary for this work. The local MCP already reads, previews and tests
 stories, so opening Storybook through the Chrome plugin, Playwright MCP or a script against `iframe.html` only adds
