@@ -348,7 +348,12 @@ export function workerActivityBaseline(store: WorkerStore, ref: Attempt, now = D
   }
   const nonnegative = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
   const logStartOffset = nonnegative(metadata.logStartOffset) ? (metadata.logStartOffset as number) : 0;
-  const checkWaitBaseline = nonnegative(metadata.checkWaitBaseline) ? (metadata.checkWaitBaseline as number) : 0;
+  const checkWaitBaseline =
+    typeof metadata.checkWaitBaseline === 'number' &&
+    Number.isFinite(metadata.checkWaitBaseline) &&
+    metadata.checkWaitBaseline >= 0
+      ? metadata.checkWaitBaseline
+      : 0;
   const recordedStart = event ? Date.parse(event.at) : NaN;
   const startedAt = Number.isFinite(recordedStart)
     ? Math.max(Date.parse(ref.startedAt), Math.min(now, recordedStart))

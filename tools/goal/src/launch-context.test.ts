@@ -199,9 +199,13 @@ test('prelaunch amendment refuses missing, wrong, ambiguous and stale authority 
     const files = readdirSync(join(h.settings.stateDirectory, 'briefs'));
     for (const actor of [null, stranger.actor, { ...owner.actor, sessionId: 'obsolete-session' }])
       expect(() => h.tasks.amend(task.id, options, actor)).toThrow('authenticated');
-    h.store.db.query('INSERT INTO manager_sessions VALUES (?, ?)').run('ambiguous-owner', JSON.stringify({
-      status: 'running', threadId: owner.actor.sessionId,
-    }));
+    h.store.db.query('INSERT INTO manager_sessions VALUES (?, ?)').run(
+      'ambiguous-owner',
+      JSON.stringify({
+        status: 'running',
+        threadId: owner.actor.sessionId,
+      }),
+    );
     expect(() => h.tasks.amend(task.id, options, owner.actor)).toThrow('unambiguous');
     h.store.db.query('DELETE FROM manager_sessions WHERE id=?').run('ambiguous-owner');
     expect(() => h.tasks.amend(task.id, { ...options, expectedAttempt: 1 }, owner.actor)).toThrow('"attempt":0');
@@ -262,78 +266,102 @@ test('prelaunch amendment supports genuinely held zero, preserves frozen input a
   }
 });
 
-test('prelaunch amendment during first capacity wait delivers exactly the latest canonical contract once through native argv', async () => {
-  const h = harness();
-  const capacity = join(h.settings.stateDirectory, 'capacity.json');
-  let pending: ReturnType<WorkerTasks['retry']> | undefined;
-  try {
-    git(h.root, ['branch', 'dev']);
-    writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'minimal');
-    const task = prelaunchTask(h);
-    const owner = prelaunchOwner(h);
-    const prompts: string[] = [];
-    const tasks = new WorkerTasks(
-      h.settings,
-      h.store,
-      reading,
-      async (store, current, attempt, pool, prompt, codex) => {
-        const [, argv] = launchCommand({ profile: attempt.profile, pool, worktree: current.worktree, prompt, ...(codex ? { codex } : {}) });
-        prompts.push(argv.at(-1)!);
-        store.updateAttempt(attempt, (value) => {
-          value.state = 'running';
+test.each([false, true])(
+  'prelaunch amendment during first capacity wait delivers exactly the latest canonical contract once through native argv (held release: %s)',
+  async (heldRelease) => {
+    const h = harness();
+    const capacity = join(h.settings.stateDirectory, 'capacity.json');
+    let pending: ReturnType<WorkerTasks['retry']> | undefined;
+    try {
+      git(h.root, ['branch', 'dev']);
+      writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'minimal');
+      const dependency = heldRelease ? prelaunchTask(h) : undefined;
+      const task = prelaunchTask(
+        h,
+        dependency ? markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`) : markdown,
+      );
+      if (dependency) {
+        h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
+          current.state = 'integrated';
+          current.integratedCommit = dependency.base;
         });
-        store.updateTask(attempt, (value) => {
-          value.state = 'running';
-        });
-        return { attempt: store.attempt(attempt), exited: Promise.resolve({ code: 0, signal: null }) };
-      },
-    );
-    writeFileSync(capacity, JSON.stringify({ maxWorkers: 0, minAvailableMiB: 0 }));
-    h.store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
-    const intent = h.store.retryIntent({ taskId: task.id, attempt: 0 });
-    expect(intent?.status).toBe('pending');
-    pending = tasks.retry(task.id, { expectedAttempt: 0 });
-    const queue = join(h.settings.stateDirectory, 'capacity-queue');
-    const tickets = readdirSync(queue);
-    expect(tickets).toHaveLength(1);
-    const ticket = readFileSync(join(queue, tickets[0]!), 'utf8');
-    const revisedText = markdown.replace(
-      'Write the requested result and commit it.',
-      'The latest accepted interface includes the restored subject control.',
-    );
-    const revised = fullBrief(h.root, 'capacity-owner-amendment', revisedText);
-    tasks.amend(task.id, { expectedAttempt: 0, brief: revised }, owner.actor);
-    expect(readdirSync(queue)).toEqual(tickets);
-    expect(readFileSync(join(queue, tickets[0]!), 'utf8')).toBe(ticket);
-    expect(h.store.retryIntent({ taskId: task.id, attempt: 0 })).toEqual(intent);
-    expect(h.store.attempts(task.id)).toEqual([]);
-    writeFileSync(capacity, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
-    await pending;
-    expect(prompts).toHaveLength(1);
-    expect(prompts[0]).toContain(revisedText);
-    expect(prompts[0]).not.toContain('Write the requested result and commit it.');
-    expect(prompts[0]).toContain('checks:[]');
-    expect(contextFromPrompt(prompts[0]!).task).toMatchObject({
-      attempt: 1,
-      contractSha256: hash(revisedText),
-      contractProof: 'verified',
-    });
-    const current = h.store.task(task.id);
-    const currentAttempt = h.store.attempt({ taskId: task.id, attempt: 1 });
-    expect(() => tasks.amend(task.id, { expectedAttempt: 0, brief: revised }, owner.actor)).toThrow('"attempt":1');
-    expect(() => tasks.amend(task.id, { expectedAttempt: 1, brief: revised }, owner.actor)).toThrow(
-      '"attemptState":"running"',
-    );
-    expect(h.store.task(task.id)).toEqual(current);
-    expect(h.store.attempt({ taskId: task.id, attempt: 1 })).toEqual(currentAttempt);
-    expect(h.store.attempts(task.id)).toHaveLength(1);
-    expect(prompts).toHaveLength(1);
-  } finally {
-    writeFileSync(capacity, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
-    if (pending) await pending.catch(() => {});
-    h.dispose();
-  }
-});
+        underLease(h, task.id, () =>
+          h.store.releaseHeldRetryTask({ taskId: task.id, attempt: 0 }, (current) => {
+            current.state = 'ready';
+          }),
+        );
+      }
+      const owner = prelaunchOwner(h);
+      const prompts: string[] = [];
+      const tasks = new WorkerTasks(
+        h.settings,
+        h.store,
+        reading,
+        async (store, current, attempt, pool, prompt, codex) => {
+          const [, argv] = launchCommand({
+            profile: attempt.profile,
+            pool,
+            worktree: current.worktree,
+            prompt,
+            ...(codex ? { codex } : {}),
+          });
+          prompts.push(argv.at(-1)!);
+          store.updateAttempt(attempt, (value) => {
+            value.state = 'running';
+          });
+          store.updateTask(attempt, (value) => {
+            value.state = 'running';
+          });
+          return { attempt: store.attempt(attempt), exited: Promise.resolve({ code: 0, signal: null }) };
+        },
+      );
+      writeFileSync(capacity, JSON.stringify({ maxWorkers: 0, minAvailableMiB: 0 }));
+      h.store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
+      const intent = h.store.retryIntent({ taskId: task.id, attempt: 0 });
+      expect(intent?.status).toBe('pending');
+      pending = heldRelease ? tasks.retryHeld(task.id) : tasks.retry(task.id, { expectedAttempt: 0 });
+      const queue = join(h.settings.stateDirectory, 'capacity-queue');
+      const tickets = readdirSync(queue);
+      expect(tickets).toHaveLength(1);
+      const ticket = readFileSync(join(queue, tickets[0]!), 'utf8');
+      const revisedText = markdown.replace(
+        'Write the requested result and commit it.',
+        'The latest accepted interface includes the restored subject control.',
+      );
+      const revised = fullBrief(h.root, 'capacity-owner-amendment', revisedText);
+      tasks.amend(task.id, { expectedAttempt: 0, brief: revised }, owner.actor);
+      expect(readdirSync(queue)).toEqual(tickets);
+      expect(readFileSync(join(queue, tickets[0]!), 'utf8')).toBe(ticket);
+      expect(h.store.retryIntent({ taskId: task.id, attempt: 0 })).toEqual(intent);
+      expect(h.store.attempts(task.id)).toEqual([]);
+      writeFileSync(capacity, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+      await pending;
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0]).toContain(revisedText);
+      expect(prompts[0]).not.toContain('Write the requested result and commit it.');
+      expect(prompts[0]).toContain('checks:[]');
+      expect(contextFromPrompt(prompts[0]!).task).toMatchObject({
+        attempt: 1,
+        contractSha256: hash(revisedText),
+        contractProof: 'verified',
+      });
+      const current = h.store.task(task.id);
+      const currentAttempt = h.store.attempt({ taskId: task.id, attempt: 1 });
+      expect(() => tasks.amend(task.id, { expectedAttempt: 0, brief: revised }, owner.actor)).toThrow('"attempt":1');
+      expect(() => tasks.amend(task.id, { expectedAttempt: 1, brief: revised }, owner.actor)).toThrow(
+        '"attemptState":"running"',
+      );
+      expect(h.store.task(task.id)).toEqual(current);
+      expect(h.store.attempt({ taskId: task.id, attempt: 1 })).toEqual(currentAttempt);
+      expect(h.store.attempts(task.id)).toHaveLength(1);
+      expect(prompts).toHaveLength(1);
+    } finally {
+      writeFileSync(capacity, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+      if (pending) await pending.catch(() => {});
+      h.dispose();
+    }
+  },
+);
 
 test('current prompt accounting preserves adopted elapsed waits without borrowing earlier-turn log output or waits', () => {
   const h = harness();

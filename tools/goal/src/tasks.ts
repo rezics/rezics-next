@@ -547,9 +547,11 @@ export class WorkerTasks {
           task.integratedCommit ||
           task.mergedCommit ||
           task.proofAuthorization ||
+          task.proofRun ||
+          (task.state === 'held' && !task.brief.after.length) ||
           task.brief.kind === 'verification' ||
           this.store.proofReservation(taskId, 0) ||
-          this.store.records().some((record) => record.taskId === taskId)
+          this.store.db.query('SELECT 1 FROM worker_records WHERE task_id=? LIMIT 1').get(taskId)
         ) {
           const current = attempts.at(-1);
           throw new Error(
@@ -578,6 +580,8 @@ export class WorkerTasks {
           throw new Error('use proof registration for verification contracts');
         if (submitted.brief.goal !== task.brief.goal || submitted.brief.manager !== task.brief.manager)
           throw new Error('an amended brief must keep the same goal and manager');
+        if (task.workspace && webModule(submitted.brief, this.settings) !== task.workspace.module)
+          throw new Error('amendment outside a shared module requires a new isolated task');
         if (criticalPriority(task.brief, task.taskClass) || criticalPriority(submitted.brief, submitted.taskClass))
           throw new Error('prelaunch amendment preserves ordinary priority only');
         const previousFrozen = parseFrozenFiles(task.brief.markdown, task.brief.paths);
@@ -1285,13 +1289,8 @@ export class WorkerTasks {
           return false;
         }
       });
-      const boundary = heldRelease
-        ? 'held-release'
-        : old?.escalation === 'import'
-          ? 'adopted-legacy'
-          : old
-            ? 'retry'
-            : 'fresh';
+      const boundary =
+        heldRelease ? 'held-release' : old?.escalation === 'import' ? 'adopted-legacy' : old ? 'retry' : 'fresh';
       const origin = old?.escalation === 'import' ? 'adopted-legacy' : 'managed';
       const oldConfigDirectory = old
         ? pools.find((candidate) => candidate.name === old.pool)?.configDirectory
@@ -1369,7 +1368,8 @@ export class WorkerTasks {
       // Releasing a contract amended after its worker settled starts a new conversation. A held check waiter is
       // different: release stops its waiting attempt, but its saved checks still need their original session.
       // Terminal records take precedence over checks retained from an earlier waiting turn.
-      const continuingCheckWait = old?.state === 'stopped' && Boolean(old.checks?.length) && !this.store.record(old);
+      const continuingCheckWait =
+        old?.state === 'stopped' && Boolean(old.checks?.length) && !this.store.record(old);
       const resumeSession =
         !(heldRelease && briefChange && !continuingCheckWait) &&
         oldSession &&
