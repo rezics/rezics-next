@@ -3363,7 +3363,7 @@
   "library_copy_profile_unavailable": "此版本的藏本选项暂时不可用，请重试。",
   "home_feed_discovery": "发现",
   "home_feed_following": "关注动态",
-  "home_feed_horizon": "关注动态保留最近 30 天或最新 2,000 条引用。完整历史请前往来源页面。",
+  "home_feed_horizon": "关注动态保留最近 30 天内最多 2,000 条引用。完整历史请前往来源页面。",
   "home_feed_sources": "你的来源",
   "home_feed_ready": "已就绪",
   "home_feed_preparing": "准备中",

@@ -3362,7 +3362,7 @@
   "library_copy_profile_unavailable": "Las opciones de ejemplar de esta edición no están disponibles temporalmente. Inténtalo de nuevo.",
   "home_feed_discovery": "Descubrir",
   "home_feed_following": "Siguiendo",
-  "home_feed_horizon": "Siguiendo conserva los últimos 30 días o las 2.000 referencias más recientes. El historial completo está en la página de cada fuente.",
+  "home_feed_horizon": "Siguiendo conserva hasta 2.000 referencias de los últimos 30 días. El historial completo está en la página de cada fuente.",
   "home_feed_sources": "Tus fuentes",
   "home_feed_ready": "Listo",
   "home_feed_preparing": "Preparando",

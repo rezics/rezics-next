@@ -3362,7 +3362,7 @@
   "library_copy_profile_unavailable": "この版の所蔵オプションは一時的に利用できません。再試行してください。",
   "home_feed_discovery": "見つける",
   "home_feed_following": "フォロー中",
-  "home_feed_horizon": "フォロー中の履歴は過去30日間または最新2,000件までです。全履歴は各ソースのページで確認できます。",
+  "home_feed_horizon": "フォロー中の履歴は過去30日間の最大2,000件までです。全履歴は各ソースのページで確認できます。",
   "home_feed_sources": "フォロー先",
   "home_feed_ready": "準備完了",
   "home_feed_preparing": "準備中",

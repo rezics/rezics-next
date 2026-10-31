@@ -3362,7 +3362,7 @@
   "library_copy_profile_unavailable": "此版本的藏本選項暫時無法使用，請再試一次。",
   "home_feed_discovery": "探索",
   "home_feed_following": "追蹤動態",
-  "home_feed_horizon": "追蹤動態保留最近 30 天或最新 2,000 筆參照。完整歷史請前往來源頁面。",
+  "home_feed_horizon": "追蹤動態保留最近 30 天內最多 2,000 筆參照。完整歷史請前往來源頁面。",
   "home_feed_sources": "你的來源",
   "home_feed_ready": "已就緒",
   "home_feed_preparing": "準備中",

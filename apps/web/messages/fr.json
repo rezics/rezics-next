@@ -3362,7 +3362,7 @@
   "library_copy_profile_unavailable": "Les options d’exemplaire de cette édition sont temporairement indisponibles. Réessayez.",
   "home_feed_discovery": "Découvrir",
   "home_feed_following": "Abonnements",
-  "home_feed_horizon": "Les abonnements conservent les 30 derniers jours ou les 2 000 références les plus récentes. L’historique complet reste sur la page de chaque source.",
+  "home_feed_horizon": "Les abonnements conservent jusqu’à 2 000 références des 30 derniers jours. L’historique complet reste sur la page de chaque source.",
   "home_feed_sources": "Vos sources",
   "home_feed_ready": "Prêt",
   "home_feed_preparing": "En préparation",

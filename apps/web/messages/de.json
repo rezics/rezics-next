@@ -3362,7 +3362,7 @@
   "library_copy_profile_unavailable": "Die Exemplaroptionen dieser Ausgabe sind vorübergehend nicht verfügbar. Versuche es erneut.",
   "home_feed_discovery": "Entdecken",
   "home_feed_following": "Gefolgt",
-  "home_feed_horizon": "Gefolgte Aktivitäten umfassen die letzten 30 Tage oder die neuesten 2.000 Verweise. Den vollständigen Verlauf findest du bei der jeweiligen Quelle.",
+  "home_feed_horizon": "Gefolgte Aktivitäten umfassen bis zu 2.000 Verweise aus den letzten 30 Tagen. Den vollständigen Verlauf findest du bei der jeweiligen Quelle.",
   "home_feed_sources": "Deine Quellen",
   "home_feed_ready": "Bereit",
   "home_feed_preparing": "Wird vorbereitet",

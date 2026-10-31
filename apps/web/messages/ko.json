@@ -3362,7 +3362,7 @@
   "library_copy_profile_unavailable": "이 판본의 소장본 옵션을 일시적으로 사용할 수 없습니다. 다시 시도하세요.",
   "home_feed_discovery": "발견",
   "home_feed_following": "팔로잉",
-  "home_feed_horizon": "팔로잉은 최근 30일 또는 최신 2,000개 참조를 보관합니다. 전체 기록은 각 출처 페이지에서 확인하세요.",
+  "home_feed_horizon": "팔로잉은 최근 30일의 참조를 최대 2,000개까지 보관합니다. 전체 기록은 각 출처 페이지에서 확인하세요.",
   "home_feed_sources": "내 출처",
   "home_feed_ready": "준비됨",
   "home_feed_preparing": "준비 중",
