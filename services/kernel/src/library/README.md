@@ -35,6 +35,15 @@ listing stores public Collection pairs and counts; it is not personal membership
 
 Current implementation evidence is narrower than the capability:
 
+- `createCollectionPublicationFinalCommand` in `collection-publication-final.ts` constructs ordinary
+  `runCommand` admission options using the same worker pool, mounted Access and current consent reader.
+  Every attempt restores the original initiator inside authorization preparation, compares the entire native
+  original tuple and delegates ordinary Collection authorization at that attempt's time before receipt lookup.
+  It provides neither activation nor a completion result. The actual Library operation/source/creation-receipt
+  reader and bounded whole-query seal/staging producer are absent in this revision; no fallback reader, guessed
+  seal ABI or count-based completion is supplied. Final native rule/Source/identity/custody/public-input/output
+  comparisons, atomic A-to-B selection and after-commit publication provenance remain required before wiring
+  a final body or exposing complete episode results. Existing explicit selected-set publication is separate.
 - `collection-reads.ts` reads stored headers and ordinal curated occurrence pages. Dynamic headers omit curated
   counts/timestamps. Private saved members use the sole owner-filter binding and Source reader; public/unlisted
   members use only the Source's activated explicit COMPLETE output, including current original/terminal disclosure.

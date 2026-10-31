@@ -1,7 +1,7 @@
 /** Whole-query publication domain data. No declaration here admits work or authorizes a command. */
 import type { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import type { DurableInitiatorReader, DurableInitiatorRecord } from '../access/durable-initiator.ts';
-import type { CommandAuthorization, CommandTransaction } from '../command/command.ts';
+import type { CommandAuthorization, CommandTransaction, PrincipalCommandOptions } from '../command/command.ts';
 import type { WorkContext } from '../work/registry.ts';
 import type { BuiltinCollectionKey } from './builtin-identity.ts';
 import type { CollectionRow, CollectionVisibility } from './collection-model.ts';
@@ -129,6 +129,14 @@ export type CollectionPublicationWorkerDependencies = Readonly<{
  * Never restore a person for mechanical Source staging or cast an OperationalTransaction.
  */
 export type CollectionPublicationFinalAuthorization = CommandAuthorization & Readonly<{ action: 'collection:update' }>;
+/** Actual runCommand admission options from collection-publication-final.ts. No receipt, native
+ * exhaustion proof or activation body is implied; their original producers remain required.
+ */
+export type CollectionPublicationFinalCommand = Readonly<
+  Pick<PrincipalCommandOptions, 'principal' | 'basis' | 'partition' | 'deadline' | 'clock'> & {
+    authorization: CollectionPublicationFinalAuthorization;
+  }
+>;
 export type CollectionPublicationActivationInput = Readonly<{
   tx: CommandTransaction;
   episode: CollectionPublicationEpisode;
