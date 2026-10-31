@@ -10,6 +10,7 @@ import { loadRealmReviewBoards } from '../src/threads/review-board-choices';
 import { canSubmitThread, reviewThreadHref, selectedReviewSubject } from '../src/threads/review-policy';
 import { loadCurrentReviewVote, selectedVoteCitation, STANDARD_QUESTION_ID } from '../src/threads/review-vote';
 import { startThreadRequest } from '../src/threads/post-writes';
+import { ReplyIntent, type ReplyCommand } from '../src/threads/reply-context-intent';
 import { ViewHeadingActions } from '../src/features/pages/view-heading';
 
 const app = join(import.meta.dir, '..');
@@ -295,4 +296,82 @@ test('review interface copy is present in all eight locales', () => {
     expect(messages.thread_review_write, locale).toBeTruthy();
     expect(messages.thread_review_duplicate, locale).toBeTruthy();
   }
+});
+
+test('a pending review with a lost response retries only its original subject, exact citation and key', async () => {
+  const originalContext = {
+    kind: 'review' as const,
+    subjectId: id(3),
+    voteCitation: { questionId: id(5), units: 14, revision: 8 },
+  };
+  type Context = { kind: 'review'; subjectId: string; voteCitation?: typeof originalContext.voteCitation };
+  const intent = new ReplyIntent<Context>(id(2));
+  const draft = { title: 'Review title', body: snapshot('A careful review'), mediaIds: [id(6)] };
+  const scope = JSON.stringify([null, id(1), 'viewer', 'csrf']);
+  const calls: { payload: unknown; key: string }[] = [];
+  let loseResponse!: () => void;
+  let entered!: () => void;
+  const pending = new Promise<void>((resolve) => (entered = resolve));
+  const client = {
+    threads: Object.assign(() => ({}), {
+      post: async (payload: unknown, options: { headers: { 'idempotency-key': string } }) => {
+        calls.push({ payload: structuredClone(payload), key: options.headers['idempotency-key'] });
+        if (calls.length === 1) {
+          entered();
+          await new Promise<void>((_resolve, reject) => {
+            loseResponse = () => reject(new Error('Response lost after commit'));
+          });
+        }
+        return { data: { thread: { id: id(4) } } };
+      },
+    }),
+  } as unknown as KernelClient;
+  const request = new Request('https://rezics.test/', { headers: { authorization: 'Bearer viewer' } });
+  let currentContext: Context = structuredClone(originalContext);
+  const send = async (command: ReplyCommand<Context>) => {
+    const result = await startThreadRequest(
+      { boardId: id(1), ...command, ...command.submissionContext! },
+      request,
+      {},
+      client,
+      () => ({ ok: false, reason: 'unavailable' }),
+    );
+    intent.settle(result.ok || result.reason !== 'unavailable');
+    return result;
+  };
+  const original = intent.prepare({ ...draft, submissionContext: currentContext }, null, scope);
+  intent.settle(false);
+  const first = send(original);
+  await pending;
+  currentContext.subjectId = id(7);
+  currentContext.voteCitation!.units = 0;
+  currentContext.voteCitation!.revision = 9;
+  expect(intent.canPrepare({ ...draft, submissionContext: currentContext }, null, scope)).toBe(false);
+  expect(calls).toHaveLength(1);
+  loseResponse();
+  expect(await first).toEqual({ ok: false, reason: 'unavailable' });
+
+  // An unavailable current-vote read cannot turn this submitted citation into an uncited retry.
+  currentContext = { kind: 'review', subjectId: originalContext.subjectId };
+  expect(intent.canPrepare({ ...draft, submissionContext: currentContext }, null, scope)).toBe(false);
+  expect(calls).toHaveLength(1);
+  const retry = intent.prepare({ ...draft, submissionContext: originalContext }, null, scope);
+  expect(retry).toBe(original);
+  expect(await send(retry)).toMatchObject({ ok: true, thread: { id: id(4) } });
+  expect(calls).toHaveLength(2);
+  expect(calls[1]).toEqual(calls[0]);
+  expect(calls[0]).toEqual({
+    key: JSON.stringify(id(2)),
+    payload: {
+      boardId: id(1),
+      title: draft.title,
+      body: draft.body,
+      licence: 'LicenseRef-rezics-terms',
+      kind: 'review',
+      subjectIds: [originalContext.subjectId],
+      voteCitation: originalContext.voteCitation,
+      visibility: 'published',
+      mediaIds: draft.mediaIds,
+    },
+  });
 });

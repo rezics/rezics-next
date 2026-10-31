@@ -4,7 +4,7 @@ import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { startThread } from '../../threads/actions';
@@ -45,10 +45,25 @@ function NewThreadPage() {
   const review = board.purpose === 'reviews';
   const [subjectId, setSubjectId] = useState<string | null>(presetSubject ?? null);
   const [voteCitation, setVoteCitation] = useState<VoteCitation | undefined>();
+  const [metadataLocked, setMetadataLocked] = useState(false);
+  const metadataLockedRef = useRef(false);
+  const handleIntentLockChange = useCallback((locked: boolean) => {
+    metadataLockedRef.current = locked;
+    setMetadataLocked(locked);
+  }, []);
   const handleSubjectChange = useCallback((next: string | null) => {
+    if (metadataLockedRef.current) return;
     setSubjectId(next);
     setVoteCitation(undefined);
   }, []);
+  const handleVoteCitationChange = useCallback((next: VoteCitation | undefined) => {
+    if (!metadataLockedRef.current) setVoteCitation(next);
+  }, []);
+  const submissionContext = review
+    ? { kind: 'review' as const, subjectId: subjectId!, ...(voteCitation ? { voteCitation } : {}) }
+    : subjectId
+      ? { subjectId }
+      : {};
 
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
@@ -59,11 +74,11 @@ function NewThreadPage() {
       <div className="space-y-5">
         {review ? (
           <ReviewFields
-            key={presetSubject ?? 'review-subject'}
             {...(presetSubject ? { initialSubjectId: presetSubject } : {})}
             {...(presetSubjectTitle ? { initialSubjectTitle: presetSubjectTitle } : {})}
             onSubjectChange={handleSubjectChange}
-            onVoteCitationChange={setVoteCitation}
+            onVoteCitationChange={handleVoteCitationChange}
+            disabled={metadataLocked}
           />
         ) : null}
         {!review && presetSubjectTitle ? <p className="text-sm text-muted-foreground">{presetSubjectTitle}</p> : null}
@@ -72,22 +87,16 @@ function NewThreadPage() {
           titleRequired
           canSubmit={canSubmitThread(board.purpose, subjectId)}
           boardId={board.id}
-          onSubmit={async ({ title, body, idempotencyKey: key, mediaIds }) => {
+          submissionContext={submissionContext}
+          onIntentLockChange={handleIntentLockChange}
+          onSubmit={async ({ title, body, idempotencyKey: key, mediaIds, submissionContext: originalContext }) => {
             const result = await startThread({
               data: {
                 boardId: board.id,
                 title,
                 body,
                 idempotencyKey: key,
-                ...(review
-                  ? {
-                      kind: 'review' as const,
-                      subjectId: subjectId!,
-                      ...(voteCitation ? { voteCitation } : {}),
-                    }
-                  : subjectId
-                    ? { subjectId }
-                    : {}),
+                ...originalContext!,
                 ...(mediaIds.length > 0 ? { mediaIds } : {}),
               },
               headers: { 'X-CSRF-Token': csrfToken ?? '' },

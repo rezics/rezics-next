@@ -73,11 +73,13 @@ function presetSubject(id: string, title: string): EntityPickerSubject {
 export function ReviewFields({
   initialSubjectId,
   initialSubjectTitle,
+  disabled = false,
   onSubjectChange,
   onVoteCitationChange,
 }: {
   initialSubjectId?: string;
   initialSubjectTitle?: string;
+  disabled?: boolean;
   onSubjectChange: (subjectId: string | null) => void;
   onVoteCitationChange: (citation: CurrentReviewVote | undefined) => void;
 }) {
@@ -107,12 +109,14 @@ export function ReviewFields({
   }, [onVoteCitationChange, subject?.id]);
 
   function chooseSubject(items: EntityPickerSubject[]) {
+    if (disabled) return;
     const next = items[0] ?? null;
     setSubject(next);
     onSubjectChange(selectedReviewSubject(items));
   }
 
   function toggleCitation(checked: boolean) {
+    if (disabled) return;
     setCitingVote(checked);
     onVoteCitationChange(selectedVoteCitation(vote, checked));
   }
@@ -128,6 +132,7 @@ export function ReviewFields({
         search={search}
         src={coverSrc}
         value={subject ? [subject] : []}
+        disabled={disabled}
         onValueChange={chooseSubject}
       />
       {vote ? (
@@ -139,6 +144,7 @@ export function ReviewFields({
             <Checkbox
               id="review-cite-vote"
               checked={citingVote}
+              disabled={disabled}
               onCheckedChange={(checked) => toggleCitation(checked === true)}
             />
             <span>

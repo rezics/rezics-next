@@ -1,17 +1,26 @@
 import type { DocumentSnapshot } from '@rezics/document';
 
-export type ReplyDraft = { title: string; body: DocumentSnapshot; mediaIds: string[] };
-export type ReplyCommand = ReplyDraft & { idempotencyKey: string; parentId?: string };
+export type ReplyDraft<Context = undefined> = {
+  title: string;
+  body: DocumentSnapshot;
+  mediaIds: string[];
+  submissionContext?: Context;
+};
+export type ReplyCommand<Context = undefined> = ReplyDraft<Context> & { idempotencyKey: string; parentId?: string };
 
 /** One target and one draft form a command intent; an uncertain response can replay it unchanged. */
-export class ReplyIntent {
+export class ReplyIntent<Context = undefined> {
   private parentId: string | null = null;
-  private attempt: ReplyCommand | undefined;
+  private attempt: ReplyCommand<Context> | undefined;
   private fingerprint: string | undefined;
   private uncertain = false;
   private context = '';
 
   constructor(private key: string) {}
+
+  get unresolved(): boolean {
+    return this.uncertain;
+  }
 
   selectParent(parentId: string | null): string {
     if (this.uncertain) return this.key;
@@ -22,7 +31,7 @@ export class ReplyIntent {
     return this.key;
   }
 
-  canPrepare(draft: ReplyDraft, parentId: string | null, context = ''): boolean {
+  canPrepare(draft: ReplyDraft<Context>, parentId: string | null, context = ''): boolean {
     return (
       !this.uncertain ||
       (parentId === this.parentId && context === this.context && JSON.stringify(draft) === this.fingerprint)
@@ -34,7 +43,7 @@ export class ReplyIntent {
     this.uncertain = !knownNotApplied && Boolean(this.attempt);
   }
 
-  prepare(draft: ReplyDraft, parentId: string | null, context = ''): ReplyCommand {
+  prepare(draft: ReplyDraft<Context>, parentId: string | null, context = ''): ReplyCommand<Context> {
     if (!this.canPrepare(draft, parentId, context)) throw new Error('The original command outcome is unknown');
     this.selectParent(parentId);
     const fingerprint = JSON.stringify(draft);

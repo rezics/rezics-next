@@ -25,7 +25,7 @@ import { checkDraftMediaStates, type DraftMediaState } from './media-state';
 import { imageSources, replyImageLimit, uploadReplyImage, UploadRefusal } from './upload';
 import { ReplyImageUploadRecovery, ReplyUploadRecoveryRefusal, type ReplyUploadTarget } from './media-upload-recovery';
 import { ExistingReviewNotice } from './write-prompts';
-import { ReplyIntent } from './reply-context-intent';
+import { ReplyIntent, type ReplyCommand } from './reply-context-intent';
 export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
@@ -371,7 +371,7 @@ function editorLabels(): RichTextEditorLabels {
   };
 }
 
-export function PostComposer<T>({
+export function PostComposer<T, Context = undefined>({
   initialKey,
   initialBody,
   titleRequired = false,
@@ -382,6 +382,8 @@ export function PostComposer<T>({
   replyContext,
   focusRequest = 0,
   onPendingChange,
+  submissionContext,
+  onIntentLockChange,
   onSubmit,
   onSuccess,
 }: {
@@ -395,13 +397,9 @@ export function PostComposer<T>({
   replyContext?: ReactNode;
   focusRequest?: number;
   onPendingChange?: (pending: boolean) => void;
-  onSubmit: (input: {
-    title: string;
-    body: DocumentSnapshot;
-    idempotencyKey: string;
-    mediaIds: string[];
-    parentId?: string;
-  }) => Promise<WriteResult<T>>;
+  submissionContext?: Context;
+  onIntentLockChange?: (locked: boolean) => void;
+  onSubmit: (input: ReplyCommand<Context>) => Promise<WriteResult<T>>;
   onSuccess: (value: T) => void;
 }) {
   const formId = useId();
@@ -424,7 +422,7 @@ export function PostComposer<T>({
   const [editorReady, setEditorReady] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(initialKey);
   const idempotencyRef = useRef(initialKey);
-  const replyIntent = useRef(new ReplyIntent(initialKey));
+  const replyIntent = useRef(new ReplyIntent<Context>(initialKey));
   idempotencyRef.current = idempotencyKey;
   const [failure, setFailure] = useState<WriteFailure | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(() =>
@@ -444,7 +442,12 @@ export function PostComposer<T>({
   const session = sessionClient?.getQueryData(sessionQuery.queryKey);
   const commandContext = JSON.stringify([containerId, boardId, session?.subject, session?.csrfToken]);
   const uncertainChanged = !replyIntent.current.canPrepare(
-    { title, body, mediaIds: mediaIdsFromSources(imageSources(body)) },
+    {
+      title,
+      body,
+      mediaIds: mediaIdsFromSources(imageSources(body)),
+      ...(submissionContext === undefined ? {} : { submissionContext }),
+    },
     replyTargetId ?? null,
     commandContext,
   );
@@ -610,13 +613,21 @@ export function PostComposer<T>({
       return;
     }
     const mediaIds = mediaIdsFromSources(sources);
-    const draft = { title, body: bodyRef.current, mediaIds };
+    const draft = {
+      title,
+      body: bodyRef.current,
+      mediaIds,
+      ...(submissionContext === undefined ? {} : { submissionContext }),
+    };
     if (!replyIntent.current.canPrepare(draft, replyTargetId ?? null, commandContext)) return;
     const command = replyIntent.current.prepare(draft, replyTargetId ?? null, commandContext);
+    // Pending and lost responses both retain the entire command until its outcome is known.
+    replyIntent.current.settle(false);
     idempotencyRef.current = command.idempotencyKey;
     setIdempotencyKey(command.idempotencyKey);
     submittingRef.current = true;
     setSubmitting(true);
+    onIntentLockChange?.(true);
     onPendingChange?.(true);
     setFailure(null);
     try {
@@ -631,6 +642,7 @@ export function PostComposer<T>({
         });
         return;
       }
+      replyIntent.current.settle(true);
       setTitle('');
       const empty = fromPlainText('', 'blocks');
       bodyRef.current = empty;
@@ -650,6 +662,7 @@ export function PostComposer<T>({
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
+      onIntentLockChange?.(replyIntent.current.unresolved);
       onPendingChange?.(false);
     }
   }
