@@ -6,6 +6,12 @@ import { candidateContext, candidateHasPayload, type Candidate, type CandidateSl
 export type ConsentAddress = { id: string; property: string; candidate: string; slot?: CandidateSlot };
 export type ConsentCommand = ConsentAddress & { operation: 'disclose' | 'retract'; key: string; session?: string };
 export type ConsentFailure = { ok: false; reason: 'denied' | 'missing' | 'invalid' | 'conflict' | 'unavailable' };
+type ConsentCandidate = Candidate & {
+  consentIdentity?: {
+    subject: { id: string; labels: Record<string, string> } | null;
+    target: { id: string; labels: Record<string, string>; redirect?: string } | null;
+  };
+};
 export type ConsentPublic =
   | { state: 'present'; statement: Candidate['statement']; related: SubjectRead['related'] }
   | { state: 'absent' | 'pending' | ConsentFailure['reason'] };
@@ -13,7 +19,7 @@ export type ConsentRead =
   | ConsentFailure
   | {
       ok: true;
-      candidate: Candidate | null;
+      candidate: ConsentCandidate | null;
       terminal: boolean;
       disclosure: boolean;
       field: Record<string, string>;
