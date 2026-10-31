@@ -8,7 +8,6 @@ test('browser package exports load portable helpers and compiled data without na
     entrypoints: [import.meta.path],
     target: 'browser',
     format: 'esm',
-    write: false,
     plugins: [
       {
         name: 'definitions-browser-boundary',
