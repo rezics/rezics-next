@@ -322,6 +322,35 @@ and join its positive account-erasure inventory, including after source curator 
 native admission fences reject late writers. Disposition must remove evidence/seal before staging and output; there
 is no new cleanup participant, reclaim, lease ACK, public Search payload, work payload mirror or terminal completion.
 
+### Whole-query publication transport declarations
+
+`collection-publication-http.ts` exports `collectionPublishQueryRequestSchema`,
+`collectionPublicationStatusSchema`, their static DTO types and `collectionPublicationStatus(episode)`.
+The selected routes are `POST customMethod('/v1/collections/:collectionId', 'publish')`
+(`POST /v1/collections/{collectionId}:publish`, operation `collection.publish_query`) and
+`GET /v1/collectionPublications/:id` (operation `collection_publication.get`). Both require current
+`collection:update` and the existing `gate:collections`; status is owner-private and `private, no-store`.
+These are declarations for composition, not currently mounted endpoints.
+
+The closed request is `{revision,visibility:'public'|'unlisted'}` with ordinary Idempotency-Key. Revision zero
+allows an actual logical built-in's first materialization by the owning command. Requests supply neither an
+owner nor a selected set, private query, pins or evidence. The closed status is
+`{id,collectionId,visibility,phase:'staging'|'awaiting_activation'|'refused'}` or
+`{id,collectionId,visibility,phase:'complete',publication:{generation}}`. The complete generation comes from the
+actual native output publication receipt. Other phases never expose B's working generation or selected A as B's
+result. The projector is used only after native current authority; it does not read, admit or complete work.
+Internal creation retains its required `durableInitiator` commitment unchanged.
+
+The actual native episode types live in `collection-publication-episode-contract.ts`; the distinct mechanical
+role's locator and admission/getter declarations live in `collection-publication-work-admission.ts`. The latter
+two functions remain typed unavailable adapters. Begin, owner-private status read, original-operation reader,
+bounded staging/seal and final activation function declarations/bodies are absent in this checkout. Their owning
+producers must publish them before service/routes and the single existing Library WorkModule can bind them.
+There is no fallback successful publication, new runtime or substitute selected-set producer.
+`collection-publication-http.test.ts` retains the unmet real API/default-worker acceptance and focused closed
+grammar/privacy assertions. It uses the existing native fixture and actual output rows/receipt, with no replacement
+worker or domain backend. Schema availability and local typing do not establish that native acceptance.
+
 ### Explicit selected-set publication
 
 `POST /v1/collections/{collectionId}:publishSelected` takes the closed body `{revision,subjectIds}` and ordinary
