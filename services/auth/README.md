@@ -85,22 +85,58 @@ at their original cursor. Empty pages and `sealedPartitions` alone prove no
 completion. After traversal, bounded calls verify all 4096 partitions through
 the actual current Source verifier and retain its generation/epoch/owner and
 high-water/live-high-water observations. A changed head/owner stays pending on
-the same cut rather than silently replacing it. Verification is an observation,
-not a live cutover fence. The delivered Access port has no owner-native durable
-handoff of subsequent obligations to this restored generation through gate
-opening. After positive traversal/verification, admission therefore reports
-`source-live-handoff-pending`. Earlier incomplete Source work reports
-`source-consumer-pending`; a missing/failing port reports
-`source-authority-unavailable`. Native replay, receiving closure and actual
-external/database-owner physical readiness remain separate required work; no
-installed owner certifies the latter boundaries.
+the same cut rather than silently replacing it. Verification is an observation, not a live cutover fence.
 
-`requireRestoredAuthAdmission` performs one bounded Source stage before refusing
-construction. Reconciliation workers may call staging and native replay directly
-while the restored database remains isolated. No generation is released from
-native-only progress. History completion publication
-is held on a marked restore image, including old carried completion; genuine
-original Source consumption still redrives independently. This delivers no
+`AuthRestoredGeneration.live(receiver)` binds the original
+`AuthErasureLivePorts` to the verified generation/database identity/inventory
+entry/version and the original cut. Trusted composition supplies
+`receiver => createAuthErasureLiveBindings(sourcePool, receiver)`; the Source
+pool remains inside Access. Auth uses the producer's original published ABI,
+including its opaque string inventory version. Missing native composition still
+reports `source-live-handoff-pending`; a boolean cannot replace it.
+
+After traversal/verification, each bounded call arms or tails one actual native
+partition. Source enrollment uses the actual tombstone append fence. Auth keeps
+the exact receiver and original Source generation/epoch/owner/cut high-water/arm
+high-water. Its tail begins at the original cut high-water, including obligations
+between that cut and the arm. The dynamic `enrolledThrough` is the native tail
+boundary; the cut's `highWater` does not grow. At most 48 obligations and 64 KiB
+cross one call under the same five-second absolute deadline. Every root is
+point-checked and imported through the existing immutable original-progress
+validator. Missing independently recovered Auth progress remains pending, even
+when Source has a genuine new obligation. Auth never invents original progress
+from an absent snapshot row. Page/import/checkpoint interruptions retry the same
+immutable evidence; a CAS advances only a completely imported page.
+
+`auth_restore_live_generation`, `auth_restore_live_partition` and
+`auth_restore_live_work` own durable partition rotation, Source observations,
+CAS cursors and indexed fair native scheduling. An indexed 48-key attachment
+page also enrolls genuine replay rows imported before the live scheduler existed;
+an empty new queue cannot hide that earlier native work. A newly imported obligation
+gets unfinished per-generation native/receiving work without clearing an older
+obligation's original consent cutoff or acknowledged Source evidence. These
+independent tables bind the original verified restore record at runtime; their
+UTC migration does not depend on the ordering of older future-dated migrations.
+
+`reconcileRestoredAuthPage` alternates Source consumption and actual existing
+native replay using durable turns and indexed keys. `createAuthRestoreHost`
+provides the isolated deployment's `start`/`reconcile`/`stop` lifecycle before
+normal `createAuthHost`: it owns its Auth pool, schedules further bounded work,
+awaits in-flight work before pool shutdown, and exposes no service, handler,
+issuer, workflow SDK or maintenance writer. Restarting it resumes native
+checkpoints. Required original consumer continuations remain pending until their
+real owner can redrive them; the isolated host does not launch an SDK to infer
+that release. Normal service admission also runs one reconciler unit before
+refusing. Unmarked fresh service/host behavior is unchanged.
+
+Once all partitions have genuine live enrollment and consumed native tail
+observations, the reported boundary becomes the actual `native-replay-pending`,
+`receiving-closure-pending` or `external-owner-pending`. This progress never opens
+traffic: the installed database owner API verifies image identity and recovered
+native progress only. No installed owner supplies final independent physical,
+committed-tail and receiving closure. A tail-end observation or current Source
+point is insufficient. History completion publication remains held on a marked
+restore image, including carried completion. This delivers no
 physical backup/replica/mail/log deletion or final coordinator ACK. Outstanding
 external custody and backup expiry remain separate pending owner obligations in
 [the external custody contract](src/external-custody-contract.md). The protected
@@ -2252,11 +2288,11 @@ remains pending, including after native work and the original consent cutoff:
 - External delivery-provider diagnostics/logs and backup restore deletion replay
   are specified by the [external custody and restore contract](src/external-custody-contract.md).
   Its source inventory, owner allocation, admission, proof and rollout are adopted;
-  native Access point/feed discovery now binds restored Auth import and replay as
-  described above. Actual receiving adapters, a durable Source live handoff and
-  physical isolated-restore readiness remain open. The two future native contract
-  suites fail explicitly at missing producer/infrastructure boundaries; they do
-  not claim provider deletion or restore safety from fixture callbacks.
+  native Access point/feed discovery and durable live consumption now bind
+  restored Auth import and isolated reconciliation as described above. Actual
+  receiving adapters and independent physical isolated-restore readiness remain
+  open. Native acceptance is deferred until integration; fixture callbacks do
+  not establish provider deletion or restore safety.
 
 The native marker deliberately has no `erased`, `none` or acknowledged outcome.
 A missing native user cannot change persisted applicability to `none`. These gaps

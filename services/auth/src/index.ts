@@ -81,7 +81,7 @@ export type {
   OwnedSecurityClientsPage,
   SecurityConsentsPage,
 } from './security-inventory.ts';
-export { createAuthHost, AuthHostConfigurationError } from './host.ts';
+export { createAuthHost, createAuthRestoreHost, AuthHostConfigurationError } from './host.ts';
 export type { AuthHostOptions } from './host.ts';
 export type { AccountOperationAccess } from './account-operations-transport.ts';
 export { SigningRotationPending } from './signing.ts';
@@ -129,6 +129,7 @@ export {
   replayRestoredAuthPage,
   stageRestoredAuthObligations,
 } from './restore-admission.ts';
+export { reconcileRestoredAuthPage } from './restore-live.ts';
 export type {
   AuthRestoredGeneration,
   AuthRestoreDatabaseOwner,

@@ -1,3 +1,4 @@
+export type * from './auth-erasure-live.ts';
 import type { AuthErasureObligationPorts } from './auth-erasure-obligations.ts';
 import type { ReadNativeCreationContext } from './native-creation-context.ts';
 export type * from './native-creation-context.ts';

@@ -5425,6 +5425,169 @@ END $$;
 CREATE TRIGGER auth_restore_identity_immutable BEFORE UPDATE OR DELETE ON auth_restore_generation
   FOR EACH ROW EXECUTE FUNCTION auth_restore_identity_immutable();
 
+--
+-- Name: auth_restore_live_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_restore_live_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' OR NEW.generation IS DISTINCT FROM OLD.generation THEN
+    RAISE EXCEPTION 'Auth live receiver is immutable' USING ERRCODE='23514';
+  END IF;
+  IF TG_TABLE_NAME='auth_restore_live_generation' THEN
+    IF NEW.inventory IS DISTINCT FROM OLD.inventory OR NEW.source_cut_id IS DISTINCT FROM OLD.source_cut_id
+      OR NEW.replay_inventory_after<OLD.replay_inventory_after
+      OR (OLD.replay_inventory_complete AND NOT NEW.replay_inventory_complete) THEN
+      RAISE EXCEPTION 'Auth live inventory binding is immutable' USING ERRCODE='23514';
+    END IF;
+  ELSIF TG_TABLE_NAME='auth_restore_live_partition' THEN
+    IF NEW.partition IS DISTINCT FROM OLD.partition OR NEW.arm IS DISTINCT FROM OLD.arm
+      OR NEW.after_ordinal<OLD.after_ordinal OR NEW.revision<>OLD.revision+1 THEN
+      RAISE EXCEPTION 'Auth live Source checkpoint is immutable' USING ERRCODE='23514';
+    END IF;
+  ELSIF NEW.obligation_id IS DISTINCT FROM OLD.obligation_id
+    OR (OLD.state='external' AND NEW.state<>'external') THEN
+    RAISE EXCEPTION 'Auth live native work identity is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_restore_live_generation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_restore_live_generation (
+    generation text NOT NULL,
+    inventory jsonb NOT NULL,
+    source_cut_id uuid NOT NULL,
+    live_partition integer DEFAULT 0 NOT NULL,
+    live_verified_partitions integer DEFAULT 0 NOT NULL,
+    reconcile_turn integer DEFAULT 0 NOT NULL,
+    replay_after bigint DEFAULT 0 NOT NULL,
+    replay_inventory_after bigint DEFAULT 0 NOT NULL,
+    replay_inventory_complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT auth_restore_live_generation_generation_check CHECK (((octet_length(generation) >= 1) AND (octet_length(generation) <= 1024))),
+    CONSTRAINT auth_restore_live_generation_inventory_check CHECK ((octet_length((inventory)::text) <= 16384)),
+    CONSTRAINT auth_restore_live_generation_live_partition_check CHECK (((live_partition >= 0) AND (live_partition <= 4095))),
+    CONSTRAINT auth_restore_live_generation_live_verified_partitions_check CHECK (((live_verified_partitions >= 0) AND (live_verified_partitions <= 4096))),
+    CONSTRAINT auth_restore_live_generation_reconcile_turn_check CHECK ((reconcile_turn = ANY (ARRAY[0, 1]))),
+    CONSTRAINT auth_restore_live_generation_replay_after_check CHECK ((replay_after >= 0)),
+    CONSTRAINT auth_restore_live_generation_replay_inventory_after_check CHECK ((replay_inventory_after >= 0))
+);
+
+
+--
+-- Name: auth_restore_live_partition; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_restore_live_partition (
+    generation text NOT NULL,
+    partition integer NOT NULL,
+    arm jsonb NOT NULL,
+    after_ordinal bigint NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    page jsonb,
+    verification jsonb,
+    verified boolean DEFAULT false NOT NULL,
+    CONSTRAINT auth_restore_live_partition_after_ordinal_check CHECK ((after_ordinal >= 0)),
+    CONSTRAINT auth_restore_live_partition_arm_check CHECK ((octet_length((arm)::text) <= 8192)),
+    CONSTRAINT auth_restore_live_partition_page_check CHECK ((octet_length((page)::text) <= 65536)),
+    CONSTRAINT auth_restore_live_partition_partition_check CHECK (((partition >= 0) AND (partition <= 4095))),
+    CONSTRAINT auth_restore_live_partition_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT auth_restore_live_partition_verification_check CHECK ((octet_length((verification)::text) <= 8192))
+);
+
+
+--
+-- Name: auth_restore_live_work; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_restore_live_work (
+    generation text NOT NULL,
+    obligation_id bigint NOT NULL,
+    state text DEFAULT 'native'::text NOT NULL,
+    CONSTRAINT auth_restore_live_work_obligation_id_check CHECK ((obligation_id > 0)),
+    CONSTRAINT auth_restore_live_work_state_check CHECK ((state = ANY (ARRAY['native'::text, 'receiving'::text, 'external'::text])))
+);
+
+
+--
+-- Name: auth_restore_live_generation auth_restore_live_generation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_live_generation
+    ADD CONSTRAINT auth_restore_live_generation_pkey PRIMARY KEY (generation);
+
+
+--
+-- Name: auth_restore_live_partition auth_restore_live_partition_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_live_partition
+    ADD CONSTRAINT auth_restore_live_partition_pkey PRIMARY KEY (generation, partition);
+
+
+--
+-- Name: auth_restore_live_work auth_restore_live_work_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_live_work
+    ADD CONSTRAINT auth_restore_live_work_pkey PRIMARY KEY (generation, obligation_id);
+
+
+--
+-- Name: auth_restore_live_work_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_restore_live_work_pending ON public.auth_restore_live_work USING btree (generation, obligation_id) WHERE (state <> 'external'::text);
+
+
+--
+-- Name: auth_restore_live_work_state; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_restore_live_work_state ON public.auth_restore_live_work USING btree (generation, state, obligation_id);
+
+
+--
+-- Name: auth_restore_live_generation auth_restore_live_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_live_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_live_generation FOR EACH ROW EXECUTE FUNCTION public.auth_restore_live_immutable();
+
+
+--
+-- Name: auth_restore_live_partition auth_restore_live_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_live_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_live_partition FOR EACH ROW EXECUTE FUNCTION public.auth_restore_live_immutable();
+
+
+--
+-- Name: auth_restore_live_work auth_restore_live_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_live_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_live_work FOR EACH ROW EXECUTE FUNCTION public.auth_restore_live_immutable();
+
+
+--
+-- Name: auth_restore_live_partition auth_restore_live_partition_generation_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_live_partition
+    ADD CONSTRAINT auth_restore_live_partition_generation_fkey FOREIGN KEY (generation) REFERENCES public.auth_restore_live_generation(generation);
+
+
+--
+-- Name: auth_restore_live_work auth_restore_live_work_generation_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_live_work
+    ADD CONSTRAINT auth_restore_live_work_generation_fkey FOREIGN KEY (generation) REFERENCES public.auth_restore_live_generation(generation);
+
 ALTER TABLE auth_erasure ADD COLUMN source_route integer CHECK(source_route BETWEEN 0 AND 4095);
 ALTER TABLE auth_erasure ADD COLUMN original_native_id text CHECK(octet_length(original_native_id) BETWEEN 1 AND 1024);
 CREATE FUNCTION auth_restore_source_immutable() RETURNS trigger LANGUAGE plpgsql AS $$

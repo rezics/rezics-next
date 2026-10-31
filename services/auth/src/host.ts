@@ -24,6 +24,67 @@ import {
   type AccountOperationAccess,
 } from './account-operations-transport.ts';
 import { AUTH_MAINTENANCE_CRON, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from './maintenance.ts';
+import {
+  AuthRestoreAdmissionError,
+  type AuthRestoredGeneration,
+  type AuthRestorePendingCode,
+} from './restore-admission.ts';
+import { reconcileRestoredAuthPage } from './restore-live.ts';
+
+/** Deployment lifecycle for an isolated restored database. It exposes no
+ * handler, signer, SDK or maintenance writer. Durable native cursors, not this
+ * timer or an in-memory ready bit, own all future reconciliation. */
+export function createAuthRestoreHost(options: { database: Pool; restoredGeneration: AuthRestoredGeneration }) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let active: Promise<{ pending: AuthRestorePendingCode }> | undefined;
+  let running = false;
+  let stopping: Promise<void> | undefined;
+  let lastError: unknown;
+  const reconcile = () => {
+    if (stopping) return Promise.reject(new Error('Auth restore host is stopped'));
+    return (active ??= reconcileRestoredAuthPage(options.database, options.restoredGeneration)
+      .catch((error: unknown) => {
+        if (error instanceof AuthRestoreAdmissionError) return { pending: error.code };
+        throw error;
+      })
+      .finally(() => {
+        active = undefined;
+      }));
+  };
+  const tick = async () => {
+    try {
+      await reconcile();
+      lastError = undefined;
+    } catch (error) {
+      lastError = error;
+    } finally {
+      if (running)
+        timer = setTimeout(() => {
+          void tick();
+        }, 250);
+    }
+  };
+  return {
+    reconcile,
+    get error() {
+      return lastError;
+    },
+    start() {
+      if (stopping) return Promise.reject(new Error('Auth restore host is stopped'));
+      if (running) return active ?? Promise.resolve();
+      running = true;
+      return tick();
+    },
+    stop() {
+      return (stopping ??= (async () => {
+        running = false;
+        clearTimeout(timer);
+        await active?.catch(() => {});
+        await options.database.end();
+      })());
+    },
+  };
+}
 
 export class AuthHostConfigurationError extends Error {
   override readonly name = 'AuthHostConfigurationError';

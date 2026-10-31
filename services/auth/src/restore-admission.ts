@@ -13,6 +13,8 @@ import { nativeErasurePage } from './erasure-native.ts';
 import { erasureHistoryPage } from './erasure-history.ts';
 import { installNativeRoleCoverage, reconcileNativeRoleCoveragePage } from './erasure-coverage.ts';
 import type { NativeConsumerRuntime } from './erasure-consumers.ts';
+import type { AuthErasureLivePorts, AuthErasureLiveReceiver } from '@rezics/auth-contract';
+import { reconcileRestoredAuthPage, stageRestoredAuthLive, restoreDatabaseWithin } from './restore-live.ts';
 
 export type AuthRestorePendingCode =
   | 'database-owner-unavailable'
@@ -104,6 +106,9 @@ export interface AuthRestoredGeneration {
   /** Fixed native Access capability, supplied by trusted service/host composition.
    * No kernel pool or runtime request field crosses this boundary. */
   obligations?: AuthErasureObligationPorts;
+  /** Trusted composition binds the original native Source factory to this exact
+   * verified receiver. This is not a request or a readiness callback. */
+  live?: (receiver: AuthErasureLiveReceiver) => AuthErasureLivePorts;
 }
 
 function fail(code: AuthRestorePendingCode): never {
@@ -137,7 +142,7 @@ async function boundedRead<T>(
   }
 }
 
-async function inventoryFor(
+export async function inventoryFor(
   database: Pool,
   restored: AuthRestoredGeneration,
   deadline?: number,
@@ -145,9 +150,10 @@ async function inventoryFor(
   if (restored.kind !== 'RESTORED' || !key(restored.generation)) fail('restore-lineage-mismatch');
   // NULL inventory records only the declaration, never verified backup evidence.
   // Failed native recovery must also keep later construction closed by omission.
-  await database.query('INSERT INTO auth_restore_generation(generation) VALUES ($1) ON CONFLICT DO NOTHING', [
-    restored.generation,
-  ]);
+  await restoreDatabaseWithin(database, deadline ?? Date.now() + 5000).query(
+    'INSERT INTO auth_restore_generation(generation) VALUES ($1) ON CONFLICT DO NOTHING',
+    [restored.generation],
+  );
   if (!restored.databaseOwner) fail('database-owner-unavailable');
   let result: Awaited<ReturnType<AuthRestoreDatabaseOwner['verifyRestoredDatabase']>>;
   try {
@@ -190,7 +196,7 @@ async function inventoryFor(
   };
 }
 
-async function bindInventory(database: Pool, inventory: AuthRestoreInventory) {
+export async function bindInventory(database: Pool, inventory: AuthRestoreInventory) {
   // A single exact identity; this is NOT a backup catalogue or physical proof.
   const result = await database.query(
     `INSERT INTO auth_restore_generation(generation,inventory) VALUES ($1,$2::jsonb)
@@ -199,6 +205,15 @@ async function bindInventory(database: Pool, inventory: AuthRestoreInventory) {
     [inventory.generation, JSON.stringify(inventory)],
   );
   if (!result.rowCount) fail('restore-lineage-mismatch');
+  const live = await database.query(
+    `INSERT INTO auth_restore_live_generation(generation,inventory,source_cut_id)
+     SELECT generation,inventory,source_cut_id FROM auth_restore_generation WHERE generation=$1
+     ON CONFLICT(generation) DO UPDATE SET generation=EXCLUDED.generation
+     WHERE auth_restore_live_generation.inventory=EXCLUDED.inventory
+     AND auth_restore_live_generation.source_cut_id=EXCLUDED.source_cut_id RETURNING generation`,
+    [inventory.generation],
+  );
+  if (!live.rowCount) fail('restore-lineage-mismatch');
 }
 
 /** Recovery/import proceeds independently of Source availability. It never
@@ -217,7 +232,7 @@ export async function importRestoredAuthProgress(
   return importProgress(database, restored, inventory, accountId, obligation, deadline);
 }
 
-async function importProgress(
+export async function importProgress(
   database: Pool,
   restored: AuthRestoredGeneration,
   inventory: AuthRestoreInventory,
@@ -305,6 +320,10 @@ async function importProgress(
         // Local native work may since have established its first cutoff or
         // published its genuine consumer proof. Never overwrite that progress
         // with the immutable evidence captured at the start of this generation.
+        await connection.query(
+          `INSERT INTO auth_restore_live_work(generation,obligation_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
+          [restored.generation, previous.id],
+        );
         await connection.query('COMMIT');
         return previous.id;
       }
@@ -377,6 +396,10 @@ async function importProgress(
       [restored.generation, row.id, JSON.stringify(progress), obligation ? JSON.stringify(obligation) : null],
     );
     if (!replay.rowCount) fail('original-progress-mismatch');
+    await connection.query(
+      `INSERT INTO auth_restore_live_work(generation,obligation_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
+      [restored.generation, row.id],
+    );
     await connection.query('COMMIT');
     return row.id;
   } catch (error) {
@@ -476,8 +499,10 @@ export async function replayRestoredAuthPage(
   restored: AuthRestoredGeneration,
   id: string,
   runtime?: NativeConsumerRuntime,
+  deadline = Date.now() + 5000,
 ): Promise<{ pending: AuthRestorePendingCode }> {
-  const inventory = await inventoryFor(database, restored);
+  const inventory = await inventoryFor(database, restored, deadline);
+  database = restoreDatabaseWithin(database, deadline);
   await bindInventory(database, inventory);
   const row = (
     await database.query(
@@ -486,6 +511,22 @@ export async function replayRestoredAuthPage(
     )
   ).rows[0];
   if (!row) return { pending: 'original-progress-unavailable' };
+  if (await reconcileRestoredAuthCoverage(database, restored)) return { pending: 'native-replay-pending' };
+  if (row.phase !== NATIVE_PHASE_END || !row.native_completed_at || !row.consent_completed_at) {
+    const page = await nativeErasurePage(database, id, runtime, restored.generation);
+    return { pending: page.code === 'native-source' ? 'source-consumer-pending' : 'native-replay-pending' };
+  }
+  if (!(await erasureHistoryPage(database, id, restored.generation))) return { pending: 'receiving-closure-pending' };
+  return { pending: 'external-owner-pending' };
+}
+
+/** One unit of the existing native deployment classifier, also needed when
+ * the original Source cut contains no account obligations. Caller has verified
+ * and bound this generation before invoking it. */
+export async function reconcileRestoredAuthCoverage(
+  database: Pool,
+  restored: AuthRestoredGeneration,
+): Promise<boolean> {
   const deployment = (
     await database.query<{ armed: boolean }>(
       'SELECT armed FROM auth_native_role_deployment WHERE singleton AND version=1',
@@ -521,15 +562,10 @@ export async function replayRestoredAuthPage(
     } finally {
       connection.release();
     }
-    return { pending: 'native-replay-pending' };
+    return true;
   }
-  if (await reconcileNativeRoleCoveragePage(database)) return { pending: 'native-replay-pending' };
-  if (row.phase !== NATIVE_PHASE_END || !row.native_completed_at || !row.consent_completed_at) {
-    const page = await nativeErasurePage(database, id, runtime, restored.generation);
-    return { pending: page.code === 'native-source' ? 'source-consumer-pending' : 'native-replay-pending' };
-  }
-  if (!(await erasureHistoryPage(database, id, restored.generation))) return { pending: 'receiving-closure-pending' };
-  return { pending: 'external-owner-pending' };
+  if (await reconcileNativeRoleCoveragePage(database)) return true;
+  return false;
 }
 
 /** Canonical native integer domains, checked as strings before conversion. */
@@ -554,7 +590,7 @@ function validCut(cut: AuthErasureObligationCut, cutId: string): boolean {
     cut.sealedPartitions <= 4096
   );
 }
-function exactObligation(value: AuthErasureObligation): AuthErasureObligation {
+export function exactObligation(value: AuthErasureObligation): AuthErasureObligation {
   if (
     !value ||
     !Number.isInteger(value.route) ||
@@ -584,7 +620,7 @@ function exactObligation(value: AuthErasureObligation): AuthErasureObligation {
 }
 const sameObligation = (a: AuthErasureObligation, b: AuthErasureObligation) =>
   JSON.stringify(exactObligation(a)) === JSON.stringify(exactObligation(b));
-async function sourceCall<T>(deadline: number, call: () => Promise<T>): Promise<T> {
+export async function sourceCall<T>(deadline: number, call: () => Promise<T>): Promise<T> {
   if (Date.now() >= deadline) fail('source-consumer-pending');
   try {
     const result = await boundedRead(deadline, call, 'source-consumer-pending');
@@ -595,7 +631,7 @@ async function sourceCall<T>(deadline: number, call: () => Promise<T>): Promise<
     return fail('source-authority-unavailable');
   }
 }
-async function sourcePoint(ports: AuthErasureObligationPorts, accountId: string, deadline: number) {
+export async function sourcePoint(ports: AuthErasureObligationPorts, accountId: string, deadline: number) {
   const point = await sourceCall(deadline, () => ports.readAuthErasureObligation({ accountId, deadline }));
   if (!point || point.state !== 'ready') fail('source-consumer-pending');
   const obligation = exactObligation(point.obligation);
@@ -619,9 +655,10 @@ type SourceCheckpoint = {
 export async function stageRestoredAuthObligations(
   database: Pool,
   restored: AuthRestoredGeneration,
+  deadline = Date.now() + 5000,
 ): Promise<{ pending: AuthRestorePendingCode }> {
-  const deadline = Date.now() + 5000;
   const inventory = await inventoryFor(database, restored, deadline);
+  database = restoreDatabaseWithin(database, deadline);
   await bindInventory(database, inventory);
   const ports = restored.obligations;
   if (!ports) return { pending: 'source-authority-unavailable' };
@@ -665,11 +702,7 @@ export async function stageRestoredAuthObligations(
     await checkpointVerification(database, restored.generation, checkpoint, verification, current, deadline);
     return { pending: current && selected === 4095 ? 'source-live-handoff-pending' : 'source-consumer-pending' };
   }
-  // Access's verifier releases its partition locks before returning. It has no
-  // owner-native registration/fence transferring future feed obligations to this
-  // restored generation through gate opening. Saved current observations cannot
-  // supply that live handoff, regardless of native/receiving completion.
-  return { pending: 'source-live-handoff-pending' };
+  return stageRestoredAuthLive(database, restored, inventory, deadline);
 }
 
 function validatePage(page: AuthErasureObligationPage, cutId: string, cursor: AuthErasureObligationCursor) {
@@ -810,6 +843,6 @@ export async function requireRestoredAuthAdmission(database: Pool, restored?: Au
     if (marked.rowCount) fail('restore-lineage-unavailable');
     return;
   }
-  const result = await stageRestoredAuthObligations(database, restored);
+  const result = await reconcileRestoredAuthPage(database, restored);
   fail(result.pending);
 }
