@@ -2,7 +2,10 @@ import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
 import type { CommandTransaction } from '../command/command.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
-import type { IdentityJobRef, IdentityNativeReceipt, IdentityReceipt } from './identity-epoch-contract.ts';
+import type { IdentityFrontier, IdentityJobRef, IdentityNativeReceipt, IdentityReceipt, NativeStepWork } from './identity-epoch-contract.ts';
+import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
+import type { WorkAllowance } from '../library/collection-source.ts';
+import type { LibraryScopeEffectSeal } from '../library/identity-scope-effects.ts';
 import { readAccountIdentitySource, type AccountIdentitySource } from '../access/agent-verification-identity.ts';
 import {
   currentCommand,
@@ -42,6 +45,37 @@ declare const identitySourceConsumerCustody: unique symbol;
 export type IdentitySourceConsumerCustody = Readonly<{
   [identitySourceConsumerCustody]: true;
 }>;
+
+/** Required additive owner exchange, not a caller proof or an installed adapter. Native
+ * implementations must resolve these generations from the original accepted input. */
+export type IdentitySourceConsumerGeneration = Readonly<{
+  replayGeneration: string;
+  undoGeneration: string;
+  restoreGeneration: string;
+}>;
+export type IdentitySourceConsumerWork = IdentitySourceConsumerGeneration & Readonly<{ allowance: NativeStepWork }>;
+export type IdentitySourceConsumerDisposition = 'discharged' | 'transferred';
+
+/** Original modules supply these methods. There is deliberately no setter/default ACK.
+ * See the owning contract for the native locks, writer obligations and accounting required. */
+type BindingConsumerOwner = {
+  readIdentitySourceConsumerWork(pool: Pool, reference: IdentitySourceConsumerReference,
+    context: Readonly<{ deadline: number }>): Promise<IdentitySourceConsumerWork | null>;
+  lockIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference,
+    expected: IdentitySourceConsumerGeneration): Promise<IdentitySourceConsumerDisposition | null>;
+  verifyIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference,
+    expected: IdentitySourceConsumerGeneration, disposition: IdentitySourceConsumerDisposition): Promise<boolean>;
+};
+type ScopedConsumerOwner = {
+  readIdentityScopeConsumerWork(pool: Pool, ticket: IdentityPrearmTicketData,
+    context: Readonly<{ deadline: number }>): Promise<WorkAllowance | null>;
+  retainIdentityScopeConsumerFence(tx: CommandTransaction, ticket: IdentityPrearmTicketData,
+    seal: LibraryScopeEffectSeal): Promise<boolean>;
+};
+type TechnicalConsumerOwner = {
+  acceptAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference): Promise<boolean>;
+  verifyAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference): Promise<boolean>;
+};
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const digest = /^[0-9a-f]{64}$/;

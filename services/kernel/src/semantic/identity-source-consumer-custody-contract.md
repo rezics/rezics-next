@@ -38,59 +38,99 @@ locator plumbing. The default minimizer defers it: a retained receipt still has 
 locators and cannot acquire a retained-nonpersonal disposition or family acknowledgment.
 This keeps the original source and surviving verification's undo/intent support pending.
 
-## Terminal ownership and required native reads
+## Terminal consumer composition
 
-This module owns the missing discharge/technical-transfer transition. The earlier name
-`IdentitySourceConsumerDischarge` does not designate a foreign producer or an exported
-interface. Retained preparation is not completion of that transition. The transition must
-enumerate the complete bounded original admission/replay and receiving dependency
-cut, including every OLD/NEW/first-apply/handoff scope, future verification undo and admitted
-in-flight reversal/replay. It must serialize that cut durably against later consumers and
-bind current native owner/restore and replay/undo generations. For transfer it must also
-prove the genuine receiving owner's acceptance of the exact immutable technical obligation
-and its continued proof needs. Its final receipt must be consumable and lockable at the
-original source home without foreign I/O in the caller's command.
+Source owns the terminal transition and local receipt. The original public reference,
+read and verify signatures remain unchanged. The delivered
+`identity-epoch-prearm-custody.ts` reader enumerates the retained admitted directory;
+its opaque cut is verified before the final source command and is never persisted.
+Library `readLibraryScopeEffectsPage` and `verifyLibraryScopeEffectsSeal` own expected
+effects and their current seal. An unavailable implementation remains pending.
 
-The required Library owner module is `library/identity-scope-effects.ts`, with its exact
-`readLibraryScopeEffectsPage` and `verifyLibraryScopeEffectsSeal` exports. That module and
-those exports are absent from the integrated source used for this implementation attempt.
-No local expected-set engine, declaration-only adapter or unavailable-as-empty result can
-replace them. Their absence prevents establishing either exhaustive effects or sealed zero.
+### Required bounded owner exchange
 
-Semantic also needs a bounded read over the **actual admitted retained directory**, rather
-than over caller-supplied scopes. The required owner read must:
+The following additive exports are required in the **original modules**. They are
+requirements for owner delivery, not declarations of already implemented authority.
+Types below are published by `identity-source-consumer-custody.ts`. No injectable
+adapter or public proof setter is supported.
 
-- Accept the exact accepted job and a native continuation within the existing eight-scalar,
-  2048-byte frontier, raw-page and work allowances.
-- Enumerate every expected retained scope and its real `IdentityPrearmTicketLocator`,
-  including the native exhausted/empty directory evidence. Replays must resolve the same
-  admitted directory generation, not the current registration set.
-- Preserve the current Source seal and native writer fence for each scope while its
-  OLD/NEW/first-apply/handoff expected selections are enumerated through the Library owner.
-- Charge failed, control and foreign work and release its home before returning. A later
-  relevant writer must extend the retained obligation or reject against the terminal fence.
+In `identity-epoch-binding.ts`:
 
-`readIdentityPrearmTicket` currently resolves only an already supplied ticket; its SQL
-requires an unreleased directory and live bridge. It cannot enumerate the admitted cut or
-recover its released directory. `readIdentityReceivingSelection` resolves one record and
-cannot supply the missing enumeration. `createIdentityScopedObservations` and the native
-Source prearm adapter currently return unavailable. These are separate native read/fence
-requirements; a participant's final frontier does not satisfy them.
+```ts
+readIdentitySourceConsumerWork(pool: Pool, reference: IdentitySourceConsumerReference,
+  context: Readonly<{deadline: number}>): Promise<IdentitySourceConsumerWork | null>;
+lockIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference,
+  expected: IdentitySourceConsumerGeneration): Promise<IdentitySourceConsumerDisposition | null>;
+verifyIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference,
+  expected: IdentitySourceConsumerGeneration, disposition: IdentitySourceConsumerDisposition): Promise<boolean>;
+```
 
-Until those owner reads are present, the existing read port prepares retention and returns
-null, and verify rejects it. This is pending product work, not terminal delivery. No terminal
-state, transfer receipt, empty scope seal or positive acceptance is inferred from this
-documentation. The existing undo-only Accounts source remains indispensable after T.
+`read` supplies an actual admitted native work reservation and native replay, undo
+and restore generations; it performs no fresh identity admission. It must account for
+its own failed/control work. The local `lock` resolves the exact original accepted
+claim under the same binding lock used by admission/replay/undo/restore. It returns
+discharged only after genuine native reversal and every surviving consumer is settled;
+it returns transferred only when the immutable technical input remains indispensable.
+Every later consumer must take that lock and consult Source's committed terminal row,
+then use the native technical input or reject old-source use. A generation pre-read,
+fixed publication state or current pending-job absence cannot implement this hook.
+`verify` revalidates these native states in the caller's live original-home command,
+including current owner/restore, without foreign I/O. It cannot accept caller stamps
+as native truth. Existing readAccountIdentityUndo must use the genuine technical
+source after transfer, retaining the original accepted job and input.
+
+In `identity-scoped-observations.ts`:
+
+```ts
+readIdentityScopeConsumerWork(pool: Pool, ticket: IdentityPrearmTicketData,
+  context: Readonly<{deadline: number}>): Promise<WorkAllowance | null>;
+retainIdentityScopeConsumerFence(tx: CommandTransaction, ticket: IdentityPrearmTicketData,
+  seal: LibraryScopeEffectSeal): Promise<boolean>;
+```
+
+`read` resolves the original retained registration/capture and its actual shared
+Source reservation, including all failed/native/control work. It must not allocate
+a guessed reservation or depend on query readiness. `retain` runs on the exact
+Source home after Source has independently verified the current Library seal on
+that same transaction. It rechecks the native registration/capture/attempt and
+exhaustive current completion, records a durable native fence with real commit
+provenance, and retains every proof obligation. Later scoped writers must extend
+that durable obligation or reject old-source use; ordinary finish/revalidate and
+a receipt read before release do not implement this guarantee. Unsupported public
+catalogue and public-output sources remain separate pending branches.
+
+In `access/agent-verification-identity.ts`:
+
+```ts
+acceptAccountIdentityTechnicalSource(tx: CommandTransaction,
+  reference: IdentitySourceConsumerReference): Promise<boolean>;
+verifyAccountIdentityTechnicalSource(tx: CommandTransaction,
+  reference: IdentitySourceConsumerReference): Promise<boolean>;
+```
+
+These are same-original-home native receiving operations. Acceptance resolves the
+actual original accepted immutable input and job and stores only indispensable
+technical undo/replay identity, never reason/requester/decider/private payloads.
+It enrolls all remaining personal locators through native all-role custody and
+records real receiving commit provenance. The existing Accounts source/undo read
+must resolve this native obligation after original source minimization, without an
+active-account requirement or current-release reconstruction. Verify resolves and
+locks that actual durable receiver in the same live command, with no foreign I/O.
+Source's own receipt does not implement this receiver and cannot stand in for it.
+
+These hooks are indispensable: the delivered directory proves inventory only,
+the Library seal may be invalidated by a later writer, and current Accounts undo
+reads still require the original source row. Their absence must leave the exact
+branch pending. Source does not edit these owner modules or copy their SQL.
 
 ## Cost and evidence
 
-Reads address the exact original source/claim, one job/control and three fixed participant
-receipts, with released homes between stages. Source-home preparation and verification use
-fixed indexed points and no global job, history or JSON scans. Scope and source observations
-keep their existing native page budgets; no new receiving enumeration is invented. The
-receipt grows with changed exact source/barrier/role keys, not group membership. Repeating a
-retained preparation reuses the durable row. Missing consumer or copy coverage stays pending.
+Reads use released homes and fixed native source/claim/job keys. Directory pages
+retain the native eight-scalar/2048-byte frontier and at most 100 RAW keys. Scope
+pages share the actual Source work reservation; native and Library work units are
+never converted. No caller scope list, expected-set mirror, zero from EOF, timing
+shortcut or participant ACK is terminal authority. Account current root and all
+History copy associations/receipts remain independently required.
 
-Focused native tests are authored in the existing fixture style and deferred. Local typing
-validates implementation structure only; it does not establish native discharge, all-copy
-closure, erasure completion or completion of the Source Goal.
+Native tests are authored but deferred. Local typing is implementation evidence,
+not native discharge, erasure or Goal completion.
