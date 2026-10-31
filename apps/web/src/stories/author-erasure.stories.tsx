@@ -15,3 +15,6 @@ export const EnqueueLostResponse: Story = { ...Erasure.EnqueueLostResponse };
 export const RunningCounters: Story = { ...Erasure.RunningCounters };
 export const TerminalPermissionDenial: Story = { ...Erasure.TerminalPermissionDenial };
 export const Completed: Story = { ...Erasure.Completed };
+
+export const CurrentAdmissionAvailable: Story = { ...Erasure.CurrentAdmissionAvailable };
+export const CurrentAdmissionDenied: Story = { ...Erasure.CurrentAdmissionDenied };

@@ -837,6 +837,30 @@ Cost per operation:
 
 ### Reads and author erasure
 
+Authenticated `GET /v1/threads/{id}` adds the private optional envelope field
+`authorErasure: { authorId: string, mayErase: boolean }`. Anonymous reads omit it. The acting account supplies
+`authorId`; no request selector, displayed post, ownership flag or Global staff role supplies this admission.
+`author-erasure-admission.ts` reuses `read-first-erasure-post.sql`'s two same-thread/same-author indexed prefix
+seeks, then current native Access `post:erase` on the actual first selected post. It binds native read time,
+clock, deadline and account lifetime, releasing each connection before consulting an independent anchor.
+No selected post or an actual permission denial yields false. Unavailable/deadline failures propagate as 503.
+
+The ordinary thread and its complete containing chain must be readable before selection. `reads.ts` retains the
+original observations and Access checks across admission and repeats final thread/container disclosure afterwards;
+a removed, hidden or changed container cannot disclose either body or admission. Missing and invisible remain
+identical 404. The response exposes no selected post ID, authored bytes, upper tuple or count through admission.
+This presentation value grants no command capability: the existing author-scope POST and every workflow step
+continue to check their own current authority.
+
+- **Touches:** Ordinary thread/container disclosure, at most two indexed author-prefix seeks and Access on one
+  selected post, followed by the same final disclosure; fixed response fields, zero writes/receipts/effects/workflows.
+- **Bound:** O(log R) index work at fixed chain/membership bounds, constant rows and statements independent of
+  author history. Original physical erasure bounds remain unchanged.
+- **Growth check:** `test/content/author-erasure-admission-http.test.ts` uses the existing native harness at three
+  small history scales, holding actor, chain and selected endpoints fixed while growing same-thread and unrelated
+  author history; it checks actual rows and statements without timing assertions. Source and typing do not prove
+  native admission or erasure closure.
+
 `readAuthoredField` is a low-level exact storage read that includes erased tombstones and must never serve as a public
 handler. Disclosure follows the current semantic candidate, as it does for imported documents; a document ID by itself
 does not authorize disclosure.

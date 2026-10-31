@@ -1,3 +1,4 @@
+import { readAuthorErasureAdmission, type AuthorErasureAdmission } from './author-erasure-admission.ts';
 import { editionRoutes } from './edition-routes.ts';
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
@@ -623,11 +624,22 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           security: readSecurity,
         },
       },
-      async ({ params: { id }, actor, admission, job, session }) => {
+      async ({ params: { id }, actor, admission, job, session, set }) => {
         existingId(id);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
-            const result = await readThread(dependencies, id, { actor, deadline: job.deadline });
+            let authorErasure: AuthorErasureAdmission | undefined;
+            const context = { actor, deadline: job.deadline };
+            const result = await readThread(
+              dependencies,
+              id,
+              context,
+              actor.kind === 'account'
+                ? async () => {
+                    authorErasure = await readAuthorErasureAdmission(dependencies, id, { ...context, actor });
+                  }
+                : undefined,
+            );
             if (!result.value) throw new ProblemError('not_found');
             session.record(sessionComponent(result.anchor));
             const [thread] = await withViewerReactions(dependencies, actor, [result.value], job.deadline);
@@ -635,7 +647,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const counted = await withReactionCounts(dependencies, [thread], job.deadline);
             const shown = counted.items[0];
             if (!shown) throw new ProblemError('not_found');
-            return { thread: shown, reactionsAsOf: counted.reactionsAsOf };
+            if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
+            return { thread: shown, reactionsAsOf: counted.reactionsAsOf, ...(authorErasure ? { authorErasure } : {}) };
           }),
         );
       },

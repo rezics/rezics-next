@@ -93,3 +93,23 @@ export const Completed: Story = {
     await expect(canvas.queryByRole('button', { name: m.author_erasure_check_again() })).toBeNull();
   },
 };
+
+export const CurrentAdmissionAvailable: Story = {
+  args: { state: 'available-entry' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.author_erasure_action() }));
+    await expect(canvas.getByRole('button', { name: m.author_erasure_confirm() })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('checkbox', { name: m.author_erasure_confirmation() }));
+    await expect(canvas.getByRole('button', { name: m.author_erasure_confirm() })).toBeEnabled();
+  },
+};
+export const CurrentAdmissionDenied: Story = {
+  args: { state: 'denied-entry' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.author_erasure_action() }));
+    await expect(canvas.getByRole('button', { name: m.author_erasure_confirm() })).toBeDisabled();
+    await expect(canvas.getByText(m.author_erasure_forbidden())).toBeVisible();
+  },
+};

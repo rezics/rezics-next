@@ -14,6 +14,8 @@ import owned from '../../../kernel/recorded/thread-owned.json';
 
 export type ErasureStoryState =
   | 'unavailable-entry'
+  | 'available-entry'
+  | 'denied-entry'
   | 'lost-response'
   | 'queued'
   | 'running'
@@ -92,7 +94,14 @@ function EntryThread({ state, onAccepted }: { state: ErasureStoryState; onAccept
               },
             },
           }
-        : {})}
+        : {
+            authorErasure: {
+              admission:
+                state === 'available-entry' || state === 'denied-entry'
+                  ? { kind: 'current' as const, mayErase: state === 'available-entry' }
+                  : { kind: 'unavailable' as const },
+            },
+          })}
     />
   );
 }
@@ -105,7 +114,7 @@ export function AuthorErasurePreview({
   shell?: boolean;
 }) {
   const [accepted, setAccepted] = useState(false);
-  const entry = (state === 'lost-response' || state === 'unavailable-entry') && !accepted;
+  const entry = (state === 'lost-response' || state.endsWith('-entry')) && !accepted;
   const operation = erasureStoryOperation(accepted ? 'queued' : state);
   const current: ErasureRead = { kind: 'available', operation };
   const content = entry ? (

@@ -2524,10 +2524,26 @@ keep their existing native paths.
 Like the composer, an in-flight erasure intent stays mounted but hidden/inert during a transient personal-query gap;
 reloading personal permissions cannot discard an uncertain request's key. Operation hydration retains its refresh budget.
 
-The current thread/post DTOs have no native `mayErase` admission. The isolated consumer-local
-`author-erasure-admission.ts` therefore returns unavailable, and product confirmation remains disabled. When that
-producer is delivered, replace this adapter with its current read; author identity, edit/delete flags and story
-fixtures cannot supply command authority. The mounted native command still checks current `post:erase` itself.
+Opening or explicitly refreshing the region makes one current generated `threads({id}).get(options)` read through
+`readThreadAuthorErasureAdmission`, the safe server-side BFF session and private/no-store responses. No read runs
+on render, per post or in an operation polling loop, and no bearer reaches the browser. The exact producer-owned
+optional envelope field is `authorErasure: {authorId: string, mayErase: boolean}` from Kernel's
+`content/schemas.ts` `ThreadResponseSchema` and `content/author-erasure-admission.ts`. The parser narrows the
+existing generated response through `unknown`, checks the exact thread and session subject and allowlists only
+this field. Absence, malformed data or mismatched identity remains unavailable; ownership/edit/delete flags
+cannot supply admission. Native signed-out, denied and unavailable responses keep their separate presentation.
+
+Admission is bound to the current thread, personal viewer identity and open region. Closing or changing that
+scope discards late reads; each refresh clears the old value before requesting a replacement. A denied or
+mismatched refresh clears presentation authority. The separately held uncertain command intent/key survives a
+transient personal-query gap or admission failure and can be explicitly retried with its original request. Every
+native POST still checks current `post:erase`; a true presentation read is never sent as proof.
+
+- **Touches:** One existing generated thread GET per explicit open/refresh and ordinary safe session preparation;
+  no lists, counts, per-post reads or new transport.
+- **Bound:** Fixed native fields, one in-flight result per interaction and constant local state; no upfront total.
+- **Growth check:** The producer's focused native admission suite owns indexed statement/row growth. Consumer
+  tests cover missing/mismatched fields and late results after close, thread/account change and refresh refusal.
 
 The binding consumes the generated `threads({id}).$erase.post({authorId}, options)` and
 `operations({id}).get(options)` methods, after inspection of Content's `operations.ts`, `operation-contract.ts` and
@@ -2554,6 +2570,8 @@ the initiating account and checks each cleanup step. Rendering is constant in th
 Review the integrated source through these story pairs, using the ordinary `phone390`/`desktop1280` viewport and
 light/dark globals. Pages wrap the same delivered regions in `AppShell`, which supplies the sole page main:
 
+- `pages-community-author-erasure--current-admission-available` / `patterns-community-author-erasure--current-admission-available`
+- `pages-community-author-erasure--current-admission-denied` / `patterns-community-author-erasure--current-admission-denied`
 - `pages-community-author-erasure--current-admission-unavailable` / `patterns-community-author-erasure--current-admission-unavailable`
 - `pages-community-author-erasure--enqueue-lost-response` / `patterns-community-author-erasure--enqueue-lost-response`
 - `pages-community-author-erasure--running-counters` / `patterns-community-author-erasure--running-counters`

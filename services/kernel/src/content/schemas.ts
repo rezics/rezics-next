@@ -340,7 +340,11 @@ export const SubjectReactionRedirectResponseSchema = t.Object(
   closed,
 );
 export const ThreadResponseSchema = t.Object(
-  { thread: ThreadViewSchema, reactionsAsOf: t.Optional(reactionFreshness) },
+  {
+    thread: ThreadViewSchema,
+    reactionsAsOf: t.Optional(reactionFreshness),
+    authorErasure: t.Optional(t.Object({ authorId: ContentIdSchema, mayErase: t.Boolean() }, closed)),
+  },
   closed,
 );
 export const PostResponseSchema = t.Object({ post: PostEntrySchema }, closed);

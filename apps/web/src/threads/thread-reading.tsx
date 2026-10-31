@@ -124,6 +124,7 @@ export function ThreadReading({
           <AuthorErasureEntry
             key={`${thread.id}:${composer.current.viewerId}`}
             threadId={thread.id}
+            viewerId={currentPersonal?.viewerId ?? null}
             {...authorErasure}
           />
         </div>

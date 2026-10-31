@@ -186,7 +186,7 @@ function route(id: string): number {
 
 /** All pool preparation happens outside this boundary. A failed rollback evicts
  * the connection rather than returning an open transaction to the pool. */
-async function snapshot<T>(
+export async function snapshot<T>(
   dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>,
   id: string,
   context: Pick<ReadContext, 'deadline'>,
@@ -1122,6 +1122,7 @@ async function disclose(
   replayedRevisionId?: string,
   subjectScope?: { subjectId: string; placeId: string },
   threadReference = threadDetail,
+  beforeFinal?: () => Promise<void>,
 ): Promise<Anchored<PostEntry | ThreadView | null>> {
   const observed = await snapshot(dependencies, threadId, context, async (client) => {
     if (threadDetail) {
@@ -1166,7 +1167,7 @@ async function disclose(
       );
     }
   }
-  const disclosed = await snapshot<PostEntry | ThreadView | null>(dependencies, threadId, context, async (client) => {
+  const discloseCurrent = async (client: AccessClient): Promise<PostEntry | ThreadView | null> => {
     if (!initial || !board?.value || checks.length !== rows.length) return null;
     const current = await chain(client, threadId, initial.posts[0]?.id, revisionId);
     if (!current || fingerprint(initial) !== fingerprint(current)) return null;
@@ -1244,7 +1245,21 @@ async function disclose(
       createdAt: thread.created_at.toISOString(),
       firstPost: item,
     };
-  });
+  };
+  let disclosed = await snapshot(dependencies, threadId, context, discloseCurrent);
+  // Admission may consult independent anchors only after ordinary disclosure has
+  // succeeded and released its connections. Keep the original rows/checks as the
+  // baseline for final disclosure; a changed container must not become a new baseline.
+  if (beforeFinal && disclosed.value) {
+    if (!(await boardObservation!.recheck())) return { ...disclosed, value: null };
+    await beforeFinal();
+    const scope = currentRealmDisclosureScope();
+    if (scope) {
+      delete scope.associationCheck;
+      delete scope.accessCheck;
+    }
+    disclosed = await snapshot(dependencies, threadId, context, discloseCurrent);
+  }
   // Release the thread connection before the independently anchored board
   // snapshot, including when the pool has only one connection. Bytes and keys
   // leave this function only after both authorities have passed their final check.
@@ -1476,10 +1491,22 @@ export async function readThread(
   dependencies: ContentReadDependencies,
   threadId: ThreadId,
   context: ReadContext,
+  beforeFinal?: () => Promise<void>,
 ): Promise<Anchored<ThreadView | null>> {
   return withRealmDisclosureScope(
     async () =>
-      (await disclose(dependencies, threadId, context, undefined, undefined, true)) as Anchored<ThreadView | null>,
+      (await disclose(
+        dependencies,
+        threadId,
+        context,
+        undefined,
+        undefined,
+        true,
+        undefined,
+        undefined,
+        true,
+        beforeFinal,
+      )) as Anchored<ThreadView | null>,
   );
 }
 /** Subject listings use the same final thread, post, board and Access checks as exact thread reads, then

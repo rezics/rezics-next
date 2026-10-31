@@ -4,7 +4,7 @@ import { useId, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { sessionCsrfToken } from '../session/query';
-import { currentAuthorErasureAdmission, type AuthorErasureAdmission } from './author-erasure-admission';
+import { authorErasureAdmissionReads, type AuthorErasureAdmission } from './author-erasure-admission';
 import { authorErasureRequest, type ErasureEnqueue, type ErasureIntent } from './author-erasure';
 
 async function sendNative(intent: ErasureIntent): Promise<ErasureEnqueue> {
@@ -29,15 +29,24 @@ export function erasureRefusal(kind: Exclude<ErasureEnqueue['kind'], 'accepted'>
   }
 }
 
+async function readNative(threadId: string): Promise<AuthorErasureAdmission> {
+  const { readThreadAuthorErasureAdmission } = await import('./author-erasure-server');
+  return readThreadAuthorErasureAdmission({ data: { threadId } });
+}
+
 /** A narrow thread action region: never owns the reading page, composer, target or draft. */
 export function AuthorErasureEntry({
   threadId,
-  admission = currentAuthorErasureAdmission(),
+  viewerId = null,
+  admission: suppliedAdmission,
+  readAdmission = readNative,
   send = sendNative,
   onAccepted,
 }: {
   threadId: string;
+  viewerId?: string | null;
   admission?: AuthorErasureAdmission;
+  readAdmission?: (threadId: string) => Promise<AuthorErasureAdmission>;
   send?: (intent: ErasureIntent) => Promise<ErasureEnqueue>;
   onAccepted?: (id: string) => void;
 }) {
@@ -48,16 +57,40 @@ export function AuthorErasureEntry({
   const [result, setResult] = useState<ErasureEnqueue | null>(null);
   const request = useRef<ReturnType<typeof authorErasureRequest> | null>(null);
   const busy = useRef(false);
+  const intentScope = useRef<{ threadId: string; viewerId: string | null } | null>(null);
+  const reads = useRef(authorErasureAdmissionReads());
+  const [, updated] = useState(0);
+  const current = reads.current.bind(threadId, viewerId, open);
+  const admission = suppliedAdmission ?? current;
+  async function refresh() {
+    if (suppliedAdmission || !viewerId) return;
+    const pending = reads.current.refresh(viewerId, () => readAdmission(threadId));
+    updated((value) => value + 1);
+    if (await pending) updated((value) => value + 1);
+  }
+  function toggle(next: boolean) {
+    reads.current.bind(threadId, viewerId, next);
+    setOpen(next);
+    if (next) void refresh();
+  }
   const allowed = admission.kind === 'current' && admission.mayErase;
   const unavailable = admission.kind === 'unavailable';
+  const retrying =
+    result?.kind === 'uncertain' &&
+    !!request.current &&
+    intentScope.current?.threadId === threadId &&
+    intentScope.current.viewerId === viewerId;
   const accepted = result?.kind === 'accepted';
   const stopped = result && result.kind !== 'uncertain' && result.kind !== 'accepted';
 
   async function submit() {
-    if (!allowed || !confirmed || busy.current || accepted || stopped) return;
+    if ((!allowed && !retrying) || !confirmed || busy.current || accepted || stopped) return;
     busy.current = true;
     setPending(true);
-    request.current ??= authorErasureRequest({ threadId, idempotencyKey: crypto.randomUUID() }, send);
+    if (!request.current) {
+      intentScope.current = { threadId, viewerId };
+      request.current = authorErasureRequest({ threadId, idempotencyKey: crypto.randomUUID() }, send);
+    }
     let outcome: ErasureEnqueue;
     try {
       outcome = await request.current();
@@ -75,7 +108,7 @@ export function AuthorErasureEntry({
 
   return (
     <section aria-label={m.author_erasure_action()} className="min-w-0 text-sm">
-      <Button variant="ghost" size="sm" aria-expanded={open} onClick={() => setOpen(!open)} disabled={pending}>
+      <Button variant="ghost" size="sm" aria-expanded={open} onClick={() => toggle(!open)} disabled={pending}>
         <Trash2 aria-hidden="true" className="size-4" />
         {m.author_erasure_action()}
       </Button>
@@ -88,7 +121,11 @@ export function AuthorErasureEntry({
           <p className="max-w-prose leading-relaxed">{m.author_erasure_irreversible()}</p>
           {!allowed ? (
             <p role="status" className="text-muted-foreground">
-              {unavailable ? m.author_erasure_admission_unavailable() : m.author_erasure_forbidden()}
+              {unavailable
+                ? m.author_erasure_admission_unavailable()
+                : admission.kind === 'signed-out'
+                  ? m.author_erasure_sign_in()
+                  : m.author_erasure_forbidden()}
             </p>
           ) : null}
           {result && result.kind !== 'accepted' ? <p role="alert">{erasureRefusal(result.kind)}</p> : null}
@@ -114,7 +151,7 @@ export function AuthorErasureEntry({
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="destructive"
-                  disabled={!allowed || !confirmed || pending || !!stopped}
+                  disabled={(!allowed && !retrying) || !confirmed || pending || !!stopped}
                   onClick={submit}
                 >
                   {pending
@@ -123,7 +160,12 @@ export function AuthorErasureEntry({
                       ? m.author_erasure_retry()
                       : m.author_erasure_confirm()}
                 </Button>
-                <Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>
+                {!suppliedAdmission ? (
+                  <Button variant="outline" disabled={pending || !viewerId} onClick={() => void refresh()}>
+                    {m.author_erasure_check_again()}
+                  </Button>
+                ) : null}
+                <Button variant="outline" disabled={pending} onClick={() => toggle(false)}>
                   {m.author_erasure_close()}
                 </Button>
               </div>

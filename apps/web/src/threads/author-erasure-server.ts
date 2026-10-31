@@ -10,6 +10,7 @@ import {
   type ErasureEnqueue,
   type ErasureRead,
 } from './author-erasure';
+import { currentAuthorErasureAdmission, type AuthorErasureAdmission } from './author-erasure-admission';
 import { authorErasureIdentity } from './author-erasure-session';
 
 export const beginThreadAuthorErasure = createServerFn({ method: 'POST' })
@@ -50,6 +51,25 @@ export const readThreadAuthorErasure = createServerFn({ method: 'GET' })
       if (session.kind !== 'available') return session;
       if (!(env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN) return { kind: 'unavailable' };
       return readAuthorErasure(kernelClient(), session.identity.authorization, data.id);
+    } catch {
+      return { kind: 'unavailable' };
+    }
+  });
+
+/** Safe session preparation: no bearer is accepted from the browser. */
+export const readThreadAuthorErasureAdmission = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    if (!input || typeof input !== 'object' || !('threadId' in input) || !validErasureId(input.threadId))
+      throw new Error('Invalid thread');
+    return { threadId: input.threadId };
+  })
+  .handler(async ({ data }): Promise<AuthorErasureAdmission> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    try {
+      const session = await authorErasureIdentity(getRequest(), env as Partial<SessionEnv>);
+      if (session.kind !== 'available') return session;
+      if (!(env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN) return { kind: 'unavailable' };
+      return currentAuthorErasureAdmission(kernelClient(), session.identity, data.threadId);
     } catch {
       return { kind: 'unavailable' };
     }

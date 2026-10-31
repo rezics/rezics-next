@@ -11,7 +11,11 @@ import {
   readAuthorErasure,
   type ErasureOperation,
 } from '../src/threads/author-erasure';
-import { currentAuthorErasureAdmission } from '../src/threads/author-erasure-admission';
+import {
+  authorErasureAdmissionReads,
+  currentAuthorErasureAdmission,
+  parseAuthorErasureAdmission,
+} from '../src/threads/author-erasure-admission';
 import { authorErasureIdentity } from '../src/threads/author-erasure-session';
 import { AuthorErasureOperationPage } from '../src/threads/author-erasure-operation';
 import { m } from '../src/paraglide/messages.js';
@@ -162,8 +166,7 @@ test('only four foreground point refreshes are automatic; a manual read never re
   expect(reads).toBe(5);
 });
 
-test('current native admission stays unavailable and session/CSRF supplies the own actor', async () => {
-  expect(currentAuthorErasureAdmission()).toEqual({ kind: 'unavailable' });
+test('session/CSRF supplies the own actor for native erasure', async () => {
   const csrfToken = newCsrfToken();
   let available = true;
   const config = {
@@ -240,4 +243,112 @@ test('operation UI shows native counters without totals, keeps terminal denial d
     expect(html).not.toContain(m.author_erasure_success());
     expect(html).toContain(m.author_erasure_check_again());
   }
+});
+
+test('current admission consumes only the same generated thread read and exact native acting-author field', async () => {
+  let payload: unknown = { thread: { id: threadId }, authorErasure: { authorId, mayErase: true } };
+  let status = 200;
+  let reads = 0;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      expect(request.method).toBe('GET');
+      expect(new URL(request.url).pathname).toBe(`/v1/threads/${threadId}`);
+      expect(request.headers.get('authorization')).toBe(identity.authorization);
+      expect(request.headers.get('cache-control')).toBe('no-store');
+      reads++;
+      return Response.json(payload, { status });
+    },
+  });
+  expect(await currentAuthorErasureAdmission(client, identity, threadId)).toEqual({
+    kind: 'current',
+    authorId,
+    mayErase: true,
+  });
+  payload = { thread: { id: threadId }, authorErasure: { authorId, mayErase: false } };
+  expect(await currentAuthorErasureAdmission(client, identity, threadId)).toEqual({
+    kind: 'current',
+    authorId,
+    mayErase: false,
+  });
+  for (const value of [
+    { thread: { id: threadId, authorId, mayEdit: true, mayDelete: true } },
+    { thread: { id: operationId }, authorErasure: { authorId, mayErase: true } },
+    { thread: { id: threadId }, authorErasure: { authorId: operationId, mayErase: true } },
+    { thread: { id: threadId }, authorErasure: { authorId, mayErase: 1 } },
+    { thread: { id: threadId }, authorErasure: { authorId, mayErase: true, postId: operationId } },
+  ]) {
+    payload = value;
+    expect(await currentAuthorErasureAdmission(client, identity, threadId)).toEqual({ kind: 'unavailable' });
+  }
+  for (const [nativeStatus, kind] of [
+    [401, 'signed-out'],
+    [403, 'forbidden'],
+    [404, 'not-found'],
+    [503, 'unavailable'],
+  ] as const) {
+    status = nativeStatus;
+    expect(await currentAuthorErasureAdmission(client, identity, threadId)).toEqual({ kind });
+  }
+  expect(reads).toBe(11);
+});
+
+test('explicit admission refresh clears previous authority and discards late closed, account and thread results', async () => {
+  const reads = authorErasureAdmissionReads();
+  const current = { kind: 'current' as const, authorId, mayErase: true };
+  const value = () => reads.bind(threadId, authorId, true);
+  expect(value()).toEqual({ kind: 'unavailable' });
+  await reads.refresh(authorId, async () => current);
+  expect(value()).toEqual(current);
+  for (const stale of [
+    () => reads.bind(threadId, authorId, false),
+    () => reads.bind(operationId, authorId, true),
+    () => reads.bind(threadId, operationId, true),
+    () => reads.bind(threadId, null, true),
+  ]) {
+    let resolve!: (value: typeof current) => void;
+    const refresh = reads.refresh(
+      authorId,
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    expect(value()).toEqual({ kind: 'unavailable' });
+    stale();
+    resolve(current);
+    expect(await refresh).toBe(false);
+    expect(value()).toEqual({ kind: 'unavailable' });
+  }
+  await reads.refresh(authorId, async () => current);
+  await reads.refresh(authorId, async () => ({ ...current, authorId: operationId }));
+  expect(value()).toEqual({ kind: 'unavailable' });
+  await reads.refresh(authorId, async () => ({ ...current, mayErase: false }));
+  expect(value()).toEqual({ ...current, mayErase: false });
+  let resolve!: (value: typeof current) => void;
+  const late = reads.refresh(
+    authorId,
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  await reads.refresh(authorId, async () => ({ kind: 'unavailable' }));
+  resolve(current);
+  expect(await late).toBe(false);
+  expect(value()).toEqual({ kind: 'unavailable' });
+  // Presentation failure cannot consume or replace the separately held intent.
+  const intents: unknown[] = [];
+  const retry = authorErasureRequest({ threadId, idempotencyKey: 'uncertain-original' }, async (intent) => {
+    intents.push(intent);
+    return { kind: 'uncertain' };
+  });
+  await retry();
+  reads.bind(threadId, null, false);
+  await reads.refresh(authorId, async () => parseAuthorErasureAdmission({}, threadId, authorId));
+  await retry();
+  expect(intents).toEqual([
+    { threadId, idempotencyKey: 'uncertain-original' },
+    { threadId, idempotencyKey: 'uncertain-original' },
+  ]);
 });
