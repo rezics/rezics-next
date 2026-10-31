@@ -222,3 +222,45 @@ test('The native colocated empty seal is retained without treating an absent dir
     expect((await verifyIdentityPrearmCustodyCut(f.pool, job, cut, context())).status).toBe('unavailable');
   } finally { await f.close(); }
 }, 180000);
+
+test('Retained custody refuses omitted original input coverage before issuing its first continuation', async () => {
+  const f = await cutoverFixture();
+  try {
+    const original = (await f.create('Coverage original', 0x8960)).id;
+    const terminal = (await f.create('Coverage survivor', 0x8961)).id;
+    const actor = await f.actor(), key = randomUUID();
+    const authority = {
+      basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+      authorization: await f.authorization('subject:merge'), ...context(),
+    };
+    const input = {
+      intent: { kind: 'merge' as const, redirected: original, survivor: terminal, release: release.digest },
+      receipt: { kind: 'subject.merge' as const, command: { actorAccountId: actor.accountId, kind: 'subject.merge' as const, key, digest: digest(key) } },
+    };
+    const binding = await identityEpochStore.bindReceipt(f.pool, authority, input);
+    const job = (await runCommand(f.pool, { ...authority, partition: partitionOf(routeOf(original)!) },
+      (tx) => identityEpochStore.admit(tx, { ...input, binding }))).value;
+    await (await nativeCutoverCoordinator())(f.pool, job);
+    for (let step = 0; step < 10; step++) await stepIdentityEpochAdmission(f.pool, job);
+    const request = { job, after: null, limit: 1, allowance: allowance() };
+    expect((await readIdentityPrearmCustodyPage(f.pool, request, context())).status).toBe('progress');
+    // Perturb only this existing fixture's owned database to simulate a missing retained head.
+    // The immutable, original admission rows still require both native input generations.
+    await f.admin.query('BEGIN');
+    try {
+      await f.admin.query("SET LOCAL semantic.erasure_cleanup='on'");
+      const removed = await f.admin.query(`DELETE FROM semantic.identity_epoch_input
+        WHERE partition_no=$1 AND job_id=$2 AND terminal=$3`, [identityJobPartition(job), job.jobId, original]);
+      expect(removed.rowCount).toBe(1);
+      await f.admin.query('COMMIT');
+    } catch (error) {
+      await f.admin.query('ROLLBACK');
+      throw error;
+    }
+    const result = await readIdentityPrearmCustodyPage(f.pool, request, context());
+    expect(result.status).toBe('unavailable');
+    if (result.status === 'unavailable') expect(result.reason).toBe('immutable-input-coverage-unavailable');
+    expect('cut' in result).toBe(false);
+    expect(result.work.rows).toBeLessThanOrEqual(100);
+  } finally { await f.close(); }
+}, 180000);

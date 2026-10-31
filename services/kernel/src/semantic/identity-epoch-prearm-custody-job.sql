@@ -17,7 +17,7 @@ LEFT JOIN semantic.identity_epoch_prearm_decision z ON z.partition_no=j.partitio
 LEFT JOIN semantic.identity_epoch_native_commit k ON k.partition_no=z.partition_no
  AND k.transaction_id=z.transaction_id AND k.transaction_id=j.cancellation_transaction_id
  AND k.xmin=z.xmin AND k.purpose='identity-prearm-cancel'
-JOIN core.partition p ON p.partition_no=j.partition_no AND p.write_state='active'
+JOIN core.partition p ON p.partition_no=j.partition_no AND p.write_state='active' AND p.moved_to IS NULL
  AND p.epoch=n.epoch AND p.epoch=c.epoch AND p.position>=n.position AND p.position>=c.position
 JOIN semantic.identity_epoch_control t ON t.partition_no=j.partition_no
 WHERE j.partition_no=$1 AND j.job_id=$2 AND j.epoch=$3

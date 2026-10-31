@@ -29,7 +29,7 @@ JOIN semantic.identity_epoch_native_commit s ON s.partition_no=v.partition_no AN
  AND s.xmin=v.xmin AND s.purpose IN ('admission','identity-prearm')
 LEFT JOIN semantic.identity_epoch_native_commit k ON k.partition_no=d.partition_no
  AND k.transaction_id=d.cancelled_transaction_id AND k.purpose='identity-prearm'
-JOIN core.partition o ON o.partition_no=d.partition_no AND o.write_state='active'
+JOIN core.partition o ON o.partition_no=d.partition_no AND o.write_state='active' AND o.moved_to IS NULL
  AND o.epoch=d.owner_epoch AND o.epoch=r.epoch AND o.epoch=a.epoch AND o.epoch=s.epoch AND o.epoch=x.epoch
  AND r.position>=a.position AND r.position>=s.position AND r.position>=x.position
  AND o.position>=r.position AND o.position>=a.position AND o.position>=s.position AND o.position>=x.position

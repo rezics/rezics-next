@@ -120,19 +120,6 @@ $$;
 
 
 --
--- Name: guard_authored_field_purge(); Type: FUNCTION; Schema: content; Owner: -
---
-
-CREATE FUNCTION content.guard_authored_field_purge() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  RAISE EXCEPTION 'Authored field purge source binding is immutable' USING ERRCODE = '23514';
-END;
-$$;
-
-
---
 -- Name: guard_board_thread(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -149,45 +136,6 @@ BEGIN
     RAISE EXCEPTION 'Board candidate identity, activity and source watermark cannot regress' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
-END;
-$$;
-
-
---
--- Name: guard_edition(); Type: FUNCTION; Schema: content; Owner: -
---
-
-CREATE FUNCTION content.guard_edition() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF TG_OP = 'DELETE' THEN
-    RAISE EXCEPTION 'Edition identity must survive unpublication' USING ERRCODE = '23514';
-  END IF;
-  IF ROW(NEW.route, NEW.edition_id, NEW.creator_account_id, NEW.thread_id, NEW.post_id, NEW.revision_id,
-         NEW.body_sha256, NEW.licence, NEW.target_subject_id, NEW.recorded_transaction_id, NEW.created_at)
-     IS DISTINCT FROM
-     ROW(OLD.route, OLD.edition_id, OLD.creator_account_id, OLD.thread_id, OLD.post_id, OLD.revision_id,
-         OLD.body_sha256, OLD.licence, OLD.target_subject_id, OLD.recorded_transaction_id, OLD.created_at)
-     OR NOT ((OLD.state = 'draft' AND NEW.state = 'published')
-          OR (OLD.state = 'published' AND NEW.state = 'unpublished'))
-     OR NEW.security_revision <> OLD.security_revision + 1 THEN
-    RAISE EXCEPTION 'Edition binding is immutable and unpublication is terminal' USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-
---
--- Name: guard_edition_publication(); Type: FUNCTION; Schema: content; Owner: -
---
-
-CREATE FUNCTION content.guard_edition_publication() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  RAISE EXCEPTION 'Edition publication provenance is immutable' USING ERRCODE = '23514';
 END;
 $$;
 
@@ -267,6 +215,24 @@ BEGIN
   IF NEW.erased IS DISTINCT FROM OLD.erased AND NEW.security_revision <= OLD.security_revision THEN
     RAISE EXCEPTION 'Media erasure requires an increasing security revision' USING ERRCODE = '23514';
   END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+CREATE FUNCTION content.guard_realm_media_claim() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.claimed_realm_id IS NOT NULL THEN
+    IF TG_OP = 'DELETE' THEN
+      RAISE EXCEPTION 'Realm media claims are permanent' USING ERRCODE = '23514';
+    END IF;
+    IF ROW(NEW.route, NEW.media_id, NEW.container_id, NEW.uploader_id, NEW.purpose, NEW.claimed_at, NEW.claimed_realm_id)
+      IS DISTINCT FROM
+      ROW(OLD.route, OLD.media_id, OLD.container_id, OLD.uploader_id, OLD.purpose, OLD.claimed_at, OLD.claimed_realm_id) THEN
+      RAISE EXCEPTION 'Realm media claims are permanent' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END;
 $$;
@@ -408,30 +374,6 @@ BEGIN
      OR ROW(NEW.source_epoch, NEW.source_position) < ROW(OLD.source_epoch, OLD.source_position) THEN
     RAISE EXCEPTION 'Reaction total identity and source watermark cannot regress' USING ERRCODE = '23514';
   END IF;
-  RETURN NEW;
-END;
-$$;
-
-
---
--- Name: guard_realm_media_claim(); Type: FUNCTION; Schema: content; Owner: -
---
-
-CREATE FUNCTION content.guard_realm_media_claim() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF OLD.claimed_realm_id IS NOT NULL THEN
-    IF TG_OP = 'DELETE' THEN
-      RAISE EXCEPTION 'Realm media claims are permanent' USING ERRCODE = '23514';
-    END IF;
-    IF ROW(NEW.route, NEW.media_id, NEW.container_id, NEW.uploader_id, NEW.purpose, NEW.claimed_at, NEW.claimed_realm_id)
-      IS DISTINCT FROM
-      ROW(OLD.route, OLD.media_id, OLD.container_id, OLD.uploader_id, OLD.purpose, OLD.claimed_at, OLD.claimed_realm_id) THEN
-      RAISE EXCEPTION 'Realm media claims are permanent' USING ERRCODE = '23514';
-    END IF;
-  END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END;
 $$;
@@ -769,33 +711,6 @@ ALTER TABLE ONLY content.authored_field ALTER COLUMN body SET COMPRESSION lz4;
 
 
 --
--- Name: authored_field_purge; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.authored_field_purge (
-    route integer NOT NULL,
-    document_id uuid NOT NULL,
-    subject_id uuid NOT NULL,
-    candidate_id uuid NOT NULL,
-    revision bigint NOT NULL,
-    deletion_generation text NOT NULL,
-    source_version text NOT NULL,
-    deletion_transaction_id text NOT NULL,
-    deletion_committed_at timestamp with time zone NOT NULL,
-    purge_after timestamp with time zone NOT NULL,
-    CONSTRAINT authored_field_purge_check CHECK ((purge_after = (deletion_committed_at + '720:00:00'::interval))),
-    CONSTRAINT authored_field_purge_check1 CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
-    CONSTRAINT authored_field_purge_check2 CHECK ((route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11)))),
-    CONSTRAINT authored_field_purge_deletion_committed_at_check CHECK (isfinite(deletion_committed_at)),
-    CONSTRAINT authored_field_purge_deletion_generation_check CHECK ((length(deletion_generation) > 0)),
-    CONSTRAINT authored_field_purge_deletion_transaction_id_check CHECK ((length(deletion_transaction_id) > 0)),
-    CONSTRAINT authored_field_purge_purge_after_check CHECK (isfinite(purge_after)),
-    CONSTRAINT authored_field_purge_revision_check CHECK (((revision >= 1) AND (revision <= '9007199254740991'::bigint))),
-    CONSTRAINT authored_field_purge_source_version_check CHECK ((length(source_version) > 0))
-);
-
-
---
 -- Name: board; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -866,80 +781,6 @@ CREATE TABLE content.board_thread (
     CONSTRAINT board_thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT board_thread_source_epoch_check CHECK ((source_epoch > 0)),
     CONSTRAINT board_thread_source_position_check CHECK ((source_position > 0))
-);
-
-
---
--- Name: creator_edition; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.creator_edition (
-    route integer NOT NULL,
-    creator_account_id uuid NOT NULL,
-    edition_id uuid NOT NULL,
-    CONSTRAINT creator_edition_check CHECK ((route = ((get_byte(uuid_send(creator_account_id), 10) * 256) + get_byte(uuid_send(creator_account_id), 11)))),
-    CONSTRAINT creator_edition_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
--- Name: edition; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.edition (
-    route integer NOT NULL,
-    edition_id uuid NOT NULL,
-    creator_account_id uuid NOT NULL,
-    target_subject_id uuid NOT NULL,
-    thread_id uuid NOT NULL,
-    post_id uuid NOT NULL,
-    revision_id uuid NOT NULL,
-    body_sha256 bytea NOT NULL,
-    licence text NOT NULL,
-    state text NOT NULL,
-    security_revision bigint NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT edition_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
-    CONSTRAINT edition_check CHECK ((route = ((get_byte(uuid_send(edition_id), 10) * 256) + get_byte(uuid_send(edition_id), 11)))),
-    CONSTRAINT edition_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
-    CONSTRAINT edition_check2 CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
-    CONSTRAINT edition_check3 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
-    CONSTRAINT edition_created_at_check CHECK (isfinite(created_at)),
-    CONSTRAINT edition_licence_check CHECK (((char_length(licence) >= 1) AND (char_length(licence) <= 128))),
-    CONSTRAINT edition_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT edition_security_revision_check CHECK ((security_revision > 0)),
-    CONSTRAINT edition_state_check CHECK ((state = ANY (ARRAY['draft'::text, 'published'::text, 'unpublished'::text])))
-);
-
-
---
--- Name: edition_publication; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.edition_publication (
-    route integer NOT NULL,
-    operation_id uuid NOT NULL,
-    edition_id uuid NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    initiator_account_id uuid NOT NULL,
-    actor_client_id text NOT NULL,
-    actor_scopes text[] NOT NULL,
-    actor_requested_by text,
-    actor_authn_epoch bigint NOT NULL,
-    original_minimum_authn_epoch text NOT NULL,
-    original_operator_account_id uuid,
-    original_delegation_transaction_id uuid,
-    original_delegation_issued_valid text,
-    source_digest text NOT NULL,
-    creation_idempotency_key text NOT NULL,
-    creation_request_digest text NOT NULL,
-    CONSTRAINT edition_publication_actor_authn_epoch_check CHECK ((actor_authn_epoch > 0)),
-    CONSTRAINT edition_publication_actor_scopes_check CHECK ((cardinality(actor_scopes) <= 512)),
-    CONSTRAINT edition_publication_check CHECK ((route = ((get_byte(uuid_send(operation_id), 10) * 256) + get_byte(uuid_send(operation_id), 11)))),
-    CONSTRAINT edition_publication_check1 CHECK ((((actor_requested_by IS NULL) AND (original_delegation_transaction_id IS NULL) AND (original_delegation_issued_valid IS NULL)) OR ((actor_requested_by IS NOT NULL) AND (original_delegation_transaction_id IS NOT NULL) AND (original_delegation_issued_valid IS NOT NULL)))),
-    CONSTRAINT edition_publication_creation_request_digest_check CHECK ((creation_request_digest ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT edition_publication_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text))
 );
 
 
@@ -1032,6 +873,8 @@ CREATE TABLE content.media (
     focal_y real,
     claimed_item_id uuid,
     claimed_realm_id uuid,
+    CONSTRAINT media_realm_asset_check CHECK (purpose NOT IN ('realm-icon', 'realm-banner') OR (source_url IS NULL AND credit IS NULL AND provenance IS NULL AND claimed_item_id IS NULL)),
+    CONSTRAINT media_realm_claim_check CHECK (claimed_realm_id IS NULL OR (purpose IN ('realm-icon', 'realm-banner') AND claimed_realm_id = container_id AND claimed_at IS NOT NULL)),
     CONSTRAINT media_actual_byte_count_check CHECK (((actual_byte_count IS NULL) OR (actual_byte_count > 0))),
     CONSTRAINT media_avatar_owner_check CHECK (((purpose <> 'avatar'::text) OR ((container_id = uploader_id) AND (source_url IS NULL) AND (credit IS NULL) AND (provenance IS NULL)))),
     CONSTRAINT media_byte_count_check CHECK (((byte_count >= 1) AND (byte_count <= 20971520))),
@@ -1054,8 +897,6 @@ CREATE TABLE content.media (
     CONSTRAINT media_measurements_check CHECK (((((state = 'reserved'::text) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = ANY (ARRAY['uploaded'::text, 'available'::text, 'rejected'::text])) AND (byte_count IS NOT NULL) AND (media_type IS NOT NULL) AND (actual_byte_count IS NOT NULL) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (((state = 'uploaded'::text) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = 'available'::text) AND (decision IS NULL)) OR ((state = 'rejected'::text) AND (decision IS NOT NULL) AND (claimed_at IS NULL)))) OR ((purpose = 'cover'::text) AND (state = 'rejected'::text) AND (byte_count IS NULL) AND (media_type IS NULL) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (declared_sha256 IS NULL) AND (decision IS NOT NULL) AND (claimed_at IS NULL))) IS TRUE)),
     CONSTRAINT media_media_type_check CHECK ((media_type = ANY (ARRAY['image/avif'::text, 'image/gif'::text, 'image/jpeg'::text, 'image/png'::text, 'image/webp'::text]))),
     CONSTRAINT media_purpose_check CHECK ((purpose = ANY (ARRAY['post-image'::text, 'cover'::text, 'avatar'::text, 'realm-icon'::text, 'realm-banner'::text]))),
-    CONSTRAINT media_realm_asset_check CHECK (((purpose <> ALL (ARRAY['realm-icon'::text, 'realm-banner'::text])) OR ((source_url IS NULL) AND (credit IS NULL) AND (provenance IS NULL) AND (claimed_item_id IS NULL)))),
-    CONSTRAINT media_realm_claim_check CHECK (((claimed_realm_id IS NULL) OR ((purpose = ANY (ARRAY['realm-icon'::text, 'realm-banner'::text])) AND (claimed_realm_id = container_id) AND (claimed_at IS NOT NULL)))),
     CONSTRAINT media_reservation_request_id_check CHECK (((char_length(reservation_request_id) >= 1) AND (char_length(reservation_request_id) <= 255))),
     CONSTRAINT media_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT media_security_revision_check CHECK ((security_revision >= 0)),
@@ -1178,23 +1019,6 @@ CREATE TABLE content.notice (
     CONSTRAINT notice_check1 CHECK ((route = ((get_byte(uuid_send(notice_id), 10) * 256) + get_byte(uuid_send(notice_id), 11)))),
     CONSTRAINT notice_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text, 'moderation_decision'::text]))),
     CONSTRAINT notice_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
--- Name: notice_finalization; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.notice_finalization (
-    route integer NOT NULL,
-    recipient_id uuid NOT NULL,
-    kind text NOT NULL,
-    source_id uuid NOT NULL,
-    sent boolean NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT notice_finalization_check CHECK ((route = ((get_byte(uuid_send(recipient_id), 10) * 256) + get_byte(uuid_send(recipient_id), 11)))),
-    CONSTRAINT notice_finalization_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text]))),
-    CONSTRAINT notice_finalization_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -1408,68 +1232,6 @@ CREATE TABLE content.reaction_total (
     CONSTRAINT reaction_total_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT reaction_total_source_epoch_check CHECK ((source_epoch > 0)),
     CONSTRAINT reaction_total_source_position_check CHECK ((source_position > 0))
-);
-
-
---
--- Name: realm_discovery_contribution; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.realm_discovery_contribution (
-    route integer NOT NULL,
-    thread_id uuid NOT NULL,
-    board_id uuid NOT NULL,
-    realm_id uuid NOT NULL,
-    space_id uuid NOT NULL,
-    realm_epoch bigint NOT NULL,
-    creation_day date NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    source_version bigint DEFAULT 1 NOT NULL,
-    contributing boolean DEFAULT true NOT NULL,
-    CONSTRAINT realm_discovery_contribution_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
-    CONSTRAINT realm_discovery_contribution_check1 CHECK ((creation_day = ((created_at AT TIME ZONE 'UTC'::text))::date)),
-    CONSTRAINT realm_discovery_contribution_realm_epoch_check CHECK ((realm_epoch > 0)),
-    CONSTRAINT realm_discovery_contribution_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT realm_discovery_contribution_source_version_check CHECK ((source_version > 0))
-);
-
-
---
--- Name: realm_discovery_operation; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.realm_discovery_operation (
-    route integer NOT NULL,
-    intent text NOT NULL,
-    generation bigint NOT NULL,
-    target_kind text NOT NULL,
-    effect text NOT NULL,
-    target_id uuid NOT NULL,
-    native_version bigint NOT NULL,
-    source_version bigint NOT NULL,
-    thread_id uuid,
-    board_id uuid NOT NULL,
-    realm_id uuid NOT NULL,
-    space_id uuid NOT NULL,
-    realm_epoch bigint NOT NULL,
-    phase text DEFAULT 'prepared'::text NOT NULL,
-    fence_generation bigint,
-    preparation_transaction_id uuid NOT NULL,
-    outcome_transaction_id uuid,
-    projected boolean DEFAULT false NOT NULL,
-    CONSTRAINT realm_discovery_operation_check CHECK ((route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
-    CONSTRAINT realm_discovery_operation_check1 CHECK (((phase <> 'ready'::text) OR (fence_generation IS NOT NULL))),
-    CONSTRAINT realm_discovery_operation_check2 CHECK (((phase = ANY (ARRAY['applied'::text, 'aborted'::text])) = (outcome_transaction_id IS NOT NULL))),
-    CONSTRAINT realm_discovery_operation_check3 CHECK (((NOT projected) OR (phase = ANY (ARRAY['applied'::text, 'aborted'::text])))),
-    CONSTRAINT realm_discovery_operation_effect_check CHECK ((effect = ANY (ARRAY['retract'::text, 'restore'::text]))),
-    CONSTRAINT realm_discovery_operation_generation_check CHECK ((generation > 0)),
-    CONSTRAINT realm_discovery_operation_intent_check CHECK ((intent ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT realm_discovery_operation_native_version_check CHECK ((native_version > 0)),
-    CONSTRAINT realm_discovery_operation_phase_check CHECK ((phase = ANY (ARRAY['prepared'::text, 'ready'::text, 'applied'::text, 'aborted'::text]))),
-    CONSTRAINT realm_discovery_operation_realm_epoch_check CHECK ((realm_epoch > 0)),
-    CONSTRAINT realm_discovery_operation_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT realm_discovery_operation_source_version_check CHECK ((source_version >= 0)),
-    CONSTRAINT realm_discovery_operation_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text])))
 );
 
 
@@ -1743,14 +1505,6 @@ ALTER TABLE ONLY content.authored_field
 
 
 --
--- Name: authored_field_purge authored_field_purge_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.authored_field_purge
-    ADD CONSTRAINT authored_field_purge_pkey PRIMARY KEY (route, document_id);
-
-
---
 -- Name: board board_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -1780,38 +1534,6 @@ ALTER TABLE ONLY content.board_report_candidate
 
 ALTER TABLE ONLY content.board_thread
     ADD CONSTRAINT board_thread_pkey PRIMARY KEY (route, board_id, thread_id);
-
-
---
--- Name: creator_edition creator_edition_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.creator_edition
-    ADD CONSTRAINT creator_edition_pkey PRIMARY KEY (route, creator_account_id, edition_id);
-
-
---
--- Name: edition edition_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.edition
-    ADD CONSTRAINT edition_pkey PRIMARY KEY (route, edition_id);
-
-
---
--- Name: edition_publication edition_publication_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.edition_publication
-    ADD CONSTRAINT edition_publication_pkey PRIMARY KEY (route, operation_id);
-
-
---
--- Name: edition_publication edition_publication_route_edition_id_key; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.edition_publication
-    ADD CONSTRAINT edition_publication_route_edition_id_key UNIQUE (route, edition_id);
 
 
 --
@@ -1919,14 +1641,6 @@ ALTER TABLE ONLY content.moderation_decision
 
 
 --
--- Name: notice_finalization notice_finalization_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.notice_finalization
-    ADD CONSTRAINT notice_finalization_pkey PRIMARY KEY (route, recipient_id, kind, source_id);
-
-
---
 -- Name: notice notice_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -2004,22 +1718,6 @@ ALTER TABLE ONLY content.reaction
 
 ALTER TABLE ONLY content.reaction_total
     ADD CONSTRAINT reaction_total_pkey PRIMARY KEY (route, target_id, kind);
-
-
---
--- Name: realm_discovery_contribution realm_discovery_contribution_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.realm_discovery_contribution
-    ADD CONSTRAINT realm_discovery_contribution_pkey PRIMARY KEY (route, thread_id);
-
-
---
--- Name: realm_discovery_operation realm_discovery_operation_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.realm_discovery_operation
-    ADD CONSTRAINT realm_discovery_operation_pkey PRIMARY KEY (route, intent, generation);
 
 
 --
@@ -2238,20 +1936,6 @@ CREATE INDEX moderation_appeal_thread_pending_idx ON content.moderation_appeal U
 
 
 --
--- Name: notice_finalization_recipient_created_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX notice_finalization_recipient_created_idx ON content.notice_finalization USING btree (route, recipient_id, created_at, kind, source_id);
-
-
---
--- Name: notice_finalization_route_created_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX notice_finalization_route_created_idx ON content.notice_finalization USING btree (route, created_at, recipient_id, kind, source_id);
-
-
---
 -- Name: notice_recipient_created_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -2301,13 +1985,6 @@ CREATE INDEX reaction_liked_subject ON content.reaction USING btree (route, acto
 
 
 --
--- Name: realm_discovery_operation_recovery; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX realm_discovery_operation_recovery ON content.realm_discovery_operation USING btree (route, intent, generation) WHERE ((NOT projected) AND (phase = ANY (ARRAY['applied'::text, 'aborted'::text])));
-
-
---
 -- Name: report_target_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -2350,13 +2027,6 @@ CREATE TRIGGER authored_field_immutable BEFORE DELETE OR UPDATE ON content.autho
 
 
 --
--- Name: authored_field_purge authored_field_purge_immutable; Type: TRIGGER; Schema: content; Owner: -
---
-
-CREATE TRIGGER authored_field_purge_immutable BEFORE DELETE OR UPDATE ON content.authored_field_purge FOR EACH ROW EXECUTE FUNCTION content.guard_authored_field_purge();
-
-
---
 -- Name: board board_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -2368,20 +2038,6 @@ CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUT
 --
 
 CREATE TRIGGER board_thread_identity BEFORE UPDATE ON content.board_thread FOR EACH ROW EXECUTE FUNCTION content.guard_board_thread();
-
-
---
--- Name: edition edition_identity; Type: TRIGGER; Schema: content; Owner: -
---
-
-CREATE TRIGGER edition_identity BEFORE DELETE OR UPDATE ON content.edition FOR EACH ROW EXECUTE FUNCTION content.guard_edition();
-
-
---
--- Name: edition_publication edition_publication_identity; Type: TRIGGER; Schema: content; Owner: -
---
-
-CREATE TRIGGER edition_publication_identity BEFORE DELETE OR UPDATE ON content.edition_publication FOR EACH ROW EXECUTE FUNCTION content.guard_edition_publication();
 
 
 --
@@ -2399,15 +2055,11 @@ CREATE TRIGGER media_erasure_guard BEFORE DELETE OR UPDATE ON content.media FOR 
 
 
 --
--- Name: media media_realm_claim_guard; Type: TRIGGER; Schema: content; Owner: -
---
-
-CREATE TRIGGER media_realm_claim_guard BEFORE DELETE OR UPDATE ON content.media FOR EACH ROW EXECUTE FUNCTION content.guard_realm_media_claim();
-
-
---
 -- Name: media media_security_guard; Type: TRIGGER; Schema: content; Owner: -
 --
+
+CREATE TRIGGER media_realm_claim_guard BEFORE UPDATE OR DELETE ON content.media
+  FOR EACH ROW EXECUTE FUNCTION content.guard_realm_media_claim();
 
 CREATE TRIGGER media_security_guard BEFORE UPDATE ON content.media FOR EACH ROW EXECUTE FUNCTION content.guard_media_security();
 
@@ -2504,27 +2156,11 @@ CREATE TRIGGER thread_review_live BEFORE UPDATE ON content.thread FOR EACH ROW E
 
 
 --
--- Name: authored_field_purge authored_field_purge_route_document_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.authored_field_purge
-    ADD CONSTRAINT authored_field_purge_route_document_id_fkey FOREIGN KEY (route, document_id) REFERENCES content.authored_field(route, id);
-
-
---
 -- Name: board board_realm_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
 --
 
 ALTER TABLE ONLY content.board
     ADD CONSTRAINT board_realm_fk FOREIGN KEY (route, realm_id) REFERENCES community.realm(route, realm_id);
-
-
---
--- Name: edition_publication edition_publication_route_edition_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.edition_publication
-    ADD CONSTRAINT edition_publication_route_edition_id_fkey FOREIGN KEY (route, edition_id) REFERENCES content.edition(route, edition_id);
 
 
 --
@@ -2568,14 +2204,6 @@ ALTER TABLE ONLY content.post
 
 
 --
--- Name: realm_discovery_contribution realm_discovery_contribution_route_thread_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.realm_discovery_contribution
-    ADD CONSTRAINT realm_discovery_contribution_route_thread_id_fkey FOREIGN KEY (route, thread_id) REFERENCES content.thread(route, thread_id);
-
-
---
 -- Name: revision revision_route_thread_id_post_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -2596,3 +2224,136 @@ ALTER TABLE ONLY content.thread
 --
 
 
+CREATE TABLE content.realm_discovery_contribution (
+  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
+  thread_id uuid NOT NULL,
+  board_id uuid NOT NULL,
+  realm_id uuid NOT NULL,
+  space_id uuid NOT NULL,
+  realm_epoch bigint NOT NULL CHECK (realm_epoch > 0),
+  creation_day date NOT NULL,
+  created_at timestamptz NOT NULL,
+  source_version bigint NOT NULL DEFAULT 1 CHECK (source_version > 0),
+  contributing boolean NOT NULL DEFAULT true,
+  PRIMARY KEY (route, thread_id),
+  FOREIGN KEY (route, thread_id) REFERENCES content.thread(route, thread_id),
+  CHECK (route = get_byte(uuid_send(thread_id), 10) * 256 + get_byte(uuid_send(thread_id), 11)),
+  CHECK (creation_day = (created_at AT TIME ZONE 'UTC')::date)
+);
+
+CREATE TABLE content.realm_discovery_operation (
+  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
+  intent text NOT NULL CHECK (intent ~ '^[0-9a-f]{64}$'),
+  generation bigint NOT NULL CHECK (generation > 0),
+  target_kind text NOT NULL CHECK (target_kind IN ('board','thread','post')),
+  effect text NOT NULL CHECK (effect IN ('retract','restore')),
+  target_id uuid NOT NULL,
+  native_version bigint NOT NULL CHECK (native_version > 0),
+  source_version bigint NOT NULL CHECK (source_version >= 0),
+  thread_id uuid,
+  board_id uuid NOT NULL,
+  realm_id uuid NOT NULL,
+  space_id uuid NOT NULL,
+  realm_epoch bigint NOT NULL CHECK (realm_epoch > 0),
+  phase text NOT NULL DEFAULT 'prepared' CHECK (phase IN ('prepared','ready','applied','aborted')),
+  fence_generation bigint,
+  preparation_transaction_id uuid NOT NULL,
+  outcome_transaction_id uuid,
+  projected boolean NOT NULL DEFAULT false,
+  PRIMARY KEY (route, intent, generation),
+  CHECK (route = get_byte(uuid_send(target_id), 10) * 256 + get_byte(uuid_send(target_id), 11)),
+  CHECK (phase <> 'ready' OR fence_generation IS NOT NULL),
+  CHECK ((phase IN ('applied','aborted')) = (outcome_transaction_id IS NOT NULL)),
+  CHECK (NOT projected OR phase IN ('applied','aborted'))
+);
+CREATE INDEX realm_discovery_operation_recovery ON content.realm_discovery_operation
+  (route, intent, generation) WHERE NOT projected AND phase IN ('applied','aborted');
+
+-- Pointer-only fixed editions; native revision erasure remains the sole byte cleanup.
+CREATE TABLE content.edition (
+  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
+  edition_id uuid NOT NULL,
+  creator_account_id uuid NOT NULL,
+  target_subject_id uuid NOT NULL,
+  thread_id uuid NOT NULL,
+  post_id uuid NOT NULL,
+  revision_id uuid NOT NULL,
+  body_sha256 bytea NOT NULL CHECK (octet_length(body_sha256) = 32),
+  licence text NOT NULL CHECK (char_length(licence) BETWEEN 1 AND 128),
+  state text NOT NULL CHECK (state IN ('draft', 'published', 'unpublished')),
+  security_revision bigint NOT NULL CHECK (security_revision > 0),
+  recorded_transaction_id uuid NOT NULL,
+  created_at timestamptz NOT NULL CHECK (isfinite(created_at)),
+  PRIMARY KEY (route, edition_id),
+  CHECK (route = get_byte(uuid_send(edition_id), 10) * 256 + get_byte(uuid_send(edition_id), 11)),
+  CHECK (route = get_byte(uuid_send(thread_id), 10) * 256 + get_byte(uuid_send(thread_id), 11)),
+  CHECK (route = get_byte(uuid_send(post_id), 10) * 256 + get_byte(uuid_send(post_id), 11)),
+  CHECK (route = get_byte(uuid_send(revision_id), 10) * 256 + get_byte(uuid_send(revision_id), 11))
+);
+
+-- The actual publish operation is immutable, separate from the draft's creation.
+CREATE TABLE content.edition_publication (
+  route integer NOT NULL,
+  operation_id uuid NOT NULL,
+  edition_id uuid NOT NULL,
+  recorded_transaction_id uuid NOT NULL,
+  initiator_account_id uuid NOT NULL,
+  actor_client_id text NOT NULL,
+  actor_scopes text[] NOT NULL CHECK (cardinality(actor_scopes) <= 512),
+  actor_requested_by text,
+  actor_authn_epoch bigint NOT NULL CHECK (actor_authn_epoch > 0),
+  original_minimum_authn_epoch text NOT NULL,
+  original_operator_account_id uuid,
+  original_delegation_transaction_id uuid,
+  original_delegation_issued_valid text,
+  source_digest text NOT NULL CHECK (source_digest ~ '^[0-9a-f]{64}$'),
+  creation_idempotency_key text NOT NULL,
+  creation_request_digest text NOT NULL CHECK (creation_request_digest ~ '^[0-9a-f]{64}$'),
+  PRIMARY KEY (route, operation_id),
+  UNIQUE (route, edition_id),
+  FOREIGN KEY (route, edition_id) REFERENCES content.edition(route, edition_id),
+  CHECK (route = get_byte(uuid_send(operation_id), 10) * 256 + get_byte(uuid_send(operation_id), 11)),
+  CHECK ((actor_requested_by IS NULL AND original_delegation_transaction_id IS NULL
+          AND original_delegation_issued_valid IS NULL) OR
+         (actor_requested_by IS NOT NULL AND original_delegation_transaction_id IS NOT NULL
+          AND original_delegation_issued_valid IS NOT NULL))
+);
+
+CREATE FUNCTION content.guard_edition() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Edition identity must survive unpublication' USING ERRCODE = '23514';
+  END IF;
+  IF ROW(NEW.route, NEW.edition_id, NEW.creator_account_id, NEW.thread_id, NEW.post_id, NEW.revision_id,
+         NEW.body_sha256, NEW.licence, NEW.target_subject_id, NEW.recorded_transaction_id, NEW.created_at)
+     IS DISTINCT FROM
+     ROW(OLD.route, OLD.edition_id, OLD.creator_account_id, OLD.thread_id, OLD.post_id, OLD.revision_id,
+         OLD.body_sha256, OLD.licence, OLD.target_subject_id, OLD.recorded_transaction_id, OLD.created_at)
+     OR NOT ((OLD.state = 'draft' AND NEW.state = 'published')
+          OR (OLD.state = 'published' AND NEW.state = 'unpublished'))
+     OR NEW.security_revision <> OLD.security_revision + 1 THEN
+    RAISE EXCEPTION 'Edition binding is immutable and unpublication is terminal' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER edition_identity BEFORE UPDATE OR DELETE ON content.edition
+  FOR EACH ROW EXECUTE FUNCTION content.guard_edition();
+
+CREATE FUNCTION content.guard_edition_publication() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'Edition publication provenance is immutable' USING ERRCODE = '23514';
+END;
+$$;
+CREATE TRIGGER edition_publication_identity BEFORE UPDATE OR DELETE ON content.edition_publication
+  FOR EACH ROW EXECUTE FUNCTION content.guard_edition_publication();
+
+
+-- Candidate locator only; current disclosure remains in the native metadata reader.
+CREATE TABLE content.creator_edition (
+  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
+  creator_account_id uuid NOT NULL,
+  edition_id uuid NOT NULL,
+  PRIMARY KEY (route, creator_account_id, edition_id),
+  CHECK (route = get_byte(uuid_send(creator_account_id), 10) * 256 + get_byte(uuid_send(creator_account_id), 11))
+);

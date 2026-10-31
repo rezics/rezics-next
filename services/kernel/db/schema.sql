@@ -94,9 +94,10 @@ END; $$;
 -- Name: agent_identity_inventory_copy_guard(); Type: FUNCTION; Schema: core; Owner: -
 --
 
+-- Recovery enrolls its own physical artifacts as DATA. It never reopens or seals
+-- the original writer's finite inventory or fabricates its SDK handoff.
 CREATE FUNCTION core.agent_identity_inventory_copy_guard() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
+LANGUAGE plpgsql AS $$
 DECLARE i core.agent_identity_inventory; s access.agent_identity_intent;
  a access.agent_identity_recovery; expected bytea;
 BEGIN

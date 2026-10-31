@@ -8,7 +8,8 @@ import { identityJobPartition, serializeIdentityValue as json } from './identity
 import jobSQL from './identity-epoch-prearm-custody-job.sql';
 import directorySQL from './identity-epoch-prearm-custody-directory.sql';
 import pagesSQL from './identity-epoch-prearm-custody-pages.sql';
-import type { IdentityFrontier, IdentityJobRef, NativeStepWork } from './identity-epoch-contract.ts';
+import inputsSQL from './identity-epoch-prearm-custody-inputs.sql';
+import type { IdentityFrontier, IdentityIntent, IdentityJobRef, NativeStepWork } from './identity-epoch-contract.ts';
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
 
 export type IdentityPrearmCustodyRequest = Readonly<{
@@ -49,7 +50,13 @@ const validJob = (job: IdentityJobRef) =>
 const validAllowance = (allowance: NativeStepWork) =>
   keys.every((key) => Number.isSafeInteger(allowance[key]) && allowance[key] >= 0);
 
-type Root = QueryResultRow & { scope_digest: string; state: string; recorded_transaction_id: string };
+type Root = QueryResultRow & {
+  scope_digest: string; state: string; recorded_transaction_id: string; intent: IdentityIntent;
+};
+type OriginalInput = QueryResultRow & {
+  original: string; terminal: string; generation: string; basis_version: string;
+  control_partition: number; owner_epoch: number; valid: boolean;
+};
 type Input = QueryResultRow & {
   terminal: string; generation: string; basis_version: string; control_partition: number; owner_epoch: number;
   prearm_sequence: string; prearm_transaction_id: string; prearm_epoch: number; prearm_position: string;
@@ -129,6 +136,14 @@ async function inventory(pool: Pool, job: IdentityJobRef, work: ReadWork): Promi
     const root = (await work.query<Root>(tx, jobSQL.sql,
       [identityJobPartition(job), job.jobId, job.epoch.toString()], 9))[0];
     if (!root) return refuse('original-job-or-terminal-custody-unavailable');
+    const sources = await work.query<OriginalInput>(tx, inputsSQL.sql,
+      [identityJobPartition(job), job.jobId, root.recorded_transaction_id], 4);
+    const originals = root.intent.kind === 'merge' ? [root.intent.redirected, root.intent.survivor]
+      : root.intent.kind === 'repoint' ? [root.intent.original, root.intent.terminal]
+      : root.intent.kind === 'unmerge' ? [root.intent.original] : [];
+    if (!originals.length || sources.some((source) => !source.valid) || sources.length !== new Set(originals).size ||
+        originals.some((id) => !sources.some((source) => source.original === id)))
+      return refuse('original-input-provenance-unavailable');
     // Native intents have at most two immutable input generations. The third row is a rejection probe.
     const inputs = await work.query<Input>(tx, `SELECT terminal,generation,basis_version,original_count,
       control_partition,owner_epoch,prearm_sequence,prearm_transaction_id,prearm_epoch,prearm_position,
@@ -137,7 +152,14 @@ async function inventory(pool: Pool, job: IdentityJobRef, work: ReadWork): Promi
     if (!inputs.length || inputs.length > 2 || inputs.some((i) => !i.prearm_transaction_id ||
       i.owner_epoch === null || (root.state !== 'published' && !i.prearm_cancelled_transaction_id)))
       return refuse('immutable-input-coverage-unavailable');
-    return { root, inputs, rootStamp: stamp([root, inputs]) };
+    const sameInput = (source: OriginalInput, input: Input) => source.terminal === input.terminal &&
+      source.generation === input.generation && source.basis_version === input.basis_version &&
+      source.control_partition === input.control_partition && source.owner_epoch === input.owner_epoch;
+    if (inputs.length !== new Set(sources.map((source) => source.terminal)).size ||
+        sources.some((source) => !inputs.some((input) => sameInput(source, input))) ||
+        inputs.some((input) => !sources.some((source) => sameInput(source, input))))
+      return refuse('immutable-input-coverage-unavailable');
+    return { root, inputs, rootStamp: stamp([root, sources, inputs]) };
   });
 }
 

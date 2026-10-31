@@ -8,7 +8,10 @@ ALTER TABLE semantic.identity_epoch_native_commit DROP CONSTRAINT identity_epoch
 ALTER TABLE semantic.identity_epoch_native_commit ADD CONSTRAINT identity_epoch_native_commit_purpose_check CHECK
  (purpose IN ('bootstrap','admission','mapping','search-canonical-index','library-private-follow-counts',
  'identity-receiving-plan','identity-receiving-record','identity-receiving-custody',
- 'identity-prearm','identity-prearm-cancel','identity-prearm-release'));
+ 'identity-prearm','identity-prearm-cancel',
+ 'identity-scope-registration','identity-scope-enrollment','identity-scope-preparation','identity-scope-cancellation',
+ 'identity-public-capture','identity-scope-finish','identity-scope-retirement','identity-scope-directory-release',
+ 'identity-prearm-release'));
 
 -- Release is also the retained directory fence. Any later page writer, including erasure
 -- minimization, touches that directory in its SAME transaction. Its xmin then no longer

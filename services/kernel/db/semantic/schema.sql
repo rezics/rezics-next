@@ -3873,7 +3873,7 @@ CREATE TABLE semantic.identity_epoch_native_commit (
     "position" bigint NOT NULL,
     purpose text NOT NULL,
     CONSTRAINT identity_epoch_native_commit_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-prearm-release'::text])))
+    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text, 'identity-prearm-release'::text])))
 );
 
 
