@@ -1203,3 +1203,87 @@ permitted solely for workspace typing through its existing supported command, le
 await the existing foreground session without polling, cancellation, duplicates or fabricated check UUIDs.
 Acceptance/native/browser/root/worker-check verification stays deferred. Source success requires the complete own
 implementation and permitted typing with `checks: []`; actual native/combined release remains a controller gate.
+the captured Git tree before native execution can be granted. Advancing integration invalidates that capture.
+
+`verification.ts` exports `ProofProducer.bind(ProofBinding): Promise<ProofBindResult>`,
+`productionProofProducer`, `nativeProofBinding`, and `receiveProofStart`. `ProofBinding` version 1 carries the
+once-generated `reservationToken` and logical `checkId`, `goal`, `taskId`, `attempt`, exact `sourceCommit`/`sourceTree`,
+original `argv` and canonical `cwd`. The adapter maps `reservationToken` to the native `ControllerProofBindingV1.token`
+without changing any other fact. It consumes the delivered async `startControllerWorkerCheck(binding)` API from
+`scripts/worker-check.ts`: matching `started`/`replayed` becomes bound evidence with its exact result path;
+`refused-never-started` alone releases never-started capacity. Unavailable/unknown, malformed fields, changed binding
+or result paths retain uncertain capacity. Captured source must contain the delivered producer integration commit;
+older snapshots remain unavailable and require an owner-authorized fresh capture, never a source swap under a token.
+
+After SQLite admission, the adapter publishes the native reservation in `<state>/check-registry` using the actual
+`validateControllerProofBinding`, `controllerProofReservationPath`, closed reservation validator and `withCheckFence`.
+The async producer call has an isolated process environment for its exact owner/attempt/registry; the existing native
+wrapper owns all execution. Terminal observation validates the actual `validControllerProofRegistration` for every
+physical incarnation and revokes the reservation under that same fence before SQLite releases capacity. The adapter
+never writes native result, runner or custody records. Full controller release validation remains required before
+runtime activation; local typing and fixture validation do not certify native acceptance.
+
+The existing WorkerStore SQLite write transaction admits at most three active proof reservations per Goal, shared
+by all controllers. Pending retries wait without a model through the existing retry-intent path. Model exit, waiting,
+crash, missing registration and unknown custody retain capacity. Only an owned terminal custody result, or explicit
+proven-never-started refusal, releases it. The wrapper's infrastructure rerun retains the same logical reservation.
+Historical unbound managed UUIDs are quarantined against proof capacity until their own terminal custody is known;
+their sessions and raw evidence remain intact, with no retroactive source/token/admission labels. Conservative
+quarantine also covers older product checks whose saved detached UUIDs cannot establish proof identity.
+The adapter reads actual `readWorkerCheckRecord` and `readWorkerCheckHistory` exports; physical records and terminal
+custody proofs for every incarnation are retained with the immutable observation. It never writes native records.
+
+Only a bound registered task gets the final original-proof protocol, including on same-session wake. Global minimal
+verification stays unchanged for product/fix tasks. The binder already started or replayed the one logical invocation;
+the worker receives its current owned records and returns the bare managed UUID while running. It never receives an
+unbound invocation that could mint a second UUID. Goal resumes the same session with actual records, without model polling or an automatic proof fix/retry. Terminal zero,
+valid owned custody, unchanged captured source and structured worker success with `checks: []` settle as `verified`.
+A verified proof never enters the landing queue and never implies main advancement or whole-Goal completion. Reports
+count `verifiedProofs` separately from landed source tasks. Failures retain exact records and log references and reach
+the owning manager for a separate minimal product fix.
+
+### Explicit control-plane cohort release
+
+The controller receiving entrypoint is
+`bun tools/goal/scripts/release-control-plane-batch.ts <manifest.json>`. Invoke it from the authenticated owning
+manager's persisted provider session, after source completion. Worker sessions cannot invoke it. It uses the ordinary
+runtime, main train lease, landing queue, worker store and outcome sink; it does not dispatch another worker or mark
+the original Goal complete.
+
+`ControlPlaneBatchManifest` in `src/contracts.ts` is the immutable input:
+
+```json
+{
+  "version": 1,
+  "managerId": "control-manager",
+  "members": [{ "taskId": "<actual-task>", "attempt": 1, "acceptedCommit": "<full-accepted-source-commit>" }]
+}
+```
+
+`captureControlPlaneBatch(store, queue, managerId, excludedTaskIds)` captures actual current `landing` requests with
+completed successful attempts and clean accepted branches. `ready` tasks, historical attempts, processed requests,
+other owners and already reserved batches are omitted. The manager explicitly selects the manifest; omit the live
+control-plane migration source for the current release priority. No task, branch, command, scope or acceptance evidence
+can be supplied through the manifest. `receiveControlPlaneBatch` authenticates the session and authorizes those same
+native requests before calling `MergeTrain.releaseControlPlaneBatch`.
+
+The train preserves source commits by merging them in an isolated tree, applies native mechanical conflict resolution,
+scope and frozen-file guards, formats the combined candidate, and runs the mandatory Goal installs, typing, suite,
+main/dev script compatibility and complete real-boundary provider lifecycle proof on that final head once. Compatibility
+uses the captured immutable dev tree; lifecycle evidence must identify the exact candidate and dev tree. An already
+represented contribution is reported explicitly with no invented implementation commit. Unavailable, conflicting or
+refused sources are reported with their source identity, log, affected files and required owning-manager fix; compatible
+sources remain eligible.
+
+Main, stabilize (when present), dev and every accepted source ref participate in the existing atomic Git transaction
+under the shared all-member SQLite fence. Each member keeps its original worker evidence and receives the actual
+combined merge commit with its own changed-file and line counts. Independent dev history is preserved.
+
+`control-plane-batch-<digest>.json` persists the immutable manifest, candidate/ref retry budget, proof record and recursive
+split decisions. Exact gate output remains in the cohort logs. A failed proof splits the cohort in halves; passing
+subsets release together after their own required final-head proof. Whole failed cohorts are never automatically
+retried unchanged. Selected queue entries are reserved against ordinary serial drain, including excluded sources;
+the manager must repair or retry those sources explicitly. Each node allows at most three candidate/ref attempts,
+including interrupted attempts. Reinvoke the same manifest to resume durable split decisions or recover a published
+release. A published verified record survives interrupted outcome delivery and checkout/tree cleanup failure, so
+recovery never needs another suite run. Individual releases remain supported for unreserved requests.
