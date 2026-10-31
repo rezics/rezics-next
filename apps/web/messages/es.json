@@ -3806,5 +3806,7 @@
   "curation_leave_warning": "Al salir se perderán los cambios sin publicar de todas las plantillas y vistas. Quédate para seguir editando.",
   "curation_leave_recovery": "Al salir se perderán los cambios sin publicar y la información que este editor conserva para recuperar la publicación. Salir no cancela ninguna solicitud de publicación ni confirma qué ha guardado el servidor. Quédate para conservar tus cambios y las opciones de recuperación.",
   "curation_stay": "Seguir en el editor",
-  "curation_leave": "Salir y descartar los cambios locales"
+  "curation_leave": "Salir y descartar los cambios locales",
+  "search_kind_navigation_selected": "Tipos de resultado seleccionados: {kinds}",
+  "search_kind_navigation_more": "Elige más tipos de resultado en Filtros."
 }

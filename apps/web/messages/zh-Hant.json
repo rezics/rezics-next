@@ -3806,5 +3806,7 @@
   "curation_leave_warning": "離開後，所有範本與檢視中尚未發布的修改都會遺失。選擇留下即可繼續編輯。",
   "curation_leave_recovery": "離開後，尚未發布的修改與目前編輯器保留的發布復原狀態都會遺失。離開不會取消發布請求，也無法確認伺服器是否已儲存。選擇留下可保留修改與復原選項。",
   "curation_stay": "留在編輯器",
-  "curation_leave": "離開並捨棄本機修改"
+  "curation_leave": "離開並捨棄本機修改",
+  "search_kind_navigation_selected": "已選結果類型：{kinds}",
+  "search_kind_navigation_more": "在篩選中選擇更多結果類型。"
 }

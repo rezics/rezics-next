@@ -3807,5 +3807,7 @@
   "curation_leave_warning": "离开后，所有模板和视图中尚未发布的修改都会丢失。选择留下可继续编辑。",
   "curation_leave_recovery": "离开后，尚未发布的修改和当前编辑器保留的发布恢复状态都会丢失。离开不会取消发布请求，也不能确认服务器是否已保存。选择留下可保留修改和恢复选项。",
   "curation_stay": "留在编辑器",
-  "curation_leave": "离开并丢弃本地修改"
+  "curation_leave": "离开并丢弃本地修改",
+  "search_kind_navigation_selected": "已选结果类型：{kinds}",
+  "search_kind_navigation_more": "在筛选中选择更多结果类型。"
 }

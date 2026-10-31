@@ -36,6 +36,7 @@ import {
 import { SearchRecovery } from './search-recovery-view';
 import { discoverySearchHref, searchParams, type SearchLoaderDeps } from './search-params';
 import { DiscoveryKinds } from './discovery-kinds';
+import { ResultKindNavigation } from './result-kind-navigation';
 import { DiscoveryResults } from './discovery-results';
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 import { ConditionEditor } from './condition-editor';
@@ -878,8 +879,18 @@ function renderResults(
       {data?.sort === 'rating' && (
         <p className="text-sm text-muted-foreground">{m.rating_public_ordering({}, { locale: locale as never })}</p>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">{m.search_results()}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="text-sm text-muted-foreground">{m.search_results()}</p>
+          {data?.queryState && !result && (
+            <ResultKindNavigation
+              kinds={data.discovery?.status === 'ready' ? data.discovery.page.kinds : undefined}
+              state={data.queryState}
+              locale={locale}
+              disabled={invalid}
+            />
+          )}
+        </div>
         <SearchSort
           sort={data?.sort ?? 'relevance'}
           locale={locale}

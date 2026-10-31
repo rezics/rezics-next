@@ -3806,5 +3806,7 @@
   "curation_leave_warning": "En quittant, vous perdrez les modifications non publiées de tous les modèles et de toutes les vues. Restez pour continuer à modifier.",
   "curation_leave_recovery": "En quittant, vous perdrez les modifications non publiées et les informations de reprise de publication conservées dans cet éditeur. Cela n’annule aucune demande de publication et ne confirme pas ce que le serveur a enregistré. Restez pour conserver vos modifications et vos options de reprise.",
   "curation_stay": "Rester dans l’éditeur",
-  "curation_leave": "Quitter et abandonner les modifications locales"
+  "curation_leave": "Quitter et abandonner les modifications locales",
+  "search_kind_navigation_selected": "Types de résultats sélectionnés : {kinds}",
+  "search_kind_navigation_more": "Choisissez d’autres types de résultats dans les filtres."
 }

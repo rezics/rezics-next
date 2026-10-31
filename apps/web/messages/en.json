@@ -3809,5 +3809,7 @@
   "curation_leave_warning": "Leaving discards your unpublished changes in every template and view. Stay to keep editing.",
   "curation_leave_recovery": "Leaving discards unpublished changes and this editor’s publication recovery state. It does not cancel a publication request or confirm what the server saved. Stay to keep your edits and recovery options.",
   "curation_stay": "Stay in editor",
-  "curation_leave": "Leave and discard local work"
+  "curation_leave": "Leave and discard local work",
+  "search_kind_navigation_selected": "Selected result kinds: {kinds}",
+  "search_kind_navigation_more": "Choose more result kinds in Filters."
 }
