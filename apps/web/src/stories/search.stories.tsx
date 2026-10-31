@@ -47,15 +47,21 @@ export const MixedCards: Story = {
     const navigation = await results.findByRole('navigation', { name: m.search_result_kinds() });
     const links = within(navigation);
     const all = links.getByRole('link', { name: m.search_kind_navigation_all() });
-    const account = links.getAllByRole('link').find((link) =>
-      new URL(link.getAttribute('href')!, window.location.href).searchParams.get('kinds') === 'account',
-    )!;
+    const account = links
+      .getAllByRole('link')
+      .find(
+        (link) => new URL(link.getAttribute('href')!, window.location.href).searchParams.get('kinds') === 'account',
+      )!;
     await expect(all).toHaveAttribute('aria-current', 'page');
     await userEvent.click(account);
-    await waitFor(() => expect(links.getByRole('link', { name: account.textContent! })).toHaveAttribute('aria-current', 'page'));
+    await waitFor(() =>
+      expect(links.getByRole('link', { name: account.textContent! })).toHaveAttribute('aria-current', 'page'),
+    );
     await expect(links.getByRole('link', { name: m.search_kind_navigation_all() })).not.toHaveAttribute('aria-current');
     await userEvent.click(links.getByRole('link', { name: m.search_kind_navigation_all() }));
-    await waitFor(() => expect(links.getByRole('link', { name: m.search_kind_navigation_all() })).toHaveAttribute('aria-current', 'page'));
+    await waitFor(() =>
+      expect(links.getByRole('link', { name: m.search_kind_navigation_all() })).toHaveAttribute('aria-current', 'page'),
+    );
     const canvas = within(context.canvasElement);
     if (window.matchMedia('(max-width: 767px)').matches)
       await userEvent.click(canvas.getByRole('button', { name: m.search_label() }));

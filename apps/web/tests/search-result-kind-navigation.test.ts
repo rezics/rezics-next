@@ -117,40 +117,60 @@ test('default mixed SearchPage offers direct result-kind navigation that retains
       expect(destination.searchParams.getAll(key)).toEqual(Array.isArray(value) ? value : [value]);
     }
     // Modified activation retains the real destination without changing this router.
-    expect(await account.evaluate((anchor) => anchor.dispatchEvent(new MouseEvent('click', {
-      bubbles: true, cancelable: true, ctrlKey: true,
-    })))).toBe(true);
+    expect(
+      await account.evaluate((anchor) =>
+        anchor.dispatchEvent(
+          new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            ctrlKey: true,
+          }),
+        ),
+      ),
+    ).toBe(true);
     expect(await page.evaluate(() => (window as any).kindRouter.state.location.search)).toEqual(original);
     await account.click();
     await page.waitForFunction(() => (window as any).kindRouter.state.location.search.kinds === 'account');
     expect(await page.evaluate(() => (window as any).kindRouter.state.location.search)).toEqual({
-      ...original, kinds: 'account', cursor: undefined,
+      ...original,
+      kinds: 'account',
+      cursor: undefined,
     });
     expect(await account.getAttribute('aria-current')).toBe('page');
     expect(await all.getAttribute('aria-current')).toBeNull();
     await all.click();
     await page.waitForFunction(() => !(window as any).kindRouter.state.location.search.kinds);
     expect(await page.evaluate(() => (window as any).kindRouter.state.location.search)).toEqual({
-      ...original, cursor: undefined,
+      ...original,
+      cursor: undefined,
     });
 
     // A paged metadata response lacks one exact selection made through Filters.
     await page.evaluate(async () => {
       const router = (window as any).kindRouter;
-      await router.navigate({ search: { ...router.state.location.search,
-        kinds: ['schema:Book', 'catalogue:Atlas'], cursor: 'signed-multi+/=' } });
+      await router.navigate({
+        search: {
+          ...router.state.location.search,
+          kinds: ['schema:Book', 'catalogue:Atlas'],
+          cursor: 'signed-multi+/=',
+        },
+      });
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await navigation.getByText('Selected result kinds: Book, catalogue:Atlas', { exact: true }).waitFor();
     expect(await all.getAttribute('aria-current')).toBeNull();
     expect(await navigation.getByRole('link', { name: 'catalogue:Atlas', exact: true }).isVisible()).toBe(true);
     expect(await navigation.getByText('Choose more result kinds in Filters.', { exact: true }).isVisible()).toBe(true);
-    const exact = new URL((await navigation.getByRole('link', { name: 'Book', exact: true }).getAttribute('href'))!, 'https://site.test');
+    const exact = new URL(
+      (await navigation.getByRole('link', { name: 'Book', exact: true }).getAttribute('href'))!,
+      'https://site.test',
+    );
     expect(exact.searchParams.getAll('kinds')).toEqual(['schema:Book']);
     await all.click();
     await page.waitForFunction(() => !(window as any).kindRouter.state.location.search.kinds);
     expect(await page.evaluate(() => (window as any).kindRouter.state.location.search)).toEqual({
-      ...original, cursor: undefined,
+      ...original,
+      cursor: undefined,
     });
     expect(await all.getAttribute('aria-current')).toBe('page');
     expect(await page.getByRole('button', { name: /^Filters \(/ }).getAttribute('aria-expanded')).toBe('false');
