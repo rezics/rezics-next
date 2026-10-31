@@ -11,11 +11,14 @@ import { m } from '../../paraglide/messages.js';
 import { presentationEditorDictionary } from './curate-view-editor-messages';
 import type { CorrectionTarget } from './curate-view-editor-state';
 
-const CorrectionContext = createContext<CorrectionTarget | null>(null);
+const CorrectionContext = createContext<{
+  target: CorrectionTarget | null;
+  focused: { current: CorrectionTarget | null };
+} | null>(null);
 const useEditorPuck = createUsePuck();
 
 function CorrectionSelection({ children }: { children: ReactNode }) {
-  const target = useContext(CorrectionContext);
+  const target = useContext(CorrectionContext)?.target;
   const getPuck = useGetPuck();
   useEffect(() => {
     if (!target) return;
@@ -23,13 +26,11 @@ function CorrectionSelection({ children }: { children: ReactNode }) {
     const frame = requestAnimationFrame(() => {
       const { dispatch, getSelectorForId } = getPuck();
       const itemSelector = target.component ? getSelectorForId(target.component.id) : null;
-      console.log('correction selection', target.component, itemSelector, getPuck().appState.ui.itemSelector);
       if (target.component && !itemSelector) return;
       dispatch({
         type: 'setUi',
         ui: { itemSelector: itemSelector ?? null, rightSideBarVisible: true, leftSideBarVisible: true, mobilePanelExpanded: true, plugin: { current: 'fields' } },
       });
-      console.log('corrected selection', getPuck().appState.ui.itemSelector, getPuck().selectedItem?.props.id);
     });
     return () => cancelAnimationFrame(frame);
   }, [target, getPuck]);
@@ -37,20 +38,25 @@ function CorrectionSelection({ children }: { children: ReactNode }) {
 }
 
 function CorrectionFields({ children, isLoading }: { children: ReactNode; isLoading: boolean }) {
-  const target = useContext(CorrectionContext);
+  const correction = useContext(CorrectionContext);
+  const target = correction?.target;
   const selectedId = useEditorPuck((state) => state.selectedItem?.props.id ?? null);
   const region = useRef<HTMLDivElement>(null);
-  const focused = useRef<CorrectionTarget | null>(null);
   useEffect(() => {
     const element = region.current;
-    if (!element || !target || isLoading || focused.current === target) return;
+    if (!element || !target || !correction || isLoading || correction.focused.current === target) return;
     if (selectedId !== (target.component?.id ?? null)) return;
     function focus() {
+      if (correction!.focused.current === target) return true;
+      // Puck renders separate mobile and desktop field panels. Focus only the visible owner.
+      for (let ancestor: HTMLElement | null = element; ancestor; ancestor = ancestor.parentElement) {
+        if (getComputedStyle(ancestor).display === 'none') return false;
+      }
       // Compare owned input names; never interpolate a server pointer into a selector or HTML.
       const control = Array.from(element!.querySelectorAll('input, textarea, select'))
         .find((input) => input.getAttribute('name') === target!.field.join('.') && !input.hasAttribute('disabled') && !input.hasAttribute('readonly'));
       if (control) {
-        focused.current = target;
+        correction!.focused.current = target!;
         (control as HTMLElement).focus();
         return true;
       }
@@ -60,7 +66,7 @@ function CorrectionFields({ children, isLoading }: { children: ReactNode; isLoad
     const observer = new MutationObserver(() => { if (focus()) observer.disconnect(); });
     observer.observe(element, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [target, selectedId, isLoading]);
+  }, [correction, target, selectedId, isLoading]);
   return <div ref={region}>{children}</div>;
 }
 
@@ -176,6 +182,8 @@ export function PageEditor({
   onInvalid?: (errors: CompositionViolation[], document: CompositionDocument) => void;
 }) {
   const [errors, setErrors] = useState<CompositionViolation[]>([]);
+  const focusedCorrection = useRef<CorrectionTarget | null>(null);
+  const correctionContext = useMemo(() => ({ target: correction, focused: focusedCorrection }), [correction]);
   const config = useMemo(() => editorConfiguration(platformRegistry, locale), [locale]);
   // Puck owns the current mounted editor. A keyed remount restores the parent's per-view snapshot.
   const [data] = useState(() => draft ?? fromComposition(document));
@@ -192,10 +200,9 @@ export function PageEditor({
   }
 
   return (
-    <CorrectionContext.Provider value={correction}>
+    <CorrectionContext.Provider value={correctionContext}>
     <Puck
       config={config}
-      onAction={(action) => { if (correction && action.type === 'setUi') console.log('correction action', action.ui); }}
       data={data}
       dictionary={presentationEditorDictionary()}
       onPublish={(edited) => handlePublish(edited as PageEditorData)}
