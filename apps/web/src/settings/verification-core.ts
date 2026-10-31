@@ -14,9 +14,33 @@ type VerificationResponse = NonNullable<
 >;
 export type AgentVerificationRequest = NonNullable<VerificationResponse['verificationRequest']>;
 
+export type VerificationFailure = {
+  status: number;
+  message: string;
+  code?: string;
+  retryable?: boolean;
+  requestId?: string;
+  retryAfter?: string;
+};
 export type VerificationCommandResult =
   | { ok: true; verificationRequest: AgentVerificationRequest }
-  | { ok: false; status: number; message: string; outcome?: 'refused' };
+  | ({ ok: false; outcome?: 'refused' } & VerificationFailure);
+
+/** Explicit private transport envelope: server-function Error serialization drops custom properties. */
+export type VerificationReadResult<T> = { ok: true; value: T } | { ok: false; failure: VerificationFailure };
+
+export class VerificationReadError extends Error {
+  constructor(readonly failure: VerificationFailure) {
+    super(failure.message);
+    this.name = 'VerificationReadError';
+  }
+}
+
+/** Keep the existing snapshot-or-thrown-error read contract at the caller boundary. */
+export function unwrapVerificationRead<T>(result: VerificationReadResult<T>): T {
+  if (!result.ok) throw new VerificationReadError(result.failure);
+  return result.value;
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -59,9 +83,27 @@ function apiMessage(error: unknown): string {
   return m.settings_verification_request_failed();
 }
 
+function nativeFailure(result: { status: number; error?: unknown; headers?: HeadersInit | undefined }): VerificationFailure {
+  const problem = record(result.error) && record(result.error.value) ? result.error.value : undefined;
+  const retryAfter = result.headers === undefined ? null : new Headers(result.headers).get('retry-after');
+  return {
+    status: result.status,
+    message: apiMessage(result.error),
+    ...(typeof problem?.code === 'string' ? { code: problem.code } : {}),
+    ...(typeof problem?.retryable === 'boolean' ? { retryable: problem.retryable } : {}),
+    ...(typeof problem?.request_id === 'string'
+      ? { requestId: problem.request_id }
+      : typeof problem?.requestId === 'string'
+        ? { requestId: problem.requestId }
+        : {}),
+    ...(retryAfter === null ? {} : { retryAfter }),
+  };
+}
+
 export async function readVerification(client: KernelClient, accountId: string, authorization: string) {
   const result = await client.accounts({ accountId }).verification.get({ headers: { authorization } });
-  if (result.error || !result.data) throw new Error(apiMessage(result.error));
+  if (result.error) throw new VerificationReadError(nativeFailure(result));
+  if (!result.data) throw new Error(m.settings_verification_request_failed());
   const request = result.data.verificationRequest;
   if (request !== null && !validRequest(request, accountId)) throw new Error(m.settings_verification_load_failed());
   return request;
@@ -83,7 +125,7 @@ export async function requestVerification(
     );
   if (result.status === 201 && validRequest(result.data?.verificationRequest, accountId))
     return { ok: true, verificationRequest: result.data!.verificationRequest };
-  return { ok: false, status: result.status, message: apiMessage(result.error) };
+  return { ok: false, ...nativeFailure(result) };
 }
 
 export async function withdrawVerification(
@@ -100,5 +142,5 @@ export async function withdrawVerification(
   );
   if (result.status === 200 && validRequest(result.data?.verificationRequest, accountId))
     return { ok: true, verificationRequest: result.data!.verificationRequest };
-  return { ok: false, status: result.status, message: apiMessage(result.error) };
+  return { ok: false, ...nativeFailure(result) };
 }

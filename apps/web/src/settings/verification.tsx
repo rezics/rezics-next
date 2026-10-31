@@ -12,7 +12,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { csrfHeaders } from '../threads/composer';
 import { useSession } from '../session/query';
-import { type AgentVerificationRequest } from './verification-core';
+import { unwrapVerificationRead, type AgentVerificationRequest } from './verification-core';
+import { usePreferenceRetry } from './preference-failure-retry';
 import { VerificationSubjectChooser } from './verification-subject-chooser';
 import { VerificationLinks, verificationIssueMessage, type VerificationLinkRow } from './verification-links';
 import {
@@ -25,6 +26,7 @@ import {
   canRequestVerification,
   canWithdrawVerification,
   verificationQueryKey,
+  type VerificationSnapshot,
 } from './verification-recovery';
 import { readVerificationState, requestVerificationAction, withdrawVerificationAction } from './verification-actions';
 
@@ -78,7 +80,8 @@ function ViewerVerification({ accountId, csrfToken }: { accountId: string; csrfT
           queryClient.fetchQuery({
             ...personalRead,
             queryKey: verificationQueryKey(accountId),
-            queryFn: () => readVerificationState({ data: { accountId } }),
+            queryFn: async () =>
+              unwrapVerificationRead<VerificationSnapshot>(await readVerificationState({ data: { accountId } })),
             retry: false,
           }),
         request: (_, input) => requestVerificationAction({ data: { ...input, accountId }, headers: csrfHeaders() }),
@@ -120,6 +123,7 @@ export function VerificationCard({
   const [showValidation, setShowValidation] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
   const pending = state.phase === 'sending' || state.phase === 'reading';
+  const waiting = usePreferenceRetry(state.failure, state.retryAt);
   const verification = state.current?.verificationRequest ?? null;
   const subjectTitle = state.current?.subjectTitle ?? null;
   const canRequest = canRequestVerification(state.current) && !state.attempt && !pending;
@@ -292,7 +296,7 @@ export function VerificationCard({
                   <p className="break-all">{state.attempt.requestId}</p>
                 )}
               </details>
-              <Button type="button" disabled={pending || !csrfToken} onClick={() => void controller.retry()}>
+              <Button type="button" disabled={pending || waiting || !csrfToken} onClick={() => void controller.retry()}>
                 {m.settings_verification_retry_original()}
               </Button>
             </AlertDescription>
@@ -307,7 +311,8 @@ export function VerificationCard({
             })}
           </p>
         ) : null}
-        <Button type="button" variant="outline" disabled={pending} onClick={() => void controller.reload()}>
+        {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
+        <Button type="button" variant="outline" disabled={pending || waiting} onClick={() => void controller.reload()}>
           {m.settings_verification_read_current()}
         </Button>
       </CardContent>

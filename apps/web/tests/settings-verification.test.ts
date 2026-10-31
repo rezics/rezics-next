@@ -401,3 +401,291 @@ test('verification reads reject missing data and other accounts, and late comman
   expect(bob.snapshot().current?.verificationRequest).toBeNull();
   expect(verificationQueryKey('alice')).not.toEqual(verificationQueryKey('bob'));
 });
+
+import { spyOn } from 'bun:test';
+import {
+  VerificationReadError,
+  unwrapVerificationRead,
+  type VerificationReadResult,
+} from '../src/settings/verification-core';
+
+function nativeVerificationClient(responses: Response[]) {
+  const calls: Request[] = [];
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: (async (input, init) => {
+      calls.push(new Request(input, init));
+      const response = responses.shift();
+      if (!response) throw new Error('Unexpected native verification request');
+      return response;
+    }) as typeof fetch,
+  });
+  return { client, calls };
+}
+
+test.each(['read', 'request', 'withdraw'] as const)(
+  'native verification %s preserves actual optional failure fields across private serialization',
+  async (operation) => {
+    const failure = {
+      status: 503,
+      message: 'Native service unavailable',
+      code: 'overloaded',
+      retryable: true,
+      requestId: 'native-request-id',
+      retryAfter: 'Sat, 31 Oct 2026 01:00:00 GMT',
+    };
+    const { client, calls } = nativeVerificationClient([
+      Response.json(
+        {
+          status: failure.status,
+          detail: failure.message,
+          code: failure.code,
+          retryable: failure.retryable,
+          request_id: failure.requestId,
+        },
+        { status: failure.status, headers: { 'Retry-After': failure.retryAfter } },
+      ),
+    ]);
+    if (operation === 'read') {
+      let caught: unknown;
+      try {
+        await readVerification(client, 'alice', 'Bearer token');
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(VerificationReadError);
+      expect(caught).toBeInstanceOf(Error);
+      const envelope: VerificationReadResult<never> = JSON.parse(
+        JSON.stringify({ ok: false, failure: (caught as VerificationReadError).failure }),
+      );
+      expect(envelope).toEqual({ ok: false, failure });
+      expect(() => unwrapVerificationRead(envelope)).toThrow(failure.message);
+      try {
+        unwrapVerificationRead(envelope);
+      } catch (error) {
+        expect((error as VerificationReadError).failure).toEqual(failure);
+      }
+    } else {
+      const result =
+        operation === 'request'
+          ? await requestVerification(client, 'alice', 'Bearer token', input)
+          : await withdrawVerification(client, 'alice', 'Bearer token', input.idempotencyKey);
+      expect(JSON.parse(JSON.stringify(result))).toEqual({ ok: false, ...failure });
+    }
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.headers.get('authorization')).toBe('Bearer token');
+  },
+);
+
+test('Keep native verification recovery delays actionable without weakening native identity, exact recovery or draft invariants', async () => {
+  let now = Date.parse('2026-10-31T00:00:00.250Z');
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
+  try {
+    const { client, calls } = nativeVerificationClient([
+      Response.json({ verificationRequest: null }),
+      Response.json(
+        { detail: 'Wait before replaying', code: 'rate_limited', request_id: 'refusal-id' },
+        { status: 429, headers: { 'Retry-After': '2' } },
+      ),
+      Response.json({ verificationRequest: request }),
+      Response.json({ verificationRequest: request }, { status: 201 }),
+      Response.json({ verificationRequest: { ...request, state: 'approving' } }),
+    ]);
+    const sent: VerificationInput[] = [];
+    const controller = new VerificationRecovery('alice', {
+      read: async (accountId) => ({
+        accountId,
+        verificationRequest: await readVerification(client, accountId, 'Bearer token'),
+        subjectTitle: 'Avery',
+      }),
+      request: async (accountId, original) => {
+        sent.push(original);
+        if (sent.length === 1) throw new Error('Original response lost');
+        return requestVerification(client, accountId, 'Bearer token', original);
+      },
+      withdraw: async () => {
+        throw new Error('Conflicting command must not run');
+      },
+    });
+    await controller.reload();
+    const draft = { subject: input.subject, statement: input.statement, links: input.links.map((link) => ({ ...link })) };
+    await controller.submit(draft);
+    const original = controller.snapshot().attempt;
+    expect(controller.snapshot().failure).toBeUndefined();
+    expect(controller.snapshot().retryAt).toBe(0);
+    draft.subject = 'later-subject';
+    draft.statement = 'Later draft';
+    draft.links[0]!.url = 'https://example.test/later';
+    await controller.retry();
+    expect(controller.snapshot()).toMatchObject({
+      phase: 'uncertain',
+      current: null,
+      failure: {
+        status: 429,
+        message: 'Wait before replaying',
+        code: 'rate_limited',
+        requestId: 'refusal-id',
+        retryAfter: '2',
+      },
+      retryAt: now + 2000,
+    });
+    expect(controller.snapshot().failure).not.toHaveProperty('retryable');
+    expect(controller.snapshot().attempt).toBe(original);
+    const deadline = controller.snapshot().retryAt;
+    now = deadline - 1;
+    await controller.retry();
+    await controller.reload();
+    await controller.submit(draft);
+    await controller.withdraw(true);
+    expect(calls).toHaveLength(2);
+    now = deadline;
+    expect(calls).toHaveLength(2); // Expiry itself never dispatches IO.
+    await controller.reload();
+    expect(controller.snapshot().attempt).toBe(original);
+    expect(controller.snapshot().attempt?.receipt).toBeNull();
+    expect(controller.snapshot().phase).toBe('uncertain');
+    await controller.retry();
+    expect(sent).toHaveLength(3);
+    expect(sent.every((value) => value === original?.input)).toBe(true);
+    expect(sent[2]).toEqual({ ...input, idempotencyKey: expect.any(String) });
+    expect(Object.isFrozen(sent[2]!.links[0])).toBe(true);
+    expect(controller.snapshot().phase).toBe('review');
+    expect(controller.snapshot().attempt).toBeNull();
+    expect(controller.snapshot().current?.verificationRequest?.state).toBe('approving');
+    expect(draft).toMatchObject({ subject: 'later-subject', statement: 'Later draft' });
+    expect(draft.links[0]!.url).toBe('https://example.test/later');
+    expect(calls.map((call) => call.method)).toEqual(['GET', 'POST', 'GET', 'POST', 'GET']);
+    expect(calls[1]!.headers.get('idempotency-key')).toBe(calls[3]!.headers.get('idempotency-key'));
+    expect(await calls[3]!.json()).toEqual({ subject: input.subject, statement: input.statement, links: input.links });
+  } finally {
+    clock.mockRestore();
+  }
+});
+
+test('a failed final native status read retains the withdrawal receipt and exact deadline, including pending IO guards', async () => {
+  let now = Date.parse('2026-10-31T00:00:00Z');
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
+  try {
+    const retryAfter = new Date(now + 3000).toUTCString();
+    const withdrawn = { ...request, state: 'withdrawn' };
+    const { client, calls } = nativeVerificationClient([
+      Response.json({ verificationRequest: request }),
+      Response.json({ verificationRequest: withdrawn }),
+      Response.json(
+        { detail: 'Current status unavailable', code: 'overloaded', retryable: true, request_id: 'read-id' },
+        { status: 503, headers: { 'Retry-After': retryAfter } },
+      ),
+      Response.json({ verificationRequest: withdrawn }),
+    ]);
+    let pauseRead = false;
+    let finishRead!: () => void;
+    const sent: { idempotencyKey: string }[] = [];
+    const controller = new VerificationRecovery('alice', {
+      read: async (accountId) => {
+        if (pauseRead)
+          await new Promise<void>((resolve) => {
+            finishRead = resolve;
+          });
+        return {
+          accountId,
+          verificationRequest: await readVerification(client, accountId, 'Bearer token'),
+          subjectTitle: 'Avery',
+        };
+      },
+      request: async () => {
+        throw new Error('Conflicting request must not run');
+      },
+      withdraw: async (accountId, original) => {
+        sent.push(original);
+        if (sent.length === 1) throw new Error('Original withdrawal response lost');
+        return withdrawVerification(client, accountId, 'Bearer token', original.idempotencyKey);
+      },
+    });
+    await controller.reload();
+    await controller.withdraw(true);
+    const original = controller.snapshot().attempt;
+    await controller.retry();
+    const receipted = controller.snapshot().attempt;
+    expect(receipted?.input).toBe(original?.input);
+    expect(receipted?.requestId).toBe(request.id);
+    expect(receipted?.receipt).toEqual(withdrawn);
+    expect(Object.isFrozen(receipted?.receipt)).toBe(true);
+    expect(controller.snapshot()).toMatchObject({
+      phase: 'uncertain',
+      current: null,
+      failure: { status: 503, code: 'overloaded', retryable: true, requestId: 'read-id', retryAfter },
+      retryAt: now + 3000,
+    });
+    const deadline = controller.snapshot().retryAt;
+    now = deadline - 1;
+    await controller.reload();
+    await controller.retry();
+    expect(controller.snapshot().attempt).toBe(receipted);
+    expect(calls).toHaveLength(3);
+    now = deadline;
+    expect(calls).toHaveLength(3);
+    pauseRead = true;
+    const reading = controller.reload();
+    expect(controller.snapshot().phase).toBe('reading');
+    await controller.reload();
+    await controller.retry();
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toBe(sent[0]);
+    expect(calls).toHaveLength(3);
+    finishRead();
+    await reading;
+    expect(controller.snapshot().attempt).toBeNull();
+    expect(controller.snapshot().current?.verificationRequest?.state).toBe('withdrawn');
+    expect(controller.snapshot().phase).toBe('review');
+    expect(calls.map((call) => call.method)).toEqual(['GET', 'POST', 'GET', 'GET']);
+  } finally {
+    clock.mockRestore();
+  }
+});
+
+test('ordinary read Errors and invalid native retry timing never invent a delay or a successful null snapshot', async () => {
+  const { client, calls } = nativeVerificationClient([
+    Response.json(
+      { detail: 'Read denied', code: 'forbidden', retryable: false },
+      { status: 403, headers: { 'Retry-After': 'invalid' } },
+    ),
+    Response.json({ verificationRequest: null }),
+  ]);
+  let reads = 0;
+  const controller = new VerificationRecovery('alice', {
+    read: async (accountId) => {
+      if (++reads === 1) throw new Error('Ordinary read failure');
+      if (reads === 4) throw new Error('rezics-platform-closed');
+      return {
+        accountId,
+        verificationRequest: await readVerification(client, accountId, 'Bearer token'),
+        subjectTitle: null,
+      };
+    },
+    request: async () => {
+      throw new Error('Unexpected command');
+    },
+    withdraw: async () => {
+      throw new Error('Unexpected command');
+    },
+  });
+  await controller.reload();
+  expect(controller.snapshot()).toMatchObject({ phase: 'unavailable', current: null, retryAt: 0 });
+  expect(controller.snapshot().failure).toBeUndefined();
+  await controller.reload();
+  expect(controller.snapshot()).toMatchObject({ phase: 'unavailable', current: null, retryAt: 0 });
+  expect(controller.snapshot().failure).toEqual({
+    status: 403,
+    message: 'Read denied',
+    code: 'forbidden',
+    retryable: false,
+    retryAfter: 'invalid',
+  });
+  await controller.reload();
+  expect(controller.snapshot().current).toEqual({ accountId: 'alice', verificationRequest: null, subjectTitle: null });
+  expect(unwrapVerificationRead({ ok: true, value: controller.snapshot().current })).toBe(controller.snapshot().current);
+  expect(controller.snapshot().phase).toBe('idle');
+  await controller.reload();
+  expect(controller.snapshot().failure).toEqual({ status: 403, message: 'rezics-platform-closed' });
+  expect(controller.snapshot().retryAt).toBe(0);
+  expect(calls).toHaveLength(2);
+});

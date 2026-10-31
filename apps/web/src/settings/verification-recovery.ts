@@ -1,4 +1,11 @@
-import type { AgentVerificationRequest, VerificationCommandResult, VerificationInput } from './verification-core';
+import {
+  VerificationReadError,
+  type AgentVerificationRequest,
+  type VerificationCommandResult,
+  type VerificationFailure,
+  type VerificationInput,
+} from './verification-core';
+import { preferenceRetryDeadline } from './preference-failure-retry';
 
 export type VerificationSnapshot = {
   accountId: string;
@@ -15,7 +22,9 @@ export type VerificationRecoveryState = {
   current: VerificationSnapshot | null;
   attempt: VerificationAttempt | null;
   phase: 'loading' | 'idle' | 'sending' | 'reading' | 'uncertain' | 'refused' | 'review' | 'unavailable';
-  failure?: { status: number; message: string } | undefined;
+  failure?: VerificationFailure | undefined;
+  /** Captured once per failure, shared by the IO guards and the controls' passive timer. */
+  retryAt: number;
 };
 export type VerificationRecoveryIO = {
   read: (accountId: string) => Promise<VerificationSnapshot>;
@@ -43,7 +52,7 @@ function frozen<T extends object>(value: T): T {
 
 /** One viewer, one immutable unresolved command, and one explicit read per action. No persistence or polling. */
 export class VerificationRecovery {
-  private state: VerificationRecoveryState = { current: null, attempt: null, phase: 'loading' };
+  private state: VerificationRecoveryState = { current: null, attempt: null, phase: 'loading', retryAt: 0 };
   private listeners = new Set<() => void>();
   private epoch = 0;
   private active = true;
@@ -76,6 +85,9 @@ export class VerificationRecovery {
   private busy() {
     return this.state.phase === 'sending' || this.state.phase === 'reading';
   }
+  private waiting() {
+    return this.state.retryAt > Date.now();
+  }
   async submit(draft: Omit<VerificationInput, 'idempotencyKey'>) {
     if (!this.active || this.busy() || this.state.attempt || !canRequestVerification(this.state.current)) return;
     const input = frozen({
@@ -100,14 +112,14 @@ export class VerificationRecovery {
     await this.send(false);
   }
   async retry() {
-    if (!this.active || !this.state.attempt || this.busy()) return;
+    if (!this.active || !this.state.attempt || this.busy() || this.waiting()) return;
     await this.send(true);
   }
   private async send(recovering: boolean) {
     const attempt = this.state.attempt;
     if (!attempt) return;
     const epoch = this.epoch;
-    this.update({ phase: 'sending', current: null, failure: undefined });
+    this.update({ phase: 'sending', current: null, failure: undefined, retryAt: 0 });
     let result: VerificationCommandResult;
     try {
       result =
@@ -120,6 +132,7 @@ export class VerificationRecovery {
     }
     if (!this.live(epoch)) return;
     if (!result.ok) {
+      const { ok: _ok, outcome: _outcome, ...failure } = result;
       // A later refusal cannot prove that an earlier lost response did not commit.
       const uncertain =
         recovering ||
@@ -128,7 +141,8 @@ export class VerificationRecovery {
       this.update({
         phase: uncertain ? 'uncertain' : 'refused',
         attempt: uncertain ? attempt : null,
-        failure: { status: result.status, message: result.message },
+        failure,
+        retryAt: preferenceRetryDeadline(failure.retryAfter),
       });
       return;
     }
@@ -155,11 +169,11 @@ export class VerificationRecovery {
     );
   }
   async reload() {
-    if (!this.active || this.busy()) return;
+    if (!this.active || this.busy() || this.waiting()) return;
     await this.readCurrent(this.epoch);
   }
   private async readCurrent(epoch: number) {
-    this.update({ phase: 'reading', current: null, failure: undefined });
+    this.update({ phase: 'reading', current: null, failure: undefined, retryAt: 0 });
     let current: VerificationSnapshot;
     try {
       current = await this.io.read(this.accountId);
@@ -169,13 +183,17 @@ export class VerificationRecovery {
       )
         throw new Error('Verification account changed');
     } catch (error) {
+      const failure: VerificationFailure | undefined =
+        error instanceof VerificationReadError
+          ? error.failure
+          : error instanceof Error && error.message === 'rezics-platform-closed'
+            ? { status: 403, message: error.message }
+            : undefined;
       if (this.live(epoch))
         this.update({
           phase: this.state.attempt ? 'uncertain' : 'unavailable',
-          failure:
-            error instanceof Error && error.message === 'rezics-platform-closed'
-              ? { status: 403, message: error.message }
-              : undefined,
+          failure,
+          retryAt: preferenceRetryDeadline(failure?.retryAfter),
         });
       return;
     }

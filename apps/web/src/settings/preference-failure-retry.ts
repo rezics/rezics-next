@@ -10,9 +10,9 @@ export function preferenceRetryDeadline(retryAfter: string | undefined, now = Da
   return Number.isFinite(deadline) && deadline > now ? deadline : 0;
 }
 
-/** Only re-enables deliberate retry controls. The timer never makes a request. */
-export function usePreferenceRetry(failure: NativePreferenceFailure | undefined): boolean {
-  const deadline = useMemo(() => preferenceRetryDeadline(failure?.retryAfter), [failure]);
+/** Never requests IO; only re-enables deliberate controls. A supplied deadline avoids restarting a delay on remount. */
+export function usePreferenceRetry(failure: NativePreferenceFailure | undefined, retryAt?: number): boolean {
+  const deadline = useMemo(() => retryAt ?? preferenceRetryDeadline(failure?.retryAfter), [failure, retryAt]);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     if (deadline <= now) return;

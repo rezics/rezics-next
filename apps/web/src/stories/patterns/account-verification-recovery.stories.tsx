@@ -1,13 +1,26 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { expect, fn, userEvent, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { VerificationCard } from '../../settings/verification';
-import type { AgentVerificationRequest, VerificationInput } from '../../settings/verification-core';
+import {
+  VerificationReadError,
+  type AgentVerificationRequest,
+  type VerificationInput,
+} from '../../settings/verification-core';
 import { VerificationRecovery } from '../../settings/verification-recovery';
 
-type Scenario = 'request' | 'withdraw' | 'unavailable' | 'astral' | 'invalid' | 'links';
+type Scenario =
+  | 'request'
+  | 'withdraw'
+  | 'unavailable'
+  | 'astral'
+  | 'invalid'
+  | 'links'
+  | 'request-delay'
+  | 'withdraw-delay'
+  | 'read-delay';
 const astralStatement = '😀'.repeat(2000);
 const boundaryLink = {
   label: '😀'.repeat(64),
@@ -37,6 +50,7 @@ function Example({
   scenario?: Scenario;
   onRequest?: (input: VerificationInput) => void;
 }) {
+  const withdrawing = scenario === 'withdraw' || scenario === 'withdraw-delay';
   const [client] = useState(() => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     queryClient.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'story-csrf' });
@@ -44,7 +58,7 @@ function Example({
     return queryClient;
   });
   const [controller] = useState(() => {
-    let current: AgentVerificationRequest | null = scenario === 'withdraw' ? pending : null;
+    let current: AgentVerificationRequest | null = withdrawing ? pending : null;
     let original: VerificationInput | { idempotencyKey: string } | null = null;
     const send = async (input: VerificationInput | { idempotencyKey: string }, withdraw: boolean) => {
       const requested =
@@ -57,12 +71,31 @@ function Example({
         throw new Error('Response lost after native command');
       }
       if (input !== original) throw new Error('Retry changed the original command');
+      if (scenario === 'request-delay' || scenario === 'withdraw-delay')
+        return {
+          ok: false as const,
+          status: 503,
+          message: 'Native command temporarily unavailable',
+          code: 'overloaded',
+          retryable: true,
+          requestId: 'native-command-retry',
+          retryAfter: '3600',
+        };
       current = withdraw ? { ...pending, state: 'withdrawn' } : { ...requested, state: 'approving' };
       return { ok: true as const, verificationRequest: withdraw ? current : requested };
     };
     return new VerificationRecovery('alice', {
       read: async (accountId) => {
         if (scenario === 'unavailable' && original) throw new Error('Native status unavailable');
+        if (scenario === 'read-delay' && original)
+          throw new VerificationReadError({
+            status: 503,
+            message: 'Native current status temporarily unavailable',
+            code: 'overloaded',
+            retryable: true,
+            requestId: 'native-read-retry',
+            retryAfter: '3600',
+          });
         return { accountId, verificationRequest: current, subjectTitle: 'Avery' };
       },
       request: (_, input) => {
@@ -84,7 +117,7 @@ function Example({
           controller={controller}
           csrfToken="story-csrf"
           initialDraft={
-            scenario === 'withdraw'
+            withdrawing
               ? undefined
               : {
                   selected: { id: 'subject-1', title: 'Avery', type: m.settings_verification_person() },
@@ -356,4 +389,51 @@ export const FiveLinkKeyboardEditing: Story = {
 export const FiveLinkKeyboardEditingPhone: Story = {
   ...FiveLinkKeyboardEditing,
   globals: { viewport: { value: 'phone390' } },
+};
+
+async function showRetryAfter(canvasElement: HTMLElement, withdraw = false) {
+  const view = within(canvasElement);
+  if (withdraw) {
+    await userEvent.click(await view.findByRole('button', { name: m.settings_verification_withdraw() }));
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_confirm_withdraw() }));
+  } else {
+    const submit = await view.findByRole('button', { name: m.settings_verification_submit() });
+    await waitFor(() => expect(submit).toBeEnabled());
+    await userEvent.click(submit);
+  }
+  await view.findByText(
+    withdraw ? m.settings_verification_uncertain_withdraw() : m.settings_verification_uncertain_request(),
+  );
+  await userEvent.click(view.getByRole('button', { name: m.settings_verification_retry_original() }));
+  await view.findByText(m.settings_retry_wait());
+  await expect(view.getByRole('button', { name: m.settings_verification_read_current() })).toBeDisabled();
+  await expect(view.getByRole('button', { name: m.settings_verification_retry_original() })).toBeDisabled();
+  await userEvent.click(view.getByText(m.settings_verification_original()));
+  if (!withdraw) {
+    const statement = view.getByRole('textbox', { name: m.settings_verification_statement() });
+    await expect(statement).toBeEnabled();
+    await userEvent.clear(statement);
+    await userEvent.type(statement, 'Later draft while waiting');
+    await expect(statement).toHaveValue('Later draft while waiting');
+    await expect(view.getByText(pending.statement, { selector: 'p' })).toBeVisible();
+    await expect(view.getByRole('button', { name: m.settings_verification_add_link() })).toBeEnabled();
+  } else {
+    await expect(view.getByText(pending.id)).toBeVisible();
+  }
+  await expect(view.queryByText(m.settings_verification_draft_preserved())).toBeNull();
+}
+
+export const RequestRetryAfter: Story = {
+  args: { scenario: 'request-delay' },
+  play: ({ canvasElement }) => showRetryAfter(canvasElement),
+};
+
+export const WithdrawalRetryAfter: Story = {
+  args: { scenario: 'withdraw-delay' },
+  play: ({ canvasElement }) => showRetryAfter(canvasElement, true),
+};
+
+export const CurrentReadRetryAfter: Story = {
+  args: { scenario: 'read-delay' },
+  play: ({ canvasElement }) => showRetryAfter(canvasElement),
 };

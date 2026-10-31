@@ -72,9 +72,16 @@ export const readVerificationState = createServerFn({ method: 'GET' })
     const { request, authorization, accountId } = await viewer();
     if (accountId !== expectedAccountId) throw new Error(m.settings_verification_identity_changed());
     const client = kernelClient();
-    const { readVerification } = await import('./verification-core');
-    const verificationRequest = await readVerification(client, accountId, authorization);
-    if (!verificationRequest) return { accountId, verificationRequest: null, subjectTitle: null };
+    const { readVerification, VerificationReadError } = await import('./verification-core');
+    let verificationRequest;
+    try {
+      verificationRequest = await readVerification(client, accountId, authorization);
+    } catch (error) {
+      if (error instanceof VerificationReadError) return { ok: false as const, failure: error.failure };
+      throw error;
+    }
+    if (!verificationRequest)
+      return { ok: true as const, value: { accountId, verificationRequest: null, subjectTitle: null } };
     const subject = await client
       .subjects({ id: verificationRequest.catalogueSubjectId })
       .get({ headers: { authorization } });
@@ -85,7 +92,7 @@ export const readVerificationState = createServerFn({ method: 'GET' })
         Object.values(labels)[0] ??
         verificationRequest.catalogueSubjectId)
       : verificationRequest.catalogueSubjectId;
-    return { accountId, verificationRequest, subjectTitle };
+    return { ok: true as const, value: { accountId, verificationRequest, subjectTitle } };
   });
 
 export const searchVerificationSubjects = createServerFn({ method: 'GET' })
