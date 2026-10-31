@@ -319,7 +319,13 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
               next.restoreUntil = deadline.rows[0]!.purge_after;
             } else if (operation === 'publish') next.visibility = (input as ZonePublishInput).visibility;
             else {
-              next.configuration = (input as ZoneConfigureInput).configuration;
+              const requested = (input as ZoneConfigureInput).configuration;
+              // Older clients may omit additive metadata. Only an explicit language selection changes
+              // an existing primary; dropping the field must not silently rename the Zone by fallback.
+              next.configuration =
+                row.configuration.primaryLanguage && requested.primaryLanguage === undefined
+                  ? { ...requested, primaryLanguage: row.configuration.primaryLanguage }
+                  : requested;
               next.mounts = (input as ZoneConfigureInput).mounts;
               next.releaseDigest = configuration!.releaseDigest;
             }

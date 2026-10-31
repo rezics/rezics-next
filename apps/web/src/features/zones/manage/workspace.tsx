@@ -204,7 +204,8 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, onChange, onReload
           {zones
             .filter((zone) => result?.kind !== 'saved' || zone.id !== result.zone.id)
             .map((zone) => {
-              const title = pickZoneName(zone, locale).text || m.zones_owner_unnamed({}, options);
+              const name = pickZoneName(zone, locale);
+              const title = name.text || m.zones_owner_unnamed({}, options);
               const zoneLinks = zonePaths(locale, zone.id);
               const expired = !zone.restoreUntil || Date.parse(zone.restoreUntil) <= now;
               const visibility = {
@@ -214,7 +215,9 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, onChange, onReload
               }[zone.visibility];
               return (
                 <ListRow key={zone.id} className="space-y-3 p-3">
-                  <h2 className="text-xl font-semibold break-words">{title}</h2>
+                  <h2 lang={name.lang} className="text-xl font-semibold break-words">
+                    {title}
+                  </h2>
                   <p className="text-sm text-muted-foreground">{visibility({}, options)}</p>
                   {!input.deleted ? (
                     <ListRowLink href={zoneLinks.edit}>{m.zones_owner_configure_named({ title }, options)}</ListRowLink>

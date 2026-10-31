@@ -96,11 +96,25 @@ test('an owner creates reads renames and translates one primary Zone name while 
   legacy.configuration.scope = [];
   legacy.configuration.pages = [{ route: '', document: page('Legacy static home') }];
   const old = await f.create(legacy);
-  expect((await f.configuration(old.id)).body.configuration).toEqual(legacy.configuration);
+  const oldRead = (await f.configuration(old.id)).body;
+  expect(oldRead.configuration).toEqual(legacy.configuration);
   expect(old).not.toHaveProperty('primaryLanguage');
-  expect(pickZoneName(old, 'it')).toEqual({ text: legacy.configuration.labels.en, lang: 'en' });
+  expect(pickZoneName(oldRead.zone, 'it')).toEqual({ text: legacy.configuration.labels.en, lang: 'en' });
   // A redacted legacy map uses the same fixed order, independent of property insertion order.
   expect(pickZoneName({ labels: { es: 'Sitio', ja: '本棚' } }, 'fr')).toEqual({ text: '本棚', lang: 'ja' });
   expect(pickZoneName({ labels: {} }, 'en')).toEqual({ text: '' });
   expect((await f.raw(old.id))!.configuration).toEqual(legacy.configuration);
+  const oldPath = `/v1/zones/${old.id}/configuration`;
+  const adopted = { ...legacy.configuration, primaryLanguage: 'ja' };
+  expect(
+    (await f.call('owner', 'PUT', oldPath, { configuration: adopted, mounts: [] }, f.conditional('1'))).status,
+  ).toBe(200);
+  // An older full-configuration client omits the new field, but cannot implicitly reset Japanese to English.
+  expect(
+    (await f.call('owner', 'PUT', oldPath, { configuration: legacy.configuration, mounts: [] }, f.conditional('2')))
+      .status,
+  ).toBe(200);
+  const retained = (await f.configuration(old.id)).body;
+  expect(retained.configuration.primaryLanguage).toBe('ja');
+  expect(pickZoneName(retained.zone, 'it')).toEqual({ text: legacy.configuration.labels.ja, lang: 'ja' });
 }, 180_000);

@@ -157,7 +157,8 @@ Saved configuration adds optional `primaryLanguage` to the existing versioned JS
 migration or bulk rewrite is needed. With an explicit supported primary language, the closed label map
 requires that name and allows any of the other seven translations. Each present name is nonblank safe
 plain text of at most 80 code points. Legacy configurations without primary metadata retain all eight
-required names and remain readable and editable without an implicit rename. Inert starters and generic
+required names and remain readable and editable without an implicit rename. Once explicit primary metadata exists, a legacy full-configuration command
+that omits the field retains that stored primary; only an explicit language selection changes it. Inert starters and generic
 composition label rules keep their existing requirements.
 
 Zone-only display uses the requested readable language, then the stored primary language, then the
