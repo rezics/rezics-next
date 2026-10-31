@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ContextComparisonView } from '../features/catalogue/context-curation-view';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -46,7 +46,7 @@ export function CandidateReview({
   documents?: { public: unknown; candidates: unknown };
 }) {
   const options = { locale: locale as never };
-  const [opened, setOpened] = useState(false);
+  const [opened, setOpened] = useState(!!(initialProperty && exactCandidate));
   const [read, setRead] = useState<CandidateRead>();
   const [property, setProperty] = useState(initialProperty ?? '');
   const [candidate, setCandidate] = useState<Candidate>();
@@ -61,6 +61,11 @@ export function CandidateReview({
   const request = useRef<CandidateCommand | null>(null);
   const running = useRef(false);
   const session = useRef<string | undefined>(undefined);
+  const openedTarget = useRef<string | null>(null);
+  const target =
+    initialProperty && exactCandidate
+      ? JSON.stringify([id, initialProperty, exactCandidate, context, slot?.target, slot?.sameAs, slot?.key])
+      : null;
   const current = read?.ok ? read : undefined;
   const publicRead = context
     ? (result?.contextReview?.reading ?? current?.contextReview?.reading)
@@ -161,6 +166,19 @@ export function CandidateReview({
       running.current = false;
     }
   }
+
+  useEffect(() => {
+    if (!target) {
+      openedTarget.current = null;
+      return;
+    }
+    if (openedTarget.current === target || running.current || request.current) return;
+    // An explicit exact-target handoff requests this same bounded read. Keep its identity across
+    // rerenders/StrictMode, and defer retargeting until an active read or frozen command finishes.
+    openedTarget.current = target;
+    setProperty(initialProperty!);
+    void load(initialProperty);
+  });
 
   async function confirm() {
     if (

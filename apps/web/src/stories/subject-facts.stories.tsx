@@ -140,8 +140,7 @@ export const Submitted: Story = {
     await expect(canvas.findByText(m.facts_results({ count: 2 }))).resolves.toBeVisible();
     const links = canvas.getAllByRole('link', { name: m.correction_review() });
     await userEvent.click(links[0]!);
-    await expect(canvas.findByRole('button', { name: m.candidate_entry() })).resolves.toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
+    await expect(canvas.findByRole('heading', { name: m.candidate_proposed() })).resolves.toBeVisible();
     await expect(canvas.findByRole('heading', { name: m.candidate_title() })).resolves.toBeVisible();
   },
 };

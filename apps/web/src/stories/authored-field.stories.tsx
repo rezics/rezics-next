@@ -96,7 +96,6 @@ async function review(canvasElement: HTMLElement) {
   const canvas = await submit(canvasElement);
   await canvas.findByText(m.correction_proposed());
   await userEvent.click(canvas.getByRole('button', { name: m.correction_review() }));
-  await userEvent.click(await canvas.findByRole('button', { name: m.candidate_entry() }));
   const candidate = await canvas.findByRole('region', { name: m.authored_candidate() });
   await expect(within(candidate).getByText('A quiet story about friendship.')).toBeVisible();
   await expect(

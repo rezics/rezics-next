@@ -140,7 +140,6 @@ export const Proposed: Story = {
     const canvas = await submit(canvasElement);
     await canvas.findByText(m.correction_proposed());
     await userEvent.click(canvas.getByRole('button', { name: m.correction_review() }));
-    await userEvent.click(await canvas.findByRole('button', { name: m.candidate_entry() }));
     await canvas.findByRole('heading', { name: m.candidate_proposed() });
     await expect(canvas.getByRole('button', { name: m.candidate_accept() })).toBeTruthy();
   },
