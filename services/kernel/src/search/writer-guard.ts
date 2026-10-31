@@ -9,6 +9,7 @@ import type {
 } from './public-filter-consumer-contract.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import { routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import {
@@ -29,6 +30,14 @@ import fence from './identity-epoch-participant-fence.sql';
 import { OpenSearchError, type OpenSearch } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
 import { writeIndexActions, validateRefreshResponse, validateIndexWriteReceipt } from './write-actions.ts';
+import {
+  readDiscoveryWriterPhysicalTarget,
+  readDiscoveryRepairWinner,
+  type DiscoveryProjection,
+  type DiscoveryRepairEffect,
+} from './account-discovery.ts';
+import { discoveryIndexName } from './indices.ts';
+import { validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 
 /** Durable native evidence retained by the existing writer, never supplied by Source callers. */
@@ -45,6 +54,31 @@ export type SearchRepairWriterReceipt = Readonly<{
   completion: IdentityNativeReceipt;
   native: unknown;
 }>;
+/** The mixed writer retains its actual tagged actions and both allocation identities. */
+export type DiscoveryRepairWriterReceipt = Readonly<{
+  writer: 'discovery';
+  locator: string;
+  subject: string;
+  partition: number;
+  epoch: number;
+  incarnation: string;
+  allocation: string;
+  writeAlias: string;
+  consumer: string;
+  sourcePosition: bigint;
+  effects: readonly DiscoveryRepairEffect[];
+  enrollment: IdentityNativeReceipt;
+  completion: IdentityNativeReceipt;
+}>;
+export type PublicFilterRepairWriterReceipt = SearchRepairWriterReceipt | DiscoveryRepairWriterReceipt;
+export function isDiscoveryRepairWriterReceipt(
+  receipt: PublicFilterRepairWriterReceipt,
+): receipt is DiscoveryRepairWriterReceipt {
+  return 'writer' in receipt && receipt.writer === 'discovery';
+}
+export const repairWriterPosition = (receipt: PublicFilterRepairWriterReceipt): bigint =>
+  isDiscoveryRepairWriterReceipt(receipt) ? receipt.sourcePosition : receipt.action.version;
+
 const repairEncode = (value: unknown) =>
   JSON.stringify(value, (_key, item) => (typeof item === 'bigint' ? { nativeBigint: String(item) } : item));
 export const decodeSearchRepairWriterReceipt = (value: string): SearchRepairWriterReceipt =>
@@ -145,6 +179,31 @@ export async function verifySearchRepairWriterReceipt(
   const fail = () => {
     throw unavailable('Native repair receipt or final writer fence changed');
   };
+  await verifyRetainedRepairWriter(db, index, receipt);
+  const physical = await readSearchWriterPhysicalTarget(search, index);
+  if (physical.incarnation !== receipt.incarnation || physical.writeAlias !== receipt.writeAlias) fail();
+  await readSearchRepairWinner(search, index, receipt.action);
+}
+
+function repairReviver(_key: string, item: unknown) {
+  if (
+    item &&
+    typeof item === 'object' &&
+    Object.keys(item).length === 1 &&
+    'nativeBigint' in item &&
+    typeof item.nativeBigint === 'string'
+  )
+    return BigInt(item.nativeBigint);
+  return item;
+}
+async function verifyRetainedRepairWriter(
+  db: Pick<Pool, 'query'>,
+  index: string,
+  receipt: PublicFilterRepairWriterReceipt,
+) {
+  const fail = () => {
+    throw unavailable('Native repair receipt or final writer fence changed');
+  };
   // Each query is anchored to one native home; never join observation and subject partitions.
   const gate = (
     await db.query(
@@ -180,8 +239,8 @@ export async function verifySearchRepairWriterReceipt(
     writer.incarnation !== receipt.incarnation ||
     writer.repair_locator !== receipt.locator ||
     !writer.repair_receipt ||
-    !isDeepStrictEqual(decodeSearchRepairWriterReceipt(writer.repair_receipt), receipt) ||
-    BigInt(writer.source_position ?? -1) !== receipt.action.version ||
+    !isDeepStrictEqual(JSON.parse(writer.repair_receipt, repairReviver), receipt) ||
+    BigInt(writer.source_position ?? -1) !== repairWriterPosition(receipt) ||
     writer.writer_transaction_id !== receipt.enrollment.transactionId ||
     BigInt(writer.writer_position ?? -1) !== receipt.enrollment.position ||
     writer.visible_transaction_id !== receipt.completion.transactionId ||
@@ -204,9 +263,266 @@ export async function verifySearchRepairWriterReceipt(
     BigInt(owner.position) < receipt.completion.position
   )
     fail();
-  const physical = await readSearchWriterPhysicalTarget(search, index);
-  if (physical.incarnation !== receipt.incarnation || physical.writeAlias !== receipt.writeAlias) fail();
-  await readSearchRepairWinner(search, index, receipt.action);
+}
+
+/** Dispatch by original physical family; no mixed receipt is accepted by the Subject verifier. */
+export function validatePublicFilterRepairWriterEvidence(index: string, receipt: PublicFilterRepairWriterReceipt) {
+  if (!isDiscoveryRepairWriterReceipt(receipt)) {
+    if (!/subjects-g[1-9][0-9]*$/.test(index)) throw unavailable('Subject receipt cannot settle a mixed target');
+    return validateSearchRepairWriterEvidence(index, receipt);
+  }
+  if (
+    !/discovery-g[1-9][0-9]*$/.test(index) ||
+    subjectPartition(receipt.subject) !== receipt.partition ||
+    receipt.enrollment.partition !== receipt.partition ||
+    receipt.completion.partition !== receipt.partition ||
+    receipt.enrollment.epoch !== receipt.epoch ||
+    receipt.completion.epoch !== receipt.epoch ||
+    receipt.completion.position <= receipt.enrollment.position ||
+    !receipt.allocation ||
+    receipt.writeAlias !== `${index}-write` ||
+    receipt.effects.length < 1 ||
+    receipt.effects.length > 100
+  )
+    throw unavailable('Mixed repair receipt changed');
+  const seen = new Set<string>();
+  let floor: bigint | undefined;
+  for (const { key, action, evidence } of receipt.effects) {
+    if (
+      key.id !== receipt.subject ||
+      subjectPartition(key.id) !== receipt.partition ||
+      key.route !== routeOf(key.id) ||
+      (key.owner === 'accounts' ? key.kind !== 'account' : key.owner !== 'semantic' || key.kind === 'account') ||
+      action.id !== `discovery-v1:${encodeURIComponent(key.kind)}:${key.id}` ||
+      seen.has(action.id) ||
+      action.version < 1n ||
+      action.version > 9223372036854775807n
+    )
+      throw unavailable('Mixed repair keyed Source action changed');
+    seen.add(action.id);
+    floor = floor === undefined || action.version < floor ? action.version : floor;
+    if (evidence.kind === 'bulk') validateDiscoveryWriteReceipt(evidence.bulk, index, [action]);
+    else if (evidence.kind === 'recovered' && action.op === 'index') validateRefreshResponse(200, evidence.refresh);
+    else throw unavailable('Mixed repair has no native dispatch receipt');
+  }
+  if (floor !== receipt.sourcePosition) throw unavailable('Mixed repair Source version changed');
+}
+export async function readPublicFilterRepairPhysicalTarget(db: Pick<Pool, 'query'>, search: OpenSearch, index: string) {
+  return /discovery-g[1-9][0-9]*$/.test(index)
+    ? readDiscoveryWriterPhysicalTarget(db, search, index)
+    : readSearchWriterPhysicalTarget(search, index);
+}
+export async function verifyPublicFilterRepairWriterReceipt(
+  db: Pick<Pool, 'query'>,
+  search: OpenSearch,
+  index: string,
+  receipt: PublicFilterRepairWriterReceipt,
+) {
+  validatePublicFilterRepairWriterEvidence(index, receipt);
+  if (!isDiscoveryRepairWriterReceipt(receipt)) return verifySearchRepairWriterReceipt(db, search, index, receipt);
+  await verifyRetainedRepairWriter(db, index, receipt);
+  const target = await readDiscoveryWriterPhysicalTarget(db, search, index);
+  if (
+    target.incarnation !== receipt.incarnation ||
+    target.allocation !== receipt.allocation ||
+    target.writeAlias !== receipt.writeAlias
+  )
+    throw unavailable('Mixed repair allocation changed');
+  for (const effect of receipt.effects) await readDiscoveryRepairWinner(search, index, effect.action);
+}
+
+/** Uses the existing native writer enrollment, dispatch and settlement rows, with the actual
+ * mixed projection as the only body/version producer. An interrupted attempt replays that writer;
+ * no copy flag, current ACK or engine conflict is a repair receipt.
+ */
+export function createDiscoveryRepairWriter(options: {
+  pool: Pool;
+  search: OpenSearch;
+  consumer: string;
+  projection: DiscoveryProjection;
+}) {
+  const { pool, search, projection, consumer } = options;
+  const index = discoveryIndexName(projection.target.prefix, projection.target.generation);
+  async function gate(
+    tx: CommandTransaction,
+    receipt: IdentityNativeReceipt,
+    physical: { incarnation: string; writeAlias: string },
+  ) {
+    await tx.query('SELECT pg_advisory_xact_lock_shared(hashtextextended($1,741))', [index]);
+    const publication = await tx.query(
+      'SELECT publication_fence FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1',
+      [index],
+    );
+    if (publication.rows[0]?.publication_fence) throw unavailable('Mixed generation is fenced for native publication');
+    const parameters = [receipt.partition, index, consumer, physical.incarnation, receipt.epoch, physical.writeAlias];
+    const existing = await tx.query(gateSql.sql, parameters);
+    const row =
+      existing.rows[0] ??
+      (
+        await tx.query(
+          `INSERT INTO search.identity_writer_gate(partition_no,physical_target,consumer,incarnation,owner_epoch,write_alias)
+       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING closed_token`,
+          parameters,
+        )
+      ).rows[0];
+    if (!row || row.closed_token) throw unavailable('Mixed repair writer requires native generation/home handoff');
+  }
+  return {
+    async repair(
+      subject: string,
+      obligation: bigint,
+      locator: string,
+      context: PublicFilterConsumerContext,
+    ): Promise<DiscoveryRepairWriterReceipt> {
+      if (!locator || locator.length > 8192 || obligation < 0n) throw new TypeError('Invalid mixed repair locator');
+      const partition = subjectPartition(subject);
+      const commandOptions = { partition, deadline: context.deadline };
+      const physical = await readDiscoveryWriterPhysicalTarget(pool, search, index);
+      if (physical.incarnation !== projection.target.uuid || physical.allocation !== projection.target.incarnation)
+        throw unavailable('Mixed projection allocation changed');
+      type Row = {
+        repair_locator: string | null;
+        repair_receipt: string | null;
+        writer_token: string | null;
+        writer_transaction_id: string;
+        writer_position: string;
+        owner_epoch: number;
+        incarnation: string;
+        dispatch_state: string;
+        closed_job: string | null;
+      };
+      const read = async () =>
+        (
+          await pool.query<Row>(
+            `SELECT repair_locator,repair_receipt,writer_token,writer_transaction_id,writer_position,owner_epoch,
+         incarnation,dispatch_state,closed_job FROM search.identity_writer
+         WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+            [partition, index, subject],
+          )
+        ).rows[0];
+      let row = await read();
+      if (row?.repair_locator !== locator) {
+        const token = crypto.randomUUID();
+        await runCommand(pool, commandOptions, async (tx, context) => {
+          const enrollment = await native(tx, context.transactionId);
+          await gate(tx, enrollment, physical);
+          const enrolled = await tx.query(enroll.sql, [
+            partition,
+            index,
+            physical.incarnation,
+            enrollment.epoch,
+            token,
+            enrollment.transactionId,
+            enrollment.position.toString(),
+            [subject],
+          ]);
+          if (enrolled.rowCount !== 1) throw unavailable('Mixed repair writer is pending or structurally fenced');
+          await tx.query(
+            `UPDATE search.identity_writer SET repair_locator=$4,repair_action=NULL,repair_receipt=NULL
+            WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+            [partition, index, subject, locator],
+          );
+          await tx.query(
+            `UPDATE search.identity_writer_gate SET enrollment_generation=enrollment_generation+1
+            WHERE partition_no=$1 AND physical_target=$2`,
+            [partition, index],
+          );
+          return { value: null, events: changed() };
+        });
+        row = await read();
+      }
+      if (!row || row.repair_locator !== locator || row.closed_job || row.incarnation !== physical.incarnation)
+        throw unavailable('Mixed retained repair changed');
+      if (row.dispatch_state === 'settled' && !row.writer_token && row.repair_receipt) {
+        const receipt: PublicFilterRepairWriterReceipt = JSON.parse(row.repair_receipt, repairReviver);
+        if (!isDiscoveryRepairWriterReceipt(receipt)) throw unavailable('Mixed repair retained a different writer');
+        return receipt;
+      }
+      if (!row.writer_token || !['enrolled', 'dispatched'].includes(row.dispatch_state))
+        throw unavailable('Mixed repair dispatch custody is unavailable');
+      const token = row.writer_token;
+      const enrollment: IdentityNativeReceipt = {
+        partition,
+        epoch: row.owner_epoch,
+        transactionId: row.writer_transaction_id,
+        position: BigInt(row.writer_position),
+      };
+      await runCommand(pool, commandOptions, async (tx, context) => {
+        const dispatch = await native(tx, context.transactionId);
+        if (dispatch.epoch !== enrollment.epoch) throw unavailable('Mixed repair home moved');
+        await gate(tx, dispatch, physical);
+        if (row.dispatch_state === 'enrolled') {
+          const dispatched = await tx.query(dispatchSql.sql, [
+            partition,
+            index,
+            physical.incarnation,
+            dispatch.epoch,
+            token,
+            [subject],
+          ]);
+          if (dispatched.rowCount !== 1) throw unavailable('Mixed repair dispatch was revoked');
+        } else {
+          // Serialize replay admission against native cancellation and retain the same enrollment.
+          const retained = await tx.query(
+            `SELECT 1 FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2
+            AND original_id=$3 AND writer_token=$4 AND dispatch_state='dispatched' FOR UPDATE`,
+            [partition, index, subject, token],
+          );
+          if (retained.rowCount !== 1) throw unavailable('Mixed repair replay was revoked');
+        }
+        return { value: null, events: changed() };
+      });
+      const effects = await projection.repairActions(subject, obligation);
+      if (!effects.length) throw unavailable('Mixed repair produced no native action');
+      const sourcePosition = effects.reduce(
+        (floor, effect) => (effect.action.version < floor ? effect.action.version : floor),
+        effects[0]!.action.version,
+      );
+      if (sourcePosition < obligation) throw unavailable('Mixed repair did not cover its own-home Source version');
+      if (!isDeepStrictEqual(await readDiscoveryWriterPhysicalTarget(pool, search, index), physical))
+        throw unavailable('Mixed repair allocation changed after dispatch');
+      const completed = await runCommand(pool, commandOptions, async (tx, context) => {
+        const completion = await native(tx, context.transactionId);
+        if (completion.epoch !== enrollment.epoch) throw unavailable('Mixed repair home moved before settlement');
+        await gate(tx, completion, physical);
+        const receipt: DiscoveryRepairWriterReceipt = {
+          writer: 'discovery',
+          locator,
+          subject,
+          partition,
+          epoch: enrollment.epoch,
+          ...physical,
+          consumer,
+          sourcePosition,
+          effects,
+          enrollment,
+          completion,
+        };
+        validatePublicFilterRepairWriterEvidence(index, receipt);
+        const settled = await tx.query(settle.sql, [
+          partition,
+          index,
+          physical.incarnation,
+          enrollment.epoch,
+          token,
+          enrollment.transactionId,
+          enrollment.position.toString(),
+          [subject],
+          completion.transactionId,
+          completion.position.toString(),
+          sourcePosition.toString(),
+        ]);
+        if (settled.rowCount !== 1) throw unavailable('Mixed repair changed at final native fence');
+        await tx.query(
+          `UPDATE search.identity_writer SET repair_receipt=$4
+          WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 AND repair_locator=$5`,
+          [partition, index, subject, repairEncode(receipt), locator],
+        );
+        return { value: receipt, events: changed() };
+      });
+      return completed.value;
+    },
+  };
 }
 
 export const SEARCH_IDENTITY_WRITER_CHUNK = 100;

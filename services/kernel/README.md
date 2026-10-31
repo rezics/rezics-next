@@ -49,6 +49,14 @@ kind metadata and the queried mixed consumer's checkpoint for freshness. Prepara
 public-preparation store and default worker; API requests never launch an indexing worker. Shutdown drains requests
 and closes the discovery runtime before the shared database pool.
 
+Mixed repair dispatch uses `createDiscoveryProjection` for both native owner families, including keyed old-kind
+removal. Its receipt is distinct from a Subject writer receipt: custody rechecks the actual allocation incarnation,
+engine UUID, tagged actions, exact-version native responses, refresh-visible winners and retained native
+writer enrollment/settlement. It uses the existing writer custody rows and Source repair-step/receipt verifiers;
+`discovery_copy.settled` never supplies repair closure. Interrupted dispatch replays through the same mixed writer
+with current own-home Source versions. The keyed copy window is at most 100; no population or kind census supplies
+repair targets.
+
 Native Source projection and reduction proof remains a prerequisite. The current `publicFilterSource` export in
 [`semantic/public-filter-source.ts`](src/semantic/public-filter-source.ts) still returns typed `metadata_missing`
 readiness from its projection-page and reduction readers. Default wiring preserves that result as

@@ -607,7 +607,14 @@ import type {
 import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
-import { createSearchWriterGuard, type SearchRepairWriterReceipt } from './writer-guard.ts';
+import {
+  createSearchWriterGuard,
+  createDiscoveryRepairWriter,
+  repairWriterPosition,
+  type PublicFilterRepairWriterReceipt,
+} from './writer-guard.ts';
+import { createDiscoveryProjection, nativeDiscoveryRegistry } from './account-discovery.ts';
+import { discoveryConsumer } from './generations.ts';
 import { validatePublicSuggestionInput, compilePublicSuggestion } from './public-suggestion-input.ts';
 import { type SubjectDocument } from './document.ts';
 import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
@@ -792,6 +799,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         check();
         return result as any;
       },
+      ...(config.search.bulkRaw
+        ? {
+            async bulkRaw<T>(body: string, options?: Parameters<NonNullable<OpenSearch['bulkRaw']>>[1]): Promise<T> {
+              check();
+              cost.engineRequests++;
+              cost.bytes += Buffer.byteLength(body);
+              const result = await config.search.bulkRaw!<T>(body, { ...options, timeoutMs: remaining(context) });
+              cost.bytes += Buffer.byteLength(encodeState(result));
+              check();
+              return result;
+            },
+          }
+        : {}),
       async bulk(lines, options) {
         check();
         cost.engineRequests++;
@@ -1836,18 +1856,54 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     if (work.records.some((row) => row.indexed === null)) throw new ConsumerFailure('source_pending');
     const origin = publicFilterSourceOrigin(config.source);
-    const targetMatch = /^(.*)subjects-g([1-9][0-9]*)$/.exec(target);
-    if (!origin || !targetMatch) throw new ConsumerFailure('source_pending');
-    const consumer = `search_${targetMatch[1]!.replaceAll('-', '_')}subjects_g${targetMatch[2]}`;
-    const nativeSource = createRatedSubjectSource(m.pool, origin.routeKey).source;
-    const guard = createSearchWriterGuard({
-      pool: m.pool,
-      search: m.native,
-      index: target,
-      consumer,
-      source: nativeSource,
-      listing: subjectListingSource(m.pool),
-    });
+    const subjectTarget = /^(.*)subjects-g([1-9][0-9]*)$/.exec(target);
+    const mixedTarget = /^(.*)discovery-g([1-9][0-9]*)$/.exec(target);
+    if (!origin || (!subjectTarget && !mixedTarget)) throw new ConsumerFailure('source_pending');
+    let guard:
+      | Pick<ReturnType<typeof createSearchWriterGuard>, 'repair'>
+      | ReturnType<typeof createDiscoveryRepairWriter>;
+    if (mixedTarget) {
+      if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
+      await mixedGeneration(m);
+      const generation = Number(mixedTarget[2]);
+      const prefix = mixedTarget[1]!;
+      const row = (
+        await m.sql<{ uuid: string; incarnation: string }>(
+          `SELECT index_uuid AS uuid,incarnation::text FROM search.discovery_generation
+         WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('ready','active')`,
+          [prefix, generation],
+        )
+      ).rows[0];
+      if (!row?.uuid || row.uuid !== q.consumer.incarnation) throw new ConsumerFailure('incarnation_changed');
+      const registry = await nativeDiscoveryRegistry(
+        m.pool,
+        origin.routeKey,
+        createRatedSubjectSource(m.pool, origin.routeKey).source,
+        { release: config.meaning.release },
+      );
+      guard = createDiscoveryRepairWriter({
+        pool: m.pool,
+        search: m.native,
+        consumer: discoveryConsumer(prefix, generation),
+        projection: createDiscoveryProjection({
+          pool: m.pool,
+          search: m.native,
+          registry,
+          listing: subjectListingSource(m.pool),
+          target: { prefix, generation, uuid: row.uuid, incarnation: row.incarnation },
+        }),
+      });
+    } else {
+      if (!subjectTarget) throw new ConsumerFailure('source_pending');
+      guard = createSearchWriterGuard({
+        pool: m.pool,
+        search: m.native,
+        index: target,
+        consumer: `search_${subjectTarget[1]!.replaceAll('-', '_')}subjects_g${subjectTarget[2]}`,
+        source: createRatedSubjectSource(m.pool, origin.routeKey).source,
+        listing: subjectListingSource(m.pool),
+      });
+    }
     const locator = encodeNative({
       observation: q.snapshot.observation,
       execution: work.execution,
@@ -1858,7 +1914,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     m.cost.candidates++;
     m.cost.accessPoints++;
     m.cost.dependencyPoints++;
-    let receipt: SearchRepairWriterReceipt;
+    let receipt: PublicFilterRepairWriterReceipt;
     try {
       receipt = await guard.repair(repair.source.subject, repair.source.position, locator, context);
     } catch (error) {
@@ -1868,7 +1924,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if (
       receipt.epoch !== repair.source.epoch ||
       receipt.incarnation !== q.consumer.incarnation ||
-      receipt.action.version < repair.source.position
+      repairWriterPosition(receipt) < repair.source.position
     )
       throw new ConsumerFailure('source_pending');
     await physical(q, m, context);

@@ -126,6 +126,15 @@ export function validateIndexWriteReceipt(response: unknown, target: string, act
   if (validateBulkResponse(response, target, actions)) throw new IndexWriteError([response]);
 }
 
+/** Revalidate an actual mixed bulk item response with exact signed-bigint versions. */
+export function validateDiscoveryWriteReceipt(
+  response: unknown,
+  target: string,
+  actions: readonly DiscoveryIndexAction[],
+): void {
+  if (validateBulkResponse(response, target, actions, true)) throw new IndexWriteError([response]);
+}
+
 /** Native mixed writer. A conflict settles only an identical, actually search-visible keyed winner. */
 export async function writeDiscoveryActions(
   search: OpenSearch,

@@ -15,11 +15,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
-import { readSearchWriterPhysicalTarget } from './identity-epoch-participant-physical.ts';
 import {
-  verifySearchRepairWriterReceipt,
-  validateSearchRepairWriterEvidence,
-  type SearchRepairWriterReceipt,
+  verifyPublicFilterRepairWriterReceipt,
+  readPublicFilterRepairPhysicalTarget,
+  repairWriterPosition,
+  validatePublicFilterRepairWriterEvidence,
+  type PublicFilterRepairWriterReceipt,
 } from './writer-guard.ts';
 import { subjectPartition } from './source.ts';
 import { validateRefreshResponse } from './write-actions.ts';
@@ -603,7 +604,7 @@ export async function readPublicFilterRepairSettlement(
         page: RetainedRepairPage;
       }[] = [];
       const copies = new Map<string, string>();
-      const latest = new Map<string, SearchRepairWriterReceipt>();
+      const latest = new Map<string, PublicFilterRepairWriterReceipt>();
       const effects: { page: number; item: number; receipt: string }[] = [];
       const append = async (ordinal: number, intent: string) => {
         const page = decode<RetainedRepairPage>(intent);
@@ -649,7 +650,7 @@ export async function readPublicFilterRepairSettlement(
           });
           if (!effect) throw new Failure('owner_unavailable');
           effects.push({ page: ordinal, item, receipt: effect.receipt });
-          const receipt = decode<SearchRepairWriterReceipt>(effect.receipt);
+          const receipt = decode<PublicFilterRepairWriterReceipt>(effect.receipt);
           const locator = encode({
             observation: q.snapshot.observation,
             execution: input.execution,
@@ -661,15 +662,15 @@ export async function readPublicFilterRepairSettlement(
             receipt.subject !== repair.source.subject ||
             receipt.partition !== repair.source.partition ||
             receipt.epoch !== repair.source.epoch ||
-            receipt.action.version < repair.source.position ||
+            repairWriterPosition(receipt) < repair.source.position ||
             receipt.incarnation !== q.consumer.incarnation
           )
             throw new Failure('binding_mismatch');
-          validateSearchRepairWriterEvidence(q.consumer.physicalTarget, receipt);
+          validatePublicFilterRepairWriterEvidence(q.consumer.physicalTarget, receipt);
           const previous = latest.get(receipt.subject);
           if (
             previous &&
-            (receipt.action.version < previous.action.version ||
+            (repairWriterPosition(receipt) < repairWriterPosition(previous) ||
               receipt.enrollment.position <= previous.completion.position)
           )
             throw new Failure('binding_mismatch');
@@ -697,7 +698,7 @@ export async function readPublicFilterRepairSettlement(
       const last = pages.at(-1)!;
       if (!last.page.complete || last.page.frontier !== null) throw new Failure('owner_unavailable');
       if (copies.size) throw new Failure('owner_unavailable');
-      const physical = await readSearchWriterPhysicalTarget(search, q.consumer.physicalTarget);
+      const physical = await readPublicFilterRepairPhysicalTarget(db, search, q.consumer.physicalTarget);
       if (physical.incarnation !== q.consumer.incarnation) throw new Failure('binding_mismatch');
       const own = [...new Set(retained.execution.ownRows.flatMap((row) => [row.original, row.terminal]))].sort();
       const subjects = [...new Set([...own, ...latest.keys()])].sort(
@@ -802,12 +803,12 @@ export async function readPublicFilterRepairSettlement(
       for (const receipt of [...final.latest.values()].sort(
         (a, b) => a.partition - b.partition || a.subject.localeCompare(b.subject),
       ))
-        await verifySearchRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
+        await verifyPublicFilterRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
       const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
       validateRefreshResponse(refreshed.status, refreshed.body);
       if (
         !isDeepStrictEqual(
-          await readSearchWriterPhysicalTarget(search, q.consumer.physicalTarget),
+          await readPublicFilterRepairPhysicalTarget(db, search, q.consumer.physicalTarget),
           final.basis.physical,
         )
       )
