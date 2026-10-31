@@ -102,6 +102,9 @@ export function createNativeWorkflowProofPorts({ database }: { database: Pool })
       reservationId?: string;
     }): Promise<AutomatedCreationBinding | null> {
       const { registrationId, operationKey, accountId, reservationId } = input;
+      // Only the still-live original stage can answer this approval reader.
+      // Terminal proof skeletons never reconstruct a creation descriptor or
+      // authorize a new producer after the stage's final reader has retired.
       if (!bounded(registrationId) || !bounded(operationKey) || operationKey.length > 128) return null;
       const requestKey = `automated:${createHash('sha256').update(JSON.stringify(operationKey)).digest('hex')}`;
       const row = (

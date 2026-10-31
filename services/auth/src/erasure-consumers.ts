@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { AccountWorkflowPorts } from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { isRefusal } from './workflows.ts';
+import { registrationActivationResult, registrationExpiryResult } from './native-proof-minimization.ts';
 
 /** Close only the native credential CAS consumer. The locked source receipt,
  * immutable stage binding and permanent producer fence are the proof; neither
@@ -101,7 +102,8 @@ export async function registrationTerminal(connection: PoolClient, stageId: stri
     await connection.query(
       `SELECT 1 FROM auth_registration_stage s JOIN auth_native_consumer_proof p
      ON p.store='registration' AND p.key=s.registration_id
-     WHERE s.registration_id=$1 AND p.binding=${registrationBindingSql}`,
+     WHERE s.registration_id=$1 AND p.binding=${registrationBindingSql}
+       AND p.result->>'outcome' IN ('activated','expired')`,
       [stageId],
     )
   ).rowCount;
@@ -113,16 +115,29 @@ export async function recordRegistrationActivation(
   pool: Pool,
   stageId: string,
   activationKey: string,
-  result: { accountId: string },
-): Promise<void> {
-  await pool.query(
+  result: unknown,
+): Promise<boolean> {
+  if (!registrationActivationResult(result)) return false;
+  const recorded = await pool.query(
     `INSERT INTO auth_native_consumer_proof (store,key,binding,result)
      SELECT 'registration',s.registration_id,${registrationBindingSql},
        jsonb_build_object('outcome','activated','sourceResult',$3::jsonb)
      FROM auth_registration_stage s WHERE s.registration_id=$1 AND s.activation_key=$2
        AND s.account_id=$4 AND s.reservation_id IS NOT NULL AND s.consumer_workflow_id IS NOT NULL
-     ON CONFLICT (store,key) DO NOTHING`,
+     ON CONFLICT (store,key) DO NOTHING RETURNING key`,
     [stageId, activationKey, JSON.stringify(result), result.accountId],
+  );
+  return (
+    (recorded.rowCount ?? 0) > 0 ||
+    !!(
+      await pool.query(
+        `SELECT 1 FROM auth_registration_stage s JOIN auth_native_consumer_proof p
+       ON p.store='registration' AND p.key=s.registration_id
+       WHERE s.registration_id=$1 AND s.activation_key=$2 AND p.binding=${registrationBindingSql}
+         AND p.result=jsonb_build_object('outcome','activated','sourceResult',$3::jsonb)`,
+        [stageId, activationKey, JSON.stringify(result)],
+      )
+    ).rowCount
   );
 }
 
@@ -149,8 +164,7 @@ async function continueRegistration(pool: Pool, stageId: string, runtime: Native
       try {
         const result = (await runtime.access.activate({ accountId: row.account_id, key: row.activation_key, evidence }))
           .value;
-        await recordRegistrationActivation(pool, stageId, row.activation_key, result);
-        return true;
+        return await recordRegistrationActivation(pool, stageId, row.activation_key, result);
       } catch (error) {
         if (!isRefusal(error)) throw error;
       }
@@ -196,6 +210,20 @@ async function continueRegistration(pool: Pool, stageId: string, runtime: Native
     ).value;
     responsibilityResult = { retired, released };
   }
+  const result = registrationExpiryResult(
+    claim,
+    sourceResult,
+    handleResult,
+    row.erasure_operator_id
+      ? {
+          operatorAccountId: row.erasure_operator_id,
+          subjectAccountId: row.account_id,
+          reservationId: row.operator_reservation_id!,
+        }
+      : undefined,
+    responsibilityResult,
+  );
+  if (!result) return false;
   // The real terminal account command precedes the existing Auth obligation.
   // Starting it releases its connection before the parent checkpoint is acquired.
   await runtime.auth.internal.startAccountErasure(row.account_id);
@@ -204,11 +232,7 @@ async function continueRegistration(pool: Pool, stageId: string, runtime: Native
     SELECT 'registration',s.registration_id,${registrationBindingSql},$2::jsonb
     FROM auth_registration_stage s WHERE s.registration_id=$1 AND ${registrationBindingSql}=$3::jsonb
     ON CONFLICT (store,key) DO NOTHING`,
-    [
-      stageId,
-      JSON.stringify({ outcome: 'expired', sourceResult, handleResult, responsibilityResult }),
-      JSON.stringify(registrationBinding(row)),
-    ],
+    [stageId, JSON.stringify(result), JSON.stringify(registrationBinding(row))],
   );
   return true;
 }

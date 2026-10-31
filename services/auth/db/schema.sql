@@ -3545,13 +3545,6 @@ CREATE TRIGGER auth_credential_stage_immutable BEFORE UPDATE ON public.auth_effe
 
 
 --
--- Name: auth_native_consumer_proof auth_native_consumer_proof_immutable; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER auth_native_consumer_proof_immutable BEFORE DELETE OR UPDATE ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_credential_terminal_immutable();
-
-
---
 -- Name: auth_effect_receipt auth_native_credential_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -5743,3 +5736,246 @@ BEGIN
 END $$;
 
 CREATE TRIGGER zzz_request_parties BEFORE INSERT OR UPDATE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_request_parties_guard();
+
+--
+-- Name: auth_minimize_native_registration(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_minimize_native_registration(stage_key text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE proof auth_native_consumer_proof; skeleton jsonb;
+BEGIN
+  IF stage_key IS NULL THEN RETURN; END IF;
+  -- Lock before the separate dependency statement. Concurrent last-reader
+  -- deletions serialize here; the waiter observes the previous commit as well.
+  SELECT * INTO proof FROM auth_native_consumer_proof
+    WHERE store='registration' AND key=stage_key FOR UPDATE;
+  IF NOT FOUND THEN RETURN; END IF;
+  skeleton:=auth_native_registration_skeleton(proof.binding,proof.result);
+  IF skeleton IS NULL OR auth_native_registration_readers(stage_key) THEN RETURN; END IF;
+  UPDATE auth_native_consumer_proof SET
+    binding=CASE WHEN proof.result->>'outcome'='expired' THEN 'null'::jsonb
+      ELSE jsonb_build_array(proof.binding->0,proof.binding->1,proof.binding->2,proof.binding->3) END,
+    result=skeleton WHERE store='registration' AND key=stage_key;
+END $$;
+
+
+--
+-- Name: auth_native_consumer_proof_minimize_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_consumer_proof_minimize_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE skeleton jsonb; minimal_binding jsonb;
+BEGIN
+  IF TG_OP='UPDATE' AND OLD.store='registration' AND NEW.store=OLD.store AND NEW.key=OLD.key THEN
+    skeleton:=auth_native_registration_skeleton(OLD.binding,OLD.result);
+    minimal_binding:=CASE WHEN OLD.result->>'outcome'='expired' THEN 'null'::jsonb
+      ELSE jsonb_build_array(OLD.binding->0,OLD.binding->1,OLD.binding->2,OLD.binding->3) END;
+    IF skeleton IS NOT NULL AND NEW.binding=minimal_binding AND NEW.result=skeleton
+      AND NOT auth_native_registration_readers(OLD.key) THEN RETURN NEW; END IF;
+  END IF;
+  RAISE EXCEPTION 'Native consumer terminal proof is immutable' USING ERRCODE='55000';
+END $$;
+
+
+--
+-- Name: auth_native_registration_producer_fence(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_producer_fence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE stage_key text;
+BEGIN
+  stage_key:=CASE WHEN TG_TABLE_NAME='auth_registration_stage' THEN to_jsonb(NEW)->>'registration_id'
+    ELSE to_jsonb(NEW)->>'erasure_stage_id' END;
+  IF TG_OP='UPDATE' THEN
+    IF to_jsonb(NEW)->>'erasure_stage_id' IS NOT DISTINCT FROM to_jsonb(OLD)->>'erasure_stage_id'
+      THEN RETURN NEW; END IF;
+    IF to_jsonb(OLD)->>'erasure_stage_id' IS NOT NULL THEN
+      RAISE EXCEPTION 'Native registration reader identity is immutable' USING ERRCODE='55000';
+    END IF;
+  END IF;
+  IF stage_key IS NULL THEN RETURN NEW; END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('auth-native-registration:'||stage_key,0));
+  IF EXISTS(SELECT 1 FROM auth_native_consumer_proof WHERE store='registration' AND key=stage_key) THEN
+    -- Preserve existing exact-key ON CONFLICT replay while its native reader
+    -- remains. The row lock prevents a concurrent DELETE/reinsert resurrection.
+    IF TG_TABLE_NAME='auth_workflow_request' THEN
+      PERFORM 1 FROM auth_workflow_request WHERE workflow_id=NEW.workflow_id
+        AND erasure_stage_id=stage_key FOR KEY SHARE;
+      IF FOUND THEN RETURN NEW; END IF;
+    ELSIF TG_TABLE_NAME='auth_provisioning_receipt' THEN
+      PERFORM 1 FROM auth_provisioning_receipt WHERE idempotency_key=NEW.idempotency_key
+        AND erasure_stage_id=stage_key FOR KEY SHARE;
+      IF FOUND THEN RETURN NEW; END IF;
+    END IF;
+    RAISE EXCEPTION 'Native registration consumer is terminal' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_registration_proof_insert_lock(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_proof_insert_lock() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.store='registration' THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended('auth-native-registration:'||NEW.key,0));
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_registration_proof_inserted(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_proof_inserted() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.store='registration' THEN PERFORM auth_minimize_native_registration(NEW.key); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_registration_reader_deleted(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_reader_deleted() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM auth_minimize_native_registration(CASE WHEN TG_TABLE_NAME='auth_registration_stage'
+    THEN to_jsonb(OLD)->>'registration_id' ELSE to_jsonb(OLD)->>'erasure_stage_id' END);
+  RETURN OLD;
+END $$;
+
+
+--
+-- Name: auth_native_registration_readers(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_readers(stage_key text) RETURNS boolean
+    LANGUAGE sql
+    AS $$
+  SELECT EXISTS(SELECT 1 FROM auth_registration_stage WHERE registration_id=stage_key)
+    OR EXISTS(SELECT 1 FROM auth_provisioning_receipt WHERE erasure_stage_id=stage_key)
+    OR EXISTS(SELECT 1 FROM auth_workflow_request WHERE erasure_stage_id=stage_key);
+$$;
+
+
+--
+-- Name: auth_native_registration_skeleton(jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_skeleton(source_binding jsonb, source_result jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    AS $_$
+  SELECT CASE
+    WHEN jsonb_array_length(CASE WHEN jsonb_typeof(source_binding)='array' THEN source_binding ELSE '[]'::jsonb END)=8
+      AND source_result->>'outcome'='expired'
+      AND source_result->'sourceResult'->>'accountId'=source_binding->>3
+      AND source_result->'sourceResult'->>'kind'='tombstone'
+      AND source_result->'sourceResult'->>'receiptId'<>''
+      AND source_result->'sourceResult'->>'minimumAuthnEpoch' ~ '^[1-9][0-9]*$'
+      AND source_result->'handleResult'=jsonb_build_object('accountId',source_binding->>3,'handle',source_binding->>4)
+      AND (CASE WHEN source_binding->6='null'::jsonb THEN NOT source_result ? 'responsibilityResult'
+        ELSE source_result->'responsibilityResult'=jsonb_build_object(
+          'retired',jsonb_build_object('operatorAccountId',source_binding->>6,
+            'subjectAccountId',source_binding->>3,'reservationId',source_binding->>7),
+          'released',jsonb_build_object('operatorAccountId',source_binding->>6,
+            'subjectAccountId',source_binding->>3,'reservationId',source_binding->>7)) END)
+      THEN jsonb_build_object('outcome','expired')
+    WHEN jsonb_array_length(CASE WHEN jsonb_typeof(source_binding)='array' THEN source_binding ELSE '[]'::jsonb END)=8
+      AND source_result=jsonb_build_object('outcome','activated',
+        'sourceResult',jsonb_build_object('accountId',source_binding->>3))
+      THEN source_result
+    ELSE NULL END;
+$_$;
+
+
+--
+-- Name: auth_native_proof_provisioning_stage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_native_proof_provisioning_stage ON public.auth_provisioning_receipt USING btree (erasure_stage_id, idempotency_key);
+
+
+--
+-- Name: auth_native_proof_request_stage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_native_proof_request_stage ON public.auth_workflow_request USING btree (erasure_stage_id, workflow_id);
+
+
+--
+-- Name: auth_native_consumer_proof aa_native_proof_insert_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER aa_native_proof_insert_lock BEFORE INSERT ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_proof_insert_lock();
+
+
+--
+-- Name: auth_provisioning_receipt aa_native_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER aa_native_terminal_fence BEFORE INSERT OR UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_producer_fence();
+
+
+--
+-- Name: auth_registration_stage aa_native_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER aa_native_terminal_fence BEFORE INSERT ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_producer_fence();
+
+
+--
+-- Name: auth_workflow_request aa_native_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER aa_native_terminal_fence BEFORE INSERT OR UPDATE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_producer_fence();
+
+
+--
+-- Name: auth_native_consumer_proof auth_native_consumer_proof_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_consumer_proof_immutable BEFORE DELETE OR UPDATE ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_consumer_proof_minimize_guard();
+
+
+--
+-- Name: auth_native_consumer_proof native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER native_proof_minimize AFTER INSERT ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_proof_inserted();
+
+
+--
+-- Name: auth_provisioning_receipt native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER native_proof_minimize AFTER DELETE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_reader_deleted();
+
+
+--
+-- Name: auth_registration_stage native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER native_proof_minimize AFTER DELETE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_reader_deleted();
+
+
+--
+-- Name: auth_workflow_request native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER native_proof_minimize AFTER DELETE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_reader_deleted();

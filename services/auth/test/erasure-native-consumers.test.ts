@@ -25,6 +25,8 @@ let expiredStage: {
 let creator: Person;
 let operatorId: string;
 let originalBarrier: number;
+let restoreExpiryObservation: (() => void) | undefined;
+const originalExpiryOutputs: { source?: unknown; handle?: unknown; retired?: unknown; released?: unknown } = {};
 let expiredInput: Parameters<Awaited<ReturnType<typeof nativeFixture>>['host']['workflows']['createAutomated']>[0];
 beforeAll(async () => {
   f = await nativeFixture();
@@ -35,6 +37,7 @@ beforeAll(async () => {
   governor = await f.login(governor, 'native-governance', requested);
 }, 120_000);
 afterAll(async () => {
+  restoreExpiryObservation?.();
   await f?.close();
 }, 120_000);
 
@@ -106,6 +109,43 @@ test('a legitimate deleted creator keeps a pending registration secret-free unti
     )
   ).rows[0]!;
   expect(expiredStage.operator_reservation_id).toBeString();
+  // Observe actual original command outputs transiently; no persisted audit or
+  // replacement result supplies the post-retirement replay oracle.
+  const ports = f.bindings.workflowPorts;
+  const expire = ports.expireRegistration;
+  const releaseHandle = ports.releaseExpiredRegistrationHandle;
+  const retire = ports.retireResponsibility;
+  const releaseOperator = ports.releaseResponsibility;
+  if (!retire || !releaseOperator) throw new Error('Native responsibility ports missing');
+  ports.expireRegistration = async (input) => {
+    const result = await expire(input);
+    if (input.key === `wf:${expiredStage.consumer_workflow_id}:expire`) originalExpiryOutputs.source ??= result.value;
+    return result;
+  };
+  ports.releaseExpiredRegistrationHandle = async (input) => {
+    const result = await releaseHandle(input);
+    if (input.key === `wf:${expiredStage.consumer_workflow_id}:release-expired`)
+      originalExpiryOutputs.handle ??= result.value;
+    return result;
+  };
+  ports.retireResponsibility = async (input) => {
+    const result = await retire(input);
+    if (input.key === `wf:${expiredStage.consumer_workflow_id}:retire-operator`)
+      originalExpiryOutputs.retired ??= result.value;
+    return result;
+  };
+  ports.releaseResponsibility = async (input) => {
+    const result = await releaseOperator(input);
+    if (input.key === `wf:${expiredStage.consumer_workflow_id}:release-operator`)
+      originalExpiryOutputs.released ??= result.value;
+    return result;
+  };
+  restoreExpiryObservation = () => {
+    ports.expireRegistration = expire;
+    ports.releaseExpiredRegistrationHandle = releaseHandle;
+    ports.retireResponsibility = retire;
+    ports.releaseResponsibility = releaseOperator;
+  };
   // This is a real approved self deletion. The creator holds no membership or
   // operator responsibility; the separate organization legitimately keeps its hold.
   const creatorHandle = (await f.bindings.workflowPorts.readAccount(creator.accountId))!.handle;
@@ -554,120 +594,136 @@ test('an interrupted real reduction finishes through the default consumer using 
 }, 180_000);
 
 test('default native expiry releases the exact registration, handle and operator slot after the source deadline, across restart and duplicate delivery', async () => {
-  // The source owns its thirty-minute pending lifetime. No test clock, source T,
-  // terminal column, hold deletion or trigger bypass makes this case eligible.
-  await eventually(
-    async () =>
-      !!(
-        await f.pool.query("SELECT 1 FROM auth_native_consumer_proof WHERE store='registration' AND key=$1", [
-          expiredStage.registration_id,
-        ])
-      ).rowCount,
-    Math.max(120_000, expiredStage.expires_at.getTime() - Date.now() + 120_000),
-  );
-  await eventually(
-    async () =>
-      !(
-        await f.pool.query('SELECT 1 FROM auth_registration_stage WHERE registration_id=$1', [
-          expiredStage.registration_id,
-        ])
-      ).rowCount,
-  );
-  const proof = (
-    await f.pool.query("SELECT binding,result FROM auth_native_consumer_proof WHERE store='registration' AND key=$1", [
-      expiredStage.registration_id,
-    ])
-  ).rows[0]!;
-  expect(proof.binding).toEqual([
-    expiredStage.registration_id,
-    expiredStage.consumer_workflow_id,
-    expiredStage.activation_key,
-    expiredStage.account_id,
-    expiredStage.handle,
-    expiredStage.reservation_id,
-    operatorId,
-    expiredStage.operator_reservation_id,
-  ]);
-  expect(proof.result.outcome).toBe('expired');
-  expect(proof.result.sourceResult.accountId).toBe(expiredStage.account_id);
-  const claim = {
-    accountId: expiredStage.account_id,
-    handle: expiredStage.handle,
-    reservationId: expiredStage.reservation_id,
-    expiresAt: expiredStage.expires_at.toISOString(),
-  };
-  expect(
-    (
-      await f.bindings.workflowPorts.expireRegistration({
-        ...claim,
-        key: `wf:${expiredStage.consumer_workflow_id}:expire`,
-      })
-    ).value,
-  ).toEqual(proof.result.sourceResult);
-  expect(
-    (
-      await f.bindings.workflowPorts.releaseExpiredRegistrationHandle({
-        ...claim,
-        key: `wf:${expiredStage.consumer_workflow_id}:release-expired`,
-      })
-    ).value,
-  ).toEqual(proof.result.handleResult);
-  const responsibility = {
-    operatorAccountId: operatorId,
-    subjectAccountId: expiredStage.account_id,
-    reservationId: expiredStage.operator_reservation_id,
-  };
-  expect(proof.result.responsibilityResult).toEqual({ retired: responsibility, released: responsibility });
-  expect(
-    (
-      await f.kernel.query(
-        'SELECT terminal,operator_account_id FROM access.operator_relation_slot WHERE route=$1 AND subject_account_id=$2 AND reservation_id=$3',
-        [f.routeOf(expiredStage.account_id), expiredStage.account_id, expiredStage.operator_reservation_id],
-      )
-    ).rows[0],
-  ).toEqual({ terminal: true, operator_account_id: operatorId });
-  expect(
-    (
-      await f.kernel.query(
-        'SELECT 1 FROM access.lifecycle_coordination WHERE route=$1 AND account_id=$2 AND reservation_id=$3',
-        [f.routeOf(operatorId), operatorId, expiredStage.operator_reservation_id],
-      )
-    ).rowCount,
-  ).toBe(0);
-  expect((await f.bindings.workflowPorts.readAccount(expiredStage.account_id))!.state).toBe('deleted');
-  await eventually(
-    async () =>
-      !!(await f.pool.query('SELECT native_completed_at FROM auth_erasure WHERE account_id=$1', [creator.accountId]))
-        .rows[0]?.native_completed_at,
-  );
-  expect(
-    (
-      await f.pool.query('SELECT 1 FROM auth_workflow_request WHERE workflow_id=$1', [
-        expiredStage.consumer_workflow_id,
-      ])
-    ).rowCount,
-  ).toBe(0);
-  await expect(f.host.workflows.createAutomated(expiredInput)).rejects.toThrow();
-  expect((await f.pool.query('SELECT 1 FROM "user" WHERE id=$1', [expiredStage.account_id])).rowCount).toBe(0);
-  await f.host.workflows.redriveNativeErasure();
-  await f.host.workflows.redriveNativeErasure();
-  expect(
-    (
+  try {
+    // The source owns its thirty-minute pending lifetime. No test clock, source T,
+    // terminal column, hold deletion or trigger bypass makes this case eligible.
+    await eventually(
+      async () =>
+        !!(
+          await f.pool.query("SELECT 1 FROM auth_native_consumer_proof WHERE store='registration' AND key=$1", [
+            expiredStage.registration_id,
+          ])
+        ).rowCount,
+      Math.max(120_000, expiredStage.expires_at.getTime() - Date.now() + 120_000),
+    );
+    await eventually(
+      async () =>
+        !(
+          await f.pool.query('SELECT 1 FROM auth_registration_stage WHERE registration_id=$1', [
+            expiredStage.registration_id,
+          ])
+        ).rowCount,
+    );
+    await eventually(
+      async () =>
+        !(
+          await f.pool.query('SELECT 1 FROM auth_workflow_request WHERE workflow_id=$1', [
+            expiredStage.consumer_workflow_id,
+          ])
+        ).rowCount,
+    );
+    const proof = (
       await f.pool.query(
         "SELECT binding,result FROM auth_native_consumer_proof WHERE store='registration' AND key=$1",
         [expiredStage.registration_id],
       )
-    ).rows[0],
-  ).toEqual(proof);
-  const erasure = (
-    await f.pool.query(
-      "SELECT barrier,consent_due_at>=accepted_at+interval '310 seconds' AS retained_cutoff,native_completed_at,pending_code FROM auth_erasure WHERE account_id=$1",
-      [creator.accountId],
-    )
-  ).rows[0]!;
-  expect(erasure.barrier).toBe(originalBarrier);
-  expect(erasure.native_completed_at).toBeInstanceOf(Date);
-  expect(erasure.retained_cutoff).toBe(true);
-  expect(erasure.pending_code).not.toBe('none');
-  expect((await f.bindings.workflowPorts.readAccount(operatorId))!.state).toBe('active');
+    ).rows[0]!;
+    expect(proof).toEqual({ binding: null, result: { outcome: 'expired' } });
+    expect(originalExpiryOutputs.source).toBeDefined();
+    const claim = {
+      accountId: expiredStage.account_id,
+      handle: expiredStage.handle,
+      reservationId: expiredStage.reservation_id,
+      expiresAt: expiredStage.expires_at.toISOString(),
+    };
+    expect(
+      (
+        await f.bindings.workflowPorts.expireRegistration({
+          ...claim,
+          key: `wf:${expiredStage.consumer_workflow_id}:expire`,
+        })
+      ).value,
+    ).toEqual(originalExpiryOutputs.source);
+    expect(
+      (
+        await f.bindings.workflowPorts.releaseExpiredRegistrationHandle({
+          ...claim,
+          key: `wf:${expiredStage.consumer_workflow_id}:release-expired`,
+        })
+      ).value,
+    ).toEqual(originalExpiryOutputs.handle);
+    expect(originalExpiryOutputs.handle).toEqual({ accountId: expiredStage.account_id, handle: expiredStage.handle });
+    const responsibility = {
+      operatorAccountId: operatorId,
+      subjectAccountId: expiredStage.account_id,
+      reservationId: expiredStage.operator_reservation_id,
+    };
+    expect({ retired: originalExpiryOutputs.retired, released: originalExpiryOutputs.released }).toEqual({
+      retired: responsibility,
+      released: responsibility,
+    });
+    const retire = f.bindings.workflowPorts.retireResponsibility;
+    const release = f.bindings.workflowPorts.releaseResponsibility;
+    if (!retire || !release) throw new Error('Native responsibility ports missing');
+    expect(
+      (await retire({ ...responsibility, key: `wf:${expiredStage.consumer_workflow_id}:retire-operator` })).value,
+    ).toEqual(originalExpiryOutputs.retired);
+    expect(
+      (await release({ ...responsibility, key: `wf:${expiredStage.consumer_workflow_id}:release-operator` })).value,
+    ).toEqual(originalExpiryOutputs.released);
+    expect(
+      (
+        await f.kernel.query(
+          'SELECT terminal,operator_account_id FROM access.operator_relation_slot WHERE route=$1 AND subject_account_id=$2 AND reservation_id=$3',
+          [f.routeOf(expiredStage.account_id), expiredStage.account_id, expiredStage.operator_reservation_id],
+        )
+      ).rows[0],
+    ).toEqual({ terminal: true, operator_account_id: operatorId });
+    expect(
+      (
+        await f.kernel.query(
+          'SELECT 1 FROM access.lifecycle_coordination WHERE route=$1 AND account_id=$2 AND reservation_id=$3',
+          [f.routeOf(operatorId), operatorId, expiredStage.operator_reservation_id],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect((await f.bindings.workflowPorts.readAccount(expiredStage.account_id))!.state).toBe('deleted');
+    await eventually(
+      async () =>
+        !!(await f.pool.query('SELECT native_completed_at FROM auth_erasure WHERE account_id=$1', [creator.accountId]))
+          .rows[0]?.native_completed_at,
+    );
+    expect(
+      (
+        await f.pool.query('SELECT 1 FROM auth_workflow_request WHERE workflow_id=$1', [
+          expiredStage.consumer_workflow_id,
+        ])
+      ).rowCount,
+    ).toBe(0);
+    await expect(f.host.workflows.createAutomated(expiredInput)).rejects.toThrow();
+    expect((await f.pool.query('SELECT 1 FROM "user" WHERE id=$1', [expiredStage.account_id])).rowCount).toBe(0);
+    await f.host.workflows.redriveNativeErasure();
+    await f.host.workflows.redriveNativeErasure();
+    expect(
+      (
+        await f.pool.query(
+          "SELECT binding,result FROM auth_native_consumer_proof WHERE store='registration' AND key=$1",
+          [expiredStage.registration_id],
+        )
+      ).rows[0],
+    ).toEqual(proof);
+    const erasure = (
+      await f.pool.query(
+        "SELECT barrier,consent_due_at>=accepted_at+interval '310 seconds' AS retained_cutoff,native_completed_at,pending_code FROM auth_erasure WHERE account_id=$1",
+        [creator.accountId],
+      )
+    ).rows[0]!;
+    expect(erasure.barrier).toBe(originalBarrier);
+    expect(erasure.native_completed_at).toBeInstanceOf(Date);
+    expect(erasure.retained_cutoff).toBe(true);
+    expect(erasure.pending_code).not.toBe('none');
+    expect((await f.bindings.workflowPorts.readAccount(operatorId))!.state).toBe('active');
+  } finally {
+    restoreExpiryObservation?.();
+  }
 }, 2_000_000);

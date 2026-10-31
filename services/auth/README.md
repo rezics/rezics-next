@@ -2099,9 +2099,28 @@ remains refused; this path never restores its former authority.
   evidence; a committed activation wins without another activation. Otherwise the
   existing source expiry command decides whether its original thirty-minute
   deadline is due. Only actual expiry, handle release, operator retirement/release
-  and child Auth obligation acceptance establish release completion. Immutable
-  native proof retains those exact reservation bindings and returned results.
-  A native request can then close through its exact stage proof after stage removal.
+  and child Auth obligation acceptance establish release completion. Full native
+  proof retains those exact reservation bindings and returned results until the
+  LAST original stage, provisioning receipt and workflow request is deleted.
+  Stage deletion alone does not retire the request's exact binding reader.
+  Indexed final-reader checks run in each deletion transaction, including the
+  ordinary SDK request-retention trigger. Expired proof then retains only its
+  existing `(store,key)`, JSON `binding: null` and `result: {outcome: 'expired'}`.
+  Permanent original native expiry/release commands and operator slots still
+  refuse old writes; no new stage, receipt or request can reuse that proof key.
+  Existing exact-key request/receipt replay may finish while its original row
+  remains. The minimal skeleton supplies no authorization or source outcome.
+  Unknown source/release/responsibility returns retain the original witness and
+  the existing `native-stage`/`native-release` pending branch, never a success.
+  Completed/expired timestamps alone cannot close a registration consumer.
+  Activation drops its handle, reservation and operator links after the same
+  final-reader boundary, retaining only `[registrationId, workflowId,
+  activationKey, accountId]` and the exact actual activation result. Access does
+  not export a committed activation-result read bound to the original command,
+  account and reservation after provisioning evidence expires. In the lost-reply
+  branch, unavailable evidence therefore remains `native-release`; the actual
+  current account state never reconstructs an activation result. The retained
+  actual result must not be nulled to pretend that missing reader is delivered.
 - Credential consumers lock the actual receipt under the existing permanent
   account/client fence. A real committed CAS result is retained with its original
   operation, effect reference, digest, subject, floor and opening receipt. An
@@ -2116,6 +2135,10 @@ remains refused; this path never restores its former authority.
   fenced source account also proves that its establishment cannot clear a fence
   later; a missing account, Auth user absence, local expiry or erasure marker does
   not. Proof binds the exact reference, receipt, establishment, commitment and floor.
+  That required original recovery witness/result remains: no exported committed
+  recovery-result reader transfers its last responsibility after establishment
+  evidence expires. This is a pending source boundary, not a retention exception
+  for creation descriptors, request JSON, handles or approval business payload.
 - Reduction retains the original operation, delivered ordinal page and count of
   acknowledged owners. The permanent erased-client obligation admits only that
   existing gate. Continuation uses each original page/owner source key, its actual
@@ -2126,8 +2149,9 @@ remains refused; this path never restores its former authority.
 
 Credential proof is one point operation per raw receipt, with the original page
 transaction and checkpoint. Other consumer pages reserve their source neighborhood
-inside the 48-key budget: 44 outer keys for registration/provisioning/recovery and
-38 for reduction, including its existing eight-row ordinal batch. Only one held
+inside the 48-key budget: eight outer keys for registration/provisioning/request
+pages reserve each row's proof and indexed final-reader checks; recovery admits
+44 outer keys and reduction 38, including its existing eight-row ordinal batch. Only one held
 consumer is continued per page. Locators stay within 1 KiB each and 64 KiB total;
 there is no workflow-history search or account-map fanout. The native consumer
 growth acceptance measures proof, trigger work, cleanup, transaction and checkpoint
