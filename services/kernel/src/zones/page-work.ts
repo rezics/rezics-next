@@ -48,7 +48,7 @@ export async function zonePageWork(
       input.work.select('control', 'id', 1);
       const [stored] = await input.work.bounded({ statements: 1, nativePoints: 2, nativeRows: 3, bytes: 525312 }, () => save.run(deps.pool, {
         ...key, request, basis: input.basis, generation,
-        expected: revision ?? null, position: next,
+        expected: revision ?? '0', position: next,
       }));
       if (!stored) return zoneUnavailable();
       return encodeListCursor(deps.tokens, binding, {

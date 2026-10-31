@@ -183,7 +183,7 @@ export async function readZonePage(
   }
   // One native summaries batch over actual selected canonical IDs. It is not a Search page surrogate.
   const ids = [...new Set(prepared.flatMap(read => read.position.rows.map(row => row.id)))];
-  const summaries = await readSubjectSummaries({ ...dependencies, actor: input.actor, deadline: input.deadline }, ids, { languages });
+  const summaries = await readSubjectSummaries({ ...dependencies, actor: input.actor, deadline: input.deadline }, ids, languages ? { languages } : {});
   for (const read of prepared) {
     const descriptor = plan.reads[read.key]!;
     const rows = read.position.rows.map(row => {

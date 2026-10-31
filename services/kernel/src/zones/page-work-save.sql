@@ -10,5 +10,5 @@ WHERE EXISTS (SELECT 1 FROM zones.zone z WHERE z.route=input.route AND z.zone_id
 ON CONFLICT (route,zone_id,viewer,slot) DO UPDATE
 SET request=EXCLUDED.request,basis=EXCLUDED.basis,generation=EXCLUDED.generation,
  revision=zones.page_preparation.revision+1,position=EXCLUDED.position
-WHERE ((SELECT expected FROM input) IS NULL OR zones.page_preparation.revision=(SELECT expected FROM input))
+WHERE zones.page_preparation.revision=(SELECT expected FROM input)
 RETURNING revision::text AS revision;

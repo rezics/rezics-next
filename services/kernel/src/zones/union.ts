@@ -94,14 +94,19 @@ export async function advanceZoneUnion(
  */
 export async function revalidateZoneUnion(membership: ZoneMembership, position: ZoneUnionPosition): Promise<boolean> {
   if (membership.basis !== position.basis) return false;
-  for (const row of position.rows) {
-    const source = membership.streams[row.source];
-    if (!source) return false;
-    const result = await source.member(row.id, position.pending?.subject === row.id && position.pending.source === row.source ? position.pending : undefined);
+  for (const [index, row] of position.rows.entries()) {
+    const result = await membership.contains(row.id,
+      position.pending?.subject === row.id ? position.pending : undefined, row.source);
     if (result.value !== true) {
-      if (result.pending) position.pending = { ...result.pending, source: row.source };
+      if (result.pending) position.pending = result.pending;
+      if (result.value === false) {
+        // Actual current negative repairs the derived result, without retaining negative truth.
+        position.rows.splice(index, 1);
+        if (position.pending?.subject === row.id) delete position.pending;
+      }
       return false;
     }
+    row.source = result.source!;
     if (position.pending?.subject === row.id) delete position.pending;
   }
   return true;
