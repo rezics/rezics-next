@@ -1136,7 +1136,7 @@
   "decision_refresh": "Aktuellen Stand aktualisieren",
   "decision_refreshing": "Aktueller Stand wird geprüft…",
   "decision_appeal_explanation": "Wer den Inhalt ursprünglich verfasst hat, kann bis einschließlich zum Stichtag, der 183 Tage nach der Entscheidung liegt, einmal Beschwerde einlegen. Eine andere Person aus dem Moderationsteam prüft sie.",
-  "decision_authority_hint": "Beim Absenden wird geprüft, ob du als Autor:in geführt wirst, ob die Frist eingehalten ist und ob bereits eine Beschwerde vorliegt. Dieses Formular bestätigt nicht, dass du zur Beschwerde berechtigt bist.",
+  "decision_authority_hint": "Beim Absenden wird geprüft, ob du aktuell als Autor:in geführt wirst, ob die Frist eingehalten ist und ob bereits eine Beschwerde vorliegt. Dieses Formular bestätigt nicht, dass du zur Beschwerde berechtigt bist.",
   "decision_author_only": "Nur wer den Inhalt ursprünglich verfasst hat, kann Beschwerde einlegen. Der Status einer bestehenden Beschwerde wird oben angezeigt, sofern verfügbar.",
   "decision_pending_explanation": "Laut aktueller Entscheidung liegt bereits eine Beschwerde vor. Eine unabhängige Person aus dem Moderationsteam hat noch kein Ergebnis festgehalten. Zu dieser Entscheidung kannst du keine weitere Beschwerde einreichen.",
   "decision_review_heading": "Unabhängige Prüfung abgeschlossen",
