@@ -156,7 +156,15 @@ export async function readSubjectSummaries(
           }
           const release = 'access' in deps ? active!.release : deps.release;
           return projectSummaries(
-            { ...deps, client, release, authorize: ready, deadline },
+            {
+              pool: deps.pool,
+              routeKey: deps.routeKey,
+              ...(deps.maySeeCover ? { maySeeCover: deps.maySeeCover } : {}),
+              client,
+              release,
+              authorize: ready,
+              deadline,
+            },
             [...results.keys()],
             languages,
             plan,

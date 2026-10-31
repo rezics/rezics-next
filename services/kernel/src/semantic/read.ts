@@ -26,7 +26,8 @@ export function withReadTransaction<T>(
   requireAccessDeadline(deadline);
   if (owned) {
     return (async () => {
-      const result = await read(owned.client);
+      const client = deadline < owned.deadline ? (deadlineClient(owned.client, deadline) as PoolClient) : owned.client;
+      const result = await read(client);
       requireAccessDeadline(deadline);
       return result;
     })();

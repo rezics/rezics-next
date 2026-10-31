@@ -1,7 +1,7 @@
 import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
-import { type Access, type Actor } from '../request/access.ts';
+import { type Access, type AccessCheck, type Actor } from '../request/access.ts';
 export type CoverSummary = {
     media: string;
     width: number;
@@ -32,6 +32,7 @@ export type SubjectSummary = {
     cover: CoverSummary | null;
 };
 export type SummaryDependencies = {
+    /** Compatibility input; the executor binds the live same-pool snapshot, never a pool.query facade. */
     client: Pick<PoolClient, 'query'>;
     pool: Pool;
     /** Trusted server routing configuration; never selected by the reader. */
@@ -51,7 +52,14 @@ export type SummaryReaderDependencies = {
     deadline: number;
     maySeeCover?: SummaryDependencies['maySeeCover'];
 };
+type SummaryAuthorize = SummaryDependencies['authorize'];
+/** Preserve the callable related-read adapter, and expose preparation to the batch owner.
+ * Preparation never runs while the final snapshot is checked out. Only the returned
+ * native checks execute on that snapshot; no allow decision is retained.
+ */
+export declare function summaryAuthorization(prepare: (id: string, batch: readonly string[]) => Promise<AccessCheck>): SummaryAuthorize;
 /** One bounded, shared display projection. Unknown and undisclosed ids remain explicit null entries. */
 export declare function readSubjectSummaries(deps: SummaryDependencies | SummaryReaderDependencies, ids: readonly string[], { languages }?: {
     languages?: readonly string[];
 }): Promise<Map<string, SubjectSummary | null>>;
+export {};

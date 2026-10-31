@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import type { PoolClient } from 'pg';
+import type { PoolClient, QueryConfig } from 'pg';
+import permissionRead from '../../src/access/permission-check.sql';
 import { createKernel } from '../../src/http/kernel.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -25,10 +26,10 @@ test('A default mounted summary batch spanning logical partitions uses one real 
       }
       throw new Error('Could not allocate distinct native fixture homes');
     };
-    const work = await f.create('schema:Book', { en: 'Before work' }, source());
-    const edition = await f.create('bf:Instance', { en: 'Before edition' }, source());
-    const neighbour = await f.create('schema:Book', { en: 'Before neighbour' }, source());
-    const hidden = await f.create('schema:Book', { en: 'Hidden title' }, source());
+    const work = await f.create('schema:Book', { en: 'Before work', ja: 'Before work' }, source());
+    const edition = await f.create('bf:Instance', { en: 'Before edition', ja: 'Before edition' }, source());
+    const neighbour = await f.create('schema:Book', { en: 'Before neighbour', ja: 'Before neighbour' }, source());
+    const hidden = await f.create('schema:Book', { en: 'Hidden title', ja: 'Hidden title' }, source());
     const coverSource = { ...source(), field_group: 'cover' as const };
     const media = await f.importCover(edition.id, coverSource);
     await f.adopt(edition.id, 'schema:image', media, coverSource);
@@ -65,6 +66,7 @@ test('A default mounted summary batch spanning logical partitions uses one real 
       snapshot: string;
       isolation: string;
       readonly: string;
+      resources: string[];
     };
     const scope = new AsyncLocalStorage<boolean>();
     const samples: Sample[] = [];
@@ -134,8 +136,9 @@ test('A default mounted summary batch spanning logical partitions uses one real 
       // Instrument native dispatch only; every result and permission decision is
       // produced by the installed code and PostgreSQL, never by this observer.
       client.query = ((...args: Parameters<PoolClient['query']>) => {
-        const input = args[0];
+        const input = args[0] as string | QueryConfig;
         const sql = typeof input === 'string' ? input : input.text;
+        const values = typeof input === 'string' ? args[1] : input.values;
         if (!scope.getStore() || args.some((arg) => typeof arg === 'function')) return query(...args);
         return (async () => {
           if (sql.startsWith('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')) {
@@ -148,7 +151,15 @@ test('A default mounted summary batch spanning logical partitions uses one real 
               `SELECT pg_backend_pid() AS backend,pg_current_snapshot()::text AS snapshot,
                       current_setting('transaction_isolation') AS isolation,current_setting('transaction_read_only') AS readonly`,
             );
-            samples.push({ kind, transaction, checkout: acquisitions.get(client)!, ...observed.rows[0]! });
+            const resources: unknown =
+              kind === 'authorization' ? values?.[permissionRead.params.indexOf('resource_ids')] : undefined;
+            samples.push({
+              kind,
+              transaction,
+              checkout: acquisitions.get(client)!,
+              ...observed.rows[0]!,
+              resources: Array.isArray(resources) ? resources.filter((id): id is string => typeof id === 'string') : [],
+            });
           }
           const result = await query(...args);
           const planned = transactions.some(
@@ -190,6 +201,10 @@ test('A default mounted summary batch spanning logical partitions uses one real 
       expect(new Set(finalSamples.map((sample) => sample.checkout))).toEqual(new Set([final.checkout]));
       expect(new Set(finalSamples.map((sample) => sample.backend)).size).toBe(1);
       expect(new Set(finalSamples.map((sample) => sample.snapshot)).size).toBe(1);
+      const checked = new Set(
+        finalSamples.filter((sample) => sample.kind === 'authorization').flatMap((s) => s.resources),
+      );
+      for (const id of [work.id, neighbour.id, edition.id]) expect(checked.has(id)).toBe(true);
       for (const sample of finalSamples) {
         expect(sample.isolation).toBe('repeatable read');
         expect(sample.readonly).toBe('on');
