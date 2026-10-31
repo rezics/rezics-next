@@ -7,7 +7,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@rezics/ui/shadcn/item';
 import { PasswordInput } from '../password-input';
 import { Trash2 } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { failureMessage } from '../api';
@@ -74,16 +74,25 @@ export function SecurityPage({
   const [signedOutNotice, setSignedOutNotice] = useState('');
   const actionPending = useRef(false);
   const activeAccount = useRef('');
+  const authorityGeneration = useRef(0);
+  const retryLoad = useRef<(() => void) | null>(null);
   const recoveryStatus = useRef<HTMLDivElement>(null);
   const sessionStatus = useRef<HTMLDivElement>(null);
   const submittingPassword = useRef(false);
   const passwordInput = useRef<HTMLInputElement>(null);
   const passwordAlert = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let active = true;
-    void (initial ? Promise.resolve(initial) : loadSecurity(passkeysSupported())).then((result) => {
+    let pending = false;
+    async function load(provided?: SecurityLoadResult) {
+      if (!active || pending) return;
+      pending = true;
+      clearPrivateData('loading');
+      setConsentReduced(false);
+      const result = provided ?? (await loadSecurity(passkeysSupported()));
       if (!active) return;
+      pending = false;
       if (result.kind === 'ready') {
         activeAccount.current = result.accountId;
         setAccountId(result.accountId);
@@ -97,9 +106,13 @@ export function SecurityPage({
         setLoadMessage(result.message);
         setLoadState('failure');
       }
-    });
+    }
+    retryLoad.current = () => void load();
+    void load(initial);
     return () => {
       active = false;
+      retryLoad.current = null;
+      authorityGeneration.current++;
       activeAccount.current = '';
     };
   }, [initial]);
@@ -114,8 +127,11 @@ export function SecurityPage({
     else if (sessionNotice) sessionStatus.current?.focus();
   }, [recovery, sessionNotice]);
 
-  function clearPrivateData(state: 'signed-out' | 'failure', notice = '') {
+  function clearPrivateData(state: Exclude<LoadState, 'ready'>, notice = '') {
+    authorityGeneration.current++;
     activeAccount.current = '';
+    actionPending.current = false;
+    submittingPassword.current = false;
     setAccountId('');
     setSessions([]);
     setPasskeys([]);
@@ -130,6 +146,11 @@ export function SecurityPage({
     setPasskeyNotice('');
     setPasskeyError('');
     setRecovery(null);
+    setReading(false);
+    setPasswordPending(false);
+    setSessionPending('');
+    setPasskeyAdding(false);
+    setPasskeyRemoving('');
     setSignedOutNotice(notice);
     setLoadMessage(m.auth_security_authority_changed());
     setLoadState(state);
@@ -140,7 +161,9 @@ export function SecurityPage({
     actionPending.current = true;
     setReading(true);
     const { target } = recovery;
+    const generation = authorityGeneration.current;
     const result = await (securitySource?.read(target) ?? readSecurityTarget(target));
+    if (authorityGeneration.current !== generation) return;
     actionPending.current = false;
     setReading(false);
     if (activeAccount.current !== target.accountId) return;
@@ -217,11 +240,13 @@ export function SecurityPage({
     setSessionError('');
     setPasskeyNotice('');
     setPasskeyError('');
+    const generation = authorityGeneration.current;
     const result = securitySource
       ? await securitySource.act(target)
       : target.kind === 'session'
         ? await revokeSession(target.id, target.accountId)
         : await removePasskey(target.id, target.accountId);
+    if (authorityGeneration.current !== generation) return;
     actionPending.current = false;
     setSessionPending('');
     setPasskeyRemoving('');
@@ -246,7 +271,9 @@ export function SecurityPage({
     setPasswordNotice('');
     setPasswordError('');
     const owner = accountId;
+    const generation = authorityGeneration.current;
     const result = await changePassword(accountId, password);
+    if (authorityGeneration.current !== generation) return;
     submittingPassword.current = false;
     setPasswordPending(false);
     if (activeAccount.current !== owner) return;
@@ -270,7 +297,9 @@ export function SecurityPage({
     setPasskeyNotice('');
     setPasskeyError('');
     const owner = accountId;
+    const generation = authorityGeneration.current;
     const result = await addPasskey(passkeyName);
+    if (authorityGeneration.current !== generation) return;
     setPasskeyAdding(false);
     if (activeAccount.current !== owner) return;
     if (result.ok) {
@@ -308,6 +337,9 @@ export function SecurityPage({
     return (
       <AuthPage heading={m.auth_security_heading()}>
         <ErrorAlert>{loadMessage}</ErrorAlert>
+        <Button type="button" variant="outline" onClick={() => retryLoad.current?.()}>
+          {m.auth_inventory_reload()}
+        </Button>
         <a href="/login">{m.auth_security_sign_in()}</a>
       </AuthPage>
     );
@@ -317,7 +349,7 @@ export function SecurityPage({
 
   return (
     <AuthPage heading={m.auth_security_heading()}>
-      <div className="auth-security-page">
+      <div className="auth-security-page" aria-busy={loadState === 'loading'}>
         {loadState === 'loading' ? (
           <p role="status">{m.auth_inventory_loading()}</p>
         ) : (

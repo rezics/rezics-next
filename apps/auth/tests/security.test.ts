@@ -41,6 +41,8 @@ const sessions: Session[] = [
 ];
 let signedOut = false;
 let stepUpRequired = false;
+let inventoryUnavailable = false;
+let beforeSessions: (() => Promise<void>) | undefined;
 
 // Copied from apps/auth/tests/recovery.test.ts's fake Auth HTTP server.
 const fake = Bun.serve({
@@ -63,7 +65,9 @@ const fake = Bun.serve({
     }
 
     if (url.pathname === '/sessions' && request.method === 'GET') {
+      await beforeSessions?.();
       if (signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
+      if (inventoryUnavailable) return Response.json({ error: 'unavailable' }, { status: 503, headers });
       return Response.json({ sessions }, { headers });
     }
 
@@ -412,6 +416,117 @@ test(
       expect(authCalls('/session')).toHaveLength(1);
       expect(authCalls('/sessions')).toHaveLength(0);
     } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'Auth Security exposes one explicit read-only retry after unavailable inventory and never restores stale private authority',
+  async () => {
+    signedOut = false;
+    stepUpRequired = false;
+    inventoryUnavailable = true;
+    calls.length = 0;
+    const { page } = await open();
+    try {
+      await page.getByRole('alert').waitFor();
+      const reload = page.getByRole('button', { name: 'Reload list', exact: true });
+      expect(await reload.count()).toBe(1);
+      expect(await page.getByRole('link', { name: 'Sign in', exact: true }).getAttribute('href')).toBe('/login');
+      expect(await page.getByRole('list', { name: 'Sessions', exact: true }).count()).toBe(0);
+      expect(await page.getByText('No active sessions were returned.', { exact: true }).count()).toBe(0);
+      expect(await page.getByLabel('New password', { exact: true }).count()).toBe(0);
+      expect(authCalls('/session')).toHaveLength(1);
+      expect(authCalls('/sessions')).toHaveLength(1);
+
+      inventoryUnavailable = false;
+      await reload.click();
+      const list = page.getByRole('list', { name: 'Sessions', exact: true });
+      await list.waitFor();
+      expect(await list.getByRole('listitem').count()).toBe(2);
+      expect(await page.getByLabel('New password', { exact: true }).inputValue()).toBe('');
+      expect(authCalls('/session')).toHaveLength(2);
+      expect(authCalls('/sessions')).toHaveLength(2);
+      expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
+    } finally {
+      inventoryUnavailable = false;
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'an inventory retry shows loading, suppresses repeated clicks and keeps another unavailable read unknown',
+  async () => {
+    signedOut = false;
+    inventoryUnavailable = true;
+    calls.length = 0;
+    const { page } = await open();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    try {
+      const reload = page.getByRole('button', { name: 'Reload list', exact: true });
+      await reload.waitFor();
+      beforeSessions = async () => {
+        entered.resolve();
+        await release.promise;
+      };
+      await reload.evaluate((button) => {
+        (button as HTMLButtonElement).click();
+        (button as HTMLButtonElement).click();
+      });
+      await entered.promise;
+      await page.getByRole('status').filter({ hasText: 'Loading account information…' }).waitFor();
+      expect(await page.locator('.auth-security-page').getAttribute('aria-busy')).toBe('true');
+      expect(await page.getByLabel('New password', { exact: true }).count()).toBe(0);
+      expect(await page.getByRole('list', { name: 'Sessions', exact: true }).count()).toBe(0);
+      expect(authCalls('/session')).toHaveLength(2);
+      expect(authCalls('/sessions')).toHaveLength(2);
+
+      release.resolve();
+      await reload.waitFor();
+      expect(await page.getByRole('alert').count()).toBe(1);
+      expect(await reload.count()).toBe(1);
+      expect(await page.getByText('No active sessions were returned.', { exact: true }).count()).toBe(0);
+      expect(authCalls('/sessions')).toHaveLength(2);
+      expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
+    } finally {
+      release.resolve();
+      beforeSessions = undefined;
+      inventoryUnavailable = false;
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'an explicit inventory retry that finds a signed-out person keeps private security controls absent',
+  async () => {
+    signedOut = false;
+    inventoryUnavailable = true;
+    calls.length = 0;
+    const { page } = await open();
+    try {
+      const reload = page.getByRole('button', { name: 'Reload list', exact: true });
+      await reload.waitFor();
+      signedOut = true;
+      inventoryUnavailable = false;
+      await reload.click();
+      await page.getByText('You are signed out. Sign in to manage your security settings.', { exact: true }).waitFor();
+      expect(await page.getByRole('link', { name: 'Sign in', exact: true }).getAttribute('href')).toBe('/login');
+      expect(await reload.count()).toBe(0);
+      expect(await page.getByLabel('New password', { exact: true }).count()).toBe(0);
+      expect(await page.getByRole('heading', { name: /^(Sessions|Passkeys)$/ }).count()).toBe(0);
+      expect(await page.getByRole('button', { name: 'Check current security settings', exact: true }).count()).toBe(0);
+      expect(authCalls('/session')).toHaveLength(2);
+      expect(authCalls('/sessions')).toHaveLength(1);
+      expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
+    } finally {
+      inventoryUnavailable = false;
       await page.context().close();
     }
   },
