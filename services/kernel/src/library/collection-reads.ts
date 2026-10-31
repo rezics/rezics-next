@@ -714,7 +714,7 @@ export function createCollectionReads(
     )
       throw new ProblemError('dependency_unavailable');
     const authorize = async (time: AuthoritativeTime) => {
-      const checks = await prepareCollectionRuleAuthority(dependencies, viewer, saved.filter, { time, read: true }, deadline);
+      const checks = await prepareCollectionRuleAuthority(dependencies, viewer, admission.filter!, { time, read: true }, deadline);
       await readOnly(pool, (client) => authorizeCollectionRule(client, { time }, checks));
       await revalidate();
     };
@@ -741,16 +741,17 @@ export function createCollectionReads(
     return { id: collection.id, lastModified: iso(collection.updatedAt) };
   }
 
+  /** Curated occurrence primitive. Dynamic callers use readMembers and its discriminated page/preparation result. */
   async function listMembers(
     viewer: Actor,
     collectionId: string,
     options: { cursor?: string | null; limit?: number } = {},
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
-  ) {
+  ): Promise<{ members: MemberView[]; next: string | null }> {
     const page = pageRequest(options, ['cursor', 'limit']);
     const collection = await loadCollection(viewer, collectionId, deadline);
     if (!collection) throw notFound();
-    if (collection.membershipKind === 'dynamic') return readDynamicMembers(viewer, collection, options, deadline);
+    if (collection.membershipKind === 'dynamic') throw new ProblemError('unsupported_query');
     const route = routeOf(collectionId)!;
     const binding: CursorBinding = {
       operation: 'library.collection.members',

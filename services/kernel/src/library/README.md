@@ -36,17 +36,30 @@ listing stores public Collection pairs and counts; it is not personal membership
 Current implementation evidence is narrower than the capability:
 
 - `collection-reads.ts` reads stored headers and ordinal curated occurrence pages. Dynamic headers omit curated
-  counts/timestamps, and BASIC/FULL dynamic members explicitly remain unavailable until the common Source binding.
-  It does not supply logical built-in discovery or canonical duplicate-free browsing.
+  counts/timestamps. Private saved members use the sole owner-filter binding and Source reader; public/unlisted
+  members use only the Source's activated explicit COMPLETE output, including current original/terminal disclosure.
+  BASIC and FULL share those boundaries. Missing bindings or incomplete canonical output remain unavailable.
 - `collection-rules.ts` supplies `parseCollectionRule`, `admitCollectionRule`, `collectionRuleActions`,
   `prepareCollectionRuleAuthority`, `authorizeCollectionRule`, `readSavedCollectionRule`, `insertSavedCollection`
-  and `updateSavedCollectionRule`. The existing creator and Collection mutation transaction consume them;
-  no second command executor or evaluator exists. Rule CAS advances its own revision and Source generation once.
-  Its AST has one private row copy, is absent from receipts/events/public projections, and is cleared when the
-  existing account retention deidentifies its header. The native owner/preparation types have not been published
-  for saving/executing this filter+source+order. `requireCollectionRuleExecution` therefore prevents successful
-  saved writes/replays and member pages with `503 dependency_unavailable`. This is a caller-owned unavailable
-  boundary, not a guessed producer declaration, provisional native success or ready-empty result.
+  and `updateSavedCollectionRule`. Definition admission uses shared parse/release expansion and the Search native
+  Boolean compiler, with the common preparation declaration's supported `id` order. Saving a private definition
+  requires current parent/account and every expanded private-family scope/gate/Access, including before replay;
+  it requires no newly created Source or result/preparation receipt. The ordinary single-partition insert/CAS,
+  rule revision, digest, receipt and event paths remain authoritative. Public creation still requires an unavailable
+  whole-query publication producer; explicit selected-set publication below has its separate consent and meaning.
+  Rule ASTs have one private row copy, are absent from receipts/events/public projections, and are cleared by the
+  existing account retention path. Editing a rule changes its Source generation and invalidates the old selection.
+  Existing built-in identities/rules remain immutable and private.
+- `admitSavedCollectionMemberQuery` shares the common owner-family admission/compiler with ad-hoc member queries,
+  reads the stored accepted release and preserves expanded saved meaning across activation. An additional filter
+  is a bounded shared conjunction under that accepted release. The exact curator must be current before the rule
+  is loaded. `bindOwnerFilterRead` and `readBoundOwnerFilterPage` retain native scoped binding, Source execution,
+  complete-original closure and genuine preparation behavior; their unavailable producers are not bypassed.
+- `readCollectionSourceMembers` generalizes the existing canonical member caller to an explicit Source scope;
+  `readOwnerMembers` retains its private built-in wrapper. The public branch accepts only `activated_output`,
+  no private query, and uses the same signed keyset, work ledger and fresh Source/subject revalidation. FULL facts
+  revalidate that Source after foreign reads. Sitemap dynamic timestamps come from currently authorized stored
+  metadata only after the ordinary explicit-output reader succeeds; no dynamic DTO gains times or counts.
 - `GET /v1/collections/:collectionId/rule` returns only `{rule: SavedCollectionRule}` to the exact current
   curator with current `collection:update` and every private-family action/gate from the stored expanded rule.
   It reuses `prepareCollectionRuleAuthority` and `collectionRuleActions`, performs final native account/floor,

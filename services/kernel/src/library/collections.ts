@@ -438,7 +438,7 @@ export function createCollectionCommands(config: {
     const owner = accountActor(actor);
     if (
       owner.scopes.includes(action) &&
-      (kind.startsWith('library.collection.member') || kind === 'library.collection.delete')
+      (kind.startsWith('library.collection.member') || kind === 'library.collection.delete' || kind === 'library.collection.rule.update')
     ) {
       const builtins = createBuiltinRuntime({ pool });
       if (await builtins.read(owner, collectionId, action))
@@ -520,6 +520,8 @@ export function createCollectionCommands(config: {
           if (collection.membershipKind !== 'dynamic' || collection.builtinKind != null || !collection.hasSavedRule)
             throw new ProblemError('dynamic_membership_immutable');
           if (collection.curatorAccountId !== owner.accountId) throw new GrantDeniedError();
+          const failure = failures.get(attempt.time);
+          if (failure) throw failure;
           const prepared = rules.get(attempt.time);
           if (!prepared) throw new Error('Missing native Collection rule preparation');
           await authorizeCollectionRule(tx, attempt, prepared.checks);

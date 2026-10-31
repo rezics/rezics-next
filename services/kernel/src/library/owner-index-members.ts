@@ -188,58 +188,58 @@ export async function readCollectionSourceMembers(
     const revalidate = async () => {
       const finalAt = await withConnection(deps.pool, (client) => mintReadTime(client, clock));
       try {
-      const finalRuntime = await openOwnerQuery(deps, {
-        actor: input.actor,
-        collectionId: input.collectionId,
-        deadline: input.deadline,
-        work: ledger,
-        logical: input.scope === 'private_builtin',
-        at: finalAt,
-      });
-      const current = finalRuntime.source;
-      const finalFilter = input.query ? await finalRuntime.filter(input.query.filter, input.query.releaseDigest) : null;
-      if (
-        filtered &&
-        finalFilter &&
-        JSON.stringify(filtered.prepared.basis) !== JSON.stringify(finalFilter.prepared.basis)
-      )
-        throw new ProblemError('semantic_not_ready');
-      if (!sameSource(observed, current.observation)) throw new ProblemError('semantic_not_ready');
-      for (const member of shown) {
-        const checked = await finalRuntime.native.containsSubject({
-          ...context,
+        const finalRuntime = await openOwnerQuery(deps, {
+          actor: input.actor,
+          collectionId: input.collectionId,
+          deadline: input.deadline,
+          work: ledger,
+          logical: input.scope === 'private_builtin',
           at: finalAt,
-          source: current,
-          allowance: work.allowance(),
-          subjectId: member.subjectId,
         });
-        work.settle(checked.work);
-        if (!sameSource(observed, checked.observation) || checked.result !== true)
+        const current = finalRuntime.source;
+        const finalFilter = input.query ? await finalRuntime.filter(input.query.filter, input.query.releaseDigest) : null;
+        if (
+          filtered &&
+          finalFilter &&
+          JSON.stringify(filtered.prepared.basis) !== JSON.stringify(finalFilter.prepared.basis)
+        )
           throw new ProblemError('semantic_not_ready');
-      }
-      if (finalFilter) {
-        const a = ledger.remaining();
-        const checked = await finalFilter.scope.evaluate(
-          finalFilter.prepared,
-          shown.map((member) => member.subjectId),
-          {
-            rawKeys: Math.min(256, a.remaining.candidateKeys),
-            native: {
-              points: a.remaining.nativePoints,
-              witnesses: a.remaining.witnessKeys,
-              rows: a.remaining.nativeRows,
-              bytes: a.remaining.bytes,
-              emptySeeks: a.remaining.emptySeeks,
+        if (!sameSource(observed, current.observation)) throw new ProblemError('semantic_not_ready');
+        for (const member of shown) {
+          const checked = await finalRuntime.native.containsSubject({
+            ...context,
+            at: finalAt,
+            source: current,
+            allowance: work.allowance(),
+            subjectId: member.subjectId,
+          });
+          work.settle(checked.work);
+          if (!sameSource(observed, checked.observation) || checked.result !== true)
+            throw new ProblemError('semantic_not_ready');
+        }
+        if (finalFilter) {
+          const a = ledger.remaining();
+          const checked = await finalFilter.scope.evaluate(
+            finalFilter.prepared,
+            shown.map((member) => member.subjectId),
+            {
+              rawKeys: Math.min(256, a.remaining.candidateKeys),
+              native: {
+                points: a.remaining.nativePoints,
+                witnesses: a.remaining.witnessKeys,
+                rows: a.remaining.nativeRows,
+                bytes: a.remaining.bytes,
+                emptySeeks: a.remaining.emptySeeks,
+              },
+              allowance: a,
             },
-            allowance: a,
-          },
-        );
-        ledger.native(finalFilter.scope.work(checked));
-        if (checked.values.length !== shown.length || checked.values.some((value) => value !== true))
-          throw new ProblemError('semantic_not_ready');
-      }
-      await input.revalidateOwner();
-      if ((await input.readSourceVersion()) !== version) throw new ProblemError('semantic_not_ready');
+          );
+          ledger.native(finalFilter.scope.work(checked));
+          if (checked.values.length !== shown.length || checked.values.some((value) => value !== true))
+            throw new ProblemError('semantic_not_ready');
+        }
+        await input.revalidateOwner();
+        if ((await input.readSourceVersion()) !== version) throw new ProblemError('semantic_not_ready');
       } finally {
         releaseOperationalTime(finalAt);
       }
