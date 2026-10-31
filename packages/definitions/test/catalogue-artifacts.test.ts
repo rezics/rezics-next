@@ -86,7 +86,7 @@ test('Definition authors build and verify more than 1024 Types, resolve a nonini
     const old = await lookupCatalogueKind(pin, oldId, store);
     expect(old.status).toBe('found');
     if (old.status !== 'found') throw new Error('Historical exact Kind absent');
-    expect(old.presentation.release).toEqual(historical);
+    expect(catalogueBytes(old.presentation.release)).toEqual(historicBytes);
     expect(old.presentation.pin.releaseDigest).toBe(historicDigest);
     expect(old.presentation.library).toBeNull(); // Unknown stays unknown; never manufacture a legacy/no-profile pin.
 
