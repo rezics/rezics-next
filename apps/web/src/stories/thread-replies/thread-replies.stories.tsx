@@ -1,9 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { checkDocument } from '@rezics/document';
 import { DocumentBody } from '../../document-body';
-import { ReplyButton, ReplyContext, type ReplyParents } from '../../threads/reply-context';
+import { ReplyButton, ReplyContext, ReplyParentReader, type ReplyParents } from '../../threads/reply-context';
+import { readReplyParent } from '../../threads/reads';
+import { useSession } from '../../session/query';
 import { ThreadReplyComposer } from '../../threads/reply-context-composer';
 import type { ReplyCommand } from '../../threads/reply-context-intent';
 import type { CreatedPost, WriteFailure } from '../../threads/actions';
@@ -135,7 +137,23 @@ export const Pending: Story = {
     await expect(canvas.getByRole('button', { name: m.thread_reply_to_post() })).toBeDisabled();
   },
 };
-export const UnloadedParent: Story = { render: () => <ReplyContext parentId={parent.id} parents={new Map()} /> };
+function UnloadedParentContext() {
+  const { state, subject, csrfToken } = useSession();
+  const reader = useMemo(() => {
+    if (state !== 'signed-in' && state !== 'signed-out') return undefined;
+    return new ReplyParentReader(parent.threadId, (parentId) =>
+      readReplyParent({
+        data: { threadId: parent.threadId, parentId, credentialMode: state === 'signed-in' ? 'session' : 'anonymous' },
+      }),
+    );
+  }, [state, subject, csrfToken]);
+  useEffect(() => {
+    reader?.activate();
+    return () => reader?.dispose();
+  }, [reader]);
+  return <ReplyContext parentId={parent.id} parents={new Map()} reader={reader} />;
+}
+export const UnloadedParent: Story = { render: () => <UnloadedParentContext /> };
 export const DeletedParent: Story = {
   render: () => (
     <ReplyContext parentId={parent.id} parents={new Map([[parent.id, { id: parent.id, availability: 'erased' }]])} />

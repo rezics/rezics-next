@@ -11,6 +11,8 @@ import { rememberThreadSlug, threadLocation } from './thread-href';
 import type { ThreadSubject } from './subjects';
 import type { LoadedThreadPage, ThreadPost } from './thread-page';
 import type { readThreadPersonal } from './reads';
+import { readReplyParent } from './reads';
+import { ReplyParentReader } from './reply-context';
 import { replyToThread } from './actions';
 import { csrfHeaders, draftFetch } from './composer';
 import { ThreadReplyComposer } from './reply-context-composer';
@@ -30,6 +32,7 @@ export function ThreadReading({
   readAuthority,
   personal,
   session,
+  readerSubject,
   returnTo,
   renderHeader,
   onMutation,
@@ -45,6 +48,7 @@ export function ThreadReading({
   signedOut: ReactNode;
   personal: ThreadReadingPersonal | undefined;
   session: SessionState | 'unknown';
+  readerSubject?: string | undefined;
   returnTo: string;
   renderHeader: (title: string | null) => ReactNode;
   onMutation: () => Promise<void>;
@@ -79,6 +83,17 @@ export function ThreadReading({
   const replyParents = useMemo(() => new Map(posts.posts.map((post) => [post.id, post])), [posts.posts]);
   // Private data is consumed only while the session still says signed in.
   const currentPersonal = session === 'signed-in' ? personal : undefined;
+  const parentReader = useMemo(() => {
+    if (session !== 'signed-in' && session !== 'signed-out') return undefined;
+    const credentialMode = session === 'signed-in' ? 'session' : 'anonymous';
+    return new ReplyParentReader(thread.id, (parentId) =>
+      readReplyParent({ data: { threadId: thread.id, parentId, credentialMode } }),
+    );
+  }, [readAuthority, thread.id, posts.posts, authors, session, readerSubject, currentPersonal?.viewerId]);
+  useEffect(() => {
+    parentReader?.activate();
+    return () => parentReader?.dispose();
+  }, [parentReader]);
   const refreshScope = useMemo(
     () => ({}),
     [readAuthority, thread.id, thread.boardId, realm?.id, session, currentPersonal?.viewerId],
@@ -173,6 +188,7 @@ export function ThreadReading({
                         rememberThreadSlug(thread.id, title);
                       }}
                       replyParents={replyParents}
+                      replyParentReader={parentReader}
                       replyPending={replyPending}
                       onReply={() => selectReplyParent(post.id)}
                       subjects={provenanceSubjects}

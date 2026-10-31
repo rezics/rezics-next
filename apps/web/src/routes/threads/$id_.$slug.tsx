@@ -175,6 +175,7 @@ function ThreadPage() {
       key={id}
       page={page}
       readAuthority={readScope}
+      readerSubject={subject}
       Post={ThreadReadingPost}
       signedOut={<SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />}
       personal={personal}
@@ -247,6 +248,7 @@ export function ThreadReadingPost({
   onPageRefresh,
   onOpeningPostChange,
   replyParents,
+  replyParentReader,
   replyPending,
   onReply,
   subjects,
@@ -273,6 +275,7 @@ export function ThreadReadingPost({
   onPageRefresh: () => Promise<ThreadReadingPage | undefined>;
   onOpeningPostChange: (restored: boolean) => void;
   replyParents: ReplyParents;
+  replyParentReader?: import('../../threads/reply-context').ReplyParentReader | undefined;
   replyPending: boolean;
   onReply: () => void;
   subjects: ThreadSubject[];
@@ -507,7 +510,7 @@ export function ThreadReadingPost({
         onCopyLink={copyLink}
         {...(canRestore ? { onRestore: () => void restoreRemovedPost() } : {})}
       >
-        <ReplyContext parentId={post.parentId} parents={replyParents} />
+        <ReplyContext parentId={post.parentId} parents={replyParents} authors={authors} reader={replyParentReader} />
       </RemovedPost>
     );
   }
@@ -567,7 +570,7 @@ export function ThreadReadingPost({
           </ThreadPostActions>
         </div>
       </div>
-      <ReplyContext parentId={post.parentId} parents={replyParents} />
+      <ReplyContext parentId={post.parentId} parents={replyParents} authors={authors} reader={replyParentReader} />
       {editing ? (
         <InlinePostEditor
           initialBody={post.body}

@@ -26,6 +26,7 @@ import {
 } from './exact-revision-media';
 import type { ThreadDocumentMedia } from './document-media-read';
 import { loadNewThreadPage } from './new-thread-read';
+import { loadReplyParent, validateReplyParentInput } from './reply-parent-read';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -36,6 +37,13 @@ type PostResource = ReturnType<KernelClient['posts']>;
 type PostRevisionPage = NonNullable<Awaited<ReturnType<PostResource['revisions']['get']>>['data']>;
 type PostRevision = PostRevisionPage['revisions'][number];
 export type { ThreadPost };
+
+export const readReplyParent = createServerFn({ method: 'GET' })
+  .validator(validateReplyParentInput)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadReplyParent(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
 
 type PageInput = {
   id: string;
