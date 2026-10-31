@@ -870,8 +870,11 @@ export class WorkerStore implements AttemptFence {
     }
     if (task.brief.goal !== brief.goal || task.brief.manager !== brief.manager)
       throw new Error('a reshaped brief must keep the same goal and manager');
-    const reserved = this.db.query('SELECT 1 FROM worker_proof_reservations WHERE task_id=? LIMIT 1').get(task.id);
-    if (reserved && proofFingerprint(task.brief) !== proofFingerprint(brief))
+    const reservations = this.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=?').all(task.id)
+      .map((row) => decode<ProofReservation>(row)!);
+    if (reservations.length && (proofFingerprint(task.brief) !== proofFingerprint(brief) ||
+        reservations.some(({ binding }) => binding.sourceCommit !== brief.proof?.sourceCommit ||
+          !isDeepStrictEqual(binding.argv, brief.acceptance.command))))
       throw new Error('a reserved proof source and command may never be replaced');
     if (task.brief.proof && task.brief.proof.sourceCommit !== brief.proof?.sourceCommit && ref.attempt !== 0)
       throw new Error('proof source refresh requires a new authorized registration before any attempt');
@@ -1215,6 +1218,7 @@ export class WorkerStore implements AttemptFence {
           if (previous.taskKind === undefined) delete record.taskKind;
           else record.taskKind = previous.taskKind;
           record.taskClass = previous.taskClass;
+          record.criticalPath = previous.criticalPath;
           record.diffLines = previous.diffLines;
           record.changedFiles = previous.changedFiles;
           record.hostMs = previous.hostMs;

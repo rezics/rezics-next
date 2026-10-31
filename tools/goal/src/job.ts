@@ -1039,7 +1039,7 @@ export class WorkerJob implements GateOutcomeSink {
       const waiting = capacityWaiters(this.tasks.settings.stateDirectory);
       for (const task of store.activeTasks()) {
         await yieldSweep();
-        if (task.state !== 'ready' || task.currentAttempt !== 0 || this.recovering.has(task.id)) continue;
+        if (task.brief.kind === 'verification' || task.state !== 'ready' || task.currentAttempt !== 0 || this.recovering.has(task.id)) continue;
         if (Date.now() - Date.parse(task.createdAt) < graceMs || waiting.has(task.id)) continue;
         try {
           acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', task.id)).release();

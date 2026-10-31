@@ -1044,3 +1044,67 @@ test('first-start receiving refuses missing helpers and stale, cancelled, integr
     h.dispose();
   }
 });
+
+test('configured operations receives stopped and held conversions with authentic ordinary priority and unchanged old attempts', () => {
+  const h = registeredFixture();
+  try {
+    h.settings.integration.operationsManager = 'operations';
+    const operations = { id: 'operations', sessionId: 'operations-session' };
+    h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(operations.id,
+      JSON.stringify({ status: 'running', threadId: operations.sessionId }));
+    const submitted = submittedProof(h);
+    for (const state of ['stopped', 'held'] as const) {
+      const task = h.store.createTask({ ...brief(), kind: 'claim', criticalPath: true },
+        { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'critical-path');
+      const ref = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number) => attempt(task.id, number, h.settings.stateDirectory));
+      h.store.close(ref, 'stopped');
+      if (state === 'held') h.store.updateHeldRetryTask(ref, (current) => { current.state = 'held'; });
+      const raw = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(task.id, 1);
+      expect(() => h.tasks.queueRetry(task.id, { expectedAttempt: 1, brief: submitted.path }, null)).toThrow('authenticated');
+      h.tasks.queueRetry(task.id, { expectedAttempt: 1, brief: submitted.path }, operations);
+      const registered = h.store.task(task.id);
+      expect(registered.proofAuthorization).toMatchObject({ manager: operations.id, sessionId: operations.sessionId });
+      expect(registered.brief.criticalPath).toBe(false);
+      expect(registered.taskClass).toBe('implementation');
+      expect(registered.priorityHistory?.at(-1)).toMatchObject({
+        value: 'normal', setter: operations.id,
+        provenance: { kind: 'manager-session', sessionId: operations.sessionId },
+      });
+      expect(h.store.record(ref)).toMatchObject({ taskKind: 'claim', criticalPath: true });
+      expect(h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(task.id, 1)).toEqual(raw);
+      expect(h.store.retryIntent(ref)?.status).toBe('pending');
+      expect(h.store.proofReservation(task.id, 1)).toBeUndefined();
+    }
+  } finally {
+    h.dispose();
+  }
+});
+
+test('exact retained local wrapper registration stays pending across host sweeps before any nested check or attempt', async () => {
+  const h = registeredFixture();
+  try {
+    const command = ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test', 'fixture.test.ts'];
+    h.store.updateTask({ taskId: h.source.id, attempt: 0 }, (current) => { current.brief.acceptance.command = command; });
+    const submitted = submittedProof(h, { acceptance: { ...h.proofBrief.acceptance, command } });
+    const task = h.store.createTask({ ...brief(), kind: 'claim' },
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'claim');
+    expect(h.tasks.queueProofStart(task.id, { expectedAttempt: 0, brief: submitted.path }, h.actor)).toEqual({
+      taskId: task.id, attempt: 0, status: 'pending', reason: proofExecutionUnavailable(command),
+    });
+    const job = new WorkerJob(h.tasks, { enqueue() { throw new Error('proof must never land'); } }, { deliver() {} });
+    job.resumePendingRetries();
+    await job.drain();
+    job.resumePendingRetries();
+    await job.drain();
+    await expect(job.start(task.id, { expectedAttempt: 0 })).rejects.toThrow('ONE logical invocation');
+    expect(h.store.task(task.id).brief.acceptance.command).toEqual(command);
+    expect(h.store.task(task.id).proofAuthorization?.originals[0]?.argv).toEqual(command);
+    expect(h.store.task(task.id).currentAttempt).toBe(0);
+    expect(h.store.attempts(task.id)).toEqual([]);
+    expect(h.store.proofReservation(task.id, 1)).toBeUndefined();
+    expect(h.store.retryIntents().filter((intent) => intent.taskId === task.id)).toHaveLength(1);
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 0 })?.status).toBe('pending');
+  } finally {
+    h.dispose();
+  }
+});

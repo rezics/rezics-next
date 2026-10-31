@@ -398,7 +398,7 @@ export class WorkerTasks {
           this.store,
           this.settings.mainCheckout,
           brief,
-          actor ?? authenticatedManager(this.store.db),
+          actor === undefined ? authenticatedManager(this.store.db) : actor,
           this.settings.integration.operationsManager,
           this.settings.integrationBranch,
         );
@@ -428,7 +428,7 @@ export class WorkerTasks {
             this.store,
             this.settings.mainCheckout,
             submittedBrief,
-            actor ?? authenticatedManager(this.store.db),
+            actor === undefined ? authenticatedManager(this.store.db) : actor,
             this.settings.integration.operationsManager,
             this.settings.integrationBranch,
           )
@@ -512,7 +512,6 @@ export class WorkerTasks {
     if (!worker) throw new TaskHeldForDependenciesError();
     return worker;
   }
-  /** Persist an explicit retry for the host to start on its next recovery sweep. */
   /** Authenticate and persist a SAME-ID never-started conversion; this method never launches anything. */
   queueProofStart(
     taskId: string,
@@ -536,7 +535,8 @@ export class WorkerTasks {
           removed.length !== approved.length || approved.some((id) => !removed.includes(id)))
         throw new Error('removed after lanes must exactly match explicit removeAfter approval');
       const authorization = authorizeProof(
-        this.store, this.settings.mainCheckout, nextBrief, actor ?? authenticatedManager(this.store.db),
+        this.store, this.settings.mainCheckout, nextBrief,
+        actor === undefined ? authenticatedManager(this.store.db) : actor,
         this.settings.integration.operationsManager, this.settings.integrationBranch,
       );
       const missing = preflightProof(this.settings.mainCheckout, nextBrief);
@@ -548,10 +548,12 @@ export class WorkerTasks {
       }
       this.store.updateHeldRetryTask(ref, (current) => {
         this.store.assertProofRegistration(ref, nextBrief);
+        const previousCritical = criticalPriority(current.brief, current.taskClass);
         current.brief = nextBrief;
         if (briefPath) current.briefPath = briefPath;
-        if (submitted) current.taskClass = submitted.taskClass;
+        current.taskClass = classifyTask(nextBrief);
         current.proofAuthorization = authorization;
+        this.applyRetryPriority(current, previousCritical, actor, authorization);
         current.state = this.dependenciesMet(current) ? 'ready' : 'held';
         this.store.saveRetryIntent(ref, {});
       });
@@ -568,6 +570,7 @@ export class WorkerTasks {
       lease.release();
     }
   }
+  /** Persist an explicit retry for the host to start on its next recovery sweep. */
   queueRetry(
     taskId: string,
     options: RetryOptions = {},
@@ -595,7 +598,8 @@ export class WorkerTasks {
     if (nextBrief.kind === 'verification') {
       this.store.assertProofRegistration({ taskId, attempt: task.currentAttempt }, nextBrief);
       authorization = authorizeProof(
-        this.store, this.settings.mainCheckout, nextBrief, actor ?? authenticatedManager(this.store.db),
+        this.store, this.settings.mainCheckout, nextBrief,
+        actor === undefined ? authenticatedManager(this.store.db) : actor,
         this.settings.integration.operationsManager, this.settings.integrationBranch,
       );
       const missing = preflightProof(this.settings.mainCheckout, nextBrief);
@@ -628,13 +632,7 @@ export class WorkerTasks {
             current.brief = reshaped.brief;
             current.briefPath = briefPath;
             current.taskClass = reshaped.taskClass;
-            applyPriorityTransition(
-              this.store.db,
-              current,
-              previousCritical,
-              criticalPriority(current.brief, current.taskClass),
-              actor,
-            );
+            this.applyRetryPriority(current, previousCritical, actor, authorization);
             current.state = 'held';
             current.pendingBriefChange = {
               previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
@@ -696,13 +694,7 @@ export class WorkerTasks {
             current.brief = reshaped.brief;
             current.briefPath = briefPath!;
             current.taskClass = reshaped.taskClass;
-            applyPriorityTransition(
-              this.store.db,
-              current,
-              previousCritical,
-              criticalPriority(current.brief, current.taskClass),
-              actor,
-            );
+            this.applyRetryPriority(current, previousCritical, actor, authorization);
             current.pendingBriefChange = {
               previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
               newBriefHash: briefHash(reshaped.brief.markdown),
@@ -718,6 +710,25 @@ export class WorkerTasks {
       throw error;
     }
     if (reshaped && nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
+  }
+  /** A real proof permit also authorizes its required ordinary priority, including an operations conversion. */
+  private applyRetryPriority(
+    task: Task,
+    previousCritical: boolean,
+    actor: AuthenticatedManager | null | undefined,
+    authorization?: ProofAuthorization,
+  ): void {
+    if (!authorization) {
+      applyPriorityTransition(this.store.db, task, previousCritical, criticalPriority(task.brief, task.taskClass), actor);
+      return;
+    }
+    if (criticalPriority(task.brief, task.taskClass)) throw new Error('proof tasks are ordinary priority only');
+    if (!previousCritical) return;
+    task.priorityHistory ??= [];
+    task.priorityHistory.push({
+      value: 'normal', setter: authorization.manager, grantor: null, at: new Date().toISOString(),
+      provenance: { kind: 'manager-session', sessionId: authorization.sessionId },
+    });
   }
   setPriority(
     taskId: string,
