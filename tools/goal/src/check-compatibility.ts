@@ -13,7 +13,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { hostname } from 'node:os';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CONTRACT_PATH = fileURLToPath(new URL('../contracts/check-scripts.json', import.meta.url));
@@ -727,13 +728,17 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
 
     if (binary) {
       const packageRoot = join(scriptsRoot, 'node_modules/bun');
-      const platformRoot = join(scriptsRoot, 'node_modules', binary.package);
+      // Bun may keep optional dependencies on the installed package's private edge.
+      // Follow that graph from the real manifest, using only the contract's package name.
+      const packageManifest = realpathSync(join(packageRoot, 'package.json'));
+      const platformManifest = createRequire(packageManifest).resolve(`${binary.package}/package.json`);
+      const platformRoot = dirname(platformManifest);
       const installed = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as {
         name?: string;
         version?: string;
         bin?: { bun?: string };
       };
-      const installedPlatform = JSON.parse(readFileSync(join(platformRoot, 'package.json'), 'utf8')) as {
+      const installedPlatform = JSON.parse(readFileSync(platformManifest, 'utf8')) as {
         name?: string;
         version?: string;
       };
@@ -746,7 +751,7 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
       pushCheck(
         checks,
         'workerCheck.bun.packages',
-        ['read', join(packageRoot, 'package.json'), join(platformRoot, 'package.json')],
+        ['read', packageManifest, platformManifest],
         installedOk,
         installedOk
           ? 'Installed Bun and platform package identities match the exact package pin.'

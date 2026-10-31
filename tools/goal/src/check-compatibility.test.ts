@@ -199,7 +199,7 @@ test('missing worker-check and remote-check scripts are reported as incompatible
 });
 
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, readFileSync, realpathSync, symlinkSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, realpathSync, renameSync, symlinkSync } from 'node:fs';
 import { checkPinnedBunInstallation } from './check-compatibility.ts';
 
 /** Provision authentic immutable npm artifacts, never a shim reporting a desired positive version. */
@@ -400,6 +400,90 @@ test('artifact custody fails closed for changed lock integrity, installed packag
     expect(checkPinnedBunInstallation(root).find((check) => check.field === 'workerCheck.bun.artifact')?.status).toBe(
       'incompatible',
     );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+/** Model Bun's private optional dependency edge without modifying shared installed artifacts. */
+function nonhoistedBunInstallation(directory: string) {
+  const fixture = completeScriptsRoot(directory);
+  const platform = fixture.artifact.platforms[`${process.platform}-${process.arch}`]!;
+  const packageRoot = join(directory, 'private-bun');
+  const dependencies = join(directory, 'private-dependencies');
+  const platformRoot = join(directory, 'private-platform');
+  renameSync(join(fixture.installation, 'bun'), packageRoot);
+  symlinkSync(packageRoot, join(fixture.installation, 'bun'), 'dir');
+  mkdirSync(join(dependencies, '@oven'), { recursive: true });
+  mkdirSync(join(platformRoot, 'bin'), { recursive: true });
+  // Copy metadata into this private fixture so negative cases never mutate artifact cache files.
+  writeFileSync(
+    join(platformRoot, 'package.json'),
+    readFileSync(join(fixture.installation, platform.package, 'package.json')),
+  );
+  symlinkSync(fixture.executable, join(platformRoot, platform.executable));
+  rmSync(join(fixture.installation, platform.package));
+  symlinkSync(platformRoot, join(dependencies, platform.package), 'dir');
+  symlinkSync(dependencies, join(packageRoot, 'node_modules'), 'dir');
+  return { ...fixture, platform, platformRoot };
+}
+
+test('artifact custody resolves both hoisted and nonhoisted installed Bun optional dependency edges', () => {
+  const directory = temporaryDirectory();
+  try {
+    for (const layout of ['hoisted', 'nonhoisted']) {
+      const fixtureDirectory = join(directory, layout);
+      const { root, executable } = layout === 'hoisted'
+        ? completeScriptsRoot(fixtureDirectory)
+        : nonhoistedBunInstallation(fixtureDirectory);
+      const checks = checkPinnedBunInstallation(root);
+      expect(checks.filter((check) => check.status === 'incompatible')).toEqual([]);
+      const custody = checks.find((check) => check.field === 'workerCheck.bun.executable')!;
+      expect(custody.evidence?.installedBinary).toBe(realpathSync(executable));
+      expect(custody.evidence?.resolved).toBe(realpathSync(executable));
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('nonhoisted Bun optional package custody rejects missing or wrong metadata, integrity and binary bytes', () => {
+  const directory = temporaryDirectory();
+  try {
+    const { root, platformRoot, platform, artifact } = nonhoistedBunInstallation(directory);
+    const manifestPath = join(platformRoot, 'package.json');
+    const metadata = readFileSync(manifestPath, 'utf8');
+    const requireRefusal = (field: string) => {
+      const checks = checkPinnedBunInstallation(root);
+      expect(checks.find((check) => check.field === field)?.status).toBe('incompatible');
+      // The genuine lookup still passes both probes; those alone must never establish custody.
+      for (const probe of ['version', 'revision'])
+        expect(checks.find((check) => check.field === `workerCheck.bun.${probe}`)?.status).toBe('compatible');
+    };
+
+    rmSync(manifestPath);
+    requireRefusal('workerCheck.bun.custody');
+    const original = JSON.parse(metadata) as { name: string; version: string };
+    for (const change of [{ name: 'wrong-package' }, { version: '0.0.0-incompatible' }]) {
+      writeFileSync(manifestPath, JSON.stringify({ ...original, ...change }));
+      requireRefusal('workerCheck.bun.packages');
+    }
+    writeFileSync(manifestPath, metadata);
+
+    const lockPath = join(root, 'bun.lock');
+    const lock = readFileSync(lockPath, 'utf8');
+    expect(lock).toContain(platform.integrity);
+    writeFileSync(lockPath, lock.replace(platform.integrity, 'sha512-incompatible'));
+    requireRefusal('workerCheck.bun.lock');
+    writeFileSync(lockPath, lock);
+
+    const binaryPath = join(platformRoot, platform.executable);
+    rmSync(binaryPath);
+    writeFileSync(binaryPath, 'not the pinned executable');
+    expect(createHash('sha256').update(readFileSync(binaryPath)).digest('hex')).not.toBe(
+      artifact.platforms[`${process.platform}-${process.arch}`]!.executableSha256,
+    );
+    requireRefusal('workerCheck.bun.executable');
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
