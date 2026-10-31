@@ -3793,7 +3793,7 @@
   "order_tax_unavailable": "Steuerinformationen sind nicht verfügbar.",
   "order_tax_code": "Steuercode",
   "benefit_details_unknown": "Die Leistungsdetails dieses historischen Eintrags sind nicht verfügbar.",
-  "curation_leave_title": "Den Darstellungseditor verlassen?",
+  "curation_leave_title": "Den Präsentationseditor verlassen?",
   "curation_leave_warning": "Beim Verlassen gehen unveröffentlichte Änderungen in allen Vorlagen und Ansichten verloren. Bleibe im Editor, um weiterzuarbeiten.",
   "curation_leave_recovery": "Beim Verlassen gehen unveröffentlichte Änderungen und die hier gespeicherten Informationen zur Wiederaufnahme der Veröffentlichung verloren. Eine Veröffentlichungsanfrage wird dadurch weder abgebrochen noch wird bestätigt, was der Server gespeichert hat. Bleibe im Editor, um Änderungen und Wiederherstellungsoptionen zu behalten.",
   "curation_stay": "Im Editor bleiben",
