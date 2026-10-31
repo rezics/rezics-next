@@ -42,9 +42,16 @@ export function consentAssertion(read: Extract<ConsentRead, { ok: true }>, addre
   const subject = pickText(identity?.subject?.labels ?? {}, locale);
   const relationship = pickText(read.field, locale);
   const target = pickText(identity?.target?.labels ?? {}, locale);
-  const identified = !!candidate && !read.terminal && identity?.subject?.id === address.id &&
-    candidate.statement.property.id === address.property && candidate.statement.value.type === 'value' &&
-    identity?.target?.id === candidate.statement.value.content && !!subject.text && !!relationship.text && !!target.text;
+  const identified =
+    !!candidate &&
+    !read.terminal &&
+    identity?.subject?.id === address.id &&
+    candidate.statement.property.id === address.property &&
+    candidate.statement.value.type === 'value' &&
+    identity?.target?.id === candidate.statement.value.content &&
+    !!subject.text &&
+    !!relationship.text &&
+    !!target.text;
   return { subject, relationship, target, identified };
 }
 

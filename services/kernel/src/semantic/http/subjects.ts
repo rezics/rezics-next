@@ -2009,10 +2009,22 @@ function subjectRoutes(
                         t.Object({ source: SemanticSourceSchema, references: t.Array(BatchReferenceSchema) }),
                         t.Null(),
                       ]),
-                      consentIdentity: t.Optional(t.Object({
-                        subject: t.Union([t.Object({ id: t.String(), labels: t.Record(t.String(), t.String()) }), t.Null()]),
-                        target: t.Union([t.Object({ id: t.String(), labels: t.Record(t.String(), t.String()), redirect: t.Optional(t.String()) }), t.Null()]),
-                      })),
+                      consentIdentity: t.Optional(
+                        t.Object({
+                          subject: t.Union([
+                            t.Object({ id: t.String(), labels: t.Record(t.String(), t.String()) }),
+                            t.Null(),
+                          ]),
+                          target: t.Union([
+                            t.Object({
+                              id: t.String(),
+                              labels: t.Record(t.String(), t.String()),
+                              redirect: t.Optional(t.String()),
+                            }),
+                            t.Null(),
+                          ]),
+                        }),
+                      ),
                       statement: StatementSchema,
                       release: t.String(),
                       revision: t.Integer(),
@@ -2066,7 +2078,10 @@ function subjectRoutes(
                 authorize: check,
                 routeKey,
                 identity: {
-                  access: access(), actor, deadline: job.deadline, refreshAudience,
+                  access: access(),
+                  actor,
+                  deadline: job.deadline,
+                  refreshAudience,
                   prepareSource: () => authorize({ ...resource, eligibility: subjectReadEligibility(resource) }),
                 },
               }),

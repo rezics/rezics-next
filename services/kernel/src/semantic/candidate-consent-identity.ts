@@ -21,14 +21,26 @@ export type ConsentIdentityReader = {
 /** Each addressed identity has its own native admission and released home snapshot.
  * No source checkout or source authorization is used for these target reads.
  */
-export async function readConsentTarget(pool: Pool, reader: ConsentIdentityReader, id: string): Promise<ConsentIdentity['target']> {
+export async function readConsentTarget(
+  pool: Pool,
+  reader: ConsentIdentityReader,
+  id: string,
+): Promise<ConsentIdentity['target']> {
   async function observe(subject: string) {
     requireAccessDeadline(reader.deadline);
     const route = routeOf(subject);
     if (route === null) return null;
-    const check = await accessCheck(reader.access, reader.actor, 'subject:read', {
-      route, id: subject, eligibility: subjectReadEligibility({ route, id: subject }),
-    }, { pool, deadline: reader.deadline });
+    const check = await accessCheck(
+      reader.access,
+      reader.actor,
+      'subject:read',
+      {
+        route,
+        id: subject,
+        eligibility: subjectReadEligibility({ route, id: subject }),
+      },
+      { pool, deadline: reader.deadline },
+    );
     return withReadTransaction(pool, async (client) => {
       const home = partitionOf(route);
       const partition = await readPartition(client, home);
@@ -48,6 +60,7 @@ export async function readConsentTarget(pool: Pool, reader: ConsentIdentityReade
   if (!survivor || survivor.redirect) return null;
   // The original must still admit this reader after the survivor's staged read.
   const current = await observe(id);
-  if (!current || current.redirect !== survivor.id || current.security_revision !== original.security_revision) return null;
+  if (!current || current.redirect !== survivor.id || current.security_revision !== original.security_revision)
+    return null;
   return { id, labels: survivor.labels as Record<string, string>, redirect: survivor.id };
 }

@@ -136,7 +136,9 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
       if (scenario === 'deleted' || scenario === 'lagging-deletion')
         return json({ candidates: [{ id: candidateId, deleted: true }], adoption: null, next: null });
       return json({
-        candidates: [{ ...candidate, ...(retracted ? { consentIdentity: undefined } : {}), retracted: retracted ? 3 : null }],
+        candidates: [
+          { ...candidate, ...(retracted ? { consentIdentity: undefined } : {}), retracted: retracted ? 3 : null },
+        ],
         adoption: { mode: 'replace', head: 1 },
         next: null,
       });

@@ -106,11 +106,17 @@ export function StatementConsentPage({
   const assertion = current ? consentAssertion(current, address, locale) : undefined;
   const assertionView = (
     <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 break-words [overflow-wrap:anywhere]">
-      <span lang={assertion?.subject.lang ?? undefined}>{assertion?.subject.text || m.statement_consent_identity_unavailable({}, options)}</span>
+      <span lang={assertion?.subject.lang ?? undefined}>
+        {assertion?.subject.text || m.statement_consent_identity_unavailable({}, options)}
+      </span>
       <span aria-hidden="true">→</span>
-      <span lang={assertion?.relationship.lang ?? undefined}>{assertion?.relationship.text || m.subject_value_unlabelled({}, options)}</span>
+      <span lang={assertion?.relationship.lang ?? undefined}>
+        {assertion?.relationship.text || m.subject_value_unlabelled({}, options)}
+      </span>
       <span aria-hidden="true">→</span>
-      <span lang={assertion?.target.lang ?? undefined}>{assertion?.target.text || m.statement_consent_identity_unavailable({}, options)}</span>
+      <span lang={assertion?.target.lang ?? undefined}>
+        {assertion?.target.text || m.statement_consent_identity_unavailable({}, options)}
+      </span>
     </p>
   );
   function openConfirmation(operation: ConsentCommand['operation']) {
@@ -140,7 +146,12 @@ export function StatementConsentPage({
     }
   }
   async function change() {
-    if (running.current || !current || (!request.current && (!confirmation || !own || !attempt || !assertion?.identified || reload))) return;
+    if (
+      running.current ||
+      !current ||
+      (!request.current && (!confirmation || !own || !attempt || !assertion?.identified || reload))
+    )
+      return;
     request.current ??= {
       ...address,
       operation: confirmation!,
@@ -253,11 +264,18 @@ export function StatementConsentPage({
                   {!confirmation && !uncertain && (
                     <div className="flex flex-wrap gap-2">
                       {result?.kind !== 'disclosed' && (
-                        <Button disabled={busy || reload || !assertion?.identified} onClick={() => openConfirmation('disclose')}>
+                        <Button
+                          disabled={busy || reload || !assertion?.identified}
+                          onClick={() => openConfirmation('disclose')}
+                        >
                           {m.statement_consent_share({}, options)}
                         </Button>
                       )}
-                      <Button variant="outline" disabled={busy || reload || !assertion?.identified} onClick={() => openConfirmation('retract')}>
+                      <Button
+                        variant="outline"
+                        disabled={busy || reload || !assertion?.identified}
+                        onClick={() => openConfirmation('retract')}
+                      >
                         {m.statement_consent_retract({}, options)}
                       </Button>
                     </div>

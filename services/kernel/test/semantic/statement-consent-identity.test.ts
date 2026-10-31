@@ -26,17 +26,39 @@ test('The real mounted candidate read gives the authorized target account readab
     await f.grantAccount(owner, ['subject:create', 'statement:propose']);
     await f.grantAccount(other, ['subject:create', 'statement:propose']);
     await f.grantAccount(moderator, ['moderation:hide']);
-    const target = (await ensureAccountAgent(f.pool, {
-      account: owner.accountId, kind: 'person', name: 'The person behind the name',
-    })).subject.id;
-    const source = await f.send(owner, 'POST', '/v1/subjects', {
-      type: 'schema:Person', labels: { en: 'River Ink' },
-    }, key());
+    const target = (
+      await ensureAccountAgent(f.pool, {
+        account: owner.accountId,
+        kind: 'person',
+        name: 'The person behind the name',
+      })
+    ).subject.id;
+    const source = await f.send(
+      owner,
+      'POST',
+      '/v1/subjects',
+      {
+        type: 'schema:Person',
+        labels: { en: 'River Ink' },
+      },
+      key(),
+    );
     expect(source.status, JSON.stringify(source.body)).toBe(201);
     const id = (source.body.subject as { id: string }).id;
-    const proposal = await f.send(owner, 'POST', `/v1/subjects/${id}/candidates`, {
-      statement: { property: { id: property }, value: { type: 'value', content: target }, references: [], qualifiers: [] },
-    }, key());
+    const proposal = await f.send(
+      owner,
+      'POST',
+      `/v1/subjects/${id}/candidates`,
+      {
+        statement: {
+          property: { id: property },
+          value: { type: 'value', content: target },
+          references: [],
+          qualifiers: [],
+        },
+      },
+      key(),
+    );
     expect(proposal.status, JSON.stringify(proposal.body)).toBe(201);
     const candidate = proposal.body.candidate as string;
     const address = { id, property, candidate, slot: { target } };
@@ -66,11 +88,19 @@ test('The real mounted candidate read gives the authorized target account readab
       if (!reader) expect(page.headers.get('cache-control')).toBe('no-cache');
     }
     const denied = await changeStatementConsent(client, `Bearer ${other.bearer}`, {
-      ...address, operation: 'disclose', key: randomUUID(),
+      ...address,
+      operation: 'disclose',
+      key: randomUUID(),
     });
     expect(denied).toEqual({ ok: false, reason: 'denied' });
 
-    const hidden = await f.send(moderator, 'POST', `/v1/subjects/${target}:hide`, { reason: 'Withhold target identity.' }, key());
+    const hidden = await f.send(
+      moderator,
+      'POST',
+      `/v1/subjects/${target}:hide`,
+      { reason: 'Withhold target identity.' },
+      key(),
+    );
     expect(hidden.status, JSON.stringify(hidden.body)).toBe(200);
     const withheld = await readStatementConsent(client, authorization, address);
     expect(withheld.ok, JSON.stringify(withheld)).toBe(true);
@@ -82,7 +112,9 @@ test('The real mounted candidate read gives the authorized target account readab
 
     // Missing display identity does not invent a native retraction restriction.
     const retracted = await changeStatementConsent(client, authorization, {
-      ...address, operation: 'retract', key: randomUUID(),
+      ...address,
+      operation: 'retract',
+      key: randomUUID(),
     });
     expect(retracted.ok, JSON.stringify(retracted)).toBe(true);
     if (!retracted.ok) throw new Error('Native owner retraction failed');

@@ -55,7 +55,13 @@ import {
   type Adoption,
   type Candidate,
 } from './slots.ts';
-import { accountSource, assertAgentStatementAccess, readItemDetails, readLabels, type AgentSelfSource } from './subject.ts';
+import {
+  accountSource,
+  assertAgentStatementAccess,
+  readItemDetails,
+  readLabels,
+  type AgentSelfSource,
+} from './subject.ts';
 import { contextSnapshot } from './context.ts';
 import registerRelationContext from './relation-context-register.sql';
 import listRelationContexts from './relation-context-list.sql';
@@ -974,11 +980,7 @@ export function listRevisions(pool: Pool, ring: KeyRing, options: PageOptions) {
   );
 }
 
-async function candidatePage(
-  pool: Pool,
-  ring: KeyRing,
-  options: CandidatePageOptions,
-) {
+async function candidatePage(pool: Pool, ring: KeyRing, options: CandidatePageOptions) {
   const contextRecord = options.context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, options.context);
   if (options.context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
   const defaults = contextRecord?.defaults ?? {};
@@ -1005,7 +1007,8 @@ async function candidatePage(
       typeof after[2] === 'string' &&
       routeOf(after[2]) === routeOf(options.subject),
     async (client, after) => {
-      const identityAdmitted = options.identity &&
+      const identityAdmitted =
+        options.identity &&
         (await readPartition(client, partitionOf(routeOf(options.subject)!)))?.writeState === 'active';
       const slot = options.slot ?? slotId(options.subject, options.property);
       const state = await resolveSlot(client, options.subject, options.property, options.context, slot);
@@ -1101,6 +1104,7 @@ async function candidatePage(
           (fact.body as { rank?: 'normal' | 'preferred' | 'deprecated' }).rank ?? null,
         ]),
       );
+      let subjectIdentity: ConsentIdentity['subject'] | undefined;
       let candidates: (
         | { id: string; deleted: true }
         | {
@@ -1149,12 +1153,21 @@ async function candidatePage(
           release: row.release,
           context: options.context,
         }).statements[options.property]![0]!;
-        const identity = identityAdmitted && provenance?.retracted === null &&
+        let identity: ConsentIdentity | undefined;
+        if (
+          identityAdmitted &&
+          provenance?.retracted === null &&
           releases.get(row.release)?.properties[options.property]?.disclosure === 'sourceOrConsent' &&
-          statement.property.data_type === 'wikibase-item' && statement.value.type === 'value' &&
+          statement.property.data_type === 'wikibase-item' &&
+          statement.value.type === 'value' &&
           typeof statement.value.content === 'string'
-          ? { subject: { id: options.subject, labels: (await readLabels(client, [options.subject])).get(options.subject) ?? {} }, target: null }
-          : undefined;
+        ) {
+          subjectIdentity ??= {
+            id: options.subject,
+            labels: (await readLabels(client, [options.subject])).get(options.subject) ?? {},
+          };
+          identity = { subject: subjectIdentity, target: null };
+        }
         candidates.push({
           ...provenance!,
           ...(identity ? { consentIdentity: identity } : {}),
@@ -1188,7 +1201,6 @@ async function candidatePage(
   );
 }
 
-
 type CandidatePageOptions = PageOptions & {
   property: string;
   context: string;
@@ -1205,11 +1217,16 @@ type CandidatePageOptions = PageOptions & {
  */
 export async function listCandidates(pool: Pool, ring: KeyRing, options: CandidatePageOptions) {
   const first = await candidatePage(pool, ring, options);
-  if (!options.identity || !first.candidates.some((candidate) => 'consentIdentity' in candidate && candidate.consentIdentity)) return first;
+  if (
+    !options.identity ||
+    !first.candidates.some((candidate) => 'consentIdentity' in candidate && candidate.consentIdentity)
+  )
+    return first;
   const targets = new Map<string, ConsentIdentity['target']>();
   for (const candidate of first.candidates) {
     if ('deleted' in candidate || !candidate.consentIdentity) continue;
-    const target = String(candidate.statement.value.content);
+    if (candidate.statement.value.type !== 'value' || typeof candidate.statement.value.content !== 'string') continue;
+    const target = candidate.statement.value.content;
     if (!targets.has(target)) targets.set(target, await readConsentTarget(pool, options.identity, target));
   }
   await options.identity.refreshAudience();
@@ -1218,12 +1235,19 @@ export async function listCandidates(pool: Pool, ring: KeyRing, options: Candida
   for (const candidate of current.candidates) {
     if ('deleted' in candidate || !candidate.consentIdentity) continue;
     const prior = first.candidates.find((row) => row.id === candidate.id);
-    if (!prior || 'deleted' in prior || prior.release !== candidate.release ||
-        JSON.stringify(prior.statement) !== JSON.stringify(candidate.statement)) {
+    if (
+      !prior ||
+      'deleted' in prior ||
+      prior.release !== candidate.release ||
+      JSON.stringify(prior.statement) !== JSON.stringify(candidate.statement)
+    ) {
       delete candidate.consentIdentity;
       continue;
     }
-    candidate.consentIdentity.target = targets.get(String(candidate.statement.value.content)) ?? null;
+    candidate.consentIdentity.target =
+      candidate.statement.value.type === 'value' && typeof candidate.statement.value.content === 'string'
+        ? (targets.get(candidate.statement.value.content) ?? null)
+        : null;
   }
   return current;
 }
