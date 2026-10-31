@@ -11,6 +11,7 @@ import {
   mangaExample,
   mangaSeriesId,
   mangaVolumeId,
+  mangaVolumeCitation,
   type MangaScenario,
 } from '../kernel/fake/catalogue-manga-profile';
 import definitions from '../kernel/recorded/definitions-release.json';
@@ -93,27 +94,37 @@ function fieldName(property: string) {
     getLocale(),
   ).text;
 }
+async function enabled(control: HTMLElement) {
+  // The real fieldset can stay disabled after its controls appear while session and metadata load.
+  await waitFor(async () => {
+    await expect(control).toBeEnabled();
+    await expect(control).toHaveStyle({ pointerEvents: 'auto' });
+  });
+  return control;
+}
 async function addField(canvasElement: HTMLElement, group: string, property: string) {
   const canvas = within(canvasElement);
-  const select = await canvas.findByRole('combobox', { name: group });
+  const select = await enabled(await canvas.findByRole('combobox', { name: group }));
   await userEvent.selectOptions(select, property);
-  await userEvent.click(within(select.closest('section')!).getByRole('button', { name: m.correction_add() }));
+  await userEvent.click(
+    await enabled(within(select.closest('section')!).getByRole('button', { name: m.correction_add() })),
+  );
   return within(await canvas.findByRole('region', { name: fieldName(property) }));
 }
 async function fillSeries(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.type(
-    await canvas.findByRole('textbox', { name: m.catalogue_create_label() }),
+    await enabled(await canvas.findByRole('textbox', { name: m.catalogue_create_label() })),
     'The Paper Observatory',
   );
   const language = await addField(canvasElement, m.manga_publication(), 'schema:inLanguage');
-  await userEvent.type(language.getByRole('textbox', { name: m.correction_value() }), 'ja');
+  await userEvent.type(await enabled(language.getByRole('textbox', { name: m.correction_value() })), 'ja');
 }
 export const CreateSeries: Story = {
   play: async ({ canvasElement }) => {
     await fillSeries(canvasElement);
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.manga_title() }));
+    await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await expect(await canvas.findByText(m.manga_created())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.candidate_view_public() })).toHaveAttribute(
       'href',
@@ -125,29 +136,29 @@ export const CreateVolume: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.selectOptions(
-      await canvas.findByRole('combobox', { name: m.manga_grain() }),
+      await enabled(await canvas.findByRole('combobox', { name: m.manga_grain() })),
       'schema:PublicationVolume',
     );
     await userEvent.type(
-      canvas.getByRole('textbox', { name: m.catalogue_create_label() }),
+      await enabled(canvas.getByRole('textbox', { name: m.catalogue_create_label() })),
       'The Paper Observatory, volume 2',
     );
-    await userEvent.click(canvas.getByRole('checkbox', { name: m.manga_independent() }));
+    await userEvent.click(await enabled(canvas.getByRole('checkbox', { name: m.manga_independent() })));
     const work = await addField(canvasElement, m.manga_membership(), 'wdt:P179');
-    await userEvent.type(work.getByRole('combobox', { name: fieldName('wdt:P179') }), 'Paper');
+    await userEvent.type(await enabled(work.getByRole('combobox', { name: fieldName('wdt:P179') })), 'Paper');
     await userEvent.click(
       await within(canvasElement.ownerDocument.body).findByRole('option', { name: /The Paper Observatory|紙の天文台/ }),
     );
     await userEvent.selectOptions(
-      work.getByRole('combobox', { name: m.correction_add_qualifier() }),
+      await enabled(work.getByRole('combobox', { name: m.correction_add_qualifier() })),
       'schema:position',
     );
-    await userEvent.click(work.getByRole('button', { name: m.relation_add_qualifier() }));
-    await userEvent.type(work.getByRole('textbox', { name: m.correction_value() }), '2');
+    await userEvent.click(await enabled(work.getByRole('button', { name: m.relation_add_qualifier() })));
+    await userEvent.type(await enabled(work.getByRole('textbox', { name: m.correction_value() })), '2');
     const pages = await addField(canvasElement, m.manga_publication(), 'schema:numberOfPages');
-    await userEvent.type(pages.getByRole('textbox', { name: m.correction_amount() }), '+192');
-    await userEvent.selectOptions(pages.getByRole('combobox', { name: m.correction_unit() }), '1');
-    await userEvent.click(canvas.getByRole('button', { name: m.manga_title() }));
+    await userEvent.type(await enabled(pages.getByRole('textbox', { name: m.correction_amount() })), '+192');
+    await userEvent.selectOptions(await enabled(pages.getByRole('combobox', { name: m.correction_unit() })), '1');
+    await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await expect(await canvas.findByText(m.manga_created())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.candidate_view_public() })).toHaveAttribute(
       'href',
@@ -161,11 +172,17 @@ export const CorrectVolume: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const pages = within(await canvas.findByRole('region', { name: fieldName('schema:numberOfPages') }));
-    await userEvent.click(pages.getByRole('button', { name: m.facts_edit_field() }));
-    const amount = pages.getByRole('textbox', { name: m.correction_amount() });
+    await userEvent.click(await enabled(pages.getByRole('button', { name: m.facts_edit_field() })));
+    const amount = await enabled(await pages.findByRole('textbox', { name: m.correction_amount() }));
+    await expect(amount).toHaveValue('+192');
+    await expect(pages.getByRole('combobox', { name: m.correction_unit() })).toHaveValue('1');
+    await expect(pages.getByRole('textbox', { name: m.correction_value() })).toHaveValue(mangaVolumeCitation);
     await userEvent.clear(amount);
     await userEvent.type(amount, '+196');
-    await userEvent.click(canvas.getByRole('button', { name: m.facts_submit() }));
+    await expect(amount).toHaveValue('+196');
+    await expect(pages.getByRole('combobox', { name: m.correction_unit() })).toHaveValue('1');
+    await expect(pages.getByRole('textbox', { name: m.correction_value() })).toHaveValue(mangaVolumeCitation);
+    await userEvent.click(await enabled(canvas.getByRole('button', { name: m.facts_submit() })));
     await expect(await pages.findByText(m.correction_proposed())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.candidate_view_public() })).toHaveAttribute(
       'href',
@@ -179,10 +196,10 @@ export const Uncertain: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await fillSeries(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.manga_title() }));
+    await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await expect(await canvas.findByRole('alert')).toBeVisible();
     await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toBeDisabled();
-    await userEvent.click(canvas.getByRole('button', { name: m.correction_retry() }));
+    await userEvent.click(await enabled(canvas.getByRole('button', { name: m.correction_retry() })));
     await expect(await canvas.findByText(m.manga_created())).toBeVisible();
   },
 };
@@ -191,7 +208,7 @@ export const Denied = {
   play: async ({ canvasElement }) => {
     await fillSeries(canvasElement);
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.manga_title() }));
+    await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await expect(await canvas.findByRole('alert')).toBeVisible();
     await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue(
       'The Paper Observatory',
@@ -205,12 +222,17 @@ export const StaleCorrection: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement),
       pages = within(await canvas.findByRole('region', { name: fieldName('schema:numberOfPages') }));
-    await userEvent.click(pages.getByRole('button', { name: m.facts_edit_field() }));
-    const amount = pages.getByRole('textbox', { name: m.correction_amount() });
+    await userEvent.click(await enabled(pages.getByRole('button', { name: m.facts_edit_field() })));
+    const amount = await enabled(await pages.findByRole('textbox', { name: m.correction_amount() }));
+    await expect(amount).toHaveValue('+192');
+    await expect(pages.getByRole('combobox', { name: m.correction_unit() })).toHaveValue('1');
+    await expect(pages.getByRole('textbox', { name: m.correction_value() })).toHaveValue(mangaVolumeCitation);
     await userEvent.clear(amount);
     await userEvent.type(amount, '+196');
-    await userEvent.click(canvas.getByRole('button', { name: m.facts_submit() }));
-    await expect(await pages.findByRole('alert')).toBeVisible();
+    await userEvent.click(await enabled(canvas.getByRole('button', { name: m.facts_submit() })));
+    const alert = await pages.findByRole('alert');
+    await expect(alert).toBeVisible();
+    await expect(alert).toHaveTextContent(m.correction_stale());
     await expect(amount).toHaveValue('+196');
   },
 };
@@ -219,7 +241,7 @@ export const ReaderUnavailable: Story = {
   play: async ({ canvasElement }) => {
     await fillSeries(canvasElement);
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.manga_title() }));
+    await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await expect(await canvas.findByText(m.catalogue_create_reader_unavailable())).toBeVisible();
     await expect(canvas.getByText(mangaSeriesId)).toBeVisible();
   },
@@ -229,7 +251,7 @@ export const ReaderConcealed: Story = {
   play: async ({ canvasElement }) => {
     await fillSeries(canvasElement);
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.manga_title() }));
+    await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await expect(await canvas.findByText(m.catalogue_create_concealed())).toBeVisible();
   },
 };
@@ -238,7 +260,7 @@ export const Saving: Story = {
   play: async ({ canvasElement }) => {
     await fillSeries(canvasElement);
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.manga_title() }));
+    await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await waitFor(() => expect(canvas.getByRole('button', { name: m.catalogue_create_saving() })).toBeDisabled());
   },
 };

@@ -17,6 +17,7 @@ import recording from '../recorded/subject.json';
 export const mangaSeriesId = '00000000-0000-4000-8000-00000000d101';
 export const mangaVolumeId = '00000000-0000-4000-8000-00000000d102';
 export const mangaCreatorId = '00000000-0000-4000-8000-00000000d103';
+export const mangaVolumeCitation = 'https://example.org/paper-observatory/volume-2';
 export type MangaScenario =
   | 'ready'
   | 'loading'
@@ -51,7 +52,15 @@ export function mangaExample(volume = false): MangaItem {
               qualifiers: [{ property: { id: 'schema:position' }, value: { type: 'value', content: '2' } }],
             },
           ],
-          'schema:numberOfPages': [statement('schema:numberOfPages', { amount: '+192', unit: '1' })],
+          'schema:numberOfPages': [
+            {
+              ...statement('schema:numberOfPages', { amount: '+192', unit: '1' }),
+              // Ordinary replacement proposals retain a statement citation, including in this declared example.
+              references: [
+                { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: mangaVolumeCitation } }] },
+              ],
+            },
+          ],
           'schema:isbn': [statement('schema:isbn', '9781234567897')],
         }
       : { 'schema:inLanguage': [statement('schema:inLanguage', 'ja')] },
