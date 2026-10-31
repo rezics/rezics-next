@@ -13,6 +13,7 @@ test('default presentation editor takes a native invalid publication to its actu
     window,
     document: window.document,
     navigator: window.navigator,
+    localStorage: window.localStorage,
     HTMLElement: window.HTMLElement,
     HTMLIFrameElement: window.HTMLIFrameElement,
     Element: window.Element,
@@ -51,7 +52,7 @@ test('default presentation editor takes a native invalid publication to its actu
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const button = (label: string) => {
-    const match = [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label);
+    const match = [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label || item.getAttribute('title') === label);
     expect(match).toBeDefined();
     return match!;
   };
@@ -78,6 +79,7 @@ test('default presentation editor takes a native invalid publication to its actu
     });
   };
   const heading = async (id: string) => {
+    await click(m.curation_puck_outline());
     await settle(() => !!host.querySelector(`[data-puck-layer-tree-id="${id}"]`));
     await act(async () => { host.querySelector(`[data-puck-layer-tree-id="${id}"] button`)!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
     await settle(() => !!textField('text.en'));

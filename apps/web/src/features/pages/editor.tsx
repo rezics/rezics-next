@@ -1,5 +1,5 @@
 import { platformRegistry } from '@rezics/composition';
-import { Puck, usePuck, type Config } from '@puckeditor/core';
+import { Puck, createUsePuck, type Config } from '@puckeditor/core';
 import { Button } from '@rezics/ui/shadcn/button';
 import '@puckeditor/core/puck.css';
 import { createContext, createElement, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
@@ -12,10 +12,12 @@ import { presentationEditorDictionary } from './curate-view-editor-messages';
 import type { CorrectionTarget } from './curate-view-editor-state';
 
 const CorrectionContext = createContext<CorrectionTarget | null>(null);
+const useEditorPuck = createUsePuck();
 
 function CorrectionSelection({ children }: { children: ReactNode }) {
   const target = useContext(CorrectionContext);
-  const { dispatch, getSelectorForId } = usePuck();
+  const dispatch = useEditorPuck((state) => state.dispatch);
+  const getSelectorForId = useEditorPuck((state) => state.getSelectorForId);
   useEffect(() => {
     if (!target) return;
     const itemSelector = target.component ? getSelectorForId(target.component.id) : null;
@@ -30,13 +32,13 @@ function CorrectionSelection({ children }: { children: ReactNode }) {
 
 function CorrectionFields({ children, isLoading }: { children: ReactNode; isLoading: boolean }) {
   const target = useContext(CorrectionContext);
-  const { selectedItem } = usePuck();
+  const selectedId = useEditorPuck((state) => state.selectedItem?.props.id ?? null);
   const region = useRef<HTMLDivElement>(null);
   const focused = useRef<CorrectionTarget | null>(null);
   useEffect(() => {
     const element = region.current;
     if (!element || !target || isLoading || focused.current === target) return;
-    if ((selectedItem?.props.id ?? null) !== (target.component?.id ?? null)) return;
+    if (selectedId !== (target.component?.id ?? null)) return;
     function focus() {
       // Compare owned input names; never interpolate a server pointer into a selector or HTML.
       const control = Array.from(element!.querySelectorAll('input, textarea, select'))
@@ -52,7 +54,7 @@ function CorrectionFields({ children, isLoading }: { children: ReactNode; isLoad
     const observer = new MutationObserver(() => { if (focus()) observer.disconnect(); });
     observer.observe(element, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [target, selectedItem?.props.id, isLoading]);
+  }, [target, selectedId, isLoading]);
   return <div ref={region}>{children}</div>;
 }
 
