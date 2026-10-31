@@ -87,9 +87,7 @@ export const SavingBoundaries: Story = {
         await expect(originalWrite.key).toBeTruthy();
 
         const navigation = within(view.getByRole('navigation', { name: m.settings_sections_label() }));
-        await userEvent.click(
-          navigation.getByRole('link', { name: m.settings_public_activity_heading(), exact: true }),
-        );
+        await userEvent.click(navigation.getByRole('link', { name: m.settings_public_activity_heading() }));
         const activity = within(await view.findByRole('region', { name: m.settings_public_activity_heading() }));
         await expect(activity.getByText(m.settings_automatic_save_help())).toBeVisible();
         const reviews = await activity.findByRole('switch', { name: m.settings_public_reviews() });
@@ -103,7 +101,7 @@ export const SavingBoundaries: Story = {
         await expect(writes[1]!.key).toBeTruthy();
         await expect(writes[1]!.key).not.toBe(originalWrite.key);
 
-        await userEvent.click(navigation.getByRole('link', { name: m.settings_profile_heading(), exact: true }));
+        await userEvent.click(navigation.getByRole('link', { name: m.settings_profile_heading() }));
         await expect(name).toHaveValue(updatedName);
         await expect(save).toBeDisabled();
         await expect(profile.queryByText(m.settings_profile_unsaved())).toBeNull();
