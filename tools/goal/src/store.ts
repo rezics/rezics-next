@@ -569,9 +569,11 @@ export class WorkerStore implements AttemptFence {
         throw new Error('logical proof release requires a stopped or exited current attempt');
       const reservations = this.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=?').all(task.id)
         .map((row) => decode<ProofReservation>(row)!);
+      const starts = this.events(task.id)
+        .filter((event) => ['proof-reserved', 'proof-binding', 'proof-command-ready'].includes(event.kind));
+      if (task.brief.kind !== 'verification' && !reservations.length && !starts.length) return [];
       const generations = new Set([ref.attempt, ...reservations.map((run) => run.binding.attempt),
-        ...this.events(task.id).filter((event) => ['proof-reserved', 'proof-binding', 'proof-command-ready'].includes(event.kind))
-          .map((event) => event.attempt)]);
+        ...starts.map((event) => event.attempt)]);
       const owners = [...generations].map((generation) => this.attempt({ taskId: task.id, attempt: generation }));
       if (owners.some((owner) => !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) ||
           [owner.process, owner.driver, ...(owner.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)))) {

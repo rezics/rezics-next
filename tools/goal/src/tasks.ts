@@ -222,7 +222,7 @@ export type RetryOptions = {
   /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
   expectedAttempt?: number;
 };
-/** Metadata-only first proof start, including an exited historical product generation with no proof start. */
+/** Metadata-only first/future proof registration, including retained product or logically reconciled proof runs. */
 export type ProofStartOptions = {
   expectedAttempt: number;
   brief?: string;
@@ -525,7 +525,7 @@ export class WorkerTasks {
       return { taskId, attempt: expectedAttempt, status: 'released', checks };
     } finally { lease.release(); }
   }
-  /** Authenticate a SAME-ID first proof start, retaining exited product attempts; never launches anything. */
+  /** Authenticate a SAME-ID first/future proof start, retaining prior incarnations; never launches anything. */
   queueProofStart(
     taskId: string,
     options: ProofStartOptions,
