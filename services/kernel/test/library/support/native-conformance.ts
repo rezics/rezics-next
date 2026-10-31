@@ -3,6 +3,8 @@ import type { Release } from '@rezics/definitions';
 import type { Anchor, LibraryDriver } from '../../../../../specs/library-driver.ts';
 import type { WorkClient } from '../../../src/work/client.ts';
 import type { Capture } from '../../support/growth.ts';
+import type { GrowthDatabase } from '../../support/growth.ts';
+import type { ReadTrace, Principal } from '../../../../../specs/follow-counts-driver.ts';
 import { createLibraryDriver } from './outcome-driver.ts';
 
 export type NativePersona =
@@ -24,6 +26,13 @@ export interface NativeConformanceWorld extends LibraryDriver {
     databaseUrl: string;
     steward: Anchor;
     workClient: WorkClient;
+    /** Existing Auth provisioning and kernel transport, with no asserted Actor. */
+    principal(partition: number): Promise<Principal>;
+    reauthenticate(accountId: string, scopes?: readonly string[]): Promise<Principal>;
+    bearerRequest(credential: string | null, path: string, init?: RequestInit): Promise<Response>;
+    observeManagement(observer: ((check: ReadTrace['managementChecks'][number]) => void) | undefined): void;
+    /** The same database/capture used by the established growth classifier. */
+    growth: GrowthDatabase;
     token(persona: Exclude<NativePersona, 'anonymous'>): string;
     request(persona: NativePersona, input: NativeRequest): Promise<Response>;
     rawRequest(

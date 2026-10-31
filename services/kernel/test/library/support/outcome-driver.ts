@@ -343,6 +343,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
     });
 
     const cursorKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) };
+    let managementObserver: Parameters<NativeConformanceWorld['native']['observeManagement']>[0];
     const app = createKernel({
       requestDeadlineMs: 30_000,
       pool: db!.pool,
@@ -359,8 +360,8 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
       }),
       routeKey,
       tokens: cursorKeys,
-      access: (config) =>
-        createAccess({
+      access: (config) => {
+        const access = createAccess({
           ...config,
           auth: {
             issuer,
@@ -368,7 +369,16 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
             jwksUrl: `${issuer}/.well-known/jwks.json`,
             fetch: async (location, init) => auth.handler(new Request(location, init)),
           },
-        }),
+        });
+        const authorize = access.authorize.bind(access);
+        access.authorize = (...args) => {
+          const [, , action, resource] = args;
+          if (['collection:update', 'space:manage', 'account:manage'].includes(action))
+            managementObserver?.({ action, resource: { route: resource.route, id: resource.id } });
+          return authorize(...args);
+        };
+        return access;
+      },
     });
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
     scopes.push('access:grant');
@@ -935,6 +945,30 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         databaseUrl,
         workClient,
         steward: governor,
+        growth: db,
+        async principal(partition) {
+          if (!Number.isInteger(partition) || partition < 0 || partition >= 4096)
+            throw new RangeError('Native principal partition must be below 4096');
+          const person = await provisionAccount({ id: newId(partition * 16), route: partition * 16, partition });
+          return { accountId: person.id, credential: tokenFor(person) };
+        },
+        async reauthenticate(accountId, selected = scopes) {
+          const route = routeOf(accountId);
+          if (route === null) throw new TypeError('Unroutable native account');
+          return {
+            accountId,
+            credential: await consent({ id: accountId, route, partition: partitionOf(route) }, selected),
+          };
+        },
+        async bearerRequest(credential, path, init = {}) {
+          const headers = new Headers(init.headers);
+          if (credential === null) headers.delete('authorization');
+          else headers.set('authorization', `Bearer ${credential}`);
+          return app.handle(new Request(`http://kernel.test${path}`, { ...init, headers }));
+        },
+        observeManagement(observer) {
+          managementObserver = observer;
+        },
         token(as) {
           const person =
             as === 'steward'

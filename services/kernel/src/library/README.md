@@ -1743,6 +1743,27 @@ store or additional participant. Local compiler validation is separate from all 
 
 ### Follow
 
+The retained native inputs are `test/library/follow-counts-outcomes.test.ts`,
+`test/library/follow-count-bootstrap.test.ts`, `test/library/follow-count-bootstrap-growth.test.ts` and
+`test/library/follow-counts-growth.test.ts`. The outcome entry point installs the file URL of
+`test/library/support/follow-counts-driver.ts` and imports the authoritative seventeen-outcome suite once.
+That factory uses the existing `createLibraryDriver` world, original kernel Responses, native source reconciliation
+and target delivery, and the shared growth capture/classifier. The additive native fixture ports expose existing
+Auth provisioning/consent, bearer transport and observation of actual Access calls; they confer no authority.
+
+These restored inputs do not establish native completion. The current world lacks an Auth account-operation host
+for operated-account creation and terminal deletion. Whole Library page observations must include raw examined
+work, including owned-graph pages; missing observations fail explicitly. Count-role exhaustion never establishes
+whole-participant completion. The original bootstrap contract file is absent, and newly provisioned accounts are
+already bootstrap-complete under the runtime migration; they cannot stand in for pre-hook legacy coverage.
+The retained first-page inputs require that native legacy population boundary rather than a SQL reset.
+
+Two frozen outcome bindings also require an owning ruling: `explicit unfollow wins over later implied Library
+intent` supplies a Collection to the subject-only Library entry command; `suspension and reactivation reconcile
+current truth and never resurrect explicit unfollow` captures after `followed()` has already delivered and
+acknowledged the edge, while capture requires genuinely pending work. The binding preserves the original target
+and refuses to invent pending work. Neither assertion is changed here.
+
 Create/refollow requires real current target authority at native command T through prepared command support.
 Stored source originals never change when Semantic identity moves. Exact authorized receipt replay precedes deferred
 target failure; replay/no-op emits no new invalidation or replacement. Explicit removal remains negative across
