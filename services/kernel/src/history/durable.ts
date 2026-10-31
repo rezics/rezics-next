@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
-import { lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
+import { historyDeadline, lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
 import { sealHistoryAccount } from './gates.ts';
 import type { WorkClient } from '../work/client.ts';
 import { decodeLocator } from './locator.ts';
