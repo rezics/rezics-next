@@ -78,7 +78,10 @@ test('the BFF keeps locale order, numeric bounds, explicit identity and each sto
     ['Signed In', 'Bearer supplied', { headers: { authorization: 'Bearer supplied' } }],
   ] as const) {
     start.setStoryRequestContext({ visitor, url: '/zh-Hant/collections/recorded' });
-    const response = await fetch(new Request(`${endpoint}?q=Prince&limit=10`, init));
+    const input = new Request(`${endpoint}?q=Prince&limit=10`, init);
+    // Bun omits Request.credentials; retain the browser caller's metadata in this source-level test.
+    if ('credentials' in init) Object.defineProperty(input, 'credentials', { value: init.credentials });
+    const response = await fetch(input);
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     const request = calls.filter((request) => new URL(request.url).pathname === '/v1/subjects:suggest').at(-1)!;
