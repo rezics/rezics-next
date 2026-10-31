@@ -120,7 +120,7 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
       }));
       if (input.operation === 'rename' || input.operation === 'delete') {
         setAction((selected) =>
-          selected?.label.id !== input.id
+          !selected || selected.label.id !== input.id
             ? selected
             : result.ok
               ? null
