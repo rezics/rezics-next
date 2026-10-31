@@ -600,12 +600,17 @@ export function controllerProofExecutionArgv(binding: ControllerProofBindingV1):
     entry += command[entry] === '--cwd' || command[entry] === '-C' ? 2 : 1;
   }
   if (isBun && command[entry] === 'test') return [...argv];
-  const namedWrapper = isBun
-    ? namesWrapper(command[entry] ?? '')
-    : command.some(namesWrapper);
-  const aliasedWrapper = isBun && command.some((arg, position) =>
-    position >= 2 && arg === '--local' && command[position + 1] === '--' &&
-    command[position + 2] === 'bun' && command[position + 3] === 'test');
+  const namedWrapper = isBun ? namesWrapper(command[entry] ?? '') : command.some(namesWrapper);
+  const aliasedWrapper =
+    isBun &&
+    command.some(
+      (arg, position) =>
+        position >= 2 &&
+        arg === '--local' &&
+        command[position + 1] === '--' &&
+        command[position + 2] === 'bun' &&
+        command[position + 3] === 'test',
+    );
   if (!namedWrapper && !aliasedWrapper) return [...argv];
   const prefix = ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test'];
   const files = argv.slice(prefix.length);
@@ -627,8 +632,12 @@ function validateProofExecutionSource(binding: ControllerProofBindingV1): void {
   const execution = controllerProofExecutionArgv(binding);
   if (JSON.stringify(execution) === JSON.stringify(binding.argv)) return;
   // The pure derivation recognizes syntax; execution additionally requires the canonical captured files.
-  const tracked = new Map(proofGit(binding.cwd, ['ls-tree', '-rz', '--full-tree', binding.sourceTree])
-    .split('\0').filter(Boolean).map((entry) => [entry.slice(entry.indexOf('\t') + 1), entry]));
+  const tracked = new Map(
+    proofGit(binding.cwd, ['ls-tree', '-rz', '--full-tree', binding.sourceTree])
+      .split('\0')
+      .filter(Boolean)
+      .map((entry) => [entry.slice(entry.indexOf('\t') + 1), entry]),
+  );
   for (const path of ['scripts/worker-check.ts', ...execution.slice(4)]) {
     const file = join(binding.cwd, path);
     if (
@@ -679,7 +688,8 @@ function validateProofRecord(record: CheckRecord): ControllerProofState | undefi
       predecessor.status !== 'finished' ||
       !predecessor.exitCode ||
       !sameControllerProofBinding(predecessor.controllerProof, binding) ||
-      JSON.stringify(record.physicalArgv) !== JSON.stringify(controllerOverloadArgv({ ...record, log: predecessor.log }))
+      JSON.stringify(record.physicalArgv) !==
+        JSON.stringify(controllerOverloadArgv({ ...record, log: predecessor.log }))
     ) {
       throw new Error('worker-check: controller proof physical argv is not an admitted original rerun');
     }

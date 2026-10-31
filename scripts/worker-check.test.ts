@@ -2914,12 +2914,26 @@ function reserveControllerProof(root: string, argv: string[]): ControllerProofBi
 
 test('controller proof execution derivation admits only the selected saved wrapper syntax and preserves plain argv', () => {
   const binding = reserveControllerProof(overloadFixture(), [
-    'bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test', 'tests/once.test.ts',
+    'bun',
+    'scripts/worker-check.ts',
+    '--local',
+    '--',
+    'bun',
+    'test',
+    'tests/once.test.ts',
   ]);
   const execution = controllerProofExecutionArgv(binding);
   expect(execution).toEqual(['--local', '--', 'bun', 'test', 'tests/once.test.ts']);
   execution.push('changed.test.ts');
-  expect(binding.argv).toEqual(['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test', 'tests/once.test.ts']);
+  expect(binding.argv).toEqual([
+    'bun',
+    'scripts/worker-check.ts',
+    '--local',
+    '--',
+    'bun',
+    'test',
+    'tests/once.test.ts',
+  ]);
   for (const argv of [
     ['bun', 'test', 'tests/once.test.ts'],
     ['bun', '-e', "console.log('scripts/worker-check.ts')", 'scripts/worker-check.ts'],
@@ -2933,8 +2947,12 @@ test('controller proof execution derivation admits only the selected saved wrapp
     expect(actual).not.toBe(argv);
   }
   for (const argv of [
-    ...['./scripts/worker-check.ts', '/foreign/scripts/worker-check.ts', 'scripts/../scripts/worker-check.ts',
-      'foreign/worker-check.ts'].map((path) => ['bun', path, ...binding.argv.slice(2)]),
+    ...[
+      './scripts/worker-check.ts',
+      '/foreign/scripts/worker-check.ts',
+      'scripts/../scripts/worker-check.ts',
+      'foreign/worker-check.ts',
+    ].map((path) => ['bun', path, ...binding.argv.slice(2)]),
     ['bun', 'run', ...binding.argv.slice(1)],
     ['env', ...binding.argv],
     ['sh', '-c', binding.argv.join(' ')],
@@ -2951,7 +2969,8 @@ test('controller proof execution derivation admits only the selected saved wrapp
     [...binding.argv.slice(0, 6), '*.test.ts'],
     [...binding.argv.slice(0, 6), 'tests/once.test.ts; echo wrong'],
     [...binding.argv.slice(0, 4), ...binding.argv],
-  ]) expect(() => controllerProofExecutionArgv({ ...binding, argv })).toThrow('unsupported controller proof wrapper');
+  ])
+    expect(() => controllerProofExecutionArgv({ ...binding, argv })).toThrow('unsupported controller proof wrapper');
   expect(() => controllerProofExecutionArgv({ ...binding, attempt: 0 })).toThrow();
 });
 
@@ -3323,10 +3342,16 @@ test('A bound proof whose owned setup fails before command launch retains the ex
   const root = overloadFixture();
   writeFileSync(join(root, 'package.json'), JSON.stringify({ packageManager: 'bun@fixture-missing-pin' }));
   const marker = join(root, '.temp/must-not-run');
-  const binding = reserveControllerProof(root, ['--local', 'bun', '-e',
-    `require('node:fs').writeFileSync(${JSON.stringify(marker)},'wrong')`]);
+  const binding = reserveControllerProof(root, [
+    '--local',
+    'bun',
+    '-e',
+    `require('node:fs').writeFileSync(${JSON.stringify(marker)},'wrong')`,
+  ]);
   let diagnostic = '';
-  try { resolveRepositoryBun(['bun'], root); } catch (error) {
+  try {
+    resolveRepositoryBun(['bun'], root);
+  } catch (error) {
     diagnostic = (error as Error).message;
   }
   expect(diagnostic).toContain('ENOENT');
@@ -3339,8 +3364,12 @@ test('A bound proof whose owned setup fails before command launch retains the ex
     expect(sameProcess(record.runnerIdentity!)).toBe(false);
     expect(processGroupMembers(record.runnerIdentity!.group)).toEqual([]);
     const history = readWorkerCheckHistory(binding.checkId, record.physicalRunId!, root);
-    expect(history).toMatchObject({ status: 'finished', exitCode: 1, remoteExpected: false,
-      terminalProof: { local: true, remote: null, resultKnown: true } });
+    expect(history).toMatchObject({
+      status: 'finished',
+      exitCode: 1,
+      remoteExpected: false,
+      terminalProof: { local: true, remote: null, resultKnown: true },
+    });
     expect(history?.terminalHistory).toHaveLength(1);
     expect(readWorkerCheckCleanupHistory(binding.checkId, record.physicalRunId!, root)).toHaveLength(1);
     expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'replayed', binding });
@@ -3375,9 +3404,20 @@ test('Exact saved repository wrapped originals execute once through the admitted
   mkdirSync(join(root, 'scripts'));
   writeFileSync(join(root, 'scripts/worker-check.ts'), "throw new Error('a nested wrapper must never execute');\n");
   const counter = join(root, '.temp/counter');
-  writeFileSync(join(root, 'once.test.ts'), `import {test,expect} from 'bun:test';
-test('once',()=>{expect(process.env.REZICS_CHECK_LOCAL_ONLY).toBe('1');require('node:fs').appendFileSync(${JSON.stringify(counter)},'x')});`);
-  const binding = reserveControllerProof(root, ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test', 'once.test.ts']);
+  writeFileSync(
+    join(root, 'once.test.ts'),
+    `import {test,expect} from 'bun:test';
+test('once',()=>{expect(process.env.REZICS_CHECK_LOCAL_ONLY).toBe('1');require('node:fs').appendFileSync(${JSON.stringify(counter)},'x')});`,
+  );
+  const binding = reserveControllerProof(root, [
+    'bun',
+    'scripts/worker-check.ts',
+    '--local',
+    '--',
+    'bun',
+    'test',
+    'once.test.ts',
+  ]);
   await withControllerProofEnvironment(binding, async () => {
     expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'started', binding });
     expect(await waitWorkerCheck(binding.checkId, root, 5_000)).toBe(0);
@@ -3386,15 +3426,17 @@ test('once',()=>{expect(process.env.REZICS_CHECK_LOCAL_ONLY).toBe('1');require('
     expect(record.physicalArgv).toBeUndefined();
     expect(readWorkerCheckHistory(binding.checkId, record.physicalRunId!, root)?.argv).toEqual([...binding.argv]);
     expect(readdirSync(join(root, '.temp/goal/checks/results'))).toEqual([binding.checkId + '.json']);
-    const registration = JSON.parse(readFileSync(
-      registrationPath(process.env.GOAL_CHECK_REGISTRY!, binding.checkId, record.physicalRunId!), 'utf8'));
+    const registration = JSON.parse(
+      readFileSync(registrationPath(process.env.GOAL_CHECK_REGISTRY!, binding.checkId, record.physicalRunId!), 'utf8'),
+    );
     expect(registration.controllerProof).toEqual(binding);
     expect(validControllerProofRegistration(registration, binding)).toBe(true);
     expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'replayed', binding });
     expect(readWorkerCheckRecord(binding.checkId, root).physicalRunId).toBe(record.physicalRunId);
     expect(readFileSync(counter, 'utf8')).toBe('x');
-    expect(JSON.parse(readFileSync(controllerProofStatePath(root, binding.checkId), 'utf8')).physical)
-      .toEqual([{ physicalRunId: record.physicalRunId, argv: binding.argv }]);
+    expect(JSON.parse(readFileSync(controllerProofStatePath(root, binding.checkId), 'utf8')).physical).toEqual([
+      { physicalRunId: record.physicalRunId, argv: binding.argv },
+    ]);
   });
 });
 
@@ -3404,17 +3446,36 @@ test('saved wrapper overload reruns derive the physical subset while replay reta
   writeFileSync(join(root, 'scripts/worker-check.ts'), "throw new Error('nested wrapper');\n");
   const healthy = join(root, '.temp/healthy');
   const transient = join(root, '.temp/transient');
-  writeFileSync(join(root, 'healthy.test.ts'), `import {test} from 'bun:test';
-test('healthy',()=>require('node:fs').appendFileSync(${JSON.stringify(healthy)},'x'));`);
-  writeFileSync(join(root, 'transient.test.ts'), `import {test} from 'bun:test';
-test('transient',()=>{const fs=require('node:fs');const first=!fs.existsSync(${JSON.stringify(transient)});fs.appendFileSync(${JSON.stringify(transient)},'x');if(first)throw new Error('HTTP 503 overloaded')});`);
-  const binding = reserveControllerProof(root, ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test', 'healthy.test.ts', 'transient.test.ts']);
+  writeFileSync(
+    join(root, 'healthy.test.ts'),
+    `import {test} from 'bun:test';
+test('healthy',()=>require('node:fs').appendFileSync(${JSON.stringify(healthy)},'x'));`,
+  );
+  writeFileSync(
+    join(root, 'transient.test.ts'),
+    `import {test} from 'bun:test';
+test('transient',()=>{const fs=require('node:fs');const first=!fs.existsSync(${JSON.stringify(transient)});fs.appendFileSync(${JSON.stringify(transient)},'x');if(first)throw new Error('HTTP 503 overloaded')});`,
+  );
+  const binding = reserveControllerProof(root, [
+    'bun',
+    'scripts/worker-check.ts',
+    '--local',
+    '--',
+    'bun',
+    'test',
+    'healthy.test.ts',
+    'transient.test.ts',
+  ]);
   await withControllerProofEnvironment(binding, async () => {
     expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'started');
     expect(await waitWorkerCheck(binding.checkId, root, 10_000)).toBe(0);
     const record = readWorkerCheckRecord(binding.checkId, root);
-    expect(record).toMatchObject({ argv: binding.argv, controllerProof: binding, reruns: 1,
-      physicalArgv: ['--local', '--', 'bun', 'test', 'transient.test.ts'] });
+    expect(record).toMatchObject({
+      argv: binding.argv,
+      controllerProof: binding,
+      reruns: 1,
+      physicalArgv: ['--local', '--', 'bun', 'test', 'transient.test.ts'],
+    });
     const state = JSON.parse(readFileSync(controllerProofStatePath(root, binding.checkId), 'utf8'));
     expect(state.physical).toHaveLength(2);
     expect(state.physical[0].argv).toEqual(binding.argv);
@@ -3422,8 +3483,10 @@ test('transient',()=>{const fs=require('node:fs');const first=!fs.existsSync(${J
     expect(readFileSync(healthy, 'utf8')).toBe('x');
     expect(readFileSync(transient, 'utf8')).toBe('xx');
     expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'replayed');
-    expect(await startControllerWorkerCheck({ ...binding, argv: record.physicalArgv! }))
-      .toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
+    expect(await startControllerWorkerCheck({ ...binding, argv: record.physicalArgv! })).toMatchObject({
+      outcome: 'unavailable',
+      custody: 'unknown',
+    });
   });
 });
 
@@ -3437,8 +3500,10 @@ test('unsupported wrapper originals and untracked wrapper sources are refused be
     const binding = reserveControllerProof(root, argv);
     await withControllerProofEnvironment(binding, async () => {
       expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'refused-never-started');
-      expect(JSON.parse(readFileSync(controllerProofStatePath(root, binding.checkId), 'utf8')))
-        .toMatchObject({ phase: 'refused', physical: [] });
+      expect(JSON.parse(readFileSync(controllerProofStatePath(root, binding.checkId), 'utf8'))).toMatchObject({
+        phase: 'refused',
+        physical: [],
+      });
       expect(existsSync(join(root, '.temp/goal/checks/results', binding.checkId + '.json'))).toBe(false);
     });
   }

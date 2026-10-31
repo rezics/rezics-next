@@ -463,7 +463,10 @@ export function detachedGroupTerminal(identity: RunnerIdentity, procRoot = '/pro
           throw directoryError;
         }
       }
-      const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+      const fields = stat
+        .slice(stat.lastIndexOf(')') + 2)
+        .trim()
+        .split(/\s+/);
       if (!stat.startsWith(`${name} (`) || !fields[19] || !/^\d+$/.test(fields[2] ?? '')) return false;
       if (fields[0] === 'Z' || fields[0] === 'X') continue;
       if (Number(name) === identity.pid || Number(fields[2]) === identity.group) return false;
