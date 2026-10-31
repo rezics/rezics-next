@@ -363,7 +363,16 @@ async function hydrate(pool: Pool, keys: Key[], options: ReadOptions): Promise<P
           };
           const owners = await readOwners.run(tx, input);
           const hidden = new Set(
-            (await readHidden.run(tx, { ...input, ...(await statementAudience(tx)) })).map((row) => row.candidate_id),
+            (
+              await readHidden.run(tx, {
+                candidates: local.map((row) => ({
+                  route: routeOf(subject)!,
+                  subject_id: subject,
+                  candidate_id: row.candidate_id,
+                })),
+                ...(await statementAudience(tx)),
+              })
+            ).map((row) => row.candidate_id),
           );
           for (const row of local) {
             if (!currentRelease.release.properties[row.property]) continue;

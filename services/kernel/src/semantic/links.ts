@@ -1493,11 +1493,10 @@ export async function listSubjectRelations(
           candidate: row.statement,
         }));
         if (!fact) continue;
-        const digest = fact.fact_release ?? options.release.digest;
+        const digest = fact.fact_release ?? '';
         let release = releases.get(digest);
         if (!release) {
-          release =
-            digest === options.release.digest ? options.release : (await readRelease(client, digest)) ?? undefined;
+          release = digest ? (await readRelease(client, digest)) ?? undefined : options.release;
           if (!release) continue;
           releases.set(digest, release);
         }
