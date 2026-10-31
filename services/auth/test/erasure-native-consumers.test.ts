@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
+import type { OriginalLifecycleRequest } from '@rezics/auth-contract';
 import { failNativeQueries, nativeFixture, password, scopes, type Person } from './support/erasure-native.ts';
 
 async function eventually(probe: () => Promise<boolean>, timeout = 120_000) {
@@ -191,6 +192,95 @@ test('a legitimate deleted creator keeps a pending registration secret-free unti
   ).toBe(0);
   originalBarrier = (await f.pool.query('SELECT barrier FROM auth_erasure WHERE account_id=$1', [creator.accountId]))
     .rows[0]!.barrier;
+}, 180_000);
+
+test('Consume genuine original lifecycle result for terminal Auth continuation', async () => {
+  const key = randomUUID();
+  const email = `${key}@consumer.test`;
+  const ports = f.bindings.workflowPorts;
+  const activate = ports.activate;
+  let committed: Awaited<ReturnType<typeof activate>> | undefined;
+  let original: Parameters<typeof activate>[0] | undefined;
+  ports.activate = async (input) => {
+    original = input;
+    committed = await activate(input);
+    throw new Error('Lost original committed activation reply');
+  };
+  try {
+    await expect(
+      f.host.workflows.register({ key, handle: `original_${key.replaceAll('-', '')}`, email, password }),
+    ).rejects.toThrow();
+  } finally {
+    ports.activate = activate;
+  }
+  if (!committed || !original) throw new Error('Missing actual original activation');
+  const accountId = committed.value.accountId;
+  const stage = (
+    await f.pool.query<{
+      registration_id: string;
+      consumer_workflow_id: string;
+      activation_key: string;
+      reservation_id: string;
+    }>(
+      'SELECT registration_id,consumer_workflow_id,activation_key,reservation_id FROM auth_registration_stage WHERE account_id=$1',
+      [accountId],
+    )
+  ).rows[0]!;
+  const request: OriginalLifecycleRequest = {
+    kind: 'activation',
+    accountId,
+    reservationId: stage.reservation_id,
+    operationKey: original.key,
+    source: {
+      registrationId: stage.registration_id,
+      provisioningReceiptKey: `registration:${stage.registration_id}`,
+    },
+  };
+  const read = ports.readOriginalLifecycleResult;
+  if (!read) throw new Error('Missing installed original lifecycle result reader');
+  const result = await read(request);
+  expect(result).toEqual({
+    kind: 'activation',
+    accountId,
+    reservationId: stage.reservation_id,
+    authnEpoch: 1,
+    outcome: committed,
+  });
+  const person = await f.login({ accountId, email });
+  const evidence = ports.provisioningEvidence;
+  let activationAttempts = 0;
+  ports.provisioningEvidence = async () => null;
+  ports.activate = async () => {
+    activationAttempts++;
+    throw new Error('Terminal consumption must not execute activation');
+  };
+  try {
+    // The original reader remains available independently of transient evidence.
+    // No caller retry or replacement approval is allowed to supply its result.
+    expect(await read(request)).toEqual(result);
+    void f.delete(person).catch(() => {});
+    await eventually(
+      async () =>
+        !(await f.pool.query('SELECT 1 FROM auth_registration_stage WHERE registration_id=$1', [stage.registration_id]))
+          .rowCount,
+    );
+    const proof = (
+      await f.pool.query("SELECT binding,result FROM auth_native_consumer_proof WHERE store='registration' AND key=$1", [
+        stage.registration_id,
+      ])
+    ).rows[0]!;
+    expect(proof.binding.slice(0, 4)).toEqual([
+      stage.registration_id,
+      stage.consumer_workflow_id,
+      stage.activation_key,
+      accountId,
+    ]);
+    expect(proof.result).toEqual({ outcome: 'activated', sourceResult: committed.value });
+    expect(activationAttempts).toBe(0);
+  } finally {
+    ports.provisioningEvidence = evidence;
+    ports.activate = activate;
+  }
 }, 180_000);
 
 test('a lost activation reply is replayed with its original key, unavailable evidence remains pending, and default restart removes the actual release witness', async () => {
