@@ -15,6 +15,7 @@ import { locales } from '../paraglide/runtime.js';
 import { localizedLabel } from './results';
 import {
   CONDITION_POINTER,
+  conditionChoiceLabels,
   conditionFieldIssues,
   type ConditionIssue,
   type ConditionMetadata,
@@ -572,6 +573,11 @@ function ValueFields({
   closed?: boolean;
 }) {
   const choicesId = useId();
+  const options = closed
+    ? conditionChoiceLabels(
+        (choices ?? []).map(({ value, labels }) => ({ value, label: localizedLabel(labels, context.locale).text })),
+      )
+    : [];
   return (
     <div className="min-w-0 space-y-2">
       {!closed && !!choices?.length && (
@@ -603,9 +609,9 @@ function ValueFields({
                   {value && !choices.some((entry) => entry.value === value) && (
                     <NativeSelectOption value={value}>{value}</NativeSelectOption>
                   )}
-                  {choices.map((entry) => (
+                  {options.map((entry) => (
                     <NativeSelectOption key={entry.value} value={entry.value}>
-                      {localizedLabel(entry.labels, context.locale).text || entry.value}
+                      {entry.label}
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>

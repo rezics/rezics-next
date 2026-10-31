@@ -18,6 +18,19 @@ export type ConditionIssue = { pointer: string; code: string };
 export type SearchProblem = NonNullable<ReturnType<typeof facetProblem>>;
 export const CONDITION_POINTER = '/filter/and/0';
 
+/** Distinguish colliding display labels within one selector, preserving native values and metadata order. */
+export function conditionChoiceLabels(choices: readonly { value: string; label: string }[]) {
+  const counts = new Map<string, number>();
+  for (const { value, label } of choices) {
+    const text = label || value;
+    counts.set(text, (counts.get(text) ?? 0) + 1);
+  }
+  return choices.map(({ value, label }) => ({
+    value,
+    label: label && counts.get(label)! > 1 ? `${label} (${value})` : label || value,
+  }));
+}
+
 /** Only released public grammar metadata crosses the BFF; no Library profiles or owner fields. */
 export function conditionMetadata(
   release: FilterRelease & Pick<ConditionMetadata, 'types' | 'properties'>,
