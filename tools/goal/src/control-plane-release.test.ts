@@ -620,3 +620,30 @@ test('batch receiving refuses GOAL_MANAGER without a persisted authenticated man
     expect(h.queue.entry(manifest.members[0]!)?.request.managerLanding).toBeUndefined();
   } finally { h.dispose(); }
 });
+
+test('an accepted source already represented by main has an honest zero-delta disposition', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const first = dispatchControlPlane(h, 'tools/goal/src/represented.ts');
+    const second = dispatchControlPlane(h, 'tools/goal/src/new-contribution.ts');
+    await h.start(first);
+    await h.start(second);
+    const manifest = acceptedBatch(h, [first, second]);
+    const path = first.brief.paths[0]!;
+    mkdirSync(dirname(join(h.root, path)), { recursive: true });
+    writeFileSync(join(h.root, path), 'candidate\n');
+    git(h.root, 'add', '--', path);
+    git(h.root, 'commit', '-m', 'Independently represent the accepted implementation');
+    let suites = 0;
+    const result = await batchTrain(h, async command => {
+      if (isFullControlPlaneSuite(command)) suites++;
+      return { passed: true, output: '', timedOut: false };
+    }).releaseControlPlaneBatch(manifest);
+    expect(suites).toBe(1);
+    expect(result.members.map(member => member.disposition)).toEqual(['already-represented', 'released']);
+    expect(h.outcomes.find(outcome => outcome.taskId === first.id)).toMatchObject({ changedFiles: [], diffLines: 0 });
+    expect(git(h.root, 'log', '--format=%s', 'main')).not.toContain(`Merge accepted source ${first.branch}`);
+    expect(git(first.worktree, 'rev-parse', 'HEAD')).toBe(manifest.members[0]!.acceptedCommit);
+  } finally { h.dispose(); }
+});

@@ -467,6 +467,10 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     derivedFiles: options.train?.derivedFiles ?? settings.derivedFiles ?? packageDerivedFiles,
     promote: () => promoteNow(),
     runGate,
+    // Every control-plane release must execute its complete mandatory proof on the exact final candidate.
+    runControlPlaneGate: options.runGate ?? gateRunner(
+      settings.integration.gateTimeoutMs, settings.stateDirectory, LANDING_CHECK_ENVIRONMENT,
+    ),
     gateIdentity: JSON.stringify(settings.gate),
     codeIsCurrent,
     handOff,

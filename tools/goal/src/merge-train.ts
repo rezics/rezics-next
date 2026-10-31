@@ -1066,6 +1066,8 @@ export type TrainOptions = {
   sink: GateOutcomeSink;
   derivedFiles?: DerivedFile[];
   runGate?: GateRunner;
+  /** Mandatory control-plane proof uses a fresh runner, without reusable-result shortcuts. */
+  runControlPlaneGate?: GateRunner;
   /** Candidate Git seam used for integrity checks and prepared control-plane merges. */
   runCandidateGit?: CandidateGitRunner;
   /** Real launch smoke seam; production uses the bounded candidate smoke after control-plane checks. */
@@ -1283,6 +1285,7 @@ export class MergeTrain {
           git(o.mainCheckout, 'worktree', 'add', '--detach', tree, snapshot.mainHead);
           try {
             const preparedMembers: NonNullable<ControlPlaneReleaseRecord['members']> = [];
+            const contributionBases = new Map<string, string>();
             let excluded = false;
             for (const [offset, entry] of entries.entries()) {
               const index = node.indices[offset]!;
@@ -1326,9 +1329,19 @@ export class MergeTrain {
                 }
                 files = changedFrozenFiles(tree, frozen);
                 if (files.length) throw new Error(`Combined source changed frozen acceptance files: ${files.join(', ')}`);
+                for (const earlier of preparedMembers) {
+                  const erased = pathsChangedByTaskButUnchangedOnDev(tree,
+                    contributionBases.get(earlier.request.taskId)!, after,
+                    earlier.disposition.acceptedCommit, earlier.outcome.changedFiles);
+                  if (erased.length) {
+                    files = erased;
+                    throw new Error(`Would erase accepted contribution ${earlier.disposition.acceptedCommit}: ${erased.join(', ')}`);
+                  }
+                }
                 const changed = changedPathsBetween(tree, before, after);
                 this.checkScope(changed, guardedRequest, node.logPath);
                 const nonGenerated = nonGeneratedFiles(tree, changed);
+                contributionBases.set(task.id, before);
                 preparedMembers.push({ entryId: entry.id, request: entry.request,
                   outcome: { taskId: task.id, attempt: member.attempt, passed: true, stage: 'merge',
                     logPath: node.logPath, hostMs: 0, changedFiles: changed,
@@ -3722,7 +3735,7 @@ export class MergeTrain {
     tree: string, candidate: string, snapshot: ControlPlaneReleaseSnapshot, logPath: string,
   ): Promise<GateResult & { failedCommand?: readonly string[]; moved?: boolean; lifecycleEvidence?: string; compatibilityCommand?: string[] }> {
     const o = this.options;
-    const run = o.runGate ?? gateRunner();
+    const run = o.runControlPlaneGate ?? o.runGate ?? gateRunner(600_000, o.stateDirectory);
     const integrity = (cwd: string, head: string, phase: string) =>
       assertCandidateIntegrity(cwd, head, phase, logPath, o.runCandidateGit);
     const moved = () => !this.controlPlaneSnapshotMatches(snapshot);
