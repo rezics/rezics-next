@@ -206,19 +206,21 @@ async function prepareSelection(
   const bound = await bindOwnerFilterRead(deps, actor, collectionId, admission, deadline, attempt);
   if (bound.status !== 'bound') throw unavailable();
   const binding = bound.binding;
+  const sourceKey = binding.scope.key.source;
   if (
     binding.input.actor !== actor ||
     binding.input.at !== attempt.time ||
     binding.input.collectionId !== collectionId ||
     binding.input.deadline > deadline ||
-    binding.scope.key.source.kind !== 'library' ||
-    binding.scope.key.source.identity.scope === 'public_output' ||
-    binding.scope.key.source.identity.collectionId !== collectionId ||
-    binding.scope.key.source.identity.route !== route ||
-    binding.scope.key.source.identity.accountId !== actor.accountId ||
-    binding.scope.key.source.identity.generation !== saved.header.sourceGeneration
+    sourceKey.kind !== 'library' ||
+    sourceKey.identity.scope === 'public_output' ||
+    sourceKey.identity.collectionId !== collectionId ||
+    sourceKey.identity.route !== route ||
+    sourceKey.identity.accountId !== actor.accountId ||
+    sourceKey.identity.generation !== saved.header.sourceGeneration
   )
     throw unavailable();
+  const workingIdentity = sourceKey.identity;
   const work = new NativeCollectionWork(binding.input.allowance, deadline);
   return withNativeOwnerFilterSource(binding, work, async () => {
     // One transferred reservation, never another raw100 allowance. Hold the entire known output work
@@ -239,7 +241,7 @@ async function prepareSelection(
       prepared.source.observation.collectionId !== collectionId ||
       prepared.source.observation.route !== route ||
       prepared.source.observation.revision !== saved.header.revision ||
-      prepared.source.observation.incarnation !== binding.scope.key.source.identity.incarnation ||
+      prepared.source.observation.incarnation !== workingIdentity.incarnation ||
       prepared.source.observation.authority.kind !== 'private_builtin' ||
       prepared.source.observation.authority.curatorAccountId !== actor.accountId
     )
