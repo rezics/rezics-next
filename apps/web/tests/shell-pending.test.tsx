@@ -15,9 +15,7 @@ test('router pending content keeps the AppShell main and a named busy region, wi
   const pending = await Bun.file(join(import.meta.dir, '../src/shell/pending.tsx')).text();
   expect(router).toContain('defaultPendingComponent: PendingPage');
 
-  const shellMarkup = renderToStaticMarkup(
-    createElement(SidebarInset, null, createElement(PendingPage)),
-  );
+  const shellMarkup = renderToStaticMarkup(createElement(SidebarInset, null, createElement(PendingPage)));
   expect(shellMarkup.match(/<main\b/g) ?? []).toHaveLength(1);
   const shellRegion = loadingRegion(shellMarkup);
   expect(shellRegion).toContain('aria-busy="true"');
