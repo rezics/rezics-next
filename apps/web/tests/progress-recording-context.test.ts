@@ -23,6 +23,7 @@ test('Record progress with title unit and explicit total semantics', async () =>
     MutationObserver: window.MutationObserver,
     ResizeObserver: window.ResizeObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
@@ -231,7 +232,7 @@ test('Record progress with title unit and explicit total semantics', async () =>
       {
         body: { revision: 1, amount: '3.75' },
         authorization: 'Bearer recording-owner',
-        key: page.idempotencyKey,
+        key: JSON.stringify(page.idempotencyKey),
       },
     ]);
     expect(csrf).toEqual(['recording-csrf']);
@@ -246,7 +247,7 @@ test('Record progress with title unit and explicit total semantics', async () =>
       again.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
     );
     expect(writes[1]?.body).toEqual({ revision: 2, amount: '0' });
-    expect(writes[1]?.key).not.toBe(page.idempotencyKey);
+    expect(writes[1]?.key).not.toBe(JSON.stringify(page.idempotencyKey));
     expect(session.amount).toBe('0');
     expect(session.total).toBeNull();
     expect(host.textContent).toContain('0 segments');
