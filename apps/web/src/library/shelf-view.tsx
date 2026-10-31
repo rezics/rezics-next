@@ -29,7 +29,16 @@ import { libraryEntryStateWrite, type LibraryEntryStateRead, type PersonalLibrar
 import { coverSubject } from './subject-row';
 import { displayLibraryTitle } from './title';
 import { progressView } from './progress-label';
-import { shelfHref, type ShelfLayout, type ShelfSize, type ShelfSort } from './shelf-params';
+import {
+  shelfColumnIds,
+  shelfColumns,
+  shelfHref,
+  type ShelfDisplay,
+  type ShelfLayout,
+  type ShelfSize,
+  type ShelfSort,
+} from './shelf-params';
+import { shelfColumnLabel } from './shelf-columns';
 import { useHydrated, useShelfRows, type ShelfFailure, type ShelfRow } from './shelf-rows';
 import { useSession } from '../session/query';
 import { selectableEntry, type ShelfOutcome } from './shelf-selection';
@@ -84,6 +93,7 @@ type Controls = ReturnType<typeof useShelfRows> & {
   filterSort?: ShelfSort;
   layout: ShelfLayout;
   size: ShelfSize;
+  columns?: string;
 };
 function hrefOf(entry: PersonalLibraryEntry, locale: string): string {
   return entry.subject
@@ -93,7 +103,13 @@ function hrefOf(entry: PersonalLibraryEntry, locale: string): string {
 function stateHref(state: LibraryEntryStateRead, locale: string, controls: Controls) {
   const writable = libraryEntryStateWrite(state);
   return writable
-    ? shelfHref(locale, { state: writable, ...controls.filterSort, layout: controls.layout, size: controls.size })
+    ? shelfHref(locale, {
+        state: writable,
+        ...controls.filterSort,
+        layout: controls.layout,
+        size: controls.size,
+        ...(controls.columns ? { columns: controls.columns } : {}),
+      })
     : undefined;
 }
 function EntryMenu({
@@ -412,15 +428,17 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
   const entries = useOperation('library_entry.list');
   const progress = useOperation('progress_session.list');
   const sortable = entries && progress && !!controls.sort;
-  const columns: ShelfColumn[] = [
-    { id: 'cover', label: '', visible: true },
-    { id: 'title', label: m.library_column_title(), visible: true },
-    { id: 'type', label: m.library_column_type(), visible: true },
-    { id: 'status', label: m.library_column_status(), visible: true },
-    { id: 'added', label: m.library_sort_created(), visible: true, sortable },
-    { id: 'finished', label: m.library_sort_finished(), visible: true, sortable },
-    { id: 'lastActivity', label: m.library_sort_activity(), visible: true, sortable },
-  ];
+  const chosen = (shelfColumns(controls.columns) ?? shelfColumnIds.join(',')).split(',');
+  const activityVisible = chosen.includes('lastActivity');
+  const statusVisible = chosen.includes('status');
+  // ShelfTable has no title action slot. Reuse its status cell for actions when activity is hidden;
+  // if status is hidden too, the cell contains only the labeled actions, never hidden status data.
+  const columns: ShelfColumn[] = shelfColumnIds.map((id) => ({
+    id,
+    label: id === 'status' && !statusVisible ? m.library_column_actions() : shelfColumnLabel(id),
+    visible: chosen.includes(id) || (id === 'status' && !activityVisible),
+    sortable: sortable && ['added', 'finished', 'lastActivity'].includes(id),
+  }));
   const tableRows: ShelfTableRow[] = rows.map((row) => {
     const { entry } = row;
     const status = stateLabel(entry.state, entry.stateLabel);
@@ -436,14 +454,24 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
       cover: coverOf(entry),
       ...(entryProgress(entry, locale) ? { progress: <ProgressRow {...entryProgress(entry, locale)!} /> } : {}),
       type: entry.subject?.typeLabel,
-      status:
-        status && href ? (
-          <a href={href} className="underline">
-            {status}
-          </a>
-        ) : (
-          status
-        ),
+      status: (
+        <span className="inline-flex items-center gap-1">
+          {!activityVisible ? (
+            <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}>
+              {null}
+            </EntryMenu>
+          ) : null}
+          {statusVisible ? (
+            status && href ? (
+              <a href={href} className="underline">
+                {status}
+              </a>
+            ) : (
+              status
+            )
+          ) : null}
+        </span>
+      ),
       added: <RelativeTime value={entry.createdAt} locale={locale} timeZone="UTC" />,
       finished: entry.finishedAt ? <RelativeTime value={entry.finishedAt} locale={locale} timeZone="UTC" /> : '—',
       lastActivity: (
@@ -477,7 +505,16 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
         const orderBy = field === 'added' ? 'createdAt' : field === 'finished' ? 'finishedAt' : 'lastActivity';
         void navigate({
           to: '/library',
-          search: { ...(state ? { state } : {}), orderBy, direction, layout: controls.layout, size: controls.size },
+          search: (previous) => ({
+            ...previous,
+            state,
+            orderBy,
+            direction,
+            cursor: undefined,
+            layout: controls.layout,
+            size: controls.size,
+            columns: controls.columns,
+          }),
         });
       }}
     />
@@ -490,13 +527,19 @@ type ShelfEntriesProps = {
   size: ShelfSize;
   sort?: ShelfSort;
   filterSort?: ShelfSort;
+  columns?: string;
+  cursor?: string;
   state?: string;
 };
 
 export function ShelfEntries(props: ShelfEntriesProps) {
   const session = useSession();
   const location = useLocation();
-  const context = `${session.subject ?? session.state}:${props.locale}:${location.href}:${props.state ?? ''}`;
+  // Column visibility cannot change the loaded population. Keep the mounted command/unknown intent and
+  // selection on these same rows; actor, source URL and replacement loader rows still reset the page.
+  const sourceUrl = new URL(location.href, 'https://shelf.invalid');
+  sourceUrl.searchParams.delete('columns');
+  const context = `${session.subject ?? session.state}:${props.locale}:${sourceUrl.href}:${props.state ?? ''}`;
   const [source, setSource] = useState({ entries: props.entries, context, generation: 0 });
   if (source.entries !== props.entries || source.context !== context) {
     setSource({ entries: props.entries, context, generation: source.generation + 1 });
@@ -504,7 +547,17 @@ export function ShelfEntries(props: ShelfEntriesProps) {
   return <ShelfEntriesPage key={source.generation} {...props} />;
 }
 
-function ShelfEntriesPage({ entries, locale, layout, size, sort, filterSort, state }: ShelfEntriesProps) {
+function ShelfEntriesPage({
+  entries,
+  locale,
+  layout,
+  size,
+  sort,
+  filterSort,
+  columns,
+  cursor,
+  state,
+}: ShelfEntriesProps) {
   const hydrated = useHydrated();
   const shelfRows = useShelfRows(entries, locale);
   const controls: Controls = {
@@ -513,6 +566,7 @@ function ShelfEntriesPage({ entries, locale, layout, size, sort, filterSort, sta
     hydrated,
     layout,
     size,
+    ...(columns ? { columns } : {}),
     ...(sort ? { sort } : {}),
     ...(filterSort ? { filterSort } : {}),
   };
@@ -548,6 +602,14 @@ function ShelfEntriesPage({ entries, locale, layout, size, sort, filterSort, sta
               {...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId })}
               idempotencyKey={entry.removeKey}
               locale={locale}
+              returnTo={shelfHref(locale, {
+                layout,
+                size,
+                ...sort,
+                ...(columns ? { columns } : {}),
+                ...(state ? { state } : {}),
+                ...(cursor ? { cursor } : {}),
+              })}
             />
           </div>
         ))}
@@ -597,7 +659,9 @@ function LabelAssignmentRemoveForm({
   labelName,
   locale,
   csrfToken,
+  display,
 }: {
+  display: ShelfDisplay;
   entry: LabelShelfEntry;
   labelName: string;
   locale: string;
@@ -607,7 +671,7 @@ function LabelAssignmentRemoveForm({
   const labelNameId = useId();
   if (!admitted) return null;
   return (
-    <form method="post" action={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(entry.labelId)}`}>
+    <form method="post" action={shelfHref(locale, { label: entry.labelId, ...display })}>
       <input type="hidden" name="intent" value="unassign" />
       <input type="hidden" name="subjectId" value={entry.subjectId} />
       <input type="hidden" name="labelId" value={entry.labelId} />
@@ -639,8 +703,10 @@ export function LabelShelfEntries({
   locale,
   layout,
   size,
+  columns,
   csrfToken,
 }: {
+  columns?: string;
   entries: LabelShelfEntry[];
   label: { id: string; name: string };
   locale: string;
@@ -649,6 +715,7 @@ export function LabelShelfEntries({
   csrfToken: string | null;
 }) {
   const removeAdmitted = useOperation('library_label.unassign');
+  const display: ShelfDisplay = { layout, size, ...(columns ? { columns } : {}) };
   const title = (entry: LabelShelfEntry) =>
     entry.subject ? displayLibraryTitle(entry.subject.label, locale).text : m.library_subject_unavailable();
   const href = (entry: LabelShelfEntry) =>
@@ -679,6 +746,7 @@ export function LabelShelfEntries({
                       }
                       content={
                         <LabelAssignmentRemoveForm
+                          display={display}
                           entry={entry}
                           labelName={label.name}
                           locale={locale}
@@ -703,6 +771,7 @@ export function LabelShelfEntries({
                 ? {
                     menu: (
                       <LabelAssignmentRemoveForm
+                        display={display}
                         entry={entry}
                         labelName={label.name}
                         locale={locale}
@@ -725,7 +794,13 @@ export function LabelShelfEntries({
             return (
               <li key={entry.id} className="space-y-2 border-b py-3">
                 <Tombstone shape="row" />
-                <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />
+                <LabelAssignmentRemoveForm
+                  display={display}
+                  entry={entry}
+                  labelName={label.name}
+                  locale={locale}
+                  csrfToken={csrfToken}
+                />
               </li>
             );
           const progress = labelEntryProgress(entry, locale);
@@ -743,6 +818,7 @@ export function LabelShelfEntries({
                 ? {
                     menu: (
                       <LabelAssignmentRemoveForm
+                        display={display}
                         entry={entry}
                         labelName={label.name}
                         locale={locale}
@@ -776,6 +852,7 @@ export function LabelShelfEntries({
                   <div className="space-y-2">
                     <Tombstone shape="row" />
                     <LabelAssignmentRemoveForm
+                      display={display}
                       entry={entry}
                       labelName={label.name}
                       locale={locale}
@@ -801,7 +878,13 @@ export function LabelShelfEntries({
                 <a className="font-medium hover:underline" href={href(entry)}>
                   {title(entry)}
                 </a>
-                <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />
+                <LabelAssignmentRemoveForm
+                  display={display}
+                  entry={entry}
+                  labelName={label.name}
+                  locale={locale}
+                  csrfToken={csrfToken}
+                />
               </TableCell>
               <TableCell>{entry.subject.typeLabel}</TableCell>
               <TableCell>{entry.state ? (entry.stateLabel ?? m.library_other()) : null}</TableCell>

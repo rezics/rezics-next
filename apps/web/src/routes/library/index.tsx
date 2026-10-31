@@ -123,6 +123,7 @@ export const Route = createFileRoute('/library/')({
   }),
   // The router merges what the address says over what validation returns, so a value the validator dropped is still
   // there; reading through the validator again keeps only the documented values.
+  // Columns, layout and size are display state; native reads and keysets depend only on the source below.
   loaderDeps: ({ search }) => {
     const { state, cursor, label, orderBy, direction } = validateShelfSearch(search);
     return {

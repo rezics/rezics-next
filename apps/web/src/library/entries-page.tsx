@@ -27,14 +27,16 @@ import {
   shelfSizes,
   type ShelfLayout,
   type ShelfSize,
+  type ShelfDisplay,
 } from './shelf-params';
 import { ShelfEntries } from './shelf-view';
+import { ShelfColumnsControl } from './shelf-columns';
 import { useHydrated } from './shelf-rows';
 import { LabelShelfEntries } from './shelf-view';
 import type { LabelShelfPageData } from './label-shelf-read';
 import { SubjectLabelNotice } from './subject-labels.tsx';
 
-type Display = { layout: ShelfLayout; size: ShelfSize };
+type Display = ShelfDisplay;
 function layoutLabel(layout: ShelfLayout): string {
   return layout === 'grid'
     ? m.library_layout_grid()
@@ -53,6 +55,7 @@ function DisplayControls({
   sort,
   cursor,
   filterSort,
+  tableAvailable,
 }: {
   state?: LibraryEntryStateWrite;
   locale: string;
@@ -61,6 +64,7 @@ function DisplayControls({
   sort?: ShelfSort;
   filterSort?: ShelfSort;
   cursor?: string;
+  tableAvailable?: boolean;
 }) {
   const hydrated = useHydrated();
   const navigate = useNavigate();
@@ -99,7 +103,7 @@ function DisplayControls({
         {state ? (
           <a
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            href={shelfHref(locale, { ...filterSort, layout: display.layout, size: display.size, ...labelSearch })}
+            href={shelfHref(locale, { ...filterSort, ...display, ...labelSearch })}
           >
             {m.library_clear_state()}
           </a>
@@ -115,7 +119,10 @@ function DisplayControls({
         onValueChange={(values) => {
           const layout = values[0] as ShelfLayout | undefined;
           if (layout)
-            void navigate({ to: '/library', search: { ...stateSearch, ...labelSearch, layout, size: display.size } });
+            void navigate({
+              to: '/library',
+              search: (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...display, layout }),
+            });
         }}
         variant="outline"
       >
@@ -125,6 +132,11 @@ function DisplayControls({
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
+      {display.layout === 'table' && !label && tableAvailable ? (
+        <div className="hidden sm:block">
+          <ShelfColumnsControl {...(display.columns ? { value: display.columns } : {})} disabled={!hydrated} />
+        </div>
+      ) : null}
       {display.layout === 'grid' ? (
         <ToggleGroup
           aria-label={m.library_size()}
@@ -134,7 +146,7 @@ function DisplayControls({
             if (size)
               void navigate({
                 to: '/library',
-                search: { ...stateSearch, ...labelSearch, layout: display.layout, size },
+                search: (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...display, size }),
               });
           }}
           variant="outline"
@@ -149,7 +161,7 @@ function DisplayControls({
       {state ? (
         <a
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          href={shelfHref(locale, { ...filterSort, layout: display.layout, size: display.size, ...labelSearch })}
+          href={shelfHref(locale, { ...filterSort, ...display, ...labelSearch })}
         >
           {m.library_clear_state()}
         </a>
@@ -178,6 +190,7 @@ function SortControls({
       {state ? <input type="hidden" name="state" value={state} /> : null}
       <input type="hidden" name="layout" value={display.layout} />
       <input type="hidden" name="size" value={display.size} />
+      {display.columns ? <input type="hidden" name="columns" value={display.columns} /> : null}
       <label className="grid gap-1 text-sm">
         {m.library_sort_by()}
         <select name="orderBy" defaultValue={sort.orderBy} className="rounded-md border bg-background p-2">
@@ -258,7 +271,19 @@ export function PersonalLibraryPage({
         collections={navigation.data?.collections ?? []}
         collectionsState={navigation.data?.collectionsState ?? (navigation.isError ? 'unavailable' : 'preparing')}
       />
-      {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken ?? null} /> : null}
+      {undo ? (
+        <EntryUndoForm
+          undo={undo}
+          locale={locale}
+          csrfToken={csrfToken ?? null}
+          returnTo={shelfHref(locale, {
+            ...display,
+            ...sort,
+            ...(page.state ? { state: page.state } : {}),
+            ...(effectiveCursor ? { cursor: effectiveCursor } : {}),
+          })}
+        />
+      ) : null}
       {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
       {continueAbsent ? null : (
         <ContinueSection
@@ -279,6 +304,7 @@ export function PersonalLibraryPage({
               {...(page.state ? { state: page.state } : {})}
               locale={locale}
               display={display}
+              tableAvailable={!page.readState && page.entries.length > 0}
               sort={sort}
               {...(filterSort ? { filterSort } : {})}
               {...(effectiveCursor ? { cursor: effectiveCursor } : {})}
@@ -315,6 +341,7 @@ export function PersonalLibraryPage({
             {...(filterSort ? { filterSort } : {})}
             {...(page.state ? { state: page.state } : {})}
             entries={page.entries}
+            {...(effectiveCursor ? { cursor: effectiveCursor } : {})}
             locale={locale}
             {...display}
           />
@@ -341,8 +368,7 @@ export function PersonalLibraryPage({
               ...(page.state ? { state: page.state } : {}),
               ...sort,
               cursor: page.next,
-              layout: display.layout,
-              size: display.size,
+              ...display,
             })}
           >
             {m.library_next_page()}
@@ -420,11 +446,7 @@ export function LabelShelfPage({
       ) : null}
       {page.undo ? (
         <Exposure operation="library_label.unassign">
-          <form
-            data-label-undo
-            method="post"
-            action={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(page.label.id)}`}
-          >
+          <form data-label-undo method="post" action={shelfHref(locale, { label: page.label.id, ...display })}>
             <input type="hidden" name="intent" value="restore" />
             <input type="hidden" name="subjectId" value={page.undo.subjectId} />
             <input type="hidden" name="labelId" value={page.undo.labelId} />

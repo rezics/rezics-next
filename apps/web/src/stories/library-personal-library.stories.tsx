@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useLocation } from '@tanstack/react-router';
+import { shelfDisplay, validateShelfSearch } from '../library/shelf-params';
 import { Toaster } from '@rezics/ui/shadcn/toast';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { PersonalLibraryEntry, PersonalLibraryView } from '../library/entries-read';
@@ -128,19 +130,29 @@ export const ContinueUnavailable: Story = uncertain({ state: 'unavailable', stat
   m.library_continue_unavailable(),
 );
 
-function chronological(page: PersonalLibraryView): Story {
+function ChronologicalPage({ page }: { page: PersonalLibraryView }) {
+  const location = useLocation();
+  return (
+    <PersonalLibraryPage
+      page={page}
+      continueState={{ state: 'loaded', entries: [], next: null }}
+      locale={getLocale()}
+      display={shelfDisplay(validateShelfSearch(location.search))}
+    />
+  );
+}
+
+function chronological(
+  page: PersonalLibraryView,
+  path = '/library?orderBy=finishedAt&direction=asc&layout=table',
+): Story {
   return {
     render: () => {
       setLibraryNavigationStoryState({ pinCount: 0, builtins: 'none', collectionCount: 0 });
       return (
-        <PatternStory visitor="Signed In" path="/library?orderBy=finishedAt&direction=asc&layout=table">
+        <PatternStory visitor="Signed In" path={path}>
           <div className="mx-auto max-w-7xl p-4 sm:p-8">
-            <PersonalLibraryPage
-              page={page}
-              continueState={{ state: 'loaded', entries: [], next: null }}
-              locale={getLocale()}
-              display={{ layout: 'table', size: 'm' }}
-            />
+            <ChronologicalPage page={page} />
           </div>
         </PatternStory>
       );
@@ -383,5 +395,35 @@ export const SelectedAuthorityLost: Story = {
     await waitFor(() => expect(canvasElement.querySelectorAll('[data-selection-outcome="failed"]')).toHaveLength(1));
     await expect(canvasElement.querySelectorAll('[data-selection-outcome="changed"]')).toHaveLength(1);
     await expect(canvasElement.querySelectorAll('[data-selection-outcome="not-attempted"]')).toHaveLength(2);
+  },
+};
+
+export const ChosenColumns: Story = {
+  ...chronological(
+    { signedIn: true, entries: selectionEntries(), next: null },
+    '/library?layout=table&columns=title,status',
+  ),
+  name: 'Chosen table columns retained',
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    if (!window.matchMedia('(min-width: 640px)').matches) {
+      await expect(await canvas.findByRole('link', { name: 'A new reading state' })).toBeVisible();
+      await expect(canvas.queryByRole('button', { name: m.library_columns(), exact: true })).toBeNull();
+      return;
+    }
+    await expect(await canvas.findByRole('columnheader', { name: m.library_column_status() })).toBeVisible();
+    await expect(canvas.queryByRole('columnheader', { name: m.library_sort_activity() })).toBeNull();
+    await userEvent.click(await canvas.findByRole('button', { name: m.library_columns(), exact: true }));
+    const picker = within(await within(document.body).findByRole('dialog', { name: m.library_columns() }));
+    await expect(picker.getByRole('checkbox', { name: m.library_column_title(), exact: true })).toBeDisabled();
+    await userEvent.click(picker.getByRole('checkbox', { name: m.library_column_cover(), exact: true }));
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(canvas.getByRole('button', { name: m.library_layout_list(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_layout_table(), exact: true }));
+    await expect(await canvas.findByRole('columnheader', { name: m.library_column_cover() })).toBeVisible();
+    await expect(canvas.queryByRole('columnheader', { name: m.library_sort_activity() })).toBeNull();
+    await expect(
+      canvas.getByRole('button', { name: m.library_entry_actions({ title: 'A new reading state' }) }),
+    ).toBeEnabled();
   },
 };

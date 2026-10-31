@@ -141,3 +141,24 @@ export const SelectedLoadedPage: Story = {
     await expect(canvas.getByRole('button', { name: m.library_selection_clear() })).toBeEnabled();
   },
 };
+
+export const ChosenColumns: Story = {
+  name: 'Owner, chosen table columns',
+  render: () => (
+    <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?layout=table&columns=title,status`} />
+  ),
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    const title = displayLibraryTitle(entries.libraryEntries[0]!.subject.label, getLocale()).text;
+    await expect(await canvas.findByRole('link', { name: title, exact: true })).toBeVisible();
+    if (window.matchMedia('(min-width: 640px)').matches) {
+      await expect(canvas.getByRole('button', { name: m.library_columns(), exact: true })).toBeEnabled();
+      await expect(canvas.getByRole('columnheader', { name: m.library_column_status() })).toBeVisible();
+      await expect(canvas.queryByRole('columnheader', { name: m.library_sort_activity() })).toBeNull();
+    } else {
+      await expect(canvas.queryByRole('button', { name: m.library_columns(), exact: true })).toBeNull();
+    }
+    await expect(canvas.getByRole('button', { name: m.library_entry_actions({ title }) })).toBeEnabled();
+  },
+};
