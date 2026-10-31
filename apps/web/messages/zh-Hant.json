@@ -1147,7 +1147,7 @@
   "decision_appeal_conflict": "由於決定狀態或申訴狀態與此請求衝突，申訴未獲接受。你的草稿會保留。繼續前請重新整理目前狀態。",
   "decision_appeal_uncertain": "無法確認處理結果。申訴可能已經提交。你的草稿會保留；請原樣重試同一申訴以確認結果，或重新整理目前狀態。",
   "decision_appeal_refused": "請求未獲接受。你的草稿會保留。繼續前請重新整理目前狀態。",
-  "decision_refresh_failed": "無法載入目前狀態。內容連結已隱藏，草稿會保留。請再次重新整理。",
+  "decision_refresh_failed": "無法載入目前狀態。內容連結已隱藏，草稿會保留。請重新整理目前狀態。",
   "decision_retry_same": "重試同一申訴",
   "decision_reference": "決定編號：",
   "thread_media_unavailable": "草稿中的一張圖片目前無法使用。",
