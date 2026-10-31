@@ -111,6 +111,33 @@ current public site's result. No old screenshot was reused without matching publ
 
 ## Findings grouped by cause
 
+### Public ready-state provider errors and a transient delivery failure
+
+**Defect class: error-unavailable wall; owner seam: Web story composition and its query/session consumers.**
+`pages-subjects-subject--imported-scores` and `pages-commerce-order--active` display the full Storybook
+“No QueryClient set, use QueryClientProvider to set one” error at both widths. Each was also opened in an
+independent fresh public tab, with the same result; see the four matching `comparisons/` PNG/JSON pairs.
+These are not intentionally denied or unavailable examples. The first source renders `RatingsView` directly;
+its rating control calls `useQueryClient`. The Order Active component example renders `OrderPage` directly;
+that component calls `useSession`, whose browser implementation uses a query. Neither export wraps that render
+in `PageStory` or `PatternStory`. This identifies a concrete missing-provider boundary, rather than a failed
+native API. The user cannot inspect the claimed ready design at all. Supply the minimal real providers for an
+isolated example, or use the integrated page harness when the claim exercises it. A global shell is not itself
+the cure for a missing QueryClient.
+
+The first phone capture of `pages-community-thread--editor-mention` instead shows
+`Failed to fetch dynamically imported module: https://storybook.rezics.com/assets/thread-media.stories-C5SnEn_Q.js`.
+Its desktop observation renders the mention editor, and subsequent fresh direct visits render it at both widths.
+The original failed PNG and diagnostics remain; `comparisons/` preserves the recovery separately. This is an
+observed transient asset-delivery failure, not a demonstrated permanent phone layout defect. The capture does
+not establish whether cache, connection or publication asset lifetime caused it. The publication/CDN seam should
+retain versioned assets and distinguish delivery errors from component errors; do not remove the observation
+from the counts merely because a later visit recovered.
+
+The cause that lets these states look complete in an inventory is counting exported stories or narrow fixture
+assertions instead of observing their actual published composition. Storybook's renderer can even report a
+terminal phase while its visible content is an error panel. The exhaustive visual manifest remains the evidence.
+
 ### Shared header, search and filters
 
 **Defect class: unfinished shared design; owner seam: Web shell/header-search, with UI panel primitives.**
