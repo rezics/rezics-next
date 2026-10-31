@@ -14,8 +14,17 @@ const meta = { title: 'Pages/Account/Inbox', parameters: { layout: 'fullscreen' 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function inboxMain(canvasElement: HTMLElement) {
+  return within(canvasElement).findByRole('main');
+}
+
+async function inboxNoticeList(canvasElement: HTMLElement) {
+  const main = await inboxMain(canvasElement);
+  return within(main).findByRole('list', { name: m.inbox_heading() });
+}
+
 async function rowsReady({ canvasElement }: { canvasElement: HTMLElement }) {
-  await within(canvasElement).findByRole('list');
+  await inboxNoticeList(canvasElement);
 }
 
 const recordedPostHref = '/threads/01a17a3b-0884-721b-91ef-d7ffd7bb58f1#post-01a17a3b-0884-721b-91ef-d7ffd7bb58f2';
@@ -125,7 +134,7 @@ const reportHref = '/moderation/reports/01a17a3b-0884-721b-91ef-d7ffd7bb58f3';
 export const ReporterAvailable: Story = {
   render: () => <InboxStory fixture="report-available" />,
   play: async ({ canvasElement }) => {
-    const list = within(await within(canvasElement).findByRole('list'));
+    const list = within(await inboxNoticeList(canvasElement));
     await expect(list.getByRole('link', { name: m.moderation_actioned() })).toHaveAttribute('href', reportHref);
   },
 };
@@ -133,7 +142,7 @@ export const ReporterAvailable: Story = {
 export const ReporterUnavailable: Story = {
   render: () => <InboxStory fixture="report-unavailable" />,
   play: async ({ canvasElement }) => {
-    const list = within(await within(canvasElement).findByRole('list'));
+    const list = within(await inboxNoticeList(canvasElement));
     await expect(list.getByRole('link', { name: m.moderation_dismissed() })).toHaveAttribute('href', reportHref);
     await expect(list.queryByText(m.inbox_unavailable_item())).toBeNull();
   },
@@ -168,13 +177,14 @@ export const ViewerBecomesUnknown: Story = {
   ),
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    const main = within(await view.findByRole('main'));
-    const rows = await main.findByRole('list');
+    const mainElement = await inboxMain(canvasElement);
+    const main = within(mainElement);
+    const rows = await main.findByRole('list', { name: m.inbox_heading() });
     const ids = [...rows.querySelectorAll('[data-notice-id]')].map((row) => row.getAttribute('data-notice-id'));
     await userEvent.click(view.getByRole('button', { name: 'Session becomes unknown' }));
     await main.findByText(m.inbox_loading());
-    await expect(main.queryByRole('list')).toBeNull();
-    for (const id of ids) await expect(canvasElement.querySelector(`[data-notice-id="${id}"]`)).toBeNull();
+    await expect(main.queryByRole('list', { name: m.inbox_heading() })).toBeNull();
+    for (const id of ids) await expect(mainElement.querySelector(`[data-notice-id="${id}"]`)).toBeNull();
     await expect(main.queryByText(m.inbox_seen_unavailable())).toBeNull();
   },
 };
@@ -221,16 +231,16 @@ const restartParameters = {
 };
 
 async function rejectedContinuation({ canvasElement }: { canvasElement: HTMLElement }) {
-  const view = within(canvasElement);
-  await view.findByRole('list');
-  await expect(view.queryByRole('button', { name: m.inbox_start_first_page() })).toBeNull();
-  const loadMore = await view.findByRole('button', { name: m.inbox_load_more() });
+  const main = within(await inboxMain(canvasElement));
+  await main.findByRole('list', { name: m.inbox_heading() });
+  await expect(main.queryByRole('button', { name: m.inbox_start_first_page() })).toBeNull();
+  const loadMore = await main.findByRole('button', { name: m.inbox_load_more() });
   await waitFor(() => expect(loadMore).toBeEnabled());
   await userEvent.click(loadMore);
-  const status = await view.findByRole('status');
+  const status = await main.findByRole('status');
   await expect(status).toHaveAttribute('data-response-status', '409');
-  await expect(view.queryByRole('list')).toBeNull();
-  await expect(view.queryByText(m.inbox_empty())).toBeNull();
+  await expect(main.queryByRole('list', { name: m.inbox_heading() })).toBeNull();
+  await expect(main.queryByText(m.inbox_empty())).toBeNull();
   const retry = within(status).getByRole('button', { name: m.inbox_retry() });
   const restart = within(status).getByRole('button', { name: m.inbox_start_first_page() });
   await expect(retry).toBeDisabled();
@@ -247,14 +257,14 @@ export const RejectedContinuation: Story = {
   render: () => <RejectedContinuationExample />,
   play: async (context) => {
     await rejectedContinuation(context);
-    const view = within(context.canvasElement);
-    await userEvent.click(view.getByRole('button', { name: m.inbox_retry() }));
+    const main = within(await inboxMain(context.canvasElement));
+    await userEvent.click(main.getByRole('button', { name: m.inbox_retry() }));
     await waitFor(() => expect(restartRequests).toEqual([undefined, rejectedCursor, rejectedCursor]));
-    await expect(view.getByRole('status')).toHaveAttribute('data-response-status', '409');
-    await waitFor(() => expect(view.getByRole('button', { name: m.inbox_start_first_page() })).toBeEnabled(), {
+    await expect(main.getByRole('status')).toHaveAttribute('data-response-status', '409');
+    await waitFor(() => expect(main.getByRole('button', { name: m.inbox_start_first_page() })).toBeEnabled(), {
       timeout: 5000,
     });
-    await expect(view.queryByRole('list')).toBeNull();
+    await expect(main.queryByRole('list', { name: m.inbox_heading() })).toBeNull();
   },
 };
 
@@ -265,16 +275,16 @@ export const RestartAfterRejectedContinuation: Story = {
   render: () => <RejectedContinuationExample />,
   play: async (context) => {
     await rejectedContinuation(context);
-    const view = within(context.canvasElement);
-    await userEvent.click(view.getByRole('button', { name: m.inbox_start_first_page() }));
-    const list = within(await view.findByRole('list'));
+    const main = within(await inboxMain(context.canvasElement));
+    await userEvent.click(main.getByRole('button', { name: m.inbox_start_first_page() }));
+    const list = within(await main.findByRole('list', { name: m.inbox_heading() }));
     await expect(list.getAllByRole('listitem').map((row) => row.getAttribute('data-notice-id'))).toEqual([
       '01a17a3b-0884-721b-91ef-d7ffd7bb5802',
     ]);
     await expect(restartRequests).toEqual([undefined, rejectedCursor, undefined]);
-    await expect(view.queryByRole('button', { name: m.inbox_load_more() })).toBeNull();
-    await expect(view.queryByRole('button', { name: m.inbox_start_first_page() })).toBeNull();
-    await expect(view.queryByText(m.inbox_unavailable())).toBeNull();
+    await expect(main.queryByRole('button', { name: m.inbox_load_more() })).toBeNull();
+    await expect(main.queryByRole('button', { name: m.inbox_start_first_page() })).toBeNull();
+    await expect(main.queryByText(m.inbox_unavailable())).toBeNull();
   },
 };
 
@@ -285,19 +295,19 @@ export const FirstPageRestartUnavailable: Story = {
   render: () => <RejectedContinuationExample failedReset />,
   play: async (context) => {
     await rejectedContinuation(context);
-    const view = within(context.canvasElement);
-    await userEvent.click(view.getByRole('button', { name: m.inbox_start_first_page() }));
-    const status = await view.findByRole('status');
+    const main = within(await inboxMain(context.canvasElement));
+    await userEvent.click(main.getByRole('button', { name: m.inbox_start_first_page() }));
+    const status = await main.findByRole('status');
     await expect(status).toHaveAttribute('data-response-status', '503');
-    await expect(view.queryByRole('list')).toBeNull();
-    await expect(view.queryByText(m.inbox_empty())).toBeNull();
-    await expect(view.queryByRole('button', { name: m.inbox_start_first_page() })).toBeNull();
+    await expect(main.queryByRole('list', { name: m.inbox_heading() })).toBeNull();
+    await expect(main.queryByText(m.inbox_empty())).toBeNull();
+    await expect(main.queryByRole('button', { name: m.inbox_start_first_page() })).toBeNull();
     const retry = within(status).getByRole('button', { name: m.inbox_retry() });
     await expect(retry).toBeDisabled();
     await waitFor(() => expect(retry).toBeEnabled(), { timeout: 5000 });
     await expect(restartRequests).toEqual([undefined, rejectedCursor, undefined]);
     await userEvent.click(retry);
-    const list = within(await view.findByRole('list'));
+    const list = within(await main.findByRole('list', { name: m.inbox_heading() }));
     await expect(list.getAllByRole('listitem').map((row) => row.getAttribute('data-notice-id'))).toEqual([
       '01a17a3b-0884-721b-91ef-d7ffd7bb5802',
     ]);
@@ -343,7 +353,7 @@ export const SeenRetryAfterRecovery: Story = {
     await userEvent.click(retry);
     await waitFor(() => expect(view.queryByText(m.inbox_seen_unavailable())).toBeNull());
     await expect(inboxSeenRecoveryStory.commands).toEqual([original, original]);
-    await expect(view.getByRole('list')).toBeVisible();
+    await expect(await inboxNoticeList(canvasElement)).toBeVisible();
   },
 };
 
@@ -359,7 +369,7 @@ export const SeenUnavailable: Story = {
     await expect(within(status).getByRole('button', { name: m.inbox_retry() })).toBeEnabled();
     await expect(within(status).queryByText(m.settings_retry_wait())).toBeNull();
     await expect(view.queryByText(m.inbox_preparing())).toBeNull();
-    await expect(view.getByRole('list')).toBeVisible();
+    await expect(await inboxNoticeList(canvasElement)).toBeVisible();
   },
 };
 
@@ -371,7 +381,7 @@ export const SeenClosed: Story = {
     const view = within(canvasElement);
     const status = (await view.findByText(m.inbox_seen_closed())).closest('section')!;
     await expect(status).toHaveAttribute('data-response-code', 'platform_closed');
-    await expect(view.getByRole('list')).toBeVisible();
+    await expect(await inboxNoticeList(canvasElement)).toBeVisible();
   },
 };
 
@@ -394,11 +404,11 @@ export const SeenViewerBecomesUnknown: Story = {
   render: () => <SeenInboxStory fixture="seen-wait" transition />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    const main = within(await view.findByRole('main'));
+    const main = within(await inboxMain(canvasElement));
     await main.findByText(m.inbox_seen_rate_limited());
     await userEvent.click(view.getByRole('button', { name: 'Session becomes unknown' }));
     await main.findByText(m.inbox_loading());
-    await expect(main.queryByRole('list')).toBeNull();
+    await expect(main.queryByRole('list', { name: m.inbox_heading() })).toBeNull();
     await expect(main.queryByText(m.inbox_seen_unavailable())).toBeNull();
     await expect(main.queryByRole('button', { name: m.inbox_retry() })).toBeNull();
     await expect(inboxSeenRecoveryStory.commands).toHaveLength(1);

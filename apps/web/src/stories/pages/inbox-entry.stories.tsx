@@ -81,15 +81,16 @@ export const SignedOut: Story = {
   ),
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    const link = await view.findByRole('link', { name: m.inbox_sign_in() });
+    const main = within(await view.findByRole('main'));
+    const link = await main.findByRole('link', { name: m.inbox_sign_in() });
     await expect(link).toHaveAttribute(
       'href',
       `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/inbox?from=navigation`)}`,
     );
     link.focus();
     await expect(link).toHaveFocus();
-    await expect(view.queryByRole('list')).toBeNull();
-    await expect(view.queryByRole('button', { name: m.inbox_retry() })).toBeNull();
+    await expect(main.queryByRole('list', { name: m.inbox_heading() })).toBeNull();
+    await expect(main.queryByRole('button', { name: m.inbox_retry() })).toBeNull();
   },
 };
 
@@ -97,10 +98,11 @@ export const Pending: Story = {
   render: () => <SessionExample scenario="pending" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await expect(await view.findByRole('status')).toHaveTextContent(m.inbox_loading());
-    await expect(view.queryByRole('link', { name: m.inbox_sign_in() })).toBeNull();
-    await expect(view.queryByRole('button', { name: m.inbox_retry() })).toBeNull();
-    await expect(view.queryByRole('list')).toBeNull();
+    const main = within(await view.findByRole('main'));
+    await expect(await main.findByRole('status')).toHaveTextContent(m.inbox_loading());
+    await expect(main.queryByRole('link', { name: m.inbox_sign_in() })).toBeNull();
+    await expect(main.queryByRole('button', { name: m.inbox_retry() })).toBeNull();
+    await expect(main.queryByRole('list', { name: m.inbox_heading() })).toBeNull();
   },
 };
 
@@ -108,13 +110,14 @@ export const UnavailableRetryFails: Story = {
   render: () => <SessionExample scenario="unavailable" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await view.findByText(m.inbox_session_unavailable());
-    const retry = view.getByRole('button', { name: m.inbox_retry() });
+    const main = within(await view.findByRole('main'));
+    await main.findByText(m.inbox_session_unavailable());
+    const retry = main.getByRole('button', { name: m.inbox_retry() });
     await userEvent.click(retry);
     await waitFor(() => expect(retry).toBeEnabled());
-    await expect(view.getByRole('status')).toHaveTextContent(m.inbox_session_unavailable());
-    await expect(view.queryByRole('list')).toBeNull();
-    await expect(view.queryByText(m.inbox_empty())).toBeNull();
+    await expect(main.getByRole('status')).toHaveTextContent(m.inbox_session_unavailable());
+    await expect(main.queryByRole('list', { name: m.inbox_heading() })).toBeNull();
+    await expect(main.queryByText(m.inbox_empty())).toBeNull();
   },
 };
 
@@ -122,13 +125,14 @@ export const RecoveredSession: Story = {
   render: () => <SessionExample scenario="recovered" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await view.findByText(m.inbox_session_unavailable());
-    await userEvent.click(view.getByRole('button', { name: m.inbox_retry() }));
-    const list = within(await view.findByRole('list', { name: m.inbox_heading() }));
+    const main = within(await view.findByRole('main'));
+    await main.findByText(m.inbox_session_unavailable());
+    await userEvent.click(main.getByRole('button', { name: m.inbox_retry() }));
+    const list = within(await main.findByRole('list', { name: m.inbox_heading() }));
     await expect(list.getAllByRole('link')[0]).toHaveAttribute(
       'href',
       '/threads/01a17a3b-0884-721b-91ef-d7ffd7bb58f1#post-01a17a3b-0884-721b-91ef-d7ffd7bb58f2',
     );
-    await expect(view.queryByText(m.inbox_session_unavailable())).toBeNull();
+    await expect(main.queryByText(m.inbox_session_unavailable())).toBeNull();
   },
 };
