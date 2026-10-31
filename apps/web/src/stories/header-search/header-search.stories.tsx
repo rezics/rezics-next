@@ -85,7 +85,7 @@ type Story = StoryObj<typeof meta>;
 async function expand({ canvasElement }: { canvasElement: HTMLElement }, triggerName = m.header_search_global()) {
   const canvas = within(canvasElement);
   if (window.matchMedia('(max-width: 767px)').matches)
-    await userEvent.click(await canvas.findByRole('button', { name: triggerName, exact: true }));
+    await userEvent.click(await canvas.findByRole('button', { name: triggerName }));
   else await userEvent.click(await canvas.findByRole('combobox', { name: m.search_label() }));
   const input = await canvas.findByRole('combobox', { name: m.search_label() });
   await expect(input).toHaveAttribute('aria-expanded', 'true');
