@@ -31,11 +31,10 @@ every Context a page could be scored in. A layout with one block, tab or section
 those numbers; so does ranking that only works for a handful of Contexts. Show what the design renders and costs at
 the limit, not only in the fixture.
 
-The core of every design is that it is easy to extend and iterate. For an open-ended set (kinds, Contexts,
-presentation types) that means configuration rather than code: a specification of what each member declares (for a
-kind, its filter conditions and presentation), storage that holds at the upper bound, and versions so the
-specification can change without breaking what is stored. Behaviour reads the configuration; code never enumerates
-the members.
+The core of every design is that it is easy to extend and iterate. Choose the design that achieves this for the case
+at hand. Versioned configuration is one such design among others: a specification of what each member of an
+open-ended set declares (for a kind, its filter conditions and presentation), storage that holds at the upper bound,
+and versions so the specification can change without breaking what is stored.
 
 Write acceptance in user terms. For Collections, examples include light novels tagged harem, books over one million
 words and combined filters. Name missing properties, indexes and owner ports before claiming support.
