@@ -545,9 +545,7 @@ test('A retained terminal organization verification request with an erased reque
   expect(Object.hasOwn(read.body.verificationRequest, 'requestedBy')).toBe(true);
   expect(read.body.verificationRequest.requestedBy).toBeNull();
 
-  const route = kernel.routes.find(
-    (route) => route.hooks.detail?.operationId === 'account.read_verification_request',
-  );
+  const route = kernel.routes.find((route) => route.hooks.detail?.operationId === 'account.read_verification_request');
   const schema = (route!.hooks.response as Record<number, TSchema>)[200]!;
   expect(Value.Check(schema, read.body)).toBe(true);
   expect(Value.Check(schema, { verificationRequest: { ...native, requestedBy: manager.id } })).toBe(true);
