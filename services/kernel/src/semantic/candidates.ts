@@ -1005,6 +1005,8 @@ async function candidatePage(
       typeof after[2] === 'string' &&
       routeOf(after[2]) === routeOf(options.subject),
     async (client, after) => {
+      const identityAdmitted = options.identity &&
+        (await readPartition(client, partitionOf(routeOf(options.subject)!)))?.writeState === 'active';
       const slot = options.slot ?? slotId(options.subject, options.property);
       const state = await resolveSlot(client, options.subject, options.property, options.context, slot);
       type Decided = Candidate & { verdict: 'accept' | 'reject' | 'abstain' | null; head: number | null };
@@ -1147,7 +1149,7 @@ async function candidatePage(
           release: row.release,
           context: options.context,
         }).statements[options.property]![0]!;
-        const identity = options.identity && provenance?.retracted === null &&
+        const identity = identityAdmitted && provenance?.retracted === null &&
           releases.get(row.release)?.properties[options.property]?.disclosure === 'sourceOrConsent' &&
           statement.property.data_type === 'wikibase-item' && statement.value.type === 'value' &&
           typeof statement.value.content === 'string'
