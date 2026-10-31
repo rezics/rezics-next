@@ -1198,7 +1198,7 @@ test('one hundred historical unknowns archive durably and allow exactly three ne
       const task = store.createTask(h.proofBrief,
         { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
       store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
-        current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization;
+        current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization!;
       });
       const next = store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory));
       const binding = newProofBinding(store.task(task.id), next.attempt);
@@ -1240,7 +1240,7 @@ test('live historical runner occupies cap3 until its actual identity is gone and
     expect(h.store.historicalProofSlots()).toEqual([check]);
     const task = h.store.createTask(h.proofBrief,
       { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
-    h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => { current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization; });
+    h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => { current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization!; });
     const next = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory));
     expect(h.store.reserveProof(newProofBinding(h.store.task(task.id), next.attempt))?.status).toBe('reserved');
     expect(h.store.proofCapacityAvailable('fixture', 'another-proof')).toBe(false);
