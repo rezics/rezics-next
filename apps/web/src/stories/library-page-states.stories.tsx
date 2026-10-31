@@ -16,7 +16,6 @@ const meta = {
       'purchases',
       'agent_verification',
       'personal_library',
-      'library_continue.list',
       'reading_progress',
       'collections',
     ],

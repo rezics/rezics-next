@@ -8,7 +8,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Unavailable: Story = {
-  parameters: { admitted: ['personal_library', 'library_continue.list', 'reading_progress', 'collections'] },
+  parameters: { admitted: ['personal_library', 'reading_progress', 'collections'] },
   render: () => <PageStory visitor="Signed In" path="/library/continue" />,
   play: async (context) => {
     await pageReady(context);

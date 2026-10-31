@@ -9,7 +9,7 @@ import { homeJsonLd } from '../features/pages/jsonld';
 import { RoutePage, routePageJsonLd } from '../features/pages/route';
 import { ContinueSection, useContinuePreparation } from '../library/continue';
 import { homeContinueQuery } from '../library/continue-read';
-import { operationGroups } from '../kernel/exposure';
+import { operationIsAdmitted } from '../kernel/exposure';
 import { pageHead } from '../shell/head';
 import { PageHeading } from '../shell/page-heading';
 
@@ -35,19 +35,23 @@ function Home() {
     ...exposureQuery,
     enabled: personalRead.enabled && state === 'signed-in',
   });
-  const hasContinueList = viewerGroups?.includes(operationGroups['library_continue.list']) ?? false;
+  const hasContinueList =
+    operationIsAdmitted('library_continue.list', viewerGroups) &&
+    operationIsAdmitted('progress_session.list', viewerGroups);
   const exposureReady = viewerGroups !== undefined;
+  const continueEnabled =
+    personalRead.enabled && state === 'signed-in' && exposureReady && !exposureFailed && hasContinueList;
   const resume = useQuery({
     ...homeContinueQuery(getLocale(), () => readHomeContinue({ data: getLocale() })),
-    enabled: personalRead.enabled && state === 'signed-in' && hasContinueList,
+    enabled: continueEnabled,
   });
   const continueState =
     resume.isError || exposureFailed || (exposureReady && !hasContinueList)
       ? { state: 'unavailable' as const }
-      : resume.isFetching
+      : !exposureReady || resume.isFetching
         ? { state: 'unknown' as const }
         : (resume.data ?? { state: 'unknown' as const });
-  useContinuePreparation(state === 'signed-in' ? continueState : undefined, resume.refetch, getLocale());
+  useContinuePreparation(continueEnabled ? continueState : undefined, resume.refetch, getLocale());
   const nonce = useRouter().options.ssr?.nonce;
   if (loaded.kind === 'missing') return <PageHeading>{m.home_heading()}</PageHeading>;
   return (
@@ -63,7 +67,7 @@ function Home() {
               <ContinueSection
                 state={continueState}
                 locale={getLocale()}
-                {...(hasContinueList ? { onRetry: () => void resume.refetch() } : {})}
+                {...(continueEnabled ? { onRetry: () => void resume.refetch() } : {})}
                 busy={resume.isFetching}
               />
             ),

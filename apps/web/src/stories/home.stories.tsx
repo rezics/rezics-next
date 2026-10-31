@@ -10,7 +10,7 @@ type Story = StoryObj<typeof meta>;
 
 export const SignedIn: Story = {
   name: 'Member, Continue unavailable pending native binding',
-  parameters: { admitted: ['personal_library', 'library_continue.list', 'reading_progress', 'collections'] },
+  parameters: { admitted: ['personal_library', 'reading_progress', 'collections'] },
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} />,
   play: async (context) => {
     await pageReady(context);
