@@ -9,7 +9,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { editorLabels } from '../../threads/composer';
@@ -67,7 +67,9 @@ export function RecipeEditor({
     staleTime: Infinity,
   });
   const read = query.data?.ok ? query.data : undefined;
-  const [terms, setTerms] = useState([{ language: locale, label: '', description: '', aliases: '' }]);
+  const termsId = useId();
+  const nextTermId = useRef(1);
+  const [terms, setTerms] = useState([{ id: 0, language: locale, label: '', description: '', aliases: '' }]);
   const [rows, setRows] = useState<Row[]>([]);
   const [property, setProperty] = useState('');
   const [failure, setFailure] = useState<CreateFailure>();
@@ -200,10 +202,11 @@ export function RecipeEditor({
               <fieldset disabled={locked || session !== 'signed-in'} className="space-y-5">
                 <legend className="mb-4 font-semibold">{m.catalogue_create_terms({}, o)}</legend>
                 {terms.map((term, index) => (
-                  <div key={index} className="space-y-3">
+                  <fieldset key={term.id} id={`${termsId}-${term.id}`} className="min-w-0 space-y-3">
+                    <legend className="sr-only">{term.language || m.catalogue_create_language({}, o)}</legend>
                     {(['language', 'label', 'description', 'aliases'] as const).map((field) => (
                       <Field key={field}>
-                        <FieldLabel htmlFor={`recipe-${field}-${index}`}>
+                        <FieldLabel htmlFor={`${termsId}-${field}-${term.id}`}>
                           {
                             {
                               language: m.catalogue_create_language({}, o),
@@ -215,24 +218,24 @@ export function RecipeEditor({
                         </FieldLabel>
                         {field === 'aliases' ? (
                           <Textarea
-                            id={`recipe-${field}-${index}`}
+                            id={`${termsId}-${field}-${term.id}`}
                             value={term[field]}
                             onChange={(event) =>
-                              setTerms(
-                                terms.map((value, at) =>
-                                  at === index ? { ...value, [field]: event.target.value } : value,
+                              setTerms((previous) =>
+                                previous.map((value) =>
+                                  value.id === term.id ? { ...value, [field]: event.target.value } : value,
                                 ),
                               )
                             }
                           />
                         ) : (
                           <Input
-                            id={`recipe-${field}-${index}`}
+                            id={`${termsId}-${field}-${term.id}`}
                             value={term[field]}
                             onChange={(event) =>
-                              setTerms(
-                                terms.map((value, at) =>
-                                  at === index ? { ...value, [field]: event.target.value } : value,
+                              setTerms((previous) =>
+                                previous.map((value) =>
+                                  value.id === term.id ? { ...value, [field]: event.target.value } : value,
                                 ),
                               )
                             }
@@ -240,11 +243,35 @@ export function RecipeEditor({
                         )}
                       </Field>
                     ))}
-                  </div>
+                    {index > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        aria-controls={`${termsId}-${term.id}`}
+                        disabled={locked || session !== 'signed-in'}
+                        onClick={() => {
+                          if (locked || running.current || pending.current || session !== 'signed-in') return;
+                          setTerms((previous) => previous.filter((value) => value.id !== term.id));
+                          setFailure(undefined);
+                        }}
+                      >
+                        {m.catalogue_create_remove_language({}, o)}
+                      </Button>
+                    )}
+                  </fieldset>
                 ))}
                 <Button
+                  type="button"
                   variant="outline"
-                  onClick={() => setTerms([...terms, { language: '', label: '', description: '', aliases: '' }])}
+                  disabled={locked || session !== 'signed-in'}
+                  onClick={() => {
+                    if (locked || running.current || pending.current || session !== 'signed-in') return;
+                    const id = nextTermId.current++;
+                    setTerms((previous) => [
+                      ...previous,
+                      { id, language: '', label: '', description: '', aliases: '' },
+                    ]);
+                  }}
                 >
                   {m.catalogue_create_add_language({}, o)}
                 </Button>

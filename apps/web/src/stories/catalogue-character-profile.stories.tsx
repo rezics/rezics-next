@@ -13,18 +13,37 @@ import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
+import {
+  createObserver,
+  recoverLanguageRow,
+  retryLanguageRecovery,
+  type ObserveCreate,
+} from './catalogue-language-row-recovery';
 
 function Example({
   scenario = 'ready',
   existing = false,
   work = false,
+  onCreate,
 }: {
   scenario?: CharacterScenario;
   existing?: boolean;
   work?: boolean;
+  onCreate?: ObserveCreate;
 }) {
   const locale = getLocale();
   const fixture = useMemo(() => characterProfileFixture(scenario, locale), [scenario, locale]);
+  const transport = useMemo(
+    () => ({
+      ...fixture.transport,
+      create: async (command: Parameters<typeof fixture.transport.create>[0]) => {
+        const result = await fixture.transport.create(command);
+        onCreate?.(structuredClone(fixture.calls));
+        return result;
+      },
+    }),
+    [fixture, onCreate],
+  );
   return (
     <PatternStory visitor={scenario === 'signed-out' ? 'Signed Out' : 'Signed In'}>
       <AppShell>
@@ -32,6 +51,7 @@ function Example({
           key={`${scenario}:${existing}:${work}:${locale}`}
           locale={locale}
           {...fixture.props}
+          transport={transport}
           {...(existing ? { id: characterProfileId } : {})}
           {...(work ? { work: fixture.work.id } : {})}
         />
@@ -63,6 +83,40 @@ type Story = StoryObj<typeof meta>;
 
 export const RouteEntry: Story = { render: () => <PageStory visitor="Signed In" path="/catalogue/character" /> };
 export const Create: Story = {};
+export const LanguageRowRecovery: Story = {
+  args: { scenario: 'uncertain', onCreate: createObserver() },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(await canvas.findByRole('textbox', { name: m.catalogue_create_label() }), 'A new traveler');
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:url');
+    await userEvent.click(canvas.getByRole('button', { name: m.character_add_fact() }));
+    await userEvent.type(canvas.getByRole('textbox', { name: m.correction_value() }), 'https://example.org/traveler');
+    const observed = args.onCreate as ReturnType<typeof createObserver>;
+    const terms = await recoverLanguageRow(
+      canvasElement,
+      m.character_create(),
+      observed,
+      'A new traveler',
+      '新しい旅人',
+    );
+    await retryLanguageRecovery(canvasElement, m.character_create(), m.correction_retry(), observed, {
+      type: 'wd:Q95074',
+      ...terms,
+      statements: {
+        'schema:url': [
+          {
+            property: { id: 'schema:url' },
+            value: { type: 'value', content: 'https://example.org/traveler' },
+            qualifiers: [],
+            references: [],
+            rank: 'normal',
+          },
+        ],
+      },
+    });
+    await expect(await canvas.findByRole('link', { name: m.character_correct() })).toBeVisible();
+  },
+};
 export const CurrentIdentity: Story = { args: { existing: true } };
 export const WorkCredits: Story = {
   args: { existing: true, work: true },

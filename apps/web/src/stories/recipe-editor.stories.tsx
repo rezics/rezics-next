@@ -16,15 +16,23 @@ import { getLocale } from '../paraglide/runtime';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import definitions from '../kernel/recorded/definitions-release.json';
+import {
+  createObserver,
+  recoverLanguageRow,
+  retryLanguageRecovery,
+  type ObserveCreate,
+} from './catalogue-language-row-recovery';
 
 function RecipeStory({
   scenario = 'ready',
   correction = false,
   signedOut = false,
+  onCreate,
 }: {
   scenario?: RecipeScenario;
   correction?: boolean;
   signedOut?: boolean;
+  onCreate?: ObserveCreate;
 }) {
   const locale = getLocale();
   const fixture = useMemo(() => recipeFixture(correction ? 'ready' : scenario, locale), [scenario, locale, correction]);
@@ -39,8 +47,15 @@ function RecipeStory({
               return fixture.corrections.load();
             },
           }
-        : fixture.transport,
-    [fixture, scenario, correction],
+        : {
+            ...fixture.transport,
+            create: async (command: Parameters<typeof fixture.transport.create>[0]) => {
+              const result = await fixture.transport.create(command);
+              onCreate?.(structuredClone(fixture.calls));
+              return result;
+            },
+          },
+    [fixture, scenario, correction, onCreate],
   );
   return (
     <PatternStory path="/catalogue/recipe" visitor={signedOut ? 'Signed Out' : 'Signed In'}>
@@ -154,6 +169,53 @@ async function create(canvasElement: HTMLElement) {
   return canvas;
 }
 export const Ready: Story = {};
+export const LanguageRowRecovery: Story = {
+  args: { scenario: 'uncertain', onCreate: createObserver() },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(await canvas.findByRole('textbox', { name: m.catalogue_create_label() }), 'Lentil soup');
+    for (const text of ['200 g lentils', '400 ml water']) {
+      const ingredient = await addField(canvasElement, 'schema:recipeIngredient');
+      await userEvent.type(ingredient.getByRole('textbox', { name: m.correction_value() }), text);
+      await userEvent.type(ingredient.getByRole('textbox', { name: m.correction_language() }), 'en');
+      await userEvent.type(
+        ingredient.getByRole('textbox', { name: m.relation_citation() }),
+        'https://cook.example/my-lentil-soup',
+      );
+    }
+    const material = await addField(canvasElement, 'wdt:P186');
+    await userEvent.type(material.getByRole('combobox', { name: fieldName('wdt:P186') }), 'Lentils');
+    await userEvent.click(await within(canvasElement.ownerDocument.body).findByRole('option', { name: /Lentils/ }));
+    await userEvent.type(
+      material.getByRole('textbox', { name: m.relation_citation() }),
+      'https://cook.example/my-lentil-soup',
+    );
+    const observed = args.onCreate as ReturnType<typeof createObserver>;
+    const terms = await recoverLanguageRow(
+      canvasElement,
+      m.recipe_title(),
+      observed,
+      'Lentil soup',
+      'レンズ豆のスープ',
+    );
+    const example = recipeExample();
+    await retryLanguageRecovery(canvasElement, m.recipe_title(), m.correction_retry(), observed, {
+      type: 'schema:Recipe',
+      ...terms,
+      statements: {
+        'schema:recipeIngredient': [
+          example.statements['schema:recipeIngredient']![0],
+          {
+            ...example.statements['schema:recipeIngredient']![0],
+            value: { type: 'value', content: { language: 'en', text: '400 ml water' } },
+          },
+        ],
+        'wdt:P186': example.statements['wdt:P186'],
+      },
+    });
+    await expect(await canvas.findByText(m.recipe_created())).toBeVisible();
+  },
+};
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const SignedOut: Story = { args: { signedOut: true } };

@@ -6,7 +6,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import {
@@ -50,7 +50,11 @@ export function AlbumProfileCreate({
   const o = { locale: locale as never };
   const [release, setRelease] = useState(initialRelease);
   const [metadataFailure, setMetadataFailure] = useState(false);
-  const [terms, setTerms] = useState<TermDraft[]>([{ language: locale, label: '', description: '', aliases: '' }]);
+  const termsId = useId();
+  const nextTermId = useRef(1);
+  const [terms, setTerms] = useState<(TermDraft & { id: number })[]>([
+    { id: 0, language: locale, label: '', description: '', aliases: '' },
+  ]);
   const [rows, setRows] = useState<Row[]>([]);
   const [property, setProperty] = useState('');
   const [failure, setFailure] = useState<CreateFailure>();
@@ -162,7 +166,12 @@ export function AlbumProfileCreate({
       <fieldset id="album-terms" disabled={locked} className="space-y-5 rounded-xl border border-border p-4 sm:p-5">
         <legend className="px-2 font-semibold">{m.catalogue_create_terms({}, o)}</legend>
         {terms.map((term, index) => (
-          <div key={index} className="grid gap-3 border-b border-border pb-4 sm:grid-cols-2">
+          <fieldset
+            key={term.id}
+            id={`${termsId}-${term.id}`}
+            className="grid min-w-0 gap-3 border-b border-border pb-4 sm:grid-cols-2"
+          >
+            <legend className="sr-only">{term.language || m.catalogue_create_language({}, o)}</legend>
             {(['language', 'label', 'description', 'aliases'] as const).map((field) => {
               const label = {
                 language: m.catalogue_create_language({}, o),
@@ -171,19 +180,19 @@ export function AlbumProfileCreate({
                 aliases: m.catalogue_create_aliases({}, o),
               }[field];
               const update = (value: string) =>
-                setTerms((previous) => previous.map((row, at) => (at === index ? { ...row, [field]: value } : row)));
+                setTerms((previous) => previous.map((row) => (row.id === term.id ? { ...row, [field]: value } : row)));
               return (
                 <Field key={field}>
-                  <FieldLabel htmlFor={`album-${field}-${index}`}>{label}</FieldLabel>
+                  <FieldLabel htmlFor={`${termsId}-${field}-${term.id}`}>{label}</FieldLabel>
                   {field === 'aliases' ? (
                     <Textarea
-                      id={`album-${field}-${index}`}
+                      id={`${termsId}-${field}-${term.id}`}
                       value={term[field]}
                       onChange={(event) => update(event.target.value)}
                     />
                   ) : (
                     <Input
-                      id={`album-${field}-${index}`}
+                      id={`${termsId}-${field}-${term.id}`}
                       value={term[field]}
                       onChange={(event) => update(event.target.value)}
                     />
@@ -191,12 +200,32 @@ export function AlbumProfileCreate({
                 </Field>
               );
             })}
-          </div>
+            {index > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                aria-controls={`${termsId}-${term.id}`}
+                disabled={locked}
+                onClick={() => {
+                  if (locked || running.current || pending.current) return;
+                  setTerms((previous) => previous.filter((row) => row.id !== term.id));
+                  setFailure(undefined);
+                }}
+              >
+                {m.catalogue_create_remove_language({}, o)}
+              </Button>
+            )}
+          </fieldset>
         ))}
         <Button
           type="button"
           variant="outline"
-          onClick={() => setTerms([...terms, { language: '', label: '', description: '', aliases: '' }])}
+          disabled={locked}
+          onClick={() => {
+            if (locked || running.current || pending.current) return;
+            const id = nextTermId.current++;
+            setTerms((previous) => [...previous, { id, language: '', label: '', description: '', aliases: '' }]);
+          }}
         >
           {m.catalogue_create_add_language({}, o)}
         </Button>

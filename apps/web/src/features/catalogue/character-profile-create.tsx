@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -25,7 +25,11 @@ export function CharacterProfileCreate({
   onCreated: (result: Extract<CreateResult, { ok: true }>) => void;
 }) {
   const o = { locale: locale as never };
-  const [terms, setTerms] = useState<TermDraft[]>([{ language: locale, label: '', description: '', aliases: '' }]);
+  const termsId = useId();
+  const nextTermId = useRef(1);
+  const [terms, setTerms] = useState<(TermDraft & { id: number })[]>([
+    { id: 0, language: locale, label: '', description: '', aliases: '' },
+  ]);
   const [facts, setFacts] = useState<StatementInput[]>([]);
   const [field, setField] = useState('');
   const [failure, setFailure] = useState<CreateFailure>();
@@ -82,10 +86,11 @@ export function CharacterProfileCreate({
       <fieldset disabled={locked} className="space-y-5">
         <legend className="font-semibold">{m.catalogue_create_terms({}, o)}</legend>
         {terms.map((term, index) => (
-          <div key={index} className="space-y-3">
+          <fieldset key={term.id} id={`${termsId}-${term.id}`} className="min-w-0 space-y-3">
+            <legend className="sr-only">{term.language || m.catalogue_create_language({}, o)}</legend>
             {(['language', 'label', 'description', 'aliases'] as const).map((key) => (
               <Field key={key}>
-                <FieldLabel htmlFor={`character-${key}-${index}`}>
+                <FieldLabel htmlFor={`${termsId}-${key}-${term.id}`}>
                   {
                     {
                       language: m.catalogue_create_language({}, o),
@@ -97,29 +102,53 @@ export function CharacterProfileCreate({
                 </FieldLabel>
                 {key === 'aliases' ? (
                   <Textarea
-                    id={`character-${key}-${index}`}
+                    id={`${termsId}-${key}-${term.id}`}
                     value={term[key]}
                     onChange={(event) =>
-                      setTerms(terms.map((row, at) => (at === index ? { ...row, [key]: event.target.value } : row)))
+                      setTerms((previous) =>
+                        previous.map((row) => (row.id === term.id ? { ...row, [key]: event.target.value } : row)),
+                      )
                     }
                   />
                 ) : (
                   <Input
-                    id={`character-${key}-${index}`}
+                    id={`${termsId}-${key}-${term.id}`}
                     value={term[key]}
                     onChange={(event) =>
-                      setTerms(terms.map((row, at) => (at === index ? { ...row, [key]: event.target.value } : row)))
+                      setTerms((previous) =>
+                        previous.map((row) => (row.id === term.id ? { ...row, [key]: event.target.value } : row)),
+                      )
                     }
                   />
                 )}
               </Field>
             ))}
-          </div>
+            {index > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                aria-controls={`${termsId}-${term.id}`}
+                disabled={locked}
+                onClick={() => {
+                  if (locked || running.current || pending.current) return;
+                  setTerms((previous) => previous.filter((row) => row.id !== term.id));
+                  setFailure(undefined);
+                }}
+              >
+                {m.catalogue_create_remove_language({}, o)}
+              </Button>
+            )}
+          </fieldset>
         ))}
         <Button
           type="button"
           variant="outline"
-          onClick={() => setTerms([...terms, { language: '', label: '', description: '', aliases: '' }])}
+          disabled={locked}
+          onClick={() => {
+            if (locked || running.current || pending.current) return;
+            const id = nextTermId.current++;
+            setTerms((previous) => [...previous, { id, language: '', label: '', description: '', aliases: '' }]);
+          }}
         >
           {m.catalogue_create_add_language({}, o)}
         </Button>

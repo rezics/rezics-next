@@ -17,21 +17,37 @@ import { getLocale } from '../paraglide/runtime';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import definitions from '../kernel/recorded/definitions-release.json';
+import {
+  createObserver,
+  recoverLanguageRow,
+  retryLanguageRecovery,
+  type ObserveCreate,
+} from './catalogue-language-row-recovery';
 
 function AlbumStory({
   scenario = 'ready',
   correction = false,
   signedOut = false,
+  onCreate,
 }: {
   scenario?: AlbumScenario;
   correction?: boolean;
   signedOut?: boolean;
+  onCreate?: ObserveCreate;
 }) {
   const locale = getLocale();
   const fixture = useMemo(() => albumFixture(scenario, locale), [scenario, locale]);
   const transport = useMemo(
-    () => (correction ? { ...fixture.transport, load: fixture.loadCorrection } : fixture.transport),
-    [fixture, correction],
+    () => ({
+      ...fixture.transport,
+      ...(correction ? { load: fixture.loadCorrection } : {}),
+      create: async (command: Parameters<typeof fixture.transport.create>[0]) => {
+        const result = await fixture.transport.create(command);
+        onCreate?.(structuredClone(fixture.calls));
+        return result;
+      },
+    }),
+    [fixture, correction, onCreate],
   );
   return (
     <PatternStory
@@ -117,6 +133,75 @@ const failure = (scenario: AlbumScenario, text: () => string): Story => ({
 });
 
 export const Ready: Story = {};
+export const LanguageRowRecovery: Story = {
+  args: { scenario: 'uncertain', onCreate: createObserver() },
+  play: async ({ canvasElement, args }) => {
+    const canvas = await fill(canvasElement);
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:contributor');
+    await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
+    const artist = within(canvas.getByRole('group', { name: fieldName('schema:contributor') }));
+    await userEvent.type(artist.getByRole('combobox', { name: fieldName('schema:contributor') }), 'Harbour');
+    await userEvent.click(
+      await within(canvasElement.ownerDocument.body).findByRole('option', { name: /The Harbour Ensemble/ }),
+    );
+    await userEvent.type(
+      artist.getByRole('textbox', { name: m.relation_citation() }),
+      'https://artist.example/harbour',
+    );
+    const observed = args.onCreate as ReturnType<typeof createObserver>;
+    const terms = await recoverLanguageRow(canvasElement, m.album_create(), observed, 'Harbour sessions', '港の演奏');
+    await retryLanguageRecovery(canvasElement, m.album_create(), m.catalogue_create_retry(), observed, {
+      type: 'schema:MusicAlbum',
+      ...terms,
+      statements: {
+        'schema:datePublished': [
+          {
+            property: { id: 'schema:datePublished' },
+            value: {
+              type: 'value',
+              content: {
+                time: '+2024-00-00T00:00:00Z',
+                precision: 9,
+                calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+              },
+            },
+            qualifiers: [],
+            references: [
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value', content: 'https://artist.example/harbour' },
+                  },
+                ],
+              },
+            ],
+            rank: 'normal',
+          },
+        ],
+        'schema:contributor': [
+          {
+            property: { id: 'schema:contributor' },
+            value: { type: 'value', content: artistId },
+            qualifiers: [],
+            references: [
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value', content: 'https://artist.example/harbour' },
+                  },
+                ],
+              },
+            ],
+            rank: 'normal',
+          },
+        ],
+      },
+    });
+    await expect(await canvas.findByText(m.catalogue_create_created())).toBeVisible();
+  },
+};
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const SignedOut: Story = { args: { signedOut: true } };
