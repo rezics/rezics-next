@@ -3584,5 +3584,13 @@
   "erasure_participant_imports": "Imported records",
   "erasure_participant_history": "Shared activity records",
   "erasure_participant_delivery": "Notifications and delivery",
-  "erasure_participant_other": "Other cleanup service"
+  "erasure_participant_other": "Other cleanup service",
+  "library_progress_unit_unspecified": "Unit label unavailable",
+  "library_progress_current_total": "Current recorded total: {value}",
+  "library_progress_unrecorded": "Not recorded yet",
+  "library_progress_replace_total": "Enter your total so far. Saving replaces the current recorded total; it does not add to it.",
+  "library_progress_total_preview_empty": "Enter a total to preview the result.",
+  "library_progress_resulting_total": "Recorded total after saving: {value}",
+  "library_progress_session_total": "Session total: {value}",
+  "library_progress_details": "Progress details"
 }

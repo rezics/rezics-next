@@ -3232,5 +3232,13 @@
   "erasure_participant_imports": "インポートした記録",
   "erasure_participant_history": "共有アクティビティ記録",
   "erasure_participant_delivery": "通知と配信",
-  "erasure_participant_other": "その他の消去サービス"
+  "erasure_participant_other": "その他の消去サービス",
+  "library_progress_unit_unspecified": "単位名を取得できません",
+  "library_progress_current_total": "現在記録されている累計：{value}",
+  "library_progress_unrecorded": "まだ記録されていません",
+  "library_progress_replace_total": "これまでの累計を入力してください。保存すると現在の累計を置き換えます。加算はされません。",
+  "library_progress_total_preview_empty": "累計を入力すると保存後の値を確認できます。",
+  "library_progress_resulting_total": "保存後の累計：{value}",
+  "library_progress_session_total": "このセッションの総量：{value}",
+  "library_progress_details": "進捗の詳細"
 }

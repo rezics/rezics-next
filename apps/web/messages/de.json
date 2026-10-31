@@ -3232,5 +3232,13 @@
   "erasure_participant_imports": "Importierte Datensätze",
   "erasure_participant_history": "Gemeinsame Aktivitätsdaten",
   "erasure_participant_delivery": "Benachrichtigungen und Zustellung",
-  "erasure_participant_other": "Anderer Bereinigungsdienst"
+  "erasure_participant_other": "Anderer Bereinigungsdienst",
+  "library_progress_unit_unspecified": "Einheitenbezeichnung nicht verfügbar",
+  "library_progress_current_total": "Bisher erfasste Summe: {value}",
+  "library_progress_unrecorded": "Noch nicht erfasst",
+  "library_progress_replace_total": "Gib die bisherige Summe ein. Beim Speichern wird die erfasste Summe ersetzt, nicht erhöht.",
+  "library_progress_total_preview_empty": "Gib eine Summe ein, um das Ergebnis zu sehen.",
+  "library_progress_resulting_total": "Erfasste Summe nach dem Speichern: {value}",
+  "library_progress_session_total": "Gesamtumfang dieser Sitzung: {value}",
+  "library_progress_details": "Fortschrittsdetails"
 }

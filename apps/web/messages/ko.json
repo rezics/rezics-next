@@ -3232,5 +3232,13 @@
   "erasure_participant_imports": "가져온 기록",
   "erasure_participant_history": "공유 활동 기록",
   "erasure_participant_delivery": "알림 및 전달",
-  "erasure_participant_other": "기타 정리 서비스"
+  "erasure_participant_other": "기타 정리 서비스",
+  "library_progress_unit_unspecified": "단위 이름을 확인할 수 없습니다",
+  "library_progress_current_total": "현재 기록된 누계: {value}",
+  "library_progress_unrecorded": "아직 기록되지 않음",
+  "library_progress_replace_total": "지금까지의 누계를 입력하세요. 저장하면 현재 기록된 누계를 대체하며, 기존 값에 더하지 않습니다.",
+  "library_progress_total_preview_empty": "누계를 입력하면 저장 후 값을 확인할 수 있습니다.",
+  "library_progress_resulting_total": "저장 후 누계: {value}",
+  "library_progress_session_total": "이 세션의 전체 분량: {value}",
+  "library_progress_details": "진행 상황 세부 정보"
 }

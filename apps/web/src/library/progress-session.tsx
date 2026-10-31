@@ -21,6 +21,7 @@ import { finishProgressSession, recordProgressSession, readProgressSession } fro
 import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
 import { displayLibraryTitle, LibraryTitle } from './title';
 import { progressFailureMessage, progressView } from './progress-label';
+import { scalarRecordingValue } from './progress-view';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 
 const buttonClass =
@@ -80,6 +81,7 @@ function SessionEditor({
   const removeHint = useId();
   const changesHeading = useId();
   const unitsHeading = useId();
+  const amountHint = useId();
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 767px), (pointer: coarse)');
@@ -258,6 +260,9 @@ function SessionEditor({
   const inputBounds = { min, max, step: step ?? 'any' };
   const ratio = rowRatio([session.subject, session.versionSubjectId ? session.versionSubject : session.subject]);
   const progress = progressView(session, getLocale());
+  const currentAmount = scalarRecordingValue(session, session.amount, getLocale());
+  const resultingAmount = scalarRecordingValue(session, amount, getLocale());
+  const sessionTotal = scalarRecordingValue(session, session.total, getLocale());
   const progressLabel =
     session.mode === 'cursor_position' && session.position !== null && progress
       ? `${m.library_progress_position()}: ${progress.text}`
@@ -268,6 +273,25 @@ function SessionEditor({
         <h2 id="record-progress-heading" className="text-xl font-semibold">
           {m.library_progress_record_heading()}
         </h2>
+        <p className="text-lg font-medium break-words">
+          {session.subject ? (
+            <LibraryTitle label={session.subject.label} locale={getLocale()} />
+          ) : (
+            m.library_subject_unavailable()
+          )}
+        </p>
+        {session.versionSubjectId ? (
+          <p className="text-sm text-muted-foreground">
+            {session.versionSubject ? (
+              <LibraryTitle label={session.versionSubject.label} locale={getLocale()} />
+            ) : (
+              m.library_subject_unavailable()
+            )}
+          </p>
+        ) : null}
+        <p className="text-sm">
+          {m.library_progress_unit()}: {session.unitLabel || m.library_progress_unit_unspecified()}
+        </p>
         {session.state !== 'active' ? <p className="text-muted-foreground">{stateLabel(session.state)}</p> : null}
         {offered && session.state === 'active' && session.mode !== 'completed_units' ? (
           <form
@@ -278,15 +302,34 @@ function SessionEditor({
             }}
           >
             {session.mode === 'scalar_amount' ? (
-              <label className="block space-y-1">
-                <span className="text-sm font-medium">{m.library_progress_amount()}</span>
-                <Input
-                  type="number"
-                  {...inputBounds}
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                />
-              </label>
+              <div className="space-y-3">
+                <p className="text-sm">
+                  {m.library_progress_current_total({ value: currentAmount ?? m.library_progress_unrecorded() })}
+                </p>
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium">{m.library_progress_amount()}</span>
+                  <Input
+                    type="number"
+                    {...inputBounds}
+                    aria-describedby={amountHint}
+                    value={amount}
+                    onChange={(event) => setAmount(event.target.value)}
+                  />
+                </label>
+                <p id={amountHint} className="text-sm text-muted-foreground">
+                  {m.library_progress_replace_total()}
+                </p>
+                <p role="status" className="text-sm font-medium">
+                  {resultingAmount === null
+                    ? m.library_progress_total_preview_empty()
+                    : m.library_progress_resulting_total({ value: resultingAmount })}
+                </p>
+                {sessionTotal !== null ? (
+                  <p className="text-sm text-muted-foreground">
+                    {m.library_progress_session_total({ value: sessionTotal })}
+                  </p>
+                ) : null}
+              </div>
             ) : (
               <>
                 <label className="block space-y-1">
@@ -438,12 +481,15 @@ function SessionEditor({
           {session.meaning === 'unknown' ? m.library_progress_meaning_unknown() : m.library_history_unavailable()}
         </p>
       ) : null}
-      <p className="text-sm text-muted-foreground">
-        {m.library_progress_mode()} / {m.library_progress_unit()}:{' '}
-        <code>
-          {session.mode} / {session.unit}
-        </code>
-      </p>
+      <details className="space-y-2 text-sm text-muted-foreground">
+        <summary className="cursor-pointer">{m.library_progress_details()}</summary>
+        <p>
+          {m.library_progress_mode()} / {m.library_progress_unit()}:{' '}
+          <code className="break-all">
+            {session.mode} / {session.unit}
+          </code>
+        </p>
+      </details>
       {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
         <p className="text-sm text-muted-foreground">{m.library_progress_structure_unverified()}</p>
       ) : null}

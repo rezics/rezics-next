@@ -3233,5 +3233,13 @@
   "erasure_participant_imports": "导入记录",
   "erasure_participant_history": "共享活动记录",
   "erasure_participant_delivery": "通知与传送",
-  "erasure_participant_other": "其他清理服务"
+  "erasure_participant_other": "其他清理服务",
+  "library_progress_unit_unspecified": "无法获取单位名称",
+  "library_progress_current_total": "当前记录的累计值：{value}",
+  "library_progress_unrecorded": "尚未记录",
+  "library_progress_replace_total": "请输入截至目前的累计值。保存会替换当前记录的累计值，不会与原值相加。",
+  "library_progress_total_preview_empty": "输入累计值以预览结果。",
+  "library_progress_resulting_total": "保存后的累计值：{value}",
+  "library_progress_session_total": "本次进度的总量：{value}",
+  "library_progress_details": "进度详情"
 }

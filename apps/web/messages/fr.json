@@ -3232,5 +3232,13 @@
   "erasure_participant_imports": "Enregistrements importés",
   "erasure_participant_history": "Historique d’activité partagé",
   "erasure_participant_delivery": "Notifications et livraison",
-  "erasure_participant_other": "Autre service de nettoyage"
+  "erasure_participant_other": "Autre service de nettoyage",
+  "library_progress_unit_unspecified": "Libellé de l’unité indisponible",
+  "library_progress_current_total": "Cumul actuellement enregistré : {value}",
+  "library_progress_unrecorded": "Pas encore enregistré",
+  "library_progress_replace_total": "Saisissez le cumul atteint. L’enregistrement remplace le cumul actuel sans s’y ajouter.",
+  "library_progress_total_preview_empty": "Saisissez un cumul pour voir le résultat.",
+  "library_progress_resulting_total": "Cumul après enregistrement : {value}",
+  "library_progress_session_total": "Total de cette session : {value}",
+  "library_progress_details": "Détails de la progression"
 }

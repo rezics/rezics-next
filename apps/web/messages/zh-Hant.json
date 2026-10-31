@@ -3232,5 +3232,13 @@
   "erasure_participant_imports": "匯入紀錄",
   "erasure_participant_history": "共用活動紀錄",
   "erasure_participant_delivery": "通知與傳送",
-  "erasure_participant_other": "其他清理服務"
+  "erasure_participant_other": "其他清理服務",
+  "library_progress_unit_unspecified": "無法取得單位名稱",
+  "library_progress_current_total": "目前記錄的累計值：{value}",
+  "library_progress_unrecorded": "尚未記錄",
+  "library_progress_replace_total": "請輸入截至目前的累計值。儲存會取代目前記錄的累計值，不會與原值相加。",
+  "library_progress_total_preview_empty": "輸入累計值以預覽結果。",
+  "library_progress_resulting_total": "儲存後的累計值：{value}",
+  "library_progress_session_total": "本次進度的總量：{value}",
+  "library_progress_details": "進度詳細資訊"
 }

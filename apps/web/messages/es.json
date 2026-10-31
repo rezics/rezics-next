@@ -3232,5 +3232,13 @@
   "erasure_participant_imports": "Registros importados",
   "erasure_participant_history": "Registros de actividad compartidos",
   "erasure_participant_delivery": "Notificaciones y entrega",
-  "erasure_participant_other": "Otro servicio de limpieza"
+  "erasure_participant_other": "Otro servicio de limpieza",
+  "library_progress_unit_unspecified": "Nombre de la unidad no disponible",
+  "library_progress_current_total": "Acumulado registrado: {value}",
+  "library_progress_unrecorded": "Aún sin registrar",
+  "library_progress_replace_total": "Introduce el acumulado hasta ahora. Al guardar se sustituye el acumulado actual, sin sumarse a él.",
+  "library_progress_total_preview_empty": "Introduce un acumulado para ver el resultado.",
+  "library_progress_resulting_total": "Acumulado después de guardar: {value}",
+  "library_progress_session_total": "Total de esta sesión: {value}",
+  "library_progress_details": "Detalles del progreso"
 }

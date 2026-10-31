@@ -64,9 +64,6 @@ function DeclaredProfileView() {
   return (
     <PatternStory visitor="Signed In" path={`/library/progress/${profileSessionId}`}>
       <main className="w-full max-w-4xl space-y-6 p-4">
-        <p role="note">
-          Bounded view with explicit declared DTO inputs. Native recording and authorization are unverified.
-        </p>
         <ProgressSessionPage page={boundedProfilePage} />
       </main>
     </PatternStory>
@@ -75,6 +72,9 @@ function DeclaredProfileView() {
 
 export const ProfileUnits: Story = {
   name: 'Journey with declared profile units (bounded view)',
+  parameters: {
+    docs: { description: { story: 'Supplied presentation DTO. Native recording and authorization are unverified.' } },
+  },
   play: async (context) => {
     await libraryProgressSessionReady(context);
     await userEvent.click(within(context.canvasElement).getByRole('button', { name: m.library_progress_update() }));
@@ -104,6 +104,9 @@ export const ProfileUnitsRecordingUnavailable: Story = {
 
 export const DeclaredRecordingRefused: Story = {
   name: 'Current command refuses advisory support (bounded view)',
+  parameters: {
+    docs: { description: { story: 'Supplied presentation DTO. The current command refuses advisory support.' } },
+  },
   play: async (context) => {
     await libraryProgressSessionReady(context);
     const canvas = within(context.canvasElement);
