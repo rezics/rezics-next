@@ -25,12 +25,7 @@ function Example(props: ExampleProps) {
 }
 
 // Illustrative native DTOs for component review, not proof of native authorization or completed operations.
-function ConnectedDetail({
-  member = false,
-  paging = false,
-  failed,
-  waiting = false,
-}: ExampleProps) {
+function ConnectedDetail({ member = false, paging = false, failed, waiting = false }: ExampleProps) {
   const client = useQueryClient();
   useState(() => {
     client.setQueryData(sessionQuery.queryKey, {
