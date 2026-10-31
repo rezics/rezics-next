@@ -41,8 +41,8 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
     { workspace: 'packages/ui', title: 'Components/Cover', source: '/components/cover.stories.tsx', port: uiPort },
     {
       workspace: 'apps/web',
-      title: 'Patterns/Community/Page heading',
-      source: '/shell/page-heading.stories.tsx',
+      title: 'Patterns/Discovery/Search Refinement',
+      source: '/stories/search-refinement.stories.tsx',
       port: await unusedPort(),
     },
   ]) {
@@ -182,6 +182,7 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
         ),
       );
       expect(shown).toContain(component!.id);
+      expect(shown).toContain(workspace === 'apps/web' ? 'query' : 'subject');
       const story = text(
         await rpc(
           'tools/call',

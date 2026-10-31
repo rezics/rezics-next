@@ -69,8 +69,11 @@ React manifest preset uses synchronous React docgen. The pinned renderer is patc
 then extract props only for the selected component and declared subcomponents. Other JSX imports remain available
 for source examples without generating unused API payloads. This retains the complete catalogue, source imports,
 stories and docs. The JSON manifest reports `meta.docgen: "react-docgen"`.
+When multiple files share a canonical component ID, its API still comes from Storybook's selected file; the patch
+also merges the other files' story examples under that ID instead of dropping them. Canonical IDs stay unchanged.
 The patch is registered in the root `patchedDependencies`; remove it when upstream defers incidental JSX prop
-extraction. The focused default-composition regression is `apps/web/tests/storybook-local-manifest.test.ts`.
+extraction and retains every source file's stories for shared IDs. The focused default-composition regression is
+`apps/web/tests/storybook-local-manifest.test.ts`.
 Do not enable `experimentalReactComponentMeta` with the pinned TypeScript 7 package: it lacks the legacy compiler
 API (`ts.sys`) required by this alpha's component-meta generator, which otherwise returns component errors without
 props. Neither server-side docgen nor that experimental flag provides a working substitute with these pins.
