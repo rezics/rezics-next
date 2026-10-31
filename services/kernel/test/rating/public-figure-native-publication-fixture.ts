@@ -6,7 +6,12 @@ import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
-import { readPublicFigures } from '../../src/rating/public-figure.ts';
+import {
+  capturePublicFigurePriorInputs,
+  markPublicFigurePriorPage,
+  readPublicFigures,
+  type SubjectPriorInput,
+} from '../../src/rating/public-figure.ts';
 import { createPublicRatingSource } from '../../src/rating/public-rating-source.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -266,6 +271,28 @@ export async function createNativePublicationFixture() {
       return figure;
     };
 
+    const captureGlobalPrior = async () => {
+      const [prior] = await capturePublicFigurePriorInputs(database.pool, [
+        {
+          questionId: STANDARD_QUESTION_ID,
+          populationId: GLOBAL_CONTEXT.id,
+        },
+      ]);
+      if (!prior) throw new Error('Global prior input capture is unavailable');
+      return prior;
+    };
+    const redeliverGlobalPrior = async (subjectId: string, prior: SubjectPriorInput) => {
+      // Delay only transport: replay the ordinary subject command with a real earlier owner capture.
+      // Publication still runs through the worker's registered rating_public_figure effect.
+      await markPublicFigurePriorPage(database.pool, {
+        partition: partitionOf(routeOf(subjectId)!),
+        subjectIds: [subjectId],
+        prior,
+        requiredGeneration: prior.generation,
+      });
+      await base.drain();
+    };
+
     const createSubject = async (partition?: number): Promise<string> => {
       let key: string;
       do {
@@ -385,6 +412,8 @@ export async function createNativePublicationFixture() {
       applied,
       current,
       createSubject,
+      captureGlobalPrior,
+      redeliverGlobalPrior,
       establishPrior,
       createHistoricalPopulation,
       joinMembers: base.joinMembers,

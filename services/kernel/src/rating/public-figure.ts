@@ -5,8 +5,13 @@ import { runCommand } from '../command/command.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { readPartition } from '../partition/partition.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { RATING_EVENTS } from './events.ts';
 import drainPublicFiguresSql from './public-figure-drain.sql';
+import readFigureInputPage from './public-figure-input-page.sql';
+import readPriorInput from './population-prior-input-read.sql';
+import writeSubjectPriorInputs from './public-figure-prior-input-upsert.sql';
 import readPendingPriorGroup from './public-figure-prior-pending-group.sql';
 import readPendingPriorSubjects from './public-figure-prior-pending-subjects.sql';
 import pagePublicFiguresSql from './public-figures-page.sql';
@@ -105,6 +110,48 @@ type PriorEpochRow = {
   m: string | null;
   C: string | null;
 };
+type FigureInputKey = { questionId: string; populationId: string; subjectId: string };
+export type SubjectPriorInput = {
+  population_route: number;
+  question_id: string;
+  population_id: string;
+  generation: string;
+  epoch: number | null;
+  status: 'absent' | 'inactive' | 'active';
+  m: string | null;
+  c: string | null;
+};
+
+/** Finish each source snapshot before checking out any subject command connection. */
+export async function capturePublicFigurePriorInputs(
+  pool: Pool,
+  keys: readonly PendingPopulation[],
+): Promise<SubjectPriorInput[]> {
+  if (keys.length > MAX_DRAIN_LIMIT) throw new RangeError('Rating prior input page exceeds 500 keys');
+  const distinct = new Map(keys.map((key) => [`${key.questionId}/${key.populationId}`, key]));
+  const inputs: SubjectPriorInput[] = [];
+  for (const key of distinct.values()) {
+    const route = routeOf(key.populationId);
+    if (route === null || routeOf(key.questionId) === null) throw new TypeError('Invalid rating prior input address');
+    const prior = await withReadTransaction(pool, async (tx) => {
+      const home = await readPartition(tx, partitionOf(route));
+      if (!home || home.writeState === 'moved') throw new Error('Rating prior input partition is unavailable');
+      return readPriorInput.run(tx, { route, question_id: key.questionId, population_id: key.populationId });
+    });
+    inputs.push({
+      population_route: route,
+      question_id: key.questionId,
+      population_id: key.populationId,
+      generation: prior?.generation ?? '0',
+      epoch: prior?.epoch ?? null,
+      status: prior === undefined ? 'absent' : prior.startCount === null ? 'inactive' : 'active',
+      m: prior?.m ?? null,
+      c: prior?.C ?? null,
+    });
+  }
+  return inputs;
+}
+
 type PriorRepublishJob = {
   route: number;
   questionId: string;
@@ -245,6 +292,11 @@ async function markPriorEpochRepublishPage(pool: Pool, limit: number): Promise<v
   if (populationRoute === null || populationRoute !== job.route || routeOf(job.questionId) === null)
     throw new Error('Invalid durable rating prior republish job');
 
+  const priorInputs = await capturePublicFigurePriorInputs(pool, [job]);
+  const captured = priorInputs[0]!;
+  // A stale job cannot lend its generation to a different captured value. A newer job remains durable.
+  if (BigInt(captured.generation) < BigInt(job.generation)) return;
+
   const candidates = (await readPriorRepublishPage.run(pool, {
     question_id: job.questionId,
     population_id: job.populationId,
@@ -261,23 +313,9 @@ async function markPriorEpochRepublishPage(pool: Pool, limit: number): Promise<v
   }
 
   await Promise.all(
-    [...groups].map(async ([partition, subjectIds]) => {
-      await runCommand(pool, { partition }, async (tx) => {
-        const position = await publicFigurePosition.run(tx, { partition_no: partition });
-        if (!position) throw new Error('Rating figure partition is unavailable');
-        await markPriorRepublishPage.run(tx, {
-          question_id: job.questionId,
-          population_id: job.populationId,
-          subject_ids: subjectIds,
-          position: position.position,
-          generation: job.generation,
-        });
-        return {
-          value: subjectIds.length,
-          events: [priorEpochWorkEvent('mark', job.questionId, job.populationId, job.generation, subjectIds.length)],
-        };
-      });
-    }),
+    [...groups].map(([partition, subjectIds]) =>
+      markPublicFigurePriorPage(pool, { partition, subjectIds, prior: captured, requiredGeneration: job.generation }),
+    ),
   );
 
   const hasMore = candidates.length > limit;
@@ -312,20 +350,82 @@ async function markPriorEpochRepublishPage(pool: Pool, limit: number): Promise<v
   }
 }
 
+/** Internal subject-home command for a captured republish page, also safe to redeliver after an epoch change. */
+export async function markPublicFigurePriorPage(
+  pool: Pool,
+  input: {
+    partition: number;
+    subjectIds: readonly string[];
+    prior: SubjectPriorInput;
+    requiredGeneration: string;
+  },
+): Promise<void> {
+  validateAddress({
+    partition: input.partition,
+    questionId: input.prior.question_id,
+    populationId: input.prior.population_id,
+  });
+  if (
+    input.subjectIds.length > MAX_DRAIN_LIMIT ||
+    input.prior.population_route !== routeOf(input.prior.population_id) ||
+    input.subjectIds.some((id) => routeOf(id) === null || partitionOf(routeOf(id)!) !== input.partition)
+  )
+    throw new TypeError('Invalid rating prior subject page');
+  if (input.subjectIds.length === 0 || BigInt(input.prior.generation) < BigInt(input.requiredGeneration)) return;
+  await runCommand(pool, { partition: input.partition }, async (tx) => {
+    await writeSubjectPriorInputs.run(tx, { partition_no: input.partition, inputs: [input.prior] });
+    const position = await publicFigurePosition.run(tx, { partition_no: input.partition });
+    if (!position) throw new Error('Rating figure partition is unavailable');
+    await markPriorRepublishPage.run(tx, {
+      partition_no: input.partition,
+      question_id: input.prior.question_id,
+      population_id: input.prior.population_id,
+      subject_ids: [...input.subjectIds],
+      position: position.position,
+      generation: input.requiredGeneration,
+    });
+    return {
+      value: undefined,
+      events: [
+        priorEpochWorkEvent(
+          'mark',
+          input.prior.question_id,
+          input.prior.population_id,
+          input.prior.generation,
+          input.subjectIds.length,
+        ),
+      ],
+    };
+  });
+}
+
 async function drainFigurePage(
   pool: Pool,
   partition: number,
   limit: number,
   filter?: { questionId: string; populationId: string; subjectIds: readonly string[] },
 ): Promise<number> {
+  const keys = await withReadTransaction(pool, async (tx) => {
+    const home = await readPartition(tx, partition);
+    if (!home || home.writeState === 'moved') throw new Error('Rating figure partition is unavailable');
+    return (await readFigureInputPage.run(tx, {
+      partition_no: partition,
+      limit,
+      subject_ids: filter ? [...filter.subjectIds] : null,
+      question_id: filter?.questionId ?? null,
+      population_id: filter?.populationId ?? null,
+    })) as FigureInputKey[];
+  });
+  if (keys.length === 0) return 0;
+  const priorInputs = await capturePublicFigurePriorInputs(pool, keys);
   try {
     const outcome = await runCommand(pool, { partition }, async (tx) => {
+      await writeSubjectPriorInputs.run(tx, { partition_no: partition, inputs: priorInputs });
       const rows = (await drainPublicFiguresSql.run(tx, {
         partition_no: partition,
-        limit,
-        subject_ids: filter ? [...filter.subjectIds] : null,
-        question_id: filter?.questionId ?? null,
-        population_id: filter?.populationId ?? null,
+        subject_ids: keys.map((key) => key.subjectId),
+        question_ids: keys.map((key) => key.questionId),
+        population_ids: keys.map((key) => key.populationId),
       })) as PublicFigureRow[];
       if (rows.length === 0) throw new NoPendingFigures();
       const figures = rows.map(figureFromRow);

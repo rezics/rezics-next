@@ -388,3 +388,127 @@ test('Ratings: native Global figure threshold, prior and current public disclosu
     await fixture.close();
   }
 }, 900_000);
+
+test('Default public rating publication uses independently anchored population priors across different partitions and never regresses a published prior generation', async () => {
+  const fixture = await createNativePublicationFixture();
+  try {
+    const populationPartition = partitionOf(routeOf(GLOBAL_CONTEXT.id)!);
+    const subjects = [
+      await fixture.createSubject((populationPartition + 1) % 4096),
+      await fixture.createSubject((populationPartition + 2) % 4096),
+    ];
+    expect(new Set([populationPartition, ...subjects.map((id) => partitionOf(routeOf(id)!))]).size).toBe(3);
+    const absent = await fixture.captureGlobalPrior();
+    expect(absent).toMatchObject({ generation: '0', epoch: null, status: 'absent', m: null, c: null });
+    for (const [index, subject] of subjects.entries()) {
+      for (const voter of fixture.members)
+        await fixture.applied(await fixture.vote(subject, voter, index === 0 ? 20 : 12));
+      expect(await fixture.current(subject)).toMatchObject({
+        count: 5,
+        mean: index === 0 ? 10 : 6,
+        score: null,
+        m: null,
+        C: null,
+        priorEpoch: null,
+      });
+    }
+    // Exactly fifty native votes: ten on the two independent subject homes and forty prior votes.
+    for (const subject of fixture.priorSubjects.slice(0, 8))
+      for (const voter of fixture.members) await fixture.applied(await fixture.vote(subject, voter, 4));
+    const first = await fixture.captureGlobalPrior();
+    expect(first).toMatchObject({ generation: '1', epoch: 1, status: 'active', m: '3.2000', c: '5' });
+
+    const assertPublished = async (generation: string, epoch: number | null, m: number | null) => {
+      const figures = [];
+      for (const [index, subject] of subjects.entries()) {
+        const mean = index === 0 ? 10 : 6;
+        const figure = await fixture.current(subject);
+        const score = m === null ? null : round4((5 * m + 5 * mean) / 10);
+        expect(figure).toMatchObject({ count: 5, mean, score, m, C: m === null ? null : 5, priorEpoch: epoch });
+        for (const actor of [null, fixture.reader])
+          expect(await body(await fixture.request('GET', `/v1/subjects/${subject}/figure`, { actor }))).toEqual({
+            figure: {
+              questionId: STANDARD_QUESTION_ID,
+              populationId: GLOBAL_CONTEXT.id,
+              scale,
+              count: 5,
+              state: 'ready',
+              mean,
+              score,
+            },
+          });
+        const local = await fixture.database.admin.query(
+          `SELECT input.generation::text, input.status, input.epoch, input.m::float8, input.c::integer,
+                  figure.published_prior_generation::text, figure.pending_prior_generation::text
+           FROM rating.subject_home_prior_input AS input
+           JOIN rating.public_figure AS figure ON figure.partition_no = input.partition_no
+             AND figure.question_id = input.question_id AND figure.population_id = input.population_id
+           WHERE input.partition_no = $1 AND input.population_route = $2
+             AND input.question_id = $3 AND input.population_id = $4 AND figure.route = $5 AND figure.subject_id = $6`,
+          [
+            partitionOf(routeOf(subject)!),
+            routeOf(GLOBAL_CONTEXT.id),
+            STANDARD_QUESTION_ID,
+            GLOBAL_CONTEXT.id,
+            routeOf(subject),
+            subject,
+          ],
+        );
+        expect(local.rows).toEqual([
+          {
+            generation,
+            status: m === null ? 'inactive' : 'active',
+            epoch: m === null ? 1 : epoch,
+            m,
+            c: m === null ? null : 5,
+            published_prior_generation: generation,
+            pending_prior_generation: null,
+          },
+        ]);
+        const indexed = await fixture.source.read(partitionOf(routeOf(subject)!), [subject]);
+        expect(indexed.figures.get(subject)).toMatchObject({ count: 5, mean, score, priorEpoch: epoch });
+        figures.push(figure);
+      }
+      return figures;
+    };
+    await assertPublished('1', 1, 3.2);
+    const clearedSubject = fixture.priorSubjects[0]!;
+    const voter = fixture.members[0]!;
+    await fixture.applied(await fixture.vote(clearedSubject, voter, null));
+    const inactive = await fixture.captureGlobalPrior();
+    expect(inactive).toMatchObject({ generation: '2', epoch: 1, status: 'inactive', m: null, c: null });
+    const deactivated = await assertPublished('2', null, null);
+    for (const subject of subjects) {
+      await fixture.redeliverGlobalPrior(subject, first);
+      await fixture.redeliverGlobalPrior(subject, absent);
+    }
+    expect(await assertPublished('2', null, null)).toEqual(deactivated);
+
+    // Returning to fifty starts a new epoch with a different frozen mean, through the same native effect path.
+    await fixture.applied(await fixture.vote(clearedSubject, voter, 20));
+    expect(await fixture.captureGlobalPrior()).toMatchObject({
+      generation: '3',
+      epoch: 2,
+      status: 'active',
+      m: '3.3600',
+      c: '5',
+    });
+    const renewed = await assertPublished('3', 2, 3.36);
+    for (const subject of subjects) {
+      await fixture.redeliverGlobalPrior(subject, inactive);
+      await fixture.redeliverGlobalPrior(subject, first);
+    }
+    expect(await assertPublished('3', 2, 3.36)).toEqual(renewed);
+
+    // An ordinary aggregate-applied publication must also retain the new local prior, not relabel old m/C.
+    await fixture.applied(await fixture.vote(subjects[0]!, voter, 18));
+    const updated = await fixture.current(subjects[0]!);
+    expect(updated).toMatchObject({ count: 5, mean: 9.8, score: 6.58, m: 3.36, C: 5, priorEpoch: 2 });
+    expect(BigInt(updated.revision)).toBeGreaterThan(BigInt(renewed[0]!.revision));
+    expect(BigInt(updated.position)).toBeGreaterThan(BigInt(renewed[0]!.position));
+    await fixture.redeliverGlobalPrior(subjects[0]!, first);
+    expect(await fixture.current(subjects[0]!)).toEqual(updated);
+  } finally {
+    await fixture.close();
+  }
+}, 900_000);
