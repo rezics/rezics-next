@@ -69,3 +69,45 @@ test('the shelf toolbar no longer renders a second text search box', async () =>
   expect(toolbar).not.toContain('<Input');
   expect(toolbar).not.toContain('type="search"');
 });
+
+test('phone search exposes a named modal container around one ordinary named GET search form', () => {
+  const state = reduceHeaderSearchState(initialHeaderSearchState(undefined, 'Prince'), { type: 'open-phone' });
+  const markup = renderToStaticMarkup(
+    createElement(HeaderSearchView, {
+      id: 'phone',
+      state,
+      locale: 'en',
+      region: null,
+      fields: [['type', 'schema:Book']],
+    }),
+  );
+  expect(markup).toStartWith(
+    `<div data-header-search="true" data-expanded="true" role="dialog" aria-modal="true" aria-label="${m.search_label()}"`,
+  );
+  const form = markup.match(/<form\b[^>]*>[\s\S]*?<\/form>/)?.[0];
+  expect(form).toBeDefined();
+  expect(form).toContain(`role="search" aria-label="${m.search_label()}" method="get" action="/en/search"`);
+  expect(form).not.toContain('role="dialog"');
+  expect(form).not.toContain('aria-modal');
+  expect(form).toContain('name="type" value="schema:Book"');
+  expect(form).toContain('name="q"');
+  expect(form).toContain('value="Prince"');
+  expect(form).toContain('type="submit"');
+  expect(markup.match(/<form\b/g)).toHaveLength(1);
+  expect(markup.match(/role="search"/g)).toHaveLength(1);
+  expect(markup.match(/role="dialog"/g)).toHaveLength(1);
+});
+
+test('desktop search remains one named search form at rest and while expanded without modal semantics', () => {
+  const rest = initialHeaderSearchState(undefined, 'Prince');
+  for (const state of [rest, reduceHeaderSearchState(rest, { type: 'focus' })]) {
+    const markup = renderToStaticMarkup(
+      createElement(HeaderSearchView, { id: 'desktop', state, locale: 'en', region: null }),
+    );
+    expect(markup).toContain(`<form id="desktop-form" role="search" aria-label="${m.search_label()}"`);
+    expect(markup).not.toContain('role="dialog"');
+    expect(markup).not.toContain('aria-modal');
+    expect(markup.match(/<form\b/g)).toHaveLength(1);
+    expect(markup.match(/role="combobox"/g)).toHaveLength(1);
+  }
+});

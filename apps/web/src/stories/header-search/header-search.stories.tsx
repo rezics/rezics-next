@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { Suspense } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import recording from '../../kernel/recorded/search.json';
 import { searchFacetStoryPaths } from '../../kernel/fake/search-facets';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -195,5 +195,42 @@ export const PhoneSheet: Story = {
     await expect(canvas.getByRole('button', { name: m.header_search_close() })).toHaveFocus();
     await userEvent.keyboard('{Tab}');
     await expect(input).toHaveFocus();
+  },
+};
+
+export const PhoneSheetKeyboardSubmission: Story = {
+  args: { onNavigate: fn() },
+  render: (args) => (
+    <Example presentation="sheet" fields={[['type', 'schema:Book']]} onNavigate={args.onNavigate} />
+  ),
+  play: async (context) => {
+    const { canvas, input } = await expand(context);
+    const dialog = canvas.getByRole('dialog', { name: m.search_label() });
+    const form = within(dialog).getByRole('search', { name: m.search_label() });
+    await expect(dialog.tagName).toBe('DIV');
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
+    await expect(form.tagName).toBe('FORM');
+    await expect(form).not.toHaveAttribute('aria-modal');
+    await expect(form).toHaveAttribute('method', 'get');
+    await expect(form).toHaveAttribute('action', `/${getLocale()}/search`);
+    await expect(within(form).getByRole('combobox', { name: m.search_label() })).toBe(input);
+
+    await userEvent.keyboard('{Escape}');
+    await expect(canvas.queryByRole('dialog')).toBeNull();
+    const returnTarget = window.matchMedia('(max-width: 767px)').matches
+      ? canvas.getByRole('button', { name: m.header_search_global() })
+      : input;
+    await waitFor(() => expect(returnTarget).toHaveFocus());
+
+    const reopened = await expand(context);
+    await expect(reopened.input).toBe(input);
+    await userEvent.type(input, 'Prince');
+    await userEvent.keyboard('{Enter}');
+    await expect(context.args.onNavigate).toHaveBeenCalledTimes(1);
+    await expect(context.args.onNavigate).toHaveBeenCalledWith(
+      `/${getLocale()}/search?type=schema%3ABook&q=Prince`,
+    );
+    await expect(canvas.queryByRole('dialog')).toBeNull();
+    await expect(input).toHaveAttribute('aria-expanded', 'false');
   },
 };

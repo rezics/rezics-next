@@ -124,7 +124,14 @@ export function HeaderSearchView({
     ? [...(target?.searchParams ?? [])].filter(([key]) => key !== 'q' && key !== 'cursor')
     : fields;
   return (
-    <div data-header-search data-expanded={expanded} className="relative min-w-0 w-full">
+    <div
+      data-header-search
+      data-expanded={expanded}
+      role={phoneSheet ? 'dialog' : undefined}
+      aria-modal={phoneSheet || undefined}
+      aria-label={phoneSheet ? m.search_label() : undefined}
+      className="relative min-w-0 w-full"
+    >
       <button
         ref={triggerRef}
         type="button"
@@ -146,8 +153,7 @@ export function HeaderSearchView({
         {...formProps}
         ref={formRef}
         id={`${id}-form`}
-        role={phoneSheet ? 'dialog' : 'search'}
-        aria-modal={phoneSheet || undefined}
+        role="search"
         aria-label={m.search_label()}
         method="get"
         action={target?.pathname}
