@@ -404,7 +404,7 @@ export function CollectionPage({
   }
 
   async function refreshBoundary(value: BoundaryMove) {
-    if (!boundaryIsCurrent(value) || value.reading) return;
+    if (!boundaryIsCurrent(value) || boundaryRef.current !== value || value.reading) return;
     recordBoundary({ ...value, reading: true });
     try {
       // One bounded read through the page's established callback. Its native source may restart a stale cursor once.

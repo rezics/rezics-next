@@ -108,6 +108,8 @@ test('A curator moves a chosen occurrence from a later Collection page to its re
       if (path.startsWith('/v1/definitions/releases/')) return Response.json({ ...definitions, digest: 'journey-release' });
       if (path === '/v1/platform/exposure') return Response.json({ admitted: ['collections'] });
       if (path === '/openapi.json') return Response.json({ paths: {} });
+      if ((path.startsWith('/v1/collections') || path === '/v1/viewerActions') && request.headers.get('authorization') !== 'Bearer owner')
+        return Response.json({ code: 'not_found' }, { status: 404 });
       if (path === '/v1/collections') return Response.json({ collections: [], next: null });
       if (path === '/v1/viewerActions') return Response.json({ resources: [{ type: 'library.collection', id: parent.id,
         viewerActions: [{ action: 'collection:update', operations: ['collection.update', 'collection_member.move'] }] }] });
@@ -232,6 +234,8 @@ test('A curator moves a chosen occurrence from a later Collection page to its re
     await edit();
     await chosen.locator('[data-collection-note-editor] summary').click();
     await chosen.getByRole('textbox').fill('Unsent note must survive');
+    await page.locator('[data-collection-details] summary').click();
+    await page.getByRole('textbox', { name: m.library_collection_title(), exact: true }).fill('Unsent title');
     let menu = await rowMenu(originalId);
     for (const label of [m.library_collection_boundary_start(), m.library_collection_boundary_end()]) {
       expect(await menu.getByRole('menuitem', { name: label, exact: true }).getAttribute('aria-disabled')).toBe('true');
@@ -239,8 +243,12 @@ test('A curator moves a chosen occurrence from a later Collection page to its re
     expect(await moves()).toHaveLength(0);
     await page.keyboard.press('Escape');
     expect(await chosen.getByRole('textbox').inputValue()).toBe('Unsent note must survive');
+    expect(await page.getByRole('textbox', { name: m.library_collection_title(), exact: true }).inputValue()).toBe(
+      'Unsent title',
+    );
     await page.getByText(m.library_collection_move_save_first(), { exact: true }).waitFor();
     await page.getByRole('button', { name: m.library_collection_cancel(), exact: true }).click();
+    expect((await calls()).filter((call) => call.method === 'PATCH')).toHaveLength(0);
     await edit();
     await chosen.locator('[data-collection-note-editor] summary').click();
     expect(await chosen.getByRole('textbox').inputValue()).toBe('Duplicate occurrence note');
