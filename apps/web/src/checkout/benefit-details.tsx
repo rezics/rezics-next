@@ -21,7 +21,7 @@ export function BenefitDetails({
     return (
       <Alert>
         <AlertDescription>
-          {benefit.kind === 'unknown' ? m.entitlements_delivery_unknown() : m.benefit_terms_unavailable()}
+          {benefit.kind === 'unknown' ? m.benefit_details_unknown() : m.benefit_terms_unavailable()}
         </AlertDescription>
       </Alert>
     );

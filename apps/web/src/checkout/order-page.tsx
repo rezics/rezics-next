@@ -9,6 +9,7 @@ import { PageHeading } from '../shell/page-heading';
 import { SubjectCover } from './subject-cover';
 import { useSession } from '../session/query';
 import { BenefitDetails } from './benefit-details';
+import { formatMinorAmount } from './money';
 import {
   createReconciliationRequest,
   requestOrderReconciliation,
@@ -116,6 +117,16 @@ export function OrderPage({
   const canceled = checkout === 'canceled' && order.settlement !== 'paid';
   const confirming = pending && !canceled;
   const locale = getLocale();
+  const money = order.money;
+  const charge = order.settlement === 'paid' ? money?.recordedCharge : null;
+  const price = money && formatMinorAmount(locale, money.currency, money.unitAmountMinor, money.moneyUnit);
+  const total = charge && formatMinorAmount(locale, charge.currency, charge.amountTotalMinor, charge.moneyUnit);
+  const tax =
+    charge?.amountTaxMinor != null
+      ? formatMinorAmount(locale, charge.currency, charge.amountTaxMinor, charge.moneyUnit)
+      : money?.amountTaxMinor != null
+        ? formatMinorAmount(locale, money.currency, money.amountTaxMinor, money.moneyUnit)
+        : null;
   const heading =
     order.settlement === 'paid'
       ? m.order_paid()
@@ -168,6 +179,28 @@ export function OrderPage({
                 </dd>
               </dl>
             )}
+            <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 text-sm">
+              <dt className="text-muted-foreground">{m.order_currency()}</dt>
+              <dd>{money?.currency?.toUpperCase() || m.statements_amount_unavailable()}</dd>
+              <dt className="text-muted-foreground">
+                {money?.taxBehavior === 'exclusive' ? m.order_recorded_price_exclusive() : m.order_recorded_price()}
+              </dt>
+              <dd>{price || m.statements_amount_unavailable()}</dd>
+              {order.settlement === 'paid' && (
+                <>
+                  <dt className="text-muted-foreground">{m.order_paid_total()}</dt>
+                  <dd>{total || m.order_paid_total_unavailable()}</dd>
+                  <dt className="text-muted-foreground">{m.order_recorded_tax()}</dt>
+                  <dd>{tax || m.order_tax_unavailable()}</dd>
+                </>
+              )}
+              {money?.taxCode ? (
+                <>
+                  <dt className="text-muted-foreground">{m.order_tax_code()}</dt>
+                  <dd className="break-all">{money.taxCode}</dd>
+                </>
+              ) : null}
+            </dl>
           </div>
         </div>
       </div>
@@ -175,8 +208,13 @@ export function OrderPage({
         <dt className="font-medium">{m.order_current_access()}</dt>
         <dd role="status">{entitlementLabel(order.entitlement)}</dd>
       </dl>
-      {order.benefit ? (
-        <BenefitDetails benefit={order.benefit} creatorName={order.creatorName} locale={locale} />
+      {order.settlement === 'paid' && order.benefit ? (
+        <BenefitDetails
+          benefit={order.benefit}
+          creatorName={order.creatorName}
+          locale={locale}
+          active={order.canUseBenefit === true && order.entitlement.kind === 'current' && order.entitlement.active}
+        />
       ) : null}
       {order.entitlementId ? (
         <p>
@@ -255,7 +293,7 @@ export function OrderPage({
           </div>
         </section>
       )}
-      {checkout === 'canceled' && (
+      {canceled && (
         <Alert role="status">
           <AlertDescription className="space-y-3 text-foreground">
             <a

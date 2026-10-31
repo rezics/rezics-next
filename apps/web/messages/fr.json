@@ -3765,5 +3765,14 @@
   "author_erasure_bounded_refresh": "Cette page vérifie l’état jusqu’à quatre fois tant qu’elle est visible, puis attend votre intervention. Vous pouvez quitter et rouvrir cette opération sans relancer le nettoyage.",
   "author_erasure_check_again": "Vérifier à nouveau",
   "author_erasure_checking": "Vérification…",
-  "author_erasure_back_thread": "Retour à la discussion"
+  "author_erasure_back_thread": "Retour à la discussion",
+  "order_currency": "Devise",
+  "order_recorded_price": "Prix unitaire enregistré",
+  "order_recorded_price_exclusive": "Prix unitaire enregistré (hors taxes)",
+  "order_paid_total": "Total payé enregistré",
+  "order_paid_total_unavailable": "Le total débité n’a pas été enregistré ou est indisponible.",
+  "order_recorded_tax": "Taxe enregistrée",
+  "order_tax_unavailable": "Les informations fiscales sont indisponibles.",
+  "order_tax_code": "Code fiscal",
+  "benefit_details_unknown": "Les détails de l’avantage sont indisponibles pour cet ancien enregistrement."
 }

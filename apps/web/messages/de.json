@@ -3765,5 +3765,14 @@
   "author_erasure_bounded_refresh": "Diese Seite prüft den Status bis zu viermal, solange sie sichtbar ist, und wartet danach auf dich. Du kannst die Seite verlassen und diesen Vorgang erneut öffnen, ohne die Bereinigung neu zu starten.",
   "author_erasure_check_again": "Erneut prüfen",
   "author_erasure_checking": "Wird geprüft …",
-  "author_erasure_back_thread": "Zurück zum Thread"
+  "author_erasure_back_thread": "Zurück zum Thread",
+  "order_currency": "Währung",
+  "order_recorded_price": "Gespeicherter Stückpreis",
+  "order_recorded_price_exclusive": "Gespeicherter Stückpreis (ohne Steuern)",
+  "order_paid_total": "Gespeicherter Zahlungsbetrag",
+  "order_paid_total_unavailable": "Der belastete Gesamtbetrag wurde nicht gespeichert oder ist nicht verfügbar.",
+  "order_recorded_tax": "Gespeicherte Steuer",
+  "order_tax_unavailable": "Steuerinformationen sind nicht verfügbar.",
+  "order_tax_code": "Steuercode",
+  "benefit_details_unknown": "Die Leistungsdetails dieses historischen Eintrags sind nicht verfügbar."
 }

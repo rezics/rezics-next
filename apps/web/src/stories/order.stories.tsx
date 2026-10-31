@@ -8,7 +8,8 @@ import { expect, userEvent, within } from 'storybook/test';
 import type { ReconciliationSender } from '../checkout/order-reconcile';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { setMappedCheckoutStory } from '../kernel/fake/checkout';
+import { receiptStoryMoney, setMappedCheckoutStory, setReceiptMoneyStory } from '../kernel/fake/checkout';
+import { setEntitlementStoryMode } from '../kernel/fake/entitlements';
 import {
   PageStory,
   PatternStory,
@@ -53,28 +54,78 @@ function currentOrder(entitlement: CurrentEntitlement): OrderPageData {
     ...order,
     settlement: 'paid',
     entitlement,
+    money: receiptStoryMoney,
     subject: subjectCover(getLocale(), order.targetSubjectId, order.title, order.subject),
+  };
+}
+function CurrentReceipt({ entitlement }: { entitlement: CurrentEntitlement }) {
+  const order = currentOrder(entitlement);
+  return (
+    <PatternStory visitor="Signed In" path={`/orders/${order.id}`}>
+      <OrderPage order={{ ...order, ...(entitlement.kind === 'none' ? { entitlementId: null } : {}) }} />
+    </PatternStory>
+  );
+}
+function currentReceiptReady(label: () => string) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: m.order_paid(), level: 1 });
+    await canvas.findByText(label());
+    await canvas.findByText(m.order_paid_total());
   };
 }
 export const Active: Story = {
   name: 'Buyer, current active access (component)',
-  render: () => <OrderPage order={currentOrder({ kind: 'current', active: true })} />,
+  render: () => <CurrentReceipt entitlement={{ kind: 'current', active: true }} />,
+  play: currentReceiptReady(() => m.order_entitlement_active()),
 };
 export const Refunded: Story = {
   name: 'Buyer, paid receipt with revoked access (component)',
-  render: () => <OrderPage order={currentOrder({ kind: 'current', active: false })} />,
+  render: () => <CurrentReceipt entitlement={{ kind: 'current', active: false }} />,
+  play: currentReceiptReady(() => m.order_entitlement_revoked()),
 };
 export const AccessUnavailable: Story = {
   name: 'Buyer, current access unavailable (component)',
-  render: () => <OrderPage order={currentOrder({ kind: 'unavailable' })} />,
+  render: () => <CurrentReceipt entitlement={{ kind: 'unavailable' }} />,
+  play: currentReceiptReady(() => m.order_entitlement_unavailable()),
 };
 export const NoEntitlement: Story = {
   name: 'Buyer, no entitlement (component)',
-  render: () => <OrderPage order={{ ...currentOrder({ kind: 'none' }), entitlementId: null }} />,
+  render: () => <CurrentReceipt entitlement={{ kind: 'none' }} />,
+  play: currentReceiptReady(() => m.orders_entitlement_none()),
 };
 export const AccessRefresh: Story = {
   name: 'Buyer, payment confirmed and current access needs refresh (component)',
-  render: () => <OrderPage order={currentOrder({ kind: 'refresh' })} />,
+  render: () => <CurrentReceipt entitlement={{ kind: 'refresh' }} />,
+  play: currentReceiptReady(() => m.order_entitlement_refresh()),
+};
+
+export const RecordedCharge: Story = {
+  name: 'Buyer, recorded charge (constructed amounts)',
+  beforeEach() {
+    setReceiptMoneyStory(true);
+    return () => setReceiptMoneyStory(false);
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths['order-paid']} />,
+  play: orderPaidReady,
+};
+
+export const MappedCurrentUse: Story = {
+  name: 'Buyer, current fixed edition use (constructed responses)',
+  beforeEach() {
+    setMappedCheckoutStory(true);
+    setEntitlementStoryMode('mapped');
+    return () => {
+      setMappedCheckoutStory(false);
+      setEntitlementStoryMode('active');
+    };
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths['order-paid']} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('link', { name: m.benefit_open_reader() });
+    await canvas.findByText(m.order_entitlement_active());
+  },
 };
 
 function ReconciliationPreview({ send }: { send: ReconciliationSender }) {

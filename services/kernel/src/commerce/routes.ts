@@ -171,6 +171,22 @@ const orderReadSchema = t.Object(
     id,
     offerId: id,
     title: t.String(),
+    currency: t.String(),
+    unitAmountMinor: t.Integer(),
+    taxCode: t.String(),
+    amountTaxMinor: t.Union([t.Integer(), t.Null()]),
+    recordedCharge: t.Union([
+      t.Null(),
+      t.Object(
+        {
+          currency: t.String(),
+          moneyUnit: moneyUnitSchema,
+          amountTotalMinor: t.Integer(),
+          amountTaxMinor: t.Union([t.Integer(), t.Null()]),
+        },
+        object,
+      ),
+    ]),
     targetSubjectId: id,
     subject: t.Union([SubjectSummarySchema, t.Null()]),
     settlement: t.Union([t.Literal('pending'), t.Literal('paid'), t.Literal('failed'), t.Literal('unknown')]),
@@ -826,8 +842,9 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           throw new ProblemError('not_found');
         const languages = languagePreferences(query.languages);
         return admission.run('normal', job, async () => {
-          const order = await store.readOrder(pool, route, params.orderId);
-          if (!order || order.buyerAccountId !== actor.accountId) throw new ProblemError('not_found');
+          const receipt = await store.readBuyerOrder(pool, route, params.orderId);
+          if (!receipt || receipt.order.buyerAccountId !== actor.accountId) throw new ProblemError('not_found');
+          const { order, recordedCharge } = receipt;
           const summaryDependencies = {
             pool,
             routeKey: deps.routeKey,
@@ -843,6 +860,11 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
             order: {
               ...(await orderView(pool, order)),
               title: order.title,
+              currency: order.currency,
+              unitAmountMinor: order.unitAmountMinor,
+              taxCode: order.taxCode,
+              amountTaxMinor: order.amountTaxMinor ?? null,
+              recordedCharge,
               targetSubjectId: order.targetSubjectId,
               subject: summaries.get(order.targetSubjectId) ?? null,
             },

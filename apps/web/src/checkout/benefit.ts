@@ -35,6 +35,23 @@ export function capturedBenefit(value: unknown, targetSubjectId: string): Captur
   return { kind: 'mapped', terms: value };
 }
 
+/** An active historical entitlement is usable here only for these exact accepted terms. */
+export function sameCapturedBenefit(a: CapturedBenefit | undefined, b: CapturedBenefit): boolean {
+  if (a?.kind !== 'mapped' || b.kind !== 'mapped') return false;
+  const x = a.terms;
+  const y = b.terms;
+  return (
+    x.creatorAccountId === y.creatorAccountId &&
+    x.targetSubjectId === y.targetSubjectId &&
+    x.source.licence === y.source.licence &&
+    x.saleTermsReference === y.saleTermsReference &&
+    x.benefit.resource.route === y.benefit.resource.route &&
+    x.benefit.resource.id === y.benefit.resource.id &&
+    x.benefit.version.revisionId === y.benefit.version.revisionId &&
+    x.benefit.version.sha256 === y.benefit.version.sha256
+  );
+}
+
 /** Navigation only. The served Content reader reauthorizes the current viewer and immutable source. */
 export function benefitReaderHref(benefit: CapturedBenefit, active: boolean, locale: string): string | null {
   const language = locales.find((candidate) => candidate === locale);

@@ -3766,5 +3766,14 @@
   "author_erasure_bounded_refresh": "此页面在可见期间最多检查四次，之后会等待你操作。你可以离开后重新打开此操作，而不会重新启动清理。",
   "author_erasure_check_again": "再次检查",
   "author_erasure_checking": "正在检查…",
-  "author_erasure_back_thread": "返回讨论串"
+  "author_erasure_back_thread": "返回讨论串",
+  "order_currency": "币种",
+  "order_recorded_price": "记录的单价",
+  "order_recorded_price_exclusive": "记录的单价（不含税）",
+  "order_paid_total": "记录的实付总额",
+  "order_paid_total_unavailable": "未记录扣款总额，或目前无法获取。",
+  "order_recorded_tax": "记录的税额",
+  "order_tax_unavailable": "无法获取税务信息。",
+  "order_tax_code": "税务代码",
+  "benefit_details_unknown": "无法获取此历史记录的权益详情。"
 }

@@ -3768,5 +3768,14 @@
   "library_selection_conflicted": "Conflicted",
   "library_selection_failed": "Failed",
   "library_selection_unknown_label": "Unknown",
-  "library_selection_not_attempted": "Not attempted"
+  "library_selection_not_attempted": "Not attempted",
+  "order_currency": "Currency",
+  "order_recorded_price": "Recorded unit price",
+  "order_recorded_price_exclusive": "Recorded unit price (excluding tax)",
+  "order_paid_total": "Recorded paid total",
+  "order_paid_total_unavailable": "The charged total was not recorded or is unavailable.",
+  "order_recorded_tax": "Recorded tax",
+  "order_tax_unavailable": "Tax information is unavailable.",
+  "order_tax_code": "Tax code",
+  "benefit_details_unknown": "Benefit details are unavailable for this historical record."
 }

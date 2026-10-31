@@ -15,6 +15,14 @@ export const MAX_ORDER_TRANSACTIONS = 256;
 export type Settlement = 'pending' | 'paid' | 'failed' | 'unknown';
 export type RevokeReason = 'refund' | 'dispute';
 
+/** Retained Checkout integration amounts, independent of the accepted price and current access. */
+export type RecordedOrderCharge = Readonly<{
+  currency: string;
+  moneyUnit: StripeMoneyUnit;
+  amountTotalMinor: number;
+  amountTaxMinor: number | null;
+}>;
+
 /** Closed native Content identity; a subject is never a substitute for this binding. */
 import type { ContentEditionBenefit } from '../access/authenticated-benefit.ts';
 export type { ContentEditionBenefit } from '../access/authenticated-benefit.ts';

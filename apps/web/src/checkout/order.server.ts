@@ -8,13 +8,14 @@ import { prepareSession, sessionSubject, viewerCredential } from '../session/req
 import type { CurrentEntitlement, OrderPageData, Settlement } from './order';
 import { UUID } from './price';
 import { subjectCover } from './subject-cover';
-import { benefitCreatorName, capturedBenefit } from './benefit';
+import { benefitCreatorName, capturedBenefit, sameCapturedBenefit, type CapturedBenefit } from './benefit';
 
 type OrderRead = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['orders']>['get']>>['data']>;
 type BuyerOrder = { kind: 'order'; order: OrderPageData } | { kind: 'missing' } | { kind: 'unavailable' };
 
 const reads = new WeakMap<Request, Map<string, Promise<BuyerOrder>>>();
-const entitlementReads = new WeakMap<Request, Map<string, Promise<CurrentEntitlement>>>();
+type CurrentAccess = { entitlement: CurrentEntitlement; canUseBenefit: boolean };
+const entitlementReads = new WeakMap<Request, Map<string, Promise<CurrentAccess>>>();
 const settlements = new Set<Settlement>(['pending', 'paid', 'failed', 'unknown']);
 
 async function currentEntitlement(
@@ -22,8 +23,10 @@ async function currentEntitlement(
   credential: string,
   orderId: string,
   entitlementId: string,
-): Promise<CurrentEntitlement> {
-  if (!UUID.test(entitlementId)) return { kind: 'unavailable' };
+  benefit: CapturedBenefit | undefined,
+): Promise<CurrentAccess> {
+  const unavailable = { entitlement: { kind: 'unavailable' as const }, canUseBenefit: false };
+  if (!UUID.test(entitlementId)) return unavailable;
   try {
     const result = await client.entitlements({ entitlementId }).get({ headers: { authorization: credential } });
     const entitlement = result.data?.entitlement;
@@ -33,10 +36,17 @@ async function currentEntitlement(
       entitlement.orderId !== orderId ||
       typeof entitlement.active !== 'boolean'
     )
-      return { kind: 'unavailable' };
-    return { kind: 'current', active: entitlement.active };
+      return unavailable;
+    return {
+      entitlement: { kind: 'current', active: entitlement.active },
+      canUseBenefit:
+        entitlement.active &&
+        entitlement.revokedAt === null &&
+        entitlement.revokeReason === null &&
+        sameCapturedBenefit(benefit, capturedBenefit(entitlement.contentEdition, entitlement.targetSubjectId)),
+    };
   } catch {
-    return { kind: 'unavailable' };
+    return unavailable;
   }
 }
 
@@ -46,9 +56,11 @@ function entitlementOnce(
   credential: string,
   orderId: string,
   entitlementId: string | null,
-): Promise<CurrentEntitlement> {
-  if (entitlementId === null) return Promise.resolve({ kind: 'none' });
-  if (typeof entitlementId !== 'string') return Promise.resolve({ kind: 'unavailable' });
+  benefit: CapturedBenefit | undefined,
+): Promise<CurrentAccess> {
+  if (entitlementId === null) return Promise.resolve({ entitlement: { kind: 'none' }, canUseBenefit: false });
+  if (typeof entitlementId !== 'string')
+    return Promise.resolve({ entitlement: { kind: 'unavailable' }, canUseBenefit: false });
   let pending = entitlementReads.get(request);
   if (!pending) {
     pending = new Map();
@@ -57,7 +69,7 @@ function entitlementOnce(
   const key = `${orderId}\n${entitlementId}`;
   let entitlement = pending.get(key);
   if (!entitlement) {
-    entitlement = currentEntitlement(client, credential, orderId, entitlementId);
+    entitlement = currentEntitlement(client, credential, orderId, entitlementId, benefit);
     pending.set(key, entitlement);
   }
   return entitlement;
@@ -92,6 +104,15 @@ async function readOnce(request: Request, id: string, locale: string | undefined
       createdAt: order.createdAt,
       subject: subjectCover(locale ?? '', order.targetSubjectId, order.title, order.subject),
       benefit: capturedBenefit(order.contentEdition, order.targetSubjectId),
+      money: {
+        currency: order.currency,
+        unitAmountMinor: order.unitAmountMinor,
+        taxCode: order.taxCode,
+        amountTaxMinor: order.amountTaxMinor,
+        moneyUnit: order.moneyUnit,
+        taxBehavior: order.taxBehavior,
+        recordedCharge: order.recordedCharge,
+      },
     },
   };
 }
@@ -111,23 +132,26 @@ function buyerOrder(request: Request, id: string, locale?: string): Promise<Buye
   return order;
 }
 
-export async function loadOrder(id: string, locale: string): Promise<OrderPageData> {
+async function loadRequestOrder(request: Request, id: string, locale: string): Promise<OrderPageData> {
   setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
   const outcome = await buyerOrder(request, id, locale);
   if (outcome.kind === 'missing') throw notFound();
   if (outcome.kind === 'unavailable') throw new Error('Kernel order read failed');
   return outcome.order;
 }
 
+export async function loadOrder(id: string, locale: string): Promise<OrderPageData> {
+  return loadRequestOrder(getRequest(), id, locale);
+}
+
 /** Compose current access only for the detail page, sharing its prepared order and credential. */
 export async function loadOrderPage(id: string, locale: string): Promise<OrderPageData> {
-  const order = await loadOrder(id, locale);
   const request = getRequest();
+  const order = await loadRequestOrder(request, id, locale);
   const credential = viewerCredential(request);
-  const entitlement = credential
-    ? await entitlementOnce(request, kernelClient(), credential, id, order.entitlementId)
-    : { kind: 'unavailable' as const };
+  const access = credential
+    ? await entitlementOnce(request, kernelClient(), credential, id, order.entitlementId, order.benefit)
+    : { entitlement: { kind: 'unavailable' as const }, canUseBenefit: false };
   let canReconcile = false;
   const accountId = sessionSubject(request);
   if (credential && accountId && UUID.test(accountId)) {
@@ -153,7 +177,7 @@ export async function loadOrderPage(id: string, locale: string): Promise<OrderPa
   }
   return {
     ...order,
-    entitlement,
+    ...access,
     canReconcile,
     creatorName: order.benefit ? await benefitCreatorName(kernelClient(locale), order.benefit) : undefined,
   };

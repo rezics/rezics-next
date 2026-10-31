@@ -3765,5 +3765,14 @@
   "author_erasure_bounded_refresh": "此頁面顯示期間最多檢查四次，之後會等待你操作。你可以離開後重新開啟此操作，而不會重新開始清理。",
   "author_erasure_check_again": "再次檢查",
   "author_erasure_checking": "檢查中…",
-  "author_erasure_back_thread": "返回討論串"
+  "author_erasure_back_thread": "返回討論串",
+  "order_currency": "幣別",
+  "order_recorded_price": "記錄的單價",
+  "order_recorded_price_exclusive": "記錄的單價（未稅）",
+  "order_paid_total": "記錄的實付總額",
+  "order_paid_total_unavailable": "未記錄扣款總額，或目前無法取得。",
+  "order_recorded_tax": "記錄的稅額",
+  "order_tax_unavailable": "無法取得稅務資訊。",
+  "order_tax_code": "稅務代碼",
+  "benefit_details_unknown": "此歷史記錄的權益詳情無法取得。"
 }

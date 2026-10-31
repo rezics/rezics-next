@@ -3,6 +3,27 @@ import type { KernelRecording } from '../fake.ts';
 import { fixedEditionTerms, mappedEntitlement } from './entitlements';
 import pending from '../recorded/order-pending.json';
 import type { AcquisitionProblem } from '../../checkout/offer-recovery';
+import type { OrderMoney } from '../../checkout/order';
+
+// Constructed receipt examples, not retroactive financial authority for the older recordings.
+export const receiptStoryMoney: OrderMoney = {
+  currency: 'usd',
+  unitAmountMinor: 1200,
+  taxCode: 'txcd_10302000',
+  amountTaxMinor: 96,
+  moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
+  taxBehavior: 'exclusive',
+  recordedCharge: {
+    currency: 'usd',
+    moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
+    amountTotalMinor: 1296,
+    amountTaxMinor: 96,
+  },
+};
+let receiptMoney = false;
+export function setReceiptMoneyStory(enabled: boolean) {
+  receiptMoney = enabled;
+}
 
 // Constructed current native 409 bodies, not recordings or an ownership lookup.
 export const acquisitionProblems = {
@@ -108,7 +129,20 @@ export const routes: FakeRoute[] = [
       const locale = new URL(request.url).searchParams.get('languages') ?? 'en';
       const localized = localizedSubject(recording.order as Record<string, unknown>, locale, labels);
       if (!localized) return;
-      return { ...recording, order: mapped ? { ...localized, contentEdition: fixedEditionTerms } : localized };
+      return {
+        ...recording,
+        order: {
+          ...localized,
+          ...(mapped ? { contentEdition: fixedEditionTerms } : {}),
+          ...(receiptMoney
+            ? {
+                ...receiptStoryMoney,
+                amountTaxMinor: localized.settlement === 'paid' ? receiptStoryMoney.amountTaxMinor : null,
+                recordedCharge: localized.settlement === 'paid' ? receiptStoryMoney.recordedCharge : null,
+              }
+            : {}),
+        },
+      };
     },
   },
 ];

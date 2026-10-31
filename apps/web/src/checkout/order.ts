@@ -4,6 +4,13 @@ import { loadOrderPage } from './order.server';
 import { UUID } from './price';
 import type { SubjectCoverData } from './subject-cover';
 import type { CapturedBenefit } from './benefit';
+import type { KernelClient } from '@rezics/client';
+
+type NativeOrder = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['orders']>['get']>>['data']>['order'];
+export type OrderMoney = Pick<
+  NativeOrder,
+  'currency' | 'unitAmountMinor' | 'taxCode' | 'amountTaxMinor' | 'moneyUnit' | 'taxBehavior' | 'recordedCharge'
+>;
 
 export type Settlement = 'failed' | 'paid' | 'pending' | 'unknown';
 export type CurrentEntitlement = { kind: 'current'; active: boolean } | { kind: 'none' | 'unavailable' | 'refresh' };
@@ -18,6 +25,10 @@ export type OrderPageData = {
   createdAt: string;
   subject: SubjectCoverData;
   benefit?: CapturedBenefit;
+  /** Missing legacy display data remains unknown; the default BFF always supplies the native money fields. */
+  money?: OrderMoney;
+  /** Current associated native entitlement covers this exact captured benefit. Final use reauthorizes in Content. */
+  canUseBenefit?: boolean;
   creatorName?: string | undefined;
   /** Exact current native viewer-action decision on the signed-in account. */
   canReconcile?: boolean;

@@ -3765,5 +3765,14 @@
   "author_erasure_bounded_refresh": "このページは表示中に最大4回状態を確認し、その後はあなたの操作を待ちます。ページを離れて再びこの操作を開いても、クリーンアップは再開されません。",
   "author_erasure_check_again": "もう一度確認",
   "author_erasure_checking": "確認中…",
-  "author_erasure_back_thread": "スレッドに戻る"
+  "author_erasure_back_thread": "スレッドに戻る",
+  "order_currency": "通貨",
+  "order_recorded_price": "記録された単価",
+  "order_recorded_price_exclusive": "記録された単価（税抜）",
+  "order_paid_total": "記録された支払総額",
+  "order_paid_total_unavailable": "請求総額が記録されていないか、取得できません。",
+  "order_recorded_tax": "記録された税額",
+  "order_tax_unavailable": "税情報を取得できません。",
+  "order_tax_code": "税コード",
+  "benefit_details_unknown": "この過去の記録の特典詳細を取得できません。"
 }

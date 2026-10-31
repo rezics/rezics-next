@@ -3765,5 +3765,14 @@
   "author_erasure_bounded_refresh": "Esta página comprueba el estado hasta cuatro veces mientras esté visible y luego espera a que actúes. Puedes salir y volver a abrir esta operación sin reiniciar la limpieza.",
   "author_erasure_check_again": "Comprobar de nuevo",
   "author_erasure_checking": "Comprobando…",
-  "author_erasure_back_thread": "Volver al hilo"
+  "author_erasure_back_thread": "Volver al hilo",
+  "order_currency": "Moneda",
+  "order_recorded_price": "Precio unitario registrado",
+  "order_recorded_price_exclusive": "Precio unitario registrado (sin impuestos)",
+  "order_paid_total": "Total pagado registrado",
+  "order_paid_total_unavailable": "El total cobrado no se registró o no está disponible.",
+  "order_recorded_tax": "Impuesto registrado",
+  "order_tax_unavailable": "La información fiscal no está disponible.",
+  "order_tax_code": "Código fiscal",
+  "benefit_details_unknown": "Los detalles del beneficio no están disponibles para este registro histórico."
 }
