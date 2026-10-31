@@ -104,6 +104,7 @@ export function RealmBansControl({ realmId, initial, ready, read, write }: Realm
 
   async function change(input: BanWriteInput) {
     if (!ready || working.current || view.state !== 'ready') return;
+    const current = generation.current;
     working.current = true;
     setBusy(true);
     setResult(null);
@@ -113,6 +114,7 @@ export function RealmBansControl({ realmId, initial, ready, read, write }: Realm
     } catch {
       next = { ok: false, reason: 'unavailable' };
     }
+    if (generation.current !== current) return;
     setResult(next);
     setRetry(!next.ok && next.reason === 'unavailable' ? input : null);
     if (next.ok) {
@@ -121,7 +123,7 @@ export function RealmBansControl({ realmId, initial, ready, read, write }: Realm
         setAccountId('');
         setReason('');
       }
-      await refresh();
+      void refresh();
     } else if (next.reason === 'forbidden' || next.reason === 'signed-out' || next.reason === 'closed') {
       setView({ state: next.reason });
       setConfirm(null);

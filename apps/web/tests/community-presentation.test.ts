@@ -676,3 +676,15 @@ test('appearance action source failures offer an unavailable read retry while na
     expect(control.editable()).toBe(true);
   }
 });
+
+test('Realm appearance cache, drafts and uploads are scoped to the current signed-in subject', async () => {
+  const panel = await Bun.file(new URL('../src/community/realm-presentation-panel.tsx', import.meta.url)).text();
+  const settings = await Bun.file(new URL('../src/community/realm-presentation-settings.tsx', import.meta.url)).text();
+
+  expect(panel).toContain('const { state, csrfToken, subject } = useSession();');
+  expect(panel).toContain("const viewer = state === 'signed-in' && subject ? subject : null;");
+  expect(panel).toContain("queryKey: ['realm-appearance', realmId, viewer]");
+  expect(panel).toContain('enabled: personalRead.enabled && viewer !== null');
+  expect(panel).toContain('key={`${realmId}:${viewer}`}');
+  expect(settings).toContain('useEffect(() => () => control.cancelUpload(), [control]);');
+});

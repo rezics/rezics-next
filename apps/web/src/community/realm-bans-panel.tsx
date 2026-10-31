@@ -6,7 +6,7 @@ import type { BanWriteInput, BanWriteResult } from './realm-bans';
 
 /** The page supplies only the Realm anchor. Native list and commands decide current authority. */
 export function RealmBansPanel({ realmId }: { realmId: string }) {
-  const { state, csrfToken } = useSession();
+  const { state, csrfToken, subject } = useSession();
   const read = useCallback(
     (cursor?: string) => readRealmBans({ data: { realmId, ...(cursor ? { cursor } : {}) } }),
     [realmId],
@@ -18,6 +18,14 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
     },
     [csrfToken],
   );
-  if (state !== 'signed-in') return null;
-  return <RealmBansControl key={realmId} realmId={realmId} read={read} write={write} ready={csrfToken !== null} />;
+  if (state !== 'signed-in' || !subject) return null;
+  return (
+    <RealmBansControl
+      key={`${realmId}:${subject}`}
+      realmId={realmId}
+      read={read}
+      write={write}
+      ready={csrfToken !== null}
+    />
+  );
 }

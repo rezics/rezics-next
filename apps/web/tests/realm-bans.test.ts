@@ -164,3 +164,15 @@ test('current authority failures, role removal, cursor refusal and lost response
   expect(await writeRealmBan(lost, request('POST'), {}, input)).toEqual({ ok: true, action: 'ban', ban });
   expect(keys.slice(-2)).toEqual([JSON.stringify(idempotencyKey), JSON.stringify(idempotencyKey)]);
 });
+
+test('Realm ban lists and intents are scoped to the current signed-in subject', async () => {
+  const panel = await Bun.file(new URL('../src/community/realm-bans-panel.tsx', import.meta.url)).text();
+  const control = await Bun.file(new URL('../src/community/realm-bans-control.tsx', import.meta.url)).text();
+
+  expect(panel).toContain('const { state, csrfToken, subject } = useSession();');
+  expect(panel).toContain("if (state !== 'signed-in' || !subject) return null;");
+  expect(panel).toContain('key={`${realmId}:${subject}`}');
+  expect(control).toContain('const [confirm, setConfirm] = useState<string | null>(null);');
+  expect(control).toContain('const [retry, setRetry] = useState<BanWriteInput | null>(null);');
+  expect(control).toContain('if (generation.current !== current) return;');
+});
