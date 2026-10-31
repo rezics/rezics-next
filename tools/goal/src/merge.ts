@@ -79,7 +79,7 @@ export function processGroupRunner(
   parent: NodeJS.ProcessEnv = process.env,
   sanitizeEnvironment = true,
 ): GateRunner {
-  return async (argv, cwd, logPath, { signal } = {}) => {
+  return async (argv, cwd, logPath, { signal }: GateRunOptions = {}) => {
     if (!argv.length) throw new Error('A gate command is required');
     signal?.throwIfAborted();
     return await new Promise<GateResult>((resolve, reject) => {
