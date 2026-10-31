@@ -1014,6 +1014,69 @@ END $$;
 
 
 --
+-- Name: auth_native_phase_coverage_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_phase_coverage_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.native_covered AND current_setting('auth.native_phase_producer',true) IS DISTINCT FROM '2' THEN
+    RAISE EXCEPTION 'Auth native phase producer version refused' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_phase_cursor_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_phase_cursor_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='INSERT' OR
+     ROW(NEW.phase,NEW.client_phase,NEW.after_key,NEW.client_id,NEW.native_phase_version,
+         NEW.native_completed_at,NEW.native_role_version) IS DISTINCT FROM
+     ROW(OLD.phase,OLD.client_phase,OLD.after_key,OLD.client_id,OLD.native_phase_version,
+         OLD.native_completed_at,OLD.native_role_version) THEN
+    IF current_setting('auth.native_phase_worker',true) IS DISTINCT FROM '2' THEN
+      RAISE EXCEPTION 'Auth native phase worker version refused' USING ERRCODE='55000';
+    END IF;
+  END IF;
+  IF TG_OP='UPDATE' AND NEW.native_phase_version<OLD.native_phase_version THEN
+    RAISE EXCEPTION 'Auth native phase downgrade refused' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_phase_producer_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_phase_producer_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- This lock crosses processes and survives a pool restart. The old native
+  -- role triggers remain responsible for original source custody and history.
+  PERFORM 1 FROM auth_native_phase_deployment WHERE singleton AND version=2 FOR SHARE;
+  IF NULLIF(current_setting('auth.erasure_obligation',true),'') IS NOT NULL THEN
+    IF current_setting('auth.native_phase_worker',true) IS DISTINCT FROM '2' THEN
+      RAISE EXCEPTION 'Auth native phase worker version refused' USING ERRCODE='55000';
+    END IF;
+  ELSIF TG_OP<>'DELETE' AND current_setting('auth.native_phase_producer',true) IS DISTINCT FROM '2'
+    AND current_setting('auth.native_role_reconcile',true) IS DISTINCT FROM '1' THEN
+    RAISE EXCEPTION 'Auth native phase producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_native_registration_identity(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1553,13 +1616,23 @@ CREATE TABLE public.auth_erasure (
     source_published_at timestamp with time zone,
     copies_completed_at timestamp with time zone,
     copies_published_at timestamp with time zone,
+    native_role_version smallint DEFAULT 0 NOT NULL,
+    native_phase_version smallint DEFAULT 1 NOT NULL,
+    source_route integer,
+    original_native_id text,
+    recovery_copy_pending text DEFAULT 'recovery-copy-coverage'::text NOT NULL,
     CONSTRAINT auth_erasure_after_key_check CHECK ((octet_length(after_key) <= 1024)),
     CONSTRAINT auth_erasure_barrier_check CHECK ((barrier >= 0)),
     CONSTRAINT auth_erasure_client_id_check CHECK ((octet_length(client_id) <= 1024)),
     CONSTRAINT auth_erasure_inventory_coverage_check CHECK ((inventory_coverage = ANY (ARRAY['unknown'::text, 'covered'::text]))),
     CONSTRAINT auth_erasure_kernel_at_check CHECK ((octet_length(kernel_at) <= 64)),
     CONSTRAINT auth_erasure_kernel_identity CHECK ((((kernel_version IS NULL) AND (kernel_at IS NULL)) OR ((kernel_version > 0) AND (kernel_at IS NOT NULL)))),
+    CONSTRAINT auth_erasure_native_phase_version_check CHECK ((native_phase_version = ANY (ARRAY[1, 2]))),
+    CONSTRAINT auth_erasure_native_role_version_check CHECK ((native_role_version = ANY (ARRAY[0, 1]))),
+    CONSTRAINT auth_erasure_original_native_id_check CHECK (((octet_length(original_native_id) >= 1) AND (octet_length(original_native_id) <= 1024))),
+    CONSTRAINT auth_erasure_recovery_copy_pending_check CHECK ((recovery_copy_pending = ANY (ARRAY['recovery-copy-custody'::text, 'recovery-copy-coverage'::text]))),
     CONSTRAINT auth_erasure_source CHECK ((((source_continuation_id IS NULL) AND (source_receipt_id IS NULL) AND (source_accepted_at IS NULL) AND (source_discharged_at IS NULL) AND (source_published_at IS NULL)) OR ((kernel_at IS NOT NULL) AND (source_continuation_id IS NOT NULL) AND (source_receipt_id IS NOT NULL) AND (source_accepted_at IS NOT NULL) AND ((source_published_at IS NULL) OR (source_discharged_at IS NOT NULL))))),
+    CONSTRAINT auth_erasure_source_route_check CHECK (((source_route >= 0) AND (source_route <= 65535))),
     CONSTRAINT auth_erasure_source_workflow_id_check CHECK ((octet_length(source_workflow_id) <= 256)),
     CONSTRAINT auth_erasure_version_check CHECK ((version = 1))
 );
@@ -1638,6 +1711,18 @@ CREATE TABLE public.auth_native_credential_terminal (
     CONSTRAINT auth_native_credential_terminal_effect_digest_check CHECK ((effect_digest ~ '^[a-f0-9]{64}$'::text)),
     CONSTRAINT auth_native_credential_terminal_outcome_check CHECK ((outcome = ANY (ARRAY['committed'::text, 'fenced-refusal'::text]))),
     CONSTRAINT auth_native_credential_terminal_receipt_id_check CHECK ((octet_length(receipt_id) <= 1024))
+);
+
+
+--
+-- Name: auth_native_phase_deployment; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_native_phase_deployment (
+    singleton boolean DEFAULT true NOT NULL,
+    version smallint NOT NULL,
+    CONSTRAINT auth_native_phase_deployment_singleton_check CHECK (singleton),
+    CONSTRAINT auth_native_phase_deployment_version_check CHECK ((version = 2))
 );
 
 
@@ -2282,6 +2367,14 @@ ALTER TABLE ONLY public.auth_native_credential_terminal
 
 
 --
+-- Name: auth_native_phase_deployment auth_native_phase_deployment_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_native_phase_deployment
+    ADD CONSTRAINT auth_native_phase_deployment_pkey PRIMARY KEY (singleton);
+
+
+--
 -- Name: auth_provisioning_receipt auth_provisioning_receipt_account_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2650,7 +2743,7 @@ CREATE INDEX auth_erasure_copy_pending ON public.auth_erasure USING btree (revis
 -- Name: auth_erasure_pending; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX auth_erasure_pending ON public.auth_erasure USING btree (revision, id) WHERE (native_completed_at IS NULL);
+CREATE INDEX auth_erasure_pending ON public.auth_erasure USING btree (revision, id) WHERE ((native_completed_at IS NULL) OR (native_role_version = 0) OR (native_phase_version < 2) OR (phase < 90));
 
 
 --
@@ -3470,6 +3563,41 @@ CREATE TRIGGER auth_native_credential_terminal_fence BEFORE INSERT OR UPDATE ON 
 --
 
 CREATE TRIGGER auth_native_credential_terminal_immutable BEFORE DELETE OR UPDATE ON public.auth_native_credential_terminal FOR EACH ROW EXECUTE FUNCTION public.auth_native_credential_terminal_immutable();
+
+
+--
+-- Name: auth_copy_coverage auth_native_phase_coverage_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_phase_coverage_guard BEFORE INSERT OR UPDATE ON public.auth_copy_coverage FOR EACH ROW EXECUTE FUNCTION public.auth_native_phase_coverage_guard();
+
+
+--
+-- Name: auth_erasure auth_native_phase_cursor_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_phase_cursor_guard BEFORE INSERT OR UPDATE ON public.auth_erasure FOR EACH ROW EXECUTE FUNCTION public.auth_native_phase_cursor_guard();
+
+
+--
+-- Name: auth_provisioning_receipt auth_native_phase_producer_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_phase_producer_guard BEFORE INSERT OR DELETE OR UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_phase_producer_guard();
+
+
+--
+-- Name: auth_registration_stage auth_native_phase_producer_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_phase_producer_guard BEFORE INSERT OR DELETE OR UPDATE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_phase_producer_guard();
+
+
+--
+-- Name: auth_workflow_request auth_native_phase_producer_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_phase_producer_guard BEFORE INSERT OR DELETE OR UPDATE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_native_phase_producer_guard();
 
 
 --
