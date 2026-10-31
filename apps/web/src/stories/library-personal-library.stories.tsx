@@ -47,7 +47,7 @@ export const ContinueAbsent: Story = {
     await expect(canvas.getByRole('heading', { level: 2, name: m.library_tracked_entries() })).toBeVisible();
     await expect(canvas.queryByText(m.library_continue_empty())).toBeNull();
     if (window.matchMedia('(min-width: 1024px)').matches) {
-      await expect(canvas.getByRole('link', { name: m.library_continue(), exact: true })).toHaveAttribute(
+      await expect(canvas.getByRole('link', { name: m.library_continue() })).toHaveAttribute(
         'href',
         `/${getLocale()}/library/continue`,
       );
@@ -58,7 +58,7 @@ export const ContinueAbsent: Story = {
           ? 'link'
           : 'menuitem';
       await expect(
-        await within(document.body).findByRole(role, { name: m.library_continue(), exact: true }),
+        await within(document.body).findByRole(role, { name: m.library_continue() }),
       ).toHaveAttribute('href', `/${getLocale()}/library/continue`);
       await userEvent.keyboard('{Escape}');
     }
