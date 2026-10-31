@@ -66,6 +66,8 @@ import { IDENTITY_EPOCH_ADMITTED, IDENTITY_EPOCH_HOME_AVAILABLE } from './events
 import {
   IdentityEpochStoreError,
   identityJobPartition,
+  selectIdentityEpochRemainder,
+  identityEpochRemainderTerminal,
   authorizeIdentityAdmission,
   identityReceiptKey,
   identityReceiptValue,
@@ -152,12 +154,15 @@ async function capture(pool: Pool, input: IdentityAdmissionInput): Promise<Ident
     const rows = await withReadTransaction(pool, async (tx) => {
       const owner = await readPartition(tx, home);
       if (!owner || owner.writeState !== 'active') throw unavailable();
-      return (
+      const groups = (
         await tx.query(
           `SELECT * FROM semantic.identity_epoch_group WHERE partition_no=$1 AND terminal=ANY($2::uuid[])`,
           [home, local.map((p) => p.control_group)],
         )
       ).rows.filter((g) => g.owner_epoch === owner.epoch);
+      for (const group of groups)
+        group.remainder_terminal = await selectIdentityEpochRemainder(tx, input.intent, group);
+      return groups;
     });
     for (const point of local) {
       const group = rows.find((g) => g.terminal === point.control_group);
@@ -199,6 +204,7 @@ function fingerprint(rows: Awaited<ReturnType<typeof capture>>) {
       r.version,
       r.observed_count,
       r.owner_epoch,
+      r.remainder_terminal ?? null,
     ]),
   );
 }
@@ -227,6 +233,7 @@ export async function bindIdentityEpochReceipt(
   if (fingerprint(first) !== fingerprint(second)) throw unavailable();
   const groups = [...new Map(second.map((r) => [r.terminal, r])).values()];
   const intent = input.intent;
+  identityEpochRemainderTerminal(intent, second);
   const resulting =
     intent.kind === 'merge'
       ? groups.reduce((n, r) => n + BigInt(r.observed_count), 0n)
@@ -435,6 +442,7 @@ export async function admitBoundIdentityEpoch(
     throw unavailable();
   const roles = identityBindingAccountRoles(input.binding);
   if (roles.length) bindSemanticProducerRoles(tx, roles);
+  const remainderTerminal = identityEpochRemainderTerminal(input.intent, data.sources);
   recordIdentityEpochNativeCommit(tx, 'admission');
   registerCommandCallback(tx, async (transactionId) => {
     await tx.query(insertJob.sql, [
@@ -446,6 +454,7 @@ export async function admitBoundIdentityEpoch(
       json(identityReceiptValue(input.receipt)),
       data.scope,
       transactionId,
+      remainderTerminal,
     ]);
     await tx.query(insertBases.sql, [home, data.job.jobId, json(data.sources)]);
     await tx.query(handoff.sql, [

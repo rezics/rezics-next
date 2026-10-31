@@ -253,6 +253,21 @@ async function minimizePayload(
 ): Promise<{ defer: true; rawKeys: number; bytes: number } | undefined> {
   const { store, record_key: key, role } = locator;
   if (!allowedStores.has(store)) throw new TypeError('Unknown Semantic erasure store');
+  // These copies still protect native retry/undo custody. Without an owning
+  // minimizer, retain the exact pending obligation rather than acknowledging it.
+  if (
+    [
+      'identity_epoch_mapping_head',
+      'identity_epoch_mapping_plan',
+      'identity_epoch_mapping_effect',
+      'identity_epoch_mapping_payload',
+      'identity_epoch_mapping_generation',
+      'identity_epoch_mapping_fence',
+      'identity_epoch_mapping_withdrawal',
+      'identity_epoch_mapping_undo',
+    ].includes(store)
+  )
+    return { defer: true, rawKeys: 0, bytes: 0 };
   const low = partition * 16;
   const high = low + 15;
   const values = [low, high, key];

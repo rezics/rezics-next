@@ -16,9 +16,10 @@ export const release = { digest: bundledDigest, release: bundledRelease };
 export const globalResource = { route: 0, id: GLOBAL_CONTEXT };
 export const digest = (key: string) => createHash('sha256').update(key).digest();
 
-export async function epochFixture(url = process.env.DATABASE_URL) {
+export async function epochFixture(url = process.env.DATABASE_URL, options: { pool?: pg.Pool; poolMax?: number } = {}) {
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-  const pool = createPool(url);
+  const pool = options.pool ?? createPool(url);
+  if (options.poolMax !== undefined) pool.options.max = options.poolMax;
   const admin = new pg.Pool({ connectionString: url, max: 2 });
   const accounts = { editor: newId(0x5c10), outsider: newId(0x5c20) };
   const actions = ['subject:create', 'subject:merge', 'subject:read', 'follow:create', 'follow:delete'];
@@ -96,7 +97,7 @@ export async function epochFixture(url = process.env.DATABASE_URL) {
     merge,
     snapshot,
     async close() {
-      await pool.end();
+      if (!options.pool) await pool.end();
       await admin.end();
     },
   };

@@ -529,6 +529,15 @@ slots; the old SAME256, final replay, alias-window and home-certificate prescrip
 
 ## Identity
 
+`stepIdentityEpochMapping(pool, job)` in `identity-epoch-mapping.ts` is the native mapping step. It retains
+immutable input generations, bounded link/member phases and released per-home effect receipt custody. It
+accepts no caller page, frontier, affected-ID vector or completion callback. Terminal repoint retains the smallest
+remaining live original from the admitted generation, then maps the remainder directly to that saved root;
+singleton detachment has no remainder. The public intent is unchanged. Mapping completion remains a
+receipt locator: it cannot publish without the two fixed participant receipts. Accounts source intents,
+full positive undo/publication, generation minimization/erasure and inclusive native cost evidence remain
+pending at the boundaries documented in the [identity contract](identity-epoch-contract.md#mapping-execution-boundary).
+
 Subject IDs permanently name catalogue records and are never reused. Creation requires Global `subject:create`
 (and import batch authority where applicable), writes revision 1 and is independent of Search. Compact fact storage
 is an optimization, not a separate compact-revision creation target. Merging requires `subject:merge` and asserts

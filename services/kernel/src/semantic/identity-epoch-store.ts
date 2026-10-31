@@ -21,6 +21,7 @@ import {
 } from './identity-epoch-binding.ts';
 import bindingInsert from './identity-epoch-binding-insert.sql';
 import bindingAccept from './identity-epoch-binding-accept.sql';
+import selectRemainder from './identity-epoch-mapping-remainder.sql';
 import storeInsertNativeCommit from './identity-epoch-store-insert-native-commit.sql';
 import storeSelectJob from './identity-epoch-store-select-job.sql';
 import storeSelectAck from './identity-epoch-store-select-ack.sql';
@@ -239,6 +240,62 @@ async function readJob(tx: CommandTransaction, job: IdentityJobRef): Promise<Ide
   };
 }
 
+/** One keyed selection in the captured generation, independent of presentation visibility. */
+export async function selectIdentityEpochRemainder(
+  tx: CommandTransaction,
+  intent: IdentityIntent,
+  input: { partition_no: number; terminal: string; generation: string },
+): Promise<string | null> {
+  if (intent.kind === 'merge' || input.terminal !== intent.original) return null;
+  return (
+    (await tx.query(selectRemainder.sql, [input.partition_no, input.generation, intent.original])).rows[0]?.original ??
+    null
+  );
+}
+
+type TransformSource = {
+  input_original: string;
+  terminal: string;
+  observed_count: string;
+  remainder_terminal?: string | null;
+};
+/** Validate the captured transform before binding or allocating an attempt. */
+export function identityEpochRemainderTerminal(
+  intent: IdentityIntent,
+  sources: readonly TransformSource[],
+): string | null {
+  if (intent.kind === 'merge') return null;
+  const source = sources.find((row) => row.input_original === intent.original);
+  if (!source) throw unavailable();
+  const count = BigInt(source.observed_count);
+  if (count < 1n) throw unavailable();
+  if (count - 1n > 4096n)
+    throw new IdentityEpochStoreError(
+      'identity_group_overflow',
+      'Resulting identity group exceeds 4096 complete originals',
+    );
+  if (intent.kind === 'repoint') {
+    const target = sources.find((row) => row.input_original === intent.terminal);
+    if (!target || target.terminal !== intent.terminal || source.terminal === target.terminal) throw stale();
+  }
+  if (source.terminal !== intent.original) return null;
+  const remainder = source.remainder_terminal ?? null;
+  if (count > 1n !== (remainder !== null) || remainder === intent.original) throw unavailable();
+  return remainder;
+}
+
+/** The store page and executable mapping consume the same immutable constant transform. */
+export function identityEpochChangeTerminal(
+  intent: IdentityIntent,
+  remainder: string | null,
+  original: string,
+  previous: string,
+): string {
+  if (intent.kind === 'merge') return intent.survivor;
+  if (original === intent.original) return intent.kind === 'unmerge' ? intent.original : intent.terminal;
+  return previous === intent.original && remainder !== null ? remainder : previous;
+}
+
 /** Native source mappings and partition-scoped admission. Participant completion is never inferred. */
 export const identityEpochStore: IdentityEpochStore = {
   // Compatibility for topology observations only; actual job homes are encoded by their native routed IDs.
@@ -327,6 +384,12 @@ export const identityEpochStore: IdentityEpochStore = {
       throw unavailable();
     if (inputs.some((g) => g.pending_job))
       throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
+    for (const input of inputs) {
+      const remainder = await selectIdentityEpochRemainder(tx, intent, input);
+      for (const source of sources.filter((row) => row.terminal === input.terminal))
+        source.remainder_terminal = remainder;
+    }
+    const remainderTerminal = identityEpochRemainderTerminal(intent, sources);
     const resulting =
       intent.kind === 'merge'
         ? inputs.reduce((n, g) => n + BigInt(g.observed_count), 0n)
@@ -339,6 +402,15 @@ export const identityEpochStore: IdentityEpochStore = {
         'identity_group_overflow',
         'Resulting identity group exceeds 4096 complete originals',
       );
+    if (
+      (
+        await tx.query(
+          `SELECT slot FROM semantic.identity_epoch_mapping_generation WHERE partition_no=$1 ORDER BY slot LIMIT 1`,
+          [command.partition],
+        )
+      ).rowCount
+    )
+      throw unavailable();
     // Lock/revalidate every immutable input BEFORE reservation. The control row serializes local P=1 capacity.
     const state = (await tx.query(storeSelectControl2.sql, [command.partition])).rows[0];
     const locked = (await tx.query(storeSelectGroup.sql, [command.partition, inputs.map((g) => g.terminal)])).rows;
@@ -358,7 +430,9 @@ export const identityEpochStore: IdentityEpochStore = {
       throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Native identity home capacity is occupied');
     const job = { jobId: newId(command.partition * 16), epoch: BigInt(state.allocated_epoch) + 1n };
     const scope = createHash('sha256')
-      .update(json([intent, inputs.map((g) => [g.terminal, g.generation, g.version, g.observed_count])]))
+      .update(
+        json([intent, inputs.map((g) => [g.terminal, g.generation, g.version, g.observed_count]), remainderTerminal]),
+      )
       .digest('hex');
     if (accountSource) bindSemanticProducerRoles(tx, accountSource.roles);
     recordIdentityEpochNativeCommit(tx, 'admission');
@@ -387,6 +461,7 @@ export const identityEpochStore: IdentityEpochStore = {
         json(receiptValue(receipt)),
         scope,
         transactionId,
+        remainderTerminal,
       ]);
       await tx.query(admissionInsertBases.sql, [command.partition, job.jobId, json(sources)]);
       await tx.query(admissionHandoff.sql, [
@@ -535,21 +610,33 @@ export const identityEpochStore: IdentityEpochStore = {
       .map((r) => ({
         original: r.original,
         previousTerminal: r.terminal,
-        terminal:
-          intent.kind === 'merge'
-            ? intent.survivor
-            : r.original === intent.original
-              ? intent.kind === 'unmerge'
-                ? intent.original
-                : intent.terminal
-              : r.terminal,
+        terminal: identityEpochChangeTerminal(intent, saved.remainder_terminal, r.original, r.terminal),
       }));
     return { changes, next: frontier ? changes.at(-1)!.original : null };
   },
   async admitHomeEffect(tx, effect) {
     const command = currentCommand(tx);
     if (effect.kind === 'receiving') return admitIdentityReceivingEffect(tx, effect);
-    const destination = effect.kind === 'follow-count' ? effect.terminal : effect.original;
+    if (effect.kind === 'structural' && effect.controlGroup) {
+      if (command.basis !== null || effect.destination !== undefined) throw stale();
+      const group = (
+        await tx.query(
+          `SELECT g.pending_job,g.pending_epoch,g.generation FROM semantic.identity_epoch_group g
+        JOIN core.partition p ON p.partition_no=g.partition_no AND p.epoch=g.owner_epoch AND p.write_state='active'
+        WHERE g.partition_no=$1 AND g.terminal=$2 FOR UPDATE OF g`,
+          [command.partition, effect.controlGroup.terminal],
+        )
+      ).rows[0];
+      if (
+        !group ||
+        group.pending_job !== effect.job.jobId ||
+        BigInt(group.pending_epoch ?? -1) !== effect.job.epoch ||
+        group.generation !== effect.controlGroup.generation
+      )
+        throw stale();
+      return;
+    }
+    const destination = effect.kind === 'follow-count' ? effect.terminal : (effect.destination ?? effect.original);
     const destinationRoute = route(destination);
     if (command.partition !== partitionOf(destinationRoute)) throw stale();
     const gate = (await tx.query(storeSelectHomeGate.sql, [destinationRoute, destination, effect.original])).rows[0];

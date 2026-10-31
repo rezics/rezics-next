@@ -1640,3 +1640,62 @@ Each delivery names the Source scope and immutable admission receipt. Receiving 
 not completion verdicts. Registration and bounded repair may return pending. No pending result establishes
 coverage, publication, permission or a current reader observation. The indexed pre-arm protocol closes the
 claim-to-Source boundary before the first pending claim; asynchronous arm delivery cannot establish it.
+
+### Mapping execution boundary
+
+`identity-epoch-mapping.ts:stepIdentityEpochMapping(pool, job)` consumes only a saved admitted job. Its input
+keyset reads at most one raw key from each immutable input stream. Each subsequent invocation applies one
+source, link, member, membership or header unit. Sparse Context fanout is a separate raw-90 keyset phase.
+The native control head retains one original and one link intent, at most two output descriptors and an
+8-scalar/2048-byte frontier. Local effect receipts and the exact control custody row precede advancement;
+a lost local result resumes the same unit. Transient payloads are deleted only after released control custody.
+
+Output memberships use separate immutable generations. Four home-local reservation slots cover partial outputs
+and retired inputs under the existing G/A allowance; unknown bootstrap exports pause allocation. These slots
+are not an erasure or reclaim producer. Missing minimizer and receiving-owner transfer remain pending.
+Mapping heads, intents, effects, transient payloads, generation reservations, fences, withdrawals and undo
+footers are in the physical erasure inventory. Their native source hooks carry actual job and copied-link roles;
+the erasure step retains these obligations pending an owning minimizer. Native cost certification still requires the existing all-pool/nested-SQL harness and
+its owning correction; returned body counters are not a substitute for inclusive native plans or failed work.
+
+Ordinary merge authority cannot stand in for an Accounts source intent. Accounts verification/reversal remains
+unavailable until that immutable account-home producer is supplied. Ordinary unmerge requires a genuinely published
+undo job with both fixed participants and native withdrawal custody. Merge/repoint retains each withdrawn link
+in its original home, alongside an immutable footer identifying the current fact revision, security revision and
+admitted release. Undo restores one retained row at a time and refreshes projection revisions from native subject
+points. A full withdrawal requires the original to have been self-mapped and the real home-local `semantic_links`
+checkpoint to cover its last fact command's native editorial basis before the withdrawal footer commits.
+Missing projection custody, a previously redirected source, or a moderated source without an equivalent projection
+closure remains unavailable for undo. A later repoint's empty withdrawal is not a complete fact inventory.
+An indexed non-structural revision check rejects a changed fact/security/release basis rather than replaying
+stale facts. Restoration preserves the exact Context/property/source/statement/filter identity and does not enumerate
+personal references. Positive published-undo proof remains pending the real fixed participants and coordinator;
+no fixture or mapping function manufactures those receipts. Changed-fact reprojection remains an explicit unavailable
+boundary rather than an invented fact-restoration port.
+Terminal repoint captures the smallest remaining structurally live original from the immutable source generation
+as its remainder terminal, using one home-leading indexed selection independently of presentation visibility.
+The public intent is unchanged. The captured source snapshot and scope digest retain that UUID; admission persists
+it in the immutable job's `remainder_terminal` column. Generation conflict recaptures before effects, while accepted
+jobs never reselect a representative. A singleton has no remainder. Same-group/self and nonterminal targets reject
+before binding or reservation. Only the requested original moves to the validated target terminal. Every remaining
+source original maps directly to the saved remainder (self for that root), and the target group stays at its terminal.
+The same transform applies to terminal detachment by unmerge, which still requires its actually published undo job,
+fixed participants and native source inventory. No visibility, permission or published-undo evidence is synthesized.
+Remainder members use the normal reparenting phases; undo restoration belongs only to the requested original.
+Both the destination group and the remainder independently retain the 4096-original cap.
+
+Mapping processes remaining keys before the detached terminal, so their old incoming copies are withdrawn before
+moving the old terminal's own remaining links. One skipped key and a final native point replace a group rescan; the
+frontier remains scalar and every subphase retains the existing per-home receipt protocol. The remainder output
+stays in the captured source control home and has exactly source count minus one members. Its new header spends G;
+partial output and retired input reservations still spend the same four slots. Store pages and mapping consume the
+same constant transform. Hidden members retain their visibility/security state; ordinary input-terminal eligibility,
+account-agent exclusion, current ownership, cancellation and epoch gates remain independent and unchanged.
+The visibility exception applies only to members of the saved remainder, not to a requested hidden source.
+
+The remainder column is part of the existing immutable job and its owner/role/minimizer inventory; the home-leading
+live-generation index adds no membership copy. Selection examines at most the first two live keys (one excluded
+original), plus current metadata under the existing allowance. Native inclusive cost proof and physical index-byte
+measurement remain pending the existing cost owner; no new per-step budget is introduced.
+Full coordinator composition, fixed Search and ALL-Library production, caller binding, publication/fence
+release, erasure/minimization and final integration proof remain separate obligations.
