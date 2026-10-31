@@ -16,7 +16,6 @@ import type { ContributionAddress, ContributionTransport } from './contribution-
 import {
   editableScalar,
   statementInput,
-  unitSymbols,
   validateStatement,
   type EditorRead,
   type EditorTransport,
@@ -25,6 +24,7 @@ import {
   type SnakInput,
   type StatementInput,
 } from './statement-editor';
+import { quantityUnitLabel, unitSymbols } from '../../subject/quantity-presentation';
 
 import {
   controlId,
@@ -64,16 +64,10 @@ export function EditorFailure({ reason, locale }: { reason: string; locale: stri
 export function PartValue({ part, read, locale }: { part: SnakInput; read: ScalarRead; locale: string }) {
   const definition = read.release.properties[part.property.id];
   if (!definition) return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
-  const content = part.value.type === 'value' && isRecord(part.value.content) ? part.value.content : undefined;
-  const unit = typeof content?.unit === 'string' ? content.unit : '';
-  const symbol = unitSymbols[unit];
-  const related = symbol
-    ? { ...read.public.related, [unit]: { labels: { en: symbol } } as Current['public']['related'][string] }
-    : read.public.related;
   return (
     <CandidateValue
       snak={{ property: { ...part.property, data_type: definition?.datatype ?? '' }, value: part.value }}
-      related={related}
+      related={read.public.related}
       locale={locale}
     />
   );
@@ -167,9 +161,7 @@ function ScalarControl({
     });
   };
   const unitName = (id: string) =>
-    id === '1'
-      ? m.correction_unitless({}, o)
-      : (unitSymbols[id] ?? pageText(read.public.related[id]?.labels, locale).text);
+    id === '1' ? m.correction_unitless({}, o) : quantityUnitLabel(id, read.public.related, locale);
   const units = (
     definition.units?.includes('*') ? ['1', ...Object.keys(unitSymbols)] : (definition.units ?? [])
   ).filter((id) => !!unitName(id));
@@ -232,7 +224,9 @@ function ScalarControl({
                   </NativeSelectOption>
                 ))}
                 {typeof record.unit === 'string' && !units.includes(record.unit) && (
-                  <NativeSelectOption value={record.unit}>{m.correction_unit_preserved({}, o)}</NativeSelectOption>
+                  <NativeSelectOption value={record.unit}>
+                    {unitName(record.unit) ?? m.quantity_unit_unavailable({}, o)}
+                  </NativeSelectOption>
                 )}
               </NativeSelect>
             </Field>

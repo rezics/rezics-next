@@ -172,16 +172,4 @@ export function validateStatement(statement: unknown, release?: Release): Violat
   return checkStatementInput(statement, release).violations;
 }
 
-/** Exact unit identities from the admitted catalogue; symbols never choose or convert an amount. */
-export const unitSymbols: Record<string, string> = {
-  'http://www.wikidata.org/entity/Q1238720': 'vol',
-  'http://www.wikidata.org/entity/Q1980247': 'ch',
-  'http://www.wikidata.org/entity/Q11574': 's',
-  'http://www.wikidata.org/entity/Q7727': 'min',
-  'http://www.wikidata.org/entity/Q577': 'a',
-  'http://www.wikidata.org/entity/Q11573': 'm',
-  'http://www.wikidata.org/entity/Q174728': 'cm',
-  'http://www.wikidata.org/entity/Q11570': 'kg',
-  'http://www.wikidata.org/entity/Q41803': 'g',
-  'http://www.wikidata.org/entity/Q3241121': 'mg',
-};
+export { unitSymbols } from '../../subject/quantity-presentation';

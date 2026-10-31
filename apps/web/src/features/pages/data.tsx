@@ -23,6 +23,7 @@ import { defaultReader, type Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
 import { subjectHref } from '../../subject/subject-href';
+import { quantityPresentation } from '../../subject/quantity-presentation';
 import type { PageDocument } from './render';
 import { statementDocument } from './documents';
 import * as accounts from './account';
@@ -285,15 +286,16 @@ export function CandidateValue({
   }
   if (snak.property.data_type === 'media')
     return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
-  if (
-    snak.property.data_type === 'quantity' &&
-    isRecord(content) &&
-    typeof content.unit === 'string' &&
-    content.unit !== '1'
-  ) {
-    const label = pageText(related[content.unit]?.labels, locale).text;
-    if (!label) return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
-    snak = { ...snak, value: { type: 'value', content: { ...content, unit: label } } };
+  if (snak.property.data_type === 'quantity') {
+    const quantity = quantityPresentation(content, related, locale);
+    if (!quantity) return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
+    const unit = quantity.unitLabel ?? m.quantity_unit_unavailable({}, { locale: locale as never });
+    return (
+      <span>
+        {quantity.numbers}
+        {unit ? ` ${unit}` : ''}
+      </span>
+    );
   }
   return (
     inlineValue(snak, related, {

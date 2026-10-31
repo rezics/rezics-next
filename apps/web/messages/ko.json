@@ -295,6 +295,7 @@
   "candidate_title": "제안",
   "candidate_unavailable": "결과를 확인하지 못했습니다. 동일한 확인을 재시도하거나 현재 값을 다시 불러오세요.",
   "candidate_value_unavailable": "이 값은 미리 볼 수 없습니다.",
+  "quantity_unit_unavailable": "단위 정보 없음",
   "candidate_reject": "제안 거절",
   "candidate_rejected_state": "거절됨 · 주장은 보존됨",
   "candidate_rejected": "제안을 거절했습니다. 주장은 보존됩니다. 새로고침하여 현재 공개 내용을 비교하세요.",

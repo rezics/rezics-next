@@ -324,6 +324,7 @@
   "candidate_title": "Proposals",
   "candidate_unavailable": "The result could not be confirmed. Retry the same confirmation or reload current values.",
   "candidate_value_unavailable": "This value has no readable preview.",
+  "quantity_unit_unavailable": "Unit unavailable",
   "candidate_reject": "Reject suggestion",
   "candidate_rejected_state": "Rejected; assertion retained",
   "candidate_rejected": "Suggestion rejected. The assertion is retained; reload to compare the current public reading.",

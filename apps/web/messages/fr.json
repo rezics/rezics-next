@@ -295,6 +295,7 @@
   "candidate_title": "Propositions",
   "candidate_unavailable": "Le résultat n’a pas pu être confirmé. Réessayez la même confirmation ou rechargez les valeurs actuelles.",
   "candidate_value_unavailable": "Aucun aperçu lisible pour cette valeur.",
+  "quantity_unit_unavailable": "Unité indisponible",
   "candidate_reject": "Refuser la suggestion",
   "candidate_rejected_state": "Refusée ; assertion conservée",
   "candidate_rejected": "Suggestion refusée. L’assertion est conservée. Rechargez pour comparer les valeurs publiques actuelles.",

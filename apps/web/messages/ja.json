@@ -295,6 +295,7 @@
   "candidate_title": "提案",
   "candidate_unavailable": "結果を確認できませんでした。同じ確定を再試行するか現在の値を再読み込みしてください。",
   "candidate_value_unavailable": "この値のプレビューはありません。",
+  "quantity_unit_unavailable": "単位を表示できません",
   "candidate_reject": "提案を却下",
   "candidate_rejected_state": "却下済み・主張は保持",
   "candidate_rejected": "提案を却下しました。主張は保持されます。再読み込みして現在の公開内容を比較してください。",

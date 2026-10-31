@@ -295,6 +295,7 @@
   "candidate_title": "Vorschläge",
   "candidate_unavailable": "Das Ergebnis konnte nicht bestätigt werden. Dieselbe Bestätigung wiederholen oder aktuelle Werte neu laden.",
   "candidate_value_unavailable": "Für diesen Wert ist keine lesbare Vorschau verfügbar.",
+  "quantity_unit_unavailable": "Einheit nicht verfügbar",
   "candidate_reject": "Vorschlag ablehnen",
   "candidate_rejected_state": "Abgelehnt; Aussage bleibt erhalten",
   "candidate_rejected": "Vorschlag abgelehnt. Die Aussage bleibt erhalten. Lade die aktuellen öffentlichen Werte zum Vergleich neu.",

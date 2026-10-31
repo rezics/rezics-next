@@ -295,6 +295,7 @@
   "candidate_title": "提議",
   "candidate_unavailable": "無法確認結果。請重試同一次確認或重新載入目前值。",
   "candidate_value_unavailable": "此值暫無可讀預覽。",
+  "quantity_unit_unavailable": "單位資訊無法顯示",
   "candidate_reject": "拒絕建議",
   "candidate_rejected_state": "已拒絕；保留原斷言",
   "candidate_rejected": "建議已拒絕，原斷言仍保留。重新載入以比較目前公開內容。",
