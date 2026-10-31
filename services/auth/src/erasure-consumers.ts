@@ -115,8 +115,8 @@ export async function registrationTerminal(connection: PoolClient, stageId: stri
   ).rowCount;
 }
 
-/** Called only with the actual return from Access.activate, before the ordinary
- * completion marker. The original source key is fixed before any source command. */
+/** Accept only the actual activation value, returned by Access.activate or its
+ * private original-result reader. The original source key precedes source work. */
 export async function recordRegistrationActivation(
   pool: Pool | PoolClient,
   stageId: string,

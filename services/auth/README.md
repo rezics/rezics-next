@@ -2230,10 +2230,12 @@ remains refused; this path never restores its former authority.
   fenced source account also proves that its establishment cannot clear a fence
   later; a missing account, Auth user absence, local expiry or erasure marker does
   not. Proof binds the exact reference, receipt, establishment, commitment and floor.
-  That required original recovery witness/result remains: no exported committed
-  recovery-result reader transfers its last responsibility after establishment
-  evidence expires. This is a pending source boundary, not a retention exception
-  for creation descriptors, request JSON, handles or approval business payload.
+  The private original recovery-result reader is available, but this continuation
+  still uses the existing completion/deleted-source branches; adoption of the
+  original outcome here remains incomplete. Its required original recovery
+  witness/result remains after establishment evidence expires. This pending source
+  boundary supplies no retention exception for creation descriptors, request JSON,
+  handles or approval business payload.
 - Reduction retains the original operation, delivered ordinal page and count of
   acknowledged owners. The permanent erased-client obligation admits only that
   existing gate. Continuation uses each original page/owner source key, its actual
