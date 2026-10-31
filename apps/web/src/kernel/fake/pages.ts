@@ -2,6 +2,7 @@ import defaultFixtures from '../fixtures.json' with { type: 'json' };
 import { pageRead, type Fixtures, type KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import { isRecord, languageList, localizeRecording, localizeSearchReads } from './languages.ts';
+import { isCommunityPageTarget } from './subject-community.ts';
 import { subjectSourcesPage } from './subject-sources.ts';
 
 const storyFixtures = defaultFixtures as unknown as Fixtures;
@@ -43,13 +44,16 @@ export const routes: FakeRoute[] = [
       const languages = languageList(body?.languages);
       // Select explicit Sources scenarios here, before the ordinary subject and hero recordings can answer.
       const recording =
-        body && languages.length > 0 ? (subjectSourcesPage(body) ?? storyPage(body, recordings)) : undefined;
+        body && languages.length > 0
+          ? (subjectSourcesPage(body) ?? (isCommunityPageTarget(body.target) ? undefined : storyPage(body, recordings)))
+          : undefined;
       return recording ? localizeSearchReads(recording, languages, storyFixtures) : undefined;
     },
     fixture: async ({ request, fixtures }) => {
       const body = await input(request);
       const languages = languageList(body?.languages);
       if (languages.length === 0) return undefined;
+      if (body && isCommunityPageTarget(body.target) && !subjectSourcesPage(body)) return undefined;
       const response = await pageRead(fixtures, request.clone() as Request);
       const value: unknown = await response.json().catch(() => undefined);
       if (!isRecord(value)) return { status: response.status };

@@ -64,8 +64,8 @@ test('Sources selection preserves generic page fallback and declines other targe
     'missing-subject-page': { status: 404, marker: 'missing subject' },
   };
   const cases: [string, unknown, KernelRecording | undefined][] = [
-    ['', { subject: subjectPage.subject }, recordings['subject-page']],
-    ['?sourceRecords=other', { subject: subjectPage.subject }, recordings['subject-page']],
+    ['', { subject: subjectPage.subject }, undefined],
+    ['?sourceRecords=other', { subject: subjectPage.subject }, undefined],
     ['?sourceRecords=all', { route: '/' }, recordings['home-page']],
     ['?sourceRecords=empty', { account: 'reader' }, recordings['agent-page']],
     ['?sourceRecords=all', { subject: '00000000-0000-4000-8000-000000000000' }, recordings['missing-subject-page']],

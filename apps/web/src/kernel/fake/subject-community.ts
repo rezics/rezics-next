@@ -7,8 +7,23 @@ import type { KernelClient } from '@rezics/client';
 import type { NativeCommunityThread, CommunityKind } from '../../features/pages/subject-community';
 import { GLOBAL } from '../../features/pages/subject-ratings';
 import type { FakeRoute } from '../fake-modules';
+import { isRecord } from './languages';
+import { subjectSourcesPage } from './subject-sources';
 
 export const communitySubject = { id: '01a17a3b-0884-721b-91ef-d7ffd7bb58e4', label: 'The Little Prince' };
+
+export function isCommunityPageTarget(target: unknown): boolean {
+  return (
+    isRecord(target) &&
+    target.subject === communitySubject.id &&
+    !target.realm &&
+    (target.view === undefined ||
+      target.view === 'overview' ||
+      target.view === 'reviews' ||
+      target.view === 'discussion')
+  );
+}
+
 export const communityAuthor = {
   id: '01a17a3a-20f5-72aa-9f14-f4cc56678188',
   kind: 'actor',
@@ -109,7 +124,7 @@ const composedPage: FakeRoute['story'] = async ({ request }) => {
     target?: { subject?: string; realm?: string };
     continuation?: PageContinuation;
   };
-  if (input.target?.subject !== communitySubject.id || input.target.realm) return;
+  if (!isCommunityPageTarget(input.target) || subjectSourcesPage(input)) return;
   const { pageRead } = await import('../fake');
   const response = await pageRead(demoFixtures as unknown as Fixtures, request.clone() as Request);
   const page = (await response.json()) as SubjectPageData;
