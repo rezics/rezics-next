@@ -46,7 +46,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { offerParentAnchor, platformRootAnchor } from './catalogue.ts';
 import { declareCommerceCommandHistory } from './erasure-history.ts';
-import type { CheckoutRequest, CheckoutSession, CheckoutSnapshot, Offer, Order } from './model.ts';
+import { STRIPE_API_VERSION, type CheckoutRequest, type CheckoutSession, type CheckoutSnapshot, type Offer, type Order } from './model.ts';
 import { assertCheckoutEvidence, assertTransactionBound, decideCheckout } from './settlement.ts';
 import * as store from './store.ts';
 import { appendCheckoutMoneyObservations } from './money-observation.ts';
@@ -597,7 +597,7 @@ export function createCommerceCommands(config: {
                 ? {
                     moneyUnit: current.moneyUnit,
                     taxBehavior: current.taxBehavior,
-                    apiVersion: '2026-09-30.endive' as const,
+                    apiVersion: STRIPE_API_VERSION,
                   }
                 : {}),
               orderId: id,

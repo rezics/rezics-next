@@ -5,6 +5,7 @@ import { stripeTransport } from './stripe-transport.ts';
 import { assertCheckoutEvidence, assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
 import {
   MAX_ORDER_TRANSACTIONS,
+  STRIPE_API_VERSION,
   StripeRejectedError,
   StripeUnavailableError,
   type CheckoutLocator,
@@ -176,7 +177,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
         transport.inspectInput({ input, apiKey: config.apiKey, host: config.host });
         // One SDK instance binds the supported fetch hook to this physical operation, including retries/pages.
         const stripe = new Stripe(config.apiKey, {
-          apiVersion: '2026-09-30.endive',
+          apiVersion: STRIPE_API_VERSION,
           ...(config.host === undefined ? {} : { host: config.host }),
           ...(config.port === undefined ? {} : { port: config.port }),
           ...(config.protocol === undefined ? {} : { protocol: config.protocol }),
@@ -441,6 +442,8 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
             [
               'needs_response',
               'under_review',
+              'appeal_needs_response',
+              'appeal_under_review',
               'lost',
               'won',
               'warning_needs_response',

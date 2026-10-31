@@ -296,6 +296,9 @@ const disputeCases = [
   { status: 'needs_response', revokes: true },
   // https://docs.stripe.com/api/disputes/object.md — under_review.
   { status: 'under_review', revokes: true },
+  // Stripe 23.1.0 / 2026-10-28.endive: an appeal is still an unresolved adverse outcome.
+  { status: 'appeal_needs_response', revokes: true },
+  { status: 'appeal_under_review', revokes: true },
   // https://docs.stripe.com/api/disputes/object.md — lost.
   { status: 'lost', revokes: true },
   // https://docs.stripe.com/api/disputes/object.md — won.

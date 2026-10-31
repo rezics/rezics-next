@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createCheckoutForOrder } from '../../src/commerce/creation-attempt.ts';
 import type { createCommerceCommands } from '../../src/commerce/commands.ts';
-import type { CheckoutRequest } from '../../src/commerce/model.ts';
+import { STRIPE_API_VERSION, type CheckoutRequest } from '../../src/commerce/model.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { readCommerceMoneyPolicy, validateOfferAmount } from '../../src/commerce/money.ts';
 import { startFakeStripe } from './support/fake-stripe.ts';
@@ -71,7 +71,7 @@ test('new tax is explicit; retrying an existing historical physical attempt pres
       {
         ...request,
         orderId: 'order-new',
-        apiVersion: '2026-09-30.endive',
+        apiVersion: STRIPE_API_VERSION,
         ...validateOfferAmount(
           { currency: request.currency, amountMinor: request.unitAmountMinor },
           readCommerceMoneyPolicy({}),
@@ -82,8 +82,14 @@ test('new tax is explicit; retrying an existing historical physical attempt pres
     const fresh = fake.requests[1]!;
     expect(fresh.params.get('line_items[0][price_data][tax_behavior]')).toBe('exclusive');
     expect(fresh.params.get('line_items[0][price_data][unit_amount]')).toBe('1200');
-    expect(fresh.headers.get('stripe-version')).toBe('2026-09-30.endive');
-    expect(fake.requests).toHaveLength(2);
+    expect(fresh.headers.get('stripe-version')).toBe(STRIPE_API_VERSION);
+    // A retained, explicitly captured baseline overrides the new SDK default without changing the capture.
+    const captured: CheckoutRequest = { ...request, orderId: 'order-captured', apiVersion: '2026-09-30.endive' };
+    const evidence = JSON.stringify(captured);
+    await stripe.createCheckoutSession(captured, 'order:order-captured');
+    expect(fake.requests[2]!.headers.get('stripe-version')).toBe('2026-09-30.endive');
+    expect(JSON.stringify(captured)).toBe(evidence);
+    expect(fake.requests).toHaveLength(3);
   } finally {
     fake.stop();
   }

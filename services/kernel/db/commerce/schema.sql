@@ -307,7 +307,7 @@ CREATE TABLE commerce.checkout_creation_attempt (
     tax_behavior text,
     api_version text,
     request jsonb,
-    CONSTRAINT checkout_creation_attempt_api_version_check CHECK (((api_version IS NULL) OR (api_version = '2026-09-30.endive'::text))),
+    CONSTRAINT checkout_creation_attempt_api_version_check CHECK (((api_version IS NULL) OR (api_version = ANY (ARRAY['2026-09-30.endive'::text, '2026-10-28.endive'::text])))),
     CONSTRAINT checkout_creation_attempt_cancel_check CHECK (((octet_length(cancel_url) >= 1) AND (octet_length(cancel_url) <= 8192))),
     CONSTRAINT checkout_creation_attempt_expiry_check CHECK ((expires_at > 0)),
     CONSTRAINT checkout_creation_attempt_home_check CHECK ((route = ((get_byte(uuid_send(order_id), 10) * 256) + get_byte(uuid_send(order_id), 11)))),

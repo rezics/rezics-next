@@ -406,8 +406,8 @@ is a different merchant-responsibility configuration, not MoR approval. Preserve
 without treating the fallback as first-slice Managed Payments qualification.
 
 REZICS remains catalogue authority: captured inline `price_data`/`product_data`, one item and no Product/Price sync.
-Inline product creation can still create a Stripe Product. The pinned dependency is **stripe 23.0.1**, whose default
-request/type version is **2026-09-30.endive**. The webhook snapshot endpoint version is configured separately and
+Inline product creation can still create a Stripe Product. The pinned dependency is **stripe 23.1.0**, whose default
+request/type version is **2026-10-28.endive**. The webhook snapshot endpoint version is configured separately and
 must be explicitly recorded/validated; the actual deployed endpoint version is not established here.
 `event.api_version` is diagnostic provenance, not an upgrade mechanism.
 An older Event's snapshot does not become current by retrieval. No silent SDK, API or status-union upgrade.
@@ -471,8 +471,10 @@ presentment and actual settlement stay separate currency/unit tuples; this conve
 Repricing captures a new revision for future purchases without rewriting accepted purchases or immutable attempts.
 
 New immutable physical creation intents capture the complete request, money tuple and separate API baseline
-`2026-09-30.endive`. New inline `price_data` explicitly sends `tax_behavior:'exclusive'`. A retained first physical
-attempt retries its original request/key/URLs/expiry/mode, including historical omission of tax and unit metadata.
+`2026-10-28.endive`. New inline `price_data` explicitly sends `tax_behavior:'exclusive'`. A retained first physical
+attempt retries its original request/key/URLs/expiry/mode, including a captured `2026-09-30.endive` API version
+and historical omission of API, tax and unit metadata.
+The forward API-version migration accepts both dates without updating any captured request or row.
 Old uncertainty without first-call evidence or captured unit provenance cannot start a fresh charge. Price adoption
 never backfills history or rescales raw amounts. The base-price ceiling does not cap genuinely observed paid totals
 when actual tax raises them above it; payment evidence retains its existing safe-integer and association validation.
@@ -728,8 +730,8 @@ Compatible indivisible-benefit policy:
 - Partial refunds retain the whole benefit. Aggregate full same-charge/currency pending or requires-action refunds
   provisionally revoke; full succeeded refunds revoke. Failed/cancelled refunds may restore only with complete current
   evidence and no other blocker. Provisional revocation does not manufacture a cash debit.
-- Known active (`needs_response`, `under_review`) and lost disputes revoke. Verified won may restore absent other
-  blockers; “lost” is blocking while lost, not a promise that a late verified win is impossible. Warnings/inquiries
+- Known active (`needs_response`, `under_review`, `appeal_needs_response`, `appeal_under_review`) and lost disputes
+  revoke. Verified won may restore absent other blockers; “lost” is blocking while lost, not a promise that a late verified win is impossible. Warnings/inquiries
   and prevented disputes retain access under current policy. Unsupported future status is unavailable, preserving
   last verified state; it cannot mask known active/lost evidence or restore a currently revoked entitlement.
 - Terminal buyer T always prevents grant/restore and private reads. Use the real account share barrier in the same

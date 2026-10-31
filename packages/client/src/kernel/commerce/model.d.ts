@@ -4,6 +4,8 @@
  */
 import type { StripeMoneyUnit, StripeMoneyProvenance } from './money.ts';
 export type { StripeMoneyUnit, StripeMoneyProvenance } from './money.ts';
+/** API baseline for new physical requests; historical captures retain their own version or omission. */
+export declare const STRIPE_API_VERSION = "2026-10-28.endive";
 /** Maximum balance transactions in one complete provider snapshot. */
 export declare const MAX_ORDER_TRANSACTIONS = 256;
 /** Historical purchase outcome, independent of provider cash availability and current benefit permission. */
@@ -208,7 +210,7 @@ export type CheckoutDecision = {
 };
 export type CheckoutRequest = {
     /** Physical request baseline, distinct from unit facts. Omitted in pre-adoption captures. */
-    apiVersion?: '2026-09-30.endive' | null;
+    apiVersion?: '2026-09-30.endive' | typeof STRIPE_API_VERSION | null;
     /** Absent historical metadata is unknown, never inferred from current currency facts. */
     moneyUnit?: StripeMoneyUnit | null;
     taxBehavior?: 'exclusive' | null;

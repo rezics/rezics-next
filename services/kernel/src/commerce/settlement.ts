@@ -102,7 +102,14 @@ const nonRevokingDisputeStatuses = new Set([
 ]);
 
 const ignoredRefundStatuses = new Set(['failed', 'canceled']);
-const revokingDisputeStatuses = new Set(['needs_response', 'under_review', 'lost']);
+// An appeal remains adverse evidence until the provider verifies a win.
+const revokingDisputeStatuses = new Set([
+  'needs_response',
+  'under_review',
+  'appeal_needs_response',
+  'appeal_under_review',
+  'lost',
+]);
 
 /** Validate even injected port evidence; a typed unavailable outcome writes no decision or receipt. */
 export function assertCheckoutEvidence(snapshot: CheckoutSnapshot, requirePayment: boolean): void {
