@@ -58,6 +58,7 @@ export async function authorizeUnprotectedRequest<Context>(
   access: AccountWorkflowPorts<Context>,
   input: AccountOperation,
 ): Promise<Context | undefined> {
+  if (input.kind === 'transfer-acceptance') return refused();
   const context: unknown = await access.authorizeUnprotectedOperation?.(input);
   return context == null ? undefined : (context as Context);
 }

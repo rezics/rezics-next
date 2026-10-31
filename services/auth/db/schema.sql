@@ -5541,24 +5541,39 @@ ALTER TABLE auth_native_role_deployment ADD CHECK(store_index BETWEEN 0 AND 28);
 ALTER TABLE auth_erasure ADD COLUMN recovery_copy_pending text NOT NULL DEFAULT 'recovery-copy-coverage'
   CHECK(recovery_copy_pending IN ('recovery-copy-custody','recovery-copy-coverage'));
 
--- Unknown historical requests are never reconstructed from payloads or today's relations.
-ALTER TABLE auth_workflow_request
-  ADD COLUMN erasure_actor_id text CHECK(octet_length(erasure_actor_id) BETWEEN 1 AND 1024),
-  ADD COLUMN erasure_principal_id text CHECK(octet_length(erasure_principal_id) BETWEEN 1 AND 1024),
-  ADD COLUMN erasure_source_client_id text CHECK(octet_length(erasure_source_client_id) BETWEEN 1 AND 1024),
-  ADD COLUMN request_party_version smallint NOT NULL DEFAULT 0 CHECK(request_party_version IN (0,1)),
-  ADD COLUMN request_context_version smallint NOT NULL DEFAULT 0 CHECK(request_context_version IN (0,1)),
-  ADD CONSTRAINT auth_request_party_context CHECK(request_party_version=0 OR
-    (request_context_version=1 AND erasure_actor_version=1 AND erasure_actor_id IS NOT NULL
-      AND erasure_source_client_id IS NOT NULL));
-CREATE INDEX erasure_request_actor ON auth_workflow_request(erasure_actor_id,workflow_id);
-CREATE INDEX erasure_request_principal ON auth_workflow_request(erasure_principal_id,workflow_id);
-CREATE INDEX erasure_request_source_client ON auth_workflow_request(erasure_source_client_id,workflow_id);
-CREATE INDEX erasure_request_unknown_context ON auth_workflow_request(workflow_id) WHERE request_party_version=0;
+ALTER TABLE public.auth_workflow_request ADD COLUMN erasure_actor_id text;
 
--- Original source roles are immutable, including inside their creation transaction.
--- Retiring a private request needs the existing native consumer proof, not SDK status.
-CREATE FUNCTION auth_request_parties_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+ALTER TABLE public.auth_workflow_request ADD COLUMN erasure_principal_id text;
+
+ALTER TABLE public.auth_workflow_request ADD COLUMN erasure_source_client_id text;
+
+ALTER TABLE public.auth_workflow_request ADD COLUMN request_party_version smallint DEFAULT 0 NOT NULL;
+
+ALTER TABLE public.auth_workflow_request ADD COLUMN request_context_version smallint DEFAULT 0 NOT NULL;
+
+ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_request_party_context CHECK (((request_party_version = 0) OR ((request_context_version = 1) AND (erasure_actor_version = 1) AND (erasure_actor_id IS NOT NULL) AND (erasure_source_client_id IS NOT NULL))));
+
+ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_workflow_request_erasure_actor_id_check CHECK (((octet_length(erasure_actor_id) >= 1) AND (octet_length(erasure_actor_id) <= 1024)));
+
+ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_workflow_request_erasure_principal_id_check CHECK (((octet_length(erasure_principal_id) >= 1) AND (octet_length(erasure_principal_id) <= 1024)));
+
+ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_workflow_request_erasure_source_client_id_check CHECK (((octet_length(erasure_source_client_id) >= 1) AND (octet_length(erasure_source_client_id) <= 1024)));
+
+ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_workflow_request_request_party_version_check CHECK ((request_party_version = ANY (ARRAY[0, 1])));
+
+ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_workflow_request_request_context_version_check CHECK ((request_context_version = ANY (ARRAY[0, 1])));
+
+CREATE INDEX erasure_request_actor ON public.auth_workflow_request USING btree (erasure_actor_id, workflow_id);
+
+CREATE INDEX erasure_request_principal ON public.auth_workflow_request USING btree (erasure_principal_id, workflow_id);
+
+CREATE INDEX erasure_request_source_client ON public.auth_workflow_request USING btree (erasure_source_client_id, workflow_id);
+
+CREATE INDEX erasure_request_unknown_context ON public.auth_workflow_request USING btree (workflow_id) WHERE (request_party_version = 0);
+
+CREATE FUNCTION public.auth_request_parties_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
   IF TG_OP='UPDATE' AND
     ROW(NEW.erasure_subject_id,NEW.erasure_human_id,NEW.erasure_operator_id,
@@ -5583,11 +5598,10 @@ BEGIN
   PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
   RETURN NEW;
 END $$;
--- Runs after the native role trigger has filled original client-owner provenance.
-CREATE TRIGGER zzz_request_parties BEFORE INSERT OR UPDATE ON auth_workflow_request
-  FOR EACH ROW EXECUTE FUNCTION auth_request_parties_guard();
 
-CREATE OR REPLACE FUNCTION auth_delete_workflow_request() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION public.auth_delete_workflow_request() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
   -- Exactly nativeRequestTerminal's registration closure. Other native consumers
   -- retain their pending request until their owning closure can retire it.
@@ -5600,3 +5614,4 @@ BEGIN
   RETURN OLD;
 END $$;
 
+CREATE TRIGGER zzz_request_parties BEFORE INSERT OR UPDATE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_request_parties_guard();

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { DBOS, type DBOSClient, type WorkflowHandle } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
+import { retireNativeWorkflowRequest } from './request-retention.ts';
 
 export type CopyRole = {
   accountId: string;
@@ -339,6 +340,7 @@ export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
     ).rows[0];
     if (status && status.status !== 'SUCCESS') return false;
     await client.query('UPDATE auth_copy_work SET retired=true WHERE workflow_id=$1', [id]);
+    await retireNativeWorkflowRequest(client, id);
     return true;
   });
   if (!ready) return false;

@@ -950,10 +950,12 @@ the erasure phase inventory. Every original role and version is immutable on rep
 even in the creation transaction; current relations never refill a request. Existing
 rows retain version zero and unknown pending provenance. Request scope reads only
 original typed columns. A request locator does not establish SDK copy coverage.
-The SDK deletion trigger minimizes a private request only through the exact native
-registration consumer closure also used by `nativeRequestTerminal`; terminal SDK
-status or `terminal_at` alone cannot retire it. Other requests remain pending until
-their owning native consumer provides its closure.
+The copy retirement transaction minimizes a private request through the exact native
+registration consumer closure in `nativeRequestTerminal`, while its existing copy
+work and roles still anchor SDK history cleanup. The SDK deletion trigger uses
+the same native closure. Terminal SDK status or `terminal_at` alone cannot retire
+the request. Other requests remain pending until their owning native consumer
+provides its closure.
 
 The two request producers are `workflows.ts`'s `runOperation` and
 `reduceClientScopes`; the atomic source callback is in `erasure-copy.ts`. The Access
