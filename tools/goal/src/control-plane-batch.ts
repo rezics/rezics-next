@@ -39,7 +39,7 @@ export function assertControlPlaneMember(store: WorkerStore, taskId: string, man
 
 /** Capture current landing-state requests, never ready-to-start work or historical successes. No task is changed. */
 export function captureControlPlaneBatch(
-  store: WorkerStore, queue: SqliteLandingQueue, managerId: string, excludedTaskIds: readonly string[] = [],
+  store: WorkerStore, queue: SqliteLandingQueue, managerId: string, excludedTaskIds: readonly string[] = [], mainBranch = 'main',
 ): ControlPlaneBatchManifest {
   const members: ControlPlaneBatchManifest['members'][number][] = [];
   for (const task of store.activeTasks()) {
@@ -50,7 +50,7 @@ export function captureControlPlaneBatch(
     const acceptedCommit = git(task.worktree, 'rev-parse', '--verify', 'HEAD^{commit}');
     assertManagerLandingEvidence({ ...entry.request, managerLanding: {
       managerId, acceptedCommit, acceptanceCommand: task.brief.acceptance.command,
-    } }, store);
+    } }, store, { allowNoDeltaOn: git(task.worktree, 'rev-parse', `refs/heads/${mainBranch}^{commit}`) });
     members.push({ taskId: task.id, attempt: task.currentAttempt, acceptedCommit });
   }
   return parseControlPlaneBatchManifest({ version: 1, managerId, members });
@@ -59,7 +59,7 @@ export function captureControlPlaneBatch(
 /** Authenticate the manager's persisted provider session before granting any landing authority. */
 export async function receiveControlPlaneBatch(
   input: unknown,
-  runtime: { store: WorkerStore; queue: SqliteLandingQueue; train: MergeTrain; landing(taskId: string): LandingRequest },
+  runtime: { store: WorkerStore; queue: SqliteLandingQueue; train: MergeTrain; mainBranch?: string; landing(taskId: string): LandingRequest },
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ControlPlaneBatchResult> {
   const manifest = parseControlPlaneBatchManifest(input);
@@ -77,9 +77,12 @@ export async function receiveControlPlaneBatch(
       throw new Error(`Accepted source moved for ${member.taskId}`);
     assertManagerLandingEvidence({ ...entry.request, managerLanding: {
       managerId: manager.id, acceptedCommit: member.acceptedCommit, acceptanceCommand: task.brief.acceptance.command,
-    } }, runtime.store, { allowIntegrated: true });
+    } }, runtime.store, { allowIntegrated: true,
+      allowNoDeltaOn: git(task.worktree, 'rev-parse', `refs/heads/${runtime.mainBranch ?? 'main'}^{commit}`) });
   }
   for (const member of manifest.members)
-    requestManagerLanding(member.taskId, manager.id, runtime.store, runtime.queue, runtime.landing);
+    requestManagerLanding(member.taskId, manager.id, runtime.store, runtime.queue, runtime.landing, {
+      allowNoDeltaOn: git(runtime.store.task(member.taskId).worktree, 'rev-parse', `refs/heads/${runtime.mainBranch ?? 'main'}^{commit}`),
+    });
   return runtime.train.releaseControlPlaneBatch(manifest);
 }

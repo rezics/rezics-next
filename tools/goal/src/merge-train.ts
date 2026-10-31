@@ -1161,7 +1161,8 @@ export class MergeTrain {
             entry.request.managerLanding.acceptedCommit !== member.acceptedCommit ||
             (entry.request.workerCommit && entry.request.workerCommit !== member.acceptedCommit))
           throw new Error(`Batch source/request identity changed for ${member.taskId}`);
-        assertManagerLandingEvidence(entry.request, store, { allowIntegrated: recovery });
+        assertManagerLandingEvidence(entry.request, store, { allowIntegrated: recovery,
+          allowNoDeltaOn: git(o.mainCheckout, 'rev-parse', `refs/heads/${o.mainBranch ?? 'main'}^{commit}`) });
         // Even recovery must never attribute an old release to a newer source on the same attempt.
         if (git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}^{commit}`) !== member.acceptedCommit)
           throw new Error(`Accepted source moved for ${member.taskId}`);

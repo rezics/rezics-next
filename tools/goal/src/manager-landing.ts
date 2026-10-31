@@ -19,7 +19,7 @@ function cleanTrackedTree(cwd: string): void {
 export function assertManagerLandingEvidence(
   request: LandingRequest,
   store: WorkerStore,
-  options: { allowIntegrated?: boolean } = {},
+  options: { allowIntegrated?: boolean; allowNoDeltaOn?: string } = {},
 ): void {
   const evidence = request.managerLanding;
   if (!evidence) throw new Error('Missing manager landing authorization');
@@ -65,8 +65,12 @@ export function assertManagerLandingEvidence(
   } catch {
     throw new Error(`Accepted commit for task ${task.id} is not based on its recorded task base`);
   }
-  if (/^0+$/.test(git(task.worktree, 'rev-list', '--count', `${task.base}..${head}`).trim()))
-    throw new Error(`Task ${task.id} has no committed work`);
+  if (/^0+$/.test(git(task.worktree, 'rev-list', '--count', `${task.base}..${head}`).trim())) {
+    if (!options.allowNoDeltaOn) throw new Error(`Task ${task.id} has no committed work`);
+    // Only explicit cohort release can attest that this completed source is already represented on captured main.
+    // Ordinary single-request authorization keeps its committed-work requirement.
+    git(task.worktree, 'merge-base', '--is-ancestor', head, options.allowNoDeltaOn);
+  }
   cleanTrackedTree(task.worktree);
 }
 
@@ -77,6 +81,7 @@ export function requestManagerLanding(
   store: WorkerStore,
   queue: SqliteLandingQueue,
   landing: (taskId: string) => LandingRequest,
+  options: { allowNoDeltaOn?: string } = {},
 ): boolean {
   if (!managerId) throw new Error('Manager authentication is required to use direct landing');
   const task = store.task(taskId);
@@ -99,7 +104,7 @@ export function requestManagerLanding(
   } satisfies LandingRequest;
   let changed = true;
   store.write(ref, () => {
-    assertManagerLandingEvidence(request, store);
+    assertManagerLandingEvidence(request, store, options);
     const row = store.db
       .query('SELECT request, outcome, delivered FROM landing_queue WHERE task=? AND attempt=?')
       .get(taskId, ref.attempt) as { request: string; outcome: string | null; delivered: number } | null;
