@@ -1,9 +1,8 @@
 import type { KernelClient } from '@rezics/client';
-import type { TypeDefinition } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import type { Release } from '../subject/definitions';
 import { getLocale } from '../paraglide/runtime.js';
-import { parseCoverRatio, type CoverRatio } from '@rezics/ui/cover';
+import { parseCoverRatio, type CoverRatio, type ListPresentation } from '@rezics/ui/cover';
 import type { LibrarySubject } from './reads';
 
 const listRatios: Readonly<Record<string, CoverRatio>> = {
@@ -24,7 +23,7 @@ const listRatios: Readonly<Record<string, CoverRatio>> = {
 export function collectionMemberRatio(
   subject: Pick<LibrarySubject, 'type'> | null,
   typeRatios: Readonly<Record<string, string>> = {},
-  presentations: Readonly<Record<string, NonNullable<TypeDefinition['listPresentation']>>> = {},
+  presentations: CollectionListPresentations = {},
 ): CoverRatio {
   if (!subject) return '1:1';
   const aspect = presentations[subject.type]?.imageAspect;
@@ -55,7 +54,7 @@ export type CollectionPresentationData = Partial<
   Pick<NativeCollection, 'presentationKind' | 'presentationKindSource' | 'cover' | 'coverSource'>
 >;
 export type CollectionTypeOption = { id: string; label: string };
-export type CollectionListPresentations = Record<string, NonNullable<TypeDefinition['listPresentation']>>;
+export type CollectionListPresentations = Readonly<Record<string, ListPresentation>>;
 
 /** Keep the one shell filter protocol intact when following a native signed page cursor. */
 export function collectionPageAddress(

@@ -297,6 +297,7 @@ export function CollectionPage({
     page.visibility,
     page.memberState,
     page.members.map((member) => `${member.id}:${member.note ?? ''}`).join('\n'),
+    JSON.stringify(page.members.map((member) => member.facts)),
   ].join('\n');
 
   useEffect(() => setHydrated(true), []);

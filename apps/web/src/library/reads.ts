@@ -79,6 +79,7 @@ type RawMember = {
   subjectId?: string;
   note: string | null;
   addedAt: string;
+  facts?: CollectionMember['facts'];
   subject?: RawSubject | null;
 };
 type RawMemberPage = { members: RawMember[]; next: string | null };
@@ -183,6 +184,7 @@ function present(identity: SessionIdentity, collection: RawCollection, members: 
       note: member.note,
       addedAt: member.addedAt,
       subject: subjectOf(member.subject),
+      ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
     })),
     next: members.next,
   };

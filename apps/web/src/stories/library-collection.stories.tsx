@@ -1,6 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { PageStory, libraryCollectionReady, pagePaths, pageReady } from './page';
+import { PageStory, PatternStory, libraryCollectionReady, pagePaths, pageReady } from './page';
+import { pickText } from '@rezics/composition';
+import { parseListPresentation } from '@rezics/ui/cover';
+import { CollectionReadMembers } from '../library/collection-page';
+import { subjectOf, type CollectionMember } from '../library/reads';
+import { getLocale } from '../paraglide/runtime.js';
+import memberRecording from '../kernel/recorded/library-collection-members.json';
+import subjectRecording from '../kernel/recorded/subject.json';
+import definitionsRecording from '../kernel/recorded/definitions-release.json';
 import { collectionStoryPaths } from '../kernel/fake/collection-stories';
 import { setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { collectionReadStoryIds } from '../kernel/fake/collection-read-stories';
@@ -319,6 +327,83 @@ export const AnotherReader: Story = {
     await expect(actions.getByText(m.report_action(), { exact: true })).toBeVisible();
     await expect(actions.queryByText(m.library_collection_edit(), { exact: true })).toBeNull();
     await userEvent.keyboard('{Escape}');
+  },
+};
+
+export const AnotherReaderGrid: Story = {
+  ...AnotherReader,
+  render: () => <PageStory visitor="Signed In" path={`/collections/${variants.ReaderPublicMany.id}?layout=grid`} />,
+  play: async (context) => {
+    await AnotherReader.play?.(context);
+    await expect(context.canvasElement.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(4);
+    await expect(context.canvasElement.querySelector('[data-slot="member-list-row-facts"]')).toBeNull();
+  },
+};
+
+export const MixedTypesGrid: Story = {
+  render: () => <PageStory visitor="Signed In" path={`/collections/${collectionReadStoryIds.mixed}?layout=grid`} />,
+  play: async (context) => {
+    await variantReady(context, 'A collection across many kinds of work');
+    await expect(context.canvasElement.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(4);
+    await expect(context.canvasElement.querySelector('[data-slot="member-list-row-facts"]')).toBeNull();
+  },
+};
+
+// An illustrative projection of one recorded statement for the same recorded subject, never a replacement
+// for the collection's recording. No recorded author label or Film facts are available to project here.
+const illustratedBook = memberRecording.members.find((member) => member.subject.id === subjectRecording.subject.id)!;
+const illustratedYear = Number(
+  subjectRecording.subject.statements['schema:datePublished'][0]!.value.content.time.slice(1, 5),
+);
+const illustratedPresentation = parseListPresentation(
+  definitionsRecording.release.types['schema:Book'].listPresentation,
+)!;
+
+export const SuppliedBookFactsIllustrative: Story = {
+  name: 'Supplied Book facts — illustrative DTO',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Illustrates the existing row renderer in list and grid using the recorded publication statement in subject.json for the same member ID. The collection FULL recording has no facts. This is not a recorded FULL fact response or native coverage; author and Film facts remain absent.',
+      },
+    },
+  },
+  render: () => {
+    const locale = getLocale();
+    const member: CollectionMember = {
+      ...illustratedBook,
+      subject: {
+        ...subjectOf(illustratedBook.subject)!,
+        typeLabel: pickText(definitionsRecording.release.types['schema:Book'].labels, locale).text,
+      },
+      facts: { 'schema:datePublished': [{ kind: 'time', year: illustratedYear }] },
+    };
+    return (
+      <PatternStory>
+        <main className="mx-auto max-w-5xl space-y-6 p-4">
+          <h1 className="text-xl font-semibold">Illustrative supplied Book facts</h1>
+          {(['list', 'grid'] as const).map((layout) => (
+            <CollectionReadMembers
+              key={layout}
+              members={[member]}
+              layout={layout}
+              listPresentations={{ 'schema:Book': illustratedPresentation }}
+              onCopy={() => {}}
+            />
+          ))}
+        </main>
+      </PatternStory>
+    );
+  },
+  play: async (context) => {
+    const facts = context.canvasElement.querySelectorAll('[data-slot="member-list-row-facts"]');
+    await expect(facts).toHaveLength(2);
+    const year = new Intl.NumberFormat(getLocale(), { useGrouping: false }).format(illustratedYear);
+    for (const fact of facts) await expect(fact).toHaveTextContent(year);
+    await expect(
+      within(context.canvasElement).getAllByRole('link', { name: illustratedBook.subject.label.value }),
+    ).toHaveLength(2);
   },
 };
 

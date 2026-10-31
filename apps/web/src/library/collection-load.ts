@@ -155,6 +155,7 @@ export async function loadDynamicMembers(
   return {
     members: page.members.map((member) => ({
       subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
+      ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
     })),
     next: page.next,
     preparing: false,
@@ -373,10 +374,9 @@ export async function loadEditableCollectionPage(
     );
     const dynamicMembers = {
       members: page.members.map((member) => ({
-        ...(editor && member.subject
-          ? { subjectId: member.subjectId, ...(member.facts ? { facts: member.facts } : {}) }
-          : {}),
+        ...(editor && member.subject ? { subjectId: member.subjectId } : {}),
         subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
+        ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
       })),
       next: page.next,
       preparing: false,
