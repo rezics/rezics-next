@@ -619,6 +619,8 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   });
   const zones = zoneRoutes(sourceStatistics, {
     pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    ...(dependencies.search ? { search: dependencies.search } : {}),
     tokens,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),

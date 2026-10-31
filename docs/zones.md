@@ -9,8 +9,8 @@ nothing until a person submits a create command; subsequent definition releases 
 
 [Filtered lists](filtered-lists.md) owns complete indexed observations, current disclosure, direct/prepared plans,
 freshness, canonical identity and cost. [Zone membership](zone-membership.md) owns source composition obligations.
-The resource substrate and independent static configured-page reads are integrated; source-dependent
-membership/page/default execution and Zone-specific withholding,
+The resource substrate, independent static configured-page reader and native-owner page composition are
+implemented. Actual ordered owner execution and native page/default proof, plus Zone-specific withholding,
 purge, account cleanup and scheduler work remain incomplete. Typed schemas, immutable loaders, cursor capacity
 and helper setup do not establish those capabilities; the
 [integration audit](research/semantic-integration-audit-zone-composition.md) remains evidence, not a completion gate.
@@ -20,14 +20,14 @@ and helper setup do not establish those capabilities; the
 The public slice is configured static routed documents with no planned source reads, through current
 `zone:read` authority. The mounted `zone.read_page` operation remains public for this slice. Saved-scope
 and mounted-Collection unions, direct catalogue targets, source-dependent lists and retained preparation
-remain deferred behind `zone_sources` platform grants. A source-dependent request first proves current Zone
+execute only behind explicit `zone_sources` platform grants and actual native owner readiness. A source-dependent request first proves current Zone
 readability, preserving identical unknown/private concealment and the safe public shell, then calls native
 `admitGroup` with the real Actor, mounted client action, original deadline and configured clock. Anonymous
 and ungranted accounts receive the standard `403 platform_closed` Problem. Zone ownership supplies no gate.
 
 An explicit `gate:zone_sources` (or covering platform grant) admits development exposure only. It supplies
-no membership or source permission and reveals no private mount metadata. Missing source/runtime owner
-ports still answer the truthful typed `503 semantic_not_ready`, with `Retry-After: 1`, after admission.
+no membership or source permission and reveals no private mount metadata. Unready source/runtime owner
+ports answer the truthful typed `503 semantic_not_ready`, with `Retry-After: 1`, after admission.
 That response is not supported dynamic behavior; the full native dynamic journey remains required before
 opening. Existing native grant administration handles the exact gate action; this internal branch is not a
 separate mounted operation in visibleOperations or OpenAPI. Static routes keep the ordinary platform
@@ -383,11 +383,24 @@ The request's native deadline also bounds the Zone snapshot's statements and is 
 lookup and response construction. This adds no query budget, projection or maintenance work.
 
 Subject targets and configured documents requiring data first require native `zone_sources` admission
-after current Zone readability: ungranted callers receive `403 platform_closed`. Explicitly admitted
-development callers still receive `503 semantic_not_ready` Problem with `Retry-After`, without partial
-documents or replacement cursors, until actual source-dependent runtime ports are available. The declared closed 202 progress envelope is reserved for real retained preparation;
-this static implementation emits none. Static completion does not establish any remaining union,
-direct-target, freshness, canonical-order, privacy-repair or default-worker obligation below.
+after current Zone readability: ungranted callers receive `403 platform_closed`. The mounted composition now
+uses the actual same Search service and native Collection/canonical providers. Original saved scopes retain their
+release pin; mounted Sources require current native authorization. The union settles only completely discovered
+covered ranges and retains actual unfinished owner progress. A MemberSource is intersected with this union.
+Direct targets require current native membership before the common Subject/type/view reader; a source-free direct
+target is concealed 404. No Source ID, Zone ownership or exposure grant supplies membership.
+
+Name/count TypeLists call the exact selected Scope `nativeOrder` preparation and `orderedPrefix` ports, preserving
+native tuples and work receipts. Their current native bodies are still unavailable in this input; the composition
+propagates standard retryable 503 rather than substituting a UUID page or complete public Search result. Underlying
+Source `metadata_missing` remains an independent owner dependency. See the [callable runtime inventory](../services/kernel/src/zones/README.md).
+
+Real bounded advancing work retains disposable locators and returns private/no-store `202 {next}`; complete pages
+return 200. Native unavailability or impossible/no-progress work returns 503 with Retry-After and no partial document
+or replacement cursor. `zones.page_preparation` is bounded derived work, separate from the existing authoritative
+Zone head. Configuration/lifecycle updates invalidate it in the owning transaction. Cursor encryption uses the
+existing Accounts search profile and current authorization on every request. This establishes composition code,
+not native six-surface, Source publication, physical/growth, GET-list or account/lifecycle completion.
 
 ### Retained preparation and current query safety
 

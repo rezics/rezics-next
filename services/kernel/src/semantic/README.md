@@ -1496,6 +1496,20 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
   `lifecycle-input.test.ts` covers only negative pre-IO validation. Access's native `resource-role-held.test.ts`
   separately covers microsecond validity, branded T, direct grants and anchored RR after revocation.
 
+### Mounted Zone source composition
+
+- Touches: the existing Zone head/current Access, original pinned saved Scope definitions, actual common Collection
+  providers and canonical prefixes, current native membership and common page summaries. See the
+  [runtime inventory](../zones/README.md) for callable methods and explicit ordered-owner unavailability.
+- Bound: original 16 scopes and 16 mounts; structural UUID work shares aggregate 256 raw keys including aliases,
+  rejects, lookahead and final rereads. Name/count output uses the independently named direct/ready operation
+  classes in [Filtered lists](../../../../docs/filtered-lists.md#cost), not UUID post-sorting or a universal 256.
+  Common admission retains 16 reads/128 slots and native independent receipts; the shared summary cost stays in
+  the Cost table above. Retained locators have bounded slots/bytes and use Accounts' unchanged encrypted profile.
+- Growth check: original native Zone source/union/current-target/cursor/finite outcomes and three-scale controller
+  evidence remain required. Local composition delivery checks Kernel typing only and certifies no native/physical,
+  Source publication, GET-list, account cleanup or default-worker completion.
+
 ### Zone account-owner fence
 
 #### Zone read and mutation owner fence

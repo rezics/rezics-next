@@ -291,6 +291,14 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
         return {
           zone,
           document,
+          // INTERNAL descriptors from the same authorized native head. Never put these in the shell.
+          sources: {
+            scopes: row.configuration.scope.filter((_, index) => !zoneWithheld(row, `/scope/${index}`)),
+            mounts: (row.mounts ?? []).filter((_, index) => !zoneWithheld(row, `/mounts/${index}`)),
+            releaseDigest: row.releaseDigest,
+            revision: `${row.revision}:${row.lifecycleRevision}`,
+          },
+          time,
           component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
         };
       },

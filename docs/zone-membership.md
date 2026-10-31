@@ -112,9 +112,14 @@ retaining usable continuation; a 503 supplies no replacement cursor. No schema/s
 
 Search must provide actual same-service admitted indexed/prepared execution and freshness over Semantic's complete
 facet projections/dependencies. Commerce must provide actual curated, built-in, published and frozen source plans.
-The current service/Scope and Collection factories are unavailable scaffolding. Their raw-prefix, current-leaf,
-one-pending-leaf, universal 256, final-replay and home-certificate prescriptions are superseded list rules until
-replacement acceptance permits code removal. Existing native batch/string/byte and cursor limits remain independent.
+The mounted Zone composition now consumes the real service/Scope and Collection factories, canonical discovery,
+current membership and retained page locators. Exact name/count declarations are in Search's `scope-ordered.ts`;
+ordered `prepare` and `orderedPrefix` currently return native unavailability after validation. Their real owner
+implementation and underlying Source readiness remain dependencies, never positive readiness inferred from types.
+Structural UUID work retains its original aggregate 256 raw cap; name/count operations instead use the operation
+classes in [Filtered lists](filtered-lists.md#cost), including direct `min(600,6s+3)` and ready `2s+2` bounds.
+Existing native batch/string/byte and encrypted cursor limits remain independent. The
+[callable runtime inventory](../services/kernel/src/zones/README.md) names actual methods and remaining branches.
 
 The [integration audit](research/semantic-integration-audit-zone-composition.md) establishes the resource substrate,
 not membership/page/default execution or Zone withholding/purge/account/scheduler completion. Typed schemas,

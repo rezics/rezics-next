@@ -10,6 +10,7 @@ import { customMethod } from '../http/custom-method.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { actionForRequest, IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { SearchService } from '../search/service-scope.ts';
 import {
   ZoneCreateInputSchema,
   ZoneConfigureInputSchema,
@@ -78,7 +79,7 @@ function cache(set: { headers: Record<string, string | number | readonly string[
   set.headers['cache-control'] = 'private, no-store';
   if (revision) set.headers.etag = `"${revision}"`;
 }
-/** Resource routes and independent static pages; source-dependent execution has separate owners. */
+/** Resource routes and the one common-page composition over native source owners. */
 export function zoneRoutes(
   app: ReturnType<typeof definitionRoutes>,
   dependencies: {
@@ -86,6 +87,8 @@ export function zoneRoutes(
     access: () => Access;
     tokens: KeyRing;
     clock: () => Date;
+    routeKey: Uint8Array;
+    search?: SearchService;
   },
 ) {
   const reads = () => createZoneReads({ ...dependencies, access: dependencies.access() });
@@ -203,6 +206,8 @@ export function zoneRoutes(
           ),
         );
         session.record(result.component);
+        for (const component of result.components) session.record(component);
+        set.status = result.status;
         cache(set);
         return result.value;
       },
