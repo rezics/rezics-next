@@ -50,6 +50,10 @@ and the canonical story index at `http://127.0.0.1:16497/index.json`. Select a d
 worktree; keep the endpoint and manifest on that worktree's server. The addon is already configured in both
 catalogues. Neither a shared dev server nor a public MCP service is required.
 
+The web configuration enables `componentsManifest` and uses `docgenServer: false`: this alpha deliberately returns
+404 for the dev JSON manifest with server-side docgen. Builder-side React docgen retains the required JSON endpoint;
+Storybook marks that mode deprecated for version 12, so revisit these flags when upgrading.
+
 The default web preview uses `connectedStoryProviders` from `apps/web/src/stories/connected-story.tsx`.
 It supplies a missing QueryClient for connected regions such as local search history and imported subject scores.
 Each selected story owns its fallback client, retains it during rerenders and clears it on unmount or story change.

@@ -17,7 +17,10 @@ const config: StorybookConfig = {
     name: '@storybook/react-vite',
     options: { builder: { viteConfigPath: null } },
   },
-  features: { viewportStoryGlobals: true, componentsManifest: true } as NonNullable<StorybookConfig['features']> & {
+  // This alpha serves the dev JSON manifest only with builder-side docgen.
+  features: { viewportStoryGlobals: true, componentsManifest: true, docgenServer: false } as NonNullable<
+    StorybookConfig['features']
+  > & {
     viewportStoryGlobals: true;
   },
   stories: [
