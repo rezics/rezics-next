@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { processIdentity as readProcessIdentity, type ProcessIdentity } from './process.ts';
 import { cleanManagedProviderEnvironment } from './agents.ts';
+import { processIdentity as readProcessIdentity, type ProcessIdentity } from './process.ts';
 
 export type Notification = { method: string; params: any };
 export interface AppServer {
@@ -12,18 +12,26 @@ export interface AppServer {
   close(): void | Promise<void>;
 }
 export class RpcError extends Error {
-  constructor(readonly code: number, message: string, readonly data?: unknown) { super(message); }
+  constructor(
+    readonly code: number,
+    message: string,
+    readonly data?: unknown,
+  ) {
+    super(message);
+  }
 }
 
 async function stopChild(child: ChildProcessWithoutNullStreams, graceMs = 500): Promise<void> {
   if (!child.pid) return;
   if (child.exitCode !== null || child.signalCode !== null) return;
-  const exited = new Promise<void>(resolve => child.once('exit', () => resolve()));
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
   child.kill('SIGTERM');
   let timer: ReturnType<typeof setTimeout> | undefined;
   const stopped = await Promise.race([
     exited.then(() => true),
-    new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), graceMs); }),
+    new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), graceMs);
+    }),
   ]);
   clearTimeout(timer);
   if (!stopped) {
@@ -36,21 +44,32 @@ async function stopChild(child: ChildProcessWithoutNullStreams, graceMs = 500): 
 export class StdioAppServer implements AppServer {
   private readonly child: ChildProcessWithoutNullStreams;
   private nextId = 0;
-  private pending = new Map<number, { resolve(value: any): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
+  private pending = new Map<
+    number,
+    { resolve(value: any): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }
+  >();
   private listeners = new Set<(notification: Notification) => void>();
   private ended: Error | undefined;
-  constructor(argv: readonly string[], env: NodeJS.ProcessEnv, private readonly timeoutMs = 30_000) {
+  constructor(
+    argv: readonly string[],
+    env: NodeJS.ProcessEnv,
+    private readonly timeoutMs = 30_000,
+  ) {
     this.child = spawn(argv[0]!, argv.slice(1), { env, stdio: 'pipe' });
     this.child.stderr.on('data', () => {});
-    createInterface({ input: this.child.stdout }).on('line', line => {
-      try { this.receive(JSON.parse(line)); } catch (error) { this.fail(new Error(`Invalid app-server message: ${error}`)); }
+    createInterface({ input: this.child.stdout }).on('line', (line) => {
+      try {
+        this.receive(JSON.parse(line));
+      } catch (error) {
+        this.fail(new Error(`Invalid app-server message: ${error}`));
+      }
     });
-    this.child.on('error', error => this.fail(error));
+    this.child.on('error', (error) => this.fail(error));
     this.child.on('exit', (code, signal) => this.fail(new Error(`App-server exited (${code ?? signal})`)));
-    this.child.stdin.on('error', error => this.fail(error));
+    this.child.stdin.on('error', (error) => this.fail(error));
   }
   get identity(): ProcessIdentity | undefined {
-    return this.child.pid ? readProcessIdentity(this.child.pid) ?? undefined : undefined;
+    return this.child.pid ? (readProcessIdentity(this.child.pid) ?? undefined) : undefined;
   }
   private receive(message: any): void {
     if (message.method && message.id !== undefined) {
@@ -61,35 +80,50 @@ export class StdioAppServer implements AppServer {
     } else {
       const pending = this.pending.get(message.id);
       if (!pending) return;
-      this.pending.delete(message.id); clearTimeout(pending.timer);
+      this.pending.delete(message.id);
+      clearTimeout(pending.timer);
       if (message.error) pending.reject(new RpcError(message.error.code, message.error.message, message.error.data));
       else pending.resolve(message.result);
     }
   }
-  private write(message: unknown): void { this.child.stdin.write(`${JSON.stringify(message)}\n`); }
+  private write(message: unknown): void {
+    this.child.stdin.write(`${JSON.stringify(message)}\n`);
+  }
   private fail(error: Error): void {
     this.ended = error;
-    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
     this.pending.clear();
   }
   async initialize(): Promise<void> {
-    await this.request('initialize', { clientInfo: { name: 'rezics_goal', title: 'REZICS Goal', version: '0.1.0' },
-      capabilities: { experimentalApi: true, requestAttestation: false } });
+    await this.request('initialize', {
+      clientInfo: { name: 'rezics_goal', title: 'REZICS Goal', version: '0.1.0' },
+      capabilities: { experimentalApi: true, requestAttestation: false },
+    });
     this.write({ method: 'initialized' });
   }
   request<T = any>(method: string, params: unknown): Promise<T> {
     if (this.ended) return Promise.reject(this.ended);
     const id = ++this.nextId;
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`App-server request timed out: ${method}`)); }, this.timeoutMs);
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`App-server request timed out: ${method}`));
+      }, this.timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       this.write({ id, method, params });
     });
   }
   onNotification(listener: (notification: Notification) => void): () => void {
-    this.listeners.add(listener); return () => this.listeners.delete(listener);
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
-  close(): void | Promise<void> { this.fail(new Error('App-server client closed')); return stopChild(this.child); }
+  close(): void | Promise<void> {
+    this.fail(new Error('App-server client closed'));
+    return stopChild(this.child);
+  }
 }
 
 export type CodexPool = { id: string; codexHome: string; executable?: string };
@@ -97,22 +131,32 @@ export type CodexPool = { id: string; codexHome: string; executable?: string };
 /** JSON-RPC over the WebSocket app-server owned by this manager host. */
 export class WebSocketAppServer implements AppServer {
   private nextId = 0;
-  private pending = new Map<number, { resolve(value: any): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
+  private pending = new Map<
+    number,
+    { resolve(value: any): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }
+  >();
   private listeners = new Set<(notification: Notification) => void>();
   private ended: Error | undefined;
-  constructor(readonly endpoint: string, private readonly socket: WebSocket, private readonly child: ChildProcessWithoutNullStreams,
-    private readonly timeoutMs = 30_000) {
-    socket.addEventListener('message', event => {
-      try { this.receive(JSON.parse(typeof event.data === 'string' ? event.data : String(event.data))); }
-      catch (error) { this.fail(new Error(`Invalid app-server message: ${error}`)); }
+  constructor(
+    readonly endpoint: string,
+    private readonly socket: WebSocket,
+    private readonly child: ChildProcessWithoutNullStreams,
+    private readonly timeoutMs = 30_000,
+  ) {
+    socket.addEventListener('message', (event) => {
+      try {
+        this.receive(JSON.parse(typeof event.data === 'string' ? event.data : String(event.data)));
+      } catch (error) {
+        this.fail(new Error(`Invalid app-server message: ${error}`));
+      }
     });
     socket.addEventListener('error', () => this.fail(new Error('App-server WebSocket failed')));
     socket.addEventListener('close', () => this.fail(new Error('App-server WebSocket closed')));
-    child.on('error', error => this.fail(error));
+    child.on('error', (error) => this.fail(error));
     child.on('exit', (code, signal) => this.fail(new Error(`App-server exited (${code ?? signal})`)));
   }
   get identity(): ProcessIdentity | undefined {
-    return this.child.pid ? readProcessIdentity(this.child.pid) ?? undefined : undefined;
+    return this.child.pid ? (readProcessIdentity(this.child.pid) ?? undefined) : undefined;
   }
   private receive(message: any): void {
     if (message.method && message.id !== undefined) {
@@ -122,7 +166,8 @@ export class WebSocketAppServer implements AppServer {
     } else {
       const pending = this.pending.get(message.id);
       if (!pending) return;
-      this.pending.delete(message.id); clearTimeout(pending.timer);
+      this.pending.delete(message.id);
+      clearTimeout(pending.timer);
       if (message.error) pending.reject(new RpcError(message.error.code, message.error.message, message.error.data));
       else pending.resolve(message.result);
     }
@@ -134,31 +179,46 @@ export class WebSocketAppServer implements AppServer {
   private fail(error: Error): void {
     if (this.ended) return;
     this.ended = error;
-    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
     this.pending.clear();
   }
   async initialize(): Promise<void> {
-    await this.request('initialize', { clientInfo: { name: 'rezics_goal', title: 'REZICS Goal', version: '0.1.0' },
-      capabilities: { experimentalApi: true, requestAttestation: false } });
+    await this.request('initialize', {
+      clientInfo: { name: 'rezics_goal', title: 'REZICS Goal', version: '0.1.0' },
+      capabilities: { experimentalApi: true, requestAttestation: false },
+    });
     this.write({ method: 'initialized' });
   }
   request<T = any>(method: string, params: unknown): Promise<T> {
     if (this.ended) return Promise.reject(this.ended);
     const id = ++this.nextId;
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`App-server request timed out: ${method}`)); }, this.timeoutMs);
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`App-server request timed out: ${method}`));
+      }, this.timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
-      try { this.write({ id, method, params }); } catch (error) {
-        clearTimeout(timer); this.pending.delete(id); reject(error instanceof Error ? error : new Error(String(error)));
+      try {
+        this.write({ id, method, params });
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
   onNotification(listener: (notification: Notification) => void): () => void {
-    this.listeners.add(listener); return () => this.listeners.delete(listener);
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
   close(): void | Promise<void> {
     this.fail(new Error('App-server client closed'));
-    try { this.socket.close(); } catch {}
+    try {
+      this.socket.close();
+    } catch {}
     return stopChild(this.child);
   }
 }
@@ -175,9 +235,16 @@ export async function connectPool(
   if (onStart) {
     const identity = child.pid ? readProcessIdentity(child.pid) : null;
     if (!child.pid) throw new Error('Cannot start app-server process');
-    if (!identity) { await stopChild(child); throw new Error('Cannot identify app-server process'); }
-    try { onStart(identity); }
-    catch (error) { await stopChild(child); throw error; }
+    if (!identity) {
+      await stopChild(child);
+      throw new Error('Cannot identify app-server process');
+    }
+    try {
+      onStart(identity);
+    } catch (error) {
+      await stopChild(child);
+      throw error;
+    }
   }
   child.stdout.resume();
   let stderr = '';
@@ -185,29 +252,56 @@ export async function connectPool(
   const ready = new Promise<string>((resolveReady, reject) => {
     const finish = (error?: Error, value?: string) => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
-      if (error) reject(error); else resolveReady(value!);
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error);
+      else resolveReady(value!);
     };
     const timer = setTimeout(() => finish(new Error(`Timed out waiting for app-server readiness: ${stderr}`)), 30_000);
-    child.stderr.on('data', chunk => {
+    child.stderr.on('data', (chunk) => {
       stderr += String(chunk);
       const match = stderr.match(/readyz:\s*(https?:\/\/127\.0\.0\.1:\d+\/readyz)/);
       if (match) finish(undefined, match[1]);
     });
-    child.on('error', error => finish(error));
-    child.on('exit', (code, signal) => finish(new Error(`App-server exited before readiness (${code ?? signal}): ${stderr}`)));
+    child.on('error', (error) => finish(error));
+    child.on('exit', (code, signal) =>
+      finish(new Error(`App-server exited before readiness (${code ?? signal}): ${stderr}`)),
+    );
   });
   try {
     const readiness = await ready;
     const endpoint = readiness.replace(/^https?:/, 'ws:').replace(/\/readyz$/, '');
     const socket = new WebSocket(endpoint);
     await new Promise<void>((resolveReady, reject) => {
-      const timer = setTimeout(() => { socket.close(); reject(new Error(`Timed out connecting to app-server at ${endpoint}`)); }, 30_000);
-      socket.addEventListener('open', () => { clearTimeout(timer); resolveReady(); }, { once: true });
-      socket.addEventListener('error', () => { clearTimeout(timer); reject(new Error(`Cannot connect to app-server at ${endpoint}`)); }, { once: true });
+      const timer = setTimeout(() => {
+        socket.close();
+        reject(new Error(`Timed out connecting to app-server at ${endpoint}`));
+      }, 30_000);
+      socket.addEventListener(
+        'open',
+        () => {
+          clearTimeout(timer);
+          resolveReady();
+        },
+        { once: true },
+      );
+      socket.addEventListener(
+        'error',
+        () => {
+          clearTimeout(timer);
+          reject(new Error(`Cannot connect to app-server at ${endpoint}`));
+        },
+        { once: true },
+      );
     });
     const client = new WebSocketAppServer(endpoint, socket, child);
-    try { await client.initialize(); return client; } catch (error) { await client.close(); throw error; }
+    try {
+      await client.initialize();
+      return client;
+    } catch (error) {
+      await client.close();
+      throw error;
+    }
   } catch (error) {
     await stopChild(child);
     throw error;
