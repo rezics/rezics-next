@@ -16,6 +16,7 @@ export const Missingimage: Story = { ...pattern.Missingimage };
 export const Longtext: Story = { ...pattern.Longtext };
 export const Loading: Story = { ...pattern.Loading };
 export const Unavailable: Story = { ...pattern.Unavailable };
+export const Retryrecovers: Story = { ...pattern.Retryrecovers };
 export const Refused: Story = { ...pattern.Refused };
 export const Withdrawn: Story = { ...pattern.Withdrawn };
 export const Versionmismatch: Story = { ...pattern.Versionmismatch };

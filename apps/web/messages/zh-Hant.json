@@ -1,4 +1,8 @@
 {
+  "content_edition_creator_unknown": "創作者資訊無法取得",
+  "content_edition_not_published": "此版本尚未發布，無法閱讀。",
+  "content_edition_purchases": "返回購買紀錄",
+  "content_edition_details": "版本詳細資料",
   "identifiers_title": "識別碼證據",
   "identifiers_intro": "為此條目及其目前類型提出有引用支持的識別碼或網址。保留證據中的原始值。提案需要審核；引用不授予權利，也不證明身分。",
   "identifiers_empty": "此類型目前沒有可用的識別碼或網址欄位。",

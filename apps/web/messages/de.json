@@ -1,4 +1,8 @@
 {
+  "content_edition_creator_unknown": "Urheber nicht verfügbar",
+  "content_edition_not_published": "Diese Ausgabe wurde noch nicht veröffentlicht und kann nicht gelesen werden.",
+  "content_edition_purchases": "Zurück zu den Käufen",
+  "content_edition_details": "Details zur Ausgabe",
   "identifiers_title": "Belege für Kennungen",
   "identifiers_intro": "Schlage eine belegte Kennung oder URL für diesen Eintrag und seinen aktuellen Typ vor. Behalte den genauen Wert aus dem Beleg bei. Vorschläge warten auf Prüfung; Zitate gewähren keine Rechte und belegen keine Identität.",
   "identifiers_empty": "Dieser Typ lässt derzeit keine Kennungs- oder URL-Felder zu.",

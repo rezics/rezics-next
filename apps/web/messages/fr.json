@@ -1,4 +1,8 @@
 {
+  "content_edition_creator_unknown": "Auteur indisponible",
+  "content_edition_not_published": "Cette édition n’a pas été publiée et ne peut pas être lue.",
+  "content_edition_purchases": "Retour aux achats",
+  "content_edition_details": "Détails de l’édition",
   "identifiers_title": "Justificatifs des identifiants",
   "identifiers_intro": "Proposez un identifiant ou une URL avec une citation pour cette entrée et son type actuel. Conservez la valeur exacte du justificatif. Les propositions attendent une révision ; les citations ne confèrent aucun droit et ne prouvent pas l’identité.",
   "identifiers_empty": "Ce type ne prévoit actuellement aucun champ d’identifiant ou d’URL.",

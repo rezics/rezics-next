@@ -22,10 +22,12 @@ export function EditionRoute() {
   const page = useLoaderData({ from: '/editions/$id' });
   const router = useRouter();
   const loading = useRouterState({ select: (state) => state.isLoading });
+  // Retain current refusals during a reread, but conceal old bytes during fresh authorization.
   return (
     <ContentEditionPage
       editionId={editionId}
-      page={loading ? { state: 'loading' } : page}
+      page={loading && page.state === 'published' ? { state: 'loading' } : page}
+      retrying={loading}
       onRetry={() => {
         void router.invalidate();
       }}

@@ -1,5 +1,5 @@
 import { DocumentBody } from '../document-body';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -12,10 +12,12 @@ export function ContentEditionReader({
   editionId,
   page,
   onRetry,
+  retrying = false,
 }: {
   editionId: string;
   page: ContentEditionState;
   onRetry?: () => void;
+  retrying?: boolean;
 }) {
   const locale = getLocale();
   if (page.state === 'published' && (page.metadata.editionId !== editionId || page.metadata.state !== 'published'))
@@ -26,13 +28,34 @@ export function ContentEditionReader({
   const images = new Map(
     published?.media.kind === 'ready' ? published.media.images.map((image) => [image.id, image]) : [],
   );
-  const retryable = page.state !== 'published' && page.state !== 'loading';
+  const recoverable = page.state === 'unavailable' && page.reason !== 'not-published';
+  const retryable = recoverable || page.state === 'version-mismatch';
+  const signIn = page.state === 'refused' && page.status === 401;
+  const retry =
+    retryable && onRetry ? (
+      <Button
+        type="button"
+        variant={recoverable ? 'default' : 'outline'}
+        className="min-h-11"
+        disabled={retrying}
+        onClick={onRetry}
+      >
+        {m.content_edition_retry()}
+      </Button>
+    ) : null;
   return (
     <article
       className="mx-auto w-full max-w-3xl space-y-8 text-foreground [overflow-wrap:anywhere]"
-      aria-busy={page.state === 'loading'}
+      aria-busy={page.state === 'loading' || retrying}
     >
       <header className="space-y-3">
+        <PageHeading>{subject?.label || m.content_edition_heading()}</PageHeading>
+        {published ? (
+          <p className="text-sm text-muted-foreground">
+            {creator ? m.content_edition_creator({ name: creator.name }) : m.content_edition_creator_unknown()}
+          </p>
+        ) : null}
+        <p className="text-sm font-medium text-muted-foreground">{m.content_edition_fixed()}</p>
         {subject ? (
           <a
             className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
@@ -41,33 +64,38 @@ export function ContentEditionReader({
             {m.content_edition_subject()}
           </a>
         ) : null}
-        <p className="text-sm font-medium text-muted-foreground">{m.content_edition_fixed()}</p>
-        <PageHeading>{subject?.label || m.content_edition_heading()}</PageHeading>
-        {creator ? (
-          <p className="text-sm text-muted-foreground">{m.content_edition_creator({ name: creator.name })}</p>
-        ) : null}
       </header>
       {page.state === 'loading' ? <p role="status">{m.content_edition_loading()}</p> : null}
-      {page.state === 'unavailable' ? <p role="status">{m.content_edition_unavailable()}</p> : null}
-      {page.state === 'refused' ? (
-        <div className="space-y-3">
-          <p role="status">{m.content_edition_refused()}</p>
-          {page.status === 401 ? (
+      {page.state === 'unavailable' ? (
+        <p role="status">
+          {page.reason === 'not-published' ? m.content_edition_not_published() : m.content_edition_unavailable()}
+        </p>
+      ) : null}
+      {page.state === 'refused' ? <p role="status">{m.content_edition_refused()}</p> : null}
+      {page.state === 'withdrawn' ? <p role="status">{m.content_edition_withdrawn()}</p> : null}
+      {page.state === 'version-mismatch' ? <p role="alert">{m.content_edition_version_mismatch()}</p> : null}
+      {page.state !== 'published' && page.state !== 'loading' ? (
+        <div className="flex flex-wrap items-center gap-3">
+          {signIn ? (
             <a
-              className="inline-flex min-h-11 items-center underline underline-offset-4"
+              className={buttonVariants({ className: 'min-h-11' })}
               href={`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/editions/${encodeURIComponent(editionId)}`)}`}
             >
               {m.content_edition_sign_in()}
             </a>
           ) : null}
+          {recoverable ? retry : null}
+          <a
+            href={`/${locale}/orders`}
+            className={buttonVariants({
+              variant: signIn || (recoverable && onRetry) ? 'outline' : 'default',
+              className: 'min-h-11',
+            })}
+          >
+            {m.content_edition_purchases()}
+          </a>
+          {page.state === 'version-mismatch' ? retry : null}
         </div>
-      ) : null}
-      {page.state === 'withdrawn' ? <p role="status">{m.content_edition_withdrawn()}</p> : null}
-      {page.state === 'version-mismatch' ? <p role="alert">{m.content_edition_version_mismatch()}</p> : null}
-      {retryable && onRetry ? (
-        <Button type="button" variant="outline" onClick={onRetry}>
-          {m.content_edition_retry()}
-        </Button>
       ) : null}
       {published ? (
         <>
@@ -80,28 +108,33 @@ export function ContentEditionReader({
           />
           <footer className="space-y-4 border-t border-border pt-6 text-sm text-muted-foreground">
             <p>{m.content_edition_attribution()}</p>
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <dt className="font-medium text-foreground">{m.content_edition_licence()}</dt>
-                <dd>{published.metadata.licence}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">{m.content_edition_revision()}</dt>
-                <dd>{published.metadata.revisionId}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">{m.content_edition_id()}</dt>
-                <dd>{published.metadata.editionId}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">{m.content_edition_metadata_version()}</dt>
-                <dd>{published.metadata.editionRevision}</dd>
-              </div>
-              <div className="sm:col-span-2">
-                <dt className="font-medium text-foreground">{m.content_edition_digest()}</dt>
-                <dd className="font-mono text-xs">{published.metadata.sha256}</dd>
-              </div>
+            <dl>
+              <dt className="font-medium text-foreground">{m.content_edition_licence()}</dt>
+              <dd>{published.metadata.licence}</dd>
             </dl>
+            <details className="space-y-4">
+              <summary className="min-h-11 cursor-pointer py-3 font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                {m.content_edition_details()}
+              </summary>
+              <dl className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <dt className="font-medium text-foreground">{m.content_edition_revision()}</dt>
+                  <dd>{published.metadata.revisionId}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-foreground">{m.content_edition_id()}</dt>
+                  <dd>{published.metadata.editionId}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-foreground">{m.content_edition_metadata_version()}</dt>
+                  <dd>{published.metadata.editionRevision}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="font-medium text-foreground">{m.content_edition_digest()}</dt>
+                  <dd className="font-mono text-xs">{published.metadata.sha256}</dd>
+                </div>
+              </dl>
+            </details>
           </footer>
         </>
       ) : null}

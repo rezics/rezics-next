@@ -134,18 +134,22 @@ async function readExample(state: EditionExampleState): Promise<ContentEditionSt
   });
 }
 
-function PatternExample({ state }: { state: EditionExampleState }) {
+function PatternExample({ state, recoverOnRetry }: { state: EditionExampleState; recoverOnRetry: boolean }) {
   const [page, setPage] = useState<ContentEditionState>({ state: 'loading' });
+  const [retrying, setRetrying] = useState(false);
   const generation = useRef(0);
-  async function read(next: EditionExampleState) {
+  async function read(next: EditionExampleState, initial = false) {
     const request = ++generation.current;
-    setPage({ state: 'loading' });
-    if (next === 'loading') return;
+    if (initial) setPage({ state: 'loading' });
+    setRetrying(!initial);
     const fresh = await readExample(next);
-    if (request === generation.current) setPage(fresh);
+    if (request === generation.current) {
+      setPage(fresh);
+      setRetrying(false);
+    }
   }
   useEffect(() => {
-    void read(state);
+    void read(state, true);
     return () => {
       generation.current += 1;
     };
@@ -154,8 +158,9 @@ function PatternExample({ state }: { state: EditionExampleState }) {
     <ContentEditionPage
       editionId={editionId}
       page={page}
+      retrying={retrying}
       onRetry={() => {
-        void read('published');
+        void read(recoverOnRetry ? 'published' : state);
       }}
     />
   );
@@ -163,7 +168,7 @@ function PatternExample({ state }: { state: EditionExampleState }) {
 }
 
 /** The actual served route component runs against an isolated fixture loader, with the real shell and retry. */
-function RouteExample({ state }: { state: EditionExampleState }) {
+function RouteExample({ state, recoverOnRetry }: { state: EditionExampleState; recoverOnRetry: boolean }) {
   const url = localizeUrl(new URL(`/editions/${editionId}`, 'https://site.example'));
   const entry = url.pathname;
   setStoryRequestContext({ visitor: 'Signed In', url: entry });
@@ -183,7 +188,7 @@ function RouteExample({ state }: { state: EditionExampleState }) {
       staleTime: 0,
       gcTime: 0,
       pendingMs: 0,
-      loader: () => readExample(reads++ === 0 ? state : 'published'),
+      loader: () => readExample(reads++ > 0 && recoverOnRetry ? 'published' : state),
       component: EditionRoute,
     });
     const router = createRouter({
@@ -193,7 +198,7 @@ function RouteExample({ state }: { state: EditionExampleState }) {
       rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
     });
     return { router, queryClient };
-  }, [entry, state]);
+  }, [entry, state, recoverOnRetry]);
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
@@ -204,11 +209,18 @@ function RouteExample({ state }: { state: EditionExampleState }) {
 export function ContentEditionExample({
   state = 'published',
   shell = false,
+  recoverOnRetry = false,
 }: {
   state?: EditionExampleState;
   shell?: boolean;
+  /** Only the explicitly constructed recovery transition changes its source response after retry. */
+  recoverOnRetry?: boolean;
 }) {
-  return shell ? <RouteExample state={state} /> : <PatternExample state={state} />;
+  return shell ? (
+    <RouteExample state={state} recoverOnRetry={recoverOnRetry} />
+  ) : (
+    <PatternExample state={state} recoverOnRetry={recoverOnRetry} />
+  );
 }
 
 export const editionViewports = {

@@ -1,4 +1,8 @@
 {
+  "content_edition_creator_unknown": "창작자 정보를 확인할 수 없습니다",
+  "content_edition_not_published": "이 판본은 아직 게시되지 않아 읽을 수 없습니다.",
+  "content_edition_purchases": "구매 내역으로 돌아가기",
+  "content_edition_details": "판본 상세 정보",
   "identifiers_title": "식별자 근거",
   "identifiers_intro": "이 항목의 현재 유형에 맞는 식별자나 URL을 출처와 함께 제안하세요. 근거의 원래 값을 유지하세요. 제안은 검토가 필요하며, 인용은 권한을 부여하거나 동일성을 증명하지 않습니다.",
   "identifiers_empty": "현재 이 유형에서 허용하는 식별자나 URL 필드가 없습니다.",

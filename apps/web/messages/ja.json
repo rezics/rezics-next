@@ -1,4 +1,8 @@
 {
+  "content_edition_creator_unknown": "作者情報を取得できません",
+  "content_edition_not_published": "この版は未公開のため、読むことができません。",
+  "content_edition_purchases": "購入履歴に戻る",
+  "content_edition_details": "この版の詳細",
   "identifiers_title": "識別子の根拠",
   "identifiers_intro": "この項目と現在のタイプに、出典を添えて識別子やURLを提案します。根拠にある値をそのまま保持してください。提案には審査が必要です。引用は権利の許諾や同一性の証明にはなりません。",
   "identifiers_empty": "このタイプには現在、識別子やURLの項目がありません。",
