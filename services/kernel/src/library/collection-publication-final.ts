@@ -401,7 +401,7 @@ export function createCollectionPublicationFinalActivation(
           registerCommandCallback(tx, async (transactionId) => {
             if (transactionId !== currentCommand(tx).transactionId) throw unavailable();
             const sourceGeneration = (BigInt(creation.source.rule.sourceGeneration) + 1n).toString();
-            const published = await outputCommitQuery.run(tx, {
+            const [published] = await outputCommitQuery.run(tx, {
               route: locator.route,
               collection_id: locator.collectionId,
               generation: creation.source.output.generation,
