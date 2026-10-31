@@ -265,18 +265,32 @@ export function ProviderQueue({
             }));
             const nextScope = { ...batch.scope, status: batch.scope.status as QueueScope['status'] };
             const observed = commands.findLast((command) => command.session)?.session;
-            const [queueRead, subjectRead] = await Promise.allSettled([
-              transport.read(nextScope, undefined, observed),
-              transport.readings(commands),
-            ]);
-            const next: QueueState = queueRead.status === 'fulfilled' ? queueRead.value : { state: 'unavailable' };
-            const readings =
-              subjectRead.status === 'fulfilled'
-                ? subjectRead.value
-                : commands.map(({ subject }) => ({
+            let next: QueueState;
+            try {
+              next = await transport.read(nextScope, undefined, observed);
+            } catch {
+              next = { state: 'unavailable' };
+            }
+            // The refreshed page already read its visible subjects, including refusals. Reuse
+            // those exact Context readings; only decisions now off the page need another read.
+            const readings = next.state === 'ready' ? [...(next.readings ?? [])] : [];
+            const unread = commands
+              .filter((command) => !readings.some((reading) => reading.subject === command.subject))
+              .map((command) =>
+                next.state === 'ready' && next.session ? { ...command, session: next.session } : command,
+              );
+            if (unread.length) {
+              try {
+                readings.push(...(await transport.readings(unread)));
+              } catch {
+                readings.push(
+                  ...unread.map(({ subject }) => ({
                     subject,
                     result: { ok: false as const, reason: 'unavailable' as const },
-                  }));
+                  })),
+                );
+              }
+            }
             const queue = prepared(next, nextScope);
             refreshed.current.set(queue, next);
             return { queue, readings };
