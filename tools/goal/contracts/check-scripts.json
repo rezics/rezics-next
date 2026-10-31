@@ -56,6 +56,23 @@
               "executableSha256": "bc54c90edf4f07206a316514ae9a09ca9cbfbeeb50654bf0f1928d2b38c87c68"
             }
           }
+        },
+        "bun@1.4.4-canary.20261031.1": {
+          "packageVersion": "1.4.4-canary.20261031.1+34cbc70",
+          "runtimeVersion": "1.4.4",
+          "runtimeRevision": "da867c60bf0bcbf9d6d36994f8ca0efa42075115",
+          "packageIntegrity": "sha512-kW0NXASzus9u6ag/o6Opm+vqN7FIu1pd2Fb3FIMqbS5PelHbkn8pKX39QO+HbWKM84HRlGnthsexE3JdHHoGfA==",
+          "packageTarball": "https://registry.npmjs.org/bun/-/bun-1.4.4-canary.20261031.1.tgz",
+          "provenance": "npm tarballs verified against npm registry SHA-512 integrity and upgraded bun.lock; executable hashed and probed for --version and Bun.revision. This pinned bun/install.js optimizeBun renames the optional platform executable to bun/bin/bun.exe; accept retained or package-owned moved layouts with exact metadata/dependency custody, checking any retained executable too. Package build metadata differs from the embedded runtime revision.",
+          "platforms": {
+            "linux-x64": {
+              "package": "@oven/bun-linux-x64",
+              "integrity": "sha512-G2RHjlnR1HdpIwPphi0e9Ku3KJh9f2J+MD8QxKW61TQr1hOEacIQkIZsyikibnHUFCPM2ZIY4IqZvsG/FeM7ZQ==",
+              "tarball": "https://registry.npmjs.org/@oven/bun-linux-x64/-/bun-linux-x64-1.4.4-canary.20261031.1.tgz",
+              "executable": "bin/bun",
+              "executableSha256": "fe406996b9915f388e3fad9e6e29ece9c7cb81e06257bbcb4c50f91691b46810"
+            }
+          }
         }
       }
     },
