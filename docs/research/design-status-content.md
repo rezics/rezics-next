@@ -42,12 +42,18 @@ Authority: [Content README](../../services/kernel/src/content/README.md), its `r
 | Actual page / Pattern → user step                                         | Existing API → authoritative source/storage                                                                                                                                                                 |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Space home → `/boards/{id}`; Board Continuation → Active/Hot/New and Next | `GET /v1/boards/{id}`, `GET /v1/boards/{id}/threads`; native board plus asynchronous `content.board_thread` candidates and rank work.                                                                       |
-| `/boards/{id}/new` → `PostComposer`; thread page → Thread replies         | `POST /v1/threads`, `POST /v1/threads/{id}/posts` with optional `parentId`; `content.thread`, `post`, immutable `revision`, receipt and outbox commit on the thread route. Reviews use the author route.    |
+| `/boards/{id}/new` → `PostComposer`; thread page → Thread replies         | `POST /v1/threads`, `POST /v1/threads/{id}/posts` with optional `parentId`; `content.thread`, `post`, immutable `revision`, receipt and outbox commit on the thread route. Discussion `subjectIds` are additive; reviews retain one subject and an optional vote citation. |
 | Inline edit → history / Revision provenance → delete or undo              | `POST /v1/posts/{id}/revisions` with `If-Match`; revision list and exact revision GET; `DELETE /v1/posts/{id}`, `POST /v1/posts/{id}:restore`. Native revisions and tombstone/purge state remain authority. |
 
-Delivered slices preserve selected reply context and stable retry intent, omit licence on ordinary edits to inherit
-the stored licence, and show revision-specific references. Board pages distinguish empty-with-next from terminal
-empty. These are concrete source changes; current native and visual outcomes remain unproved here.
+Protected-board new-thread preparation calls `prepareSession`, uses `viewerCredential` for one authorized GET of the
+requested board, and checks the returned board ID; it has no anonymous fallback. Discussion creation uses the existing
+multi-select `EntityPicker` for zero through 128 subjects, shows a removable query preset, retains selected subjects
+when suggestions are unavailable, and reports over-limit input without silently truncating it. `PostComposer`'s
+`submissionContext` and `onIntentLockChange` freeze the exact review kind/subject/optional citation or discussion
+`subjectIds` with the body, media IDs and idempotency key across pending and uncertain retry. Existing slices also
+preserve selected reply context and stable retry intent, inherit the stored licence on ordinary edits, show
+revision-specific references, and distinguish empty-with-next from terminal empty board pages. These are delivered
+source connections; current native and visual outcomes remain unproved here.
 
 **Boundary.** Candidate indexes never authorize disclosure. Reads check current post ancestry, thread, independently
 anchored board and Realm before final output; protected denial exposes no old body or hidden parent preview.
@@ -73,8 +79,16 @@ uses the declared own-account native route. Review `pages-content-creatoredition
 `pages-content-editionpublication--resumed-draft`, `--reloaded-published`, `--resumed-conflict`, `--uncertain-publish`.
 Only confirmed publication exposes the separate Commerce offer next step. End-to-end native use, current source
 rights, fixed bytes, inventory disclosure, sale/entitlement and visual review remain unproved; no new writer is needed.
-Bounded author-thread erasure source and its Page states are also integrated; enqueue and running counters never
-claim completion or an upfront total. Native erasure closure remains deferred.
+Author erasure now has a usable entry contract: explicitly opening or refreshing its dialog reads the original
+private `GET /v1/threads/{id}` envelope's `authorErasure { authorId, mayErase }`, bound to the exact actor and thread;
+stale reads are invalidated. Admission requires the current caller's first selected native post and the original
+`post:erase` grant. Thread ownership or edit/delete rights are not substitutes, and no grant is guessed. Existing
+Page stories cover `pages-community-author-erasure--current-admission-available`, `--current-admission-denied` and
+`--current-admission-unavailable`. The original command and workflow remain unchanged: physical cleanup is
+irreversible and asynchronous, with no upfront total, and enqueue/running counters do not establish completion.
+Response/parser fixtures are illustrative and corrected to the canonical viewer response; the frozen served preview
+predates that correction, so it supplies no visual pass. Native API/persona, database and acceptance proof remain
+unrun; visual, main and physical-cleanup closure remain unproved.
 
 ## Realms and Spaces
 
@@ -262,6 +276,5 @@ The original native role-predecessor source correction is delivered; its physica
 physical outcomes remain unproved, not waived requirements or evidence of cleanup.
 Queued or integrated cleanup does not establish residue removal, succession or final acknowledgement.
 
-This planning maintenance accompanies the leave-recovery interface; acceptance/native/database/browser/remote and
-visual proof remain deferred. Promotion, main, root and final erasure closure remain unproved. No whole scope row
-or Goal is declared complete.
+Native API/persona, acceptance, database, browser, remote and visual proof remain deferred. Promotion, main, root and
+final erasure closure remain unproved. No whole scope row or Goal is declared complete.
