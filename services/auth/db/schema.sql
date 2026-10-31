@@ -1036,7 +1036,7 @@ CREATE FUNCTION public.auth_native_phase_cursor_guard() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF TG_OP='INSERT' OR
+  IF TG_OP='INSERT' OR NULLIF(current_setting('auth.erasure_obligation',true),'') IS NOT NULL OR
      ROW(NEW.phase,NEW.client_phase,NEW.after_key,NEW.client_id,NEW.native_phase_version,
          NEW.native_completed_at,NEW.native_role_version) IS DISTINCT FROM
      ROW(OLD.phase,OLD.client_phase,OLD.after_key,OLD.client_id,OLD.native_phase_version,

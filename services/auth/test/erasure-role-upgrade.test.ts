@@ -125,6 +125,12 @@ test('native phase activation refuses old pages and separately leased old produc
       'Auth native phase worker version refused',
     );
     await oldLease.query('ROLLBACK');
+    await oldLease.query('BEGIN');
+    await oldLease.query("SELECT set_config('auth.erasure_obligation',$1,true)", [id]);
+    await expect(oldLease.query('UPDATE auth_erasure SET phase=phase WHERE id=$1', [id])).rejects.toThrow(
+      'Auth native phase worker version refused',
+    );
+    await oldLease.query('ROLLBACK');
     expect((await pool.query('SELECT phase FROM auth_erasure WHERE id=$1', [id])).rows[0]!.phase).toBe(0);
     expect((await pool.query("SELECT 1 FROM auth_workflow_request WHERE workflow_id='old-request'")).rowCount).toBe(0);
   } finally {
