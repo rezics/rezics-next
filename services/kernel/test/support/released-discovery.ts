@@ -1,4 +1,7 @@
 import { createImportTransport } from '../../../importer/src/import-client.ts';
+import type { ReviewedCandidatePage } from '../../../importer/src/import-client.ts';
+import type { BatchWriteRequest, BatchWriteResult, Source } from '@rezics/definitions/bulk';
+import type { PublicFilterDependency } from '../../src/semantic/public-filter-source-contract.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { setLabelAssignment } from '../../src/library/label-assignment-store.ts';
@@ -97,6 +100,28 @@ export type RecipeGroup = Readonly<{
   subjects: Readonly<Record<RecipeName, CreatedSubject>>;
   facts: readonly AdoptedFact[];
   completedCooking: Prerequisite;
+}>;
+
+/** Native command observations and current selection; the tuple is data, never FOREIGN completion. */
+export type ImportedHaremControl = Readonly<{
+  subject: string;
+  candidate: string;
+  sourceConcept: string;
+  source: Source;
+  bulk: readonly Readonly<{ request: BatchWriteRequest; result: BatchWriteResult }>[];
+  current: ReviewedCandidatePage;
+  dependency: Extract<PublicFilterDependency, { kind: 'sourceTuple' }>;
+  takedown(reason?: string): Promise<HttpResponse>;
+}>;
+
+/** Native statement disclosure is one-way; retract() is the production terminal command. */
+export type StatementConsentControl = Readonly<{
+  dependency: Extract<PublicFilterDependency, { kind: 'consent' }>;
+  target: string;
+  subject: string;
+  candidate: string;
+  disclose(): Promise<HttpResponse>;
+  retract(): Promise<HttpResponse>;
 }>;
 
 /** Closed extension points name missing owner data without pretending an API exists. */
