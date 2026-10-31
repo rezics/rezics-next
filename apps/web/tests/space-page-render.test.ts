@@ -119,12 +119,17 @@ test('initial and continued Realm shelves retain one exact selector on each loca
   if (!page.realm) throw new Error('The recorded member Space lost its Realm');
   const { loadRealmShelfPage } = await import('../src/community/space');
   const initialReads = calls.length;
-  const later = await loadRealmShelfPage(kernel, request, {}, {
-    realmId: page.realm.id,
-    list: 'publications',
-    cursor: page.realm.publicationNext ?? undefined,
-    credentialMode: 'anonymous',
-  });
+  const later = await loadRealmShelfPage(
+    kernel,
+    request,
+    {},
+    {
+      realmId: page.realm.id,
+      list: 'publications',
+      cursor: page.realm.publicationNext ?? undefined,
+      credentialMode: 'anonymous',
+    },
+  );
   if (later.kind !== 'page') throw new Error('The continued publication window was unavailable');
   expect(later.items.length).toBe(publicationsRecording.items.length - 1);
   expect(calls.length - initialReads).toBe(1 + later.items.length);
