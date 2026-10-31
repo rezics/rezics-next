@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import { formatBuildOutput } from '../scripts/storybook-build-output.ts';
 import { runDeployment, runStatus } from '../scripts/storybook-deploy.ts';
 import { smokeStorybook } from '../scripts/storybook-smoke.ts';
+import { generateRoutes } from '../.storybook/route-generation.ts';
 
 const root = resolve(import.meta.dir, '../../../');
 const app = resolve(root, 'apps/web');
@@ -13,6 +14,98 @@ const cloudflareOutput = resolve(app, '.cloudflare/output');
 let browser: Browser;
 let previewServer: ReturnType<typeof Bun.serve>;
 let expectedCommit: string;
+
+describe('Storybook route preparation', () => {
+  test('generates the complete current route tree with the current Start configuration without a runtime', async () => {
+    const production = readFileSync(resolve(app, 'vite.config.ts'), 'utf8');
+    expect(production).toContain('tanstackStart(),');
+    const sources = ['generate-routes.ts', 'route-generation.ts'].map((name) =>
+      readFileSync(resolve(app, '.storybook', name), 'utf8'),
+    );
+    expect(sources.join('\n')).not.toMatch(/from ['"](?:vite|@cloudflare\/|@tanstack\/react-start)/);
+    expect(sources.join('\n')).not.toMatch(/createServer|optimizeDeps|vite\.config/);
+    const webPackage = JSON.parse(readFileSync(resolve(app, 'package.json'), 'utf8'));
+    const installedGenerator = JSON.parse(
+      readFileSync(resolve(app, 'node_modules/@tanstack/router-generator/package.json'), 'utf8'),
+    );
+    expect(webPackage.devDependencies['@tanstack/router-generator']).toBe(installedGenerator.version);
+    expect(webPackage.scripts['generate:routes']).toBe('node .storybook/generate-routes.ts');
+
+    await generateRoutes(app);
+    const tree = readFileSync(resolve(app, 'src/routeTree.gen.ts'), 'utf8');
+    const routeFiles = readdirSync(resolve(app, 'src/routes'), { recursive: true }).filter((name) =>
+      /\.(ts|tsx)$/.test(name),
+    );
+    expect(routeFiles.length).toBeGreaterThan(0);
+    for (const name of routeFiles) {
+      const modulePath = `./routes/${name.replaceAll('\\', '/').replace(/\.(ts|tsx)$/, '')}`;
+      expect(tree).toContain(`from '${modulePath}'`);
+    }
+    expect(tree).toContain("import type { getRouter } from './router.tsx'");
+    expect(tree).toContain("import type { startInstance } from './start.ts'");
+    expect(tree).toContain("declare module '@tanstack/react-start'");
+    expect(tree).toContain('ssr: true');
+    expect(tree).toContain('router: Awaited<ReturnType<typeof getRouter>>');
+    expect(tree).toContain('config: Awaited<ReturnType<typeof startInstance.getOptions>>');
+  });
+
+  test('regenerates additions, renames and removals using TanStack filename and parameter handling', async () => {
+    mkdirSync(resolve(root, '.temp'), { recursive: true });
+    const fixture = mkdtempSync(resolve(root, '.temp/storybook-routes-'));
+    const routes = resolve(fixture, 'src/routes');
+    const readTree = () => readFileSync(resolve(fixture, 'src/routeTree.gen.ts'), 'utf8');
+    const routeSource =
+      "import { createFileRoute } from '@tanstack/react-router'; export const Route = createFileRoute('/placeholder')({});";
+    try {
+      mkdirSync(routes, { recursive: true });
+      writeFileSync(resolve(fixture, 'vite.config.ts'), "throw new Error('production Vite config was loaded');");
+      writeFileSync(
+        resolve(routes, '__root.tsx'),
+        "import { createRootRoute } from '@tanstack/react-router'; export const Route = createRootRoute(); throw new Error('route module was evaluated');",
+      );
+      await generateRoutes(fixture);
+      writeFileSync(resolve(routes, '@{$handle}.tsx'), routeSource);
+      writeFileSync(resolve(routes, 'robots[.]txt.ts'), routeSource);
+      await generateRoutes(fixture);
+      expect(readTree()).toContain("'/@{$handle}'");
+      expect(readTree()).toContain("'/robots.txt'");
+      renameSync(resolve(routes, '@{$handle}.tsx'), resolve(routes, 'people.$handle.tsx'));
+      rmSync(resolve(routes, 'robots[.]txt.ts'));
+      await generateRoutes(fixture);
+      expect(readTree()).toContain("'/people/$handle'");
+      expect(readTree()).not.toContain('/@{$handle}');
+      expect(readTree()).not.toContain('/robots.txt');
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
+  test('propagates generation failure through the Node entry point even when ignored output exists', () => {
+    mkdirSync(resolve(root, '.temp'), { recursive: true });
+    const fixture = mkdtempSync(resolve(root, '.temp/storybook-routes-failure-'));
+    try {
+      mkdirSync(resolve(fixture, 'src/routes'), { recursive: true });
+      writeFileSync(resolve(fixture, 'src/routeTree.gen.ts'), '// stale output');
+      const result = Bun.spawnSync(['node', resolve(app, '.storybook/generate-routes.ts')], {
+        cwd: fixture,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr.toString()).toMatch(/root route|__root/);
+      expect(readFileSync(resolve(fixture, 'src/routeTree.gen.ts'), 'utf8')).toBe('// stale output');
+
+      const main = readFileSync(resolve(app, '.storybook/main.ts'), 'utf8');
+      const preparation = main.slice(0, main.indexOf('const config: StorybookConfig'));
+      expect(preparation).toContain("spawnSync('node', ['.storybook/generate-routes.ts']");
+      expect(preparation).not.toMatch(/existsSync|mtime|statSync/);
+      expect(preparation).toContain('if (result.error) throw result.error');
+      expect(preparation).toMatch(/if \(result.status !== 0\) throw new Error/);
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('failed build diagnostics', () => {
   test('retains the native fatal prelude and terminal socket error alongside useful stdout', () => {

@@ -1,8 +1,3 @@
-import { createServer } from 'vite';
+import { generateRoutes } from './route-generation.ts';
 
-const server = await createServer({
-  configFile: 'vite.config.ts',
-  mode: 'development',
-  optimizeDeps: { disabled: true },
-});
-await server.close();
+await generateRoutes(process.cwd());
