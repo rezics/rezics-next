@@ -11,6 +11,7 @@ import { PatternStory, PageStory, pageReady } from '../../page';
 import { profilePage } from './fixtures';
 
 const longName = '世界各地的讀者與翻譯者共同維護的獨立閱讀室'.repeat(200).slice(0, 4096);
+const longHandle = 'international-reading-room'.padEnd(64, 'x');
 const longBio = 'Readers and librarians share reading notes across languages.\n閱讀筆記與翻譯持續更新。\n'
   .repeat(64)
   .slice(0, 4096);
@@ -33,7 +34,7 @@ function Example({
       ? {
           profile: {
             displayName: longName,
-            handle: 'international-reading-room'.padEnd(64, 'x'),
+            handle: longHandle,
             bio: longBio,
             links: Array.from({ length: 5 }, (_, index) => ({
               label: `${'閱讀紀錄與翻譯'.repeat(10).slice(0, 63)}${index + 1}`,
@@ -45,6 +46,7 @@ function Example({
     empty: mode === 'empty',
     ...(mode === 'denied' ? { activityStatus: 403 } : {}),
   });
+  if (mode === 'long' && page.account) page.account = { ...page.account, handle: longHandle };
   const locale = getLocale();
   return (
     <PatternStory visitor="Signed Out" path={`/@${page.account!.handle}`}>
