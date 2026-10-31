@@ -239,13 +239,15 @@ test('Consume genuine original lifecycle result for terminal Auth continuation',
   const read = ports.readOriginalLifecycleResult;
   if (!read) throw new Error('Missing installed original lifecycle result reader');
   const result = await read(request);
-  expect(result).toEqual({
+  expect(result).toMatchObject({
     kind: 'activation',
     accountId,
     reservationId: stage.reservation_id,
     authnEpoch: 1,
-    outcome: committed,
+    outcome: { value: committed.value },
   });
+  expect(result?.outcome.position).toMatch(/^[1-9][0-9]*$/);
+  expect(result?.outcome.transactionId).toBeString();
   const person = await f.login({ accountId, email });
   const evidence = ports.provisioningEvidence;
   let activationAttempts = 0;
