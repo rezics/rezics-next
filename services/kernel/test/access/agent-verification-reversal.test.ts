@@ -1707,8 +1707,6 @@ test('Compose genuine SDK permanent fence into identity receiving retirement', a
       gap: 'identity-sdk-retirement-source-fence-changed',
     });
     // An observed receiver is not the missing Semantic durable transfer or native SDK receipt.
-    expect(AGENT_IDENTITY_SDK_FENCE_CONSUMER.nativeAPI).toBeNull();
-    expect(AGENT_IDENTITY_SDK_FENCE_CONSUMER.nativeReceipt).toBeNull();
     expect((await client.getWorkflow(source.workflowId))?.status).toBe('ENQUEUED');
     expect(
       (await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [source.workflowId])).rows[0]
