@@ -2441,11 +2441,52 @@ rows, 60 operation rows, eight event keys, 64 event-history rows and four messag
 A status is at most 4 KiB; another artifact is at most 64 KiB including SDK
 bookkeeping. The recorder refuses undeclared streams, incomplete roles and budget
 overflow before the native write. Erasure uses eight exact locator keys per page
-and one execution per minimization unit, SDK cancel/delete without descendants,
-then indexed native absence probes. Retired markers survive history deletion and
-close stale enqueue, child, message, step/event and result writes. The digest is
-zeroed after physical absence. Unknown old copies or native rows preceding the
-creation cut remain pending; no scan attempts to infer their account roles.
+and one execution per minimization unit. `sdk-retirement-fence.ts` binds the SDK
+owner's actual `DBOS.retireWorkflow(workflowID)` and
+`DBOS.getWorkflowWriterFence(workflowID)` in this same Auth runtime and database.
+Its local interface is a type-only adapter until the producer's patched package is
+integrated. Missing methods, native migration/coverage, malformed receipts or any
+generation other than the producer's closed generation `2` stay pending before
+request retirement or physical deletion. Method presence alone proves no closure.
+
+`eraseCopy` first locks the original copy generation, exact roles and native source
+mapping. Its producer commitment and actual caller/recovery result consumption must
+already exist; live or historically unclassified request consumers remain pending.
+The Auth parent continuation link stays unchanged across retirement; transactional
+`DBOSClient` enqueue does not stamp that link into the SDK's native parent column.
+An original erasure-source workflow additionally requires its exact applicable
+obligation's accepted, discharged and published source facts. Deadlines, SDK status
+and current account state cannot supply these facts. The native obligation retains
+its original floor, kernel version/time and continuation/receipt identities.
+
+The SDK retirement body joins all native writers, including old executors, and
+revokes their execution token without cancellation. Auth releases its recorder lock
+before that supported call, whose transaction also touches the recorder, then
+reacquires it and revalidates the same original custody and bounded artifacts.
+The returned `{workflowID,generation,closureID,closedAt}` must exactly match a genuine
+native reread. Auth persists only generation, closure UUID and closure timestamp
+beside the existing workflow ID in `auth_copy_work`, atomically with local retirement
+and before request minimization. These fields are immutable. No payload, error,
+stack or data hash is stored as fence evidence.
+
+Only then does supported `deleteWorkflows([workflowID], false)` remove history.
+Every existing exact physical family probe must be empty, and a post-delete native
+reread must still match, before `absent` is recorded. Cancellation after closure
+would itself be a forbidden writer and is never attempted. Lost replies resume
+from the same permanent native receipt, including after physical deduplication
+deletion. The SDK owns its guards, permanent control identity and backup custody;
+Auth adds no SDK SQL or second maintenance runtime. Default history and retention
+use this same primitive and retain precise pending codes in receiving progress.
+Unknown old copies or native rows preceding the creation cut remain pending;
+no scan attempts to infer their account roles. Native/source proof, final Auth or
+shared-history participation, root completion and external backups remain independent.
+
+The focused native binding cases are in `test/sdk-retirement-binding.test.ts`.
+They require producer-first package integration and deferred native execution;
+source registration and local typing establish neither native coverage nor Goal
+completion. The older frozen `test/sdk-retirement-fence.test.ts` still asserts
+unconditional refusal for a genuinely consumed registration and needs its owning
+acceptance decision before integration can claim physical completion.
 
 `AuthService.internal.consumeAccountErasure(accountId, receiptId, workflowId)` is
 called by the actual `erase-auth-owner` step, in its SDK context, after the real

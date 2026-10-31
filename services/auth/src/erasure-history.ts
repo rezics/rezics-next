@@ -12,6 +12,7 @@ type Progress = {
   kernel_at: string | null;
   source_continuation_id: string | null;
   source_receipt_id: string | null;
+  source_accepted_at: Date | null;
   source_discharged_at: Date | null;
   source_published_at: Date | null;
   copies_completed_at: Date | null;
@@ -63,7 +64,8 @@ export async function dischargeErasureSource(database: Pool, id: string, value: 
 /** One page/unit. Missing coverage, live consumers and unmapped copies stay pending. */
 export async function erasureHistoryPage(database: Pool, id: string, restoreGeneration?: string): Promise<boolean> {
   const row = (await database.query<Progress>('SELECT * FROM auth_erasure WHERE id=$1', [id])).rows[0];
-  if (!row || !barrier(row) || !row.source_discharged_at) return false;
+  if (!row || !barrier(row) || !row.source_accepted_at || !row.source_discharged_at || !row.source_published_at)
+    return false;
   if (restoreGeneration) {
     const replay = (
       await database.query(
@@ -86,8 +88,18 @@ export async function erasureHistoryPage(database: Pool, id: string, restoreGene
   if (work) {
     // Recover the actual result consumer from its native commitment. No HTTP
     // retry, old approval or resurrected session participates.
-    await completeCopy(database, work.workflow_id);
-    if (!(await eraseCopy(database, work.workflow_id))) return false;
+    const consumed = await completeCopy(database, work.workflow_id);
+    if (!(await eraseCopy(database, work.workflow_id))) {
+      const pending = (
+        await database.query<{ sdk_fence_pending: string | null }>(
+          'SELECT sdk_fence_pending FROM auth_copy_work WHERE workflow_id=$1',
+          [work.workflow_id],
+        )
+      ).rows[0]?.sdk_fence_pending;
+      if (consumed && pending)
+        await database.query('UPDATE auth_erasure SET pending_code=$2 WHERE id=$1', [id, pending]);
+      return false;
+    }
     await database.query('DELETE FROM auth_copy_role WHERE account_id=$1 AND workflow_id=$2', [
       row.account_id,
       work.workflow_id,

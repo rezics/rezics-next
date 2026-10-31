@@ -2,6 +2,14 @@ import { createHash } from 'node:crypto';
 import { DBOS, type DBOSClient, type WorkflowHandle } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { retireNativeWorkflowRequest } from './request-retention.ts';
+import {
+  AUTH_SDK_RETIREMENT,
+  closeAuthSdkWriters,
+  nativeFence,
+  readAuthSdkFence,
+  sameNativeFence,
+  type WorkflowWriterFence,
+} from './sdk-retirement-fence.ts';
 
 export type CopyRole = {
   accountId: string;
@@ -276,79 +284,184 @@ export async function copiesAbsent(database: Pool, id: string): Promise<boolean>
     return false;
   return true;
 }
-/** One exact bounded execution, never descendants or unrelated work. */
-export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
-  const ready = await copyTransaction(database, async (client) => {
-    const row = (
-      await client.query<{
-        ready: boolean;
-        absent: boolean;
-        source_key: string | null;
-        result_finished_at: Date | null;
-        rows: number;
-        bytes: number;
-        version: number;
-      }>(
-        'SELECT ready,absent,source_key,result_finished_at,rows,bytes,version FROM auth_copy_work WHERE workflow_id=$1 FOR UPDATE',
-        [id],
-      )
-    ).rows[0];
-    if (
-      !row ||
-      !row.ready ||
-      !row.result_finished_at ||
-      (!row.source_key && !row.absent) ||
-      row.version !== 1 ||
-      row.rows > 139 ||
-      row.bytes > 10485760
+type RetirementWork = {
+  workflow_id: string;
+  name: Name;
+  digest: Buffer;
+  parent_workflow_id: string | null;
+  ready: boolean;
+  retired: boolean;
+  absent: boolean;
+  source_key: string | null;
+  result_digest: Buffer | null;
+  result_finished_at: Date | null;
+  scope_count: number;
+  rows: number;
+  bytes: number;
+  version: number;
+  sdk_fence_generation: string | null;
+  sdk_fence_closure_id: string | null;
+  sdk_fence_closed_at: string | null;
+};
+async function retirementWork(client: PoolClient, id: string): Promise<RetirementWork | undefined> {
+  return (await client.query<RetirementWork>('SELECT * FROM auth_copy_work WHERE workflow_id=$1 FOR UPDATE', [id]))
+    .rows[0];
+}
+function storedFence(work: RetirementWork): WorkflowWriterFence | null {
+  return nativeFence(
+    {
+      workflowID: work.workflow_id,
+      generation: work.sdk_fence_generation,
+      closureID: work.sdk_fence_closure_id,
+      closedAt: Number(work.sdk_fence_closed_at),
+    },
+    work.workflow_id,
+  );
+}
+async function pending(database: Pool | PoolClient, id: string, code: string): Promise<false> {
+  await database.query('UPDATE auth_copy_work SET sdk_fence_pending=$2 WHERE workflow_id=$1', [id, code]);
+  return false;
+}
+
+/** Reuse original creation/result custody. Neither a deadline nor the SDK's
+ * terminal status can stand in for the producer's committed last-consumer return. */
+async function retirementPreconditions(client: PoolClient, work: RetirementWork): Promise<boolean> {
+  const id = work.workflow_id;
+  if (!work.source_key || work.version !== 1) return pending(client, id, 'auth-sdk-original-copy-mapping-unavailable');
+  if (!work.ready || !work.result_finished_at || !work.result_digest || work.rows > 139 || work.bytes > 10485760)
+    return pending(client, id, 'auth-sdk-original-result-pending');
+  const roles = (
+    await client.query<{ account_id: string }>(
+      'SELECT account_id FROM auth_copy_role WHERE workflow_id=$1 ORDER BY account_id,role LIMIT 17',
+      [id],
     )
-      return false;
-    const ledger = (
-      await client.query<{ kind: string; key: string; bytes: number }>(
-        'SELECT kind,key,bytes FROM auth_copy_artifact WHERE workflow_id=$1 ORDER BY kind,key LIMIT 140',
+  ).rows;
+  if (!roles.length || roles.length !== work.scope_count || roles.length > 16)
+    return pending(client, id, 'auth-sdk-original-copy-mapping-unavailable');
+  // Exact account keys use the existing unique native obligation index. Preserve
+  // its floor, applicability, continuation and accepted/published source facts.
+  const liveSource = await client.query(
+    `SELECT 1 FROM auth_erasure WHERE account_id=ANY($1::text[]) AND source_workflow_id=$2
+     AND NOT (applicable AND kernel_version>0 AND kernel_at IS NOT NULL
+       AND source_continuation_id IS NOT NULL AND source_receipt_id IS NOT NULL
+       AND source_accepted_at IS NOT NULL AND source_discharged_at IS NOT NULL
+       AND source_published_at IS NOT NULL) LIMIT 1`,
+    [roles.map((r) => r.account_id), id],
+  );
+  if (liveSource.rowCount) return pending(client, id, 'auth-sdk-original-source-pending');
+  const request = (
+    await client.query<{ terminal_at: Date | null; request_party_version: number; request_context_version: number }>(
+      'SELECT terminal_at,request_party_version,request_context_version FROM auth_workflow_request WHERE workflow_id=$1 FOR UPDATE',
+      [id],
+    )
+  ).rows[0];
+  if (request && (!request.terminal_at || request.request_party_version !== 1 || request.request_context_version !== 1))
+    return pending(client, id, 'auth-sdk-original-consumer-pending');
+  const status = (
+    await client.query<{ name: string; status: string }>(
+      'SELECT name,status FROM auth_dbos.workflow_status WHERE workflow_uuid=$1',
+      [id],
+    )
+  ).rows[0];
+  // Missing original mapping is not physical completion. Only a persisted native
+  // receipt permits recovery after supported deletion has removed this row.
+  if ((!status && !storedFence(work)) || (status && status.name !== work.name))
+    return pending(client, id, 'auth-sdk-original-copy-mapping-unavailable');
+  if (status && status.status !== 'SUCCESS') return pending(client, id, 'auth-sdk-original-consumer-pending');
+  const ledger = (
+    await client.query<{ kind: string; key: string; bytes: number }>(
+      'SELECT kind,key,bytes FROM auth_copy_artifact WHERE workflow_id=$1 ORDER BY kind,key LIMIT 140',
+      [id],
+    )
+  ).rows;
+  if (ledger.length !== work.rows || ledger.reduce((sum, item) => sum + item.bytes, 0) !== work.bytes)
+    return pending(client, id, 'auth-sdk-native-copy-coverage-pending');
+  for (const table of COPY_TABLES) {
+    const key =
+      table === 'notifications'
+        ? 'message_uuid'
+        : table === 'operation_outputs'
+          ? 'function_id::text'
+          : table === 'workflow_events'
+            ? 'key'
+            : table === 'workflow_events_history'
+              ? "function_id::text||':'||key"
+              : "''::text";
+    const actual = (
+      await client.query<{ key: string; bytes: number }>(
+        `SELECT ${key} AS key,octet_length(row_to_json(t)::text) AS bytes FROM auth_dbos.${table} t WHERE ${table === 'notifications' ? 'destination_uuid' : 'workflow_uuid'}=$1 LIMIT 140`,
         [id],
       )
     ).rows;
-    if (ledger.length !== row.rows) return false;
-    for (const table of COPY_TABLES) {
-      const key =
-        table === 'notifications'
-          ? 'message_uuid'
-          : table === 'operation_outputs'
-            ? 'function_id::text'
-            : table === 'workflow_events'
-              ? 'key'
-              : table === 'workflow_events_history'
-                ? "function_id::text||':'||key"
-                : "''::text";
-      const actual = (
-        await client.query<{ key: string; bytes: number }>(
-          `SELECT ${key} AS key,octet_length(row_to_json(t)::text) AS bytes FROM auth_dbos.${table} t WHERE ${table === 'notifications' ? 'destination_uuid' : 'workflow_uuid'}=$1 LIMIT 140`,
-          [id],
-        )
-      ).rows;
-      if (
-        actual.length > 139 ||
-        actual.some((a) => !ledger.some((l) => l.kind === table && l.key === a.key && l.bytes >= a.bytes))
-      )
-        return false;
+    if (
+      actual.length > 139 ||
+      actual.some((a) => !ledger.some((l) => l.kind === table && l.key === a.key && l.bytes >= a.bytes))
+    )
+      return pending(client, id, 'auth-sdk-native-copy-coverage-pending');
+  }
+  if ((await client.query('SELECT 1 FROM auth_dbos.streams WHERE workflow_uuid=$1 LIMIT 1', [id])).rowCount)
+    return pending(client, id, 'auth-sdk-native-copy-coverage-pending');
+  return true;
+}
+
+/** One exact bounded execution, never descendants or unrelated work. The SDK
+ * retirement transaction itself touches the Auth recorder: release our copy lock
+ * before calling it, then revalidate under that same copy-generation/role lock. */
+export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
+  const before = await copyTransaction(database, async (client) => {
+    const work = await retirementWork(client, id);
+    if (!work) return null;
+    if (work.retired && !storedFence(work)) {
+      await pending(client, id, 'auth-sdk-original-copy-mapping-unavailable');
+      return null;
     }
-    const status = (
-      await client.query<{ status: string }>('SELECT status FROM auth_dbos.workflow_status WHERE workflow_uuid=$1', [
-        id,
-      ])
-    ).rows[0];
-    if (status && status.status !== 'SUCCESS') return false;
-    await client.query('UPDATE auth_copy_work SET retired=true WHERE workflow_id=$1', [id]);
+    if (work.absent) return work;
+    return (await retirementPreconditions(client, work)) ? work : null;
+  });
+  if (!before) return false;
+  const saved = storedFence(before);
+  const receipt = saved ? await readAuthSdkFence(id) : await closeAuthSdkWriters(id);
+  if (!receipt) return pending(database, id, AUTH_SDK_RETIREMENT.gap);
+  if (saved && !sameNativeFence(saved, receipt)) return pending(database, id, 'auth-sdk-native-fence-receipt-mismatch');
+  const retired = await copyTransaction(database, async (client) => {
+    const work = await retirementWork(client, id);
+    if (!work) return false;
+    const current = storedFence(work);
+    if (current && !sameNativeFence(current, receipt))
+      return pending(client, id, 'auth-sdk-native-fence-receipt-mismatch');
+    if (work.absent) return !!current;
+    if (
+      work.name !== before.name ||
+      work.version !== before.version ||
+      work.parent_workflow_id !== before.parent_workflow_id ||
+      work.scope_count !== before.scope_count ||
+      !work.digest.equals(before.digest) ||
+      work.source_key !== before.source_key ||
+      !work.result_digest?.equals(before.result_digest ?? Buffer.alloc(0)) ||
+      work.result_finished_at?.getTime() !== before.result_finished_at?.getTime() ||
+      !(await retirementPreconditions(client, work))
+    )
+      return false;
+    // The permanent receipt contains only native technical identity. It commits
+    // in the existing receiving progress before any request or SDK deletion.
+    await client.query(
+      `UPDATE auth_copy_work SET sdk_fence_generation=$2,sdk_fence_closure_id=$3,
+       sdk_fence_closed_at=$4,sdk_fence_pending=NULL,retired=true WHERE workflow_id=$1`,
+      [id, receipt.generation, receipt.closureID, receipt.closedAt],
+    );
     await retireNativeWorkflowRequest(client, id);
     return true;
   });
-  if (!ready) return false;
-  await DBOS.cancelWorkflow(id);
+  if (!retired) return false;
+  // Retirement revoked native writers already. Cancellation would itself be a
+  // forbidden post-fence SDK write, and supplies no original consumer authority.
   await DBOS.deleteWorkflows([id], false);
-  if (!(await copiesAbsent(database, id))) return false;
+  const after = await readAuthSdkFence(id);
+  if (!after || !sameNativeFence(receipt, after))
+    return pending(database, id, 'auth-sdk-native-fence-receipt-mismatch');
+  if (!(await copiesAbsent(database, id))) return pending(database, id, 'auth-sdk-physical-copies-pending');
   await database.query(
-    "UPDATE auth_copy_work SET absent=true,digest=decode(repeat('00',32),'hex'),source_key=NULL,result_digest=CASE WHEN result_digest IS NOT NULL THEN decode(repeat('00',32),'hex') END WHERE workflow_id=$1 AND retired",
+    "UPDATE auth_copy_work SET absent=true,sdk_fence_pending=NULL,digest=decode(repeat('00',32),'hex'),source_key=NULL,result_digest=CASE WHEN result_digest IS NOT NULL THEN decode(repeat('00',32),'hex') END WHERE workflow_id=$1 AND retired",
     [id],
   );
   return true;
