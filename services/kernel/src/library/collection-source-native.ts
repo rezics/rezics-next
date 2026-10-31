@@ -520,10 +520,7 @@ async function currentSource(client: QueryClient, metadata: NativeCollectionMeta
     current.outputGeneration !== metadata.outputGeneration
   )
     throw new ProblemError('stale_cursor');
-  if (
-    current.authority === 'unavailable_output' ||
-    (current.authority === 'private_builtin' && !current.factFence)
-  )
+  if (current.authority === 'unavailable_output' || (current.authority === 'private_builtin' && !current.factFence))
     throw new ProblemError('dependency_unavailable');
   return current;
 }
@@ -658,9 +655,7 @@ export async function probeNativeCollectionOriginal(
     throw new ProblemError('invalid_cursor');
   if (
     input.after &&
-    (input.after.driver !== 'label' ||
-      metadata.authority !== 'private_builtin' ||
-      metadata.builtinKind === 'state')
+    (input.after.driver !== 'label' || metadata.authority !== 'private_builtin' || metadata.builtinKind === 'state')
   )
     throw new ProblemError('invalid_cursor');
   let progress = input.after ?? null;

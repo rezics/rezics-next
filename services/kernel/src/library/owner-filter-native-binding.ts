@@ -23,11 +23,7 @@ import { scopeAllowance, zeroScopeWork } from '../search/scope-execution.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import type { IdentityScopeLibraryIdentity, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { freeze } from '../semantic/definitions.ts';
-import {
-  nativeSourceFence,
-  type CanonicalAllowance,
-  type CanonicalWork,
-} from './canonical-source-store.ts';
+import { nativeSourceFence, type CanonicalAllowance, type CanonicalWork } from './canonical-source-store.ts';
 import {
   createCollectionSource,
   type CollectionSourceObservation,
@@ -36,7 +32,11 @@ import {
 } from './collection-source.ts';
 import { readNativeCollectionMetadata, type NativeCollectionMetadata } from './collection-source-native.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
-import { prepareNativeCollectionMemberAuthority, readNativeCollectionMemberAdmission, type CollectionMemberAdmission } from './owner-filter.ts';
+import {
+  prepareNativeCollectionMemberAuthority,
+  readNativeCollectionMemberAdmission,
+  type CollectionMemberAdmission,
+} from './owner-filter.ts';
 import type { OwnerFilterReadBinding } from './owner-filter-plan.ts';
 import scopeQuery from './owner-filter-native-binding-scope.sql';
 import activeQuery from '../semantic/definitions-active.sql';
@@ -85,10 +85,15 @@ export function nativeOwnerFilterBinding(binding: OwnerFilterReadBinding): Nativ
 }
 
 export function sameOwnerFilterSource(left: CollectionSourceObservation, right: CollectionSourceObservation) {
-  return left.collectionId === right.collectionId && left.route === right.route &&
-    left.incarnation === right.incarnation && left.revision === right.revision &&
-    left.stamp.epoch === right.stamp.epoch && isDeepStrictEqual(left.authority, right.authority) &&
-    isDeepStrictEqual(left.basis, right.basis);
+  return (
+    left.collectionId === right.collectionId &&
+    left.route === right.route &&
+    left.incarnation === right.incarnation &&
+    left.revision === right.revision &&
+    left.stamp.epoch === right.stamp.epoch &&
+    isDeepStrictEqual(left.authority, right.authority) &&
+    isDeepStrictEqual(left.basis, right.basis)
+  );
 }
 
 export const ownerFilterUnavailable = () => new ProblemError('dependency_unavailable');
@@ -162,17 +167,22 @@ export function ownerFilterQuery<R extends QueryResultRow>(
   cost: Partial<WorkDimensions>,
 ): Promise<R[]> {
   const reserved = work.reserve({
-      ...zeroScopeWork(),
-      nativePoints: 1,
-      statements: 1,
-      emptySeeks: 1,
-      ...cost,
-      bytes: Buffer.byteLength(query.sql) + Buffer.byteLength(JSON.stringify(input)) + (cost.bytes ?? 1024),
-    });
+    ...zeroScopeWork(),
+    nativePoints: 1,
+    statements: 1,
+    emptySeeks: 1,
+    ...cost,
+    bytes: Buffer.byteLength(query.sql) + Buffer.byteLength(JSON.stringify(input)) + (cost.bytes ?? 1024),
+  });
   reserved.dispatch();
   return (async () => {
     try {
-      const rows = (await client.query<R>(query.sql, query.params.map((name) => input[name]))).rows;
+      const rows = (
+        await client.query<R>(
+          query.sql,
+          query.params.map((name) => input[name]),
+        )
+      ).rows;
       reserved.settle({
         candidateKeys: cost.candidateKeys ? rows.length : 0,
         witnessKeys: cost.witnessKeys ? rows.length : 0,
@@ -219,12 +229,10 @@ async function privateAuthority(
         attempt,
       );
       // Every family is evaluated, including excluded/nonmatching/negative branches.
-      await withConnection(dependencies.pool,
-        async (client) => {
-          for (const check of checks)
-            if (!(await check(deadlineClient(client, deadline), at))) throw new ProblemError('forbidden');
-        },
-      );
+      await withConnection(dependencies.pool, async (client) => {
+        for (const check of checks)
+          if (!(await check(deadlineClient(client, deadline), at))) throw new ProblemError('forbidden');
+      });
     },
   );
 }
@@ -234,29 +242,38 @@ export async function revalidateNativeOwnerFilter(
   work: NativeCollectionWork,
 ): Promise<void> {
   const saved = nativeOwnerFilterBinding(binding);
-  if (!saved || work.receipt().reservationId !== binding.input.allowance.reservationId)
-    throw ownerFilterUnavailable();
+  if (!saved || work.receipt().reservationId !== binding.input.allowance.reservationId) throw ownerFilterUnavailable();
   const { dependencies, admission, metadata, attempt } = saved;
   const { actor, at, deadline } = binding.input;
   if (admission.releaseDigest !== null) {
     const [active] = await withConnection(dependencies.pool, (client) =>
-      ownerFilterQuery<{ digest: string }>(deadlineClient(client, deadline), work, activeQuery,
-        { route: 0 }, { nativeRows: 4, bytes: 256 }));
+      ownerFilterQuery<{ digest: string }>(
+        deadlineClient(client, deadline),
+        work,
+        activeQuery,
+        { route: 0 },
+        { nativeRows: 4, bytes: 256 },
+      ),
+    );
     if (active?.digest !== admission.releaseDigest) throw ownerFilterUnavailable();
   }
   if (attempt) {
     commandAttemptDeadline(attempt);
-    await ownerFilterBounded(
-      work,
-      { nativeRows: 8, nativePoints: 2, statements: 2, bytes: 2048 },
-      () => requireCommandAdmission(dependencies.access, actor, ownerFilterAccessContext(dependencies, deadline, attempt)),
+    await ownerFilterBounded(work, { nativeRows: 8, nativePoints: 2, statements: 2, bytes: 2048 }, () =>
+      requireCommandAdmission(dependencies.access, actor, ownerFilterAccessContext(dependencies, deadline, attempt)),
     );
   }
   await privateAuthority(dependencies, actor, admission, at, deadline, work, attempt);
   if (admission.owner && actor.kind === 'account') {
-    const [ownerFence] = await withConnection(dependencies.pool, (client) => ownerFilterQuery<{ generation: string }>(
-      deadlineClient(client, deadline), work, ownerFenceQuery,
-      { route: routeOf(actor.accountId), account_id: actor.accountId }, { nativeRows: 4, bytes: 256 }));
+    const [ownerFence] = await withConnection(dependencies.pool, (client) =>
+      ownerFilterQuery<{ generation: string }>(
+        deadlineClient(client, deadline),
+        work,
+        ownerFenceQuery,
+        { route: routeOf(actor.accountId), account_id: actor.accountId },
+        { nativeRows: 4, bytes: 256 },
+      ),
+    );
     if (!ownerFence || ownerFence.generation !== saved.ownerFence) throw ownerFilterUnavailable();
   }
   const current = await work.compose((allowance) =>
@@ -268,19 +285,15 @@ export async function revalidateNativeOwnerFilter(
     createCollectionSource(dependencies).prepare({ ...binding.input, allowance }),
   );
   if (!sameOwnerFilterSource(prepared.source.observation, saved.observation)) throw ownerFilterUnavailable();
-  await ownerFilterBounded(
-    work,
-    { nativeRows: 32, nativePoints: 2, statements: 6, bytes: 16384 },
-    async () => {
-      const result = await createIdentityScopedObservations(dependencies.pool).revalidate({
-        key: binding.scope.key,
-        expected: binding.scope,
-        deadline,
-      });
-      if (result.status !== 'current' || !isDeepStrictEqual(result.observation, binding.scope))
-        throw ownerFilterUnavailable();
-    },
-  );
+  await ownerFilterBounded(work, { nativeRows: 32, nativePoints: 2, statements: 6, bytes: 16384 }, async () => {
+    const result = await createIdentityScopedObservations(dependencies.pool).revalidate({
+      key: binding.scope.key,
+      expected: binding.scope,
+      deadline,
+    });
+    if (result.status !== 'current' || !isDeepStrictEqual(result.observation, binding.scope))
+      throw ownerFilterUnavailable();
+  });
 }
 
 /** No capture creation or repair occurs in a read. Only current native producer evidence can bind. */
@@ -317,27 +330,33 @@ export async function bindNativeOwnerFilterRead(
   const root = scopeAllowance(100, randomUUID());
   // One direct Source request reservation, never renewed by a candidate/refill/closure.
   // Search supplies its own existing ceilings unchanged.
-  const work = inherited?.work ?? new NativeCollectionWork({ ...root,
-    remaining: { ...root.remaining, bytes: 16 * 1024 * 1024 } }, deadline);
+  const work =
+    inherited?.work ??
+    new NativeCollectionWork({ ...root, remaining: { ...root.remaining, bytes: 16 * 1024 * 1024 } }, deadline);
   const ownTime = !attempt && !inherited;
-  const at = attempt?.time ?? inherited?.at ?? (await ownerFilterBounded(
-    work,
-    { nativeRows: 1, nativePoints: 1, statements: 1, bytes: 1024 },
-    () => withConnection(dependencies.pool, (client) => mintReadTime(deadlineClient(client, deadline), dependencies.clock)),
-  ));
+  const at =
+    attempt?.time ??
+    inherited?.at ??
+    (await ownerFilterBounded(work, { nativeRows: 1, nativePoints: 1, statements: 1, bytes: 1024 }, () =>
+      withConnection(dependencies.pool, (client) => mintReadTime(deadlineClient(client, deadline), dependencies.clock)),
+    ));
   let retained = false;
   try {
     authoritativeTimeValue(at);
     if (attempt)
-      await ownerFilterBounded(
-        work,
-        { nativeRows: 8, nativePoints: 2, statements: 2, bytes: 2048 },
-        () => requireCommandAdmission(dependencies.access, actor, ownerFilterAccessContext(dependencies, deadline, attempt)),
+      await ownerFilterBounded(work, { nativeRows: 8, nativePoints: 2, statements: 2, bytes: 2048 }, () =>
+        requireCommandAdmission(dependencies.access, actor, ownerFilterAccessContext(dependencies, deadline, attempt)),
       );
     if (admission.releaseDigest !== null) {
       const [active] = await withConnection(dependencies.pool, (client) =>
-        ownerFilterQuery<{ digest: string }>(deadlineClient(client, deadline), work, activeQuery,
-          { route: 0 }, { nativeRows: 4, bytes: 256 }));
+        ownerFilterQuery<{ digest: string }>(
+          deadlineClient(client, deadline),
+          work,
+          activeQuery,
+          { route: 0 },
+          { nativeRows: 4, bytes: 256 },
+        ),
+      );
       if (active?.digest !== admission.releaseDigest) throw ownerFilterUnavailable();
     }
     const current = await work.compose((allowance) =>
@@ -345,8 +364,11 @@ export async function bindNativeOwnerFilterRead(
     );
     const metadata = current.metadata;
     if (!metadata || metadata.state !== 'active') throw new ProblemError('not_found');
-    if (admission.owner && (actor.kind !== 'account' ||
-      (metadata.authority === 'private_builtin' && metadata.curatorAccountId !== actor.accountId)))
+    if (
+      admission.owner &&
+      (actor.kind !== 'account' ||
+        (metadata.authority === 'private_builtin' && metadata.curatorAccountId !== actor.accountId))
+    )
       throw new ProblemError('not_found');
     // Public output and frozen custody have their own producers and cannot borrow a private owner capture.
     if (metadata.authority !== 'curated' && metadata.authority !== 'private_builtin')
@@ -354,18 +376,36 @@ export async function bindNativeOwnerFilterRead(
     const source = await work.compose((allowance) =>
       createCollectionSource(dependencies).prepare({ actor, at, deadline, collectionId, allowance }),
     );
-    const [row] = await withConnection(dependencies.pool, (client) => ownerFilterQuery<{
-      identity: IdentityScopeLibraryIdentity;
-      captureId: string | null;
-      revision: string | null;
-    }>(deadlineClient(client, deadline), work, scopeQuery, {
-      route, collection_id: collectionId, source_fence: nativeSourceFence(metadata),
-    }, { nativeRows: 4, bytes: 6144 }));
-    if (!row || !row.captureId || row.revision === null || row.identity.scope === 'public_output' ||
-      row.identity.collectionId !== collectionId || row.identity.route !== route ||
-      row.identity.incarnation !== metadata.incarnation || row.identity.generation !== metadata.sourceGeneration ||
-      row.identity.accountId !== metadata.curatorAccountId || row.identity.ownerEpoch !== metadata.stamp.epoch ||
-      row.identity.scope !== metadata.authority)
+    const [row] = await withConnection(dependencies.pool, (client) =>
+      ownerFilterQuery<{
+        identity: IdentityScopeLibraryIdentity;
+        captureId: string | null;
+        revision: string | null;
+      }>(
+        deadlineClient(client, deadline),
+        work,
+        scopeQuery,
+        {
+          route,
+          collection_id: collectionId,
+          source_fence: nativeSourceFence(metadata),
+        },
+        { nativeRows: 4, bytes: 6144 },
+      ),
+    );
+    if (
+      !row ||
+      !row.captureId ||
+      row.revision === null ||
+      row.identity.scope === 'public_output' ||
+      row.identity.collectionId !== collectionId ||
+      row.identity.route !== route ||
+      row.identity.incarnation !== metadata.incarnation ||
+      row.identity.generation !== metadata.sourceGeneration ||
+      row.identity.accountId !== metadata.curatorAccountId ||
+      row.identity.ownerEpoch !== metadata.stamp.epoch ||
+      row.identity.scope !== metadata.authority
+    )
       return { status: 'unavailable' } as const;
     const scope: IdentityScopeObservation = {
       key: { source: { kind: 'library', identity: row.identity }, scopeId: 'collection-source' },
@@ -374,9 +414,15 @@ export async function bindNativeOwnerFilterRead(
     };
     let ownerFence: string | null = null;
     if (admission.owner && actor.kind === 'account') {
-      const [row] = await withConnection(dependencies.pool, (client) => ownerFilterQuery<{ generation: string }>(
-        deadlineClient(client, deadline), work, ownerFenceQuery,
-        { route: routeOf(actor.accountId), account_id: actor.accountId }, { nativeRows: 4, bytes: 256 }));
+      const [row] = await withConnection(dependencies.pool, (client) =>
+        ownerFilterQuery<{ generation: string }>(
+          deadlineClient(client, deadline),
+          work,
+          ownerFenceQuery,
+          { route: routeOf(actor.accountId), account_id: actor.accountId },
+          { nativeRows: 4, bytes: 256 },
+        ),
+      );
       if (!row) return { status: 'unavailable' } as const;
       ownerFence = row.generation;
     }
@@ -384,8 +430,15 @@ export async function bindNativeOwnerFilterRead(
       input: { actor, at, deadline, collectionId, allowance: ownerFilterAllowance(work) },
       scope,
     };
-    bindings.set(binding, { dependencies, admission, metadata, observation: source.source.observation,
-      ownsTime: ownTime, ownerFence, ...(attempt ? { attempt } : {}) });
+    bindings.set(binding, {
+      dependencies,
+      admission,
+      metadata,
+      observation: source.source.observation,
+      ownsTime: ownTime,
+      ownerFence,
+      ...(attempt ? { attempt } : {}),
+    });
     await revalidateNativeOwnerFilter(binding, work);
     // Binding work is already spent. Subsequent Source and closure consumers inherit only the remainder.
     const result: OwnerFilterReadBinding = {

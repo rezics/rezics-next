@@ -16,7 +16,11 @@ import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
-import { bindNativeOwnerFilterRead, releaseNativeOwnerFilterRead, revalidateNativeOwnerFilter } from './owner-filter-native-binding.ts';
+import {
+  bindNativeOwnerFilterRead,
+  releaseNativeOwnerFilterRead,
+  revalidateNativeOwnerFilter,
+} from './owner-filter-native-binding.ts';
 import { readNativeOwnerFilterClosure } from './owner-filter-native-closure.ts';
 import { createMembersPreparation } from './members-preparation.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';

@@ -32,13 +32,17 @@ type NativeFactKey = { driver: number; factId: string; labelId: string | null };
 function locator(subjectId: string, row: NativeFactKey): OwnerFilterFactLocator {
   if (routeOf(row.factId) === null) throw ownerFilterUnavailable();
   switch (row.driver) {
-    case 1: return { kind: 'entry', subjectId };
+    case 1:
+      return { kind: 'entry', subjectId };
     case 2:
       if (row.labelId === null || routeOf(row.labelId) === null) throw ownerFilterUnavailable();
       return { kind: 'label', subjectId, labelId: row.labelId };
-    case 3: return { kind: 'session', subjectId, sessionId: row.factId };
-    case 4: return { kind: 'holding', subjectId, copyId: row.factId };
-    default: throw ownerFilterUnavailable();
+    case 3:
+      return { kind: 'session', subjectId, sessionId: row.factId };
+    case 4:
+      return { kind: 'holding', subjectId, copyId: row.factId };
+    default:
+      throw ownerFilterUnavailable();
   }
 }
 
@@ -71,15 +75,23 @@ async function catalogueEvidence(
       const budget = leafBudget(work);
       if (!budget) return null;
       const completed = await work.compose(async (allowance) => {
-        const evidence = await readScopeLeafEvidence(dependencies.pool, {
-          subject, leaf: leaf.clause, after: null, revalidate: null, budget,
-        }, {
-          access: dependencies.access,
-          actor: binding.input.actor,
-          nativeT: binding.input.at,
-          routeKey: dependencies.routeKey!,
-          deadline: binding.input.deadline,
-        });
+        const evidence = await readScopeLeafEvidence(
+          dependencies.pool,
+          {
+            subject,
+            leaf: leaf.clause,
+            after: null,
+            revalidate: null,
+            budget,
+          },
+          {
+            access: dependencies.access,
+            actor: binding.input.actor,
+            nativeT: binding.input.at,
+            routeKey: dependencies.routeKey!,
+            deadline: binding.input.deadline,
+          },
+        );
         const usage = evidence.usage;
         return {
           evidence,
@@ -121,8 +133,13 @@ async function acceptedRelease(binding: OwnerFilterReadBinding, digest: string, 
       const client = deadlineClient(connection, binding.input.deadline);
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try {
-        const [size] = await ownerFilterQuery<{ bytes: string; compressed: boolean }>(client, work, releaseSize,
-          { digest }, { nativeRows: 4, bytes: 256 });
+        const [size] = await ownerFilterQuery<{ bytes: string; compressed: boolean }>(
+          client,
+          work,
+          releaseSize,
+          { digest },
+          { nativeRows: 4, bytes: 256 },
+        );
         if (!size) {
           await client.query('COMMIT');
           return null;
@@ -130,9 +147,16 @@ async function acceptedRelease(binding: OwnerFilterReadBinding, digest: string, 
         const storedBytes = Number(size.bytes);
         if (!Number.isSafeInteger(storedBytes) || storedBytes < 0) throw ownerFilterUnavailable();
         const bytes = 6 * (size.compressed ? 1024 * 1024 * 1024 : storedBytes) + 1024;
-        const release = await ownerFilterBounded(work, {
-          nativeRows: 8, nativePoints: 2, statements: 2, bytes,
-        }, () => readRelease(client, digest, { composed: false }));
+        const release = await ownerFilterBounded(
+          work,
+          {
+            nativeRows: 8,
+            nativePoints: 2,
+            statements: 2,
+            bytes,
+          },
+          () => readRelease(client, digest, { composed: false }),
+        );
         await client.query('COMMIT');
         return release;
       } catch (error) {
@@ -150,9 +174,12 @@ export async function readNativeOwnerFilterClosure(
   work: NativeCollectionWork,
 ) {
   const saved = nativeOwnerFilterBinding(binding);
-  if (!saved || routeOf(subjectId) === null ||
+  if (
+    !saved ||
+    routeOf(subjectId) === null ||
     work.receipt().reservationId !== binding.input.allowance.reservationId ||
-    !sameOwnerFilterSource(source.observation, saved.observation))
+    !sameOwnerFilterSource(source.observation, saved.observation)
+  )
     return { status: 'unavailable' } as const;
   const { dependencies, metadata, admission, attempt } = saved;
   // A state Source indexes only entry originals; it cannot close independent private-support aliases.
@@ -168,10 +195,14 @@ export async function readNativeOwnerFilterClosure(
   const keys: CanonicalRawKey[] = [];
   let after: CanonicalRawKey | null = null;
   for (;;) {
-    const page = await ownerFilterCanonical(work, (allowance) => readCanonicalSourceGroup(dependencies.pool, {
-      ...input, allowance, basis: state.basis,
-      progress: { pendingSubjectId: subjectId, after, generation: state.generation, basis: state.basis },
-    }));
+    const page = await ownerFilterCanonical(work, (allowance) =>
+      readCanonicalSourceGroup(dependencies.pool, {
+        ...input,
+        allowance,
+        basis: state.basis,
+        progress: { pendingSubjectId: subjectId, after, generation: state.generation, basis: state.basis },
+      }),
+    );
     if (page.state !== 'ready') return { status: 'unavailable' } as const;
     keys.push(...page.rows.map((row) => row.key));
     if (keys.length > 100) return { status: 'unavailable' } as const;
@@ -189,32 +220,58 @@ export async function readNativeOwnerFilterClosure(
   const releaseDigests = new Set<string>();
   const context = ownerFilterAccessContext(dependencies, deadline, attempt);
   async function disclose(original: string) {
-    const resolved = await ownerFilterBounded(work, {
-      candidateKeys: 1, nativeRows: 8192, nativePoints: 128, statements: 128, bytes: 1024 * 1024,
-    }, () => resolveSubject(dependencies, actor, original, at, context));
+    const resolved = await ownerFilterBounded(
+      work,
+      {
+        candidateKeys: 1,
+        nativeRows: 8192,
+        nativePoints: 128,
+        statements: 128,
+        bytes: 1024 * 1024,
+      },
+      () => resolveSubject(dependencies, actor, original, at, context),
+    );
     if (!resolved || resolved.subjectId !== subjectId) throw ownerFilterUnavailable();
   }
   for (const original of originalIds) {
     await disclose(original);
     const facts: OwnerFilterFactLocator[] = [];
     if (admission.owner) {
-      if (actor.kind !== 'account' ||
-        (metadata.authority === 'private_builtin' && actor.accountId !== metadata.curatorAccountId))
+      if (
+        actor.kind !== 'account' ||
+        (metadata.authority === 'private_builtin' && actor.accountId !== metadata.curatorAccountId)
+      )
         throw ownerFilterUnavailable();
       // All original keys, including originals excluded by the Source's built-in state, have independent facts.
       // No matching leaf or positive witness chooses the population. LIMIT precedes all fact hydration.
-      const remaining = Math.min(100 - originalIds.length - originals.reduce((sum, row) => sum + row.facts.length, 0),
-        work.available('candidateKeys'));
+      const remaining = Math.min(
+        100 - originalIds.length - originals.reduce((sum, row) => sum + row.facts.length, 0),
+        work.available('candidateKeys'),
+      );
       if (remaining < 1) return { status: 'unavailable' } as const;
       const rows = await ownerFilterBounded(work, { nativePoints: 1, statements: 3, bytes: 256 }, () =>
         withConnection(dependencies.pool, async (connection) => {
           const client = deadlineClient(connection, deadline);
           await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           try {
-            const rows = await ownerFilterQuery<NativeFactKey>(client, work, factsQuery, {
-              route: routeOf(actor.accountId), account_id: actor.accountId, subject_id: original, limit: remaining,
-            }, { nativeRows: 32 * remaining + 32, nativePoints: 4, candidateKeys: remaining,
-              witnessKeys: remaining, bytes: 256 * remaining });
+            const rows = await ownerFilterQuery<NativeFactKey>(
+              client,
+              work,
+              factsQuery,
+              {
+                route: routeOf(actor.accountId),
+                account_id: actor.accountId,
+                subject_id: original,
+                limit: remaining,
+              },
+              {
+                nativeRows: 32 * remaining + 32,
+                nativePoints: 4,
+                candidateKeys: remaining,
+                witnessKeys: remaining,
+                bytes: 256 * remaining,
+              },
+            );
             // A full window is unknown, even when every observed supporter matched.
             if (rows.length === remaining) {
               await client.query('COMMIT');
@@ -223,11 +280,13 @@ export async function readNativeOwnerFilterClosure(
             for (const row of rows) {
               const factLocator = locator(original, row);
               facts.push(factLocator);
-              const needed = admission.plan?.leaves.some((leaf) => leaf.kind === 'owner' && (
-                ('state' in leaf.leaf.owner && factLocator.kind === 'entry') ||
-                ('session' in leaf.leaf.owner && factLocator.kind === 'session') ||
-                ('holding' in leaf.leaf.owner && factLocator.kind === 'holding')
-              ));
+              const needed = admission.plan?.leaves.some(
+                (leaf) =>
+                  leaf.kind === 'owner' &&
+                  (('state' in leaf.leaf.owner && factLocator.kind === 'entry') ||
+                    ('session' in leaf.leaf.owner && factLocator.kind === 'session') ||
+                    ('holding' in leaf.leaf.owner && factLocator.kind === 'holding')),
+              );
               if (!needed) continue;
               const fact = await admission.owner!.read(client, factLocator, work);
               if (fact && 'pin' in fact && fact.pin) releaseDigests.add(fact.pin.releaseDigest);

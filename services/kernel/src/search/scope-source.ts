@@ -300,13 +300,15 @@ export function createSearchScopeSource({
     const nativeWork = new NativeCollectionWork(work.remaining(), reader.deadline);
     const bound = await (async () => {
       try {
-        return await withOwnerFilterNativeRead({ actor: reader.actor, at: reader.nativeT!, work: nativeWork }, () => bindOwnerFilterRead(
-      { pool, access: reader.access, routeKey: reader.routeKey, clock },
-      reader.actor,
-      identity.collectionId,
-      admission,
-      reader.deadline,
-        ));
+        return await withOwnerFilterNativeRead({ actor: reader.actor, at: reader.nativeT!, work: nativeWork }, () =>
+          bindOwnerFilterRead(
+            { pool, access: reader.access, routeKey: reader.routeKey, clock },
+            reader.actor,
+            identity.collectionId,
+            admission,
+            reader.deadline,
+          ),
+        );
       } finally {
         work.native(nativeWork.receipt());
       }

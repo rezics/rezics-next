@@ -423,11 +423,14 @@ export type CollectionMemberQuery = {
 };
 
 type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
-const nativeAdmissions = new WeakMap<CollectionMemberAdmission, Readonly<{
-  actor: Actor;
-  pool: Pool;
-  deadline: number;
-}>>();
+const nativeAdmissions = new WeakMap<
+  CollectionMemberAdmission,
+  Readonly<{
+    actor: Actor;
+    pool: Pool;
+    deadline: number;
+  }>
+>();
 
 /** Exact native grammar/family admission, not a permission verdict or a serializable capability.
  * Consumers must repeat ordinary current authority and Source/identity fences at their actual T.
@@ -461,7 +464,8 @@ export async function prepareNativeCollectionMemberAuthority(
   attempt?: CommandAttempt,
 ) {
   const saved = nativeAdmissions.get(admission);
-  if (!saved || saved.actor !== viewer || saved.pool !== deps.pool) throw new TypeError('Foreign native owner admission');
+  if (!saved || saved.actor !== viewer || saved.pool !== deps.pool)
+    throw new TypeError('Foreign native owner admission');
   if (!admission.owner || !admission.filter) return [];
   if (viewer.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
   const route = routeOf(viewer.accountId);
@@ -469,11 +473,25 @@ export async function prepareNativeCollectionMemberAuthority(
   const checks = [];
   for (const { action, group } of privateReads(admission.filter)) {
     if (!viewer.scopes.includes(action)) throw new ProblemError('forbidden');
-    await admitGroup({ pool: deps.pool, access: () => deps.access, actor: viewer, group,
-      clientAction: action, deadline, clock: () => new Date(authoritativeTimeValue(at)) });
+    await admitGroup({
+      pool: deps.pool,
+      access: () => deps.access,
+      actor: viewer,
+      group,
+      clientAction: action,
+      deadline,
+      clock: () => new Date(authoritativeTimeValue(at)),
+    });
     const context = { pool: deps.pool, deadline };
-    checks.push(await accessCheck(deps.access, viewer, action, { route, id: viewer.accountId },
-      attempt ? commandAccessContext(context, attempt) : context));
+    checks.push(
+      await accessCheck(
+        deps.access,
+        viewer,
+        action,
+        { route, id: viewer.accountId },
+        attempt ? commandAccessContext(context, attempt) : context,
+      ),
+    );
   }
   return checks;
 }
