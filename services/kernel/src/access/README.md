@@ -3701,3 +3701,22 @@ path. This marker never calls `acknowledgeErasure`. Access and shared-history re
 neither shared-history's global acknowledgement nor Auth's final acknowledgement is an early native readiness
 condition. Native deletion, recovery, role/privacy and growth outcomes still require the preserved three-file
 acceptance after integration; workspace typing does not establish those outcomes.
+
+### Accepted identity technical receiver
+
+The original `agent-verification-identity.ts` exports
+`acceptAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference): Promise<IdentityNativeReceipt | null>`
+and `verifyAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference, receiving: IdentityNativeReceipt): Promise<boolean>`.
+Both types are the original Semantic exports, without a receiver brand or new source identifier.
+The receiver belongs to the same live original source-home command. Its receipt is the actual
+Access receiving commit's partition, epoch, position and transaction, distinct from the original
+source component. Executor finalization supplies provenance; replay resolves the same durable
+receiver. Source commits receiver acceptance and its own terminal transition atomically. A failed
+post-write verification aborts that entire command; null acceptance must have no effects.
+This custody cannot authorize erasure, new admission, disclosure or all-copy completion.
+
+Integration requires Semantic's original `readAcceptedAccountIdentityBinding` export: an
+accepted, committed, current-owner local binding read without active admission or foreign I/O.
+The existing `readIdentityBinding` invokes admission and is not a substitute after the terminal
+fence. Until that export is delivered, acceptance remains unavailable and verification false.
+The original personal-source minimizer and exhaustive consumer discharge remain independently owned.

@@ -1,3 +1,4 @@
+import type { IdentitySourceConsumerReference } from '../semantic/identity-source-consumer-custody.ts';
 import { recordAgentIdentityWorkSource } from '../history/agent-identity-source.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 /** Access-owned source history. These helpers are internal to the native identity bridge. */
@@ -17,6 +18,7 @@ import {
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accountAgentId } from '../semantic/agents.ts';
 import type {
+  IdentityNativeReceipt,
   IdentityAdmissionInput,
   IdentityIntent,
   IdentityJobRef,
@@ -578,4 +580,27 @@ async function probeAccountIdentityPublicationBounded(pool: Pool, receipt: Accou
   )
     throw accountIdentityUnavailable(`publication pending ${keyOf(receipt)}`);
   return saved.ref;
+}
+
+/** Same-home accepted technical custody; never admission, erasure completion or permission. */
+export async function acceptAccountIdentityTechnicalSource(
+  tx: CommandTransaction,
+  reference: IdentitySourceConsumerReference,
+): Promise<IdentityNativeReceipt | null> {
+  // The native accepted-only binding reader must be delivered by its Semantic owner.
+  void tx;
+  void reference;
+  return null;
+}
+
+/** Re-lock the durable receiver in the enclosing source-home command. */
+export async function verifyAccountIdentityTechnicalSource(
+  tx: CommandTransaction,
+  reference: IdentitySourceConsumerReference,
+  receiving: IdentityNativeReceipt,
+): Promise<boolean> {
+  void tx;
+  void reference;
+  void receiving;
+  return false;
 }
