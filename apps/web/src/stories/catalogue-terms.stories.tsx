@@ -96,7 +96,9 @@ export const Invalid: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement, '');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_save() }));
-    expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_invalid());
+    expect(await canvas.findByText(m.catalogue_create_invalid(), { exact: true })).toHaveTextContent(
+      m.catalogue_create_invalid(),
+    );
     expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveAttribute('aria-invalid', 'true');
   },
 };

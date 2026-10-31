@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { AuthoredField } from '../features/catalogue/authored-field-view';
 import { authoredFixture, type AuthoredScenario } from '../kernel/fake/authored-field';
 import { getLocale } from '../paraglide/runtime';
@@ -180,7 +180,7 @@ export const Conflict: Story = {
     await expect(canvas.getByRole('textbox', { name: m.authored_text() })).toHaveTextContent(
       'A quiet story about friendship.',
     );
-    await expect(canvas.getByRole('button', { name: m.correction_submit() })).toBeEnabled();
+    await waitFor(() => expect(canvas.getByRole('button', { name: m.correction_submit() })).toBeEnabled());
     // Finish on the actual rejection so the conflict capture includes the retained, frozen draft.
     await userEvent.click(canvas.getByRole('button', { name: m.correction_submit() }));
     await canvas.findByText(m.correction_stale());

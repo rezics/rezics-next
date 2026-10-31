@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { pickText } from '@rezics/composition';
 import { SubjectFacts } from '../features/catalogue/subject-facts-view';
 import { subjectFactsFixture } from '../kernel/fake/subject-facts';
@@ -156,21 +156,21 @@ export const Conflict: Story = {
   args: { scenario: 'stale' },
   play: async ({ canvasElement }) => {
     const canvas = await submitFields(canvasElement);
-    await expect(canvas.findAllByText(m.correction_stale())).resolves.toHaveLength(2);
+    await waitFor(() => expect(canvas.getAllByText(m.correction_stale())).toHaveLength(2));
   },
 };
 export const Invalid: Story = {
   args: { scenario: 'invalid' },
   play: async ({ canvasElement }) => {
     const canvas = await submitFields(canvasElement);
-    await expect(canvas.findAllByText(m.correction_invalid())).resolves.toHaveLength(2);
+    await waitFor(() => expect(canvas.getAllByText(m.correction_invalid())).toHaveLength(2));
   },
 };
 export const UncertainRetry: Story = {
   args: { scenario: 'lost-response' },
   play: async ({ canvasElement }) => {
     const canvas = await submitFields(canvasElement);
-    await expect(canvas.findAllByText(m.facts_uncertain())).resolves.toHaveLength(2);
+    await waitFor(() => expect(canvas.getAllByText(m.facts_uncertain())).toHaveLength(2));
     await userEvent.click(canvas.getByRole('button', { name: m.facts_submit() }));
     await expect(canvas.findByText(m.facts_results({ count: 2 }))).resolves.toBeVisible();
   },
