@@ -69,6 +69,10 @@ export interface ReleasedDiscoveryRuntime extends ReleasedNativeConsumers {
 /** Internal shared-fixture handoff; Access is supplied once by the installed Kernel. */
 export interface ReleasedDiscoveryComposition {
   control: ReleasedDiscoveryRuntime;
+  /** Explicit shared-fixture freeze/advance only; receives the actual cloned fixture instant. */
+  onClockChange(instant: Date): void;
+  /** Acknowledge all earlier clock transitions before a dependent Kernel request. */
+  flushClock(): Promise<void>;
   onAccessReady(access: Access): void;
   service(installed: Parameters<typeof createKernel>[0]): ReturnType<typeof createSearchService>;
   start(runtime: SemanticOutcomeDriver['fixtures']['runtime'], send: Request): Promise<void>;
