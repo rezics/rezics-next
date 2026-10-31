@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -8,6 +8,8 @@ import { exactRevisionHref } from '../src/threads/exact-revision-href';
 import { ExactRevisionView } from '../src/threads/exact-revision-view';
 import { loadRevisionDocumentMedia, revisionDocumentImageIds } from '../src/threads/exact-revision-media';
 import { current, id, identity, later, selected } from '../src/stories/exact-revision/fixture';
+import type { DocumentImagePresentation } from '../src/threads/document-media';
+import * as start from '../.storybook/react-start';
 
 function client(handler: (request: Request) => Response) {
   return createKernelClient('https://kernel.test', {
@@ -239,4 +241,190 @@ test('history image references stay within each native page and each available r
       { ...nextPage, mediaIds: [] },
     ]),
   ).toEqual([]);
+});
+
+const presentation = (mediaId: string): DocumentImagePresentation => ({
+  id: mediaId,
+  containerId: selected.threadId,
+  digest: 'a'.repeat(64),
+  width: 457,
+  height: 271,
+  variants: [{ format: 'webp', width: 113, height: 67 }],
+  placeholder: null,
+  focalPoint: null,
+  credit: null,
+});
+const illustrated = (references: string[], mediaIds = references) => ({
+  ...selected,
+  mediaIds,
+  subjectIds: [],
+  body: {
+    ...selected.body,
+    doc: {
+      ...selected.body.doc,
+      content: [
+        ...(selected.body.doc.content ?? []),
+        ...references.map((src, index) => ({
+          type: 'image',
+          attrs: { id: `illustration-${index}`, src, alt: `Recorded illustration ${index}` },
+        })),
+      ],
+    },
+  },
+});
+
+// Exercise the actual server handler with request/session boundaries and the original native client transport.
+mock.module('@tanstack/react-start', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
+let historyRequest = new Request('https://site.test/en/thread', { headers: { authorization: 'Bearer first-page' } });
+mock.module('@tanstack/react-start/server', () => ({
+  getRequest: () => historyRequest,
+  setResponseHeader: () => {},
+}));
+let historyClient: ReturnType<typeof client>;
+mock.module('../src/kernel/client', () => ({ kernelClient: () => historyClient }));
+const { readPostHistory } = await import('../src/threads/reads');
+const { RevisionEntry } = await import('../src/threads/post-history');
+type HistoryPage = Extract<Awaited<ReturnType<typeof readPostHistory>>, { available: true }>;
+const historyMarkup = (page: HistoryPage, index = 0) =>
+  renderToStaticMarkup(
+    createElement(RevisionEntry, {
+      revision: page.revisions[index]!,
+      number: index + 1,
+      authors: page.authors,
+      mentions: page.mentions,
+      documentMedia: page.documentMedia,
+      now: page.now,
+      subjects: page.subjects,
+      currentVote: undefined,
+      review: true,
+    }),
+  );
+
+test('Exact revision and each explicit native history page use the sole delivered DocumentMedia reader and renderer, while unauthorized omitted or overflow image references remain unavailable', async () => {
+  const calls: Request[] = [];
+  const exact = illustrated([id(60), id(61), id(62), id(60)], [id(60), id(61), id(63)]);
+  const images = Array.from({ length: 35 }, (_, index) => id(100 + index));
+  const first = illustrated(images);
+  const unbound = { ...illustrated([images[0]!], []), revisionId: id(500) };
+  const withheld = { ...illustrated([id(600)]), availability: 'withheld', body: null, sha256: null, removed: true };
+  const second = { ...illustrated([images[32]!, images[0]!]), revisionId: id(501) };
+  const cursor = 'native-signed/+=';
+  let pageIndex = -1;
+  let historyDenied = false;
+  historyClient = client((request) => {
+    calls.push(request);
+    const url = new URL(request.url);
+    if (url.pathname.endsWith(`/revisions/${selected.revisionId}`)) return Response.json({ post: exact });
+    if (url.pathname === `/v1/threads/${selected.threadId}`) return Response.json(current);
+    if (url.pathname === `/v1/posts/${selected.id}/revisions`) {
+      if (historyDenied) return new Response(null, { status: 404 });
+      pageIndex = url.searchParams.has('cursor') ? 1 : 0;
+      return Response.json({
+        revisions: pageIndex ? [second] : [first, unbound, withheld],
+        next: pageIndex ? null : cursor,
+      });
+    }
+    if (url.pathname === '/v1/media/presentations')
+      return Response.json({ images: [presentation(pageIndex < 0 ? id(60) : pageIndex ? images[32]! : images[0]!)] });
+    if (url.pathname === '/v1/accounts') return Response.json({ accounts: [] });
+    throw new Error(`Unexpected request: ${url.pathname}`);
+  });
+  const exactPage = await loadExactRevision(historyClient, identity, 'Bearer exact-reader');
+  expect(exactPage.state).toBe('ready');
+  if (exactPage.state !== 'ready') throw new Error('Expected exact document');
+  const html = markup(exactPage);
+  expect(html.match(/<picture>/g)).toHaveLength(2);
+  expect(html).toContain(`src="/media/${id(60)}/webp-113"`);
+  expect(html).toContain('alt="Recorded illustration 0"');
+  expect(html.match(/data-state="unavailable"/g)).toHaveLength(2);
+  expect(html).not.toContain(`/media/${id(61)}/`);
+  expect(html).not.toContain(`/media/${id(62)}/`);
+  expect(exactPage.revision.sha256).toBe(selected.sha256);
+  expect(html).toContain(selected.licence);
+
+  const firstPage = await readPostHistory({ data: { postId: selected.id } });
+  expect(firstPage.available).toBe(true);
+  if (!firstPage.available) throw new Error('Expected first history page');
+  expect(firstPage.next).toBe(cursor);
+  expect(historyMarkup(firstPage)).toContain(`/media/${images[0]}/webp-113`);
+  expect(historyMarkup(firstPage).match(/data-state="unavailable"/g)).toHaveLength(34);
+  expect(historyMarkup(firstPage, 1)).not.toContain('<picture');
+  expect(historyMarkup(firstPage, 2)).not.toContain('data-slot="document-body"');
+  expect(calls.filter((request) => new URL(request.url).pathname.endsWith('/revisions'))).toHaveLength(1);
+
+  historyRequest = new Request('https://site.test/en/thread', { headers: { authorization: 'Bearer second-page' } });
+  const secondPage = await readPostHistory({ data: { postId: selected.id, cursor: firstPage.next! } });
+  expect(secondPage.available).toBe(true);
+  if (!secondPage.available) throw new Error('Expected second history page');
+  expect(historyMarkup(secondPage)).toContain(`/media/${images[32]}/webp-113`);
+  expect(historyMarkup(secondPage)).not.toContain(`/media/${images[0]}/`);
+  // A later page cannot refill an earlier page's overflow or omission.
+  expect(historyMarkup(firstPage)).not.toContain(`/media/${images[32]}/`);
+  const batches = calls.filter((request) => new URL(request.url).pathname === '/v1/media/presentations');
+  expect(batches).toHaveLength(3);
+  expect(await Promise.all(batches.map((request) => request.json()))).toEqual([
+    { ids: [id(60), id(61)] },
+    { ids: images.slice(0, 32) },
+    { ids: [images[32], images[0]] },
+  ]);
+  expect(batches.map((request) => request.headers.get('authorization'))).toEqual([
+    'Bearer exact-reader',
+    'Bearer first-page',
+    'Bearer second-page',
+  ]);
+  expect(batches.every((request) => request.method === 'POST')).toBe(true);
+  const historyReads = calls.filter((request) => new URL(request.url).pathname.endsWith('/revisions'));
+  expect(historyReads.map((request) => [...new URL(request.url).searchParams])).toEqual([
+    [['limit', '20']],
+    [
+      ['limit', '20'],
+      ['cursor', cursor],
+    ],
+  ]);
+  expect(historyReads.map((request) => request.headers.get('authorization'))).toEqual([
+    'Bearer first-page',
+    'Bearer second-page',
+  ]);
+  const count = calls.length;
+  historyDenied = true;
+  expect(await readPostHistory({ data: { postId: selected.id, cursor } })).toEqual({ available: false });
+  expect(calls).toHaveLength(count + 1);
+});
+
+test('optional current media denial cannot rescue a missing exact source or reuse an earlier image result', async () => {
+  let sourceStatus = 200;
+  let mediaStatus = 200;
+  const calls: Request[] = [];
+  const kernel = client((request) => {
+    calls.push(request);
+    const path = new URL(request.url).pathname;
+    if (path.endsWith(`/revisions/${selected.revisionId}`))
+      return sourceStatus === 200
+        ? Response.json({ post: illustrated([id(60)]) })
+        : new Response(null, { status: sourceStatus });
+    if (path === `/v1/threads/${selected.threadId}`) return Response.json(current);
+    if (path === '/v1/media/presentations')
+      return mediaStatus === 200
+        ? Response.json({ images: [presentation(id(60))] })
+        : new Response(null, { status: mediaStatus });
+    if (path === '/v1/accounts') return Response.json({ accounts: [] });
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  expect(markup(await loadExactRevision(kernel, identity, 'Bearer current-reader'))).toContain('<picture');
+  for (const status of [403, 404, 503]) {
+    mediaStatus = status;
+    const page = await loadExactRevision(kernel, identity, 'Bearer current-reader');
+    expect(page.state).toBe('ready');
+    expect(markup(page)).toContain('The original edition');
+    expect(markup(page)).toContain('data-state="unavailable"');
+    expect(markup(page)).not.toContain('<picture');
+  }
+  sourceStatus = 404;
+  mediaStatus = 200;
+  calls.length = 0;
+  const page = await loadExactRevision(kernel, identity, 'Bearer current-reader');
+  expect(page).toEqual({ state: 'unavailable', status: 404 });
+  expect(markup(page)).not.toContain('data-slot="document-body"');
+  expect(calls).toHaveLength(1);
 });

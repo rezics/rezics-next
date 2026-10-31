@@ -4,7 +4,9 @@ import { useId, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Byline } from './byline';
+import { NativeDocumentImage } from './document-media';
 import { exactRevisionHref } from './exact-revision-href';
+import { revisionDocumentImage } from './exact-revision-media';
 import { readPostHistory } from './reads';
 import { RevisionProvenance } from './revision-provenance-view';
 
@@ -26,7 +28,7 @@ export function PostHistory({
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [available, setAvailable] = useState(true);
-  const [revisions, setRevisions] = useState<Revision[]>([]);
+  const [revisions, setRevisions] = useState<{ revision: Revision; documentMedia: HistoryPage['documentMedia'] }[]>([]);
   const [authors, setAuthors] = useState<HistoryPage['authors']>({});
   const [mentions, setMentions] = useState<HistoryPage['mentions']>({});
   const [subjects, setSubjects] = useState<HistoryPage['subjects']>([]);
@@ -44,7 +46,8 @@ export function PostHistory({
         setLoaded(true);
         return;
       }
-      setRevisions((current) => (cursor ? [...current, ...result.revisions] : result.revisions));
+      const entries = result.revisions.map((revision) => ({ revision, documentMedia: result.documentMedia }));
+      setRevisions((current) => (cursor ? [...current, ...entries] : entries));
       setAuthors((current) => ({ ...(current ?? {}), ...(result.authors ?? {}) }));
       setMentions((current) => ({ ...current, ...result.mentions }));
       setSubjects((current) => [
@@ -98,13 +101,14 @@ export function PostHistory({
           ) : null}
           {available && revisions.length > 0 ? (
             <ol className="space-y-5" aria-label={m.thread_history_heading()}>
-              {revisions.map((revision, index) => (
+              {revisions.map(({ revision, documentMedia }, index) => (
                 <RevisionEntry
                   key={revision.revisionId}
                   revision={revision}
                   number={index + 1}
                   authors={authors}
                   mentions={mentions}
+                  documentMedia={documentMedia}
                   now={now}
                   subjects={subjects}
                   currentVote={viewerId === revision.authorId ? reviewVotes[revision.id] : undefined}
@@ -129,11 +133,12 @@ export function PostHistory({
   );
 }
 
-function RevisionEntry({
+export function RevisionEntry({
   revision,
   number,
   authors,
   mentions,
+  documentMedia,
   now,
   subjects,
   currentVote,
@@ -143,16 +148,18 @@ function RevisionEntry({
   number: number;
   authors: HistoryPage['authors'];
   mentions: HistoryPage['mentions'];
+  documentMedia: HistoryPage['documentMedia'];
   now: string;
   subjects: HistoryPage['subjects'];
   currentVote: HistoryPage['reviewVotes'][string] | undefined;
   review: boolean;
 }) {
+  const locale = getLocale();
   return (
     <li className="space-y-3 border-t border-border/60 pt-4 first:border-0 first:pt-0">
       <h4 className="font-semibold">
         <a
-          href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, getLocale())}
+          href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, locale)}
           className="inline-flex min-h-11 items-center underline underline-offset-4"
         >
           {m.thread_history_version({ number: String(number) })}
@@ -161,7 +168,18 @@ function RevisionEntry({
       <Byline author={authors?.[revision.authorId]} createdAt={revision.createdAt} now={now} showAuthor />
       <RevisionProvenance revision={revision} subjects={subjects} currentVote={currentVote ?? null} review={review} />
       {revision.availability === 'available' && revision.body ? (
-        <DocumentBody document={revision.body} mentions={mentions} locale={getLocale()} />
+        <DocumentBody
+          document={revision.body}
+          mentions={mentions}
+          locale={locale}
+          renderImage={({ mediaId, alt }) => (
+            <NativeDocumentImage
+              image={revisionDocumentImage(documentMedia, revision, mediaId)}
+              alt={alt}
+              locale={locale}
+            />
+          )}
+        />
       ) : null}
     </li>
   );

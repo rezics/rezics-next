@@ -4,7 +4,9 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { Byline } from './byline';
+import { NativeDocumentImage } from './document-media';
 import type { ExactRevisionIdentity, ExactRevisionState } from './exact-revision';
+import { revisionDocumentImage } from './exact-revision-media';
 import { RevisionProvenance } from './revision-provenance-view';
 import { threadLocation } from './thread-href';
 
@@ -72,7 +74,18 @@ export function ExactRevisionView({
             now={page.now}
           />
           <RevisionProvenance revision={page.revision} subjects={[]} />
-          <DocumentBody document={page.revision.body} mentions={page.mentions} locale={locale} />
+          <DocumentBody
+            document={page.revision.body}
+            mentions={page.mentions}
+            locale={locale}
+            renderImage={({ mediaId, alt }) => (
+              <NativeDocumentImage
+                image={revisionDocumentImage(page.documentMedia, page.revision, mediaId)}
+                alt={alt}
+                locale={locale}
+              />
+            )}
+          />
         </section>
       ) : null}
     </article>

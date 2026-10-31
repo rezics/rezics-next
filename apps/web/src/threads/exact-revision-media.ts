@@ -1,8 +1,7 @@
-import type { KernelClient } from '@rezics/client';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
+import { DOCUMENT_MEDIA_LIMIT, type DocumentImagePresentation, type DocumentMediaRead } from './document-media';
 
-/** Consumer-local absence boundary until the original document-media module is delivered. */
-export type RevisionDocumentMedia = Readonly<{ kind: 'unavailable' }>;
+export { loadDocumentMedia as loadRevisionDocumentMedia } from './document-media';
 
 type RevisionImageSource = Readonly<{
   availability: string;
@@ -17,28 +16,33 @@ export function revisionDocumentImageIds(revisions: readonly RevisionImageSource
     if (revision.availability !== 'available' || !revision.body) continue;
     const declared = new Set(revision.mediaIds);
     const visit = (node: DocumentNode) => {
-      if (ids.size === 32) return;
+      if (ids.size === DOCUMENT_MEDIA_LIMIT) return;
       if (node.type === 'image' && typeof node.attrs?.src === 'string' && declared.has(node.attrs.src))
         ids.add(node.attrs.src);
       for (const child of node.content ?? []) {
-        if (ids.size === 32) break;
+        if (ids.size === DOCUMENT_MEDIA_LIMIT) break;
         visit(child);
       }
     };
     visit(revision.body.doc);
-    if (ids.size === 32) break;
+    if (ids.size === DOCUMENT_MEDIA_LIMIT) break;
   }
   return [...ids];
 }
 
-/**
- * No native caller or image renderer belongs here. Replace this boundary with the original
- * document-media loadDocumentMedia export when it exists; absence grants no media authority.
- */
-export async function loadRevisionDocumentMedia(
-  _client: KernelClient,
-  _ids: readonly string[],
-  _authorization: string | null = null,
-): Promise<RevisionDocumentMedia> {
-  return { kind: 'unavailable' };
+/** A page's independent media result applies only to a readable revision's own declared container reference. */
+export function revisionDocumentImage(
+  media: DocumentMediaRead,
+  revision: RevisionImageSource & { threadId: string },
+  mediaId: string,
+): DocumentImagePresentation | null {
+  if (
+    media.kind !== 'ready' ||
+    revision.availability !== 'available' ||
+    !revision.body ||
+    !revision.mediaIds.includes(mediaId)
+  )
+    return null;
+  const image = media.images.get(mediaId);
+  return image?.containerId === revision.threadId ? image : null;
 }
