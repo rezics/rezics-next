@@ -283,11 +283,15 @@ remain. [Semantic status](design-status-semantic.md) describes a missing coordin
 label and current FULL paths. [Auth README](../../services/auth/README.md) excludes authorization-provider work
 which [website-provider](../../services/auth/src/website-provider.ts) now installs through Better Auth.
 
-Other contradictions are still actionable: [scope](../scope.md) defers user-saved dynamic queries while private
-saved-dynamic routes are mounted; [Semantic README](../../services/kernel/src/semantic/README.md) describes
+One definite wire contradiction remains: [Semantic README](../../services/kernel/src/semantic/README.md) describes
 accepted identity operations with `202`/operation observation while
 [Subject merge HTTP](../../services/kernel/src/semantic/http/subjects.ts) returns `200` with survivor, redirected
-and revision fields. These deserve reconciliation even if a gate currently prevents public use.
+and revision fields. It needs reconciliation even if a gate currently prevents public use.
+Separately, [scope](../scope.md) defers user-saved dynamic queries while
+[Collection routes](../../services/kernel/src/library/collection-routes.ts) accept a dynamic rule on creation.
+This establishes implemented/mounted private storage ahead of public scope, not necessarily a scope violation:
+stored meaning and the private-family grants do not establish public execution admission or release activation.
+Keep its public status deferred unless the owning scope changes; do not silently count it as delivered first scope.
 
 **Cause:** reports and READMEs are manually maintained at different revisions; declarations, integration and proof
 are not tracked separately. **Impact:** duplicated work, false readiness and incompatible clients.
@@ -680,7 +684,7 @@ new acceptance suite is authorized by this research recommendation.
 
 | Order / slice | Size and coherent result | Dependencies and removal target | Later evidence needed, not run here |
 | --- | --- | --- | --- |
-| 0. Reconcile capability authority | S per owner: date/status matrix from actual mounted composition, scope and dependencies | Update stale claims; resolve saved-dynamic scope and merge-operation contract. Remove redundant readiness narratives. | Ordinary API route and unavailable-state inventory; do not adopt a report as contract automatically |
+| 0. Reconcile capability authority | S per owner: date/status matrix from actual mounted composition, scope and dependencies | Update stale claims; record saved-dynamic implementation separately from deferred public scope and reconcile merge-operation contract. Remove redundant readiness narratives. | Ordinary API route and unavailable-state inventory; do not adopt a report as contract automatically |
 | 1. One database read context | M/L: full-key batch hydration across Semantic and identity, one RR snapshot/database | Reuse Content/Rating patterns; remove per-partition transaction wrappers and pooled query escape from a batch | Multiple partitions in one DB, moved partitions, concurrent revisions, disclosure and exact per-DB statements |
 | 2. Close released Library profile surfaces | M: generic state summaries, explicit follow policy, actual default shelf generation binding | Slice 0; remove duplicated fixed states outside explicit legacy adapter and dormant bulk advertising | One non-default profile through create/change/summary/shelf/Continue/copy and real production composition |
 | 3. Million-member Collection algorithm | L: exact member lookup, bounded ordering repair, retained publication and bounded Source integration | Slice 1; replaces owner-wide respacing/lookup rather than only increasing 5,000 | Adversarial repeated insertion, reorder/retry, hidden members, million-owner indexed desk/native cost later |
@@ -707,6 +711,7 @@ Ambiguities resolved for this report:
   the number of Realms. The 100-counted-Realm policy is reported honestly rather than silently expanded to 300.
 - First-scope Continue/catalogue discovery is distinguished from deferred general feeds and saved dynamic queries.
   The critique's upper-bound/mixed-home requirement does not authorize implementing a deferred feed during research.
+  A private saved-rule route ahead of public scope is recorded as implemented/exposed, not presumed publicly released.
 - A Source allowance is a maximum admission, not an observed cost. Identity metadata and privacy control reads are
   separate dimensions. No throughput, latency, coverage percentage or test-pass claim is inferred from source.
 - Existing reference clones and their index entries suffice; no reference repository or index mutation was needed.
