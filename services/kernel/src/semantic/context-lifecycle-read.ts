@@ -195,7 +195,8 @@ export async function authorizedContextMetadata(
           const currentOwners = grants.rows.filter((grant) => grant.id === row.id).map((grant) => grant.account);
           if (JSON.stringify(currentOwners) !== JSON.stringify(row.owners)) continue;
           if (!nativeActions[row.id]?.includes('context:read')) continue;
-          if (!current.rows.some((r) => r.id === row.id && r.version === row.version) || !read[row.id]?.allowed) continue;
+          if (!current.rows.some((r) => r.id === row.id && r.version === row.version) || !read[row.id]?.allowed)
+            continue;
           if (row.state === 'deleted' && (!row.actorOwner || row.id === GLOBAL_CONTEXT || !restore[row.id]?.allowed))
             continue;
           const { id, kind, labels, state, deletedAt, purgeAfter } = row;

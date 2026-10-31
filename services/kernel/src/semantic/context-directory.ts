@@ -88,9 +88,14 @@ export function createContextDirectory(dependencies: {
           authority:
             input.actor.kind === 'account'
               ? createHash('sha256')
-                  .update(JSON.stringify([
-                    input.actor.clientId, input.actor.authnEpoch, [...input.actor.scopes].sort(), input.actor.requestedBy,
-                  ]))
+                  .update(
+                    JSON.stringify([
+                      input.actor.clientId,
+                      input.actor.authnEpoch,
+                      [...input.actor.scopes].sort(),
+                      input.actor.requestedBy,
+                    ]),
+                  )
                   .digest('hex')
               : null,
         },
@@ -508,10 +513,10 @@ async function nextDirectoryHome(pool: Pool, clock?: () => Date): Promise<number
       ).rows[0];
       if (!native) throw new ContextDirectoryPreparingError();
       const disposition = await readSemanticSourceDisposition(tx, 'context', native.erasure_key);
-      await tx.query(
-        'UPDATE semantic.context SET directory_pending=true WHERE route=$1 AND context_id=$2',
-        [route, repair.id],
-      );
+      await tx.query('UPDATE semantic.context SET directory_pending=true WHERE route=$1 AND context_id=$2', [
+        route,
+        repair.id,
+      ]);
       if (disposition === 'retained-nonpersonal')
         recordSemanticSourceDisposition(tx, 'context', native.erasure_key, disposition);
       return { value: null, events: [{ type: CONTEXT_DIRECTORY_CHANGED, data: {} }] };

@@ -61,9 +61,13 @@ test('Current authorized Context discovery and lifecycle metadata support real s
     (await call('GET', `/v1/contexts?deleted=true&query=${encodeURIComponent(label)}`, 'owner')).body.contexts[0],
   ).toEqual(deleted.body.context);
   expect(await actions(id, 'owner')).toContain('context:restore');
-  const advertised = await call('POST', '/v1/viewerActions', 'owner', { resources: [{ type: 'semantic.context', id }] });
+  const advertised = await call('POST', '/v1/viewerActions', 'owner', {
+    resources: [{ type: 'semantic.context', id }],
+  });
   status(advertised, 200);
-  const reads = advertised.body.resources[0].viewerActions.find((entry: { action: string }) => entry.action === 'context:read');
+  const reads = advertised.body.resources[0].viewerActions.find(
+    (entry: { action: string }) => entry.action === 'context:read',
+  );
   expect(reads.operations).toContain('context.lifecycle');
   expect(reads.operations).not.toContain('context.get');
   status(await call('POST', `/v1/contexts/${id}:restore`, 'owner', {}), 200);
@@ -145,7 +149,11 @@ test('the fixed Global row is discoverable and multilingual prefix paging emits 
   const ids: string[] = [];
   let cursor: string | null = null;
   for (let step = 0; step < 3; step++) {
-    const page = await call('GET', `/v1/contexts?query=${encodeURIComponent(prefix)}&limit=1${cursor ? `&cursor=${cursor}` : ''}`, 'owner');
+    const page = await call(
+      'GET',
+      `/v1/contexts?query=${encodeURIComponent(prefix)}&limit=1${cursor ? `&cursor=${cursor}` : ''}`,
+      'owner',
+    );
     status(page, 200);
     ids.push(...page.body.contexts.map((entry: { id: string }) => entry.id));
     cursor = page.body.next;
