@@ -42,10 +42,16 @@ test('ordinary configured server returns current mixed discovery through its def
     expect(typeof profile.handle).toBe('string');
     const subjects: string[] = [];
     for (let n = 0; n < 2; n++) {
-      const created = await driver.request('editor', 'POST', '/v1/subjects', {
-        type: 'schema:Person',
-        labels: { en: `${marker} English ${n}`, fr: `${marker} Français ${n}` },
-      }, { 'Idempotency-Key': `"${randomUUID()}"` });
+      const created = await driver.request(
+        'editor',
+        'POST',
+        '/v1/subjects',
+        {
+          type: 'schema:Person',
+          labels: { en: `${marker} English ${n}`, fr: `${marker} Français ${n}` },
+        },
+        { 'Idempotency-Key': `"${randomUUID()}"` },
+      );
       expect(created.status, JSON.stringify(created.body)).toBe(201);
       subjects.push((created.body.subject as { id: string }).id);
     }
@@ -74,7 +80,9 @@ test('ordinary configured server returns current mixed discovery through its def
     };
     async function send(body: Record<string, unknown>) {
       const response = await fetch(new URL('/v1/subjects:search', origin), {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
       });
       return { response, body: await response.json() };
     }
@@ -126,10 +134,17 @@ test('ordinary configured server returns current mixed discovery through its def
     }
     for (const [n, action] of ['hide', 'takedown'].entries()) {
       await driver.grant('editor', [`moderation:${action}`], subjects[n]!);
-      const changed = await driver.request('editor', 'POST', `/v1/subjects/${subjects[n]}:${action}`,
-        action === 'hide' ? { reason: 'Default discovery current disclosure' } : {
-          notice: { complaint: 'Default discovery current disclosure', received_at: new Date().toISOString() },
-        }, { 'Idempotency-Key': `"${randomUUID()}"` });
+      const changed = await driver.request(
+        'editor',
+        'POST',
+        `/v1/subjects/${subjects[n]}:${action}`,
+        action === 'hide'
+          ? { reason: 'Default discovery current disclosure' }
+          : {
+              notice: { complaint: 'Default discovery current disclosure', received_at: new Date().toISOString() },
+            },
+        { 'Idempotency-Key': `"${randomUUID()}"` },
+      );
       expect(changed.status, JSON.stringify(changed.body)).toBe(200);
     }
     const current = await page({ ...request, limit: 100 });
@@ -138,24 +153,37 @@ test('ordinary configured server returns current mixed discovery through its def
     const routeKey = new Uint8Array(Buffer.from(runtime.routeKey, 'base64url'));
     const registry = await nativeDiscoveryRegistry(pool, routeKey, createRatedSubjectSource(pool, routeKey).source);
     await allocateDiscovery(pool, prefix, registry);
-    await eventually(async () => (await discoveryGenerations(pool, prefix)).some(
-      ({ generation, state }) => generation > active.generation && state === 'active',
-    ) ? true : undefined);
+    await eventually(async () =>
+      (await discoveryGenerations(pool, prefix)).some(
+        ({ generation, state }) => generation > active.generation && state === 'active',
+      )
+        ? true
+        : undefined,
+    );
     const switched = await send({ ...request, cursor: first.next });
     expect(switched.response.status, JSON.stringify(switched.body)).toBe(409);
     expect(switched.body.code).toBe('search_restart_required');
   } finally {
-    try { await server?.stop(); } finally {
-      try { await worker?.close(); } finally {
+    try {
+      await server?.stop();
+    } finally {
+      try {
+        await worker?.close();
+      } finally {
         try {
           const owned = await search.request<{ indices: { name: string }[] }>(
-            'GET', `/_resolve/index/${prefix}*`, undefined, { query: { expand_wildcards: 'all' } },
+            'GET',
+            `/_resolve/index/${prefix}*`,
+            undefined,
+            { query: { expand_wildcards: 'all' } },
           );
           for (const { name } of owned.body.indices) {
             if (!name.startsWith(prefix)) throw new Error('Discovery cleanup escaped its owned prefix');
             await search.request('DELETE', `/${name}`);
           }
-        } finally { await driver.close(); }
+        } finally {
+          await driver.close();
+        }
       }
     }
   }

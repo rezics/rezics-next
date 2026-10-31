@@ -143,8 +143,11 @@ export function createDiscoverySearch(config: {
         if (batch.status !== 'queried') {
           retained = batch.status === 'preparing';
           if (retained && repair) await config.prepare?.(repair);
-          if (batch.status === 'unavailable' &&
-            (batch.reason === 'incarnation_changed' || batch.reason === 'observation_lost') && request.cursor)
+          if (
+            batch.status === 'unavailable' &&
+            (batch.reason === 'incarnation_changed' || batch.reason === 'observation_lost') &&
+            request.cursor
+          )
             throw new ProblemError('search_restart_required');
           throw ready();
         }

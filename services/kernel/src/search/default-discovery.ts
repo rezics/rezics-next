@@ -77,8 +77,10 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
         async asOf(queried) {
           const match = /discovery-g([1-9][0-9]*)$/.exec(queried.consumer.physicalTarget);
           const generation = Number(match?.[1]);
-          if (!Number.isSafeInteger(generation) ||
-            discoveryIndexName(config.prefix, generation) !== queried.consumer.physicalTarget)
+          if (
+            !Number.isSafeInteger(generation) ||
+            discoveryIndexName(config.prefix, generation) !== queried.consumer.physicalTarget
+          )
             throw new Error('Discovery freshness requires the actual queried mixed generation');
           return (await readFreshness(config.pool, discoveryConsumer(config.prefix, generation))).asOf.toISOString();
         },
@@ -98,7 +100,11 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
       closed = true;
       return (closing ??= (async () => {
         await Promise.allSettled([...pending]);
-        try { await runtime.close(); } finally { if (work) await (await work).close(); }
+        try {
+          await runtime.close();
+        } finally {
+          if (work) await (await work).close();
+        }
       })());
     },
   };

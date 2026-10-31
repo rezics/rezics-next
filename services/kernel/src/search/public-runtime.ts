@@ -231,17 +231,21 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         const allocation = result.rows[0]!;
         if (!allocation.uuid || !Number.isSafeInteger(allocation.generation)) notReady();
         const target = discoveryIndexName(config.prefix, allocation.generation);
-        if (queried && (
-          queried.consumer.physicalTarget !== target ||
-          queried.consumer.incarnation !== allocation.uuid ||
-          queried.consumer.meaningDigest !== digest
-        )) throw new ProblemError('search_restart_required');
+        if (
+          queried &&
+          (queried.consumer.physicalTarget !== target ||
+            queried.consumer.incarnation !== allocation.uuid ||
+            queried.consumer.meaningDigest !== digest)
+        )
+          throw new ProblemError('search_restart_required');
         const key = JSON.stringify([target, allocation.uuid, allocation.incarnation, digest]);
         let operations = mixed.get(key);
         if (!operations) {
           operations = create(target, release, context, registry);
           mixed.set(key, operations);
-          void operations.catch(() => { if (mixed.get(key) === operations) mixed.delete(key); });
+          void operations.catch(() => {
+            if (mixed.get(key) === operations) mixed.delete(key);
+          });
         }
         // A real generation/release switch invalidates old cursors. Drain their factories rather
         // than retaining one resource owner for every historical release in a long-lived process.
