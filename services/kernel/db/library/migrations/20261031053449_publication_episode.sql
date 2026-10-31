@@ -1,4 +1,37 @@
 -- migrate:up
+-- First owner write can pin Everything meaning without changing its stable identity.
+ALTER TABLE library.collection DROP CONSTRAINT collection_builtin_identity_check;
+ALTER TABLE library.collection
+  ADD CONSTRAINT collection_builtin_identity_check CHECK (
+    CASE membership_kind
+      WHEN 'curated' THEN
+        builtin_kind IS NULL AND builtin_release_digest IS NULL AND
+        builtin_profile_id IS NULL AND builtin_state_set_id IS NULL AND builtin_state_id IS NULL
+      WHEN 'dynamic' THEN
+        CASE builtin_kind
+          WHEN 'everything' THEN
+            (builtin_release_digest IS NULL OR (octet_length(builtin_release_digest)=71 AND
+              builtin_release_digest COLLATE "C" ~ '\Asha256:[0-9a-f]{64}\Z')) AND
+            builtin_profile_id IS NULL AND builtin_state_set_id IS NULL AND builtin_state_id IS NULL
+          WHEN 'state' THEN
+            builtin_release_digest IS NOT NULL AND builtin_profile_id IS NOT NULL AND
+            builtin_state_set_id IS NOT NULL AND builtin_state_id IS NOT NULL AND
+            octet_length(builtin_release_digest) = 71 AND
+            builtin_release_digest COLLATE "C" ~ '\Asha256:[0-9a-f]{64}\Z' AND
+            octet_length(builtin_profile_id) BETWEEN 1 AND 64 AND
+            builtin_profile_id COLLATE "C" ~ '\A[a-z][a-z0-9_.-]{0,63}\Z' AND
+            octet_length(builtin_state_set_id) BETWEEN 1 AND 64 AND
+            builtin_state_set_id COLLATE "C" ~ '\A[a-z][a-z0-9_.-]{0,63}\Z' AND
+            octet_length(builtin_state_id) BETWEEN 1 AND 64 AND
+            builtin_state_id COLLATE "C" ~ '\A[a-z][a-z0-9_.-]{0,63}\Z'
+          ELSE
+            -- Erased private references do not establish a ready membership source.
+            builtin_kind IS NULL AND builtin_release_digest IS NULL AND
+            builtin_profile_id IS NULL AND builtin_state_set_id IS NULL AND builtin_state_id IS NULL
+        END
+      ELSE false
+    END
+  );
 -- A whole-query build has no cardinality until the actual Source proves exhaustion.
 ALTER TABLE library.collection_source_output ALTER COLUMN expected_members DROP NOT NULL;
 ALTER TABLE library.collection_source_output ADD CONSTRAINT collection_output_complete_cardinality
@@ -102,6 +135,7 @@ END; $$;
 CREATE CONSTRAINT TRIGGER collection_publication_commit AFTER INSERT ON library.collection_publication_operation
   DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_publication_episode_commit();
 -- migrate:down
+-- The accepted built-in release pin remains valid; never discard accepted meaning on downgrade.
 DROP TRIGGER collection_publication_commit ON library.collection_publication_operation;
 DROP FUNCTION library.check_publication_episode_commit();
 DROP TABLE library.collection_publication_episode;

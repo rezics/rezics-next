@@ -210,15 +210,19 @@ rule use compares incarnation, Collection/rule revision, source generation, acce
 `advanceCollectionPublicationEpisodePhase` delegates mechanical admission to the existing live Core work-step port
 and performs version CAS; it cannot complete output. The owning work-admission/getter, bounded query staging, final
 human command and default receiving composition remain independent dependencies. Their unavailable implementations
-are not successful empty results. Logical built-in first-write materialization and its Source bootstrap are not supplied
-by this saved-rule path; Liked and unsupported targets refuse. No public/frozen/full-query completion proof is claimed.
+are not successful empty results. `builtin-materialization.ts` uses the existing parent-creation capability and native
+grant initializer for the first owner write (logical revision 0 to native revision 1), keeping Everything/state IDs
+stable and accepted meaning pinned in the native header. Its storage title defaults to `Everything` or the accepted
+state identifier until an owner changes it; no query AST is retained there. Liked refuses. The existing canonical
+Source producer shares its identity allocator with original commands: it allocates an actual native scope only,
+without claiming capture, observation, repair or custody completion. No public/frozen/full-query completion proof is claimed.
 
 The existing terminal participant invokes `purgeCollectionPublicationEpisodes` in bounded owner-indexed pages,
 removing private source/operation/initiator snapshots even when completed public A is retained. The three families
 join its native probe inventory. Current account fences prevent late creation. Foreign principal/operator custody,
 shared Core history and receiving/SDK minimization remain explicit pending obligations; local exhaustion cannot ACK.
 The focused episode suite adds original native creation, replay/current authority, changed rule and receipt-retention
-assertions. These assertions require the actual native Source producers and have not been executed here.
+and built-in first-write assertions. These native assertions have not been executed here.
 
 ### Explicit membership Publication hooks
 

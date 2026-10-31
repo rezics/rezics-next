@@ -8,7 +8,7 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { accessRoot } from '../access/derived-access.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';
-import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
+import { authoritativeTimeValue, currentCommandResources, hasLiveCommandTransaction, type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -39,6 +39,8 @@ type Options = {
   allowance: WorkAllowance;
   /** Structural reads only. The Source work branch separately admits the actual native episode. */
   tx?: OperationalTransaction;
+  /** Original native creation command; independent of mechanical work authority. */
+  commandTx?: CommandTransaction;
 };
 type QueryClient = Pick<PoolClient, 'query'>;
 type Ref = { route: number; collectionId: string };
@@ -269,10 +271,16 @@ async function call<T extends object>(
   operation: (work: NativeCollectionWork) => Promise<T>,
 ) {
   const work = new NativeCollectionWork(options.allowance, options.deadline);
-  if (options.tx) {
-    if (!hasLiveOperationalTransaction(options.tx)) throw new ProblemError('semantic_not_ready');
-    const resources = currentOperationalResources(options.tx);
-    if (resources.pool !== pool || resources.mode !== 'work-step') throw new ProblemError('semantic_not_ready');
+  if (options.tx && options.commandTx) throw new TypeError('Ambiguous native read transaction');
+  if (options.tx || options.commandTx) {
+    if (options.commandTx) {
+      if (!hasLiveCommandTransaction(options.commandTx) || currentCommandResources(options.commandTx).pool !== pool)
+        throw new ProblemError('semantic_not_ready');
+    } else if (!options.tx || !hasLiveOperationalTransaction(options.tx)) throw new ProblemError('semantic_not_ready');
+    if (options.tx) {
+      const resources = currentOperationalResources(options.tx);
+      if (resources.pool !== pool || resources.mode !== 'work-step') throw new ProblemError('semantic_not_ready');
+    }
     try {
       return { ...(await operation(work)), work: work.receipt() };
     } catch (error) {
@@ -297,14 +305,16 @@ async function readOnly<T>(
   work: NativeCollectionWork,
   operation: (client: QueryClient) => Promise<T>,
 ): Promise<T> {
-  const { deadline, tx } = options;
+  const { deadline } = options;
+  const tx = options.commandTx ?? options.tx;
   if (tx) {
     // Core owns this transaction and its locks. No checkout, BEGIN, COMMIT or foreign read here.
     const client: QueryClient = {
       query: (async (config: string | QueryConfig, parameters: unknown[] = []) => {
         const sql = typeof config === 'string' ? config : config.text;
         const values = (typeof config === 'string' ? parameters : config.values) ?? [];
-        if (!hasLiveOperationalTransaction(tx)) throw new ProblemError('semantic_not_ready');
+        if (options.commandTx ? !hasLiveCommandTransaction(options.commandTx) :
+          !options.tx || !hasLiveOperationalTransaction(options.tx)) throw new ProblemError('semantic_not_ready');
         const reservation = work.reserve(footprint(sql, values, work));
         reservation.dispatch();
         let result: QueryResult | undefined;
@@ -410,7 +420,8 @@ async function observe(
 async function observeWorking(client: QueryClient, ref: Ref, work: NativeCollectionWork) {
   const metadata = await observe(client, ref, work);
   if (!metadata || metadata.membershipKind !== 'dynamic' || metadata.visibility === 'private') return metadata;
-  if (!metadata.curatorAccountId || metadata.builtinKind !== null || !metadata.ruleReady) return null;
+  if (!metadata.curatorAccountId || !(metadata.ruleReady ||
+    (metadata.builtinKind !== null && metadata.releaseDigest !== null))) return null;
   const factFence =
     (await client.query<{ generation: string }>(fenceSQL, [ref.route, metadata.curatorAccountId])).rows[0]
       ?.generation ?? null;

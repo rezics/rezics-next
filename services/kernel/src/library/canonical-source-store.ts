@@ -198,6 +198,10 @@ import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
 import { readOwnerNativeFactPage, type OwnerNativeFactDriver } from './owner-index.ts';
 import ownerFacts from './collection-source-native-facts.sql';
 import { deadlineClient } from '../access/authenticate.ts';
+import { creationDeclares } from '../access/parent-creation.ts';
+import { shareAccount } from '../access/account-share.ts';
+import { currentCommand, currentCommandResources, type CommandTransaction } from '../command/command.ts';
+import { isDeepStrictEqual } from 'node:util';
 
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
 const contexts = new WeakMap<Pool, WorkContext>();
@@ -233,6 +237,46 @@ export function nativeSourceFence(metadata: NativeCollectionMetadata): string {
     metadata.factFence,
     metadata.outputGeneration,
   ]);
+}
+/** Native identity allocation is shared by initial owner commands and the existing capture producer.
+ * Allocation never certifies a capture, scoped observation, repair, exhaustion or output receipt.
+ */
+function nativeSourceIdentity(metadata: NativeCollectionMetadata): NativeSourceIdentity {
+  if (!metadata.curatorAccountId || (metadata.authority !== 'curated' && metadata.authority !== 'private_builtin'))
+    throw new ProblemError('dependency_unavailable');
+  return { route:metadata.route,collectionId:metadata.collectionId,accountId:metadata.curatorAccountId,
+    incarnation:metadata.incarnation,generation:metadata.sourceGeneration,scope:metadata.authority,
+    ownerEpoch:metadata.stamp.epoch,receivingEpoch:metadata.stamp.epoch.toString(),
+    effectKey:`collection-source:${nativeSourceFence(metadata)}` };
+}
+/** Original native command only. Uses its SAME pool/transaction and existing Source identity storage. */
+export async function initializeCanonicalCollectionSource(
+  tx: CommandTransaction,
+  input: Readonly<{ pool: Pool; route: number; collectionId: string; deadline: number; allowance: WorkAllowance }>,
+): Promise<NativeSourceIdentity | null> {
+  const command=currentCommand(tx), resources=currentCommandResources(tx), resource={route:input.route,id:input.collectionId};
+  if (resources.pool!==input.pool || command.partition!==partitionOf(input.route) ||
+    command.authorization?.mode!=='execute' || command.authorization.action!=='collection:update' ||
+    !(isDeepStrictEqual(command.authorization.resource,resource) || creationDeclares(tx,resource)))
+    throw new TypeError('Source allocation requires the live original Collection update');
+  const {metadata}=await readNativeCollectionWorkingMetadata(input.pool,input,{
+    commandTx:tx,deadline:input.deadline,allowance:input.allowance,
+  });
+  if (!metadata || metadata.state!=='active' || metadata.authority!=='private_builtin' ||
+    metadata.curatorAccountId!==command.basis?.actorAccountId) return null;
+  await shareAccount(tx,metadata.curatorAccountId);
+  const identity=nativeSourceIdentity(metadata), fence=nativeSourceFence(metadata);
+  const current=await tx.query<{identity:NativeSourceIdentity}>(
+    'SELECT identity FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3',
+    [input.route,input.collectionId,fence]);
+  if (current.rows[0]) return isDeepStrictEqual(current.rows[0].identity,identity) ? current.rows[0].identity : null;
+  const retained=await tx.query('SELECT source_fence FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 ORDER BY source_fence LIMIT 2',
+    [input.route,input.collectionId]);
+  if (retained.rows.length>=2) return null;
+  const created=await tx.query<{identity:NativeSourceIdentity}>(
+    'INSERT INTO library.canonical_source_scope(route,collection_id,source_fence,identity) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING RETURNING identity',
+    [input.route,input.collectionId,fence,JSON.stringify(identity)]);
+  return created.rows[0]?.identity ?? null;
 }
 function scopeKey(identity: NativeSourceIdentity): IdentityScopeKey {
   return { source: { kind: 'library', identity }, scopeId: 'collection-source' };
@@ -829,18 +873,7 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       query<ScopeRow>(client, l, scopeSQL, [input.route, input.collectionId, fence]),
     );
     if (!row) {
-      const identity: NativeSourceIdentity = {
-        route: input.route,
-        collectionId: input.collectionId,
-        accountId: metadata.curatorAccountId,
-        incarnation: metadata.incarnation,
-        generation: metadata.sourceGeneration,
-        scope: metadata.authority,
-        // Both this Source and its derived receiving records live in the same real owner home.
-        ownerEpoch: metadata.stamp.epoch,
-        receivingEpoch: metadata.stamp.epoch.toString(),
-        effectKey: `collection-source:${fence}`,
-      };
+      const identity = nativeSourceIdentity(metadata);
       await mutate(pool, input, l, metadata, async (tx) => {
         const retained = await query(
           tx,

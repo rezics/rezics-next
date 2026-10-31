@@ -23,7 +23,9 @@ import { accessCheck, type Access, type AccountActor, type Actor } from '../requ
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { stageHistoryWork } from '../work/history-enqueue.ts';
-import { nativeSourceFence } from './canonical-source-store.ts';
+import { initializeCanonicalCollectionSource, nativeSourceFence } from './canonical-source-store.ts';
+import { prepareBuiltinMaterialization, readBuiltinPublicationRule } from './builtin-materialization.ts';
+import type { BuiltinCollectionKey } from './builtin-identity.ts';
 import { readCollection } from './collection-store.ts';
 import { readNativeCollectionWorkingMetadata } from './collection-source-native.ts';
 import { authorizeCollectionRule, prepareCollectionRuleAuthority, readSavedCollectionRule, type SavedCollectionRule } from './collection-rules.ts';
@@ -168,7 +170,8 @@ export const readCollectionPublicationEpisode: CollectionPublicationEpisodeReade
 export async function readCollectionPublicationRule(client: Client, locator: CollectionPublicationLocator): Promise<SavedCollectionRule | null> {
   const loaded = await loadLocator(client, locator);
   if (!loaded) return null;
-  const saved = await readSavedCollectionRule(client, locator.route, locator.collectionId);
+  const meaning = await readCurrentMeaning(client,locator.route,locator.collectionId);
+  const saved = meaning?.rule;
   const ref = loaded.creation.source.rule;
   const collection = await readCollection(client, locator.route, locator.collectionId);
   const incarnation = (await client.query<{ incarnation: string }>(
@@ -176,10 +179,20 @@ export async function readCollectionPublicationRule(client: Client, locator: Col
     [locator.route, locator.collectionId],
   )).rows[0]?.incarnation;
   if (!collection || collection.state !== 'active' || collection.curatorAccountId !== locator.ownerAccountId ||
-    incarnation !== ref.incarnation || !saved || ref.kind !== 'saved' || saved.revision !== ref.revision || saved.collectionRevision !== ref.collectionRevision ||
+    incarnation !== ref.incarnation || !saved ||
+    (ref.kind==='saved' ? meaning?.key!==null || saved.revision!==ref.revision : !isDeepStrictEqual(meaning?.key,ref.key)) ||
+    saved.collectionRevision !== ref.collectionRevision ||
     saved.sourceGeneration !== ref.sourceGeneration || saved.releaseDigest !== ref.releaseDigest ||
     hash({ filter: saved.filter, sort: saved.sort, releaseDigest: saved.releaseDigest }) !== ref.digest) return null;
   return saved;
+}
+
+type Meaning = Readonly<{ rule: SavedCollectionRule; key: Exclude<BuiltinCollectionKey,{kind:'liked'}> | null }>;
+async function readCurrentMeaning(client: Client, route: number, collectionId: string): Promise<Meaning | null> {
+  const saved=await readSavedCollectionRule(client,route,collectionId);
+  if (saved) return {rule:saved,key:null};
+  const builtin=await readBuiltinPublicationRule(client,route,collectionId);
+  return builtin ? {rule:builtin.rule,key:builtin.key} : null;
 }
 
 function metadataAllowance(): WorkAllowance {
@@ -195,7 +208,7 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
   return { async begin(actor, request, requestKey) {
     const input = structuredClone(request);
     if (actor.kind !== 'account' || !input || typeof input !== 'object' || Array.isArray(input) || !exact(input, ['collectionId','revision','visibility']) ||
-      !Number.isSafeInteger(input.revision) || input.revision < 1 || typeof requestKey !== 'string' || !/^[\x21-\x7e]{1,255}$/.test(requestKey) ||
+      !Number.isSafeInteger(input.revision) || input.revision < 0 || typeof requestKey !== 'string' || !/^[\x21-\x7e]{1,255}$/.test(requestKey) ||
       (input.visibility !== 'public' && input.visibility !== 'unlisted')) throw new ProblemError('invalid_request');
     const route = routeOf(input.collectionId);
     if (route === null || routeOf(actor.accountId) !== route) throw new GrantDeniedError();
@@ -203,7 +216,8 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
     const identity = principalCommandIdentity(actor), deadline = deadlineFor(30000);
     const requestDigest = createHash('sha256').update(canonical([identity, COLLECTION_PUBLICATION_COMMAND, input])).digest();
     const resource = { route, id: input.collectionId };
-    const ordinary = resourceAuthorization({ access, actor, action: 'collection:update',
+    const materialization=await prepareBuiltinMaterialization(config,actor,input,deadline);
+    const ordinary = materialization?.authorization ?? resourceAuthorization({ access, actor, action: 'collection:update',
       anchor: { resource, async validate(client) {
         const row = await readCollection(client, route, input.collectionId);
         return row?.state === 'active' && row.curatorAccountId === actor.accountId && row.membershipKind === 'dynamic';
@@ -211,20 +225,22 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
     const authorization: CommandAuthorization = { ...ordinary,
       async prepare(attempt) {
         const proof = await ordinary.prepare!(attempt);
-        const saved = await readSavedCollectionRule(deadlineClient(pool, deadline), route, input.collectionId);
-        // Logical built-in materialization belongs to the existing first-write authority. Never forge grants.
-        if (!saved) throw unavailable();
+        const meaning: Meaning | null = materialization ? {rule:materialization.rule,key:materialization.key} :
+          await readCurrentMeaning(deadlineClient(pool,deadline),route,input.collectionId);
+        if (!meaning) throw unavailable();
+        const saved=meaning.rule;
         const admission = await admitSavedCollectionMemberQuery({ ...config, clock: () => new Date(authoritativeTimeValue(attempt.time)) }, actor, saved, {}, deadline);
         const checks = [
           ...await prepareCollectionRuleAuthority(config, actor, saved.filter, attempt, deadline),
           ...await prepareNativeCollectionMemberAuthority(config, actor, admission, attempt.time, deadline, attempt),
-          await accessCheck(access, actor, 'collection:read', resource, commandAccessContext({ pool, deadline }, attempt)),
+          ...(materialization ? [] : [await accessCheck(access, actor, 'collection:read', resource, commandAccessContext({ pool, deadline }, attempt))]),
         ];
         const capture = await captureDurableInitiator(commandAccessContext({ pool, deadline }, attempt), actor);
-        const { metadata } = await readNativeCollectionWorkingMetadata(pool, { route, collectionId: input.collectionId }, { deadline, allowance: metadataAllowance() });
-        if (!metadata || metadata.authority !== 'private_builtin' || metadata.curatorAccountId !== actor.accountId ||
-          metadata.sourceGeneration !== saved.sourceGeneration || metadata.revision !== saved.collectionRevision) throw unavailable();
-        return { proof, saved, checks, capture, metadata, actorSnapshot: { kind: 'account' as const, accountId: actor.accountId,
+        const metadata = materialization ? null : (await readNativeCollectionWorkingMetadata(pool,
+          {route,collectionId:input.collectionId},{deadline,allowance:metadataAllowance()})).metadata;
+        if (!materialization && (!metadata || metadata.authority !== 'private_builtin' || metadata.curatorAccountId !== actor.accountId ||
+          metadata.sourceGeneration !== saved.sourceGeneration || metadata.revision !== saved.collectionRevision)) throw unavailable();
+        return { proof, meaning, saved, checks, capture, metadata, actorSnapshot: { kind: 'account' as const, accountId: actor.accountId,
           clientId: actor.clientId, requestedBy: actor.requestedBy, authnEpoch: actor.authnEpoch, scopes: [...actor.scopes] } };
       },
       async authorize(tx, attempt, evidence) {
@@ -233,24 +249,27 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
         const mode = await ordinary.authorize(tx, attempt, prepared.proof);
         await authorizeCollectionRule(tx, attempt, prepared.checks);
         await shareAccount(tx, actor.accountId);
-        const fact = (await tx.query<{ generation: string }>(
-          'SELECT generation::text FROM library.fact_source_head WHERE route=$1 AND account_id=$2 FOR SHARE',
-          [route, actor.accountId],
-        )).rows[0];
-        if (!fact || fact.generation !== prepared.metadata.factFence) throw unavailable();
         const prior = (await tx.query<{ sourceId: string; publicationId: string }>(
           `SELECT source_id::text AS "sourceId",publication_id::text AS "publicationId"
            FROM library.collection_publication_operation WHERE route=$1 AND owner_account_id=$2 AND creation_key=$3`,
           [route, actor.accountId, requestKey],
         )).rows[0];
+        const initialized=prior ? {rows:[]} : await tx.query(`INSERT INTO library.fact_source_head(route,account_id,generation)
+          VALUES($1,$2,1) ON CONFLICT DO NOTHING RETURNING generation`,[route,actor.accountId]);
+        const fact = (await tx.query<{ generation: string }>(
+          'SELECT generation::text FROM library.fact_source_head WHERE route=$1 AND account_id=$2 FOR SHARE',
+          [route, actor.accountId],
+        )).rows[0];
+        if (!fact || (prepared.metadata && !(prepared.metadata.factFence===fact.generation ||
+          (prepared.metadata.factFence===null && initialized.rows.length===1 && fact.generation==='1')))) throw unavailable();
         if (prior) {
           const original = await load(tx, { route, id: prior.publicationId, kind: COLLECTION_PUBLICATION_COMMAND, sourceId: prior.sourceId });
           if (!original || original.creation.initiator.creation.requestDigest !== requestDigest.toString('hex') ||
             !await readCollectionPublicationRule(tx, original.creation.source.locator) ||
-            !isDeepStrictEqual(original.creation.source.input.identity, await readCurrentInput(tx, prepared.metadata))) throw unavailable();
+            !prepared.metadata || !isDeepStrictEqual(original.creation.source.input.identity, await readCurrentInput(tx, prepared.metadata))) throw unavailable();
         }
-        const current = await readSavedCollectionRule(tx, route, input.collectionId);
-        if (!isDeepStrictEqual(current, prepared.saved)) throw conflict();
+        const current = await readCurrentMeaning(tx,route,input.collectionId);
+        if (materialization ? current!==null : !isDeepStrictEqual(current,prepared.meaning)) throw conflict();
         return mode;
       },
       async finalize(tx, attempt, evidence) {
@@ -260,10 +279,10 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
     };
     type Prepared = {
       actorSnapshot: AccountActor;
-      proof: unknown; saved: NonNullable<Awaited<ReturnType<typeof readSavedCollectionRule>>>;
+      proof: unknown; saved: SavedCollectionRule; meaning: Meaning;
       checks: Awaited<ReturnType<typeof prepareCollectionRuleAuthority>>;
       capture: Awaited<ReturnType<typeof captureDurableInitiator>>;
-      metadata: NonNullable<Awaited<ReturnType<typeof readNativeCollectionWorkingMetadata>>['metadata']>;
+      metadata: Awaited<ReturnType<typeof readNativeCollectionWorkingMetadata>>['metadata'];
     };
     // Invocation-local evidence; not serialized work authority or a durable actor cache.
     let prepared: Prepared | undefined;
@@ -274,29 +293,28 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
       receipt: { kind: COLLECTION_PUBLICATION_COMMAND, key: requestKey, digest: requestDigest }, authorization,
     }, async (tx, command) => {
       if (!prepared || currentCommand(tx).time !== command.time) throw unavailable();
-      const current = await readCollection(tx, route, input.collectionId);
-      if (!current || current.revision !== input.revision) throw conflict();
-      const metadata = prepared.metadata;
-      const sourceIdentity = await readCurrentInput(tx, metadata);
-      const scope = sourceIdentity ? { identity: sourceIdentity } : null;
-      // Use the actual native Source producer's stored identity, never allocate a lookalike capture.
-      if (!scope || scope.identity.scope !== 'private_builtin' || scope.identity.accountId !== actor.accountId ||
-        scope.identity.collectionId !== input.collectionId || scope.identity.route !== route ||
-        scope.identity.incarnation !== metadata.incarnation || scope.identity.generation !== metadata.sourceGeneration ||
-        scope.identity.ownerEpoch !== metadata.stamp.epoch) throw unavailable();
-      const changed = await tx.query(
-        `UPDATE library.collection SET revision=revision+1,updated_at=$4::timestamptz,transaction_id=$5
-         WHERE route=$1 AND collection_id=$2 AND revision=$3 AND state='active' RETURNING revision`,
-        [route, input.collectionId, input.revision, authoritativeTimeValue(command.time), command.transactionId],
-      );
-      if (changed.rows.length !== 1) throw conflict();
+      if (materialization) await materialization.materialize(tx);
+      else {
+        const changed=await tx.query(`UPDATE library.collection SET revision=revision+1,updated_at=$4::timestamptz,transaction_id=$5
+          WHERE route=$1 AND collection_id=$2 AND revision=$3 AND state='active' RETURNING revision`,
+          [route,input.collectionId,input.revision,authoritativeTimeValue(command.time),command.transactionId]);
+        if (changed.rows.length!==1) throw conflict();
+      }
+      const metadata=(await readNativeCollectionWorkingMetadata(pool,{route,collectionId:input.collectionId},
+        {commandTx:tx,deadline,allowance:metadataAllowance()})).metadata;
+      if (!metadata || metadata.curatorAccountId!==actor.accountId || metadata.authority!=='private_builtin' ||
+        metadata.sourceGeneration!==prepared.saved.sourceGeneration || metadata.revision!==input.revision+1) throw unavailable();
+      const identity=await initializeCanonicalCollectionSource(tx,{pool,route,collectionId:input.collectionId,deadline,allowance:metadataAllowance()});
+      // Allocation is real native Source storage, with no capture/observation/repair/complete evidence yet.
+      if (!identity || identity.scope!=='private_builtin') throw unavailable();
       const locator: CollectionPublicationLocator = { route, ownerAccountId: actor.accountId, collectionId: input.collectionId, publicationId: newId(route) };
       const sourceId = newId(route), output = { route, collectionId: input.collectionId, generation: newId(route) };
-      const rule: CollectionPublicationRuleRef = { kind: 'saved', revision: prepared.saved.revision,
+      const rule: CollectionPublicationRuleRef = {
+        ...(prepared.meaning.key ? {kind:'builtin' as const,key:prepared.meaning.key} : {kind:'saved' as const,revision:prepared.saved.revision}),
         collectionRevision: input.revision + 1, sourceGeneration: prepared.saved.sourceGeneration,
         releaseDigest: prepared.saved.releaseDigest, incarnation: metadata.incarnation,
         digest: hash({ filter: prepared.saved.filter, sort: prepared.saved.sort, releaseDigest: prepared.saved.releaseDigest }) };
-      const source: CollectionPublicationSource = { locator, input: { kind: 'private_working_source', identity: scope.identity },
+      const source: CollectionPublicationSource = { locator, input: { kind: 'private_working_source', identity },
         target: { kind: 'collection_output', route, collectionId: input.collectionId, visibility: input.visibility }, rule, output };
       const record: DurableInitiatorRecord = { operation: { route, id: locator.publicationId, kind: COLLECTION_PUBLICATION_COMMAND, sourceId },
         initiatorAccountId: actor.accountId, actor: prepared.actorSnapshot,

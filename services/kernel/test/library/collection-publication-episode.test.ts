@@ -5,6 +5,7 @@ import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts
 import { mintReadTime, releaseOperationalTime, runCommand, noEffect } from '../../src/command/command.ts';
 import { createCollectionPublicationEpisodes, readCollectionPublicationEpisode,
   readCollectionPublicationInitiator, readCollectionPublicationRule } from '../../src/library/collection-publication-episodes.ts';
+import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { identitySupport } from '../imports/identity-fixture.ts';
@@ -37,19 +38,7 @@ async function prepared() {
     membershipKind: 'dynamic', rule: { filter: { owner: { presence: true } }, sort: 'id' } });
   expect(response.status).toBe(201);
   const { collection } = await response.json();
-  // Actual default native Source producer only. No positive source/capture/receipt fixture inserts.
-  let useful = false;
-  for (let step=0; step<100; step++) {
-    const page = await f.send('GET', `/v1/collections/${collection.id}/members`, undefined, bearer);
-    if (page.status !== 202) {
-      expect(page.status).toBe(200);
-      expect((await page.json()).members).toContainEqual({ kind: 'dynamic', subjectId: subject });
-      useful = true;
-      break;
-    }
-    await Bun.sleep(10);
-  }
-  expect(useful).toBe(true);
+  // Begin allocates the native Source identity itself; it does not require/pretend full-query completion.
   return { collectionId: collection.id as string, revision: collection.revision as number, visibility: 'public' as const };
 }
 
@@ -137,4 +126,25 @@ test('collected exact creation receipt makes the native reader and common helper
       async authorize() { throw new Error('Missing original receipt must refuse before command authorization'); },
     } }, async () => noEffect(null))).rejects.toMatchObject({ name: 'DurableInitiatorUnavailableError' });
   expect(reads).toBe(1);
+},120000);
+
+
+test('first native Everything publication materializes the stable logical ID with native grants and keeps Liked private', async () => {
+  const collectionId=builtinCollectionId(actor.accountId,{kind:'everything'});
+  const result=await episodes().begin(actor,{collectionId,revision:0,visibility:'unlisted'},randomUUID());
+  const episode=await readCollectionPublicationEpisode(f.database.pool,result.value.locator);
+  expect(episode?.source.rule).toMatchObject({kind:'builtin',key:{kind:'everything'},collectionRevision:1,sourceGeneration:'0'});
+  expect(episode?.source.output.collectionId).toBe(collectionId);
+  expect(episode?.output.state).toBe('building');
+  expect(episode?.output).not.toHaveProperty('publication');
+  expect(await readCollectionPublicationRule(f.database.pool,result.value.locator)).not.toBeNull();
+  const header=(await f.database.pool.query(`SELECT c.visibility,c.revision,c.builtin_release_digest,i.creator_id::text AS creator
+    FROM library.collection c JOIN access.resource_initialization i ON (i.route,i.resource_id)=(c.route,c.collection_id)
+    WHERE c.route=$1 AND c.collection_id=$2`,[routeOf(collectionId),collectionId])).rows[0];
+  expect(header).toMatchObject({visibility:'private',revision:1,creator:actor.accountId});
+  expect(header.builtin_release_digest).toBe(episode?.source.rule.releaseDigest);
+  const liked=builtinCollectionId(actor.accountId,{kind:'liked'});
+  await expect(episodes().begin(actor,{collectionId:liked,revision:0,visibility:'public'},randomUUID())).rejects.toThrow();
+  expect((await f.database.pool.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2',
+    [routeOf(liked),liked])).rows).toHaveLength(0);
 },120000);
