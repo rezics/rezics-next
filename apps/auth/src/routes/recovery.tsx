@@ -21,7 +21,7 @@ export const Route = createFileRoute('/recovery')({
 
 function RecoveryPage() {
   const [hasFragment, setHasFragment] = useState<boolean | null>(null);
-  const [credentials, setCredentials] = useState<{ accountId: string | null; token: string | null } | null>(null);
+  const [credentials, setCredentials] = useState<{ accountId: string; token: string } | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
@@ -39,7 +39,11 @@ function RecoveryPage() {
       const parameters = new URLSearchParams(fragment.slice(1));
       const recovered = { accountId: parameters.get('account_id'), token: parameters.get('token') };
       window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
-      setCredentials(recovered);
+      if (recovered.accountId && recovered.token) {
+        setCredentials({ accountId: recovered.accountId, token: recovered.token });
+      } else {
+        setMessage(failureMessage(401, 'invalid_recovery', null));
+      }
       setHasFragment(true);
     } else {
       setHasFragment(false);
@@ -102,7 +106,11 @@ function RecoveryPage() {
     submitting.current = false;
     setPending(false);
     if (result.ok) {
-      window.sessionStorage.setItem(RECOVERY_COMPLETE_NOTICE_KEY, '1');
+      try {
+        window.sessionStorage.setItem(RECOVERY_COMPLETE_NOTICE_KEY, '1');
+      } catch {
+        // The optional notice must not prevent navigation after native completion.
+      }
       window.location.assign('/login');
       return;
     }
@@ -110,6 +118,17 @@ function RecoveryPage() {
   }
 
   if (hasFragment === null) return <AuthPage heading={m.auth_recovery_heading()} />;
+
+  if (hasFragment && !credentials) {
+    return (
+      <AuthPage heading={m.auth_recovery_heading()}>
+        <ErrorAlert tabIndex={-1} ref={alert}>
+          {message}
+        </ErrorAlert>
+        <a href="/recovery">{m.auth_recovery_new_link()}</a>
+      </AuthPage>
+    );
+  }
 
   if (hasFragment) {
     return (

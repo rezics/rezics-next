@@ -56,9 +56,13 @@ function LoginPage() {
   }, [emailError, passwordError, message]);
 
   useLayoutEffect(() => {
-    if (window.sessionStorage.getItem(RECOVERY_COMPLETE_NOTICE_KEY) === '1') {
-      window.sessionStorage.removeItem(RECOVERY_COMPLETE_NOTICE_KEY);
-      setRecoveryComplete(true);
+    try {
+      if (window.sessionStorage.getItem(RECOVERY_COMPLETE_NOTICE_KEY) === '1') {
+        window.sessionStorage.removeItem(RECOVERY_COMPLETE_NOTICE_KEY);
+        setRecoveryComplete(true);
+      }
+    } catch {
+      // The notice is optional when browser storage is unavailable.
     }
   }, []);
 

@@ -160,7 +160,9 @@ function site(): Promise<string> {
   return started;
 }
 
-async function open(path = '/recovery', options: BrowserContextOptions = {}) {
+type StorageFailure = 'access' | 'setItem' | 'getItem' | 'removeItem';
+
+async function open(path = '/recovery', options: BrowserContextOptions = {}, storageFailure?: StorageFailure) {
   const origin = await site();
   browser ??= await chromium.launch();
   const context = await browser.newContext({
@@ -174,20 +176,39 @@ async function open(path = '/recovery', options: BrowserContextOptions = {}) {
   page.setDefaultTimeout(10_000);
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
-  await page.addInitScript(() => {
-    const previousHash = window.sessionStorage.getItem('recovery-hash-at-request');
-    if (previousHash !== null)
-      (window as unknown as { recoveryHashAtRequest?: string }).recoveryHashAtRequest = previousHash;
+  await page.addInitScript((storageFailure) => {
+    try {
+      const previousHash = window.sessionStorage.getItem('recovery-hash-at-request');
+      if (previousHash !== null)
+        (window as unknown as { recoveryHashAtRequest?: string }).recoveryHashAtRequest = previousHash;
+    } catch {}
     const nativeFetch = window.fetch;
     window.fetch = function (input, init) {
       const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (/\/recovery\/(?:start|complete)$/.test(new URL(requestUrl, location.href).pathname)) {
         (window as unknown as { recoveryHashAtRequest?: string }).recoveryHashAtRequest = location.hash;
-        window.sessionStorage.setItem('recovery-hash-at-request', location.hash);
+        try {
+          window.sessionStorage.setItem('recovery-hash-at-request', location.hash);
+        } catch {}
       }
       return nativeFetch.call(this, input, init);
     };
-  });
+    if (storageFailure === 'access') {
+      Object.defineProperty(window, 'sessionStorage', {
+        get() {
+          throw new DOMException('Storage denied', 'SecurityError');
+        },
+      });
+    } else if (storageFailure) {
+      const original = Storage.prototype[storageFailure];
+      Object.defineProperty(Storage.prototype, storageFailure, {
+        value(this: Storage, key: string, value?: string) {
+          if (key === 'auth.recovery.complete') throw new DOMException('Storage denied', 'SecurityError');
+          return Reflect.apply(original, this, value === undefined ? [key] : [key, value]);
+        },
+      });
+    }
+  }, storageFailure);
   try {
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
@@ -248,6 +269,86 @@ async function sendComplete(page: Page, value = newPassword) {
 function recoveryCalls(path: 'start' | 'complete') {
   return calls.filter((call) => new URL(call.url, fake.url).pathname === `/recovery/${path}`);
 }
+
+test(
+  'Malformed recovery fragments show a safe new-link action before password entry and optional browser storage cannot strand confirmed completion',
+  async () => {
+    for (const fragment of [
+      '#unrelated=value',
+      `#account_id=${encodeURIComponent(accountId)}`,
+      `#token=${encodeURIComponent(token)}`,
+      `#account_id=&token=${encodeURIComponent(token)}`,
+      `#account_id=${encodeURIComponent(accountId)}&token=`,
+      '#account_id=&token=',
+    ]) {
+      calls.length = 0;
+      const { page, origin, urls } = await open(`/recovery${fragment}`);
+      try {
+        expect(page.url()).toBe(`${origin}/recovery`);
+        const alert = page.getByRole('alert');
+        await alert.waitFor({ state: 'visible' });
+        expect(await alert.innerText()).toMatch(/invalid|expired/i);
+        expect(await alert.evaluate((element) => element === document.activeElement)).toBe(true);
+        expect(await page.getByLabel(/new password/i).count()).toBe(0);
+        expect(await page.getByRole('button', { name: 'Update password', exact: true }).count()).toBe(0);
+        expect(recoveryCalls('start')).toHaveLength(0);
+        expect(recoveryCalls('complete')).toHaveLength(0);
+        const document = await page.locator('html').evaluate((element) => element.outerHTML);
+        expect(document).not.toContain(token);
+        expect(document).not.toContain(encodeURIComponent(token));
+        for (const url of urls) {
+          expect(url).not.toContain(token);
+          expect(url).not.toContain(encodeURIComponent(token));
+        }
+        expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain(token);
+
+        const newLink = page.getByRole('link', { name: /new recovery link/i });
+        expect(await newLink.getAttribute('href')).toBe('/recovery');
+        await newLink.click();
+        await page.getByLabel(/email/i).waitFor({ state: 'visible' });
+        await startForm(page);
+        expect(await page.getByRole('alert').count()).toBe(0);
+        expect(recoveryCalls('start')).toHaveLength(0);
+        expect(recoveryCalls('complete')).toHaveLength(0);
+      } finally {
+        await page.context().close();
+      }
+    }
+
+    completeStatus = 200;
+    for (const storageFailure of ['access', 'setItem', 'getItem', 'removeItem'] as const) {
+      calls.length = 0;
+      const { page, origin } = await open(
+        `/recovery#account_id=${encodeURIComponent(accountId)}&token=${encodeURIComponent(token)}`,
+        {},
+        storageFailure,
+      );
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      try {
+        await sendComplete(page);
+        await page.waitForURL(`${origin}/login`);
+        await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
+        expect(await page.getByLabel(/email/i).isEditable()).toBe(true);
+        expect(await page.getByLabel(/^password$/i).isEditable()).toBe(true);
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
+        expect(page.url()).toBe(`${origin}/login`);
+        expect(recoveryCalls('start')).toHaveLength(0);
+        expect(recoveryCalls('complete')).toHaveLength(1);
+        expect(JSON.parse(recoveryCalls('complete')[0]!.body)).toEqual({
+          account_id: accountId,
+          token,
+          new_password: newPassword,
+        });
+        expect(errors).toEqual([]);
+      } finally {
+        await page.context().close();
+      }
+    }
+  },
+  timeout,
+);
 
 test(
   'a person asks for a recovery link by email and always sees the same confirmation',
