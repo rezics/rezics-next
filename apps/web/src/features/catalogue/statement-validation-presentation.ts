@@ -86,7 +86,7 @@ export function presentStatementViolations(
   };
   return errors.map((error, index) => {
     let section = 'fields';
-    let sectionLabel = m.correction_title({}, o);
+    let sectionLabel: string = m.correction_title({}, o);
     let address = 'fact';
     let part: SnakInput | undefined;
     let path = '';
