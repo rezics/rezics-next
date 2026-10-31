@@ -438,7 +438,9 @@ export function createCollectionCommands(config: {
     const owner = accountActor(actor);
     if (
       owner.scopes.includes(action) &&
-      (kind.startsWith('library.collection.member') || kind === 'library.collection.delete' || kind === 'library.collection.rule.update')
+      (kind.startsWith('library.collection.member') ||
+        kind === 'library.collection.delete' ||
+        kind === 'library.collection.rule.update')
     ) {
       const builtins = createBuiltinRuntime({ pool });
       if (await builtins.read(owner, collectionId, action))

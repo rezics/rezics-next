@@ -29,7 +29,9 @@ test('saving a supported native rule admits the definition without claiming a co
   expect(definition.status).toBe(200);
   expect((await definition.json()).rule).toMatchObject(draft.rule);
   expect((await f.send('POST', '/v1/collections', draft, f.reduced, key)).status).toBe(403);
-  expect((await f.send('POST', '/v1/collections', { ...draft, rule: { ...draft.rule, sort: 'ordinal' } })).status).toBe(422);
+  expect((await f.send('POST', '/v1/collections', { ...draft, rule: { ...draft.rule, sort: 'ordinal' } })).status).toBe(
+    422,
+  );
 }, 120_000);
 
 test('Saved dynamic definitions use actual shared admission while current dynamic readers distinguish private execution from explicit public output', async () => {

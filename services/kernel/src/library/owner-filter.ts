@@ -548,8 +548,7 @@ export async function admitSavedCollectionMemberQuery(
   deadline: number,
 ): Promise<CollectionMemberAdmission> {
   requireAccessDeadline(deadline);
-  if (options.sort !== undefined && options.sort !== rule.sort)
-    throw new ProblemError('unsupported_query');
+  if (options.sort !== undefined && options.sort !== rule.sort) throw new ProblemError('unsupported_query');
   const release = await readRelease(deps.pool, rule.releaseDigest);
   requireAccessDeadline(deadline);
   if (!release) throw new ProblemError('dependency_unavailable');
@@ -557,7 +556,9 @@ export async function admitSavedCollectionMemberQuery(
   if (options.filter !== undefined) {
     try {
       // The combined document still pays the shared expansion/size limits and uses one accepted meaning.
-      filter = admitFilter(parseFilter({ and: [rule.filter, parseStrictJson(options.filter)] }), release, { owner: true });
+      filter = admitFilter(parseFilter({ and: [rule.filter, parseStrictJson(options.filter)] }), release, {
+        owner: true,
+      });
     } catch (error) {
       invalidFilter(error);
     }

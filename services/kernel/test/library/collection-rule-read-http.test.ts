@@ -83,8 +83,16 @@ test('admitted private definition creation is independent of result readiness an
   });
   expect(routeOf(collection.id)).toBe(routeOf(f.runtime.identity.ordinary.accountId));
   for (const field of [
-    'filter', 'rule', 'pins', 'releaseDigest', 'sourceGeneration',
-    'memberCount', 'orderEpoch', 'createdAt', 'updatedAt', 'builtinKind',
+    'filter',
+    'rule',
+    'pins',
+    'releaseDigest',
+    'sourceGeneration',
+    'memberCount',
+    'orderEpoch',
+    'createdAt',
+    'updatedAt',
+    'builtinKind',
   ])
     expect(collection).not.toHaveProperty(field);
   const invalid = await f.send('POST', '/v1/collections', {

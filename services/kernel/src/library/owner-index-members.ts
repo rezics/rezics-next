@@ -211,7 +211,9 @@ export async function readCollectionSourceMembers(
           at: finalAt,
         });
         const current = finalRuntime.source;
-        const finalFilter = input.query ? await finalRuntime.filter(input.query.filter, input.query.releaseDigest) : null;
+        const finalFilter = input.query
+          ? await finalRuntime.filter(input.query.filter, input.query.releaseDigest)
+          : null;
         if (
           filtered &&
           finalFilter &&
@@ -259,13 +261,14 @@ export async function readCollectionSourceMembers(
       }
     };
     await revalidate();
-    const disclosed = input.view === 'FULL'
-      ? await attachCollectionListFacts(
-          { ...deps, routeKey: requiredRouteKey(deps.routeKey), actor: input.actor, deadline: input.deadline },
-          shown,
-          { revalidate },
-        )
-      : shown;
+    const disclosed =
+      input.view === 'FULL'
+        ? await attachCollectionListFacts(
+            { ...deps, routeKey: requiredRouteKey(deps.routeKey), actor: input.actor, deadline: input.deadline },
+            shown,
+            { revalidate },
+          )
+        : shown;
     if (disclosed.length !== shown.length) throw new ProblemError('dependency_unavailable');
     return {
       members: disclosed,

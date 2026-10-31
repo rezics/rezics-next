@@ -2,7 +2,12 @@ import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runt
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
-import { mintReadTime, releaseOperationalTime, type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
+import {
+  mintReadTime,
+  releaseOperationalTime,
+  type AuthoritativeTime,
+  type CommandAttempt,
+} from '../command/command.ts';
 import { readAccount, type Account } from '../access/account-data.ts';
 import { readPublicViews } from '../access/index.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
@@ -34,7 +39,11 @@ import {
   prepareCollectionRuleAuthority,
   readSavedCollectionRule,
 } from './collection-rules.ts';
-import { admitCollectionMemberQuery, admitSavedCollectionMemberQuery, type CollectionMemberQuery } from './owner-filter.ts';
+import {
+  admitCollectionMemberQuery,
+  admitSavedCollectionMemberQuery,
+  type CollectionMemberQuery,
+} from './owner-filter.ts';
 import type { SearchService } from '../search/service-scope.ts';
 import { bindOwnerFilterRead, readBoundOwnerFilterPage, readOwnerFilterPage } from './owner-filter-plan.ts';
 import { readCollectionSourceMembers } from './owner-index-members.ts';
@@ -623,8 +632,7 @@ export function createCollectionReads(
     const logical = await builtins.read(viewer, collectionId, 'collection:read', deadline);
     const collection = logical ? null : await loadCollection(viewer, collectionId, deadline);
     if (!logical && !collection) throw notFound();
-    if (collection?.membershipKind === 'dynamic')
-      return readDynamicMembers(viewer, collection, options, deadline);
+    if (collection?.membershipKind === 'dynamic') return readDynamicMembers(viewer, collection, options, deadline);
     if (options.filter !== undefined || options.sort !== undefined) {
       if (logical) {
         const admission = await admitCollectionMemberQuery(dependencies, viewer, options, deadline);
@@ -692,7 +700,11 @@ export function createCollectionReads(
       });
     }
     // A management grant is insufficient to execute another curator's private predicates.
-    if (viewer.kind !== 'account' || viewer.accountId !== collection.curatorAccountId || routeOf(viewer.accountId) !== route)
+    if (
+      viewer.kind !== 'account' ||
+      viewer.accountId !== collection.curatorAccountId ||
+      routeOf(viewer.accountId) !== route
+    )
       throw notFound();
     const saved = await readOnly(pool, (client) => readSavedCollectionRule(client, route, collectionId));
     if (!saved) throw new ProblemError('dependency_unavailable');
@@ -714,13 +726,21 @@ export function createCollectionReads(
     )
       throw new ProblemError('dependency_unavailable');
     const authorize = async (time: AuthoritativeTime) => {
-      const checks = await prepareCollectionRuleAuthority(dependencies, viewer, admission.filter!, { time, read: true }, deadline);
+      const checks = await prepareCollectionRuleAuthority(
+        dependencies,
+        viewer,
+        admission.filter!,
+        { time, read: true },
+        deadline,
+      );
       await readOnly(pool, (client) => authorizeCollectionRule(client, { time }, checks));
       await revalidate();
     };
     await authorize(binding.input.at);
     const result = await readBoundOwnerFilterPage(dependencies, admission, options, binding);
-    const finalTime = await withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), dependencies.clock));
+    const finalTime = await withConnection(pool, (client) =>
+      mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+    );
     try {
       await authorize(finalTime);
     } finally {
