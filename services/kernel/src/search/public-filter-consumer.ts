@@ -506,8 +506,12 @@ import type {
   PublicFilterConsumerStatus,
 } from './public-filter-consumer-contract.ts';
 import type { CustodyRegistration, CustodyUse, CustodyCost } from './public-filter-custody-contract.ts';
-import { createPublicFilterCustody, encodePublicFilterNativeState as encodeNative,
-  decodePublicFilterNativeState as decodeNative, readPublicFilterRepairSettlement } from './public-filter-custody.ts';
+import {
+  createPublicFilterCustody,
+  encodePublicFilterNativeState as encodeNative,
+  decodePublicFilterNativeState as decodeNative,
+  readPublicFilterRepairSettlement,
+} from './public-filter-custody.ts';
 import type { RetainedRepairSettlement, RetainedRepairPage } from './public-filter-custody-contract.ts';
 import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
@@ -707,36 +711,44 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return result as any;
       },
     };
-    const wrapQuery = (db: Pick<Pool, 'query'>) => async (query: string | import('pg').QueryConfig, values?: unknown[]) => {
-      const text = typeof query === 'string' ? query : query.text;
-      const cleanup = /^ROLLBACK\b/.test(text);
-      if (!cleanup) check();
-      const parameters = values ?? (typeof query === 'string' ? [] : query.values ?? []);
-      cost.statements++;
-      cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encodeState(parameters));
-      const request: import('pg').QueryConfig & { query_timeout: number } = {
-        text, values: parameters, query_timeout: cleanup ? 1000 : remaining(context),
+    const wrapQuery =
+      (db: Pick<Pool, 'query'>) => async (query: string | import('pg').QueryConfig, values?: unknown[]) => {
+        const text = typeof query === 'string' ? query : query.text;
+        const cleanup = /^ROLLBACK\b/.test(text);
+        if (!cleanup) check();
+        const parameters = values ?? (typeof query === 'string' ? [] : (query.values ?? []));
+        cost.statements++;
+        cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encodeState(parameters));
+        const request: import('pg').QueryConfig & { query_timeout: number } = {
+          text,
+          values: parameters,
+          query_timeout: cleanup ? 1000 : remaining(context),
+        };
+        const result = await db.query(request);
+        cost.rows += result.rows.length;
+        cost.bytes += Buffer.byteLength(encodeState(result.rows));
+        if (/\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;
+        if (!cleanup) check();
+        return result;
       };
-      const result = await db.query(request);
-      cost.rows += result.rows.length;
-      cost.bytes += Buffer.byteLength(encodeState(result.rows));
-      if (/\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;
-      if (!cleanup) check();
-      return result;
-    };
-    const pool = new Proxy(config.pool, { get(db, key) {
-      if (key === 'query') return wrapQuery(db);
-      if (key === 'connect') return async () => {
-        const client = await db.connect();
-        return new Proxy(client, { get(connection, property) {
-          if (property === 'query') return wrapQuery(connection);
-          const value = Reflect.get(connection, property);
-          return typeof value === 'function' ? value.bind(connection) : value;
-        } });
-      };
-      const value = Reflect.get(db, key);
-      return typeof value === 'function' ? value.bind(db) : value;
-    } });
+    const pool = new Proxy(config.pool, {
+      get(db, key) {
+        if (key === 'query') return wrapQuery(db);
+        if (key === 'connect')
+          return async () => {
+            const client = await db.connect();
+            return new Proxy(client, {
+              get(connection, property) {
+                if (property === 'query') return wrapQuery(connection);
+                const value = Reflect.get(connection, property);
+                return typeof value === 'function' ? value.bind(connection) : value;
+              },
+            });
+          };
+        const value = Reflect.get(db, key);
+        return typeof value === 'function' ? value.bind(db) : value;
+      },
+    });
     return { cost, add, check, sql, unavailable, take, native, pool };
   }
   type Meter = ReturnType<typeof meter>;
@@ -1454,12 +1466,18 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return failure(error, m);
     }
   }
-  async function saveRepair(work: ConsumerWork, old: string, state: RetainedRepairSettlement,
-    previous: string | null, m: Meter): Promise<string> {
+  async function saveRepair(
+    work: ConsumerWork,
+    old: string,
+    state: RetainedRepairSettlement,
+    previous: string | null,
+    m: Meter,
+  ): Promise<string> {
     const next = encodeState(work);
     if (Buffer.byteLength(next) > 1048576) throw new ConsumerFailure('source_pending');
     const q = work.queried!;
-    const saved = await m.sql(`WITH locked AS (
+    const saved = await m.sql(
+      `WITH locked AS (
       SELECT observation FROM search.public_filter_observation
       WHERE (partition_no,observation)=($1,$2) AND state='open' AND consumer_work=$3 FOR UPDATE
     ), advanced AS (
@@ -1468,7 +1486,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         AND EXISTS (SELECT 1 FROM locked) RETURNING id
     ) UPDATE search.public_filter_observation SET consumer_work=$4
       WHERE (partition_no,observation)=($1,$2) AND EXISTS (SELECT 1 FROM advanced) RETURNING observation`,
-      [work.registration.partition, q.snapshot.observation, old, next, work.execution, encodeNative(state), previous]);
+      [work.registration.partition, q.snapshot.observation, old, next, work.execution, encodeNative(state), previous],
+    );
     if (saved.rowCount !== 1) throw new ConsumerFailure('source_pending');
     m.cost.frontierWrites++;
     return next;
@@ -1524,17 +1543,31 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       const retained = m.take(await custody.read({ queried: q, execution: work.execution }, context));
       if (retained.status !== 'found' || !retained.execution) return m.unavailable('observation_lost');
-      const current = (await m.sql<{ repair_settlement: string | null }>(
-        'SELECT repair_settlement FROM search.public_filter_execution WHERE (partition_no,observation,id)=($1,$2,$3)',
-        [work.registration.partition, q.snapshot.observation, work.execution])).rows[0];
+      const current = (
+        await m.sql<{ repair_settlement: string | null }>(
+          'SELECT repair_settlement FROM search.public_filter_execution WHERE (partition_no,observation,id)=($1,$2,$3)',
+          [work.registration.partition, q.snapshot.observation, work.execution],
+        )
+      ).rows[0];
       if (!current) return m.unavailable('observation_lost');
       let previous = current.repair_settlement;
-      let state: RetainedRepairSettlement = previous ? decodeNative(previous) : {
-        id: randomUUID(), bootstrap: work.bootstrap.id, covered: work.bootstrap.covered,
-        execution: retained.execution.id, pages: 0, frontier: null, closed: false, fence: null,
-      };
-      if (state.execution !== retained.execution.id ||
-        !isDeepStrictEqual(state.covered, retained.covered) || state.bootstrap !== work.bootstrap.id)
+      let state: RetainedRepairSettlement = previous
+        ? decodeNative(previous)
+        : {
+            id: randomUUID(),
+            bootstrap: work.bootstrap.id,
+            covered: work.bootstrap.covered,
+            execution: retained.execution.id,
+            pages: 0,
+            frontier: null,
+            closed: false,
+            fence: null,
+          };
+      if (
+        state.execution !== retained.execution.id ||
+        !isDeepStrictEqual(state.covered, retained.covered) ||
+        state.bootstrap !== work.bootstrap.id
+      )
         return m.unavailable('observation_lost');
       if (!previous) {
         encoded = await saveRepair(work, encoded, state, null, m);
@@ -1542,31 +1575,68 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       if (!state.closed) {
         const keys = [work.registration.partition, q.snapshot.observation, work.execution, state.pages];
-        let page = (await m.sql<{ intent: string }>(
-          'SELECT intent FROM search.public_filter_repair_page WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)', keys)).rows[0];
+        let page = (
+          await m.sql<{ intent: string }>(
+            'SELECT intent FROM search.public_filter_repair_page WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)',
+            keys,
+          )
+        ).rows[0];
         if (!page) {
-          const sourcePage = m.take(await binding.repairPage({ bootstrap: work.bootstrap.id, queried: q,
-            execution: work.execution, frontier: state.frontier,
-            inputLimit: Math.min(256, Math.max(1, 1000 - m.cost.inputKeys)) }, context));
-          if (sourcePage.status !== 'progress' && sourcePage.status !== 'complete') return m.unavailable('source_pending');
+          const sourcePage = m.take(
+            await binding.repairPage(
+              {
+                bootstrap: work.bootstrap.id,
+                queried: q,
+                execution: work.execution,
+                frontier: state.frontier,
+                inputLimit: Math.min(256, Math.max(1, 1000 - m.cost.inputKeys)),
+              },
+              context,
+            ),
+          );
+          if (sourcePage.status !== 'progress' && sourcePage.status !== 'complete')
+            return m.unavailable('source_pending');
           // The final callback has no frontier. Locate its actual durable owner step by the same
           // bootstrap/execution/predecessor, rather than manufacturing a receipt from its Boolean.
-          const sourceStep = (await m.sql<{ step: string; complete: boolean }>(`SELECT step::text,complete
+          const sourceStep = (
+            await m.sql<{ step: string; complete: boolean }>(
+              `SELECT step::text,complete
             FROM semantic.public_filter_repair_step WHERE partition_no=0 AND bootstrap=$1 AND execution=$2
               AND predecessor IS NOT DISTINCT FROM $3::uuid`,
-            [state.bootstrap.slice(2), work.execution, state.frontier])).rows[0];
-          if (!sourceStep || sourceStep.complete !== (sourcePage.status === 'complete') ||
-            (!sourceStep.complete && sourcePage.frontier !== sourceStep.step)) return m.unavailable('source_pending');
-          const intent: RetainedRepairPage = { sourceStep: sourceStep.step,
-            predecessor: state.frontier, frontier: sourcePage.frontier,
+              [state.bootstrap.slice(2), work.execution, state.frontier],
+            )
+          ).rows[0];
+          if (
+            !sourceStep ||
+            sourceStep.complete !== (sourcePage.status === 'complete') ||
+            (!sourceStep.complete && sourcePage.frontier !== sourceStep.step)
+          )
+            return m.unavailable('source_pending');
+          const intent: RetainedRepairPage = {
+            sourceStep: sourceStep.step,
+            predecessor: state.frontier,
+            frontier: sourcePage.frontier,
             complete: sourcePage.status === 'complete',
-            repairs: sourcePage.repairs.map(({ kind, locator, source, projection }) => ({ kind, locator, source, projection })) };
+            repairs: sourcePage.repairs.map(({ kind, locator, source, projection }) => ({
+              kind,
+              locator,
+              source,
+              projection,
+            })),
+          };
           const body = encodeNative(intent);
-          await m.sql(`INSERT INTO search.public_filter_repair_page
+          await m.sql(
+            `INSERT INTO search.public_filter_repair_page
             (partition_no,observation,execution,ordinal,has_repairs,intent) VALUES ($1,$2,$3,$4,$5,$6)
-            ON CONFLICT DO NOTHING`, [...keys, intent.repairs.length > 0, body]);
-          page = (await m.sql<{ intent: string }>(
-            'SELECT intent FROM search.public_filter_repair_page WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)', keys)).rows[0];
+            ON CONFLICT DO NOTHING`,
+            [...keys, intent.repairs.length > 0, body],
+          );
+          page = (
+            await m.sql<{ intent: string }>(
+              'SELECT intent FROM search.public_filter_repair_page WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)',
+              keys,
+            )
+          ).rows[0];
           if (!page || page.intent !== body) return m.unavailable('source_pending');
         }
         const intent = decodeNative<RetainedRepairPage>(page.intent);
@@ -1590,8 +1660,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (!complete) return { status: 'progress' as const, job, cost: m.cost };
       }
       // The canonical reader is the native guard. FAA's separate settle joins its own Source verifier.
-      const nativeSettlement = m.take(await readPublicFilterRepairSettlement(config.pool,
-        { queried: q, execution: work.execution }, context));
+      const nativeSettlement = m.take(
+        await readPublicFilterRepairSettlement(config.pool, { queried: q, execution: work.execution }, context),
+      );
       if (nativeSettlement.status !== 'settled') return m.unavailable('source_pending');
       const settled = m.take(
         await binding.settle({ bootstrap: work.bootstrap.id, queried: q, execution: work.execution }, context),
@@ -1612,15 +1683,22 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
   }
   async function applyRepair(
-    repair: Omit<PublicSourceRepair, 'receipt'>, work: ConsumerWork, page: number, encoded: string,
-    m: Meter, context: PublicFilterConsumerContext,
+    repair: Omit<PublicSourceRepair, 'receipt'>,
+    work: ConsumerWork,
+    page: number,
+    encoded: string,
+    m: Meter,
+    context: PublicFilterConsumerContext,
   ): Promise<string> {
     const q = work.queried!;
     const projection = repair.projection;
-    if ((projection.status !== 'complete' && projection.status !== 'progress') ||
-      !isDeepStrictEqual(projection.source, repair.source) || repair.source.subject !== repair.locator.subject ||
+    if (
+      (projection.status !== 'complete' && projection.status !== 'progress') ||
+      !isDeepStrictEqual(projection.source, repair.source) ||
+      repair.source.subject !== repair.locator.subject ||
       repair.source.partition !== subjectPartition(repair.source.subject) ||
-      (work.projectionSource && !isDeepStrictEqual(work.projectionSource, repair.source)))
+      (work.projectionSource && !isDeepStrictEqual(work.projectionSource, repair.source))
+    )
       throw new ConsumerFailure('source_pending');
     const recovering = work.repair !== null;
     work.projectionSource = repair.source;
@@ -1635,14 +1713,23 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if (work.records.some((row) => row.indexed === null)) throw new ConsumerFailure('source_pending');
     const origin = publicFilterSourceOrigin(config.source);
     const targetMatch = /^(.*)subjects-g([1-9][0-9]*)$/.exec(target);
-    if (!origin || !targetMatch)
-      throw new ConsumerFailure('source_pending');
+    if (!origin || !targetMatch) throw new ConsumerFailure('source_pending');
     const consumer = `search_${targetMatch[1]!.replaceAll('-', '_')}subjects_g${targetMatch[2]}`;
     const nativeSource = createRatedSubjectSource(m.pool, origin.routeKey).source;
-    const guard = createSearchWriterGuard({ pool: m.pool, search: m.native, index: target, consumer,
-      source: nativeSource, listing: subjectListingSource(m.pool) });
-    const locator = encodeNative({ observation: q.snapshot.observation, execution: work.execution,
-      page, item: work.repairPage!.next });
+    const guard = createSearchWriterGuard({
+      pool: m.pool,
+      search: m.native,
+      index: target,
+      consumer,
+      source: nativeSource,
+      listing: subjectListingSource(m.pool),
+    });
+    const locator = encodeNative({
+      observation: q.snapshot.observation,
+      execution: work.execution,
+      page,
+      item: work.repairPage!.next,
+    });
     m.cost.inputKeys++;
     m.cost.candidates++;
     m.cost.accessPoints++;
@@ -1654,16 +1741,27 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (error instanceof TypeError || error instanceof RangeError) throw error;
       throw new ConsumerFailure('source_pending');
     }
-    if (receipt.epoch !== repair.source.epoch || receipt.incarnation !== q.consumer.incarnation ||
-      receipt.action.version < repair.source.position) throw new ConsumerFailure('source_pending');
+    if (
+      receipt.epoch !== repair.source.epoch ||
+      receipt.incarnation !== q.consumer.incarnation ||
+      receipt.action.version < repair.source.position
+    )
+      throw new ConsumerFailure('source_pending');
     await physical(q, m, context);
     const body = encodeNative(receipt);
     const keys = [work.registration.partition, q.snapshot.observation, work.execution, page, work.repairPage!.next];
-    await m.sql(`INSERT INTO search.public_filter_repair_effect
+    await m.sql(
+      `INSERT INTO search.public_filter_repair_effect
       (partition_no,observation,execution,page,item,receipt) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
-      [...keys, body]);
-    const retained = (await m.sql<{ receipt: string }>(`SELECT receipt FROM search.public_filter_repair_effect
-      WHERE (partition_no,observation,execution,page,item)=($1,$2,$3,$4,$5)`, keys)).rows[0];
+      [...keys, body],
+    );
+    const retained = (
+      await m.sql<{ receipt: string }>(
+        `SELECT receipt FROM search.public_filter_repair_effect
+      WHERE (partition_no,observation,execution,page,item)=($1,$2,$3,$4,$5)`,
+        keys,
+      )
+    ).rows[0];
     if (!retained || retained.receipt !== body) throw new ConsumerFailure('source_pending');
     work.repair = null;
     work.dispatch = null;

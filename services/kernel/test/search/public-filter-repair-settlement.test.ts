@@ -35,12 +35,17 @@ async function setup(populate = true) {
   const url = process.env.OPENSEARCH_URL;
   if (!url) throw new Error('OPENSEARCH_URL must name the configured native engine');
   const search = createOpenSearch(url);
-  const native = await createPublicFilterConsumerFixture({ pool: f.db.pool, source,
+  const native = await createPublicFilterConsumerFixture({
+    pool: f.db.pool,
+    source,
     binding: createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access),
-    search, clock: systemClock, context: context(), meaning: f.meaning });
+    search,
+    clock: systemClock,
+    context: context(),
+    meaning: f.meaning,
+  });
   async function capture() {
-    const plan = { sort: 'id' as const, size: 20, text: undefined,
-      filterDocument: { type: { in: ['schema:Book'] } } };
+    const plan = { sort: 'id' as const, size: 20, text: undefined, filterDocument: { type: { in: ['schema:Book'] } } };
     for (let step = 0; step < 256; step++) {
       const result = await native.operations.capture({ plan, snapshot: 'pit' }, context());
       if (result.status === 'captured') return result;
@@ -50,10 +55,24 @@ async function setup(populate = true) {
     }
     throw new Error('Finite native bootstrap did not capture');
   }
-  return { f, source, author, book, search, native, capture,
+  return {
+    f,
+    source,
+    author,
+    book,
+    search,
+    native,
+    capture,
     read: (queried: PublicFilterQueriedObservation, execution: string) =>
       readPublicFilterRepairSettlement(f.db.pool, { queried, execution }, context()),
-    async close() { try { await native.close(); } finally { await f.close(); } } };
+    async close() {
+      try {
+        await native.close();
+      } finally {
+        await f.close();
+      }
+    },
+  };
 }
 type Native = Awaited<ReturnType<typeof setup>>;
 
@@ -62,14 +81,22 @@ async function execute(n: Native) {
   const query = await n.native.operations.query(captured.queried, context());
   expect(query.status).toBe('queried');
   if (query.status !== 'queried') throw new Error(`Native query ${query.status}`);
-  const retained = await readPublicFilterConsumerCustody(n.f.db.pool,
-    { queried: query.queried, execution: query.execution }, context());
+  const retained = await readPublicFilterConsumerCustody(
+    n.f.db.pool,
+    { queried: query.queried, execution: query.execution },
+    context(),
+  );
   expect(retained.status).toBe('found');
   if (retained.status !== 'found' || !retained.execution) throw new Error('Missing actual native execution');
   return { captured, query, retained };
 }
 
-async function finish(n: Native, job: PublicFilterConsumerJob, queried: PublicFilterQueriedObservation, execution: string) {
+async function finish(
+  n: Native,
+  job: PublicFilterConsumerJob,
+  queried: PublicFilterQueriedObservation,
+  execution: string,
+) {
   // Source owns a scalar frontier across its finite native homes. This is executable runtime work,
   // never an empty-page/count/lease shortcut or a fabricated Source receipt in this Search test.
   for (let step = 0; step < 20_000; step++) {
@@ -85,7 +112,9 @@ async function finish(n: Native, job: PublicFilterConsumerJob, queried: PublicFi
 async function untilDispatch(n: Native, job: PublicFilterConsumerJob, reached: Promise<unknown>) {
   // The existing fixture holds a real engine request. Preserve that handle instead of polling a process.
   let entered = false;
-  void reached.then(() => { entered = true; });
+  void reached.then(() => {
+    entered = true;
+  });
   let pending: Promise<unknown> | undefined;
   for (let step = 0; step < 20_000; step++) {
     pending = n.native.operations.repairStep(job, context());
@@ -104,16 +133,26 @@ test('native repair settlement guards late dispatch, lost wait_for response, ori
     const gate = n.native.arm('refresh', 'disconnect_after');
     const dispatch = untilDispatch(n, captured.repair, gate.reached);
     try {
-      expect(await Promise.race([gate.reached, dispatch.then(() => {
-        throw new Error('Repair ended before the native completion hold');
-      })])).toEqual({ kind: 'bulk_wait_for', stage: 'after_response' });
+      expect(
+        await Promise.race([
+          gate.reached,
+          dispatch.then(() => {
+            throw new Error('Repair ended before the native completion hold');
+          }),
+        ]),
+      ).toEqual({ kind: 'bulk_wait_for', stage: 'after_response' });
       // Engine visibility has happened, but producer custody has not received native completion.
       expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
-      const uncertain = await n.f.db.pool.query(`SELECT writer_token,dispatch_state FROM search.identity_writer
-        WHERE physical_target=$1 AND dispatch_state='dispatched'`, [n.native.physicalTarget]);
+      const uncertain = await n.f.db.pool.query(
+        `SELECT writer_token,dispatch_state FROM search.identity_writer
+        WHERE physical_target=$1 AND dispatch_state='dispatched'`,
+        [n.native.physicalTarget],
+      );
       expect(uncertain.rows.length).toBeGreaterThan(0);
       expect(uncertain.rows.every((row) => row.writer_token !== null)).toBe(true);
-    } finally { gate.release(); }
+    } finally {
+      gate.release();
+    }
     await dispatch;
     // Recover only the retained locator, action and own-home native version after the lost response.
     const settled = await finish(n, captured.repair, query.queried, query.execution);
@@ -121,33 +160,55 @@ test('native repair settlement guards late dispatch, lost wait_for response, ori
     expect(settled.queried).toEqual(query.queried);
     expect(settled.definition).toEqual(retained.definition);
     expect(settled.settlement.id).toBeString();
-    expect((await readPublicFilterConsumerCustody(n.f.db.pool,
-      { queried: query.queried, execution: query.execution }, context()))).toMatchObject({ covered: retained.covered });
+    expect(
+      await readPublicFilterConsumerCustody(
+        n.f.db.pool,
+        { queried: query.queried, execution: query.execution },
+        context(),
+      ),
+    ).toMatchObject({ covered: retained.covered });
     expect((await n.read(query.queried, randomUUID())).status).not.toBe('settled');
-    expect((await n.read({ ...query.queried, consumer: { ...query.queried.consumer,
-      projectionGeneration: 'unretained-generation' } }, query.execution)).status).not.toBe('settled');
+    expect(
+      (
+        await n.read(
+          { ...query.queried, consumer: { ...query.queried.consumer, projectionGeneration: 'unretained-generation' } },
+          query.execution,
+        )
+      ).status,
+    ).not.toBe('settled');
 
     // A genuine ordinary writer enrollment is a final fence even though the previous repair was visible.
     const { createSearchWriterGuard } = await import('../../src/search/writer-guard.ts');
     const { createRatedSubjectSource } = await import('../../src/search/rated-source.ts');
     const { subjectListingSource } = await import('../../src/library/listing-counts.ts');
     const match = /^(.*)subjects-g([1-9][0-9]*)$/.exec(n.native.physicalTarget)!;
-    const writer = createSearchWriterGuard({ pool: n.f.db.pool, search: n.native.transport,
-      index: n.native.physicalTarget, consumer: `search_${match[1]!.replaceAll('-', '_')}subjects_g${match[2]}`,
+    const writer = createSearchWriterGuard({
+      pool: n.f.db.pool,
+      search: n.native.transport,
+      index: n.native.physicalTarget,
+      consumer: `search_${match[1]!.replaceAll('-', '_')}subjects_g${match[2]}`,
       source: createRatedSubjectSource(n.f.db.pool, n.f.config.routeKey).source,
-      listing: subjectListingSource(n.f.db.pool) });
+      listing: subjectListingSource(n.f.db.pool),
+    });
     const pending = n.native.arm('write');
     const late = writer.write(home(n.book!), [n.book!], 0n);
     try {
-      await Promise.race([pending.reached, late.then(() => {
-        throw new Error('Ordinary writer ended before the native dispatch hold');
-      })]);
+      await Promise.race([
+        pending.reached,
+        late.then(() => {
+          throw new Error('Ordinary writer ended before the native dispatch hold');
+        }),
+      ]);
       expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
-    } finally { pending.release(); }
+    } finally {
+      pending.release();
+    }
     await late;
     // Changed current winner/enrollment cannot inherit the old repair's settlement.
     expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
-  } finally { await n.close(); }
+  } finally {
+    await n.close();
+  }
 }, 600_000);
 
 test('native settlement refuses uncertain writes before send and refuses physical replacement after recovery', async () => {
@@ -157,17 +218,26 @@ test('native settlement refuses uncertain writes before send and refuses physica
     const gate = n.native.arm('write', 'disconnect_before');
     const pending = untilDispatch(n, captured.repair, gate.reached);
     try {
-      expect(await Promise.race([gate.reached, pending.then(() => {
-        throw new Error('Repair ended before the native dispatch hold');
-      })])).toEqual({ kind: 'bulk_wait_for', stage: 'before_send' });
+      expect(
+        await Promise.race([
+          gate.reached,
+          pending.then(() => {
+            throw new Error('Repair ended before the native dispatch hold');
+          }),
+        ]),
+      ).toEqual({ kind: 'bulk_wait_for', stage: 'before_send' });
       expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
-    } finally { gate.release(); }
+    } finally {
+      gate.release();
+    }
     await pending;
     expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
     await finish(n, captured.repair, query.queried, query.execution);
     await n.native.recreate();
     expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
-  } finally { await n.close(); }
+  } finally {
+    await n.close();
+  }
 }, 600_000);
 
 test('zero repair effects require a retained complete Source window and native final fence under the original cut', async () => {
@@ -179,13 +249,21 @@ test('zero repair effects require a retained complete Source window and native f
     expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
     const settled = await finish(n, captured.repair, query.queried, query.execution);
     expect(settled.execution).toEqual(retained.execution!);
-    const last = (await n.f.db.pool.query(`SELECT intent FROM search.public_filter_repair_page
+    const last = (
+      await n.f.db.pool.query(
+        `SELECT intent FROM search.public_filter_repair_page
       WHERE partition_no=$1 AND observation=$2 AND execution=$3 ORDER BY ordinal DESC LIMIT 1`,
-      [Number(query.queried.snapshot.observation.split(':')[0]), query.queried.snapshot.observation, query.execution])).rows[0];
+        [Number(query.queried.snapshot.observation.split(':')[0]), query.queried.snapshot.observation, query.execution],
+      )
+    ).rows[0];
     const intent = decodePublicFilterNativeState<{ sourceStep: string; predecessor: string | null }>(last.intent);
-    const step = (await n.f.db.pool.query(`SELECT complete,predecessor::text FROM semantic.public_filter_repair_step
+    const step = (
+      await n.f.db.pool.query(
+        `SELECT complete,predecessor::text FROM semantic.public_filter_repair_step
       WHERE partition_no=0 AND bootstrap=$1 AND execution=$2 AND step=$3`,
-      [retained.covered.observation.slice(2), query.execution, intent.sourceStep])).rows[0];
+        [retained.covered.observation.slice(2), query.execution, intent.sourceStep],
+      )
+    ).rows[0];
     expect(step).toEqual({ complete: true, predecessor: intent.predecessor });
     const second = await n.read(query.queried, query.execution);
     expect(second.status).toBe('settled');
@@ -193,10 +271,17 @@ test('zero repair effects require a retained complete Source window and native f
     // A genuinely newer capture cannot replace the old immutable bootstrap cut.
     const newer = await n.capture();
     expect(newer.queried.snapshot.observation).not.toBe(query.queried.snapshot.observation);
-    expect((await readPublicFilterConsumerCustody(n.f.db.pool,
-      { queried: query.queried, execution: query.execution }, context()))).toMatchObject({ covered: retained.covered });
+    expect(
+      await readPublicFilterConsumerCustody(
+        n.f.db.pool,
+        { queried: query.queried, execution: query.execution },
+        context(),
+      ),
+    ).toMatchObject({ covered: retained.covered });
     const use = await n.read(query.queried, query.execution);
     expect(use.status).toBe('settled');
     expect(use.cost.engineRequests).toBeGreaterThan(0);
-  } finally { await n.close(); }
+  } finally {
+    await n.close();
+  }
 }, 600_000);

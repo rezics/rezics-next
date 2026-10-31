@@ -3,7 +3,11 @@ import { readFileSync } from 'node:fs';
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import { readSearchWriterPhysicalTarget } from './identity-epoch-participant-physical.ts';
-import { verifySearchRepairWriterReceipt, validateSearchRepairWriterEvidence, type SearchRepairWriterReceipt } from './writer-guard.ts';
+import {
+  verifySearchRepairWriterReceipt,
+  validateSearchRepairWriterEvidence,
+  type SearchRepairWriterReceipt,
+} from './writer-guard.ts';
 import { subjectPartition } from './source.ts';
 import { validateRefreshResponse } from './write-actions.ts';
 import { releaseDigest } from '@rezics/definitions';
@@ -423,34 +427,48 @@ export async function readPublicFilterRepairSettlement(
     const admit = () => {
       check(context);
       // The existing consumer allowance also covers settlement; no free verification phase.
-      if (meter.inputKeys > 1000 || meter.bytes > 4 * 1024 * 1024 ||
+      if (
+        meter.inputKeys > 1000 ||
+        meter.bytes > 4 * 1024 * 1024 ||
         meter.rows > 64 + 16 * Math.max(meter.candidates, 1) ||
-        meter.accessPoints + meter.dependencyPoints > 16 + 8 * Math.max(meter.candidates, 1))
+        meter.accessPoints + meter.dependencyPoints > 16 + 8 * Math.max(meter.candidates, 1)
+      )
         throw new Failure('owner_unavailable');
     };
-    const search: OpenSearch = { async request(method, path, body, options) {
-      admit();
-      meter.engineRequests++;
-      meter.bytes += Buffer.byteLength(path) + Buffer.byteLength(encode(body));
-      const result = await transport.request(method, path, body, { ...options,
-        timeoutMs: Math.max(1, context.deadline - Date.now()) });
-      meter.bytes += Buffer.byteLength(encode(result.body));
-      if (path.endsWith('/_search')) {
-        meter.engineSearches++;
-        const shards = (result.body as { _shards?: { total?: number } })._shards?.total;
-        if (Number.isSafeInteger(shards) && shards! > 0) meter.engineIteratorSteps += shards!;
-      }
-      admit();
-      return result as never;
-    }, bulk() { throw new TypeError('Settlement reader never dispatches writes'); } };
-    return await withConnection(pool, async (client) => {
-      const db = { query: async (text: string, parameters: unknown[]) => {
+    const search: OpenSearch = {
+      async request(method, path, body, options) {
         admit();
-        const request: import('pg').QueryConfig & { query_timeout: number } = {
-          text, values: parameters, query_timeout: Math.max(1, context.deadline - Date.now()),
-        };
-        return client.query(request);
-      } } as Pool;
+        meter.engineRequests++;
+        meter.bytes += Buffer.byteLength(path) + Buffer.byteLength(encode(body));
+        const result = await transport.request(method, path, body, {
+          ...options,
+          timeoutMs: Math.max(1, context.deadline - Date.now()),
+        });
+        meter.bytes += Buffer.byteLength(encode(result.body));
+        if (path.endsWith('/_search')) {
+          meter.engineSearches++;
+          const shards = (result.body as { _shards?: { total?: number } })._shards?.total;
+          if (Number.isSafeInteger(shards) && shards! > 0) meter.engineIteratorSteps += shards!;
+        }
+        admit();
+        return result as never;
+      },
+      bulk() {
+        throw new TypeError('Settlement reader never dispatches writes');
+      },
+    };
+    return await withConnection(pool, async (client) => {
+      const db = {
+        query: async (text: string, parameters: unknown[]) => {
+          admit();
+          const request: import('pg').QueryConfig & { query_timeout: number } = {
+            text,
+            values: parameters,
+            query_timeout: Math.max(1, context.deadline - Date.now()),
+          };
+          return client.query(request);
+        },
+      } as Pool;
       const query = async (statement: string, values: unknown[] = []) => {
         const result = await sql(db, meter, statement, values);
         admit();
@@ -467,65 +485,140 @@ export async function readPublicFilterRepairSettlement(
         const retained = await read(db, input, context, meter);
         if (!retained.execution || !state.closed || state.pages < 1 || state.frontier !== null)
           throw new Failure('owner_unavailable');
-        if (state.execution !== retained.execution.id ||
-          !isDeepStrictEqual(state.covered, retained.covered) || state.bootstrap !== retained.covered.observation ||
-          stateRow.consumer_bootstrap !== state.bootstrap) throw new Failure('binding_mismatch');
-        const work = decode<{ bootstrap: { id: string; covered: unknown }; execution: string;
-          queried: PublicFilterQueriedObservation; repairPage: unknown; records: unknown[];
-          projectionSource: unknown; repair: unknown; dispatch: unknown }>(stateRow.consumer_work);
-        if (work.bootstrap.id !== state.bootstrap || !isDeepStrictEqual(work.bootstrap.covered, retained.covered) ||
-          !isDeepStrictEqual(work.queried, q) || work.execution !== input.execution)
+        if (
+          state.execution !== retained.execution.id ||
+          !isDeepStrictEqual(state.covered, retained.covered) ||
+          state.bootstrap !== retained.covered.observation ||
+          stateRow.consumer_bootstrap !== state.bootstrap
+        )
+          throw new Failure('binding_mismatch');
+        const work = decode<{
+          bootstrap: { id: string; covered: unknown };
+          execution: string;
+          queried: PublicFilterQueriedObservation;
+          repairPage: unknown;
+          records: unknown[];
+          projectionSource: unknown;
+          repair: unknown;
+          dispatch: unknown;
+        }>(stateRow.consumer_work);
+        if (
+          work.bootstrap.id !== state.bootstrap ||
+          !isDeepStrictEqual(work.bootstrap.covered, retained.covered) ||
+          !isDeepStrictEqual(work.queried, q) ||
+          work.execution !== input.execution
+        )
           throw new Failure('binding_mismatch');
         if (work.repairPage || work.records.length || work.projectionSource || work.repair || work.dispatch)
           throw new Failure('owner_unavailable');
         // Hold native registration/physical binding as well as the execution until the final boundary.
-        const registration = (await query(`SELECT consumer FROM search.public_filter_registration
-          WHERE (partition_no,id)=($1,$2) AND state='active' FOR SHARE`, [home, stateRow.registration])).rows[0];
+        const registration = (
+          await query(
+            `SELECT consumer FROM search.public_filter_registration
+          WHERE (partition_no,id)=($1,$2) AND state='active' FOR SHARE`,
+            [home, stateRow.registration],
+          )
+        ).rows[0];
         if (!registration || !isDeepStrictEqual(decode(registration.consumer), q.consumer))
           throw new Failure('binding_mismatch');
-        const custodyOwner = (await query(`SELECT epoch,write_state FROM core.partition
-          WHERE partition_no=$1`, [home])).rows[0];
+        const custodyOwner = (
+          await query(
+            `SELECT epoch,write_state FROM core.partition
+          WHERE partition_no=$1`,
+            [home],
+          )
+        ).rows[0];
         if (custodyOwner?.write_state !== 'active') throw new Failure('owner_unavailable');
-        const target = (await query(`SELECT incarnation FROM search.public_filter_target
-          WHERE partition_no=$1 AND physical_target=$2 FOR SHARE`, [home, q.consumer.physicalTarget])).rows[0];
+        const target = (
+          await query(
+            `SELECT incarnation FROM search.public_filter_target
+          WHERE partition_no=$1 AND physical_target=$2 FOR SHARE`,
+            [home, q.consumer.physicalTarget],
+          )
+        ).rows[0];
         if (target?.incarnation !== q.consumer.incarnation) throw new Failure('binding_mismatch');
         const definition = retained.definition;
         // Recheck native Source registration and immutable definition only; Source business settlement stays FAA-owned.
-        const source = (await query(`SELECT source_id::text,configuration::text,owner_epoch FROM semantic.public_filter_source
-          WHERE partition_no=$1 AND source_id=$2 FOR SHARE`, [definition.source.partition, definition.source.id])).rows[0];
-        if (!source || source.configuration !== definition.source.configuration || source.owner_epoch !== definition.source.epoch)
+        const source = (
+          await query(
+            `SELECT source_id::text,configuration::text,owner_epoch FROM semantic.public_filter_source
+          WHERE partition_no=$1 AND source_id=$2 FOR SHARE`,
+            [definition.source.partition, definition.source.id],
+          )
+        ).rows[0];
+        if (
+          !source ||
+          source.configuration !== definition.source.configuration ||
+          source.owner_epoch !== definition.source.epoch
+        )
           throw new Failure('configuration_changed');
-        const owner = (await query(`SELECT epoch,write_state FROM core.partition WHERE partition_no=$1`,
-          [definition.source.partition])).rows[0];
-        if (owner?.epoch !== definition.source.epoch || owner.write_state !== 'active') throw new Failure('owner_unavailable');
-        const readDefinition = (await query(`SELECT source_id::text,configuration::text,release_digest,subject_type,capture,dependency_keys
+        const owner = (
+          await query(`SELECT epoch,write_state FROM core.partition WHERE partition_no=$1`, [
+            definition.source.partition,
+          ])
+        ).rows[0];
+        if (owner?.epoch !== definition.source.epoch || owner.write_state !== 'active')
+          throw new Failure('owner_unavailable');
+        const readDefinition = (
+          await query(
+            `SELECT source_id::text,configuration::text,release_digest,subject_type,capture,dependency_keys
           FROM semantic.public_filter_read_definition WHERE partition_no=$1 AND read_definition=$2 FOR SHARE`,
-          [definition.source.partition, definition.readDefinition])).rows[0];
-        if (!readDefinition || readDefinition.source_id !== definition.source.id ||
+            [definition.source.partition, definition.readDefinition],
+          )
+        ).rows[0];
+        if (
+          !readDefinition ||
+          readDefinition.source_id !== definition.source.id ||
           readDefinition.configuration !== definition.source.configuration ||
-          readDefinition.release_digest !== definition.meaning.digest || readDefinition.subject_type !== definition.meaning.type ||
+          readDefinition.release_digest !== definition.meaning.digest ||
+          readDefinition.subject_type !== definition.meaning.type ||
           !isDeepStrictEqual(decode(readDefinition.capture), definition.capture) ||
-          !isDeepStrictEqual(readDefinition.dependency_keys, definition.dependencyKeys)) throw new Failure('definition_missing');
+          !isDeepStrictEqual(readDefinition.dependency_keys, definition.dependencyKeys)
+        )
+          throw new Failure('definition_missing');
         if (!/^0:[0-9a-f-]{36}$/.test(state.bootstrap)) throw new Failure('binding_mismatch');
-        const bootstrap = (await query(`SELECT read_definition::text,consumer,snapshot_kind,owner_epoch,state,queried
+        const bootstrap = (
+          await query(
+            `SELECT read_definition::text,consumer,snapshot_kind,owner_epoch,state,queried
           FROM semantic.public_filter_bootstrap WHERE partition_no=0 AND bootstrap=$1 FOR SHARE`,
-          [state.bootstrap.slice(2)])).rows[0];
-        if (!bootstrap || bootstrap.read_definition !== definition.readDefinition ||
-          bootstrap.owner_epoch !== definition.source.epoch || bootstrap.state !== 'adopted' ||
-          bootstrap.queried !== q.snapshot.observation || bootstrap.snapshot_kind !== q.snapshot.kind ||
-          !isDeepStrictEqual(decode(bootstrap.consumer), q.consumer)) throw new Failure('binding_mismatch');
-        const last = (await query(`SELECT intent FROM search.public_filter_repair_page
-          WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)`, [...keys, state.pages - 1])).rows[0];
+            [state.bootstrap.slice(2)],
+          )
+        ).rows[0];
+        if (
+          !bootstrap ||
+          bootstrap.read_definition !== definition.readDefinition ||
+          bootstrap.owner_epoch !== definition.source.epoch ||
+          bootstrap.state !== 'adopted' ||
+          bootstrap.queried !== q.snapshot.observation ||
+          bootstrap.snapshot_kind !== q.snapshot.kind ||
+          !isDeepStrictEqual(decode(bootstrap.consumer), q.consumer)
+        )
+          throw new Failure('binding_mismatch');
+        const last = (
+          await query(
+            `SELECT intent FROM search.public_filter_repair_page
+          WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)`,
+            [...keys, state.pages - 1],
+          )
+        ).rows[0];
         if (!last) throw new Failure('owner_unavailable');
         const finalPage = decode<RetainedRepairPage>(last.intent);
         if (!finalPage.complete || finalPage.frontier !== null) throw new Failure('owner_unavailable');
         const verifyStep = async (page: RetainedRepairPage) => {
           if (!page.sourceStep) throw new Failure('owner_unavailable');
-          const step = (await query(`SELECT predecessor::text,complete FROM semantic.public_filter_repair_step
+          const step = (
+            await query(
+              `SELECT predecessor::text,complete FROM semantic.public_filter_repair_step
             WHERE partition_no=0 AND bootstrap=$1 AND execution=$2 AND step=$3 FOR SHARE`,
-            [state.bootstrap.slice(2), input.execution, page.sourceStep])).rows[0];
-          if (!step || step.complete !== page.complete || step.predecessor !== page.predecessor ||
-            (page.complete ? page.frontier !== null : page.frontier !== page.sourceStep))
+              [state.bootstrap.slice(2), input.execution, page.sourceStep],
+            )
+          ).rows[0];
+          if (
+            !step ||
+            step.complete !== page.complete ||
+            step.predecessor !== page.predecessor ||
+            (page.complete ? page.frontier !== null : page.frontier !== page.sourceStep)
+          )
             throw new Failure('owner_unavailable');
         };
         // Source owns the step body's durable receipt/verifier and creation/change closure. This
@@ -553,9 +646,12 @@ export async function readPublicFilterRepairSettlement(
             admit();
             if (repair.projection.status !== 'progress' && repair.projection.status !== 'complete')
               throw new Failure('binding_mismatch');
-            if (!isDeepStrictEqual(repair.source, repair.projection.source) ||
+            if (
+              !isDeepStrictEqual(repair.source, repair.projection.source) ||
               repair.source.partition !== subjectPartition(repair.source.subject) ||
-              repair.source.subject !== repair.locator.subject) throw new Failure('binding_mismatch');
+              repair.source.subject !== repair.locator.subject
+            )
+              throw new Failure('binding_mismatch');
             const sourceKey = encode(repair.source);
             const prior = copies.get(repair.source.subject);
             if (prior && prior !== sourceKey) throw new Failure('binding_mismatch');
@@ -564,19 +660,38 @@ export async function readPublicFilterRepairSettlement(
               continue;
             }
             if (repair.projection.status !== 'complete') throw new Failure('binding_mismatch');
-            const effect = (await query(`SELECT receipt FROM search.public_filter_repair_effect
-              WHERE (partition_no,observation,execution,page,item)=($1,$2,$3,$4,$5)`, [...keys, row.ordinal, item])).rows[0];
+            const effect = (
+              await query(
+                `SELECT receipt FROM search.public_filter_repair_effect
+              WHERE (partition_no,observation,execution,page,item)=($1,$2,$3,$4,$5)`,
+                [...keys, row.ordinal, item],
+              )
+            ).rows[0];
             if (!effect) throw new Failure('owner_unavailable');
             const receipt = decode<SearchRepairWriterReceipt>(effect.receipt);
-            const locator = encode({ observation: q.snapshot.observation, execution: input.execution, page: row.ordinal, item });
-            if (receipt.locator !== locator || receipt.subject !== repair.source.subject ||
-              receipt.partition !== repair.source.partition || receipt.epoch !== repair.source.epoch ||
-              receipt.action.version < repair.source.position || receipt.incarnation !== q.consumer.incarnation)
+            const locator = encode({
+              observation: q.snapshot.observation,
+              execution: input.execution,
+              page: row.ordinal,
+              item,
+            });
+            if (
+              receipt.locator !== locator ||
+              receipt.subject !== repair.source.subject ||
+              receipt.partition !== repair.source.partition ||
+              receipt.epoch !== repair.source.epoch ||
+              receipt.action.version < repair.source.position ||
+              receipt.incarnation !== q.consumer.incarnation
+            )
               throw new Failure('binding_mismatch');
             validateSearchRepairWriterEvidence(q.consumer.physicalTarget, receipt);
             const previous = latest.get(receipt.subject);
-            if (previous && (receipt.action.version < previous.action.version ||
-              receipt.enrollment.position <= previous.completion.position)) throw new Failure('binding_mismatch');
+            if (
+              previous &&
+              (receipt.action.version < previous.action.version ||
+                receipt.enrollment.position <= previous.completion.position)
+            )
+              throw new Failure('binding_mismatch');
             latest.set(receipt.subject, receipt);
             copies.delete(receipt.subject);
           }
@@ -587,37 +702,68 @@ export async function readPublicFilterRepairSettlement(
         // Final writer-key locks include original/terminal rows even when the retained window had no repair effects.
         const own = [...new Set(retained.execution.ownRows.flatMap((row) => [row.original, row.terminal]))].sort();
         // Lock every existing home gate before any writer/owner key, in the ordinary writer's order.
-        const homes = [...new Set([...own.map(subjectPartition), ...[...latest.values()].map((row) => row.partition)])]
-          .sort((a, b) => a - b);
+        const homes = [
+          ...new Set([...own.map(subjectPartition), ...[...latest.values()].map((row) => row.partition)]),
+        ].sort((a, b) => a - b);
         const gateEpochs = new Map<number, number>();
         for (const partition of homes) {
-          const gate = (await query(`SELECT incarnation,owner_epoch,write_alias,closed_token FROM search.identity_writer_gate
-            WHERE partition_no=$1 AND physical_target=$2 FOR SHARE`, [partition, q.consumer.physicalTarget])).rows[0];
-          if (gate && (gate.incarnation !== physical.incarnation || gate.write_alias !== physical.writeAlias ||
-            gate.closed_token)) throw new Failure('identity_pending');
+          const gate = (
+            await query(
+              `SELECT incarnation,owner_epoch,write_alias,closed_token FROM search.identity_writer_gate
+            WHERE partition_no=$1 AND physical_target=$2 FOR SHARE`,
+              [partition, q.consumer.physicalTarget],
+            )
+          ).rows[0];
+          if (
+            gate &&
+            (gate.incarnation !== physical.incarnation || gate.write_alias !== physical.writeAlias || gate.closed_token)
+          )
+            throw new Failure('identity_pending');
           if (gate) gateEpochs.set(partition, gate.owner_epoch);
         }
         for (const original of own) {
           meter.inputKeys++;
           meter.candidates++;
           const partition = subjectPartition(original);
-          const current = (await query(`SELECT writer_token,dispatch_state,closed_job,incarnation,owner_epoch
+          const current = (
+            await query(
+              `SELECT writer_token,dispatch_state,closed_job,incarnation,owner_epoch
             FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 FOR SHARE`,
-            [partition, q.consumer.physicalTarget, original])).rows[0];
-          const homeOwner = (await query(`SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE`, [partition])).rows[0];
-          if (homeOwner?.write_state !== 'active' ||
+              [partition, q.consumer.physicalTarget, original],
+            )
+          ).rows[0];
+          const homeOwner = (
+            await query(`SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE`, [partition])
+          ).rows[0];
+          if (
+            homeOwner?.write_state !== 'active' ||
             (gateEpochs.has(partition) && gateEpochs.get(partition) !== homeOwner.epoch) ||
-            (current && (current.writer_token || current.closed_job ||
-            current.dispatch_state !== 'settled' || current.incarnation !== physical.incarnation ||
-            current.owner_epoch !== homeOwner.epoch))) throw new Failure('identity_pending');
+            (current &&
+              (current.writer_token ||
+                current.closed_job ||
+                current.dispatch_state !== 'settled' ||
+                current.incarnation !== physical.incarnation ||
+                current.owner_epoch !== homeOwner.epoch))
+          )
+            throw new Failure('identity_pending');
         }
-        for (const receipt of [...latest.values()].sort((a, b) => a.partition - b.partition || a.subject.localeCompare(b.subject)))
+        for (const receipt of [...latest.values()].sort(
+          (a, b) => a.partition - b.partition || a.subject.localeCompare(b.subject),
+        ))
           await verifySearchRepairWriterReceipt({ query } as Pool, search, q.consumer.physicalTarget, receipt);
         for (const partition of [...new Set([home, definition.source.partition])].sort((a, b) => a - b)) {
-          const finalOwner = (await query(`SELECT epoch,write_state FROM core.partition
-            WHERE partition_no=$1 FOR SHARE`, [partition])).rows[0];
-          if (finalOwner?.write_state !== 'active' || (partition === definition.source.partition &&
-            finalOwner.epoch !== definition.source.epoch)) throw new Failure('owner_unavailable');
+          const finalOwner = (
+            await query(
+              `SELECT epoch,write_state FROM core.partition
+            WHERE partition_no=$1 FOR SHARE`,
+              [partition],
+            )
+          ).rows[0];
+          if (
+            finalOwner?.write_state !== 'active' ||
+            (partition === definition.source.partition && finalOwner.epoch !== definition.source.epoch)
+          )
+            throw new Failure('owner_unavailable');
         }
         const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
         validateRefreshResponse(refreshed.status, refreshed.body);
@@ -627,18 +773,32 @@ export async function readPublicFilterRepairSettlement(
         if (!isDeepStrictEqual(final.execution, retained.execution) || !isDeepStrictEqual(final.covered, state.covered))
           throw new Failure('binding_mismatch');
         const transaction = (await query('SELECT txid_current()::text AS id')).rows[0]!.id as string;
-        const fenced: RetainedRepairSettlement = { ...state, fence: { transaction,
-          incarnation: physical.incarnation, writeAlias: physical.writeAlias,
-          sourceEpoch: definition.source.epoch, refresh: refreshed.body } };
-        const stored = await query(`UPDATE search.public_filter_execution SET repair_settlement=$4
+        const fenced: RetainedRepairSettlement = {
+          ...state,
+          fence: {
+            transaction,
+            incarnation: physical.incarnation,
+            writeAlias: physical.writeAlias,
+            sourceEpoch: definition.source.epoch,
+            refresh: refreshed.body,
+          },
+        };
+        const stored = await query(
+          `UPDATE search.public_filter_execution SET repair_settlement=$4
           WHERE (partition_no,observation,id)=($1,$2,$3) AND repair_settlement=$5 RETURNING id`,
-          [...keys, encode(fenced), stateRow.repair_settlement]);
+          [...keys, encode(fenced), stateRow.repair_settlement],
+        );
         if (stored.rowCount !== 1) throw new Failure('binding_mismatch');
         admit();
         await query('COMMIT');
-        return { status: 'settled', definition: retained.definition, queried: retained.queried,
+        return {
+          status: 'settled',
+          definition: retained.definition,
+          queried: retained.queried,
           execution: retained.execution,
-          settlement: Object.freeze({ id: state.id }) as NativePublicFilterRepairSettlement, cost: meter };
+          settlement: Object.freeze({ id: state.id }) as NativePublicFilterRepairSettlement,
+          cost: meter,
+        };
       } catch (error) {
         // Rollback must release every held writer/owner lock even after allowance/deadline failure.
         meter.statements++;
