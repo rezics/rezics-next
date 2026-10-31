@@ -218,9 +218,9 @@ function SettingsSections({
             <SettingsFailure state={page.state} failure={page.failure} onRetry={() => void router.invalidate()} />
           )}
         </section>
-        <section id="display" aria-labelledby="settings-display-heading" className="scroll-mt-6">
+        <div id="display" className="scroll-mt-6">
           <DisplayPreferences />
-        </section>
+        </div>
         {'preferences' in page ? (
           <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
             {page.notifications ? (
@@ -343,9 +343,9 @@ export function SettingsSessionRecovery({
           {m.settings_retry()}
         </Button>
       ) : null}
-      <section id="display" aria-labelledby="settings-display-heading" className="scroll-mt-6">
+      <div id="display" className="scroll-mt-6">
         <DisplayPreferences />
-      </section>
+      </div>
     </div>
   );
 }

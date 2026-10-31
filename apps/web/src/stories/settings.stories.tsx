@@ -202,6 +202,20 @@ export const CollectionsClosed: Story = {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
     await view.findByRole('heading', { level: 1, name: m.settings_heading() });
+    const display = await view.findByRole('region', { name: m.shell_appearance() });
+    await expect(display).toBeVisible();
+    await expect(
+      within(display).getByRole('button', { name: (name) => name.startsWith(m.shell_language()) }),
+    ).toBeEnabled();
+    await expect(within(display).getByRole('button', { name: m.shell_theme() })).toBeEnabled();
+    await expect(view.getByRole('heading', { level: 2, name: m.settings_display_heading() })).toHaveAttribute(
+      'id',
+      'settings-display-heading',
+    );
+    await expect(view.getByRole('link', { name: m.settings_display_heading(), exact: true })).toHaveAttribute(
+      'href',
+      '#display',
+    );
     await expect(view.queryByRole('heading', { level: 2, name: m.settings_privacy_heading() })).toBeNull();
     await expect(view.queryByRole('link', { name: m.settings_privacy_heading() })).toBeNull();
   },

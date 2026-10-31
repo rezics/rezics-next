@@ -8,6 +8,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import * as start from '../.storybook/react-start';
 import { getServerAsyncLocalStorage, locales, overwriteServerAsyncLocalStorage } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
+import type { SessionEnv } from '../src/session/client';
 
 // Controlled transport boundaries exercise the installed session query, without a native service or database.
 let requests = 0;
@@ -253,4 +254,145 @@ describe('Recover Settings after an initial session read failure without weakeni
       client.clear();
     }
   });
+});
+
+test('recovery retains one named Display region, its heading and the shared Language and Theme controls', () => {
+  const html = fallback({ state: 'unknown', onRetry() {} });
+  expect(html.match(/<section\b[^>]*>/g)).toEqual([expect.stringContaining(`aria-label="${m.shell_appearance()}"`)]);
+  expect(html).toContain('id="display"');
+  expect(html).toContain(`<h2 id="settings-display-heading">${m.settings_display_heading()}</h2>`);
+  expect(html).toContain(m.shell_language());
+  expect(html).toContain(`aria-label="${m.shell_theme()}"`);
+  expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(2);
+  noPrivateSections(html);
+});
+
+test('the current authorized closed reading recording reaches the guarded page as 403/platform_closed with guidance and no reading radios', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { createRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { withPlatformClosedRecognition } = await import('../src/kernel/platform-closed');
+  const { loadSettingsPage } = await import('../src/settings/preferences');
+  const runtime = globalThis as typeof globalThis & {
+    __rezicsStoryContext?: { visitor: 'Signed In' | 'Signed Out'; url: string };
+  };
+  const previousContext = runtime.__rezicsStoryContext;
+  const previousNativeRead = nativeRead;
+  const client = new QueryClient();
+  const before = requests;
+  const sent: Request[] = [];
+  let credentialReads = 0;
+  const sessionEnv: Partial<SessionEnv> = {
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid account:read',
+    WEBSITE_CLIENT_ID: 'settings-recovery-test',
+    WEBSITE_CLIENT_KEY: '{}',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: () => ({
+        async credential() {
+          credentialReads++;
+          return {
+            status: 'active',
+            subject: 'current-viewer',
+            accessToken: 'current-access',
+            csrfToken: 'current-token',
+          };
+        },
+      }),
+    } as unknown as SessionEnv['SESSIONS'],
+  };
+  try {
+    runtime.__rezicsStoryContext = { visitor: 'Signed In', url: '/settings?reading-state=closed#reading' };
+    nativeRead = async () => ({ signedIn: true, subject: 'current-viewer', csrfToken: 'current-token' });
+    const requestSession = await client.fetchQuery(sessionQuery);
+    const recorded = createRecordedKernelFetch({});
+    const kernel = withPlatformClosedRecognition(
+      createKernelClient('https://kernel.test', {
+        fetch: (async (input, init) => {
+          const request = new Request(input, init);
+          sent.push(request);
+          const response = await recorded(request);
+          expect(response.status).toBe(403);
+          expect(await response.clone().json()).toMatchObject({ code: 'platform_closed' });
+          return response;
+        }) as typeof fetch,
+      }),
+    );
+    const page = await loadSettingsPage(
+      kernel,
+      new Request('https://site.test/settings?reading-state=closed#reading', {
+        headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+      }),
+      sessionEnv,
+    );
+    expect(page).toMatchObject({
+      signedIn: true,
+      accountId: requestSession.subject,
+      state: 'closed',
+      failure: { status: 403, code: 'platform_closed' },
+    });
+    expect(page).not.toHaveProperty('preferences');
+    const root = createRootRoute({
+      component: () => createElement(SettingsPageView, { page, csrfToken: null, requestSession }),
+    });
+    const router = createRouter({
+      routeTree: root,
+      history: createMemoryHistory({ initialEntries: ['/settings?reading-state=closed#reading'] }),
+    });
+    await router.load();
+    const html = renderToStaticMarkup(
+      createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
+    );
+    expect(html).toContain('id="reading"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('data-response-status="403"');
+    expect(html).toContain('data-response-code="platform_closed"');
+    expect(html).toContain(m.settings_closed_title());
+    expect(html).toContain(m.settings_closed_text());
+    expect(html).not.toContain('role="radio"');
+    expect(html).not.toContain('role="radiogroup"');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.method).toBe('GET');
+    expect(new URL(sent[0]!.url).pathname).toBe('/v1/accounts/current-viewer/preferences');
+    expect(sent[0]!.headers.get('authorization')).toBe('Bearer current-access');
+    expect(credentialReads).toBe(1);
+    expect(requests - before).toBe(1);
+    expect(client.isFetching()).toBe(0);
+  } finally {
+    runtime.__rezicsStoryContext = previousContext;
+    nativeRead = previousNativeRead;
+    client.clear();
+  }
+});
+
+test('a seeded private loader and cached viewer cannot upgrade an unknown, identity-less or mismatched request session', async () => {
+  const client = new QueryClient();
+  const before = requests;
+  try {
+    client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      subject: 'current-viewer',
+      csrfToken: 'cached-token',
+    });
+    const sessions: (Session | undefined)[] = [
+      undefined,
+      { state: 'unknown', csrfToken: null },
+      { state: 'signed-in', subject: null, csrfToken: 'identity-less-token' },
+      { state: 'signed-in', subject: 'other-viewer', csrfToken: 'other-token' },
+    ];
+    for (const session of sessions) {
+      const html = await pageMarkup(client, session);
+      noPrivateSections(html);
+      expect(html).not.toContain('role="radio"');
+      expect(html).not.toContain('cached-token');
+      expect(html).not.toContain('identity-less-token');
+      expect(html).not.toContain('other-token');
+      expect(html).toContain('id="display"');
+    }
+    expect(requests).toBe(before);
+    expect(client.isFetching()).toBe(0);
+  } finally {
+    client.clear();
+  }
 });

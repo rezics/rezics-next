@@ -63,7 +63,12 @@ export const Closed: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
-    await view.findByText(m.settings_closed_title());
+    const reading = within(await view.findByRole('region', { name: m.settings_reading_heading() }));
+    const alert = await reading.findByRole('alert');
+    await within(alert).findByText(m.settings_closed_title());
+    await within(alert).findByText(m.settings_closed_text());
+    await expect(alert).toHaveAttribute('data-response-status', '403');
+    await expect(alert).toHaveAttribute('data-response-code', 'platform_closed');
     await expect(view.queryByRole('radio')).toBeNull();
   },
 };
