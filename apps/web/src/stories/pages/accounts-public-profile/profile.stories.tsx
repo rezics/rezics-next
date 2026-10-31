@@ -58,12 +58,12 @@ function Example({
   );
 }
 
-async function profileShellReady(canvasElement: HTMLElement, heading = m.public_account_heading()) {
+async function profileShellReady(canvasElement: HTMLElement, heading: string = m.public_account_heading()) {
   const canvas = within(canvasElement);
   const main = await canvas.findByRole('main');
   await expect(canvas.getAllByRole('main')).toHaveLength(1);
   const view = within(main);
-  await expect(view.getByRole('heading', { level: 1, name: heading, exact: true })).toBeVisible();
+  await expect(view.getByRole('heading', { level: 1, name: heading })).toBeVisible();
   return view;
 }
 
