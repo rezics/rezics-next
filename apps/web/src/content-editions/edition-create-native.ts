@@ -91,7 +91,7 @@ export async function readEditionCreateSource(
   identity: EditionSourceIdentity,
   includeMedia = true,
 ): Promise<EditionSourceRead> {
-  const auth = { headers: { authorization }, fetch: { redirect: 'manual' as const } };
+  const auth = { headers: { authorization }, fetch: { redirect: 'manual' as const, cache: 'no-store' as const } };
   try {
     const exact = await client.posts({ id: identity.postId }).revisions({ revisionId: identity.revisionId }).get(auth);
     if (exact.error || !exact.data) return failure(exact.status);

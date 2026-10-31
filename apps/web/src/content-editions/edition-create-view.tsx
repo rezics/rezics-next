@@ -162,9 +162,9 @@ export function EditionPublication({
     (state.uncertain && !!failure?.receipt);
   const edition = concealed ? null : (state.review?.edition ?? state.edition);
   const previewSource = concealed ? null : source;
-  const target =
-    edition?.identity?.subject ??
-    previewSource?.recognition?.subjects.find((subject) => subject.id === state.targetSubjectId);
+  const target = edition
+    ? edition.identity?.subject
+    : previewSource?.recognition?.subjects.find((subject) => subject.id === state.targetSubjectId);
   const recognized = target?.kind === 'available';
   // Media is part of the exact delivered source, never a separately retained image query.
   const images = useMemo(
