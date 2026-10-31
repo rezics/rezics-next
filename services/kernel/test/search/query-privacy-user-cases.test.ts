@@ -990,6 +990,27 @@ test('a healthy real adopted word-count edit becomes filterable within the sixty
   await pages('anonymous', { text: marker, filter: filters.words, sort: 'id', languages: ['en'] }, []);
   const started = Date.now();
   await fixture.adopt(subject, discoveryStatement(fixture.meaning.words, { amount: 1200001, unit: '1' }));
+  // A healthy additive edit may take the documented projection interval. Observe
+  // real HTTP membership until it arrives; no acknowledgement substitutes for it.
+  for (;;) {
+    const response = await current('anonymous', '/v1/subjects:search', {
+      text: marker,
+      filter: filters.words,
+      sort: 'id',
+      limit: 2,
+      languages: ['en'],
+    });
+    countFreeList(response.body);
+    const found = (response.body.subjects as SearchHit[]).map(({ id }) => id);
+    expect(response.body.next).toBeNull();
+    if (found.length > 0) {
+      expect(found).toEqual([subject.id]);
+      break;
+    }
+    expect(found).toEqual([]);
+    assert(Date.now() - started < 60_000, 'The real adopted word-count edit missed its searchable deadline');
+    await Bun.sleep(25);
+  }
   const result = await pages(
     'anonymous',
     { text: marker, filter: filters.words, sort: 'id', languages: ['en'], properties: [fixture.meaning.words] },
