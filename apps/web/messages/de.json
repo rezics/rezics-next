@@ -2207,7 +2207,7 @@
   "catalogue_terms_latest": "Aktuelle Begriffe",
   "catalogue_terms_confirm_help": "Vergleiche die aktuellen Werte mit den Originalen und deinem Entwurf. Die Bestätigung sendet nur deine ausdrücklichen Änderungen für diese Revision.",
   "catalogue_terms_confirm": "Änderungen für aktuelle Begriffe bestätigen",
-  "catalogue_terms_reader_unavailable": "Die Änderung wurde bestätigt, aber die aktuellen Begriffe konnten nicht gelesen werden. Erneut lesen.",
+  "catalogue_terms_reader_unavailable": "Die Bezeichnungen wurden gespeichert, aber das aktualisierte Ergebnis konnte nicht geladen werden.",
   "context_title": "Context prüfen",
   "context_unnamed": "Unbenannter Context",
   "context_global": "Globaler Context",
@@ -3253,5 +3253,9 @@
   "library_progress_total_preview_empty": "Gib eine Summe ein, um das Ergebnis zu sehen.",
   "library_progress_resulting_total": "Erfasste Summe nach dem Speichern: {value}",
   "library_progress_session_total": "Gesamtumfang dieser Sitzung: {value}",
-  "library_progress_details": "Fortschrittsdetails"
+  "library_progress_details": "Fortschrittsdetails",
+  "catalogue_result_read_denied": "Mit deinen aktuellen Berechtigungen kannst du dieses Ergebnis nicht lesen.",
+  "catalogue_result_read_unavailable": "Das aktuelle Ergebnis konnte nicht geladen werden.",
+  "catalogue_retry_loading_result": "Ergebnis erneut laden",
+  "authored_reload_current_text": "Aktuellen Text neu laden"
 }

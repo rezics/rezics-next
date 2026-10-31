@@ -121,7 +121,16 @@ export const Empty: Story = {
   },
 };
 export const NoSelection: Story = { args: { scenario: 'no-selection' } };
-export const BodyUnavailable: Story = { args: { scenario: 'body-unavailable' } };
+export const BodyUnavailable: Story = {
+  args: { scenario: 'body-unavailable' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const selected = await canvas.findByRole('region', { name: m.authored_selected() });
+    await within(selected).findByText(m.authored_body_unavailable());
+    await userEvent.click(within(selected).getByRole('button', { name: m.authored_reload_current_text() }));
+    await within(selected).findByText(m.authored_body_unavailable());
+  },
+};
 export const Denied: Story = {
   args: { scenario: 'denied' },
   play: async ({ canvasElement }) => {
@@ -222,7 +231,7 @@ export const Selected: Story = {
     await userEvent.click(adoption.at(-1)!);
     const selected = await canvas.findByRole('region', { name: m.authored_selected() });
     await within(selected).findByText('A quiet story about friendship.');
-    await userEvent.click(within(selected).getByRole('button', { name: m.correction_reload() }));
+    await userEvent.click(within(selected).getByRole('button', { name: m.authored_reload_current_text() }));
     await within(selected).findByText('A quiet story about friendship.');
     await expect(within(selected).queryByText('An aviator meets a young traveller in the desert.')).toBeNull();
     const comparison = canvas.getByRole('region', { name: m.candidate_title() });

@@ -2207,7 +2207,7 @@
   "catalogue_terms_latest": "Términos actuales",
   "catalogue_terms_confirm_help": "Compara estos términos con los originales y tu borrador. La confirmación envía solo tus cambios explícitos para esta revisión.",
   "catalogue_terms_confirm": "Confirmar cambios en los términos actuales",
-  "catalogue_terms_reader_unavailable": "La edición se confirmó, pero no se pudieron leer los términos actuales. Reintenta la lectura.",
+  "catalogue_terms_reader_unavailable": "Los nombres y descripciones se guardaron, pero no se pudo cargar el resultado actualizado.",
   "context_title": "Revisar Context",
   "context_unnamed": "Context sin nombre",
   "context_global": "Context global",
@@ -3253,5 +3253,9 @@
   "library_progress_total_preview_empty": "Introduce un acumulado para ver el resultado.",
   "library_progress_resulting_total": "Acumulado después de guardar: {value}",
   "library_progress_session_total": "Total de esta sesión: {value}",
-  "library_progress_details": "Detalles del progreso"
+  "library_progress_details": "Detalles del progreso",
+  "catalogue_result_read_denied": "Tus permisos actuales no permiten leer este resultado.",
+  "catalogue_result_read_unavailable": "No se pudo cargar el resultado actual.",
+  "catalogue_retry_loading_result": "Reintentar cargar el resultado",
+  "authored_reload_current_text": "Recargar el texto actual"
 }

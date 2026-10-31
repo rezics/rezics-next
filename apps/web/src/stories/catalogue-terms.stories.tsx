@@ -137,7 +137,7 @@ export const UnavailableRetry: Story = {
   args: { scenario: 'read-unavailable' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_retry() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_retry_loading_result() }));
     expect(await canvas.findByRole('combobox', { name: m.catalogue_create_language() })).toBeVisible();
   },
 };
@@ -155,7 +155,10 @@ export const ReaderDenied: Story = {
   args: { scenario: 'reader-denied' },
   play: async ({ canvasElement }) => {
     const canvas = await submit(canvasElement);
-    expect(await canvas.findByText(m.catalogue_terms_denied())).toBeVisible();
+    expect(await canvas.findByText(m.catalogue_result_read_denied())).toBeVisible();
+    expect(canvas.getByText(m.catalogue_terms_saved())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_retry_loading_result() }));
+    expect(await canvas.findByText(m.catalogue_result_read_denied())).toBeVisible();
     expect(canvas.getByText(m.catalogue_terms_saved())).toBeVisible();
   },
 };

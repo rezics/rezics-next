@@ -2324,7 +2324,7 @@
   "catalogue_terms_latest": "Latest terms",
   "catalogue_terms_confirm_help": "Compare the latest terms above with the originals and your draft. Confirming sends only your explicit changes against this revision.",
   "catalogue_terms_confirm": "Confirm changes to latest terms",
-  "catalogue_terms_reader_unavailable": "The edit was confirmed, but current terms could not be read. Retry the reader.",
+  "catalogue_terms_reader_unavailable": "The terms were saved, but the updated result could not be loaded.",
   "context_title": "Review Context",
   "context_unnamed": "Unnamed Context",
   "context_global": "Global Context",
@@ -3605,5 +3605,9 @@
   "library_progress_total_preview_empty": "Enter a total to preview the result.",
   "library_progress_resulting_total": "Recorded total after saving: {value}",
   "library_progress_session_total": "Session total: {value}",
-  "library_progress_details": "Progress details"
+  "library_progress_details": "Progress details",
+  "catalogue_result_read_denied": "Your current permissions prevent reading this result.",
+  "catalogue_result_read_unavailable": "The current result could not be loaded.",
+  "catalogue_retry_loading_result": "Retry loading result",
+  "authored_reload_current_text": "Reload current text"
 }

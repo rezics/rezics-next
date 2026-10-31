@@ -76,6 +76,8 @@ export function AuthoredField({
     initialAuthoredState,
   );
   const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [readFailure, setReadFailure] = useState(initial.ok ? undefined : initial.reason);
   const [errors, setErrors] = useState<Violation[]>([]);
   const [reviewing, setReviewing] = useState(false);
   const [proposalBody, setProposalBody] = useState<AuthoredBody | null>();
@@ -89,6 +91,7 @@ export function AuthoredField({
   if (metadata !== initial) {
     setMetadata(initial);
     setCurrent(initial.ok ? initial : undefined);
+    setReadFailure(initial.ok ? undefined : initial.reason);
     dispatch({ type: 'read', read: initial, reviewDraft: false });
   }
   const property = current?.property ?? requestedProperty.current;
@@ -113,17 +116,18 @@ export function AuthoredField({
     setErrors([]);
   };
 
-  async function refresh(nextProperty = property, reviewDraft = false) {
+  async function refresh(nextProperty = property, reviewDraft = false, readingOnly = false) {
     if (running.current || (command && !reviewDraft)) return;
     requestedProperty.current = nextProperty;
     running.current = true;
     setBusy(true);
-    setProposalBody(undefined);
+    setReading(true);
+    if (!readingOnly) setProposalBody(undefined);
     try {
-      // Refresh both authorities while comparison is open. A public reload cannot stand in for
-      // the candidate document read, or silently discard its independently authorized preview.
+      // Decision recovery refreshes both authorities. The current-text action reads only the
+      // public text and leaves an independently authorized comparison intact while it remains readable.
       const comparison =
-        proposed && reviewing && nextProperty === property
+        !readingOnly && proposed && reviewing && nextProperty === property
           ? await transport.review(property, proposed.candidate, undefined, session.current)
           : undefined;
       const next: AuthoredRead = comparison
@@ -135,18 +139,25 @@ export function AuthoredField({
         if (comparison.comparison.ok) session.current = comparison.comparison.session ?? session.current;
       }
       dispatch({ type: 'read', read: next, reviewDraft });
+      setReadFailure(next.ok ? undefined : next.reason);
       if (!next.ok) {
         setCurrent(undefined);
+        setProposalBody(undefined);
+        setReviewing(false);
       } else {
         setCurrent(next);
         session.current = next.session ?? session.current;
       }
     } catch {
       setCurrent(undefined);
+      setProposalBody(undefined);
+      setReviewing(false);
+      setReadFailure('unavailable');
       dispatch({ type: 'read', read: { ok: false, reason: 'unavailable' }, reviewDraft });
     } finally {
       running.current = false;
       setBusy(false);
+      setReading(false);
     }
   }
 
@@ -184,6 +195,7 @@ export function AuthoredField({
     }
     running.current = true;
     setBusy(true);
+    setReadFailure(undefined);
     dispatch({ type: 'submit', command: request });
     try {
       const result = await transport.propose(request);
@@ -285,23 +297,38 @@ export function AuthoredField({
       </header>
       {failure && (
         <div className="space-y-3 rounded-xl border border-border p-4">
-          <EditorFailure reason={failure} locale={locale} />
+          {readFailure && !command ? (
+            <p role="alert">
+              {readFailure === 'denied'
+                ? m.catalogue_result_read_denied({}, o)
+                : readFailure === 'concealed'
+                  ? m.catalogue_create_concealed({}, o)
+                  : m.catalogue_result_read_unavailable({}, o)}
+            </p>
+          ) : (
+            <EditorFailure reason={failure} locale={locale} />
+          )}
           <Button
             variant="outline"
             disabled={busy}
             onClick={() =>
-              void (command && failure === 'unavailable' ? submit() : refresh(property, failure === 'stale'))
+              void (command && failure === 'unavailable'
+                ? submit()
+                : refresh(property, failure === 'stale', !!readFailure))
             }
           >
             {command && failure === 'unavailable'
               ? m.correction_retry({}, o)
-              : failure === 'stale'
-                ? m.authored_review_draft({}, o)
-                : m.correction_reload({}, o)}
+              : readFailure && !command
+                ? m.catalogue_retry_loading_result({}, o)
+                : failure === 'stale'
+                  ? m.authored_review_draft({}, o)
+                  : m.correction_reload({}, o)}
           </Button>
         </div>
       )}
-      {busy && <p role="status">{m.correction_saving({}, o)}</p>}
+      {busy && <p role="status">{reading ? m.catalogue_create_loading({}, o) : m.correction_saving({}, o)}</p>}
+      {proposed && !current && <p role="status">{m.authored_submitted({}, o)}</p>}
       {current && !property && <p>{m.authored_empty({}, o)}</p>}
       {current && property && (
         <>
@@ -331,8 +358,8 @@ export function AuthoredField({
             ) : (
               <p>{m.authored_no_selected({}, o)}</p>
             )}
-            <Button variant="outline" disabled={busy || !!command} onClick={() => void refresh()}>
-              {m.correction_reload({}, o)}
+            <Button variant="outline" disabled={busy || !!command} onClick={() => void refresh(property, false, true)}>
+              {m.authored_reload_current_text({}, o)}
             </Button>
           </section>
         </>

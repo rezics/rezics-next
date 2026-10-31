@@ -2207,7 +2207,7 @@
   "catalogue_terms_latest": "目前內容",
   "catalogue_terms_confirm_help": "將目前內容與原值和草稿比較。確認後只會針對這個版本提交明確的變更。",
   "catalogue_terms_confirm": "確認對目前內容的變更",
-  "catalogue_terms_reader_unavailable": "編輯已確認，但無法讀取目前內容，請重試讀取。",
+  "catalogue_terms_reader_unavailable": "名稱與描述已儲存，但無法載入更新後的結果。",
   "context_title": "審核 Context",
   "context_unnamed": "未命名的 Context",
   "context_global": "全域 Context",
@@ -3253,5 +3253,9 @@
   "library_progress_total_preview_empty": "輸入累計值以預覽結果。",
   "library_progress_resulting_total": "儲存後的累計值：{value}",
   "library_progress_session_total": "本次進度的總量：{value}",
-  "library_progress_details": "進度詳細資訊"
+  "library_progress_details": "進度詳細資訊",
+  "catalogue_result_read_denied": "你目前的權限不允許讀取此結果。",
+  "catalogue_result_read_unavailable": "無法載入目前的結果。",
+  "catalogue_retry_loading_result": "重試載入結果",
+  "authored_reload_current_text": "重新載入目前文字"
 }

@@ -140,7 +140,7 @@ export function SubjectTermsPage({
     running.current = true;
     setBusy(true);
     try {
-      const result = await transport.read(saved?.id ?? id, saved?.session ?? base.session);
+      const result = saved ? await transport.read(saved.id, saved.session) : await transport.read(id, base.session);
       if (saved) setSaved({ ...saved, reader: result });
       else setComparison(result);
     } catch {
@@ -210,11 +210,11 @@ export function SubjectTermsPage({
             {query.data?.state === 'concealed'
               ? m.catalogue_create_concealed({}, options)
               : query.data?.state === 'denied'
-                ? m.catalogue_terms_denied({}, options)
+                ? m.catalogue_result_read_denied({}, options)
                 : m.catalogue_create_unavailable({}, options)}
           </p>
           <Button variant="outline" onClick={() => void query.refetch()}>
-            {m.catalogue_create_retry({}, options)}
+            {m.catalogue_retry_loading_result({}, options)}
           </Button>
         </section>
       )}
@@ -253,11 +253,11 @@ export function SubjectTermsPage({
                     {saved.reader.state === 'concealed'
                       ? m.catalogue_create_concealed({}, options)
                       : saved.reader.state === 'denied'
-                        ? m.catalogue_terms_denied({}, options)
+                        ? m.catalogue_result_read_denied({}, options)
                         : m.catalogue_terms_reader_unavailable({}, options)}
                   </p>
                   <Button disabled={busy} onClick={() => void reread()}>
-                    {m.catalogue_create_retry({}, options)}
+                    {m.catalogue_retry_loading_result({}, options)}
                   </Button>
                 </>
               )}
@@ -414,7 +414,7 @@ export function SubjectTermsPage({
                       {comparison.state === 'concealed'
                         ? m.catalogue_create_concealed({}, options)
                         : comparison.state === 'denied'
-                          ? m.catalogue_terms_denied({}, options)
+                          ? m.catalogue_result_read_denied({}, options)
                           : m.catalogue_create_unavailable({}, options)}
                     </p>
                   )}

@@ -2207,7 +2207,7 @@
   "catalogue_terms_latest": "現在の値",
   "catalogue_terms_confirm_help": "現在の値を元の値と下書きに比較してください。確認すると、この版に対して明示した変更だけを送信します。",
   "catalogue_terms_confirm": "現在の値への変更を確認",
-  "catalogue_terms_reader_unavailable": "編集は確認されましたが、現在の値を取得できませんでした。読み込みを再試行してください。",
+  "catalogue_terms_reader_unavailable": "名称と説明は保存されましたが、更新後の結果を読み込めませんでした。",
   "context_title": "Context を確認",
   "context_unnamed": "名称未設定の Context",
   "context_global": "グローバル Context",
@@ -3253,5 +3253,9 @@
   "library_progress_total_preview_empty": "累計を入力すると保存後の値を確認できます。",
   "library_progress_resulting_total": "保存後の累計：{value}",
   "library_progress_session_total": "このセッションの総量：{value}",
-  "library_progress_details": "進捗の詳細"
+  "library_progress_details": "進捗の詳細",
+  "catalogue_result_read_denied": "現在の権限ではこの結果を閲覧できません。",
+  "catalogue_result_read_unavailable": "現在の結果を読み込めませんでした。",
+  "catalogue_retry_loading_result": "結果の読み込みを再試行",
+  "authored_reload_current_text": "現在の本文を再読み込み"
 }

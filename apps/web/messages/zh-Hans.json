@@ -2208,7 +2208,7 @@
   "catalogue_terms_latest": "当前内容",
   "catalogue_terms_confirm_help": "将当前内容与原值和草稿比较。确认后只会针对这一版本提交明确的更改。",
   "catalogue_terms_confirm": "确认对当前内容的更改",
-  "catalogue_terms_reader_unavailable": "编辑已确认，但无法读取当前内容，请重试读取。",
+  "catalogue_terms_reader_unavailable": "名称与描述已保存，但无法加载更新后的结果。",
   "context_title": "审核 Context",
   "context_unnamed": "未命名的 Context",
   "context_global": "全局 Context",
@@ -3254,5 +3254,9 @@
   "library_progress_total_preview_empty": "输入累计值以预览结果。",
   "library_progress_resulting_total": "保存后的累计值：{value}",
   "library_progress_session_total": "本次进度的总量：{value}",
-  "library_progress_details": "进度详情"
+  "library_progress_details": "进度详情",
+  "catalogue_result_read_denied": "你目前的权限不允许读取此结果。",
+  "catalogue_result_read_unavailable": "无法加载当前结果。",
+  "catalogue_retry_loading_result": "重试加载结果",
+  "authored_reload_current_text": "重新加载当前文字"
 }
