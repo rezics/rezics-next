@@ -81,7 +81,7 @@ async function subjectReady(context: { canvasElement: HTMLElement }) {
 }
 
 export const SignedIn: Story = {
-  name: 'Signed in',
+  name: 'Member',
   play: subjectReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
