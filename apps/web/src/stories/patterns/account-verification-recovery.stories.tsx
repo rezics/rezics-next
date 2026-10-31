@@ -216,7 +216,8 @@ export const AstralBoundary: Story = {
     await expect(url).toHaveValue(boundaryLink.url);
     await userEvent.click(submit);
     await view.findByText(m.settings_verification_uncertain_request());
-    await expect(args.onRequest).toHaveBeenCalledExactlyOnceWith(
+    await expect(args.onRequest).toHaveBeenCalledTimes(1);
+    await expect(args.onRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         subject: 'subject-1',
         statement: astralStatement,
@@ -347,7 +348,8 @@ export const FiveLinkKeyboardEditing: Story = {
     await expect(view.getAllByLabelText(m.settings_verification_link_url())).toHaveLength(5);
     await userEvent.click(submit);
     await view.findByText(m.settings_verification_uncertain_request());
-    await expect(args.onRequest).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ links: expectedLinks }));
+    await expect(args.onRequest).toHaveBeenCalledTimes(1);
+    await expect(args.onRequest).toHaveBeenCalledWith(expect.objectContaining({ links: expectedLinks }));
   },
 };
 
