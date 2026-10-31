@@ -46,7 +46,11 @@ export function observeVerificationRead(
 ) {
   const key = verificationQueryKey(accountId);
   return client.getQueryCache().subscribe(({ query }) => {
-    if (accountId && query.queryKey.length === key.length && query.queryKey.every((part, index) => part === key[index]))
+    if (
+      accountId &&
+      query.queryKey.length === key.length &&
+      query.queryKey.every((part: unknown, index: number) => part === key[index])
+    )
       changed();
   });
 }
