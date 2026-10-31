@@ -40,32 +40,34 @@ export function QualifiedCredit({
         >
           {title}
         </value.link>
-        <ul className="space-y-1 text-sm leading-6">
-          {notes.map((note, index) => (
-            <li key={`note-${index}`}>{note}</li>
-          ))}
-          {qualified.map((note, index) => (
-            <li key={`qualified-${index}`}>
-              {note.subject ? (
-                <value.link
-                  href={relationTargetHref(note.subject, value.locale, value.context)}
-                  lang={note.language}
-                  className="text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  {note.text}
-                </value.link>
-              ) : (
-                <span lang={note.language}>{note.text}</span>
-              )}
-              {note.language && (
-                <>
-                  {' '}
-                  <LanguageTag lang={note.language} locale={value.locale} />
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+        {(notes.length > 0 || qualified.length > 0) && (
+          <ul className="space-y-1 text-sm leading-6">
+            {notes.map((note, index) => (
+              <li key={`note-${index}`}>{note}</li>
+            ))}
+            {qualified.map((note, index) => (
+              <li key={`qualified-${index}`}>
+                {note.subject ? (
+                  <value.link
+                    href={relationTargetHref(note.subject, value.locale, value.context)}
+                    lang={note.language}
+                    className="text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    {note.text}
+                  </value.link>
+                ) : (
+                  <span lang={note.language}>{note.text}</span>
+                )}
+                {note.language && (
+                  <>
+                    {' '}
+                    <LanguageTag lang={note.language} locale={value.locale} />
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

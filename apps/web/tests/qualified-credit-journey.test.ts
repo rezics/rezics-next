@@ -149,8 +149,9 @@ test('default qualified relation list exposes full readable credit facts and wor
         'Credited as: Alex Player — additional voices in the restored international edition',
       );
       expect(reader.queryByText('Secret performer')).toBeNull();
-      expect(reader.queryByText('Secret credited name')).toBeNull();
+      expect(reader.queryByText('Credited as: Secret credited name')).toBeNull();
       expect(reader.queryByRole('link', { name: 'Character: Secret character' })).toBeNull();
+      expect(host.querySelector(`a[href*="${secret}"]`)).toBeNull();
       expect(host.innerHTML).not.toContain('undisclosed-character');
       expect(reader.queryByText('Unavailable performer')).toBeNull();
       expect(host.querySelector('a a')).toBeNull();
