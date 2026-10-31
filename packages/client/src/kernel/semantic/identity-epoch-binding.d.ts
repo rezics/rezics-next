@@ -24,6 +24,8 @@ export type IdentityAdmissionSource = Readonly<{
     owner_epoch: number;
     ready: boolean;
     pending_job: string | null;
+    /** Captured only for terminal detachment, retained with its immutable generation basis. */
+    remainder_terminal?: string | null;
 }>;
 export type IdentityBindingData = Readonly<{
     partition: number;

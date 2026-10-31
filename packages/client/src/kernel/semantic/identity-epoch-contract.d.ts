@@ -135,6 +135,13 @@ export type IdentityEffect = Readonly<{
     kind: 'structural';
     job: IdentityJobRef;
     original: string;
+    /** Destination-local link/member writes retain the affected original. */
+    destination?: string;
+    /** Native input-header gate for output membership in its actual control home. */
+    controlGroup?: Readonly<{
+        terminal: string;
+        generation: string;
+    }>;
 }> | Readonly<{
     kind: 'follow-count';
     original: string;
@@ -217,7 +224,6 @@ export type IdentityEpochStore = Readonly<{
     publish(tx: CommandTransaction, job: IdentityJobRef): Promise<CommandResult<IdentityJobRef>>;
 }>;
 /** Native producer: semantic/identity-epoch-mapping.ts, export stepIdentityEpochMapping.
- * Its provisional unavailable declaration does not establish executable native mapping.
  * One bounded native step; reads saved work, never takes a caller-supplied frontier as authority.
  */
 export type IdentityEpochStep = (pool: Pool, job: IdentityJobRef) => Promise<IdentityStepProgress>;
