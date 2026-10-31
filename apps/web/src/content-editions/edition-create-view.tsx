@@ -399,8 +399,9 @@ export function EditionPublication({
         <section
           className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
           aria-label={m.edition_publication_published_heading()}
+          role="status"
         >
-          <h2 className="text-lg font-semibold" role="status">
+          <h2 className="text-lg font-semibold">
             {m.edition_publication_published_heading()}
           </h2>
           <p className="text-sm">{m.edition_publication_published_help()}</p>
