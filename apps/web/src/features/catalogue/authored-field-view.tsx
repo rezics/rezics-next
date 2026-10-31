@@ -325,7 +325,7 @@ export function AuthoredField({
           </Button>
         </div>
       )}
-      {busy && <p role="status">{reading ? m.catalogue_create_loading({}, o) : m.correction_saving({}, o)}</p>}
+      {busy && <p role="status">{reading ? m.candidate_loading({}, o) : m.correction_saving({}, o)}</p>}
       {proposed && !current && <p role="status">{m.authored_submitted({}, o)}</p>}
       {current && !property && <p>{m.authored_empty({}, o)}</p>}
       {current && property && (

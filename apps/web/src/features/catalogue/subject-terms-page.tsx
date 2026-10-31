@@ -203,7 +203,7 @@ export function SubjectTermsPage({
           </a>
         )}
       </header>
-      {query.isPending && <p role="status">{m.catalogue_create_loading({}, options)}</p>}
+      {query.isPending && <p role="status">{m.candidate_loading({}, options)}</p>}
       {!base && !query.isPending && (
         <section role="alert" className="space-y-3">
           <p>
@@ -211,7 +211,7 @@ export function SubjectTermsPage({
               ? m.catalogue_create_concealed({}, options)
               : query.data?.state === 'denied'
                 ? m.catalogue_result_read_denied({}, options)
-                : m.catalogue_create_unavailable({}, options)}
+                : m.catalogue_result_read_unavailable({}, options)}
           </p>
           <Button variant="outline" onClick={() => void query.refetch()}>
             {m.catalogue_retry_loading_result({}, options)}
@@ -415,7 +415,7 @@ export function SubjectTermsPage({
                         ? m.catalogue_create_concealed({}, options)
                         : comparison.state === 'denied'
                           ? m.catalogue_result_read_denied({}, options)
-                          : m.catalogue_create_unavailable({}, options)}
+                          : m.catalogue_result_read_unavailable({}, options)}
                     </p>
                   )}
                 </section>
