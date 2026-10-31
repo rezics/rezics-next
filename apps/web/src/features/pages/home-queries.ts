@@ -16,7 +16,7 @@ function feedInput(input: { locale: string; stream: 'home' | 'following'; cursor
   localeInput(input.locale);
   if (
     !['home', 'following'].includes(input.stream) ||
-    (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 8192))
+    (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 32768))
   )
     throw new Error('Invalid feed request');
   return input;
