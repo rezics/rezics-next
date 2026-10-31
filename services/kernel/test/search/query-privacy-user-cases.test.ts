@@ -73,6 +73,7 @@ function countFreeList(body: Record<string, unknown>): void {
 function preparing(response: HttpResponse): void {
   status(response, 503);
   expect(response.body.status).toBe(503);
+  assert(typeof response.body.code === 'string');
   expect(['index_not_ready', 'semantic_not_ready']).toContain(response.body.code);
   expect(response.headers.get('retry-after')).toBeTruthy();
   expect(response.headers.get('content-type')).toContain('application/problem+json');
@@ -132,7 +133,7 @@ async function pages(persona: DiscoveryPersona, request: SearchRequest, expected
     expect(new Set(found.map(({ id }) => id)).size).toBe(found.length);
     expect(found.length).toBeLessThanOrEqual(expected.length);
     if (response.body.next === null) {
-      expect(found.map(({ id }) => id)).toEqual(expected);
+      expect(found.map(({ id }) => id)).toEqual([...expected]);
       return { hits: found, lengths };
     }
     cursor = response.body.next;
@@ -237,18 +238,6 @@ test('native harem and light-novel facets disclose the released labels without s
 test('native rating ordering also omits query totals and keeps the original null-rating ID tie order', async () => {
   await pages('anonymous', { filter: filters.formHarem, sort: 'rating', languages: ['en'] }, ids(formNames));
 }, 90_000);
-
-test('native private labels do not classify public Books or Recipes or borrow the owners authority', async () => {
-  const labels = await population.labels();
-  expect(labels.subject.id).toBe(books.subjects['B-long'].id);
-  status(await fixture.request('alice', 'GET', `/v1/libraryEntries/${labels.subject.id}`), 404);
-  const before = status(labels.publicBefore, 200).body.subject as Subject;
-  const after = status(await fixture.read(labels.recipe), 200).body.subject as Subject;
-  expect(after.statements[fixture.meaning.diet] ?? []).toEqual([]);
-  expect(after).toEqual(before);
-  for (const persona of ['anonymous', 'editor', 'alice', 'bob'] as const)
-    await pages(persona, { filter: harem, sort: 'id', languages: ['en'] }, ids(positiveNames));
-}, 180_000);
 
 test('native unscoped credentials are denied instead of being downgraded to an anonymous catalogue read', async () => {
   for (const [path, body] of [
@@ -476,4 +465,16 @@ test('finite sparse native input finishes preparation with full and exhausted us
     expected.sort(),
   );
   expect(result.lengths).toEqual([2, 1]);
+}, 180_000);
+
+test('native private labels do not classify public Books or Recipes or borrow the owners authority', async () => {
+  const labels = await population.labels();
+  expect(labels.subject.id).toBe(books.subjects['B-long'].id);
+  status(await fixture.request('alice', 'GET', `/v1/libraryEntries/${labels.subject.id}`), 404);
+  const before = status(labels.publicBefore, 200).body.subject as Subject;
+  const after = status(await fixture.read(labels.recipe), 200).body.subject as Subject;
+  expect(after.statements[fixture.meaning.diet] ?? []).toEqual([]);
+  expect(after).toEqual(before);
+  for (const persona of ['anonymous', 'editor', 'alice', 'bob'] as const)
+    await pages(persona, { filter: filters.combined, sort: 'id', languages: ['en'] }, ids(['B-long']));
 }, 180_000);
