@@ -848,8 +848,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const match = /^(.*)discovery-g([1-9][0-9]*)$/.exec(target);
     if (!match) throw new ConsumerFailure('dependency_unavailable');
     const row = (
-      await m.sql<{ kinds: string[]; index_uuid: string | null }>(
-        `SELECT kinds,index_uuid FROM search.discovery_generation
+      await m.sql<{ kinds: string[]; index_uuid: string | null; incarnation: string }>(
+        `SELECT kinds,index_uuid,incarnation::text FROM search.discovery_generation
        WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('ready','active','retiring')`,
         [match[1], match[2]],
       )
@@ -870,6 +870,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       !record(mapping.body[target].mappings._meta) ||
       mapping.body[target].mappings._meta.discovery_document_format !== 2 ||
       mapping.body[target].mappings._meta.comparator !== 'mixed-public-v1' ||
+      mapping.body[target].mappings._meta.incarnation !== row.incarnation ||
       settings.status !== 200 ||
       !record(settings.body) ||
       Object.keys(settings.body).length !== 1 ||

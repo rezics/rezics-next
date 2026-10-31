@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { noEffect, runCommand } from '../command/command.ts';
 import { activeRelease } from '../semantic/definitions.ts';
-import type { FilterRelease } from '@rezics/filter';
+import type { Release } from '@rezics/definitions';
 import {
   accountDiscoverySource,
   readAccountDiscoveryBindings,
@@ -242,7 +242,7 @@ export async function nativeDiscoveryRegistry(
   pool: Pool,
   routeKey: Uint8Array,
   subjects: SubjectSource,
-  options?: { release: FilterRelease; languages?: readonly string[] },
+  options?: { release: Release; languages?: readonly string[] },
 ) {
   const release = options?.release ?? (await activeRelease(pool))?.release;
   if (!release) throw new Error('Discovery requires an active definition release');

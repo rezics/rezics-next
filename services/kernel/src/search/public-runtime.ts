@@ -221,9 +221,12 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         if (!release) notReady();
         if (release.digest !== digest) throw new ProblemError('search_restart_required');
         const result = await config.pool.query<{ generation: number; uuid: string; incarnation: string }>(
-          `SELECT generation::float8 AS generation,index_uuid AS uuid,incarnation::text
-           FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state='active'`,
-          [config.prefix],
+          {
+            text: `SELECT generation::float8 AS generation,index_uuid AS uuid,incarnation::text
+              FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state='active'`,
+            values: [config.prefix],
+            query_timeout: Math.max(1, context.deadline - Date.now()),
+          },
         );
         if (result.rows.length !== 1) notReady();
         const allocation = result.rows[0]!;
@@ -240,6 +243,13 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           operations = create(target, release, context, registry);
           mixed.set(key, operations);
           void operations.catch(() => { if (mixed.get(key) === operations) mixed.delete(key); });
+        }
+        // A real generation/release switch invalidates old cursors. Drain their factories rather
+        // than retaining one resource owner for every historical release in a long-lived process.
+        const retired = [...mixed].filter(([candidate]) => candidate !== key);
+        for (const [candidate, old] of retired) {
+          mixed.delete(candidate);
+          await (await old).close();
         }
         return operations;
       });
@@ -376,6 +386,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       closing = (async () => {
         await Promise.allSettled([...pending]);
         const results = await Promise.allSettled([...owned].map((operations) => operations.close()));
+        mixed.clear();
         owned.clear();
         await publication.close();
         const failed = results.find((result) => result.status === 'rejected');

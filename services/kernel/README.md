@@ -35,6 +35,27 @@ check command starts its own disposable OpenSearch node.
 
 ## Rebuilding the search index
 
+The configured server installs `createDefaultDiscoverySearch` from
+[`search/default-discovery.ts`](src/search/default-discovery.ts) after Kernel Access is available.
+Its `{ search, close }` result exposes the existing `DiscoverySearch` callable: pass a principal,
+`MixedDiscoveryRequest` and current `DiscoveryReadContext` (Actor and deadline). The home feed can consume its
+bounded owner/kind/route/id keys, current owner summaries, signed `next` and `as_of` through that same callable.
+This candidate family covers the public catalogue and eligible Accounts; `id`, `name` and `relevance` retain
+their search meanings.
+
+The default assembly pins the active definition release and language preferences, selects the actual active
+`discovery-g` allocation, and reopens the native retained consumer for continuation. It uses the existing production
+kind metadata and the queried mixed consumer's checkpoint for freshness. Preparation jobs use the existing durable
+public-preparation store and default worker; API requests never launch an indexing worker. Shutdown drains requests
+and closes the discovery runtime before the shared database pool.
+
+Native Source projection and reduction proof remains a prerequisite. The current `publicFilterSource` export in
+[`semantic/public-filter-source.ts`](src/semantic/public-filter-source.ts) still returns typed `metadata_missing`
+readiness from its projection-page and reduction readers. Default wiring preserves that result as
+`index_not_ready` with `retry-after`; current returned-row hydration cannot certify the missing population proof.
+The focused default-server regression requires a positive native response and is deferred in minimal verification
+mode. Workspace typing does not establish native readiness.
+
 Run `bun run search rebuild` from this workspace to build the next subject generation and switch the alias to it.
 Set `DATABASE_URL`, `OPENSEARCH_URL`, and the deployment's `KERNEL_ROUTE_KEY` (canonical unpadded base64url encoding
 of exactly 32 bytes). Rebuild validates the route key before opening the database pool and supplies it to the source

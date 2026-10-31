@@ -79,7 +79,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             throw new Error('Discovery freshness requires the actual queried mixed generation');
           return (await readFreshness(config.pool, discoveryConsumer(config.prefix, generation))).asOf.toISOString();
         },
-      })(principal, request, context);
+      })(principal, request, { ...context, access: config.access });
     };
     const operation = execute().catch((error: unknown) => {
       if (error instanceof ProblemError) throw error;
