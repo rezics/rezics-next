@@ -29,14 +29,26 @@ The shared private region links to existing own `/entitlements` records without 
 declares no bounded owned-benefit batch. The existing review/Checkout/record/reader journey keeps its sole authorities.
 
 Web handoff modules are `checkout/subject-purchase.ts` (`subjectPurchaseRegions`, `SubjectOffersRegion`,
-`SubjectOwnedBenefitsRegion`) and `checkout/subject-offers-region.tsx` (`SubjectOffersView`). New stories are
-`pages-commerce-subject-purchase--{signed-out,signed-in}-{390,1280}` plus `pending`, `empty`, `preparing`,
-`partial-preparing`, `denied-signed-in`, `unavailable`, `cursor-error`, `long-title`, `mapped-price-unknown`,
-`unknown-mapping` and `actual-adapter-unavailable` under that same prefix. All eight locales use current shared rows
-and the signed-in mount seam. The ordinary Web 390/1280 review remains pending. The added
-`apps/web/tests/subject-purchase.test.ts` is focused interface acceptance source, not an executed native campaign.
-The local `bun run --cwd apps/web typecheck` passes with no type errors in 1,155 files after narrowing the shared
-locale at the region boundary. No acceptance, unit, browser, native or remote checks ran for this slice.
+`SubjectOwnedBenefitsRegion`) and `checkout/subject-offers-region.tsx` (`SubjectOffersView`). The source adapter in
+`checkout/subject-offers.ts` exports `createNativeSubjectOffersApi`, `nativeSubjectOffersApi`, `SubjectOffersPage`,
+`SubjectOffer`, `SubjectOffersQuery` and `NativeSubjectOffersOptions`; the latter four derive from the delivered
+generated directory caller. The decoder preserves the native captured original target after identity merges;
+directory membership and Realm/current disclosure remain native decisions, with no invented Realm selector.
+
+The existing story prefix is `pages-commerce-subject-purchase--`, with exact suffixes `signed-out`, `signed-in`,
+`pending`, `empty`, `preparing`, `partial-preparing`, `denied-signed-in`, `unavailable`, `cursor-error`, `long-title`,
+`mapped-price-unknown`, `unknown-mapping`, `actual-adapter-unavailable` and `signed-in-long-title`. Reproduce the real
+adapter's explicit negative transport at `/?path=/story/pages-commerce-subject-purchase--actual-adapter-unavailable`;
+the story prepares the existing Storybook session and receives 503 from `kernel.local`. The other public wire
+examples remain illustrative. All eight locales use current shared rows and the signed-in mount seam. The ordinary
+Web phone390/desktop1280 light/dark review remains pending; no new capture replaces the frozen evidence.
+
+The existing `apps/web/tests/subject-purchase.test.ts` remains unchanged. The new focused
+`apps/web/tests/subject-offers.test.ts` covers the delivered generated request, exact headers/options, one explicit
+cursor read, sparse/preparing positives, named refusals, genuine failure, session-token continuity, strict capture
+decoding and unknown historic terms. Local `bun run --cwd apps/web typecheck` passes with no type errors in 1,396
+files. `bun test apps/web/tests/subject-offers.test.ts` passes five tests with 68 assertions; these constructed
+transport cases establish adapter behavior only. No native, database, browser, capture, host or remote check ran.
 Native producer binding is present in source. Whole-journey, privacy/protected-use, visual and promoted-main proof
 remain pending; source typing does not establish those outcomes.
 
