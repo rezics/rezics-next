@@ -8,12 +8,13 @@ import {
   preflightProof,
   productionProofProducer,
   type ProofProducer,
+  nativeCheckId,
 } from './verification.ts';
 import { remoteCheckEnvironment } from './merge.ts';
 import { agentAdapter, requireOriginalProofProfile } from './agents.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -527,6 +528,125 @@ export class WorkerTasks {
     if (!worker) throw new TaskHeldForDependenciesError();
     return worker;
   }
+  /** A stopped zero counter alone cannot establish that its source has never been used. */
+  private assertStoppedPrelaunchEvidenceAbsent(task: Task): void {
+    const refuse = (evidence: unknown): never => {
+      throw new Error(
+        `prelaunch amendment refuses prior or unknown execution evidence: ${JSON.stringify({
+          taskId: task.id,
+          attempt: task.currentAttempt,
+          state: task.state,
+          evidence,
+        })}`,
+      );
+    };
+    const metadata = (path: string): Record<string, unknown> => {
+      try {
+        if (!lstatSync(path).isFile()) return refuse(path);
+        const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return refuse(path);
+        return value as Record<string, unknown>;
+      } catch (error) {
+        return refuse({ path, cause: String(error) });
+      }
+    };
+    for (const table of ['worker_integration_plans', 'worker_worktree_cleanup'])
+      if (this.store.db.query(`SELECT 1 FROM ${table} WHERE task_id=? LIMIT 1`).get(task.id)) refuse(table);
+    if (
+      this.store.db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='landing_queue'").get() &&
+      this.store.db.query('SELECT 1 FROM landing_queue WHERE task=? LIMIT 1').get(task.id)
+    )
+      refuse('landing_queue');
+    const event = this.store
+      .events(task.id)
+      .find(
+        (entry) =>
+          entry.attempt !== 0 ||
+          ![
+            'start-requested',
+            'held-task-released',
+            'prelaunch-contract-amended',
+            'stopped',
+            'cancelled-dependency-reported',
+            'cancelled-dependency-notice',
+          ].includes(entry.kind),
+      );
+    if (event) refuse(event);
+    if (
+      this.store.db
+        .query(`SELECT 1 FROM flow_events WHERE task_id=? AND
+      (attempt<>0 OR stage NOT IN ('dispatch','start') OR action NOT IN ('dispatched','requested','closed')) LIMIT 1`)
+        .get(task.id)
+    )
+      refuse('execution flow history');
+    if (
+      this.store.db
+        .query(`SELECT 1 FROM worker_retry_intents WHERE task_id=? AND
+      (attempt<>0 OR json_extract(body,'$.status') IS NOT 'pending' OR json_extract(body,'$.nextAttempt') IS NOT NULL) LIMIT 1`)
+        .get(task.id)
+    )
+      refuse('advanced start intent');
+    try {
+      if (!lstatSync(task.worktree).isDirectory()) refuse(task.worktree);
+    } catch (error) {
+      refuse({ path: task.worktree, cause: String(error) });
+    }
+    for (const directory of ['runs', 'evidence']) {
+      const path = join(this.settings.stateDirectory, directory, task.id);
+      try {
+        lstatSync(path);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        refuse({ path, cause: String(error) });
+      }
+      refuse(path);
+    }
+    // Read retained metadata only. No producer import, process probe, cleanup or custody reclassification.
+    const checks = join(task.worktree, '.temp/goal/checks');
+    const registry = join(this.settings.stateDirectory, 'check-registry');
+    for (const directory of [
+      join(checks, 'runs'),
+      join(checks, 'results'),
+      join(checks, 'custody/proofs'),
+      join(checks, 'custody/history'),
+      join(checks, 'custody/receipts'),
+      join(checks, 'custody/stopping'),
+      join(checks, 'custody/cancelled'),
+      join(checks, 'custody/remote'),
+      join(checks, 'custody/ready'),
+      registry,
+      join(registry, 'proof-reservations'),
+      join(registry, 'proof-claims'),
+    ]) {
+      let names: string[];
+      try {
+        if (!lstatSync(directory).isDirectory()) refuse(directory);
+        names = readdirSync(directory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        refuse({ path: directory, cause: String(error) });
+      }
+      for (const name of names!) {
+        if (!name.endsWith('.json')) continue;
+        const path = join(directory, name);
+        let value = metadata(path);
+        // A check claim aliases its token claim. Resolve that one explicit relation for owner attribution only.
+        if (directory === join(registry, 'proof-claims') && name.startsWith('check-')) {
+          if (typeof value.token !== 'string' || !nativeCheckId.test(value.token)) refuse(path);
+          const claim = metadata(join(directory, `${(value.token as string).toLowerCase()}.json`));
+          if (claim.token !== value.token || claim.checkId !== name.slice(6, -5)) refuse(path);
+          value = claim;
+        }
+        const ownership = value.ownership as Record<string, unknown> | undefined;
+        const binding = value.binding as Record<string, unknown> | undefined;
+        const owners = [value.taskId, ownership?.taskId, binding?.taskId].filter(
+          (id): id is string => typeof id === 'string' && id.length > 0,
+        );
+        // Even terminal custody is historical use; unowned or unreadable metadata stays unknown.
+        if (!owners.length || owners.includes(task.id)) refuse(path);
+      }
+    }
+  }
   /** Replace ordinary input before its first start, without scheduling or touching its capacity ticket. */
   amend(
     taskId: string,
@@ -542,20 +662,22 @@ export class WorkerTasks {
         if (
           options.expectedAttempt !== 0 ||
           task.currentAttempt !== 0 ||
-          !['ready', 'held'].includes(task.state) ||
+          !['ready', 'held', 'stopped'].includes(task.state) ||
           attempts.length ||
           task.integratedCommit ||
           task.mergedCommit ||
+          task.integratedBase ||
+          task.integratedCommits?.length ||
           task.proofAuthorization ||
           task.proofRun ||
           (task.state === 'held' && !task.brief.after.length) ||
           task.brief.kind === 'verification' ||
-          this.store.proofReservation(taskId, 0) ||
+          this.store.db.query('SELECT 1 FROM worker_proof_reservations WHERE task_id=? LIMIT 1').get(taskId) ||
           this.store.db.query('SELECT 1 FROM worker_records WHERE task_id=? LIMIT 1').get(taskId)
         ) {
           const current = attempts.at(-1);
           throw new Error(
-            `prelaunch amendment requires an ordinary never-started ready/held task: ${JSON.stringify({
+            `prelaunch amendment requires an ordinary never-started ready/held/stopped task: ${JSON.stringify({
               taskId,
               attempt: task.currentAttempt,
               state: task.state,
@@ -575,6 +697,7 @@ export class WorkerTasks {
         });
         if (!authenticated || authenticated.id !== owner.id || authenticated.sessionId !== owner.sessionId)
           throw new Error('prelaunch amendment requires a live unambiguous authenticated manager session');
+        if (task.state === 'stopped') this.assertStoppedPrelaunchEvidenceAbsent(task);
         const submitted = this.validateBrief(options.brief, taskId, owner);
         if (submitted.brief.kind === 'verification')
           throw new Error('use proof registration for verification contracts');
@@ -606,6 +729,7 @@ export class WorkerTasks {
         });
         this.store.event({ taskId, attempt: 0 }, 'prelaunch-contract-amended', {
           actor: owner,
+          ...(task.state === 'stopped' ? { previousState: task.state } : {}),
           previous: { path: task.briefPath, sha256: briefHash(task.brief.markdown), markdown: task.brief.markdown },
           current: { path: acceptedPath, sha256: contractSha256, markdown: submitted.brief.markdown },
         });

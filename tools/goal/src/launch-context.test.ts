@@ -7,6 +7,7 @@ import { acquireDirectoryLease } from './lease.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { captureLaunchContext } from './launch-context.ts';
 import { WorkerJob } from './job.ts';
+import { SqliteLandingQueue } from './land.ts';
 import { importAttempt } from './import-attempt.ts';
 import { git, WorkerTasks } from './tasks.ts';
 import { launchCommand, workerActivityBaseline } from './launch.ts';
@@ -261,6 +262,165 @@ test('prelaunch amendment supports genuinely held zero, preserves frozen input a
       '"state":"integrated"',
     );
     expect(h.store.attempts(task.id)).toEqual([]);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('prelaunch amendment deliberately replaces stopped zero input without restarting historical or unknown custody', async () => {
+  const h = harness();
+  try {
+    const owner = prelaunchOwner(h);
+    h.settings.integration.operationsManager = 'operations';
+    const operations = prelaunchOwner(h, 'operations');
+    const stranger = prelaunchOwner(h, 'other');
+    const dependency = prelaunchTask(h);
+    const integrated = prelaunchTask(h);
+    h.store.updateTask({ taskId: integrated.id, attempt: 0 }, (current) => {
+      current.state = 'integrated';
+      current.integratedCommit = integrated.base;
+    });
+    const text =
+      markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}, ${integrated.id}]`) +
+      '\n```ts path=result.txt\nunchanged acceptance\n```\n';
+    const task = prelaunchTask(h, text);
+    await h.tasks.stop(task.id);
+    const ref = { taskId: task.id, attempt: 0 };
+    const stopCause = { reason: 'Owner stopped the original input before admission.' };
+    h.store.event(ref, 'stopped', stopCause);
+    h.store.saveRetryIntent(ref, {});
+    h.store.updateTask(ref, (current) => {
+      current.priorityHistory = [
+        { value: 'normal', setter: null, grantor: null, at: task.createdAt, provenance: { kind: 'programmatic' } },
+      ];
+      current.priorityGrants = [];
+    });
+    const intent = h.store.retryIntent(ref);
+    const original = h.store.task(task.id);
+    const source = git(h.root, ['rev-parse', 'HEAD']);
+    expect(h.tasks.amend(task.id, { expectedAttempt: 0, brief: task.briefPath }, owner.actor).status).toBe('unchanged');
+    expect(h.store.task(task.id)).toEqual(original);
+    const replacement = fullBrief(h.root, 'stopped-replacement', text + '\nUse the complete current contract.\n');
+    const options = { expectedAttempt: 0, brief: replacement };
+    expect(() => h.tasks.amend(task.id, options, null)).toThrow('authenticated');
+    expect(() => h.tasks.amend(task.id, options, stranger.actor)).toThrow('authenticated');
+    expect(() => h.tasks.amend(task.id, { ...options, expectedAttempt: 1 }, owner.actor)).toThrow('"attempt":0');
+    const changedFrozen = fullBrief(
+      h.root,
+      'stopped-frozen-change',
+      text.replace('unchanged acceptance', 'changed assertion'),
+    );
+    expect(() => h.tasks.amend(task.id, { ...options, brief: changedFrozen }, owner.actor)).toThrow(
+      'frozen acceptance',
+    );
+    expect(h.store.task(task.id)).toEqual(original);
+    const printed: string[] = [];
+    expect(
+      await runWorkerCommand('amend', [task.id, '--expected-attempt', '0', '--brief', replacement], {
+        tasks: h.tasks,
+        env: owner.env,
+        print: (value) => printed.push(value),
+      }),
+    ).toBe(0);
+    expect(JSON.parse(printed[0]!)).toMatchObject({ taskId: task.id, attempt: 0, status: 'amended' });
+    const accepted = h.store.task(task.id);
+    expect(accepted.state).toBe('held');
+    expect(accepted.brief.after).toEqual([dependency.id, integrated.id]);
+    expect(h.tasks.dependenciesMet(accepted)).toBe(false);
+    expect({ ...accepted, state: original.state, brief: original.brief, briefPath: original.briefPath }).toEqual(
+      original,
+    );
+    expect(git(h.root, ['rev-parse', 'HEAD'])).toBe(source);
+    expect(readFileSync(original.briefPath, 'utf8')).toBe(text);
+    expect(h.store.events(task.id, 0).find((event) => event.kind === 'stopped')?.body).toBe(JSON.stringify(stopCause));
+    expect(JSON.parse(h.store.events(task.id, 0).at(-1)!.body).previousState).toBe('stopped');
+    expect(h.store.retryIntent(ref)).toEqual(intent);
+    expect(h.store.attempts(task.id)).toEqual([]);
+    // Configured operations delivers with its own genuine identity, including this deliberate stopped transition.
+    await h.tasks.stop(task.id);
+    const latest = fullBrief(h.root, 'stopped-operations-replacement', text + '\nUse the latest complete contract.\n');
+    expect(h.tasks.amend(task.id, { expectedAttempt: 0, brief: latest }, operations.actor).status).toBe('amended');
+    expect(h.store.task(task.id).state).toBe('held');
+    expect(h.store.task(task.id).brief.after).toEqual([dependency.id, integrated.id]);
+    expect(h.store.retryIntent(ref)).toEqual(intent);
+
+    // A corrupt/legacy zero counter cannot erase any real prior invocation, settlement, proof or physical evidence.
+    const evidence: Array<(id: string) => void> = [
+      (id) => {
+        h.store.db.query('INSERT INTO worker_attempts VALUES (?,?,?)').run(
+          id,
+          1,
+          JSON.stringify({
+            taskId: id,
+            attempt: 1,
+            state: 'stopped',
+            process: null,
+            logPath: 'original-worker.jsonl',
+          }),
+        );
+      },
+      (id) => {
+        h.store.db.query('INSERT INTO worker_records VALUES (?,?,?)').run(id, 1, '{}');
+      },
+      (id) => {
+        h.store.db
+          .query('INSERT INTO worker_proof_reservations VALUES (?,?,?,?,?,?)')
+          .run(randomUUID(), 'fixture', id, 2, 'released', '{}');
+      },
+      (id) => {
+        h.store.db.query('INSERT INTO worker_integration_plans VALUES (?,?,?)').run(id, 1, '{}');
+      },
+      (id) => {
+        new SqliteLandingQueue(h.store.db, h.store);
+        h.store.db
+          .query('INSERT INTO landing_queue(task,attempt,request,outcome,delivered) VALUES (?,?,?, ?,1)')
+          .run(id, 1, '{}', '{"passed":true}');
+      },
+      (id) => {
+        h.store.event({ taskId: id, attempt: 0 }, 'historical-proof-reader-unavailable', { custody: 'unknown' });
+      },
+      (id) => {
+        const directory = join(h.settings.stateDirectory, 'runs', id);
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, 'original.jsonl'), 'retained original worker output');
+      },
+      (id) => {
+        const directory = join(h.settings.stateDirectory, 'check-registry', 'proof-reservations');
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, `${randomUUID()}.json`), JSON.stringify({ binding: { taskId: id, attempt: 1 } }));
+      },
+      (id) => {
+        const directory = join(h.root, '.temp/goal/checks/results');
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(
+          join(directory, `${randomUUID()}.json`),
+          JSON.stringify({
+            status: 'finished',
+            exitCode: 0,
+            ownership: { taskId: id, attempt: 1 },
+          }),
+        );
+      },
+      () => {
+        const directory = join(h.root, '.temp/goal/checks/custody/history');
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, `${randomUUID()}.json`), '{unreadable custody');
+      },
+    ];
+    for (const recordEvidence of evidence) {
+      const stopped = prelaunchTask(h);
+      await h.tasks.stop(stopped.id);
+      recordEvidence(stopped.id);
+      const before = JSON.stringify(h.store.task(stopped.id));
+      const history = h.store.events(stopped.id);
+      const files = readdirSync(join(h.settings.stateDirectory, 'briefs'));
+      expect(() => h.tasks.amend(stopped.id, options, owner.actor)).toThrow('prelaunch amendment');
+      expect(JSON.stringify(h.store.task(stopped.id))).toBe(before);
+      expect(h.store.events(stopped.id)).toEqual(history);
+      expect(readdirSync(join(h.settings.stateDirectory, 'briefs'))).toEqual(files);
+    }
+    expect(h.store.attempts(task.id)).toEqual([]);
+    expect(h.store.task(task.id).state).toBe('held');
   } finally {
     h.dispose();
   }

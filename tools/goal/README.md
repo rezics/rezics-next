@@ -61,15 +61,21 @@ bun tools/goal/src/cli.ts amend <task> --expected-attempt 0 --brief <file>
 
 `WorkerTasks.amend(taskId, { expectedAttempt: 0, brief }, actor)` is the same receiving boundary. It requires the live,
 unambiguous persisted provider session of the owning manager or configured operations manager. Only ordinary
-generation-zero tasks in `ready` or genuinely dependency-held `held` state are eligible, with no attempt, check,
-settlement or completed state. The submitted brief passes ordinary path, risk-area and dependency validation, keeps
+generation-zero tasks in `ready`, genuinely dependency-held `held`, or deliberately selected never-started `stopped`
+state are eligible, with no attempt, check, settlement or completed state. A zero counter alone is insufficient:
+stopped tasks refuse any historical attempt, result, landing, integration, proof reservation/registration, worker
+run/evidence path or known or unknown check custody. Retained metadata with no readable ownership cannot establish
+absence of custody and refuses replacement. The submitted full brief passes ordinary path, risk-area and dependency validation, keeps
 the same Goal and manager, preserves normal priority and its grant/history bytes, and retains frozen acceptance
 blocks unchanged. Operations can deliver this same-priority amendment directly; no owner impersonation or priority
 grant is required. Verification registration continues to use its separate existing proof entry.
 
 Under the task lease and SQLite write transaction, amendment saves an immutable current brief and archives both
 contracts, paths and hashes in the existing task events. Identical input returns `unchanged`; accepted changes return
-`amended`, each with the task, generation and current contract hash. A pending first-start intent and capacity ticket
+`amended`, each with the task, generation and current contract hash. Identical stopped input stays stopped. A changed
+stopped contract records its prior stopped state, retains existing stop history and branch/worktree/base/source,
+and enters `held` while any genuine dependency remains unmet, otherwise `ready`. This explicit authenticated full
+replacement is the only stopped-zero transition added here; it does not restart other stopped tasks. A pending first-start intent and capacity ticket
 remain the same single intent and ticket. Amendment does not dispatch, retry, create an attempt, start a provider or
 bypass capacity. The waiting launcher rereads the accepted task under its lease after capacity admission, so the first
 native prompt contains the full latest canonical contract and current verification policy. Removing a held task's last
