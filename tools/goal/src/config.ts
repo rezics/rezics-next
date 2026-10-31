@@ -184,7 +184,14 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   };
   keys(
     integration,
-    [...Object.keys(defaults.integration), 'managerDirectory', 'inboxDirectory', 'managerSocket', 'tmuxSocket'],
+    [
+      ...Object.keys(defaults.integration),
+      'managerDirectory',
+      'inboxDirectory',
+      'managerSocket',
+      'tmuxSocket',
+      'operationsManager',
+    ],
     'integration',
   );
   const managerLimits = {
@@ -267,6 +274,9 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       tmuxSocket: path(integration.tmuxSocket, join(stateDirectory, 'tmux.sock')),
       termspacesCommand: text(integration.termspacesCommand, 'termspacesCommand'),
       supermanager: text(integration.supermanager, 'supermanager'),
+      ...(integration.operationsManager === undefined
+        ? {}
+        : { operationsManager: text(integration.operationsManager, 'operationsManager') }),
       managerLimits: {
         turns: positive(managerLimits.turns, 'managerLimits.turns'),
         turnsWithoutDecision: positive(managerLimits.turnsWithoutDecision, 'managerLimits.turnsWithoutDecision'),

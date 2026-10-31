@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute, win32 } from 'node:path';
 import type { AcceptancePlacement, Brief, TaskKind } from './types.ts';
+import { parseProofMetadata } from './verification.ts';
 
 export type RiskOwnership = { version: number; areas: Record<string, string[]> };
 /** Deliberately small path language: literals, *, ?, and whole-segment **. */
@@ -224,6 +225,7 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
     'claim',
     'specification',
     'research',
+    'verification',
     'mechanical',
   ];
   if (!kinds.includes(raw.kind as TaskKind)) throw new Error('unsupported brief kind');
@@ -231,7 +233,10 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
   const placement = acceptance.placement;
   if (placement !== undefined && placement !== 'local' && placement !== 'default')
     throw new Error('acceptance.placement must be local or default');
-  const estimate = object(raw.estimate, 'estimate');
+  const estimate = object(
+    raw.estimate ?? (raw.kind === 'verification' ? { lines: 1, files: 1 } : undefined),
+    'estimate',
+  );
   for (const key of ['lines', 'files'])
     if (!Number.isSafeInteger(estimate[key]) || (estimate[key] as number) < 1)
       throw new Error(`estimate.${key} must be positive`);
@@ -241,7 +246,8 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
     goal: text(raw.goal, 'goal'),
     manager: text(raw.manager ?? raw.goal, 'manager'),
     kind: raw.kind as TaskKind,
-    paths: list(raw.paths, 'paths', true),
+    paths: list(raw.paths ?? (raw.kind === 'verification' ? [] : undefined), 'paths', raw.kind !== 'verification'),
+    ...(raw.kind === 'verification' ? { proof: parseProofMetadata(raw.proof) } : {}),
     riskAreas: list(raw.riskAreas, 'riskAreas'),
     ...(raw.target === 'stabilize' ? { target: 'stabilize' as const } : {}),
     ...(raw.model === undefined ? {} : { model: text(raw.model, 'model') }),
@@ -261,6 +267,13 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
     hostileInput: boolean(raw.hostileInput, 'hostileInput', false),
     markdown,
   };
+  if (brief.kind === 'verification') {
+    if (brief.paths.length || brief.riskAreas.length || brief.criticalPath || brief.target || placement === 'local')
+      throw new Error(
+        'verification is ordinary, read-only original acceptance; paths, risk areas, target and local override are forbidden',
+      );
+    if (/^\s*```[^\n]*\bpath=/m.test(markdown)) throw new Error('verification cannot supply frozen input blocks');
+  } else if (raw.proof !== undefined) throw new Error('proof metadata requires kind verification');
   if (brief.acceptance.placement === 'local') validateLocalAcceptanceCommand(brief.acceptance.command);
   brief.paths.forEach(validatePath);
   for (const area of brief.riskAreas)

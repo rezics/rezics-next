@@ -277,6 +277,7 @@ export function makeRecord(
     taskId: task.id,
     attempt: attempt.attempt,
     taskClass: task.taskClass,
+    taskKind: task.brief.kind,
     profile: attempt.profile,
     pool: attempt.pool,
     tableVersion: attempt.tableVersion,

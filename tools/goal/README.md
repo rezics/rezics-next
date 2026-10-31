@@ -704,6 +704,31 @@ the train.
 
 ## Commands and managers
 
+### Roles and delegation
+
+The supermanager sets direction and the managers own the work. This applies to every supermanager and every Goal.
+
+- **Managers talk to each other first.** Any manager may message any other with
+  `bun tools/goal/src/cli.ts inbox send <manager> instruction "<message>"`. A question about another Goal's contract goes
+  to that Goal's manager. The producer decides its interface and the consumer adapts; the two settle it within one
+  exchange and record it in the owner document.
+- **Managers decide inside their Goal.** Contract details, frozen expectations the Goal owns, design choices within the
+  maintainer's references, and which slices to run are the manager's decisions. When unsure, research primary sources
+  first, then decide.
+- **Escalate rarely and once.** A manager sends the supermanager only a deadlock that one exchange between owners did
+  not settle, a change to the maintainer's direction or scope, or something only the maintainer can provide, with the
+  options and a recommendation.
+- **Operations belong to the delivery-system Goal.** Manager-host liveness, stuck or stale checks, hung remote runs,
+  worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal, promotion and the hourly
+  efficiency report are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
+  that owns the check scripts. System alerts go to those owners.
+- **Visual review belongs to the design-authority Goal.** The Goal that owns the shell and design system reviews every
+  visible slice by screenshot against the maintainer's references and reopens defects with the owning Goal; each
+  product Goal owns its user journeys end to end, pages included.
+- **The supermanager keeps direction.** Direction, priorities and scope with the maintainer, the allowance runway,
+  critical-priority grants, deadlocks between owners, efficiency strategy, and a sampled review of the product, not
+  every slice. When a detail reaches the supermanager, it forwards it to the owner instead of doing it.
+
 ### Check result reuse
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the
@@ -911,3 +936,82 @@ Promotion selects the latest eligible integration head by its expected ref ident
 `dev-verified` ref to pin a candidate. Each frozen promotion candidate still passes its full required gate, ancestry,
 quarantine, stabilization, ref-race and publication checks; known verifier findings do not turn a failed promotion
 command into a pass.
+
+### Original integrated journey proofs
+
+`kind: verification` is an ordinary Codex worker on the implementation route. It is a read-only proof record,
+separate from a source task: it needs no declared source paths, source estimate, edit, commit, receipt or landing.
+The authenticated owning manager, or `integration.operationsManager` when configured locally, registers it through
+normal dispatch or continues an existing stopped proof task through `retry --brief`. A verification brief cannot
+choose critical priority, frozen inputs, product paths, a different target or a local placement override.
+
+For example, write `.temp/goal/original-proof.md` with the following front matter and a read-only journey description.
+Replace the example source task and full commit with the retained original and captured integration head, and copy
+that original's acceptance argv exactly (the example presumes that exact original command):
+
+```yaml
+---
+goal: web
+manager: web
+kind: verification
+proof:
+  journey: Original navigation journey
+  sourceTasks: [original-task-id]
+  sourceCommit: 0123456789abcdef0123456789abcdef01234567
+riskAreas: []
+acceptance:
+  command: [bun, test, apps/web/tests/navigation.test.ts]
+  tests: [Original navigation journey]
+  failing: false
+criticalPath: false
+waiting: []
+---
+Observe the original journey on the captured source. Source and tests are read-only.
+```
+
+From that authenticated manager session, register with
+`bun tools/goal/src/cli.ts dispatch .temp/goal/original-proof.md`, or continue the same stopped task with
+`bun tools/goal/src/cli.ts retry <existing-proof-task> --brief .temp/goal/original-proof.md`.
+Neither command reopens any integrated source original. All originals must belong to this Goal and owner and be
+integrated or merged ancestors of the captured commit. A group retains every whole identical original argv, or the
+ordered deduplicated union of explicit Bun test files or Kernel/Auth `bun run --cwd <service> check` files
+with identical raw prefixes, including cwd/env arguments. Mixed bare and `env -u` groups stay separate.
+Shortened selections, changed flags and broad root/gate campaigns are refused. Explicit command files must exist in
+the captured Git tree before native execution can be granted. Advancing integration invalidates that capture.
+
+`verification.ts` exports `ProofProducer.bind(ProofBinding): Promise<ProofBindResult>`,
+`productionProofProducer`, `nativeProofBinding`, and `receiveProofStart`. `ProofBinding` version 1 carries the
+once-generated `reservationToken` and logical `checkId`, `goal`, `taskId`, `attempt`, exact `sourceCommit`/`sourceTree`,
+original `argv` and canonical `cwd`. The adapter maps `reservationToken` to the native `ControllerProofBindingV1.token`
+without changing any other fact. It consumes the delivered async `startControllerWorkerCheck(binding)` API from
+`scripts/worker-check.ts`: matching `started`/`replayed` becomes bound evidence with its exact result path;
+`refused-never-started` alone releases never-started capacity. Unavailable/unknown, malformed fields, changed binding
+or result paths retain uncertain capacity. Captured source must contain the delivered producer integration commit;
+older snapshots remain unavailable and require an owner-authorized fresh capture, never a source swap under a token.
+
+After SQLite admission, the adapter publishes the native reservation in `<state>/check-registry` using the actual
+`validateControllerProofBinding`, `controllerProofReservationPath`, closed reservation validator and `withCheckFence`.
+The async producer call has an isolated process environment for its exact owner/attempt/registry; the existing native
+wrapper owns all execution. Terminal observation validates the actual `validControllerProofRegistration` for every
+physical incarnation and revokes the reservation under that same fence before SQLite releases capacity. The adapter
+never writes native result, runner or custody records. Full controller release validation remains required before
+runtime activation; local typing and fixture validation do not certify native acceptance.
+
+The existing WorkerStore SQLite write transaction admits at most three active proof reservations per Goal, shared
+by all controllers. Pending retries wait without a model through the existing retry-intent path. Model exit, waiting,
+crash, missing registration and unknown custody retain capacity. Only an owned terminal custody result, or explicit
+proven-never-started refusal, releases it. The wrapper's infrastructure rerun retains the same logical reservation.
+Historical unbound managed UUIDs are quarantined against proof capacity until their own terminal custody is known;
+their sessions and raw evidence remain intact, with no retroactive source/token/admission labels. Conservative
+quarantine also covers older product checks whose saved detached UUIDs cannot establish proof identity.
+The adapter reads actual `readWorkerCheckRecord` and `readWorkerCheckHistory` exports; physical records and terminal
+custody proofs for every incarnation are retained with the immutable observation. It never writes native records.
+
+Only a bound registered task gets the final original-proof protocol, including on same-session wake. Global minimal
+verification stays unchanged for product/fix tasks. The binder already started or replayed the one logical invocation;
+the worker receives its current owned records and returns the bare managed UUID while running. It never receives an
+unbound invocation that could mint a second UUID. Goal resumes the same session with actual records, without model polling or an automatic proof fix/retry. Terminal zero,
+valid owned custody, unchanged captured source and structured worker success with `checks: []` settle as `verified`.
+A verified proof never enters the landing queue and never implies main advancement or whole-Goal completion. Reports
+count `verifiedProofs` separately from landed source tasks. Failures retain exact records and log references and reach
+the owning manager for a separate minimal product fix.

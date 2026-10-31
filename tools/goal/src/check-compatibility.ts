@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { JSON5 } from 'bun';
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -13,7 +14,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { hostname } from 'node:os';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { createRequire } from 'node:module';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CONTRACT_PATH = fileURLToPath(new URL('../contracts/check-scripts.json', import.meta.url));
@@ -420,7 +422,10 @@ function startWorkerCheck(
   delete env.KERNEL_CHECK_REMOTE;
   delete env.REMOTE_CHECK_PRIORITY;
   delete env.GOAL_CHECK_WAIT_FILE;
+  // These local probes do not belong to the invoking controller's task attempt or registry.
   delete env.GOAL_TASK_ID;
+  delete env.GOAL_ATTEMPT;
+  delete env.GOAL_CHECK_REGISTRY;
   const result = run(command, scratchRoot, env);
   const ids = [...result.stdout.matchAll(/^check: id ([0-9a-f-]{36})$/gm)].map((match) => match[1]!);
   const id = ids[0];
@@ -727,13 +732,33 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
 
     if (binary) {
       const packageRoot = join(scriptsRoot, 'node_modules/bun');
-      const platformRoot = join(scriptsRoot, 'node_modules', binary.package);
+      // Inspect the installed package's dependency graph, excluding global lookup paths.
+      // Read metadata directly: cached subpath resolution can hide restored or missing files.
+      const packageManifest = realpathSync(join(packageRoot, 'package.json'));
+      const dependencyPaths = (createRequire(packageManifest).resolve.paths(binary.package) ?? []).filter((path) => {
+        const fromAncestor = relative(dirname(path), dirname(packageManifest));
+        return (
+          basename(path) === 'node_modules' &&
+          !isAbsolute(fromAncestor) &&
+          fromAncestor !== '..' &&
+          !fromAncestor.startsWith(`..${sep}`)
+        );
+      });
+      // A linked checkout can expose a hoisted edge outside the real package's ancestors.
+      dependencyPaths.push(join(scriptsRoot, 'node_modules'));
+      const platformDirectory = dependencyPaths
+        .map((path) => join(path, binary.package))
+        .find((path) => existsSync(path) && statSync(path).isDirectory());
+      if (!platformDirectory) throw new Error(`Installed Bun dependency ${binary.package} is missing.`);
+      const platformRoot = realpathSync(platformDirectory);
+      const platformManifest = join(platformRoot, 'package.json');
       const installed = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as {
         name?: string;
         version?: string;
         bin?: { bun?: string };
+        optionalDependencies?: Record<string, string>;
       };
-      const installedPlatform = JSON.parse(readFileSync(join(platformRoot, 'package.json'), 'utf8')) as {
+      const installedPlatform = JSON.parse(readFileSync(platformManifest, 'utf8')) as {
         name?: string;
         version?: string;
       };
@@ -741,12 +766,13 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
         installed.name === 'bun' &&
         installed.version === artifact.packageVersion &&
         installed.bin?.bun === 'bin/bun.exe' &&
+        installed.optionalDependencies?.[binary.package] === artifact.packageVersion &&
         installedPlatform.name === binary.package &&
         installedPlatform.version === artifact.packageVersion;
       pushCheck(
         checks,
         'workerCheck.bun.packages',
-        ['read', join(packageRoot, 'package.json'), join(platformRoot, 'package.json')],
+        ['read', packageManifest, platformManifest],
         installedOk,
         installedOk
           ? 'Installed Bun and platform package identities match the exact package pin.'
@@ -754,14 +780,25 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
         { package: installed, platformPackage: installedPlatform },
       );
       const resolved = realpathSync(lookup);
-      const installedBinary = realpathSync(join(platformRoot, binary.executable));
-      const packageBinary = realpathSync(join(packageRoot, 'bin/bun.exe'));
+      const platformBinaryPath = join(platformRoot, binary.executable);
+      // This pinned package's install.js optimizeBun renames the platform executable
+      // into bun/bin/bun.exe, retaining the optional package's metadata and edge.
+      // Only absence permits that layout; a present broken link or wrong copy fails.
+      const platformBinaryPresent = lstatSync(platformBinaryPath, { throwIfNoEntry: false }) !== undefined;
+      const installedBinary = platformBinaryPresent ? realpathSync(platformBinaryPath) : undefined;
+      const packageBinaryPath = join(dirname(packageManifest), 'bin/bun.exe');
+      const packageBinary = realpathSync(packageBinaryPath);
       const actualSha256 = createHash('sha256').update(readFileSync(resolved)).digest('hex');
-      const platformSha256 = createHash('sha256').update(readFileSync(installedBinary)).digest('hex');
-      const executableOk =
-        (resolved === packageBinary || resolved === installedBinary) &&
-        actualSha256 === binary.executableSha256 &&
-        platformSha256 === binary.executableSha256;
+      const platformSha256 =
+        installedBinary === undefined
+          ? undefined
+          : createHash('sha256').update(readFileSync(installedBinary)).digest('hex');
+      const layoutOk = platformBinaryPresent
+        ? (resolved === packageBinary || resolved === installedBinary) && platformSha256 === binary.executableSha256
+        : resolved === packageBinaryPath &&
+          packageBinary === packageBinaryPath &&
+          lstatSync(packageBinaryPath).isFile();
+      const executableOk = layoutOk && actualSha256 === binary.executableSha256;
       pushCheck(
         checks,
         'workerCheck.bun.executable',
@@ -773,11 +810,12 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
         {
           lookup,
           resolved,
-          installedBinary,
+          installedBinary: installedBinary ?? null,
           packageBinary,
+          layout: platformBinaryPresent ? 'retained' : 'moved',
           expectedSha256: binary.executableSha256,
           actualSha256,
-          platformSha256,
+          platformSha256: platformSha256 ?? null,
         },
       );
     }

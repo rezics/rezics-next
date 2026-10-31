@@ -1,3 +1,4 @@
+import { proofProtocolAuthorized, proofSourceUnchanged, type ProofReservation } from './verification.ts';
 import { type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
 import {
   closeSync,
@@ -85,9 +86,44 @@ function namedWorkerCheck(contractText: string): string | undefined {
   }
   return path.startsWith('/') && path.endsWith('/scripts/worker-check.ts') ? path : undefined;
 }
-type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'>;
+type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'> & Partial<Pick<Brief, 'kind' | 'proof'>>;
 /** Current acceptance-check and controller wake instructions, repeated at every prompt boundary. */
-export function workerCheckProtocol(worktree: string, briefOrContract: CheckProtocolBrief | string = ''): string {
+/** Whether `<state>/verification-mode` asks for minimal verification: workers type-check and land, checks run later. */
+export function minimalVerification(stateDirectory: string | undefined): boolean {
+  if (!stateDirectory) return false;
+  try {
+    return readFileSync(join(stateDirectory, 'verification-mode'), 'utf8').trim() === 'minimal';
+  } catch {
+    return false;
+  }
+}
+export function workerCheckProtocol(
+  worktree: string,
+  briefOrContract: CheckProtocolBrief | string = '',
+  stateDirectory?: string,
+  proofRun?: ProofReservation,
+): string {
+  if (typeof briefOrContract !== 'string' && proofProtocolAuthorized(briefOrContract, proofRun))
+    return [
+      'This registered original integrated journey proof has a task-scoped exception to minimal verification.',
+      `Captured source: ${proofRun!.binding.sourceCommit}; logical check UUID: ${proofRun!.binding.checkId}.`,
+      'Product source, tests and contracts are read-only. Do not edit, typecheck, commit, land or create receipts. Only check-owned ignored temporary or derived preparation under the original command is permitted.',
+      'The controller has already started or replayed this one bound invocation. Use its current evidence; do not start an unbound worker-check or another invocation.',
+      `Current owned check evidence: ${JSON.stringify(proofRun!.observation ?? { status: 'unknown', cause: 'Await controller evidence' })}.`,
+      `If the supplied check is running, immediately end this turn with {"status":"waiting","checks":["${proofRun!.binding.checkId}"]}. Goal resumes this same session from actual terminal records.`,
+      'Do not use --wait, ps, pgrep, log polling, duplicate invocation or an automatic model retry. The wrapper alone owns its one infrastructure rerun and holds the permit throughout.',
+      'Use supplied terminal results exactly. Missing, unknown, timed out, nonzero or invalid custody stays non-green. Route failed assertions and log evidence to the original Goal owner for a separate minimal product fix.',
+      'Finish with structured success and checks:[] only after the owned terminal check passes; no source commit or landing is required.',
+    ].join(' ');
+  if (minimalVerification(stateDirectory))
+    return [
+      'Verification is minimal for now: do not run the acceptance command in the brief, and do not run any native, database, browser, host or remote check, worker-check or remote-check.',
+      'Before finishing, run only the type check of the workspaces you changed, locally in the foreground from the worktree root (`bun run --cwd <workspace> typecheck`, or `bun scripts/typecheck.ts` for several), and fix every error it reports.',
+      'The type check of services/kernel or services/auth needs a compiler database: run it in the foreground with remote placement off, as `env -u KERNEL_CHECK_REMOTE bun run --cwd services/kernel typecheck` (or services/auth), which starts a local compiler database itself; wait for it to exit and read its status. It is not a worker-check, has no check id, and must never produce a waiting result; this is the only database use allowed.',
+      'Unit tests you wrote that need no database may be run directly with `bun test <file>` if they take seconds; nothing else.',
+      'Then commit and finish with the normal exit object and `"checks":[]`. The acceptance command runs after integration; a failure there comes back to you as a fix.',
+      'A previous session may contain instructions to start or wait on checks; they are superseded by this one.',
+    ].join(' ');
   const contractText = typeof briefOrContract === 'string' ? briefOrContract : briefOrContract.markdown;
   const placement: AcceptancePlacement =
     typeof briefOrContract === 'string' ? 'default' : (briefOrContract.acceptance?.placement ?? 'default');
@@ -167,6 +203,14 @@ export function workerPrompt(
         }
       })()
     : undefined;
+  if (task.brief.kind === 'verification')
+    return [
+      `Work only in ${task.worktree}, on branch ${task.branch}. The applicable AGENTS.md is already loaded.`,
+      `The main checkout ${mainCheckout} is read-only.`,
+      task.brief.markdown,
+      'Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.',
+      workerCheckProtocol(task.worktree, task.brief, join(mainCheckout, '.temp', 'goal'), task.proofRun),
+    ].join('\n\n');
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. The AGENTS.md that applies is already in your instructions; follow it.`,
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}${task.brief.kind === 'research' ? `, except the reference clones this research task keeps under ${mainCheckout}/.reference/` : ''}.`,
@@ -206,20 +250,21 @@ export function workerPrompt(
     resolutionFiles.length
       ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`
       : '',
-    workerCheckProtocol(task.worktree, task.brief),
+    workerCheckProtocol(task.worktree, task.brief, join(mainCheckout, '.temp', 'goal')),
   ]
     .filter(Boolean)
     .join('\n\n');
 }
 /** Per-attempt variables: the attempt's identity, and the base the kernel check selects affected tests against. */
 export function attemptEnvironment(
-  task: Pick<Task, 'id' | 'base'>,
+  task: Pick<Task, 'id' | 'base'> & Partial<Pick<Task, 'proofRun'>>,
   attempt: Pick<Attempt, 'attempt'>,
   stateDirectory?: string,
 ): Record<string, string> {
   return {
     GOAL_TASK_ID: task.id,
     GOAL_ATTEMPT: String(attempt.attempt),
+    ...(task.proofRun?.native ? { GOAL_CHECK_REGISTRY: task.proofRun.native.registry } : {}),
     KERNEL_CHECK_AFFECTED: task.base,
     ...remoteCheckEnvironment(stateDirectory),
     // The worker check wrapper appends its full wait here, in milliseconds per line; the class limit adds it back.
@@ -518,6 +563,15 @@ export async function launch(
 ): Promise<RunningWorker> {
   if (!agentAdapter(attempt.profile.cli).canResume) resumeSession = undefined;
   store.assertCurrent(attempt);
+  if (
+    task.brief.kind === 'verification' &&
+    (!task.proofRun?.native ||
+      !proofProtocolAuthorized(task.brief, task.proofRun) ||
+      task.proofRun!.binding.taskId !== task.id ||
+      task.proofRun!.binding.attempt !== attempt.attempt ||
+      !proofSourceUnchanged(task, task.proofAuthorization?.integrationBranch ?? ''))
+  )
+    throw new Error('Proof execution unavailable: no owned producer binding');
   recordFlow(store.db, {
     taskId: attempt.taskId,
     attempt: attempt.attempt,

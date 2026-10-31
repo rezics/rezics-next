@@ -334,3 +334,80 @@ test('a worker is told where reference projects are and to read the ones its con
   expect(prompt).toContain('/repo/main/.reference/');
   expect(prompt).toContain('read that source for the surface you build before you design it');
 });
+
+import { workerCheckProtocol, launchCommand } from './launch.ts';
+import { brief, fixturePool, temporaryDirectory } from './test-support.ts';
+import type { ProofReservation } from './verification.ts';
+
+test('original integrated journey proof bypasses only its registered task-scoped minimal ban at final Codex input', () => {
+  const directory = temporaryDirectory();
+  try {
+    const state = join(directory.path, '.temp/goal');
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(state, 'verification-mode'), 'minimal\n');
+    const contract = {
+      ...brief(),
+      kind: 'verification' as const,
+      paths: [],
+      markdown: 'Read-only original journey.',
+      proof: { journey: 'Original journey', sourceTasks: ['original'], sourceCommit: 'a'.repeat(40) },
+    };
+    const run: ProofReservation = {
+      status: 'bound',
+      binding: {
+        version: 1,
+        reservationToken: 'owned-token',
+        checkId: '11111111-1111-4111-8111-111111111111',
+        goal: contract.goal,
+        taskId: 'proof',
+        attempt: 1,
+        sourceCommit: contract.proof.sourceCommit,
+        sourceTree: 'b'.repeat(40),
+        argv: contract.acceptance.command,
+        cwd: directory.path,
+      },
+    };
+    const task: Task = {
+      id: 'proof',
+      sequence: 1,
+      brief: contract,
+      briefPath: '',
+      state: 'running',
+      worktree: directory.path,
+      branch: 'worker/proof',
+      base: contract.proof.sourceCommit,
+      taskClass: 'implementation',
+      currentAttempt: 1,
+      createdAt: new Date().toISOString(),
+      proofRun: run,
+    };
+    const prompt = workerPrompt(task, undefined, undefined, [], directory.path);
+    const [, argv] = launchCommand({
+      profile: { cli: 'codex', model: 'gpt-6.1-sol', effort: 'high', poolClass: 'default' },
+      pool: fixturePool(directory.path),
+      worktree: directory.path,
+      prompt,
+    });
+    expect(argv.join('\n')).toContain('task-scoped exception');
+    expect(argv.join('\n')).not.toContain('do not run the acceptance command');
+    expect(argv.join('\n')).not.toContain('before you start a check and again after each fix');
+    for (const boundary of [
+      workerCheckProtocol(directory.path, contract, state, run),
+      workerCheckProtocol(directory.path, contract, state, {
+        ...run,
+        status: 'released',
+        observation: { status: 'terminal', passed: true, cause: 'done', record: {}, physical: [] },
+      }),
+    ]) {
+      expect(boundary).toContain('same session');
+      expect(boundary).not.toContain('do not run the acceptance command');
+    }
+    expect(workerCheckProtocol(directory.path, contract, state)).toContain('do not run the acceptance command');
+    expect(workerCheckProtocol(directory.path, contract.markdown, state, run)).toContain(
+      'do not run the acceptance command',
+    );
+    expect(workerCheckProtocol(directory.path, brief(), state, run)).toContain('do not run the acceptance command');
+  } finally {
+    directory.close();
+  }
+});

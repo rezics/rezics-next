@@ -1,4 +1,4 @@
-import { agentAdapter, isAgentCli, pinnedModelProfile } from './agents.ts';
+import { agentAdapter, isAgentCli, pinnedModelProfile, requireOriginalProofProfile } from './agents.ts';
 import { readFileSync } from 'node:fs';
 import type { Brief, Profile, TaskClass } from './types.ts';
 
@@ -61,6 +61,7 @@ export function retryFallbacks(table: RoutingTable, taskClass: TaskClass): Profi
   return route ? [route.first, ...(route.fallbacks ?? [])] : [];
 }
 export function classifyTask(brief: Brief): TaskClass {
+  if (brief.kind === 'verification') return 'implementation';
   if (brief.kind === 'mechanical') return 'mechanical';
   // Research cites sources by nature; it keeps its own route (web search, the research model) instead of becoming a claim.
   if (brief.kind === 'research') return 'research';
@@ -82,6 +83,11 @@ export function routeTask(
   const taskClass = classifyTask(brief);
   if (taskClass === 'mechanical') throw new Error('mechanical work must run without a model');
   if (!Number.isSafeInteger(sequence) || sequence < 1) throw new Error('invalid task sequence');
+  if (brief.kind === 'verification') {
+    const profile = table.classes.implementation.first;
+    requireOriginalProofProfile(profile);
+    return { taskClass, profile, tableVersion: table.version, experiment: null };
+  }
   // A brief may pin its Codex model and effort, for example a deep research question on Sol max beside a Terra copy.
   if (brief.model !== undefined) {
     const profile = pinnedModelProfile(brief.model, brief.effort, table.classes[taskClass].first);

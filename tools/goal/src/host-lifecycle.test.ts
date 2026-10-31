@@ -20,7 +20,9 @@ function fixture(extra: NodeJS.ProcessEnv = {}) {
   const command = async (...args: string[]) => {
     const child = Bun.spawn([process.execPath, runtime, ...args], { env, stdout: 'pipe', stderr: 'pipe' });
     const [code, stdout, stderr] = await Promise.all([
-      child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
     ]);
     return { code, stdout, stderr };
   };
@@ -30,54 +32,76 @@ function fixture(extra: NodeJS.ProcessEnv = {}) {
 type Hosted = { child: ChildProcess; exited: Promise<void>; ready: Promise<void>; pid: number };
 function startHost(env: NodeJS.ProcessEnv): Hosted {
   const child = spawn(process.execPath, [runtime, '_manager-host'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-  const exited = new Promise<void>(resolve => child.once('exit', () => resolve()));
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
   const ready = new Promise<void>((resolve, reject) => {
     const lines = createInterface({ input: child.stdout! });
-    lines.once('line', line => {
+    lines.once('line', (line) => {
       lines.close();
-      if (line === 'ready') resolve(); else reject(new Error(line));
+      if (line === 'ready') resolve();
+      else reject(new Error(line));
     });
-    child.once('exit', code => reject(new Error(`host exited before ready (${code})`)));
+    child.once('exit', (code) => reject(new Error(`host exited before ready (${code})`)));
   });
   return { child, exited, ready, pid: child.pid! };
 }
 
 function children(pid: number): ProcessIdentity[] {
   try {
-    return readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8').trim().split(/\s+/)
-      .filter(Boolean).map(Number).map(child => processIdentity(child)).filter((child): child is ProcessIdentity => child !== null);
-  } catch { return []; }
+    return readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(Number)
+      .map((child) => processIdentity(child))
+      .filter((child): child is ProcessIdentity => child !== null);
+  } catch {
+    return [];
+  }
 }
 
 function hostIdentity(stateDirectory: string): ProcessIdentity | undefined {
   const lease = join(stateDirectory, 'manager.sock.lease');
   try {
-    const file = readdirSync(lease).find(name => name.endsWith('.json'));
-    return file ? JSON.parse(readFileSync(join(lease, file), 'utf8')) as ProcessIdentity : undefined;
-  } catch { return undefined; }
+    const file = readdirSync(lease).find((name) => name.endsWith('.json'));
+    return file ? (JSON.parse(readFileSync(join(lease, file), 'utf8')) as ProcessIdentity) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function signal(identity: ProcessIdentity | undefined, value: NodeJS.Signals): void {
   if (identity && sameProcess(identity)) {
-    try { process.kill(identity.pid, value); } catch {}
+    try {
+      process.kill(identity.pid, value);
+    } catch {}
   }
 }
 
-async function cleanHosted(stateDirectory: string, host?: Hosted, knownChildren: ProcessIdentity[] = []): Promise<void> {
+async function cleanHosted(
+  stateDirectory: string,
+  host?: Hosted,
+  knownChildren: ProcessIdentity[] = [],
+): Promise<void> {
   const owner = hostIdentity(stateDirectory);
   const appServers = join(stateDirectory, 'manager-app-servers.json');
   let recorded: ProcessIdentity[] = [];
-  try { recorded = JSON.parse(readFileSync(appServers, 'utf8')) as ProcessIdentity[]; } catch {}
-  const childrenBeforeExit = [...knownChildren, ...recorded, ...(host ? children(host.pid) : owner ? children(owner.pid) : [])];
+  try {
+    recorded = JSON.parse(readFileSync(appServers, 'utf8')) as ProcessIdentity[];
+  } catch {}
+  const childrenBeforeExit = [
+    ...knownChildren,
+    ...recorded,
+    ...(host ? children(host.pid) : owner ? children(owner.pid) : []),
+  ];
   if (host && host.child.exitCode === null && host.child.signalCode === null) {
     host.child.kill('SIGTERM');
-    await Promise.race([host.exited, new Promise(resolve => setTimeout(resolve, 5000))]);
+    await Promise.race([host.exited, new Promise((resolve) => setTimeout(resolve, 5000))]);
     if (host.child.exitCode === null && host.child.signalCode === null) host.child.kill('SIGKILL');
     await host.exited;
   } else if (!host && owner && sameProcess(owner)) {
     signal(owner, 'SIGTERM');
     const deadline = Date.now() + 5000;
-    while (sameProcess(owner) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    while (sameProcess(owner) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
     signal(owner, 'SIGKILL');
   }
   for (const child of childrenBeforeExit) signal(child, 'SIGKILL');
@@ -122,8 +146,21 @@ test('a host that finds a recorded app-server of a dead host stops it before res
     const recovery = startHost({ ...f.env, FAKE_APP_SERVER_MUST_STOP_PID: String(oldServer!.pid) });
     second = recovery;
     await second.ready;
-    const rpc = readFileSync(join(f.path, 'rpc.jsonl'), 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
-    const resumed = rpc.findLast(message => message.method === 'thread/resume');
+    // Socket readiness can precede asynchronous manager recovery.
+    const deadline = Date.now() + 5000;
+    let resumed: { method: string; oldProcessAlive?: boolean } | undefined;
+    while (!resumed) {
+      const rpc = readFileSync(join(f.path, 'rpc.jsonl'), 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      resumed = rpc.findLast((message) => message.method === 'thread/resume');
+      if (resumed) break;
+      if (second.child.exitCode !== null || second.child.signalCode !== null)
+        throw new Error('Recovery host exited before thread/resume.');
+      if (Date.now() >= deadline) throw new Error('Timed out waiting for recovered thread/resume RPC.');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
     expect(resumed?.oldProcessAlive).toBe(false);
     expect(sameProcess(oldServer!)).toBe(false);
   } finally {
@@ -142,31 +179,62 @@ test('recovery reopens each codex viewer window on the current endpoint', async 
   let endpoint = 'ws://127.0.0.1:10001';
   const services = {
     command: ['goal'],
-    windows: { register(_id: string, argv: string[], cwd: string) { registrations.push({ argv, cwd }); return '@1'; }, unregister() {} },
+    windows: {
+      register(_id: string, argv: string[], cwd: string) {
+        registrations.push({ argv, cwd });
+        return '@1';
+      },
+      unregister() {},
+    },
     checkCompletion: async () => ({ passed: false, evidencePath: 'completion.log', summary: 'not complete' }),
-    connect: async (): Promise<AppServer> => ({ endpoint, async request<T>(method: string, params: any): Promise<T> {
-      if (method === 'thread/start') return { thread: { id: 'thread-1' } } as T;
-      if (method === 'thread/goal/set') return { goal: { status: params.status, tokensUsed: 0, timeUsedSeconds: 0 } } as T;
-      if (method === 'turn/start') return { turn: { id: 'turn-1' } } as T;
-      if (method === 'thread/resume') return { thread: { id: params.threadId, turns: [] } } as T;
-      if (method === 'thread/goal/get') return { goal: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0 } } as T;
-      throw new Error(`unexpected RPC ${method}`);
-    }, onNotification() { return () => {}; }, close() {} }),
+    connect: async (): Promise<AppServer> => ({
+      endpoint,
+      async request<T>(method: string, params: any): Promise<T> {
+        if (method === 'thread/start') return { thread: { id: 'thread-1' } } as T;
+        if (method === 'thread/goal/set')
+          return { goal: { status: params.status, tokensUsed: 0, timeUsedSeconds: 0 } } as T;
+        if (method === 'turn/start') return { turn: { id: 'turn-1' } } as T;
+        if (method === 'thread/resume') return { thread: { id: params.threadId, turns: [] } } as T;
+        if (method === 'thread/goal/get') return { goal: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0 } } as T;
+        throw new Error(`unexpected RPC ${method}`);
+      },
+      onNotification() {
+        return () => {};
+      },
+      close() {},
+    }),
   };
-  const spec: ManagerSpec = { id: 'accounts', goal: 'accounts', objective: 'Manage accounts', brief: 'Wait for instructions',
-    cwd: f.path, engine: 'codex', pool: { id: 'fixture', codexHome: f.path, executable: 'codex' }, budget: 1000,
-    effort: 'low', supermanager: 'supermanager', limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 } };
+  const spec: ManagerSpec = {
+    id: 'accounts',
+    goal: 'accounts',
+    objective: 'Manage accounts',
+    brief: 'Wait for instructions',
+    cwd: f.path,
+    engine: 'codex',
+    pool: { id: 'fixture', codexHome: f.path, executable: 'codex' },
+    budget: 1000,
+    effort: 'low',
+    supermanager: 'supermanager',
+    limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
+  };
   const first = new ManagerSessions(db, inbox, services);
   try {
     await first.start(spec);
     await first.close();
     endpoint = 'ws://127.0.0.1:10002';
     const recovered = new ManagerSessions(db, inbox, services);
-    try { await recovered.recover(); }
-    finally { await recovered.close(); }
+    try {
+      await recovered.recover();
+    } finally {
+      await recovered.close();
+    }
     expect(registrations).toHaveLength(2);
     expect(registrations[1]!.argv).toContain(endpoint);
-  } finally { await first.close(); db.close(); f.close(); }
+  } finally {
+    await first.close();
+    db.close();
+    f.close();
+  }
 }, 10_000);
 
 test('a host whose state directory is gone exits', async () => {
@@ -176,7 +244,10 @@ test('a host whose state directory is gone exits', async () => {
     host = startHost(f.env);
     await host.ready;
     rmSync(f.path, { recursive: true, force: true });
-    const exited = await Promise.race([host.exited.then(() => true), new Promise<boolean>(resolve => setTimeout(() => resolve(false), 500))]);
+    const exited = await Promise.race([
+      host.exited.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 500)),
+    ]);
     expect(exited).toBe(true);
   } finally {
     await cleanHosted(f.path, host);
@@ -187,7 +258,11 @@ test('a host whose state directory is gone exits', async () => {
 test('every manager command starts the host when it is not running', async () => {
   const subcommands: [string, string[]][] = [
     ['start', ['--engine', 'codex', '--budget', '1000']],
-    ['stop', []], ['complete', []], ['decision', []], ['turn-start', []], ['turn-end', []],
+    ['stop', []],
+    ['complete', []],
+    ['decision', []],
+    ['turn-start', []],
+    ['turn-end', []],
   ];
   for (const [subcommand, flags] of subcommands) {
     const f = fixture();

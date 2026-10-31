@@ -1,3 +1,9 @@
+import {
+  ProofCapacityQueuedError,
+  readReservationObservation,
+  readProofObservation,
+  historicalProofTerminal,
+} from './verification.ts';
 import { taskCommits } from './workspace.ts';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { hostname } from 'node:os';
@@ -204,6 +210,7 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (task.currentAttempt !== ref.attempt) return;
       if (task.state === 'held') return;
+      if (task.brief.kind === 'verification' && !store.proofCapacityAvailable(task.brief.goal, task.id)) return;
       if (!['landing', 'ready', 'running', 'stopped'].includes(task.state)) {
         store.updateRetryIntent(ref, (value) => {
           value.status = 'started';
@@ -241,7 +248,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (worker) await this.follow(worker);
     } catch (error) {
       // Another process holds the task: the intent stays pending for the next sweep.
-      if (error instanceof LeaseHeldError) return;
+      if (error instanceof LeaseHeldError || error instanceof ProofCapacityQueuedError) return;
       if (error instanceof TaskHeldForDependenciesError || error instanceof StaleAttemptError) {
         store.updateRetryIntent(ref, (value) => {
           value.status = 'started';
@@ -262,7 +269,7 @@ export class WorkerJob implements GateOutcomeSink {
     try {
       await this.follow(await this.tasks.retry(taskId, options));
     } catch (error) {
-      if (error instanceof TaskHeldForDependenciesError) return;
+      if (error instanceof TaskHeldForDependenciesError || error instanceof ProofCapacityQueuedError) return;
       // Another process already started the attempt this start expected to create.
       if (options.expectedAttempt !== undefined && error instanceof StaleAttemptError) return;
       throw error;
@@ -310,7 +317,13 @@ export class WorkerJob implements GateOutcomeSink {
     if (task.workspace) return taskCommits(task).length > 0;
     return Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`])) > 0;
   }
-  private checkWakeMessage(attempt: Attempt, task: Task): string | null {
+  private async checkWakeMessage(attempt: Attempt, task: Task): Promise<string | null> {
+    if (task.brief.kind === 'verification') {
+      const observed = await readProofObservation(task);
+      if (observed.status === 'running') return null;
+      if (task.proofRun?.status === 'bound') this.tasks.store.observeProof(task.proofRun.binding, observed);
+      return `Original proof result: ${JSON.stringify(observed)}`;
+    }
     const checks = attempt.checks ?? [];
     if (!checks.length) return 'The waiting attempt has no saved check ids; resume and report this recovery issue.';
     const directory = join(task.worktree, '.temp/goal/checks');
@@ -404,12 +417,30 @@ export class WorkerJob implements GateOutcomeSink {
     if (!pool) throw new Error(`Waiting attempt refers to missing pool ${attempt.pool}`);
     const adapter = agentAdapter(attempt.profile.cli);
     const canResume = adapter.canResume && !!attempt.session;
+    if (task.brief.kind === 'verification' && !canResume) {
+      await this.endAsEnvironment(
+        attempt,
+        new Error('Original proof session unavailable; no replacement model may rerun it'),
+        false,
+        true,
+      );
+      return;
+    }
     const prompt = [
       ...(!canResume
         ? [workerPrompt(task, attempt.evidencePath, undefined, [], this.tasks.settings.mainCheckout)]
         : []),
       `The checks you started have finished or could not be found. ${message}`,
-      ...(canResume ? [workerCheckProtocol(task.worktree, task.brief)] : []),
+      ...(canResume
+        ? [
+            workerCheckProtocol(
+              task.worktree,
+              task.brief,
+              this.tasks.settings.stateDirectory,
+              this.tasks.store.task(task.id).proofRun,
+            ),
+          ]
+        : []),
       'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
     ].join('\n\n');
     const failureCount = () =>
@@ -431,6 +462,10 @@ export class WorkerJob implements GateOutcomeSink {
     };
     for (;;) {
       const before = failureCount();
+      if (task.brief.kind === 'verification' && before > 0) {
+        this.onAttemptExit(attempt);
+        return;
+      }
       const releaseCapacity = await awaitHostCapacity(
         this.tasks.store,
         this.tasks.settings.stateDirectory,
@@ -470,7 +505,7 @@ export class WorkerJob implements GateOutcomeSink {
             errorLine,
           });
         });
-        if (count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
+        if (task.brief.kind === 'verification' || count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
           await this.endAsEnvironment(
             { taskId: attempt.taskId, attempt: attempt.attempt },
             new Error(errorLine),
@@ -488,7 +523,7 @@ export class WorkerJob implements GateOutcomeSink {
       await this.follow(worker);
       const count = failureCount();
       if (count === before) return;
-      if (count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
+      if (task.brief.kind === 'verification' || count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
         await this.endAsEnvironment(
           { taskId: attempt.taskId, attempt: attempt.attempt },
           new Error(lastFailure()),
@@ -567,7 +602,12 @@ export class WorkerJob implements GateOutcomeSink {
         const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
         const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory });
         const steps = Object.values(measurement.steps).reduce((a, b) => a + b, 0);
-        if ((timeLimit || steps > limits.maxSteps) && !this.hasCommit(ref) && !stopping) {
+        if (
+          (timeLimit || steps > limits.maxSteps) &&
+          task.brief.kind !== 'verification' &&
+          !this.hasCommit(ref) &&
+          !stopping
+        ) {
           const evidencePath = evidenceBundle(task, store.attempt(ref));
           const event = {
             managerId: task.brief.manager,
@@ -698,7 +738,8 @@ export class WorkerJob implements GateOutcomeSink {
         await terminateProcessGroup(current.process, this.tasks.settings.terminationGraceMs);
         for (const process of current.auxiliaryProcesses)
           await terminateProcessGroup(process, this.tasks.settings.terminationGraceMs);
-        if (!task.workspace) await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs);
+        if (!task.workspace && task.brief.kind !== 'verification')
+          await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs);
       } catch (cleanupError) {
         detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(0, 4000);
       }
@@ -751,7 +792,10 @@ export class WorkerJob implements GateOutcomeSink {
           /* The failure event still carries the driver error. */
         }
         const event = {
-          managerId: reportToSupermanager ? this.tasks.settings.integration.supermanager : task.brief.manager,
+          managerId:
+            reportToSupermanager && task.brief.kind !== 'verification'
+              ? this.tasks.settings.integration.supermanager
+              : task.brief.manager,
           taskId: task.id,
           kind: 'environment' as const,
           summary: `environment: driver exception: ${detail}`.slice(0, 1000),
@@ -846,6 +890,25 @@ export class WorkerJob implements GateOutcomeSink {
     const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
     this.reportCancelledDependencies();
+    // The same recovery sweep also observes detached custody after a model exit or cancellation.
+    if (adoptRunning)
+      for (const check of store.historicalProofChecks()) {
+        const observation = await historicalProofTerminal(check);
+        if (observation.status === 'terminal') store.observeHistoricalProof(check, observation);
+      }
+    if (adoptRunning)
+      for (const run of store.activeProofReservations()) {
+        try {
+          const observation = await readReservationObservation(
+            run,
+            run.native?.registry ??
+              (run.status === 'bound' ? undefined : join(this.tasks.settings.stateDirectory, 'check-registry')),
+          );
+          if (observation.status === 'terminal') store.observeProof(run.binding, observation);
+        } catch {
+          // Missing reader/records never release uncertain capacity.
+        }
+      }
     if (adoptRunning) this.track(removeFinishedWorktree(this.tasks.settings, store).then(() => {}));
     // A held task released by a train that then ended, or handed off to newer code, has no driver: the host starts
     // it. Commands leave it to the host, so released tasks are not started from every command at once. The host
@@ -1037,7 +1100,7 @@ export class WorkerJob implements GateOutcomeSink {
         const driver = processIdentity();
         if (!driver) throw new Error('Cannot identify driver process');
         if (attempt.state === 'waiting') {
-          const message = this.checkWakeMessage(attempt, store.task(ref.taskId));
+          const message = await this.checkWakeMessage(attempt, store.task(ref.taskId));
           if (!message) continue;
           store.updateAttempt(ref, (current) => {
             current.driver = driver;
@@ -1148,6 +1211,26 @@ export class WorkerJob implements GateOutcomeSink {
       const task = store.task(ref.taskId),
         attempt = store.attempt(ref),
         kind = attempt.failureKind;
+      if (task.brief.kind === 'verification') {
+        if (store.events(task.id, ref.attempt).some((event) => event.kind === 'proof-failure-routed')) return;
+        store.updateTask(ref, (current) => {
+          current.state = 'stopped';
+        });
+        const event = {
+          managerId: task.brief.manager,
+          taskId: task.id,
+          kind: 'instruction' as const,
+          summary:
+            `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`.slice(
+              0,
+              1000,
+            ),
+          evidencePath: attempt.evidencePath,
+        };
+        store.event(ref, 'proof-failure-routed', event);
+        this.inbox.deliver(event);
+        return;
+      }
       if (!kind) return;
       const existingRefusal = store.events(task.id, ref.attempt).find((event) => event.kind === 'usage-limit-refusal');
       let retrySamePool = false;
@@ -1677,6 +1760,7 @@ export class WorkerJob implements GateOutcomeSink {
   /** Reattach to a persisted running attempt after a controller restart using a kernel exit notification. */
   async recover(taskId: string): Promise<void> {
     const task = this.tasks.store.task(taskId);
+    if (task.state === 'verified') return;
     const ref = { taskId, attempt: task.currentAttempt };
     this.tasks.store.assertCurrent(ref);
     if (
