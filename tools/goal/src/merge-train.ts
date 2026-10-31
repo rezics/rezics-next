@@ -1410,7 +1410,8 @@ export class MergeTrain {
             catch (error) { appendFileSync(node.logPath, `Train tree cleanup deferred: ${tree}: ${error}\n`); }
           }
         }
-        if (node.children) for (const child of node.children) await visit(child);
+        const children = journal.nodes[key]?.children;
+        if (children) for (const child of children) await visit(child);
       };
       await visit('root');
       return { batchId, members: manifest.members.map(member => journal.results.find(result => result.taskId === member.taskId)!) };
