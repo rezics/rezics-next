@@ -12,7 +12,7 @@
     "typecheck": "bun check --no-script -p tsconfig.json"
   },
   "dependencies": {
-    "@dbos-inc/dbos-sdk": "5.4.6-preview",
+    "@dbos-inc/dbos-sdk": "5.5.3-preview",
     "@elysia/eden": "2.0.0-rc.0",
     "@rezics/auth-contract": "workspace:*",
     "@rezics/composition": "workspace:*",

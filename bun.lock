@@ -117,7 +117,7 @@
       "name": "@rezics/client",
       "version": "0.1.0",
       "dependencies": {
-        "@dbos-inc/dbos-sdk": "5.4.6-preview",
+        "@dbos-inc/dbos-sdk": "5.5.3-preview",
         "@elysia/eden": "2.0.0-rc.0",
         "@rezics/auth-contract": "workspace:*",
         "@rezics/composition": "workspace:*",
@@ -265,7 +265,7 @@
         "@better-auth/passkey": "1.8.0-beta.2",
         "@better-auth/utils": "0.5.0",
         "@better-fetch/fetch": "1.3.2",
-        "@dbos-inc/dbos-sdk": "5.4.6-preview",
+        "@dbos-inc/dbos-sdk": "5.5.3-preview",
         "@rezics/auth-contract": "workspace:*",
         "better-auth": "1.8.0-beta.2",
         "better-call": "1.4.4",
@@ -294,7 +294,7 @@
     "services/kernel": {
       "name": "@rezics/kernel",
       "dependencies": {
-        "@dbos-inc/dbos-sdk": "5.4.6-preview",
+        "@dbos-inc/dbos-sdk": "5.5.3-preview",
         "@elysia/openapi": "2.0.0-rc.0",
         "@reylosql/postgres": "0.6.0",
         "@rezics/auth": "workspace:*",
@@ -329,7 +329,7 @@
     },
   },
   "patchedDependencies": {
-    "@dbos-inc/dbos-sdk@5.4.6-preview": "patches/@dbos-inc%2Fdbos-sdk@5.4.6-preview.patch",
+    "@dbos-inc/dbos-sdk@5.5.3-preview": "patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch",
     "@better-auth/oauth-provider@1.8.0-beta.2": "patches/@better-auth%2Foauth-provider@1.8.0-beta.2.patch",
   },
   "packages": {
@@ -489,7 +489,7 @@
 
     "@dbmate/win32-x64": ["@dbmate/win32-x64@2.37.0", "", { "os": "win32", "cpu": "x64" }, "sha512-j66FzJqHRkqSA4aa8/Vyik34nXRpyRYKts80+8qchagreXfsrzfsD93IIAqfguAbRfBmDZab0ky0Ud9cf78R9Q=="],
 
-    "@dbos-inc/dbos-sdk": ["@dbos-inc/dbos-sdk@5.4.6-preview", "", { "dependencies": { "commander": "^12.0.0", "pg": "^8.11.3", "serialize-error": "^8.1.0", "superjson": "^1.13.3", "yaml": "^2.8.3" }, "peerDependencies": { "@dbos-inc/dbos-enterprise": "*" }, "optionalPeers": ["@dbos-inc/dbos-enterprise"], "bin": { "dbos": "dist/src/cli/cli.js", "dbos-sdk": "dist/src/cli/cli.js" } }, "sha512-91vg0zlcKYw33RB84ABeaBIxIcJ0ndVyggMMM0NRYfltTVsDr/BwDn5CJodTy3LFd3RBBXF+pI+DhRLYpdRHmw=="],
+    "@dbos-inc/dbos-sdk": ["@dbos-inc/dbos-sdk@5.5.3-preview", "", { "dependencies": { "commander": "^12.0.0", "pg": "^8.11.3", "serialize-error": "^8.1.0", "superjson": "^1.13.3", "yaml": "^2.8.3" }, "peerDependencies": { "@dbos-inc/dbos-enterprise": "*" }, "optionalPeers": ["@dbos-inc/dbos-enterprise"], "bin": { "dbos": "dist/src/cli/cli.js", "dbos-sdk": "dist/src/cli/cli.js" } }, "sha512-X3lLxn1yPQVm4LJw8uJwQ6FM8Yx73ePZD9DY7ARZCV6/hUPZf9SMXfg4VwliQOXEm8BEJUfwAKKuHZxvgT75EQ=="],
 
     "@dnd-kit/abstract": ["@dnd-kit/abstract@0.4.0", "", { "dependencies": { "@dnd-kit/geometry": "^0.4.0", "@dnd-kit/state": "^0.4.0", "tslib": "^2.6.2" } }, "sha512-loEEJxKT5oLOLeRBJVTO9qpgvvW/Qq902xO20v1JMbpANuN/NLurUdpxIwNpVz+RtOSyzznnbc7lO7psmOhc9A=="],
 

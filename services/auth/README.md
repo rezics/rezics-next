@@ -1397,8 +1397,8 @@ and signing rotation checks.
 
 ## Cost
 
-Derived from the current `src/`, `db/migrations/` and `db/schema.sql`, with Better Auth
-1.8.0-beta.2 and DBOS 5.4.6-preview as pinned in `package.json`. Each row identifies
+The cost evidence below was recorded with Better Auth 1.8.0-beta.2 and DBOS
+5.4.6-preview; current dependency pins are in `package.json`. Each row identifies
 its native entry point; helper checks do not stand in for extra handler or durable
 wrapper I/O. Startup/schema migration, bootstrap and one-time legacy session
 upgrade discovery/trimming are excluded. Unimplemented account-erasure participant

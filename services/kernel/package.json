@@ -18,7 +18,7 @@
     "typecheck": "bun scripts/typecheck.ts"
   },
   "dependencies": {
-    "@dbos-inc/dbos-sdk": "5.4.6-preview",
+    "@dbos-inc/dbos-sdk": "5.5.3-preview",
     "@elysia/openapi": "2.0.0-rc.0",
     "@reylosql/postgres": "0.6.0",
     "@rezics/auth": "workspace:*",

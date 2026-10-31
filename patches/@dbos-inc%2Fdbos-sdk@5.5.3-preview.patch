@@ -1,33 +1,36 @@
-# DBOS 5.4.6-preview lacks a permanent per-actual-workflow-ID late-writer fence.
+# DBOS 5.5.3-preview lacks a permanent per-actual-workflow-ID late-writer fence.
 # Cancellation/delete/resume cannot close writers across deduplication deletion.
 # Remove when the pinned upstream SDK supplies equivalent native migration guards,
 # durable closure receipts and supported retire/read APIs covering old executors.
 # Reproducer/acceptance: services/kernel/test/work/sdk-retirement-fence.test.ts.
+# Preserve the fence migration array positions; the SDK records positional versions.
 diff --git a/dist/src/client.d.ts b/dist/src/client.d.ts
+index 8a0fee5..b9bfadf 100644
 --- a/dist/src/client.d.ts
 +++ b/dist/src/client.d.ts
 @@ -1,3 +1,4 @@
 +import type { WorkflowWriterFence } from './workflow_retirement';
- import { SystemDatabase, type DuplicationPolicy, type VersionInfo, type ApplicationRowCounts, type DebounceParams, type DebounceResult } from './system_database';
+ import { type SystemDatabase, type DuplicationPolicy, type VersionInfo, type ApplicationRowCounts, type DebounceParams, type DebounceResult } from './system_database';
  import { DLogger } from './telemetry/logs';
  import { type GetWorkflowsInput, type StepInfo, type ListWorkflowStepsOptions, type WorkflowHandle, WorkflowSerializationFormat, type WorkflowStatus } from './workflow';
-@@ -214,6 +215,10 @@
+@@ -221,6 +222,10 @@ export declare class DBOSClient {
      }): Promise<WorkflowHandle<Awaited<T>>[]>;
-     setWorkflowPriority(workflowID: string, priority: number): Promise<void>;
+     setWorkflowPriority(workflowID: string, priority: number, options?: ShardKeyOptions): Promise<void>;
      setWorkflowDelay(workflowID: string, options: number | SetWorkflowDelayOptions): Promise<void>;
 +    /** Permanently fence this actual workflow ID. No cancellation or deletion. */
 +    retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
 +    /** Exact native closure read, independent of execution/history existence. */
 +    getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
-     deleteWorkflow(workflowID: string, deleteChildren?: boolean): Promise<void>;
-     deleteWorkflows(workflowIDs: string[], deleteChildren?: boolean): Promise<void>;
+     deleteWorkflow(workflowID: string, deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
+     deleteWorkflows(workflowIDs: string[], deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
      forkWorkflow(workflowID: string, startStep: number, options?: {
 diff --git a/dist/src/client.js b/dist/src/client.js
+index 7a6d950..9e61527 100644
 --- a/dist/src/client.js
 +++ b/dist/src/client.js
-@@ -341,6 +341,12 @@
-         const delayUntilEpochMS = (0, dbos_1.resolveDelayEpochMS)(options);
-         return this.systemDatabase.setWorkflowDelay(workflowID, delayUntilEpochMS);
+@@ -368,6 +368,12 @@ class DBOSClient {
+         const shardKey = typeof options === 'object' ? options.shardKey : undefined;
+         return await (0, shard_keys_1.bindShardKeys)([[workflowID, shardKey]], () => this.systemDatabase.setWorkflowDelay(workflowID, delayUntilEpochMS));
      }
 +    retireWorkflow(workflowID) {
 +        return this.systemDatabase.retireWorkflow(workflowID);
@@ -35,18 +38,19 @@ diff --git a/dist/src/client.js b/dist/src/client.js
 +    getWorkflowWriterFence(workflowID) {
 +        return this.systemDatabase.getWorkflowWriterFence(workflowID);
 +    }
-     deleteWorkflow(workflowID, deleteChildren = false) {
-         return this.systemDatabase.deleteWorkflows([workflowID], deleteChildren);
+     deleteWorkflow(workflowID, deleteChildren = false, options) {
+         return this.deleteWorkflows([workflowID], deleteChildren, options);
      }
 diff --git a/dist/src/dbos.d.ts b/dist/src/dbos.d.ts
+index dd663ff..4d0c393 100644
 --- a/dist/src/dbos.d.ts
 +++ b/dist/src/dbos.d.ts
 @@ -1,3 +1,4 @@
 +import type { WorkflowWriterFence } from './workflow_retirement';
- import { StepStatus } from './context';
+ import { StepStatus, DBOSLocalCtx } from './context';
  import { DBOSConfig, DBOSExecutor } from './dbos-executor';
  import { DBOSSpan, Tracer } from './telemetry/traces';
-@@ -371,6 +372,10 @@
+@@ -440,6 +441,10 @@ export declare class DBOS {
       * @param workflowID - ID of the workflow to delete
       * @param deleteChildren - If true, also delete all child workflows recursively (default: false)
       */
@@ -54,13 +58,14 @@ diff --git a/dist/src/dbos.d.ts b/dist/src/dbos.d.ts
 +    static retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
 +    /** Exact native closure read, independent of execution/history existence. */
 +    static getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
-     static deleteWorkflow(workflowID: string, deleteChildren?: boolean): Promise<void>;
+     static deleteWorkflow(workflowID: string, deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
      /**
       * Delete multiple workflows and optionally all their child workflows.
 diff --git a/dist/src/dbos.js b/dist/src/dbos.js
+index 370a89e..bb5a25e 100644
 --- a/dist/src/dbos.js
 +++ b/dist/src/dbos.js
-@@ -774,6 +774,15 @@
+@@ -909,6 +909,15 @@ class DBOS {
       * @param workflowID - ID of the workflow to delete
       * @param deleteChildren - If true, also delete all child workflows recursively (default: false)
       */
@@ -73,18 +78,20 @@ diff --git a/dist/src/dbos.js b/dist/src/dbos.js
 +        (0, decorators_1.ensureDBOSIsLaunched)('getWorkflowWriterFence');
 +        return dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.getWorkflowWriterFence(workflowID);
 +    }
-     static async deleteWorkflow(workflowID, deleteChildren = false) {
-         return this.deleteWorkflows([workflowID], deleteChildren);
+     static async deleteWorkflow(workflowID, deleteChildren = false, options) {
+         return this.deleteWorkflows([workflowID], deleteChildren, options);
      }
 diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
+index 5d56b40..161327f 100644
 --- a/dist/src/index.d.ts
 +++ b/dist/src/index.d.ts
 @@ -1,3 +1,4 @@
 +export type { WorkflowWriterFence } from './workflow_retirement';
- export { DBOS, RecvOptions, GetEventOptions, GetResultOptions, PollingOptions, WaitFirstOptions, WaitAllOptions, SetWorkflowDelayOptions, ReadStreamOptions, ReadStreamOffsetOptions, } from './dbos';
+ export { DBOS, RecvOptions, SleepOptions, GetEventOptions, GetResultOptions, PollingOptions, WaitFirstOptions, WaitAllOptions, SetWorkflowDelayOptions, ReadStreamOptions, ReadStreamOffsetOptions, ShardKeyOptions, } from './dbos';
+ export type { StepReservation } from './dbos';
  export { DBOSClient } from './client';
- export { WorkflowSchedule, ScheduledWorkflowFn, ScheduleOptions } from './scheduler/scheduler';
 diff --git a/dist/src/sysdb_migrations/internal/migrations.js b/dist/src/sysdb_migrations/internal/migrations.js
+index 7f21387..137d36f 100644
 --- a/dist/src/sysdb_migrations/internal/migrations.js
 +++ b/dist/src/sysdb_migrations/internal/migrations.js
 @@ -1,6 +1,7 @@
@@ -95,18 +102,19 @@ diff --git a/dist/src/sysdb_migrations/internal/migrations.js b/dist/src/sysdb_m
  const migration_runner_1 = require("../migration_runner");
  Object.defineProperty(exports, "SHARED_MIGRATION_BASE", { enumerable: true, get: function () { return migration_runner_1.SHARED_MIGRATION_BASE; } });
  /**
-@@ -1164,6 +1165,8 @@
+@@ -1164,6 +1165,9 @@ $$ LANGUAGE plpgsql;`,
                  `CREATE INDEX ${isCockroach ? '' : 'CONCURRENTLY'} IF NOT EXISTS "idx_application_versions_owner_timestamp" ON "${schemaName}"."application_versions" ("application_name", "version_timestamp" DESC)`,
              ],
          },
++        // Keep the downstream fence migrations at their already-applied positions.
 +        workflowWriterFenceMigration(schemaName),
 +        workflowWriterFencePrivacyMigration(schemaName),
-     ];
- }
- //# sourceMappingURL=migrations.js.map
-\ No newline at end of file
+         // Topic a SUSPENDED recv waits on.
+         {
+             name: '126_workflow_status_suspend_key',
 diff --git a/dist/src/sysdb_migrations/internal/workflow_writer_fence.js b/dist/src/sysdb_migrations/internal/workflow_writer_fence.js
 new file mode 100644
+index 0000000..694d7e9
 --- /dev/null
 +++ b/dist/src/sysdb_migrations/internal/workflow_writer_fence.js
 @@ -0,0 +1,145 @@
@@ -256,6 +264,7 @@ new file mode 100644
 +}
 +exports.workflowWriterFencePrivacyMigration = workflowWriterFencePrivacyMigration;
 diff --git a/dist/src/system_database.d.ts b/dist/src/system_database.d.ts
+index 8f66187..e6f5f6a 100644
 --- a/dist/src/system_database.d.ts
 +++ b/dist/src/system_database.d.ts
 @@ -1,3 +1,4 @@
@@ -263,20 +272,21 @@ diff --git a/dist/src/system_database.d.ts b/dist/src/system_database.d.ts
  /// <reference types="node" />
  import { Pool, PoolClient, ClientBase } from 'pg';
  import type { DatabaseError } from 'pg';
-@@ -365,6 +366,9 @@
-     debounceDelayedWorkflow(params: DebounceParams, client?: PoolClient): Promise<DebounceResult>;
+@@ -486,6 +487,9 @@ export declare class SystemDatabase {
      private debounceDelayedWorkflowStandalone;
+     protected getDirectChildren(workflowIDs: string[]): Promise<string[]>;
      getWorkflowChildren(workflowID: string): Promise<string[]>;
 +    retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
 +    getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
 +    private workflowWriterFenceReceipt;
+     /** Delete workflows and all associated data, and with deleteChildren every workflow they started, recursively. */
      deleteWorkflows(workflowIDs: string[], deleteChildren?: boolean): Promise<void>;
-     /**
-      * Drop a workflow's history from `startStep` onwards and re-enqueue it under the same
+     protected deleteWorkflowsInternal(allIds: string[]): Promise<void>;
 diff --git a/dist/src/system_database.js b/dist/src/system_database.js
+index 79ef595..d6b47fe 100644
 --- a/dist/src/system_database.js
 +++ b/dist/src/system_database.js
-@@ -1392,6 +1392,9 @@
+@@ -1835,6 +1835,9 @@ class SystemDatabase {
          const client = await this.connect();
          try {
              await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
@@ -284,9 +294,9 @@ diff --git a/dist/src/system_database.js b/dist/src/system_database.js
 +                await client.query(`SELECT "${this.schemaName}".guard_workflow_writer($1)`, [id]);
 +            }
              // Check existence separately: a zero-row update also means "already complete", a legal no-op.
-             const { rows } = await client.query(`SELECT workflow_uuid FROM "${this.schemaName}".workflow_status WHERE workflow_uuid = ANY($1)`, [workflowIDs]);
-             const existing = new Set(rows.map((r) => r.workflow_uuid));
-@@ -1556,6 +1559,30 @@
+             const existingParams = [];
+             const { rows } = await client.query(`SELECT workflow_uuid FROM "${this.schemaName}".workflow_status WHERE ${this.wfIn(undefined, workflowIDs, existingParams)}`, existingParams);
+@@ -2003,6 +2006,30 @@ class SystemDatabase {
          }
          return [...descendants];
      }
@@ -314,20 +324,20 @@ diff --git a/dist/src/system_database.js b/dist/src/system_database.js
 +        return Object.freeze({ workflowID: row.workflow_uuid, generation: String(row.generation),
 +            closureID: row.closure_id, closedAt: Number(row.closed_at) });
 +    }
+     /** Delete workflows and all associated data, and with deleteChildren every workflow they started, recursively. */
      async deleteWorkflows(workflowIDs, deleteChildren = false) {
          const allIds = [...workflowIDs];
-         if (deleteChildren) {
-@@ -1612,6 +1639,9 @@
+@@ -2063,6 +2090,9 @@ class SystemDatabase {
          const client = await this.connect();
          try {
              await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
 +            for (const id of [...new Set([workflowID])].sort()) {
 +                await client.query(`SELECT "${this.schemaName}".guard_workflow_writer($1)`, [id]);
 +            }
-             const { rows: statusRows } = await client.query(`SELECT status FROM "${schema}".workflow_status WHERE workflow_uuid = $1`, [workflowID]);
+             const statusParams = [];
+             const { rows: statusRows } = await client.query(`SELECT status FROM "${schema}".workflow_status WHERE ${this.wf(undefined, workflowID, statusParams)}`, statusParams);
              if (statusRows.length === 0) {
-                 throw new error_1.DBOSNonExistentWorkflowError(`Workflow ${workflowID} does not exist`);
-@@ -1701,6 +1731,9 @@
+@@ -2158,6 +2188,9 @@ class SystemDatabase {
          const client = await this.connect();
          try {
              await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
@@ -335,10 +345,11 @@ diff --git a/dist/src/system_database.js b/dist/src/system_database.js
 +                await client.query(`SELECT "${this.schemaName}".guard_workflow_writer($1)`, [id]);
 +            }
              // Fetch the status of all original workflows inside the transaction.
+             const statusParams = [];
              const { rows: statusRows } = await client.query(`SELECT ws.workflow_uuid, ws.name, ws.class_name, ws.config_name, ws.application_id,
-                 ws.authenticated_user, ws.authenticated_roles, ws.assumed_role,
 diff --git a/dist/src/workflow_retirement.d.ts b/dist/src/workflow_retirement.d.ts
 new file mode 100644
+index 0000000..1e56d56
 --- /dev/null
 +++ b/dist/src/workflow_retirement.d.ts
 @@ -0,0 +1,7 @@
