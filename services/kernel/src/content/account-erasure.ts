@@ -218,8 +218,14 @@ async function step(pool: Pool, storage: MediaStorage, accountId: string, expect
   if (currentPhase === 'authored') {
     const feedRows = await eraseFeedInboxPage(pool, accountId, deadlineFor(5000));
     if (feedRows > 0) {
-      await persist(pool, accountId, progress, { phase: 'authored', cursor: progress.cursor,
-        contentFound: true, deliveryFound: false, pending: false, statementsKeptUntil });
+      await persist(pool, accountId, progress, {
+        phase: 'authored',
+        cursor: progress.cursor,
+        contentFound: true,
+        deliveryFound: false,
+        pending: false,
+        statementsKeptUntil,
+      });
       return { phase: 'authored', step: expectedStep + 1 };
     }
     const page = await eraseAccountAuthoredPage({ pool }, accountId, progress.cursor as AuthoredErasureCursor | null);

@@ -452,7 +452,11 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(continued), realmRoleReader }),
   });
   const feed = feedRoutes(continued as unknown as ReturnType<typeof definitionRoutes>, {
-    tokens, pool: dependencies.pool, routeKey: dependencies.routeKey, clock, workClient,
+    tokens,
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    clock,
+    workClient,
     ...(dependencies.search ? { search: dependencies.search } : {}),
     ...(dependencies.discovery ? { discovery: dependencies.discovery } : {}),
     access: () => resolveAccess({ actions: actionCatalogue(feed), realmRoleReader }),
