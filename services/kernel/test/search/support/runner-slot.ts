@@ -1,5 +1,22 @@
 import type { startSearchIndexing } from '../../../src/search/runner.ts';
 import type { WorkService } from '../../../src/work/registry.ts';
+import type { WorkerConfig } from '../../../src/worker.ts';
+
+export type SearchWorkerKind = 'in-process' | 'owned-child';
+
+/** Pool/AsyncLocalStorage identity is a capability that cannot cross child IPC. */
+export function searchWorkerOwnership(kernelPool: WorkerConfig['kernelPool']) {
+  const kind: SearchWorkerKind = kernelPool ? 'in-process' : 'owned-child';
+  return {
+    kind,
+    requireOwnedChild(): void {
+      if (kernelPool)
+        throw new Error(
+          'Owned-child crash/restart is incompatible with the explicit kernelPool capability (in-process instrumentation)',
+        );
+    },
+  };
+}
 
 export type SearchRunnerControl = Pick<Awaited<ReturnType<typeof startSearchIndexing>>, 'stop' | 'refresh'>;
 

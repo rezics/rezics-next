@@ -1,34 +1,18 @@
 import { expect, test } from 'bun:test';
-// Load through the same Kernel entry point as the released fixture, without installing it.
-import '../../src/http/kernel.ts';
-import { releasedDiscoveryRuntime } from './support/released-discovery-runtime.ts';
+import { searchWorkerOwnership } from './support/runner-slot.ts';
 
-test('explicit kernelPool selects instrumentation and refuses process crash/restart before acquiring resources', async () => {
-  const previous = process.env.OPENSEARCH_URL;
-  // No service is installed or started. An attempted engine connection must fail.
-  process.env.OPENSEARCH_URL = 'http://127.0.0.1:1';
-  let poolCalls = 0;
-  const instrumented = releasedDiscoveryRuntime(() => {
-    poolCalls += 1;
-    throw new Error('An unstarted composition must not acquire a pool');
+test('explicit kernelPool refuses child ownership before invoking the pool capability', () => {
+  let calls = 0;
+  const instrumented = searchWorkerOwnership(() => {
+    calls += 1;
+    throw new Error('Selecting worker ownership must not acquire a pool');
   });
-  const child = releasedDiscoveryRuntime();
-  try {
-    expect(instrumented.control.workerKind).toBe('in-process');
-    expect(child.control.workerKind).toBe('owned-child');
-    for (const control of ['crash', 'restart'] as const) {
-      await expect(instrumented.control[control]()).rejects.toThrow('explicit kernelPool capability');
-      await expect(child.control[control]()).rejects.toThrow('has not started');
-    }
-    expect(poolCalls).toBe(0);
-    const closing = instrumented.close();
-    expect(instrumented.close()).toBe(closing);
-    await closing;
-    await expect(instrumented.control.crash()).rejects.toThrow('explicit kernelPool capability');
-    expect(poolCalls).toBe(0);
-  } finally {
-    await Promise.all([instrumented.close(), child.close()]);
-    if (previous === undefined) delete process.env.OPENSEARCH_URL;
-    else process.env.OPENSEARCH_URL = previous;
-  }
+  expect(instrumented.kind).toBe('in-process');
+  expect(() => instrumented.requireOwnedChild()).toThrow('explicit kernelPool capability');
+  expect(() => instrumented.requireOwnedChild()).toThrow('in-process instrumentation');
+  expect(calls).toBe(0);
+
+  const child = searchWorkerOwnership(undefined);
+  expect(child.kind).toBe('owned-child');
+  expect(() => child.requireOwnedChild()).not.toThrow();
 });

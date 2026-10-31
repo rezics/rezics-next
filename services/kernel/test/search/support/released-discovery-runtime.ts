@@ -20,6 +20,7 @@ import type { CreatedSubject } from '../../support/released-discovery.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 import { startOutcomeWorkerProcess } from './outcome-rpc.ts';
 import { searchProxy } from './outcome-supervisor.ts';
+import { searchWorkerOwnership, type SearchWorkerKind } from './runner-slot.ts';
 
 type Request = (path: string, body?: unknown) => Promise<HttpResponse>;
 /** The production factories and their returned operations retain all native admission and custody. */
@@ -34,7 +35,7 @@ export type ReleasedNativeObservation = Pick<
 export type ReleasedNativeBoundRequest = Awaited<ReturnType<DefaultPublicFilterRuntime['bindRequest']>>;
 export type ReleasedNativeRepairJob = Parameters<DefaultPublicFilterRuntime['repair']>[0];
 /** Explicit pool instrumentation requires the actual parent-process SDK and pool identities. */
-export type ReleasedDiscoveryWorkerKind = 'in-process' | 'owned-child';
+export type ReleasedDiscoveryWorkerKind = SearchWorkerKind;
 export type ReleasedTransportBarrier = Readonly<{
   /** Resolves only when real I/O reaches the selected transport boundary. */
   reached: Promise<void>;
@@ -75,6 +76,7 @@ export interface ReleasedDiscoveryComposition {
 export function releasedDiscoveryRuntime(
   kernelPool?: (url: string) => Pool | Promise<Pool>,
 ): ReleasedDiscoveryComposition {
+  const ownership = searchWorkerOwnership(kernelPool);
   const url = process.env.OPENSEARCH_URL;
   if (!url) throw new Error('OPENSEARCH_URL must name the native Search node');
   const cleanupSearch = createOpenSearch(url);
@@ -133,9 +135,6 @@ export function releasedDiscoveryRuntime(
     if (worker) return worker.rpc.request<T>(method, params);
     return Promise.reject(new Error('Released discovery worker has not started'));
   }
-  const incompatiblePool = () => new Error(
-    'Owned-child crash/restart is incompatible with the explicit kernelPool capability (in-process instrumentation)',
-  );
   async function retain(job: Parameters<DefaultPublicFilterRuntime['repair']>[0]): Promise<string> {
     if (!config || !databaseUrl) throw new Error('Released discovery preparation has not started');
     preparationClient ??= createWorkClient(databaseUrl, config.pool);
@@ -146,7 +145,7 @@ export function releasedDiscoveryRuntime(
   }
   const control: ReleasedDiscoveryRuntime = {
     indexPrefix: prefix,
-    workerKind: kernelPool ? 'in-process' : 'owned-child',
+    workerKind: ownership.kind,
     bindRequest: (...args) => operation(() => native().bindRequest(...args)),
     resumeRequest: (...args) => operation(() => native().resumeRequest(...args)),
     repair: (...args) => operation(() => native().repair(...args)),
@@ -165,15 +164,19 @@ export function releasedDiscoveryRuntime(
       return result.rows[0] ?? null;
     }),
     workerStats: () => operation(() => workerOperation(() => workerRequest<WorkerStats>('stats'))),
-    crash: () => kernelPool
-      ? Promise.reject(incompatiblePool())
-      : operation(() => workerOperation(() => worker!.crash())),
-    restart: () => kernelPool ? Promise.reject(incompatiblePool()) : operation(() => workerOperation(async () => {
-      if (!worker?.exited) throw new Error('Restart requires confirmed actual worker exit');
-      // Reuse the original environment, database, prefix and durable preparations verbatim.
-      worker = startOutcomeWorkerProcess(env!);
-      return worker.ready;
-    })),
+    async crash() {
+      ownership.requireOwnedChild();
+      return operation(() => workerOperation(() => worker!.crash()));
+    },
+    async restart() {
+      ownership.requireOwnedChild();
+      return operation(() => workerOperation(async () => {
+        if (!worker?.exited) throw new Error('Restart requires confirmed actual worker exit');
+        // Reuse the original environment, database, prefix and durable preparations verbatim.
+        worker = startOutcomeWorkerProcess(env!);
+        return worker.ready;
+      }));
+    },
     indexing: (state) => operation(() => workerOperation(async () => {
       await workerRequest('indexing', { state });
     })),
