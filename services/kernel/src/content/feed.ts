@@ -14,7 +14,7 @@ import { createFollowActivitySource } from '../library/follow-activity.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { readPublication } from '../community/publication.ts';
-import { ContentNotFoundError, readBoard, readPost, readThread } from './reads.ts';
+import { ContentNotFoundError, discloseThreads, readBoard, readPost, type ThreadView } from './reads.ts';
 import { createFeedActivityStore, feedRoute, type ActivityRef } from './feed-activity.ts';
 import { decodeFeedCursor, encodeFeedCursor, feedBinding, fingerprint, type FeedPosition } from './feed-cursor.ts';
 import type { FeedItem, FeedPage, FeedSourceState } from './feed-contract.ts';
@@ -46,7 +46,8 @@ export function createFeedReads(deps: FeedDependencies) {
   const content = { ...deps, access: deps.contentAccess };
 
   async function hydrate(activity: ActivityRef, actor: Actor, deadline: number,
-    summaries: Awaited<ReturnType<typeof readSubjectSummaries>>): Promise<FeedItem | null> {
+    summaries: Awaited<ReturnType<typeof readSubjectSummaries>>,
+    threads: ReadonlyMap<string, ThreadView | null>): Promise<FeedItem | null> {
     const supported = async () => (await (await followSource()).checkCurrentFollowSupport(actor, { targets: [activity.target] }, deadline))[0]?.status;
     const initial = await supported();
     if (initial === 'unavailable') throw new ProblemError('dependency_unavailable');
@@ -55,7 +56,7 @@ export function createFeedReads(deps: FeedDependencies) {
     if (activity.target.type === 'subject' && !summaries.get(activity.target.id)) return null;
     let item: FeedItem | null = null;
     if (object.owner === 'content') {
-      const thread = (await readThread(content, object.threadId, { actor, deadline })).value;
+      const thread = threads.get(object.threadId);
       if (!thread || thread.availability !== 'available' || thread.firstPost.availability !== 'available') return null;
       if (object.kind === 'thread' && activity.target.type === 'subject' && !thread.subjectIds.includes(activity.target.id)) return null;
       if (activity.target.type === 'space') {
@@ -177,8 +178,14 @@ export function createFeedReads(deps: FeedDependencies) {
               ...(activity.target.type === 'subject' ? [activity.target.id] : []),
             ]))];
             const summaries = await readSubjectSummaries({ ...deps, actor, deadline }, ids, { languages });
+            const threadIds = [...new Set(page.activities.flatMap((activity) =>
+              activity.object.owner === 'content' ? [activity.object.threadId] : []))];
+            // The native executor groups complete anchored keys per backend/container and applies
+            // its original opening-post, parent-chain and body/reference final disclosure checks.
+            const disclosed = await discloseThreads(content, threadIds, { actor, deadline });
+            const threads = new Map(threadIds.map((id, index) => [id, disclosed[index]!.value]));
             lanes.following = await Promise.all(page.activities.map(async (activity) => {
-              try { return { item: await hydrate(activity, actor, deadline, summaries) }; }
+              try { return { item: await hydrate(activity, actor, deadline, summaries, threads) }; }
               catch (error) {
                 if (error instanceof ContentNotFoundError || (error instanceof ProblemError && error.code === 'not_found')) return { item: null };
                 throw error;

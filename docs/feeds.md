@@ -112,6 +112,9 @@ the inverse destination is resolved independently and never substitutes that inv
 Following is a candidate inbox. Before returning each item, the feed checks genuine
 current follow support, calls the original native current owner read, checks current
 references/container chain, and checks follow support again. Thread/opening post/reply,
+thread keys are grouped by the existing native disclosure executor's backend/container
+snapshots rather than individually probing every thread. Reply reads retain their exact
+native thread/post anchor. The
 board/Realm/Space, publication head, Collection visibility, and owner body/reference
 authorization remain with their original readers. Removed, erased, hidden or revoked
 objects are omitted according to that current authority. No projection supplies an allow.
