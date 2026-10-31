@@ -49,8 +49,14 @@ export const LocalQueries: Story = {
   render: () => <Example />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.search_history_remove({ name: 'Kokoro' }) }));
-    await expect(canvas.getByText(m.search_history_empty())).toBeVisible();
+    const search = within(await canvas.findByRole('search', { name: m.search_label() }));
+    await expect(await search.findByRole('combobox', { name: m.search_label(), expanded: true })).toBeVisible();
+    const recent = within(await search.findByRole('region', { name: m.search_recent() }));
+    const remove = await recent.findByRole('button', { name: m.search_history_remove({ name: 'Kokoro' }) });
+    await expect(recent.getByText('Kokoro', { exact: true })).toBeVisible();
+    await expect(remove).toBeVisible();
+    await expect(remove).toBeEnabled();
+    await expect(recent.queryByText(m.search_history_empty())).not.toBeInTheDocument();
   },
 };
 export const Empty: Story = { render: () => <Example initial={emptyRecent()} /> };
@@ -58,8 +64,31 @@ export const History: Story = {
   render: () => <Example history />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.search_history_clear() }));
-    await expect(canvas.getByText(m.search_history_empty())).toBeVisible();
+    const history = within(await canvas.findByRole('region', { name: m.search_recent() }));
+    const clear = await history.findByRole('button', { name: m.search_history_clear() });
+    await expect(history.getByRole('heading', { name: m.search_history() })).toBeVisible();
+    await expect(history.getByText('Kokoro', { exact: true })).toBeVisible();
+    await expect(clear).toBeVisible();
+    await expect(clear).toBeEnabled();
+    await expect(history.queryByText(m.search_history_empty())).not.toBeInTheDocument();
+  },
+};
+export const RemoveLocalQuery: Story = {
+  tags: ['!dev'],
+  render: () => <Example />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.search_history_remove({ name: 'Kokoro' }) }));
+    await expect(await canvas.findByText(m.search_history_empty())).toBeVisible();
+  },
+};
+export const ClearHistory: Story = {
+  tags: ['!dev'],
+  render: () => <Example history />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.search_history_clear() }));
+    await expect(await canvas.findByText(m.search_history_empty())).toBeVisible();
   },
 };
 const unavailable = localChange(
