@@ -300,7 +300,7 @@ test('The one mounted Zone source runtime composes actual saved catalogue and co
     // Occurrence commands advanced the header after CREATE; keep the native population and its duplicate.
     const current = await population.request('alice', 'GET', `/v1/collections/${memberSource.id}`);
     expect(current.status, JSON.stringify(current.body)).toBe(200);
-    expect(current.body.collection.revision).toBeGreaterThan(source.source.revision);
+    expect((current.body.collection as { revision: number }).revision).toBeGreaterThan(source.source.revision);
     const books = await fixture.books();
     const recipes = await fixture.recipes();
     const book = books.subjects['B-long'].id;
@@ -346,7 +346,7 @@ test('The one mounted Zone source runtime composes actual saved catalogue and co
       { ...discoveryKey(), 'if-match': `"${zone.revision}"` },
     );
     expect(published.status, JSON.stringify(published.body)).toBe(200);
-    let revision = published.body.zone.revision as string;
+    let revision = (published.body.zone as { revision: string }).revision;
 
     const request = (target: { route: string } | { subject: string }, cursor?: string) =>
       population.request(
@@ -367,9 +367,10 @@ test('The one mounted Zone source runtime composes actual saved catalogue and co
       while (answer.status === 202) {
         expect(Compile(ZonePageReadProgressSchema).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
         expect(answer.headers.get('cache-control')).toBe('private, no-store');
-        expect(seen.has(answer.body.next)).toBe(false);
-        seen.add(answer.body.next);
-        answer = await request(target, answer.body.next);
+        const next = answer.body.next as string;
+        expect(seen.has(next)).toBe(false);
+        seen.add(next);
+        answer = await request(target, next);
       }
       return answer;
     };
@@ -399,7 +400,7 @@ test('The one mounted Zone source runtime composes actual saved catalogue and co
       const read = result.reads[plan.nodes[sort]!];
       expect(read.status).toBe(200);
       const ids = read.body.subjects.map(({ id }: { id: string }) => id);
-      expect(ids).toEqual(control.body.subjects.map(({ id }: { id: string }) => id));
+      expect(ids).toEqual((control.body.subjects as { id: string }[]).map(({ id }) => id));
       expect(ids.filter((id: string) => id === book)).toHaveLength(1);
       expect(read.body.next).toBeNull();
     }
@@ -417,7 +418,7 @@ test('The one mounted Zone source runtime composes actual saved catalogue and co
       { ...discoveryKey(), 'if-match': `"${revision}"` },
     );
     expect(saved.status, JSON.stringify(saved.body)).toBe(200);
-    revision = saved.body.zone.revision;
+    revision = (saved.body.zone as { revision: string }).revision;
     expect(configuration.scope).toEqual(scopes);
     const excluded = await resolve({ subject: recipe });
     expect(excluded.status, JSON.stringify(excluded.body)).toBe(404);
