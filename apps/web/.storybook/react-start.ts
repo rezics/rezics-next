@@ -11,6 +11,7 @@ export function requestForStory(input?: RequestInfo | URL, init?: RequestInit): 
   const storyContext = (globalThis as StoryGlobals).__rezicsStoryContext;
   const page = new URL(storyContext?.url ?? window.location.href, window.location.origin);
   const target = input instanceof Request ? input : new URL(input === undefined ? page.href : String(input), page);
+  const credentials = init?.credentials ?? (input instanceof Request ? input.credentials : undefined);
   const request = new Request(target, init);
   const url = new URL(request.url);
   const headers = new Headers(request.headers);
@@ -18,7 +19,7 @@ export function requestForStory(input?: RequestInfo | URL, init?: RequestInit): 
   if (!headers.has('x-forwarded-proto')) headers.set('x-forwarded-proto', url.protocol.slice(0, -1));
   if (input !== undefined && !headers.has('referer'))
     headers.set('referer', request.referrer && request.referrer !== 'about:client' ? request.referrer : page.href);
-  if (storyContext?.visitor === 'Signed In' && request.credentials !== 'omit' && !headers.has('cookie')) {
+  if (storyContext?.visitor === 'Signed In' && credentials !== 'omit' && !headers.has('cookie')) {
     // Browsers strip Cookie from Request headers, so expose the recorded session to route handlers locally.
     const getHeader = headers.get.bind(headers);
     Object.defineProperty(headers, 'get', {
