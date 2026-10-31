@@ -36,6 +36,16 @@ export function RecentPanel({
 }) {
   const [all, setAll] = useState(false);
   const entries = history?.entries ?? [];
+  const status =
+    history?.failure === 'conflict'
+      ? m.search_history_conflict()
+      : history?.failure === 'unavailable'
+        ? m.search_history_offline()
+        : history?.persistence === 'unavailable'
+          ? m.shell_account_unavailable()
+          : history?.sync === 'pending'
+            ? m.header_search_history_pending()
+            : undefined;
   return (
     <div data-search-discovery className="px-2 py-4">
       {recent ?? (
@@ -47,19 +57,7 @@ export function RecentPanel({
               <ChevronRight aria-hidden="true" className="size-4" />
             </button>
           </div>
-          <p className="px-2 text-xs text-muted-foreground">
-            {history?.failure === 'conflict'
-              ? m.search_history_conflict()
-              : history?.failure === 'unavailable'
-                ? m.search_history_offline()
-                : history?.persistence === 'unavailable'
-                  ? m.shell_account_unavailable()
-                  : history?.persistence === 'memory'
-                    ? m.header_search_history_memory()
-                    : history?.sync === 'pending'
-                      ? m.header_search_history_pending()
-                      : m.header_search_history_local()}
-          </p>
+          {status && <p className="px-2 text-xs text-muted-foreground">{status}</p>}
           {history?.failure && history.retry && (
             <button type="button" className={control} onClick={history.retry}>
               {m.search_history_reload()}
@@ -115,11 +113,13 @@ export function RecentPanel({
       )}
       {global ? <CurrentTrendingSearches language={language} onSelect={onQuery} /> : null}
       {global ? (
-        <SearchRealmDiscoverySection
-          key={JSON.stringify([language, query])}
-          locale={language}
-          load={loadRealmDiscovery}
-        />
+        <div className="px-2 pt-5">
+          <SearchRealmDiscoverySection
+            key={JSON.stringify([language, query])}
+            locale={language}
+            load={loadRealmDiscovery}
+          />
+        </div>
       ) : null}
     </div>
   );

@@ -18,6 +18,8 @@ import type { SuggestionResult } from '../src/search/suggestions';
 import { searchFormFields } from '../src/search/search-params';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { RecentPanel } from '../src/search/recent-panel';
+import type { RecentHistory } from '../src/search/recent-history';
 
 const scope: SearchScope = { kind: 'Collection', id: 'reading', name: 'Reading list' };
 const result: SuggestionResult = {
@@ -40,6 +42,38 @@ function present(state: HeaderSearchState, extra: Partial<Parameters<typeof Head
 function inputCount(markup: string) {
   return (markup.match(/<input\b[^>]*role="combobox"/g) ?? []).length;
 }
+
+test('Recent omits routine storage copy while retaining history actions and truthful recovery states', () => {
+  const history: RecentHistory = {
+    entries: [{ id: 'recent', query: 'Kokoro', visitedAt: 1 }],
+    persistence: 'local',
+    sync: 'local-only',
+    remember() {},
+    remove() {},
+    retry() {},
+  };
+  const render = (extra: Partial<RecentHistory>) =>
+    renderToStaticMarkup(createElement(RecentPanel, { history: { ...history, ...extra }, global: false }));
+  for (const persistence of ['local', 'memory'] as const) {
+    const markup = render({ persistence });
+    expect(markup).not.toContain(m.header_search_history_local());
+    expect(markup).not.toContain(m.header_search_history_memory());
+    expect(markup).toContain(m.header_search_history());
+    expect(markup).toContain('Kokoro');
+    expect(markup).toContain(m.header_search_remove_recent({ name: 'Kokoro' }));
+  }
+  for (const [state, message] of [
+    [{ failure: 'conflict' }, m.search_history_conflict()],
+    [{ failure: 'unavailable' }, m.search_history_offline()],
+    [{ persistence: 'unavailable' }, m.shell_account_unavailable()],
+    [{ persistence: 'memory', sync: 'pending' }, m.header_search_history_pending()],
+  ] satisfies [Partial<RecentHistory>, string][]) {
+    const markup = render(state);
+    expect(markup).toContain(message);
+    expect(markup).toContain('Kokoro');
+    if (state.failure) expect(markup).toContain(m.search_history_reload());
+  }
+});
 
 test('the phone trigger is named by its exact visible localized brand, query or scope text', () => {
   const previousLocale = getLocale();

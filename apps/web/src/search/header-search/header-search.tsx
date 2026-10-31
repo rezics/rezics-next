@@ -175,11 +175,12 @@ export function HeaderSearchView({
         <div
           data-search-composer
           className={cn(
+            'rounded-full focus-within:ring-2 focus-within:ring-ring',
             expanded && 'shrink-0 rounded-3xl bg-card shadow-lg',
             expanded && !phoneSheet && 'md:bg-popover md:text-popover-foreground md:shadow-xl',
           )}
         >
-          <div className="flex min-h-11 min-w-0 items-center gap-2 px-3">
+          <div className={cn('flex min-h-11 min-w-0 items-center gap-2 px-4', expanded && 'py-2')}>
             {expanded ? (
               <button
                 type="button"
@@ -218,7 +219,7 @@ export function HeaderSearchView({
               value={query}
               autoComplete="off"
               maxLength={256}
-              className="h-11 min-w-0 flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-11 min-w-0 flex-1 border-0 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
           {expanded && (
