@@ -170,7 +170,10 @@ Do not treat a scope chip as authority for a backend predicate that the route/AP
 **Defect class: broken panel containment; owner seam: UI Menu/custom dialog and Collection filter consumer.**
 The supplied maintainer image `.temp/goal/web/refs/maintainer-20261031/rezics-filter-panel-bug.png` was visually
 inspected. The popover background ends near the trigger's width while fields extend to its right over page content.
-It is reference evidence of the reported failure, not a screenshot falsely attributed to today's public story state.
+It is reference evidence of the reported failure. The enlarged current public
+`shots/patterns-library-collection-filters--reference--1280.png` independently reproduces it: the white surface
+ends near x160, while input fields extend to approximately x536. Concept-selected, word-range-applied,
+combined-filters, no-matches and preparing desktop states also visibly share the containment defect.
 Current dev source contains an exact structural explanation: `packages/ui/src/components/menu.tsx` sets custom
 content width to `Math.max(triggerRect.width, 128)`, then uses that number as the fixed portal's inline width.
 `apps/web/src/library/collection-filters.tsx` independently asks its inner form for approximately 32rem on desktop.
@@ -181,7 +184,9 @@ The proposed correction is an explicit form/dialog panel sizing contract, clampe
 height, with one scroll owner and collision-aware positioning. A form is not a list of menu items merely because
 both open from a button. The selected phone search mode is full screen; filter content inside it should share that
 surface rather than open a tiny floating desktop menu. Do not infer a current open-panel fix from a closed screenshot.
-The relevant all-matrix open states and bounded observations are identified in the final manifest.
+The all-matrix open states are identified in the manifest. The phone filter Pattern itself has a contained
+bottom sheet; that isolated component can be visually finished without claiming that the required integrated
+phone search panel or Collection-scoped header works.
 
 **Accessibility and disclosure.** An actual combobox needs an accessible name, popup relationship, keyboard selection,
 Escape and focus restoration, and predictable IME composition behavior. The W3C [combobox pattern](https://www.w3.org/WAI/ARIA/apg/patterns/combobox/)
