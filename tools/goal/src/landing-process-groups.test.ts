@@ -95,3 +95,92 @@ test('train fixtures opt out of repository affected and sibling defaults', () =>
     ]),
   ).toEqual([{ paths: ['services/kernel/**'], command: ['test-command'] }]);
 });
+
+import { temporaryDirectory } from './test-support.ts';
+import { runIntegrationChecks } from './merge-train.ts';
+
+test('owned cancellation settles the selected gate group and leaves another lane group alive', async () => {
+  const directory = temporaryDirectory();
+  const main = new AbortController();
+  const dev = new AbortController();
+  const reason = new Error('fixture main proof preempted');
+  const run = processGroupRunner(5000);
+  const started: Promise<unknown>[] = [];
+  try {
+    const mainPid = join(directory.path, 'main.pid');
+    const devPid = join(directory.path, 'dev.pid');
+    const launch = (pidFile: string, signal: AbortSignal, name: string) =>
+      run(
+        ['sh', '-c', `sleep 30 & echo $! > '${pidFile}'; wait`],
+        directory.path,
+        join(directory.path, `${name}.log`),
+        { signal },
+      );
+    const mainResult = launch(mainPid, main.signal, 'main').catch((error) => error);
+    const devResult = launch(devPid, dev.signal, 'dev').catch((error) => error);
+    started.push(mainResult, devResult);
+    await until(() => existsSync(mainPid) && existsSync(devPid));
+    const mainChild = Number(readFileSync(mainPid, 'utf8').trim());
+    const devChild = Number(readFileSync(devPid, 'utf8').trim());
+    main.abort(reason);
+    expect(await mainResult).toBe(reason);
+    await expectStopped(mainChild);
+    expect(alive(devChild)).toBe(true);
+    dev.abort(new Error('fixture cleanup'));
+    await devResult;
+    await expectStopped(devChild);
+    const neverStarted = join(directory.path, 'never-started');
+    await expect(
+      run(['sh', '-c', `touch '${neverStarted}'`], directory.path, join(directory.path, 'never.log'), {
+        signal: main.signal,
+      }),
+    ).rejects.toBe(reason);
+    expect(existsSync(neverStarted)).toBe(false);
+  } finally {
+    main.abort(reason);
+    dev.abort(reason);
+    await Promise.allSettled(started);
+    directory.close();
+  }
+});
+
+test('owned cancellation waits for all proof siblings before returning a rejected check group', async () => {
+  const directory = temporaryDirectory();
+  const sibling = Promise.withResolvers<void>();
+  let rejected = false;
+  let settled = false;
+  const reason = new Error('fixture cancellation');
+  let running: Promise<void> | undefined;
+  try {
+    running = runIntegrationChecks(
+      [['first'], ['sibling']],
+      directory.path,
+      join(directory.path, 'checks.log'),
+      async (command) => {
+        if (command[0] === 'first') throw reason;
+        await sibling.promise;
+        settled = true;
+        return { passed: true, output: '', timedOut: false };
+      },
+    ).then(
+      () => {
+        throw new Error('Rejected proof must not turn green');
+      },
+      (error) => {
+        expect(error).toBe(reason);
+        expect(settled).toBe(true);
+        rejected = true;
+      },
+    );
+    await Bun.sleep(10);
+    expect(rejected).toBe(false);
+    sibling.resolve();
+    await running;
+    expect(rejected).toBe(true);
+    expect(existsSync(join(directory.path, 'checks.log.check-0'))).toBe(true);
+  } finally {
+    sibling.resolve();
+    await running;
+    directory.close();
+  }
+});

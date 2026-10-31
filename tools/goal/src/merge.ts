@@ -49,7 +49,14 @@ export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env, stateDi
 }
 
 export type GateResult = { passed: boolean; output: string; timedOut: boolean };
-export type GateRunner = (argv: readonly string[], cwd: string, logPath: string) => Promise<GateResult>;
+/** Cancellation belongs to one invocation, never to all commands in a controller process. */
+export type GateRunOptions = { signal?: AbortSignal };
+export type GateRunner = (
+  argv: readonly string[],
+  cwd: string,
+  logPath: string,
+  options?: GateRunOptions,
+) => Promise<GateResult>;
 
 const activeCommandGroups = new Set<number>();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
@@ -72,8 +79,9 @@ export function processGroupRunner(
   parent: NodeJS.ProcessEnv = process.env,
   sanitizeEnvironment = true,
 ): GateRunner {
-  return async (argv, cwd, logPath) => {
+  return async (argv, cwd, logPath, { signal } = {}) => {
     if (!argv.length) throw new Error('A gate command is required');
+    signal?.throwIfAborted();
     return await new Promise<GateResult>((resolve, reject) => {
       const child = spawn(argv[0]!, argv.slice(1), {
         cwd,
@@ -91,6 +99,9 @@ export function processGroupRunner(
           process.kill(-child.pid, 'SIGKILL');
         } catch {}
       };
+      // Await close after killing: callers must not release custody or remove the tree while pipes are still open.
+      signal?.addEventListener('abort', killGroup, { once: true });
+      if (signal?.aborted) killGroup();
       const collect = (chunk: Buffer) => {
         const text = chunk.toString();
         output += text;
@@ -107,6 +118,7 @@ export function processGroupRunner(
             }, timeoutMs);
       const cleanup = () => {
         if (timer !== undefined) clearTimeout(timer);
+        signal?.removeEventListener('abort', killGroup);
         if (child.pid !== undefined) activeCommandGroups.delete(child.pid);
         killGroup();
       };
@@ -120,6 +132,10 @@ export function processGroupRunner(
         if (settled) return;
         settled = true;
         cleanup();
+        if (signal?.aborted) {
+          reject(signal.reason);
+          return;
+        }
         resolve({ passed: code === 0 && !timedOut, output, timedOut });
       });
     });
@@ -148,7 +164,8 @@ export function gateRunner(
   }
   const env = environment as NodeJS.ProcessEnv;
   const run = processGroupRunner(timeoutMs, stateDirectory, { ...process.env, ...env });
-  return async (argv, cwd, logPath) => {
+  return async (argv, cwd, logPath, options = {}) => {
+    options.signal?.throwIfAborted();
     let key: ReturnType<typeof checkResultKey> | undefined;
     let cached: CheckResult | undefined;
     let cleanBefore = false;
@@ -170,7 +187,8 @@ export function gateRunner(
       }
     }
     try {
-      const result = await run(argv, cwd, logPath);
+      const result = await run(argv, cwd, logPath, options);
+      options.signal?.throwIfAborted();
       try {
         if (
           key &&

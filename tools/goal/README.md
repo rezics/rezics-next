@@ -76,13 +76,30 @@ brief continue to be written and formatted from that brief.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
 enqueues its landing request, and starts the train. Requests targeting `main` use the `train-main.lease`; other
-requests use `train.lease`. The two lanes select and order their own requests. An ordinary control-plane release,
-while holding the main lane, acquires the existing dev lane before capturing refs or forming its candidate. It retains
-both through the complete required checks, captured-dev compatibility, provider lifecycle, propagation preparation
-and final atomic main/dev/stabilize compare-and-swap. Dev drains never wait for main. Contention waits asynchronously
-for at most 30 seconds, preserves the live owner and leaves the request pending for a later pump on timeout. A stale
-controller hands off, and cancellation or any exit releases only its owned leases. External ref changes still
-invalidate proof through the existing ref guards and finite retry budget. Other main and dev work retains independent
+requests use `train.lease`. The two lanes select and order their own requests. Existing dev backlog drains first. An ordinary control-plane
+release, while holding the main lane, borrows the existing dev lane only when its queue is empty, before capturing
+refs or forming its candidate. With no new dev work it retains both leases through all required checks and the final
+atomic main/dev/stabilize compare-and-swap, including verification of the accepted source ref.
+
+While that proof is running, its controller observes the native dev queue every 50 ms and checks custody before each
+proof command and publication. A newly queued dev request interrupts the controller's own proof. Per-invocation
+`GateRunner` cancellation kills only that proof's command groups and awaits their close; parallel proof commands all
+settle before the controller releases its positively owned dev lease. The same existing dev drain then takes a turn,
+even if the initial idle dev drain returned or found another live owner. No manager signal or extra enqueue is needed.
+The main request stays pending and unpublished; it is not retried again in that drain. Another live dev owner is never
+removed or replaced. Stale code cancels its own proof and uses the existing current-code handoff.
+
+`control-plane-proof-<queue-id>.json` retains each ordinary attempt's exact source, candidate, captured refs, status and
+separate log. An interrupted or crashed proof remains non-green, with no reusable proof or release record. A later
+controller may readmit it only after source or captured refs change, at most three admissions for one source and five
+candidate validations across those admissions. Exhaustion reaches the ordinary failure sink for an owning source
+decision. An observed assertion failure stays failed even when dev also progresses; it never becomes an automatic
+proof retry. Every readmitted candidate runs the entire mandatory proof, captured-dev installed-script compatibility
+and real-boundary lifecycle checks afresh. Immutable-tree evidence never certifies a different capture.
+
+Contention waits asynchronously for at most 30 seconds, preserves the live owner and leaves the request pending for a
+later pump on timeout. Cancellation and every exit release only owned leases. External ref changes retain the existing
+ref guards and finite retry budget. Other main and dev work retains independent
 lanes. Each lane remains serial. A train releases its lease and checks its lane's
 queue again, reacquiring the lease to drain a request that arrived during shutdown. Detached train processes wait for
 the lane lease and recheck the control-plane version while they wait. Every process records the Git object id for
