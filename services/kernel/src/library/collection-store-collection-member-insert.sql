@@ -8,7 +8,7 @@ WITH input AS NOT MATERIALIZED (
       revision = revision + 1,
       updated_at = input.time, transaction_id = input.transaction_id
   FROM input
-  WHERE collection.route = input.route AND collection.collection_id = input.collection_id AND collection.member_count < 5000
+  WHERE collection.route = input.route AND collection.collection_id = input.collection_id AND collection.member_count < 2147483647
   RETURNING collection.route, collection.collection_id
 )
 INSERT INTO library.collection_member

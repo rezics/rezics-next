@@ -9,7 +9,7 @@ WITH input AS NOT MATERIALIZED (
       revision = revision + 1, updated_at = input.time, transaction_id = input.transaction_id
   FROM input
   WHERE collection.route = input.route AND collection.collection_id = input.collection_id
-    AND collection.state = 'active' AND collection.member_count < 5000
+    AND collection.state = 'active' AND collection.member_count < 2147483647
     AND EXISTS (SELECT 1 FROM library.collection_member m WHERE m.route=input.route AND m.collection_id=input.collection_id
       AND m.member_id=input.member_id AND m.deletion_id=input.deletion_id
       AND m.deletion_revision=input.expected_revision AND m.purge_after > input.time)

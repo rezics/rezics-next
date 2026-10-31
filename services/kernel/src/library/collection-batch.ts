@@ -5,8 +5,8 @@ import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { newId, routeOf } from '../route/route.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
-import { deleteMembers, listMembers, memberNeighbors, readCollection, readMember } from './collection-store.ts';
-import { keyBetween, respacedKeys } from './ordinal.ts';
+import { deleteMembers, readCollection, readMember } from './collection-store.ts';
+import { planCollectionPlacement } from './collection-order-placement.ts';
 import { readableSubjects } from './subject-anchor.ts';
 import lockParents from './collection-batch-lock.sql';
 import selectedMembers from './collection-batch-selected.sql';
@@ -25,7 +25,11 @@ export type CollectionMutator = <T>(
   kind: string,
   requestKey: string,
   input: unknown,
-  body: (tx: CommandTransaction, command: Context, route: number) => Promise<{ value: T; events: CommandEvent[] }>,
+  body: (
+    tx: CommandTransaction,
+    command: Context,
+    route: number,
+  ) => Promise<{ value: T; events: readonly CommandEvent[] }>,
   destinationCollectionId?: string,
   prepareMembers?: (time: AuthoritativeTime) => Promise<void>,
 ) => Promise<CommandOutcome<T>>;
@@ -162,48 +166,29 @@ export function createCollectionBatchCommands(
           const anchor = await readMember(tx, route, destinationId, input.after);
           if (!anchor || preparedAfter !== anchor.subjectId) missing();
         }
-        const neighbors = await memberNeighbors(
+        if (destination.memberCount + ids.length > 2_147_483_647) throw new ProblemError('collection_full');
+        const plan = await planCollectionPlacement(
           tx,
           route,
           destinationId,
           input.after === null ? { kind: 'first' } : { kind: 'after', memberId: input.after },
+          members.map((member) => member.id),
         );
-        if (!neighbors) missing();
-        if (destination.memberCount + ids.length > 5000) throw new ProblemError('collection_full');
-        let before = neighbors.before;
-        let keys: string[] = [];
-        for (const _member of members) {
-          const key = keyBetween(before, neighbors.after);
-          if (key === null) {
-            keys = [];
-            break;
-          }
-          keys.push(key);
-          before = key;
-        }
-        let respaced = false;
-        if (!keys.length) {
-          const existing = await listMembers(tx, route, destinationId, { after: null, limit: 5000 });
-          const at = input.after === null ? 0 : existing.findIndex((member) => member.id === input.after) + 1;
-          if (input.after !== null && at === 0) missing();
-          const order = existing.map((member) => member.id);
-          order.splice(at, 0, ...members.map((member) => member.id));
-          const allKeys = respacedKeys(order.length);
-          const byId = new Map(order.map((id, index) => [id, allKeys[index]!]));
-          keys = allKeys.slice(at, at + members.length);
+        const keys = plan.keys;
+        const respaced = plan.members.length > 0;
+        if (respaced) {
           await deferOrdinals.run(tx);
           const respaceInput: (typeof respace)['~reylo']['input'] = {
             route,
             collection_id: destinationId,
-            items: existing.map((member) => ({ member_id: member.id, ordinal_key: byId.get(member.id)! })),
+            items: plan.members.map((member) => ({ member_id: member.memberId, ordinal_key: member.ordinalKey })),
             transaction_id: command.transactionId,
           };
           const values = respace.params.map((name) =>
             name === 'items' ? JSON.stringify(respaceInput.items) : respaceInput[name as keyof typeof respaceInput],
           );
           const { rows: updated } = await tx.query<(typeof respace)['~reylo']['element']>(respace.sql, values);
-          if (updated.length !== existing.length) conflict();
-          respaced = true;
+          if (updated.length !== plan.members.length) conflict();
         }
         const moved: CollectionMember[] = [];
         for (let index = 0; index < members.length; index++) {

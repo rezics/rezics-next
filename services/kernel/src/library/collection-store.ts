@@ -252,11 +252,13 @@ export async function memberNeighbors(
   route: number,
   collectionId: string,
   position: MemberPosition,
+  excludedIds: readonly string[] = [],
 ): Promise<MemberNeighbors | null> {
   const row = await memberNeighborsSql.run(queryClient(client), {
     route,
     collection_id: collectionId,
     kind: position.kind,
+    excluded_ids: [...excludedIds],
     member_id: position.kind === 'after' ? position.memberId : null,
   });
   if (!row || !row.found) return null;
@@ -407,7 +409,6 @@ export async function respaceMembers(
   members: readonly MemberReordering[],
   context: WriteContext,
 ): Promise<number | null> {
-  if (members.length > 5000) throw new RangeError('A Collection cannot have more than 5000 members');
   const memberIds = new Set<string>();
   const ordinalKeys = new Set<string>();
   for (const member of members) {

@@ -3,10 +3,10 @@ WITH input AS NOT MATERIALIZED (SELECT :route::integer AS route, :transaction_id
   FROM jsonb_to_recordset(:items::jsonb) AS requested(member_id uuid, ordinal_key text)
 ), parent AS (
   UPDATE library.collection AS collection
-  SET order_epoch = order_epoch + 1, revision = revision + 1, updated_at = :time, transaction_id = input.transaction_id
+  SET source_generation = source_generation + 1, order_epoch = order_epoch + 1, revision = revision + 1, updated_at = :time, transaction_id = input.transaction_id
   FROM input
   WHERE collection.route = input.route AND collection.collection_id = :collection_id
-    AND collection.member_count = (SELECT count(*) FROM requested)
+    AND collection.state = 'active'
     AND (SELECT count(DISTINCT member_id) FROM requested) = (SELECT count(*) FROM requested)
     AND (SELECT count(*) FROM requested
          JOIN library.collection_member USING (member_id)

@@ -973,7 +973,7 @@ barrier. After T, the barrier rejects new owner writes. Account cleanup runs as 
 deleted account and T; it does not impersonate an active human or invoke an active-only trusted-account command.
 
 Undo checks uniqueness and CAS atomically. An entry replacement at the same owner/subject key, occupied member
-ordinal after reorder, recreated label name, full Collection (5000), or live assignment cap (32) returns conflict
+ordinal after reorder, recreated label name, Collection integer-capacity exhaustion, or live assignment cap (32) returns conflict
 without overwriting newer facts, repositioning silently or allocating another identity. It may be retried with a
 fresh key/revision after the conflict is explicitly resolved within the window. Tombstones do not count as live
 capacity; restore must reacquire capacity. Profile absence blocks only NEW profiled values: clearing and deletion
@@ -1403,7 +1403,43 @@ and response-byte budgets. See [the shelf contract](shelf-contract.md) for the r
 
 ## Curated occurrence ordering
 
-Ordering keys are fractional-indexing keys. Keys are generated within 32 characters and stored within 48. They are stored with `COLLATE "C"` and are unique on `(route, collection_id, ordinal_key)`. That unique constraint is deferrable. A respace happens when no generated key fits. A respacing in the same command increments `orderEpoch`, which makes earlier cursors stale. A new Collection starts at epoch 0. Member cursors seal `orderEpoch + 1` because the seal rejects epoch 0. A mismatch is `stale_cursor`.
+Ordering uses the installed pinned `fractional-indexing` package with its default alphabet, ASCII case-sensitive
+`COLLATE "C"` order and the original occurrence store. Commands prefer keys within 32 bytes; storage admits 48.
+The deferrable unique key covers **all** raw rows on `(route, collection_id, ordinal_key)`, including tombstones.
+Duplicate subjects retain separate occurrence IDs, notes, revisions and added times. Collections support millions
+of occurrences; member counts retain their physical PostgreSQL integer bound, without a 5,000-member admission cap.
+
+Point reads use the exact route/Collection/member key and conceal retained deletions. Placement seeks at most two
+indexed live neighbours, excluding the selected moving occurrence. If direct allocation cannot fit preferred keys,
+two directional seeks examine at most 128 resting occurrences, including untouched boundary rows. At most 100
+selected occurrences join that bounded window. Only this window is rekeyed in the command, with the unique constraint
+deferred until commit. Local rekeying advances revision, source generation and order epoch; direct moves advance
+revision/source generation. No command enumerates an owner to find one member or repair a gap.
+
+If that window cannot fit, the original command rolls back, including its receipt. A separate Collection-partition
+`library.collection.order.repair.begin` command reauthorizes `collection:update` at its own authoritative T and
+commits an immutable native capture and an outbox work intent. Its receipt namespace includes the failed native
+fence and cannot consume the original edit's key. The membership response is retryable `dependency_unavailable`
+(`503`), with no claimed insertion or move. The caller retries the original intent after repair; revisioned transfer
+also reacquires both current parent revisions. Competing structural writes use a bounded native barrier and retry.
+
+The default Library worker consumes this intent on the shared DBOS `maintenance` queue, with stable repair/step IDs.
+The capture freezes member count, revision, source generation, order epoch, original raw minimum and package-legal
+lower/upper boundaries strictly below that minimum. A deterministic balanced midpoint tree computes only the ranks
+needed for a page, using stored-width headroom where necessary. Each native transaction examines at most 128 original
+raw occurrences by indexed strict frontier, including deleted rows, and moves only active rows into that reserved
+prefix. Already moved rows lie behind the original minimum and cannot be enumerated again. Prefix ranks and original
+suffix keep the same visible occurrence order after every commit. Tombstone locators and saved Undo ordinals/payload
+are untouched; source holds are not dropped. Raw Source ordering remains the actual native order, with source-generation
+fences invalidating prior observations on every committed page.
+
+A page atomically compares/advances the captured native parent fences and original frontier, updates the parent
+revision/source generation/order epoch and emits invalidation plus its durable continuation intent. Work stores no
+Actor, JWT, cached authorization or old T. The native account share fence prevents work after terminal account time;
+deletion, erasure or cancellation terminalizes the capture and stale workers cannot change members. A final bounded
+continuation removes the single terminal capture row. Restart resumes at committed progress, without an owner scan,
+a whole-owner key array, a second runtime or a restart loop. New Collections start at epoch 0. Public member cursors
+seal `orderEpoch + 1`; a changed epoch returns `stale_cursor`, so pages cannot mix old and new key spaces.
 
 ## Shelf reads
 
@@ -1566,7 +1602,7 @@ These are derivations from the library commands, SQL, `db/library/schema.sql` an
 `L(N) = O(log(2+N))` shared blocks for a B-tree probe, with constant rows examined for a unique key; `k` indexed changes cost `O(k L(N))` blocks.
 Bounds distinguish rows examined (`R`), shared blocks (`B`) and SQL statements (`S`). A subsection excludes the command envelope and authorization unless it adds them.
 Library primary keys are B-trees beginning with `route`.
-`M` is the member count of one Collection and is at most 5000. Mounted pages use `s` at most 100. One progress record names at most 100 unit ids. A session's completed-unit count is at most 20000. History length is not capped by that number.
+`M` is the finite original raw occurrence population of one Collection, designed for at least one million members. Mounted pages use `s` at most 100. One progress record names at most 100 unit ids. A session's completed-unit count is at most 20000. History length is not capped by that number.
 `listing-counts.sql` is the search reader. One statement probes `subject_listing` by primary key, `LIMIT 1`, once per supplied id in one partition. No library growth test measures that reader, so this Cost section does not cite it.
 Where a named test does not call the operation, or does not grow the rows that operation can touch, the subsection says so. A bound the indexes do not support is stated as not derivable.
 
@@ -1670,15 +1706,39 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 ### Add member
 
-- Touches: Subject resolve starts before the command. Inside: one active Collection read, one neighbour read, and, when no generated key fits, one `listMembers` of at most 5000 rows and one respace statement. Keys are generated within 32 characters and stored within 48. The neighbour statement seeks at most one before key and one after key on the ordinal unique key, plus the named after-member when the position is after. Respace increments `order_epoch` when `member_count` equals the requested set and rewrites those members in the same statement. The insert statement then bumps `member_count` while it is below 5000 and inserts one member. The 5001st member writes nothing. The event subject is the Collection id. Respace does not itself emit `listing.changed`.
-- Bound: Fitting key: library body `R` `O(1)`, `B` `O(L(N))`, `S` 3, plus one subject resolve, authorization and the envelope. Respace of this Collection examines and rewrites `M` member keys, `M` at most 5000, so that path is `R` `O(M)` and `B` `O(M L(N))` on top of the fitting-key reads.
-- Growth check: `test/library/growth-members.test.ts`: `Add member with a fitting key has constant rows and statements as its Collection and unrelated data grow` measures the whole command at scales 1, 4 and 16, seeding 250, 1,000 and 4,000 members in each probe Collection and 500 unrelated rows per touched library relation in both the measured and other partitions. `test/library/collections.test.ts`: `add cost stays constant as unrelated collections grow` also measures the command while unrelated Collections grow. `test/library/collection-store.test.ts`: `respacing 500 members rewrites one Collection in one statement and preserves order` covers the separate respace path. `test/library/subject-anchor.test.ts`: `subject anchoring has constant resolve cost and input-bounded page cost as unrelated subjects grow` covers subject resolve.
+- Touches: Subject resolution, the exact Collection/member points, at most two indexed live neighbours, a local
+  window of at most 128 resting occurrences and the original partition/receipt/outbox fences. The insert changes
+  count/revision/source generation; local respacing additionally changes order epoch. A failed window commits only
+  a separately authorized repair-begin intent and returns `503` for the unapplied add.
+- Bound: O((selected + 128) log N) rows/index blocks with fixed data widths and bounded key memory, independent of
+  total membership; one selected occurrence for ordinary add/move and at most 100 for transfer. Refusal uses the
+  same finite points/window, never owner enumeration. Physical integer count/epoch/revision checks remain.
+- Growth check: Existing fitting-key growth, CAS/privacy/Undo and subject-anchor tests remain relevant. The maintained
+  `test/library/collection-order.test.ts` outcome adds a native HTTP attempt beyond 5,000, interrupted dense-gap repair,
+  default worker continuation, preserved order/identity/Undo evidence and a successful retry of the original edit.
+  This source and derivation do not establish native or growth proof; integration owns their execution.
 
 ### Move member
 
-- Touches: One active Collection read and one neighbour read. A fitting key updates one member primary key and touches the Collection primary key. When no generated key fits, the command lists at most 5000 members, respaces them, then lists at most 5000 members again to return the moved row. Keys are generated within 32 characters and stored within 48. The event subject is the Collection id.
-- Bound: Fitting key: library body `R` `O(1)`, `B` `O(L(N))`, `S` 4, plus authorization and the envelope. The respace path adds two lists of `M` rows and one rewrite of `M` keys, `M` at most 5000, so `R` `O(M)` and `B` `O(M L(N))`.
-- Growth check: `test/library/growth-members.test.ts`: `Move member with a fitting key has constant rows and statements as its Collection and unrelated data grow` measures the whole command at scales 1, 4 and 16, seeding 250, 1,000 and 4,000 members in each probe Collection and 500 unrelated rows per touched library relation in both the measured and other partitions. `test/library/collections.test.ts`: `move cost stays constant as unrelated collections grow` also covers a fitting-key move as unrelated Collections grow. `test/library/collection-store.test.ts`: `respacing 500 members rewrites one Collection in one statement and preserves order` covers the separate respace path.
+- Touches: Exact live occurrence read, indexed neighbours and the same bounded local placement window as add.
+  The moved row is updated by its full point key after any resting-window rekey; it is never found by listing members.
+  The parent source generation/revision advance with the move, and local rekeying advances order epoch.
+- Bound: O((1 + 128) log N), bounded rows, statements and memory independent of Collection size. A captured repair
+  rejects structural writes by one exact owner barrier; the original move remains unapplied until retried.
+- Growth check: Retain the existing fitting-key move cost, privacy, CAS, duplicate occurrence and Undo tests. The new
+  Collection order outcome includes a move of an occurrence beyond the former admission boundary. Native proof is deferred.
+
+### Durable Collection order repair and cleanup
+
+- Touches: One immutable repair capture/progress row, one exact parent/account fence and at most 128 examined original
+  raw occurrences per transaction. Output updates are point CAS operations. Parent order/source fences, invalidation
+  and the next stable work intent commit atomically. Terminal cleanup deletes one capture; parent erasure cascades
+  only that fixed-size control row.
+- Bound: O(128 log N + log M) work and bounded keys/memory per step; O(M log N) total maintenance and O(M/128) durable
+  pages, plus one finite terminal cleanup page. Deleted rows pay the same examined-frontier budget and retain identity.
+  Structural barriers prevent an unbounded invalidate/restart loop. No `generateNKeysBetween` call receives `M`.
+- Growth check: Existing work/Source staleness and privacy assertions remain required for controller proof, including
+  interruption, account terminal fencing and held sources. The maintained outcome is not a native performance proof.
 
 ### Note member
 
@@ -2141,7 +2201,7 @@ There is no receipt: the retained source version supplies replay ordering, inclu
 cycles. It reads neither personal Library facts nor curator labels.
 
 The source examines only occurrences of this subject in this Collection through `collection_member_subject`
-(at most the existing 5000 live occurrences); apply uses point keys on version, fence, pair and subject aggregate.
+(a finite original occurrence population, paged by the registered worker); apply uses point keys on version, fence, pair and subject aggregate.
 Statements and examined rows are constant plus this bounded multiplicity, with B-tree depth in storage size.
 
 ### Listing-change workflow and publication visibility
@@ -2359,15 +2419,16 @@ stored member data. Destination anchors require the same subject readability.
 One transaction locks both parents, compares both supplied revisions, checks destination capacity and all selected
 source rows, and transfers the actual rows in source ordinal order. IDs, subject IDs, notes and added times survive.
 There is no source deletion episode. Independent previously retained occurrences remain independent. Ordinal gap
-exhaustion uses the existing 5,000-member bound and ordinal generator, defers the existing unique constraint for
-that transaction, then respace/transfer and both parent updates commit atomically. Source survivor order is unchanged.
+exhaustion uses the shared bounded local ordinal planner, defers the existing unique constraint for
+that transaction, then window rekeying/transfer and both parent updates commit atomically. An exhausted window instead
+admits the separately authorized destination repair and returns `503` with no transfer success receipt. Source survivor order is unchanged.
 Each parent advances count/revision/source generation once; destination order epoch advances once when respaced.
 Per-occurrence existing events feed the native monotonic listing producer, including duplicate survivors and all
 public/private combinations. No public count is written by the command.
 
 Cost: parent and occurrence validation uses exact route/Collection/member point keys, O(selected log N), with at
 most 100 selected changes and two parent keys. Subject preparation visits at most 101 distinct originals, in the
-existing raw-100 helper pages. Destination respacing alone reads/writes at most 5,000 live rows, fully charged.
+existing raw-100 helper pages. Destination placement examines at most 128 resting occurrences and allocates at most 100 selected keys; retained repair follows the bounded order-work contract above.
 Retained history is never searched. `collection-batch-growth.test.ts` adds API rollback/privacy/lifecycle coverage
 and native 64/512/4096 live/retained/unrelated growth at fixed batches 1 and 100, including fixed full destinations; captures use the existing inclusive
 Access, receipt, custody, outbox and listing accounting with unchanged bounds and raw plans/bytes.

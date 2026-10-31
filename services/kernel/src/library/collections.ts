@@ -42,13 +42,13 @@ import {
   preparePresentationSelection,
   type PresentationSelection,
 } from './collection-presentation.ts';
-import { placeMember } from './collection-placement.ts';
+import { CollectionOrderRepairRequired, planCollectionPlacement } from './collection-order-placement.ts';
+import { assertCollectionOrderWritable, beginCollectionOrderRepair } from './collection-order.ts';
 import {
   deleteMember as deleteMemberRow,
   insertCollection,
   insertMember,
-  listMembers,
-  memberNeighbors,
+  readMember,
   moveMember as moveMemberRow,
   readCollection,
   readMemberDeletion,
@@ -76,7 +76,7 @@ import {
   type CollectionRule,
 } from './collection-rules.ts';
 
-const MEMBER_LIMIT = 5_000;
+const MAX_MEMBER_COUNT = 2_147_483_647;
 const TITLE_LIMIT = 200;
 const DESCRIPTION_LIMIT = 2_000;
 const NOTE_LIMIT = 1_000;
@@ -161,20 +161,6 @@ function positionOf(after: string | null | undefined): MemberPosition {
   return { kind: 'after', memberId: after };
 }
 
-function insertionIndex(memberIds: readonly string[], movingId: string | null, position: MemberPosition): number {
-  const resting = movingId === null ? memberIds : memberIds.filter((id) => id !== movingId);
-  if (position.kind === 'first') return 0;
-  if (position.kind === 'last') return resting.length;
-  if (movingId !== null && position.memberId === movingId) {
-    const current = memberIds.indexOf(movingId);
-    if (current < 0) throw notFound();
-    return current;
-  }
-  const anchor = resting.indexOf(position.memberId);
-  if (anchor < 0) throw notFound();
-  return anchor + 1;
-}
-
 /** createPool refuses a second checkout while a command holds its connection.
  * Creation proof reads through the caller's pool; the insert uses another pool on the same database.
  */
@@ -257,13 +243,15 @@ async function touchCollection(
   collectionId: string,
   time: string,
   transactionId: string,
+  structural = false,
 ): Promise<void> {
   const updated = await tx.query<{ revision: number }>(
     `UPDATE library.collection
-        SET updated_at = $1::timestamptz, transaction_id = $2::uuid
+        SET updated_at = $1::timestamptz, transaction_id = $2::uuid,
+            revision = revision + $5::integer, source_generation = source_generation + $5::integer
       WHERE route = $3 AND collection_id = $4 AND state = 'active'
       RETURNING revision`,
-    [time, transactionId, route, collectionId],
+    [time, transactionId, route, collectionId, Number(structural)],
   );
   if (updated.rows.length !== 1) throw notFound();
 }
@@ -429,7 +417,7 @@ export function createCollectionCommands(config: {
       tx: CommandTransaction,
       command: { transactionId: string; time: string; rule?: AdmittedCollectionRule },
       route: number,
-    ) => Promise<{ value: T; events: CommandEvent[] }>,
+    ) => Promise<{ value: T; events: readonly CommandEvent[] }>,
     destinationCollectionId?: string,
     prepareMembers?: (time: AuthoritativeTime) => Promise<void>,
     selection?: PresentationSelection,
@@ -518,7 +506,10 @@ export function createCollectionCommands(config: {
       async authorize(tx, attempt, proof) {
         const mode = await normalAccess.authorize(tx, attempt, proof);
         const collection = await authorizedCollection(tx, owner, route, collectionId, attempt.time, allowDeleted);
-        if (kind.startsWith('library.collection.member.') && collection.membershipKind === 'dynamic')
+        if (
+          (kind.startsWith('library.collection.member') || kind === 'library.collection.order.repair.begin') &&
+          collection.membershipKind === 'dynamic'
+        )
           throw new ProblemError('dynamic_membership_immutable');
         if (rule) {
           if (collection.membershipKind !== 'dynamic' || collection.builtinKind != null || !collection.hasSavedRule)
@@ -541,33 +532,57 @@ export function createCollectionCommands(config: {
         return mode;
       },
     };
-    return runCommand(
-      pool,
-      {
-        ...identity,
-        partition: partitionOf(route),
-        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-        ...(clock ? { clock } : {}),
-        receipt: { kind, key: requestKey, digest: digest(identity, kind, input) },
-        authorization,
-      },
-      async (tx, command) => {
-        const current = await authorizedCollection(tx, owner, route, collectionId, command.time, allowDeleted);
-        if (current.curatorAccountId === null) throw new GrantDeniedError();
-        await enterShelfWrite({ client: tx, route, accountId: current.curatorAccountId });
-        const failure = failures.get(command.time);
-        if (failure) throw failure;
-        return body(
-          tx,
-          {
-            transactionId: command.transactionId,
-            time: authoritativeTimeValue(command.time),
-            ...(rules.get(command.time) ? { rule: rules.get(command.time)!.rule } : {}),
-          },
-          route,
-        );
-      },
-    );
+    try {
+      return await runCommand(
+        pool,
+        {
+          ...identity,
+          partition: partitionOf(route),
+          deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+          ...(clock ? { clock } : {}),
+          receipt: { kind, key: requestKey, digest: digest(identity, kind, input) },
+          authorization,
+        },
+        async (tx, command) => {
+          const current = await authorizedCollection(tx, owner, route, collectionId, command.time, allowDeleted);
+          if (current.curatorAccountId === null) throw new GrantDeniedError();
+          await enterShelfWrite({ client: tx, route, accountId: current.curatorAccountId });
+          const failure = failures.get(command.time);
+          if (failure) throw failure;
+          if (kind !== 'library.collection.order.repair.begin' && kind !== 'library.collection.delete') {
+            for (const id of [
+              ...new Set([collectionId, ...(destinationCollectionId ? [destinationCollectionId] : [])]),
+            ].sort())
+              await assertCollectionOrderWritable(tx, route, id);
+          }
+          return body(
+            tx,
+            {
+              transactionId: command.transactionId,
+              time: authoritativeTimeValue(command.time),
+              ...(rules.get(command.time) ? { rule: rules.get(command.time)!.rule } : {}),
+            },
+            route,
+          );
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof CollectionOrderRepairRequired)) throw error;
+      const repairKind = 'library.collection.order.repair.begin';
+      // Keep admission separate from the failed mutation, including its receipt
+      // namespace and authoritative authorization time. No Actor is retained.
+      const repairKey = digest(identity, repairKind, { requestKey, kind, input, fence: error.fence }).toString('hex');
+      await mutate(
+        actor,
+        error.collectionId,
+        'collection:update',
+        repairKind,
+        repairKey,
+        { collectionId: error.collectionId, originalKind: kind, originalKey: requestKey, fence: error.fence },
+        async (tx, _command, repairRoute) => beginCollectionOrderRepair(tx, repairRoute, error.collectionId),
+      );
+      throw new ProblemError('dependency_unavailable');
+    }
   }
 
   async function updateCollectionRule(
@@ -769,13 +784,14 @@ export function createCollectionCommands(config: {
       input,
       async (tx, command) => {
         const current = await activeCollection(tx, route, collectionId);
-        if (current.memberCount >= MEMBER_LIMIT) throw new ProblemError('collection_full');
+        if (current.memberCount >= MAX_MEMBER_COUNT) throw new ProblemError('collection_full');
         const memberId = newId(route);
         const placed = await placeInCollection(tx, route, collectionId, position, memberId, false);
         const subject = await subjectPromise;
         if (!subject || (subject.subjectId !== draft.subjectId && subject.requestedSubjectId !== draft.subjectId))
           throw notFound();
         if (placed.respace.length > 0) {
+          await tx.query('SET CONSTRAINTS library.collection_member_ordinal_key DEFERRED');
           const epoch = await respaceMembers(tx, route, collectionId, placed.respace, command);
           if (epoch === null) throw new ProblemError('conflict');
         }
@@ -788,7 +804,7 @@ export function createCollectionCommands(config: {
         );
         if (!value) {
           const again = await readCollection(tx, route, collectionId);
-          if (again && again.memberCount >= MEMBER_LIMIT) throw new ProblemError('collection_full');
+          if (again && again.memberCount >= MAX_MEMBER_COUNT) throw new ProblemError('collection_full');
           throw notFound();
         }
         return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
@@ -817,14 +833,13 @@ export function createCollectionCommands(config: {
         await activeCollection(tx, route, collectionId);
         const placed = await placeInCollection(tx, route, collectionId, position, memberId, true);
         if (placed.respace.length > 0) {
+          await tx.query('SET CONSTRAINTS library.collection_member_ordinal_key DEFERRED');
           const epoch = await respaceMembers(tx, route, collectionId, placed.respace, command);
           if (epoch === null) throw new ProblemError('conflict');
-          const value = await readMemberOn(tx, route, collectionId, memberId);
-          return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
         }
         const value = await moveMemberRow(tx, route, collectionId, memberId, placed.ordinalKey, command);
         if (!value) throw notFound();
-        await touchCollection(tx, route, collectionId, command.time, command.transactionId);
+        await touchCollection(tx, route, collectionId, command.time, command.transactionId, true);
         return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
       },
     );
@@ -918,7 +933,7 @@ export function createCollectionCommands(config: {
           throw new ProblemError('member_restore_expired');
         if (saved.deletionRevision !== BigInt(expectedRevision)) throw new ProblemError('member_restore_stale');
         if (readableOriginal !== saved.subjectId) throw notFound();
-        if (parent.memberCount >= MEMBER_LIMIT) throw new ProblemError('collection_full');
+        if (parent.memberCount >= MAX_MEMBER_COUNT) throw new ProblemError('collection_full');
         const collision = await tx.query(
           `SELECT 1 FROM library.collection_member
             WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND ordinal_key=$3 AND member_id<>$4 LIMIT 1`,
@@ -978,8 +993,7 @@ async function readMemberOn(
   collectionId: string,
   memberId: string,
 ): Promise<CollectionMember> {
-  const members = await listMembers(tx, route, collectionId, { after: null, limit: MEMBER_LIMIT });
-  const member = members.find((item) => item.id === memberId);
+  const member = await readMember(tx, route, collectionId, memberId);
   if (!member) throw notFound();
   return member;
 }
@@ -992,17 +1006,11 @@ async function placeInCollection(
   memberId: string,
   moving: boolean,
 ): Promise<{ ordinalKey: string; respace: readonly MemberReordering[] }> {
-  const neighbors = await memberNeighbors(tx, route, collectionId, position);
-  if (!neighbors) throw notFound();
-  const direct = placeMember(neighbors);
-  if (direct.kind === 'key') return { ordinalKey: direct.ordinalKey, respace: [] };
-  const existing = await listMembers(tx, route, collectionId, { after: null, limit: MEMBER_LIMIT });
-  const memberIds = existing.map((member) => member.id);
-  if (moving && !memberIds.includes(memberId)) throw notFound();
-  const orderedMemberIds = moving ? memberIds.filter((id) => id !== memberId) : memberIds;
-  const index = insertionIndex(memberIds, moving ? memberId : null, position);
-  const placed = placeMember(neighbors, { orderedMemberIds, index, memberId });
-  if (!('members' in placed)) throw new ProblemError('conflict');
-  const respace = moving ? placed.members : placed.members.filter((member) => member.memberId !== memberId);
-  return { ordinalKey: placed.ordinalKey, respace };
+  if (moving) {
+    const current = await readMemberOn(tx, route, collectionId, memberId);
+    if (position.kind === 'after' && position.memberId === memberId)
+      return { ordinalKey: current.ordinalKey, respace: [] };
+  }
+  const plan = await planCollectionPlacement(tx, route, collectionId, position, [memberId], moving ? [memberId] : []);
+  return { ordinalKey: plan.keys[0]!, respace: plan.members };
 }

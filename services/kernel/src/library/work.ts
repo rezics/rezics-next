@@ -7,6 +7,7 @@ import { syncSubjectListing } from './listing.ts';
 import memberSubjects from './work-member-subjects.sql';
 import type { ShelfMaintenanceOps } from './shelf-maintenance-ops-contract.ts';
 import { registerLibraryErasure } from './erasure-participant.ts';
+import { registerCollectionOrderWork } from './collection-order-work.ts';
 import { registerCollectionPublicationWork } from './collection-publication-work.ts';
 import { registerFollowActivityWork } from './follow-activity-work.ts';
 
@@ -19,6 +20,7 @@ export function registerLibraryWork(context: WorkContext, maintenance?: ShelfMai
   registerLibraryErasure(context, maintenance);
   registerCollectionPublicationWork(context);
   registerFollowActivityWork(context);
+  registerCollectionOrderWork(context);
   const syncPage = DBOS.registerStep<unknown, [string, string], string | null>(
     async (collectionId: string, after: string): Promise<string | null> => {
       // The route/Collection/subject index bounds this seek, including tombstoned Collections.
