@@ -507,7 +507,11 @@ test('Keep native verification recovery delays actionable without weakening nati
       },
     });
     await controller.reload();
-    const draft = { subject: input.subject, statement: input.statement, links: input.links.map((link) => ({ ...link })) };
+    const draft = {
+      subject: input.subject,
+      statement: input.statement,
+      links: input.links.map((link) => ({ ...link })),
+    };
     await controller.submit(draft);
     const original = controller.snapshot().attempt;
     expect(controller.snapshot().failure).toBeUndefined();
@@ -682,7 +686,9 @@ test('ordinary read Errors and invalid native retry timing never invent a delay 
   });
   await controller.reload();
   expect(controller.snapshot().current).toEqual({ accountId: 'alice', verificationRequest: null, subjectTitle: null });
-  expect(unwrapVerificationRead({ ok: true, value: controller.snapshot().current })).toBe(controller.snapshot().current);
+  expect(unwrapVerificationRead({ ok: true, value: controller.snapshot().current })).toBe(
+    controller.snapshot().current,
+  );
   expect(controller.snapshot().phase).toBe('idle');
   await controller.reload();
   expect(controller.snapshot().failure).toEqual({ status: 403, message: 'rezics-platform-closed' });

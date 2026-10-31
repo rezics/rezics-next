@@ -83,7 +83,11 @@ function apiMessage(error: unknown): string {
   return m.settings_verification_request_failed();
 }
 
-function nativeFailure(result: { status: number; error?: unknown; headers?: HeadersInit | undefined }): VerificationFailure {
+function nativeFailure(result: {
+  status: number;
+  error?: unknown;
+  headers?: HeadersInit | undefined;
+}): VerificationFailure {
   const problem = record(result.error) && record(result.error.value) ? result.error.value : undefined;
   const retryAfter = result.headers === undefined ? null : new Headers(result.headers).get('retry-after');
   return {
