@@ -417,9 +417,9 @@ test(
       expect(await replies.isChecked()).toBe(true);
       expect(patches()).toHaveLength(1);
       // Dispatching submit exercises the handler even when the visible submit button is disabled.
-      await restore.locator('xpath=ancestor::form').evaluate((form) =>
-        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-      );
+      await restore
+        .locator('xpath=ancestor::form')
+        .evaluate((form) => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
       await page.clock.fastForward(29_999);
       expect(await replies.isDisabled()).toBe(true);
       expect(calls).toHaveLength(requests);
