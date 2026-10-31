@@ -1603,7 +1603,7 @@ test('authenticated stopped UNKNOWN proof retry captures fresh SAME-ID source wi
     const runtime = createRuntime({ tasks: h.tasks, db: h.store.db });
     const output: string[] = [];
     const retainedRow = h.store.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=? AND attempt=1').get(h.proof.id);
-    const retainedRun = h.store.proofReservation(h.proof.id, 1);
+    const retainedRun = h.store.proofReservation(h.proof.id, 1)!;
     expect(retainedRun).toMatchObject({ binding: h.binding, status: 'bound', observation: unknown });
     const changedArgv = submittedProof(h, { proof: fresh.brief.proof!,
       acceptance: { ...fresh.brief.acceptance, command: [...fresh.brief.acceptance.command, '--changed'] } });
