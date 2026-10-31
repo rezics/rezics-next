@@ -128,7 +128,7 @@ export function storyArcProfileFixture(scenario: StoryArcScenario = 'ready', loc
         if (scenario === 'unavailable') return json({}, 503);
         return json({ digest, head: 1 });
       }
-      if (path === `/v1/definitions/releases/${digest}`)
+      if (path === `/v1/definitions/releases/${encodeURIComponent(digest)}`)
         return json({ digest: scenario === 'stale' ? 'sha256:stale' : digest, release });
       if (path === `/v1/subjects/${work.id}`) return json(work.publicRead);
       if (path === `/v1/subjects/${storyArcProfileId}`) {

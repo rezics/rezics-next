@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
+import { releaseDigest } from '@rezics/definitions';
 import {
   storyArcProfileFixture,
   storyArcProfileId,
@@ -24,6 +25,12 @@ test('Narrative story-arc editor uses current admitted native fields and actual 
   const fixture = storyArcProfileFixture();
   const read = await fixture.transport.load({ id: storyArcProfileId, work: fixture.work.id });
   if (!read.ok) throw new Error('Expected current arc and work');
+  expect(fixture.calls.find((call) => call.path.startsWith('/v1/definitions/releases/'))).toMatchObject({
+    method: 'GET',
+    path: `/v1/definitions/releases/${encodeURIComponent(releaseDigest(fixture.release))}`,
+  });
+  expect(read.release.types[storyArcType]).toEqual(fixture.release.types[storyArcType]);
+  expect(read.release.properties[storyArcProperty]).toEqual(fixture.release.properties[storyArcProperty]);
   expect(read.arc?.subject.type).toBe(storyArcType);
   expect(storyArcWork(read.release, read.work!.subject.type)).toBe(true);
   const relation = storyArcRelations(await fixture.work.transport.read(), read.release, true);
