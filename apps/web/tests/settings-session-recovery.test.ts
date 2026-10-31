@@ -457,7 +457,12 @@ test('a settled signed-out request ignores cached identity and private loader da
     expect(html).not.toMatch(/role="(?:radio|radiogroup|switch)"/);
     expect(html).not.toContain('<form');
     expect(requests).toBe(before);
-    expect(client.getQueryCache().getAll().map((query) => query.queryKey)).toEqual([sessionQuery.queryKey]);
+    expect(
+      client
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.queryKey),
+    ).toEqual([sessionQuery.queryKey]);
     expect(client.isFetching()).toBe(0);
   } finally {
     client.clear();
