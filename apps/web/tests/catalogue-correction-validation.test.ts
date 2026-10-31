@@ -41,13 +41,15 @@ test('A contributor can find and correct an invalid date without reading an API 
   };
   const edit = async (label: string, value: string) => {
     const control = input(label);
-    const values =
-      control.tagName === 'SELECT' ? [value] : ['', ...Array.from(value, (_, index) => value.slice(0, index + 1))];
-    for (const next of values) {
+    const values = control.tagName === 'SELECT' ? [value] : ['', ...value];
+    for (const [index, next] of values.entries()) {
       await act(async () => {
         const prototype =
           control.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
-        Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(control, next);
+        Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(
+          control,
+          control.tagName === 'SELECT' || index === 0 ? next : control.value + next,
+        );
         control.dispatchEvent(new window.Event(control.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
       });
     }

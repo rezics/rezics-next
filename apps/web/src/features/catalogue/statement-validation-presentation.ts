@@ -100,6 +100,7 @@ export function presentStatementViolations(
         part = draft.qualifiers?.[Number(qualifier[1])];
         address = `qualifier-${qualifier[1]}`;
         path = qualifier[2] ?? '';
+        if (part) sectionLabel += ` ${Number(qualifier[1]) + 1}`;
       }
     } else if (error.pointer === '/statement/references' || error.pointer.startsWith('/statement/references/')) {
       section = 'references';
