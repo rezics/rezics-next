@@ -38,7 +38,7 @@ export const ResultFilters: Story = {
 };
 
 // Extend the existing canonical mixed-results story without changing its catalogue identity.
-export const mixedResultKindNavigation: NonNullable<Story['play']> = async (context) => {
+export async function mixedResultKindNavigation(context: { canvasElement: HTMLElement }) {
   const main = within(context.canvasElement).getByRole('main');
   const results = within(main);
   const navigation = await results.findByRole('navigation', { name: m.search_result_kinds() });
@@ -57,4 +57,4 @@ export const mixedResultKindNavigation: NonNullable<Story['play']> = async (cont
   await waitFor(() =>
     expect(links.getByRole('link', { name: m.search_kind_navigation_all() })).toHaveAttribute('aria-current', 'page'),
   );
-};
+}
