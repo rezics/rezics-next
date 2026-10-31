@@ -109,7 +109,7 @@ Primary sources are REZICS's own durable operational records and implementation,
 [landing queue](https://github.com/rezics/rezics-next/blob/6d3f767467c85dbb9d3bb561d12af784407bd92c/tools/goal/src/land.ts),
 [merge train](https://github.com/rezics/rezics-next/blob/6d3f767467c85dbb9d3bb561d12af784407bd92c/tools/goal/src/merge-train.ts),
 and `tools/goal/src/{dev-verifier,promotion,lifecycle-metrics}.ts` at that revision.
-Repository source licence: [AGPL-3.0-only](../../goal/package.json); full [licence text](../../../LICENSE).
+Repository source licence: [AGPL-3.0-only](../package.json); full [licence text](../../../LICENSE).
 No external clone, installation, copied implementation or outside comparative research was needed for this telemetry audit.
 
 The specific contract path takes precedence over the generic research-directory instruction. The only additional
@@ -118,4 +118,5 @@ concise. Raw identifiers are retained only in that requested telemetry attachmen
 base updates; historical evidence is not relabeled as fresh telemetry. Unknown costs and causal catch counts
 remain unknown; recommendations await manager adoption into the owning efficiency/control-plane document.
 Existing `tools/goal/src/flow.test.ts` already supplies the named tests and is unchanged. Original acceptance,
-native and browser verification remain deferred; only local `tools/goal` workspace typing is permitted here.
+native and browser verification remain deferred. Local foreground `bun run --cwd tools/goal typecheck` passed
+with exit status 0; this establishes workspace typing only, not acceptance or whole-Goal completion.
