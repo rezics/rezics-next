@@ -194,7 +194,8 @@ test('subject feed hrefs reach XML and reciprocal page links with exactly one lo
 test('the existing default subject sitemap adapter consumes actual owner canonical target/views and retains current canonical locale/view paths sparse cursor semantics and native failure without per-row hydration or guessed eligibility', async () => {
   const subject = { ...entry({ fr: 'Le livre', 'zh-Hant': '書' }, 'ja'), views: ['overview', 'editions', 'details'] };
   const account: Entry = {
-    ...entry({ en: 'Not a handle' }, undefined, '2026-10-29T00:00:00.123Z', id.replace(/0$/u, '1')),
+    // Native route order can advance while UUID lexical order decreases.
+    ...entry({ en: 'Not a handle' }, undefined, '2026-10-29T00:00:00.123Z', '00000000-0000-7000-8000-66c100000001'),
     target: { family: 'account', accountId: id, canonicalPath: '/@Current_Handle-' },
     views: ['overview', 'works', 'details'],
   };

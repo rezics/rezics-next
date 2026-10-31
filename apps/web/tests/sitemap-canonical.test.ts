@@ -95,6 +95,7 @@ test('delivered defaults retain ready empty continuations and native errors keep
   } finally {
     failure = undefined;
   }
+  expect(calls).toHaveLength(5);
 });
 
 test('ready adapters retain source identity and cursors and map only owner supplied canonical families', async () => {
@@ -177,6 +178,7 @@ test('missing or invalid required native targets and views refuse projection ins
   }
   expect(calls).toHaveLength(invalid.length);
   expect(calls.every(({ name, query }) => name === 'subjects' && query.limit === 1_000)).toBe(true);
+  expect(() => subjectCanonicalPage({ subjectPages: Array(1_001).fill(item), next: null })).toThrow('bounded native');
   for (const subjectPages of [
     [item, item],
     [
