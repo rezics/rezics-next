@@ -10,13 +10,38 @@ import { repository } from './test-support.ts';
 function setup() {
   const repo = repository();
   const db = openDb(join(repo.path, 'state.sqlite'));
-  const fence: AttemptFence = { assertCurrent() {}, commitMerge(_ref, merge) { return db.transaction(() => merge()).immediate(); } };
+  const fence: AttemptFence = {
+    assertCurrent() {},
+    commitMerge(_ref, merge) {
+      return db.transaction(() => merge()).immediate();
+    },
+  };
   const queue = new SqliteLandingQueue(db, fence);
   const outcomes: GateOutcome[] = [];
-  const options = { mainCheckout: repo.main, stateDirectory: join(repo.path, 'state'), worktreeRoot: join(repo.path, 'trees'),
-    queue, fence, sink: { onGateOutcome(outcome: GateOutcome) { outcomes.push(outcome); } },
-    runGate: async () => ({ passed: true, output: '', timedOut: false }) };
-  return { repo, db, queue, outcomes, options, close() { db.close(); repo.close(); } };
+  const options = {
+    mainCheckout: repo.main,
+    stateDirectory: join(repo.path, 'state'),
+    worktreeRoot: join(repo.path, 'trees'),
+    queue,
+    fence,
+    sink: {
+      onGateOutcome(outcome: GateOutcome) {
+        outcomes.push(outcome);
+      },
+    },
+    runGate: async () => ({ passed: true, output: '', timedOut: false }),
+  };
+  return {
+    repo,
+    db,
+    queue,
+    outcomes,
+    options,
+    close() {
+      db.close();
+      repo.close();
+    },
+  };
 }
 
 test('a process running stale control-plane code hands the train to a fresh process instead of driving it', async () => {
@@ -25,15 +50,29 @@ test('a process running stale control-plane code hands the train to a fresh proc
     s.queue.enqueue(s.repo.branch('alpha', 'a'));
     const before = git(s.repo.main, 'rev-parse', 'main');
     let handedOff = 0;
-    await new MergeTrain({ ...s.options, codeIsCurrent: () => false, handOff: () => { handedOff++; } }).run();
+    await new MergeTrain({
+      ...s.options,
+      codeIsCurrent: () => false,
+      handOff: () => {
+        handedOff++;
+      },
+    }).run();
     expect(handedOff).toBe(1);
     expect(s.outcomes).toEqual([]);
     expect(git(s.repo.main, 'rev-parse', 'main')).toBe(before);
     expect(s.queue.next()?.request.taskId).toBe('alpha');
-    await new MergeTrain({ ...s.options, codeIsCurrent: () => true, handOff: () => { handedOff++; } }).run();
+    await new MergeTrain({
+      ...s.options,
+      codeIsCurrent: () => true,
+      handOff: () => {
+        handedOff++;
+      },
+    }).run();
     expect(handedOff).toBe(1);
-    expect(s.outcomes.map(outcome => [outcome.taskId, outcome.passed])).toEqual([['alpha', true]]);
-  } finally { s.close(); }
+    expect(s.outcomes.map((outcome) => [outcome.taskId, outcome.passed])).toEqual([['alpha', true]]);
+  } finally {
+    s.close();
+  }
 });
 
 test('code currency compares the running code with the control plane on main', async () => {
@@ -44,5 +83,7 @@ test('code currency compares the running code with the control plane on main', a
     expect(codeVersion(repo.main, 'base')).toBe(started);
     repo.commit('base', 'changed');
     expect(codeVersion(repo.main, 'base')).not.toBe(started);
-  } finally { repo.close(); }
+  } finally {
+    repo.close();
+  }
 });

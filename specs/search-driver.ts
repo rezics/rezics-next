@@ -27,8 +27,13 @@ export type Persona = 'anonymous' | 'editor' | 'acceptor' | 'suspended';
 export interface SearchDriver {
   readonly globalContext: string;
   /** Semantic writes carry structured-field Idempotency-Key; search is a read. */
-  request(persona: Persona, method: 'GET' | 'POST', path: string,
-    body?: unknown, headers?: Record<string, string>): Promise<HttpResponse>;
+  request(
+    persona: Persona,
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ): Promise<HttpResponse>;
   /** Production hide/takedown command through an authorized operator; await commit. */
   remove(subjectId: string, mode: 'hidden' | 'taken_down'): Promise<void>;
   /** Pause/resume the actual production indexing runner. */

@@ -1,6 +1,28 @@
 [
-  {"pageid": 123, "ns": 2, "title": "User:Example", "revisions": [{"revid": 7, "slots": {"main": {"contentmodel": "wikitext", "content": "USER_POST_SENTINEL"}}}]},
-  {"pageid": 124, "ns": 3, "title": "User talk:Example", "revisions": [{"revid": 8, "slots": {"main": {"contentmodel": "wikitext", "content": "TALK_POST_SENTINEL"}}}]},
-  {"pageid": 125, "ns": 1, "title": "Talk:Q571", "revisions": [{"revid": 9, "slots": {"main": {"contentmodel": "wikitext", "content": "ENTITY_TALK_SENTINEL"}}}]},
-  {"userid": 123, "name": "Example", "email": "PRIVATE_ACCOUNT_SENTINEL@example.invalid", "private": "PRIVATE_TEXT_SENTINEL"}
+  {
+    "pageid": 123,
+    "ns": 2,
+    "title": "User:Example",
+    "revisions": [{ "revid": 7, "slots": { "main": { "contentmodel": "wikitext", "content": "USER_POST_SENTINEL" } } }]
+  },
+  {
+    "pageid": 124,
+    "ns": 3,
+    "title": "User talk:Example",
+    "revisions": [{ "revid": 8, "slots": { "main": { "contentmodel": "wikitext", "content": "TALK_POST_SENTINEL" } } }]
+  },
+  {
+    "pageid": 125,
+    "ns": 1,
+    "title": "Talk:Q571",
+    "revisions": [
+      { "revid": 9, "slots": { "main": { "contentmodel": "wikitext", "content": "ENTITY_TALK_SENTINEL" } } }
+    ]
+  },
+  {
+    "userid": 123,
+    "name": "Example",
+    "email": "PRIVATE_ACCOUNT_SENTINEL@example.invalid",
+    "private": "PRIVATE_TEXT_SENTINEL"
+  }
 ]

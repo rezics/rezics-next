@@ -8,9 +8,15 @@ test('the unchanged dump-reader outcome suite passes with production readers', a
   const names = readFileSync(suite, 'utf8').match(/^test\(/gm)?.length ?? 0;
   expect(names).toBeGreaterThan(0);
   const child = Bun.spawn([process.execPath, 'test', '--timeout', '30000', suite], {
-    env: { ...process.env, IMPORT_DUMPS_DRIVER: driver }, stdout: 'pipe', stderr: 'pipe',
+    env: { ...process.env, IMPORT_DUMPS_DRIVER: driver },
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
-  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
   const output = stdout + stderr;
   if (code !== 0) console.error(output);
   expect(code).toBe(0);

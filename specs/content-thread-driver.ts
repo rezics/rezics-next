@@ -19,7 +19,10 @@ import type { DocumentSnapshot } from '@rezics/document';
  * fill defaults in the adapter. Item views map the selected revision's stored
  * licence, subjectIds and boardId, never reconstructed thread inheritance.
  */
-export interface Persona { id: string; bearer: string }
+export interface Persona {
+  id: string;
+  bearer: string;
+}
 export type Visibility = 'published' | 'draft' | 'protected' | 'taken_down';
 export interface WriteOptions {
   actor: Persona | null;
@@ -70,7 +73,10 @@ export interface ThreadView {
   boardId: string;
   firstPost: ItemView;
 }
-export interface ApiResult<T> { response: Response; value: T | null }
+export interface ApiResult<T> {
+  response: Response;
+  value: T | null;
+}
 export interface RevisionRow {
   id: string;
   itemId: string;
@@ -126,10 +132,18 @@ export interface ContentThreadDriver {
   createPost(input: ItemInput, options: WriteOptions): Promise<ApiResult<ItemView>>;
   reply(input: ItemInput & { parentId: string }, options: WriteOptions): Promise<ApiResult<ItemView>>;
   /** Omitted metadata preserves the prior revision; boardId must still match the thread. */
-  revise(input: {
-    threadId: string; itemId: string; body: unknown; authorId?: string;
-    licence?: string; subjectIds?: string[]; boardId?: string;
-  }, options: WriteOptions): Promise<ApiResult<ItemView>>;
+  revise(
+    input: {
+      threadId: string;
+      itemId: string;
+      body: unknown;
+      authorId?: string;
+      licence?: string;
+      subjectIds?: string[];
+      boardId?: string;
+    },
+    options: WriteOptions,
+  ): Promise<ApiResult<ItemView>>;
   readThread(id: string, actor: Persona | null): Promise<ApiResult<ThreadView>>;
   readItem(threadId: string, itemId: string, actor: Persona | null, revisionId?: string): Promise<ApiResult<ItemView>>;
   readHistory(threadId: string, itemId: string, actor: Persona | null): Promise<ApiResult<ItemView[]>>;
@@ -152,8 +166,13 @@ export interface ContentThreadDriver {
    * and supplying these exact bytes/digest. Return PostgreSQL error evidence;
    * rollback the probe transaction. Do not prevalidate in TypeScript.
    */
-  probeRevision(sourceRevisionId: string, body: Uint8Array, sha256: string): Promise<{
-    sqlstate: string; constraint: string;
+  probeRevision(
+    sourceRevisionId: string,
+    body: Uint8Array,
+    sha256: string,
+  ): Promise<{
+    sqlstate: string;
+    constraint: string;
   }>;
   /** Decode and verify the real response session header with production keys. */
   session(response: Response, actor: Persona): Promise<{ token: string; partitions: number[] }>;

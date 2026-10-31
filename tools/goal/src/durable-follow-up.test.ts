@@ -13,10 +13,21 @@ test("a gate failure's automatic retry survives the process that recorded it exi
     await first.start(task.id);
     await first.drain();
     const ref = { taskId: task.id, attempt: 1 };
-    h.store.updateAttempt(ref, attempt => { attempt.result = 'Blocked'; attempt.blocker = 'The implementation is incomplete.'; });
+    h.store.updateAttempt(ref, (attempt) => {
+      attempt.result = 'Blocked';
+      attempt.blocker = 'The implementation is incomplete.';
+    });
 
-    const outcome: GateOutcome = { ...ref, passed: false, stage: 'gate', logPath: 'fixture', hostMs: 1,
-      changedFiles: [], diffLines: 1, firstFailure: { fingerprint: 'new', assertion: 'acceptance failed', excerpt: 'expected result', } };
+    const outcome: GateOutcome = {
+      ...ref,
+      passed: false,
+      stage: 'gate',
+      logPath: 'fixture',
+      hostMs: 1,
+      changedFiles: [],
+      diffLines: 1,
+      firstFailure: { fingerprint: 'new', assertion: 'acceptance failed', excerpt: 'expected result' },
+    };
     // The first process exits after committing the outcome and before starting tracked work.
     Object.assign(first, { runRetryIntent: async () => {} });
     first.onGateOutcome(outcome);
@@ -30,7 +41,9 @@ test("a gate failure's automatic retry survives the process that recorded it exi
     expect(h.store.retryIntent(ref)?.options).toMatchObject({ escalation: 'new-failure', fixRound: 1 });
     await new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} }).recoverOrphans();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test("a command leaves another task's pending retry to the host instead of running it first", async () => {
@@ -41,9 +54,20 @@ test("a command leaves another task's pending retry to the host instead of runni
     await first.start(task.id);
     await first.drain();
     const ref = { taskId: task.id, attempt: 1 };
-    h.store.updateAttempt(ref, attempt => { attempt.result = 'Blocked'; attempt.blocker = 'The implementation is incomplete.'; });
-    const outcome: GateOutcome = { ...ref, passed: false, stage: 'gate', logPath: 'fixture', hostMs: 1,
-      changedFiles: [], diffLines: 1, firstFailure: { fingerprint: 'new', assertion: 'acceptance failed', excerpt: 'expected result', } };
+    h.store.updateAttempt(ref, (attempt) => {
+      attempt.result = 'Blocked';
+      attempt.blocker = 'The implementation is incomplete.';
+    });
+    const outcome: GateOutcome = {
+      ...ref,
+      passed: false,
+      stage: 'gate',
+      logPath: 'fixture',
+      hostMs: 1,
+      changedFiles: [],
+      diffLines: 1,
+      firstFailure: { fingerprint: 'new', assertion: 'acceptance failed', excerpt: 'expected result' },
+    };
     Object.assign(first, { runRetryIntent: async () => {} });
     first.onGateOutcome(outcome);
     rmSync(join(h.settings.stateDirectory, 'leases', task.id), { recursive: true, force: true });
@@ -59,5 +83,7 @@ test("a command leaves another task's pending retry to the host instead of runni
     await host.recoverOrphans();
     await host.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
