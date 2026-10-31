@@ -425,19 +425,27 @@ with the exact tuple sort, basis, covered frontier, exhaustion and
 public/engine breakdown of caller-root settlement, never a second charge, refund or authority. `work(prepared)`
 remains the root preparation receipt; the native implementation must charge actual ordered preparation there.
 
-**Interface stage:** ordered prepare validates and returns `semantic_not_ready` before native work. `orderedPrefix`
-validates its request and factory-local handle, then returns the same unavailable outcome. It creates no ordered
-handle, hits, EOF or usage. Existing structural prepare, UUID prefix and evaluate still use their existing runtime.
-The single follow-on native producer must bind and check exact order/size, reject foreign factory/handle/basis/order
-before enumeration, and validate physical/source/identity/release/current privacy before and finally, including
-native completion metadata. These declarations and refusal cases do not establish native readiness.
+Ordered preparation extends the existing structural worker. Public preparation retains the actual native
+consumer observation, replayable population frontier and settled canonical hits in one revision-fenced write.
+Ready reads seek the retained byte keys and revalidate the old observation, actual execution start and current
+original/terminal Source before disclosure. Keyed native queries use the versioned count-free PIT template,
+complete-shard validation and the existing iterator profiler. They never sort a UUID-limited response page.
+Missing native Source proof remains `semantic_not_ready`; these algorithms do not establish native readiness.
+
+Owner input still runs through the existing Collection source and current native matcher. Only an actually
+exhausted bounded input admits the direct native output path. Larger owner results require Library's admitted
+owner/namespace preparation. Its current `MembersPreparationWorkDefinition.definition` has only filter,
+structural sort and release; it needs retained `nativeOrder: ScopeNativeOrder` and `pageSize: number` plus an
+admitted native ordered frontier/result read/write port. `CollectionKindWorkDefinition` additionally lacks the
+retained filter/output definition itself. Search does not persist those private memberships in its public result
+store, restore an Actor, substitute generic Source locators for admission or modify Library's native bodies.
 
 One ordered owner step admits quota 1..99 and quota+1 <= budget <= 100, within the supplied candidateKeys
 reservation. Every raw key, duplicate, reject, lookahead and reread is charged; unused lookahead never advances
 coveredThrough. All [filtered-list budgets](../../../../docs/filtered-lists.md#cost) still apply: direct
 `min(600,6s+3)` candidates and at most three refill rounds, ready `2s+2`, composed 16 reads/128 total slots, with
-their independent work axes. This interface adds no list allowance or ledger. Native filter/source/order planning,
-useful-page preparation and ordered execution remain the follow-on implementation's obligations.
+their independent work axes. The returned receipt settles the actual supplied root once. Native Source
+availability and Library's missing admitted preparation fields/ports remain explicit integration dependencies.
 
 `service-scope-order.ts:createSearchScopeOrder({pool, options: LeafOptions, clock})` is the internal ordered
 Source adapter. `SearchScopeOrder` is `{kind:'id', source?: NativeSourceIdentity} | {kind:'ordinal',

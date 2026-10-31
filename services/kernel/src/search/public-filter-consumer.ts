@@ -21,7 +21,9 @@ import { assertCompleteSearch } from './complete-search.ts';
 import { subjectIndexName } from './indices.ts';
 import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { admitSearchPayload, requireSearchOverflow } from './query-payload.ts';
-import type { SearchPlan, SearchResult } from './query.ts';
+import { SCOPE_HIT_TEMPLATE, type SearchPlan, type SearchResult } from './query.ts';
+import { admitHitPayload } from './query-payload.ts';
+import { validateScopeOrderedHit } from './scope-ordered.ts';
 import { bulkLines, type IndexAction, type SearchDocument } from './document.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { subjectPartition } from './source.ts';
@@ -261,7 +263,7 @@ export async function readPublicFilterConsumerIncarnation(
 
 function iteratorSteps(body: unknown): number {
   const malformed = () => new SearchUnavailableError('Native consumer query profile is missing or malformed');
-  if (!record(body) || !record(body.profile) || !Array.isArray(body.profile.shards) || !body.profile.shards.length)
+  if (!record(body) || !record(body.profile) || !Array.isArray(body.profile.shards))
     throw malformed();
   // Completion is checked before profiling. Every executed shard must still have cost evidence;
   // skipped shards may have no query profile, but duplicates cannot stand in for another shard.
@@ -306,6 +308,9 @@ function iteratorSteps(body: unknown): number {
   }
   return count;
 }
+
+/** Shared native profiler for ordered preparation's count-free PIT keepalive. */
+export const measurePublicFilterIteratorSteps = iteratorSteps;
 
 type OrdinaryPlan = SearchPlan & { sort: 'relevance' | 'name' | 'id' | 'collections' };
 type NativePitPayload = {
@@ -414,6 +419,57 @@ export async function queryPublicFilterConsumerPit(
     ...(hasOverflow ? { overflow: requireSearchOverflow(body) } : {}),
   };
   return { result, successorPit: body.pit_id, engineIteratorSteps: iteratorSteps(body) };
+}
+
+/** Count-free, keyed native preparation on the same retained PIT and stored template.
+ * The keys restrict work only; the enclosing Source definition still covers the WHOLE predicate/order.
+ */
+export async function queryScopeOrderedKeys(
+  search: OpenSearch,
+  queried: PublicFilterQueriedObservation,
+  plan: SearchPlan & { sort: 'name' | 'collections' },
+  keys: readonly string[],
+  context: PublicFilterConsumerContext,
+  retainPit: (pit: string) => Promise<void>,
+): Promise<{ hits: SearchResult['hits']; engineIteratorSteps: number }> {
+  if (queried.snapshot.kind !== 'pit' || keys.length < 1 || keys.length > 99 || new Set(keys).size !== keys.length)
+    throw new RangeError('Ordered preparation needs a bounded native input window');
+  for (const key of keys) subjectPartition(key);
+  const { prefix, generation } = targetParts(queried.consumer.physicalTarget);
+  if (plan.generation !== generation) throw new TypeError('Ordered preparation generation changed');
+  const sort = plan.sort === 'name'
+    ? [{ name_sort: { order: 'asc', missing: '_last' } }, { id: 'asc' }]
+    : [{ public_collection_count: { order: 'desc', missing: 0 } },
+       { name_sort: { order: 'asc', missing: '_last' } }, { id: 'asc' }];
+  const { status, body } = await search.request<unknown>('POST', '/_search/template', {
+    id: `${prefix}${SCOPE_HIT_TEMPLATE}`,
+    params: {
+      pit: { id: queried.snapshot.pit, keep_alive: '5m' },
+      query: plan.query, has_query: plan.query !== undefined,
+      filter: { bool: { filter: [{ ids: { values: keys } }, ...(plan.filter ? [plan.filter] : [])] } },
+      has_filter: true, has_boost: false, sort, size: keys.length,
+      has_after: false, has_overflow: !!plan.overflowProperties?.length, overflow_properties: plan.overflowProperties,
+    },
+  }, { timeoutMs: remaining(context), query: { allow_partial_search_results: false } });
+  if (record(body) && typeof body.pit_id === 'string') await retainPit(body.pit_id);
+  if (status !== 200) throw new SearchUnavailableError('Ordered Scope native query did not complete');
+  assertCompleteSearch(body);
+  const { after: _after, ...keyedPlan } = plan;
+  admitHitPayload(body, { ...keyedPlan, size: keys.length }, prefix);
+  if (!record(body.hits) || !Array.isArray(body.hits.hits) || typeof body.pit_id !== 'string' || !body.pit_id)
+    throw new SearchUnavailableError('Ordered Scope native reply has no PIT');
+  if (plan.overflowProperties?.length && requireSearchOverflow(body))
+    throw new SearchUnavailableError('Ordered Scope native predicate needs complete overflow preparation');
+  const hits = body.hits.hits.map((value: unknown) => {
+    if (!record(value) || value._index !== queried.consumer.physicalTarget || !keys.includes(value._id as string))
+      throw new SearchUnavailableError('Ordered Scope returned another native input or index');
+    const source = value._source as { partition: number; security_revision: number };
+    return { id: value._id as string, index: value._index as string,
+      partition: source.partition, securityRevision: source.security_revision,
+      matched: (value.matched_queries ?? []) as string[], sort: value.sort as (string | number | null)[] };
+  });
+  for (const hit of hits) validateScopeOrderedHit(plan.sort, hit, queried.consumer.physicalTarget);
+  return { hits, engineIteratorSteps: iteratorSteps(body) };
 }
 
 /**

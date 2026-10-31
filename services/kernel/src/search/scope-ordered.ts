@@ -5,12 +5,31 @@ import { MAX_NAME_SORT_CHARACTERS } from './document.ts';
 import { scopeWorkAxes } from './scope-execution.ts';
 import type { SearchHit } from './query.ts';
 import type { ScopeBasis } from './scope-source.ts';
+import type { PublicFilterConsumerJob, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 
 /** Native output order, independent of structural Collection id/ordinal traversal. */
 export type ScopeNativeOrder = 'name' | 'collections';
 export type ScopeNameSortTuple = readonly [name: string | null, id: string];
 /** Actual public_collection_count DESC (missing zero), then name_sort/id ASC. */
 export type ScopeCollectionsSortTuple = readonly [count: number, name: string | null, id: string];
+
+/** Immutable retained output definition. Structural Source traversal keeps its own order. */
+export type ScopeOrderedDefinition = Readonly<{
+  nativeOrder: ScopeNativeOrder;
+  pageSize: number;
+  index: string;
+  uuid: string;
+  generation: number;
+}>;
+
+/** Native custody locators only; no Actor, permission or reconstructed start evidence. */
+export type ScopeOrderedPreparation = Readonly<{
+  queried: PublicFilterQueriedObservation | null;
+  repair: PublicFilterConsumerJob | null;
+  execution: string | null;
+  populationFrontier?: string | null;
+  populationComplete?: boolean;
+}>;
 
 export type ScopeOrderedPrefixRequest = (
   | { order: 'name'; after: ScopeNameSortTuple | null }
@@ -88,6 +107,48 @@ function nameKey(value: unknown): void {
     Buffer.byteLength(value, 'utf8') > 3 * MAX_NAME_SORT_CHARACTERS
   )
     throw new RangeError('Invalid native Scope name key');
+}
+
+export function scopeOrderedNameKey(name: string | null): Buffer {
+  nameKey(name);
+  return Buffer.from(name === null ? 'z' : `s${name}`, 'utf8');
+}
+
+/** Native Lucene keyword order, including supplementary scalars and missing-last. */
+export function compareScopeOrderedTuple(order: ScopeNativeOrder, left: readonly (string | number | null)[],
+  right: readonly (string | number | null)[]): number {
+  if (order === 'collections' && left[0] !== right[0]) return (right[0] as number) - (left[0] as number);
+  const name = Buffer.compare(scopeOrderedNameKey(left[left.length - 2] as string | null),
+    scopeOrderedNameKey(right[right.length - 2] as string | null));
+  if (name !== 0) return name;
+  return Buffer.compare(Buffer.from(left.at(-1) as string), Buffer.from(right.at(-1) as string));
+}
+
+/** Check actual native values without normalizing, canonicalizing or synthesizing a Hit. */
+export function validateScopeOrderedHit(order: ScopeNativeOrder, hit: SearchHit, index: string): void {
+  nativeOrder(order);
+  const tuple = hit.sort;
+  if (!Array.isArray(tuple) || tuple.length !== (order === 'name' ? 2 : 3))
+    throw new RangeError('Invalid ordered Scope native hit tuple');
+  if (order === 'collections') bounded(tuple[0] as number, 0, 2147483647);
+  nameKey(tuple[tuple.length - 2]);
+  if (hit.index !== index || routeOf(hit.id) === null || tuple.at(-1) !== hit.id)
+    throw new RangeError('Ordered Scope native hit identity changed');
+}
+
+export function emptyScopePublicCost(): PublicFilterCost {
+  return { inputKeys: 0, candidates: 0, accessPoints: 0, dependencyPoints: 0, engineSearches: 0,
+    engineIteratorSteps: 0, outputSlots: 0, resultWrites: 0, frontierWrites: 0 };
+}
+
+export function addScopePublicCost(a: PublicFilterCost, b: PublicFilterCost): PublicFilterCost {
+  const result = emptyScopePublicCost();
+  for (const key of Object.keys(result) as (keyof PublicFilterCost)[]) {
+    const value = a[key] + b[key];
+    bounded(value, 0, Number.MAX_SAFE_INTEGER);
+    Object.assign(result, { [key]: value });
+  }
+  return result;
 }
 
 export function validateScopeOrderedPrefix(request: ScopeOrderedPrefixRequest): void {

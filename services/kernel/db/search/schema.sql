@@ -737,6 +737,7 @@ CREATE TABLE search.scope_preparation (
     leaf_progress jsonb,
     ordinal_frontier jsonb,
     ordinal_complete boolean DEFAULT false NOT NULL,
+    ordered_state jsonb,
     state text DEFAULT 'capture'::text NOT NULL,
     revision bigint DEFAULT 1 NOT NULL,
     lease_until bigint DEFAULT 0 NOT NULL,
@@ -748,6 +749,7 @@ CREATE TABLE search.scope_preparation (
     CONSTRAINT scope_preparation_observation_check CHECK ((octet_length((observation)::text) <= 8192)),
     CONSTRAINT scope_preparation_ordinal_frontier_check CHECK ((octet_length((ordinal_frontier)::text) <= 1024)),
     CONSTRAINT scope_preparation_ordinal_membership_progress_check CHECK ((octet_length((ordinal_membership_progress)::text) <= 8192)),
+    CONSTRAINT scope_preparation_ordered_state_check CHECK ((octet_length((ordered_state)::text) <= 32768)),
     CONSTRAINT scope_preparation_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT scope_preparation_revision_check CHECK ((revision > 0)),
     CONSTRAINT scope_preparation_scope_id_check CHECK ((scope_id ~ '^[0-9a-f]{64}$'::text)),
@@ -1450,3 +1452,16 @@ ALTER TABLE ONLY search.trending_member
 --
 
 
+
+CREATE TABLE search.scope_preparation_ordered (
+    partition_no integer DEFAULT 0 NOT NULL CHECK (partition_no=0),
+    prefix text COLLATE pg_catalog."C" NOT NULL,
+    scope_id text COLLATE pg_catalog."C" NOT NULL,
+    subject uuid NOT NULL,
+    count_key integer NOT NULL CHECK (count_key BETWEEN -2147483647 AND 0),
+    name_key bytea NOT NULL CHECK (octet_length(name_key) BETWEEN 1 AND 1537),
+    hit bytea NOT NULL CHECK (octet_length(hit) <= 16384),
+    PRIMARY KEY (partition_no,prefix,scope_id,subject)
+);
+CREATE INDEX scope_preparation_ordered_page ON search.scope_preparation_ordered USING btree
+    (partition_no,prefix,scope_id,count_key,name_key,subject);

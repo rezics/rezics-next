@@ -7,18 +7,19 @@ import type { PublicFilterSourceDefinition } from '../semantic/public-filter-sou
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { withConnection } from '../database/pool.ts';
 import { enqueueWorkIntent, type WorkClient } from '../work/client.ts';
+import type { ScopeOrderedDefinition } from './scope-ordered.ts';
 
 export type ScopeOrdinalMembershipProgress = Readonly<{ row: NativeOrdinalKey; value: CollectionAliasProgress }>;
 
 export const SCOPE_PREPARATION_WORKFLOW = 'search.scopePreparation';
-export type ScopeCaptureDefinition =
+export type ScopeCaptureDefinition = (
   | Readonly<{ kind: 'library'; identity: NativeSourceIdentity }>
   | Readonly<{
       kind: 'public';
       definition: Omit<PublicFilterSourceDefinition, 'meaning'> & {
         meaning: Omit<PublicFilterSourceDefinition['meaning'], 'release'>;
       };
-    }>;
+    }>) & Readonly<{ ordered?: ScopeOrderedDefinition; nativeOutput?: Readonly<{ nativeOrder: 'name' | 'collections'; pageSize: number }> }>;
 export type ScopeCaptureFrontier =
   | Readonly<{ kind: 'library'; value: NativeSourceFrontier | null }>
   | Readonly<{ kind: 'public'; value: string | null }>;

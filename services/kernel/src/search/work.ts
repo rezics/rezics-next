@@ -279,6 +279,7 @@ export const searchWorkModule: WorkModule = {
         onAccessReady(access) {
           bindErasureAccess(access);
           scoped = createScopePreparation({
+            search,
             pool: context.pool,
             prefix: config.prefix,
             routeKey,

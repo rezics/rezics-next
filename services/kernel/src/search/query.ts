@@ -21,12 +21,13 @@ import type { PublicRatingEpoch } from './rating-source.ts';
 
 // Released templates keep their source and id; changes require a new version of both.
 export const HIT_TEMPLATE = 'subjects-hits-v1';
+export const SCOPE_HIT_TEMPLATE = 'subjects-scope-hits-v1';
 export const SEARCH_TEMPLATE = 'subjects-search-v2';
 export const SUGGEST_TEMPLATE = 'subjects-suggest-v1';
 export const FACET_TEMPLATE = 'subjects-facets-v1';
 export const TOTAL_LIMIT = 10_000;
 
-const templates = [SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, 'subjects-suggest-v2'].map((name) => ({
+const templates = [SEARCH_TEMPLATE, HIT_TEMPLATE, SCOPE_HIT_TEMPLATE, SUGGEST_TEMPLATE, 'subjects-suggest-v2'].map((name) => ({
   name,
   body: JSON.parse(readFileSync(new URL(`../../db/search/templates/${name}.json`, import.meta.url), 'utf8')) as unknown,
 }));
