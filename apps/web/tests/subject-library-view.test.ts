@@ -123,7 +123,7 @@ describe('An ordinary non-overview subject view can use the same Library leaf fo
   test('unrelated router contexts retain the existing canonical fallback for the actual current subject', async () => {
     const client = new QueryClient();
     try {
-      const html = await readerMarkup(signedOut, client, '/en/search?realm=borrowed&return_to=https://evil.test');
+      const html = await readerMarkup(signedOut, client, '/?realm=borrowed&return_to=https://evil.test');
       expect(html).toContain(`href="/auth/sign-in?return_to=${encodeURIComponent(canonical)}"`);
       expect(html).not.toContain('return_to=https');
     } finally {
@@ -213,7 +213,9 @@ describe('An ordinary non-overview subject view can use the same Library leaf fo
       expect(result).toEqual([personal, personal]);
       expect(reads).toBe(1);
       const changed = subjectLibraryLeafQuery(frame, 'en', {
-        state: 'signed-in', subject: 'reader-b', csrfToken: 'session-b',
+        state: 'signed-in',
+        subject: 'reader-b',
+        csrfToken: 'session-b',
       });
       expect((await client.fetchQuery(changed)).session).toBe('unavailable');
       expect(client.getQueryData(changed.queryKey)?.entry).toBeNull();
