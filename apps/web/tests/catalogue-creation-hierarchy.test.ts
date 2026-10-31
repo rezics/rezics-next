@@ -22,7 +22,7 @@ test('A contributor starts the actual creation task before alternative editors a
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const storybook = dirname(Bun.resolveSync('storybook', import.meta.dir));
+  const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
   const { within } = await import(Bun.resolveSync('@testing-library/dom', storybook));
   const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
   const { CreateSubjectForm } = await import('../src/features/catalogue/create-subject-form');
