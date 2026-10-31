@@ -91,22 +91,23 @@ diff --git a/dist/src/sysdb_migrations/internal/migrations.js b/dist/src/sysdb_m
  "use strict";
  Object.defineProperty(exports, "__esModule", { value: true });
  exports.allMigrations = exports.SHARED_MIGRATION_BASE = void 0;
-+const { workflowWriterFenceMigration } = require("./workflow_writer_fence");
++const { workflowWriterFenceMigration, workflowWriterFencePrivacyMigration } = require("./workflow_writer_fence");
  const migration_runner_1 = require("../migration_runner");
  Object.defineProperty(exports, "SHARED_MIGRATION_BASE", { enumerable: true, get: function () { return migration_runner_1.SHARED_MIGRATION_BASE; } });
  /**
-@@ -1164,6 +1165,7 @@
+@@ -1164,6 +1165,8 @@
                  `CREATE INDEX ${isCockroach ? '' : 'CONCURRENTLY'} IF NOT EXISTS "idx_application_versions_owner_timestamp" ON "${schemaName}"."application_versions" ("application_name", "version_timestamp" DESC)`,
              ],
          },
 +        workflowWriterFenceMigration(schemaName),
++        workflowWriterFencePrivacyMigration(schemaName),
      ];
  }
  //# sourceMappingURL=migrations.js.mapdiff --git a/dist/src/sysdb_migrations/internal/workflow_writer_fence.js b/dist/src/sysdb_migrations/internal/workflow_writer_fence.js
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/sysdb_migrations/internal/workflow_writer_fence.js
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,145 @@
 +"use strict";
 +Object.defineProperty(exports, "__esModule", { value: true });
 +// SDK-owned: old executors execute these native guards too, without new client code.
@@ -166,7 +167,7 @@ new file mode 100644
 +                RETURNING generation INTO live_generation;
 +                IF NOT FOUND THEN
 +                    RAISE EXCEPTION 'DBOS workflow writer is permanently retired'
-+                        USING ERRCODE = 'P0001', DETAIL = id;
++                        USING ERRCODE = 'P0001';
 +                END IF;
 +             END $$`,
 +            `CREATE FUNCTION ${s}.guard_workflow_writer_row() RETURNS TRIGGER
@@ -227,6 +228,31 @@ new file mode 100644
 +    };
 +}
 +exports.workflowWriterFenceMigration = workflowWriterFenceMigration;
++// Forward upgrade for installations that already applied the permanent writer fence.
++function workflowWriterFencePrivacyMigration(schemaName) {
++    const s = '"' + schemaName.replace(/"/g, '""') + '"';
++    return {
++        name: '20261031005632_private_workflow_writer_refusal',
++        pg: [
++            `CREATE OR REPLACE FUNCTION ${s}.guard_workflow_writer(id TEXT) RETURNS VOID
++             LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
++             DECLARE live_generation BIGINT;
++             BEGIN
++                -- The conflicting tuple is checked after waiting, even with an older statement snapshot.
++                -- This row lock remains held through the writer's actual COMMIT, not just its admission.
++                INSERT INTO ${s}.workflow_writer_fences AS f (workflow_uuid) VALUES (id)
++                ON CONFLICT (workflow_uuid) DO UPDATE SET generation = f.generation
++                WHERE f.closed_at IS NULL
++                RETURNING generation INTO live_generation;
++                IF NOT FOUND THEN
++                    RAISE EXCEPTION 'DBOS workflow writer is permanently retired'
++                        USING ERRCODE = 'P0001';
++                END IF;
++             END $$`,
++        ],
++    };
++}
++exports.workflowWriterFencePrivacyMigration = workflowWriterFencePrivacyMigration;
 diff --git a/dist/src/system_database.d.ts b/dist/src/system_database.d.ts
 --- a/dist/src/system_database.d.ts
 +++ b/dist/src/system_database.d.ts

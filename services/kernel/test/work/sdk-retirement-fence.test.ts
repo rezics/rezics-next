@@ -81,6 +81,23 @@ const family = [
   ],
 ] as const;
 
+test('Permanent SDK writer refusal omits private workflow identity', async () => {
+  const accountSuffix = `account:${crypto.randomUUID()}`;
+  const workflowID = `writer-fence:${accountSuffix}`;
+  owned.add(workflowID);
+  await client.enqueue(options(workflowID), workflowID);
+  await retireSdkWorkflowWriters(workflowID, client);
+  await expect(database.query(family[0][3], [workflowID])).rejects.toSatisfy((error: pg.DatabaseError) => {
+    const diagnostic = `${String(error)} ${JSON.stringify(error)}`;
+    return (
+      error.code === 'P0001' &&
+      error.message === 'DBOS workflow writer is permanently retired' &&
+      !diagnostic.includes(workflowID) &&
+      !diagnostic.includes(accountSuffix)
+    );
+  });
+});
+
 test('retirement waits for the native writer COMMIT and has no global lock', async () => {
   const workflowID = id();
   const otherID = id();
