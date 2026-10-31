@@ -2,7 +2,7 @@
 goal: daily-step-audit
 manager: supermanager
 kind: research
-paths: [tools/goal/reports/daily-step-audit.md]
+paths: [tools/goal/reports/daily-step-audit-*.md]
 riskAreas: []
 acceptance:
   command: [bun, tools/goal/src/cli.ts, report, --flow, --json]
@@ -18,4 +18,4 @@ promotion, state what failure the step prevents, how often it caught one in the 
 cost, and whether to keep, move, merge, or remove it. Use durable telemetry only; label unrecorded counts and costs
 unknown instead of estimating them. Include the previous day's `goal report --flow --since <UTC timestamp> --json`.
 Recommend one structural change and define the measure that will show whether it helped. Save a concise report in
-`tools/goal/reports/daily-step-audit.md`.
+`tools/goal/reports/daily-step-audit-<previous-UTC-day>.md`.

@@ -278,3 +278,69 @@ test('every manager command starts the host when it is not running', async () =>
     }
   }
 }, 30_000);
+
+import { writeFileSync } from 'node:fs';
+import { hostRequest } from './integration-cli.ts';
+
+test('daily audit validation and dispatch failures are durable and reported once without escaping the real host', async () => {
+  for (const failure of ['parse', 'dispatch']) {
+    const f = fixture();
+    const script = join(f.path, 'audit-host.ts');
+    const source = (name: string) => JSON.stringify(join(import.meta.dir, name));
+    writeFileSync(script, `
+      import { createIntegrationRuntime } from ${source('fixtures/cli-runtime.ts')};
+      import { serveManagers } from ${source('integration-cli.ts')};
+      import { dispatchDailyStepAudit } from ${source('flow.ts')};
+      import { parseBrief, readRiskOwnership } from ${source('briefs.ts')};
+      import { SqliteManagerInbox } from ${source('inbox.ts')};
+      import { readFileSync } from 'node:fs';
+      const runtime = createIntegrationRuntime();
+      const inbox = new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
+      runtime.hostCommand = [process.execPath, import.meta.filename];
+      runtime.dispatchDailyStepAudit = () => dispatchDailyStepAudit(runtime.db, [], () => {
+        ${failure === 'parse'
+          ? `parseBrief(readFileSync(${JSON.stringify(join(import.meta.dir, '../templates/daily-step-audit.md'))}, 'utf8').replace('daily-step-audit-*.md', '**'), readRiskOwnership(${JSON.stringify(join(import.meta.dir, '../risk-areas.json'))}));`
+          : ''}
+        throw new Error('fixture dispatch failure: original cause');
+      }, new Date('2026-10-30T00:00:00Z'), summary => inbox.deliver({ managerId: 'supermanager', kind: 'environment', summary }));
+      await serveManagers(runtime);
+      runtime.db.close();
+    `);
+    let child: ChildProcess | undefined;
+    const start = async () => {
+      child = spawn(process.execPath, [script], { env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+      await new Promise<void>((resolve, reject) => {
+        const lines = createInterface({ input: child!.stdout! });
+        lines.once('line', line => { lines.close(); line === 'ready' ? resolve() : reject(new Error(line)); });
+        child!.once('exit', code => reject(new Error(`audit host exited before ready (${code})`)));
+      });
+    };
+    const stopChild = async () => {
+      if (!child || child.exitCode !== null || child.signalCode !== null) return;
+      const exited = new Promise(resolve => child!.once('exit', resolve));
+      child.kill('SIGTERM');
+      await exited;
+    };
+    try {
+      await start();
+      // A real socket response demonstrates that the host still serves after the thrown audit operation.
+      await expect(hostRequest(join(f.path, 'manager.sock'), { command: 'decision', manager: 'absent' }, 1000)).rejects.toThrow('Unknown manager');
+      await stopChild();
+      await start();
+      const db = openDb(join(f.path, 'state.sqlite'));
+      try {
+        const notices = new SqliteManagerInbox(db, f.path).pending('supermanager');
+        expect(notices).toHaveLength(1);
+        expect(notices[0]!.event.summary).toContain(failure === 'parse' ? 'undeclared risk area' : 'original cause');
+        const rows = db.query('SELECT cause, reported_at FROM flow_audit_failures').all() as { cause: string; reported_at: string | null }[];
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.reported_at).not.toBeNull();
+        expect(rows[0]!.cause).toContain(failure === 'parse' ? 'undeclared risk area' : 'fixture dispatch failure: original cause');
+      } finally { db.close(); }
+    } finally {
+      await stopChild();
+      await cleanHosted(f.path);
+      f.close();
+    }
+  }
+}, 15_000);

@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { watchOrPoll } from './watch-or-poll.ts';
 import { join } from 'node:path';
 import type { ManagerEvent, ManagerEventKind, ManagerInbox } from './contracts.ts';
@@ -46,8 +46,16 @@ export class SqliteManagerInbox implements ManagerInbox {
     // The committed row is authoritative. A signal is only a wakeup hint.
     const signal = () => writeFileSync(this.signalPath(event.managerId), String(Date.now()));
     // Worker decisions may call us inside their shared synchronous transaction. Signal after its commit.
-    if (this.db.inTransaction) queueMicrotask(signal);
-    else signal();
+    if (this.db.inTransaction) queueMicrotask(() => {
+      try { signal(); }
+      catch (error) {
+        // Shutdown can remove state after commit but before this microtask. Never recreate removed state.
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT' && !existsSync(this.stateDirectory)) return;
+        // The transaction has returned: throwing here bypasses its caller's error boundary and kills the host.
+        // Keep the durable event and the actual signal failure visible without undoing delivery.
+        console.error('manager inbox wakeup hint failed:', error);
+      }
+    }); else signal();
   }
   record(manager: string, event: unknown): void {
     this.insert(manager, event, false);

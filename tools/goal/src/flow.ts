@@ -33,6 +33,11 @@ export const flowMigrations = [
     version: 2,
     sql: `CREATE INDEX flow_events_launch_window ON flow_events(stage, action, at, task_id, attempt);`,
   },
+  {
+    module: 'flow',
+    version: 3,
+    sql: `CREATE TABLE flow_audit_failures (day TEXT PRIMARY KEY, failed_at TEXT NOT NULL, cause TEXT NOT NULL, reported_at TEXT);`,
+  },
 ];
 export function ensureFlow(db: Database): void {
   migrate(db, flowMigrations);
@@ -121,20 +126,48 @@ function stageDurations(events: FlowEvent[], stage: FlowStage): number[] {
   return durations;
 }
 
-export type FlowTask = Pick<Task, 'id'> & { brief: Pick<Task['brief'], 'goal'> };
+export type FlowTask = Pick<Task, 'id'> & {
+  brief: Pick<Task['brief'], 'goal'>;
+  /** Authoritative store snapshot, also covering terminal tasks predating closure events. */
+  terminalState?: Task['state'];
+};
+
+function terminalCloses(state: Task['state'] | undefined, stage: FlowStage): boolean {
+  return state === 'cancelled' || state === 'stopped' || state === 'merged' ||
+    (state === 'integrated' && stage !== 'promotion');
+}
+
+/** Explicit closure is not a successful stage completion and never supplies a duration. */
+export function closePendingFlow(db: Database, task: Task, at = new Date().toISOString()): void {
+  ensureFlow(db);
+  const events = db.query('SELECT task_id AS taskId, attempt, stage, action, at FROM flow_events WHERE task_id=? ORDER BY at,sequence').all(task.id) as FlowEvent[];
+  for (const stage of FLOW_STAGES) {
+    if (!terminalCloses(task.state, stage)) continue;
+    const attempts = new Set(events.filter((event) => event.stage === stage).map((event) => event.attempt));
+    for (const attempt of attempts) {
+      let open = false;
+      for (const event of events.filter((event) => event.stage === stage && event.attempt === attempt)) {
+        if (startActions[stage].includes(event.action)) open = true;
+        if (endActions[stage].includes(event.action) || event.action === 'closed') open = false;
+      }
+      if (open) recordFlow(db, { taskId: task.id, attempt, stage, action: 'closed', at, detail: task.state });
+    }
+  }
+}
 
 /** Read only the task fields used by flow reporting, without decoding full task bodies in JavaScript. */
 export function readFlowTasks(db: Database): FlowTask[] {
   const exists = db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='worker_tasks'").get();
   if (!exists) return [];
   return (
-    db.query("SELECT id, json_extract(body, '$.brief.goal') AS goal FROM worker_tasks ORDER BY sequence").all() as {
+    db.query("SELECT id, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.state') AS state FROM worker_tasks ORDER BY sequence").all() as {
       id: string;
       goal: string | null;
+      state: Task['state'];
     }[]
   )
-    .filter((row): row is { id: string; goal: string } => typeof row.goal === 'string')
-    .map((row) => ({ id: row.id, brief: { goal: row.goal } }));
+    .filter((row): row is { id: string; goal: string; state: Task['state'] } => typeof row.goal === 'string')
+    .map((row) => ({ id: row.id, brief: { goal: row.goal }, terminalState: row.state }));
 }
 
 export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.now()) {
@@ -177,7 +210,7 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       if (e.action === 'requested' && !checks.some((x) => x.at >= e.at && x.action === 'acquired')) checkKnown = false;
     }
     const working =
-      es.some((e) => e.stage === 'worker' && e.action === 'started') && (!checks.length || checkKnown)
+      es.some((e) => e.stage === 'worker' && e.action === 'started') && open === undefined && (!checks.length || checkKnown)
         ? Math.max(0, workerMs - checkWaitMs)
         : null;
     return {
@@ -189,16 +222,20 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     };
   });
   const queues = (['start', 'check', 'landing', 'verification', 'promotion'] as const).map((stage) => {
+    const terminal = new Set(tasks.filter((task) => terminalCloses(task.terminalState, stage)).map((task) => task.id));
     const requests = ordered.filter((e) => e.stage === stage && ['requested', 'enqueued'].includes(e.action));
     const pending = requests.filter(
       (e) =>
+        !terminal.has(e.taskId) &&
+        !(stage !== 'promotion' && ordered.some((x) => x.taskId === e.taskId && x.attempt >= e.attempt &&
+          x.stage === 'integration' && x.action === 'integrated' && x.at >= e.at)) &&
         !ordered.some(
           (x) =>
             x.taskId === e.taskId &&
             x.attempt === e.attempt &&
             x.stage === stage &&
             x.at >= e.at &&
-            endActions[stage].includes(x.action),
+            (endActions[stage].includes(x.action) || x.action === 'closed'),
         ),
     );
     return {
@@ -249,7 +286,12 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
               x.at >= e.at &&
               waitEnds[q.stage].includes(x.action),
           );
-          return sum + (end ? Math.max(0, Date.parse(end.at) - Date.parse(e.at)) : Math.max(0, now - Date.parse(e.at)));
+          // Closed or legacy terminal requests have no observed wait end. Keep their duration unknown.
+          const closed = ordered.some((x) => x.taskId === e.taskId && x.attempt === e.attempt &&
+            x.stage === e.stage && x.at >= e.at && x.action === 'closed');
+          const terminal = tasks.some((task) => task.id === e.taskId && terminalCloses(task.terminalState, e.stage));
+          return sum + (end ? Math.max(0, Date.parse(end.at) - Date.parse(e.at)) :
+            closed || terminal ? 0 : Math.max(0, now - Date.parse(e.at)));
         }, 0),
       }))
       .sort((a, b) => b.ms - a.ms)[0]?.stage ?? null;
@@ -324,9 +366,25 @@ export function dispatchDailyStepAudit(
   tasks: Task[],
   dispatch: () => Task,
   now = new Date(),
+  reportFailure: (summary: string) => void = (summary) => console.error(summary),
 ): Task | null {
   ensureFlow(db);
   const day = now.toISOString().slice(0, 10);
+  // A synchronous outbox delivery and its acknowledgement share the inbox's SQLite transaction.
+  const report = () => {
+    try {
+      db.transaction(() => {
+        const failures = db.query('SELECT day, cause FROM flow_audit_failures WHERE reported_at IS NULL ORDER BY day').all() as { day: string; cause: string }[];
+        for (const failure of failures) {
+          reportFailure(`Daily step audit failed (${failure.day}): ${JSON.stringify(failure.cause)}`);
+          db.query('UPDATE flow_audit_failures SET reported_at=? WHERE day=?').run(now.toISOString(), failure.day);
+        }
+      }).immediate();
+    } catch (error) {
+      console.error('daily step audit failure reporting failed:', error);
+    }
+  };
+  report();
   if (db.query('SELECT 1 FROM flow_audit_runs WHERE day=?').get(day)) return null;
   const open = tasks.find(
     (task) =>
@@ -336,7 +394,17 @@ export function dispatchDailyStepAudit(
     db.query('INSERT INTO flow_audit_runs(day,task_id) VALUES (?,?)').run(day, open.id);
     return null;
   }
-  const audit = dispatch();
-  db.query('INSERT INTO flow_audit_runs(day,task_id) VALUES (?,?)').run(day, audit.id);
-  return audit;
+  // Claim before parsing or dispatching. A failed day is never retried by each host tick or replacement host.
+  const claimed = db.query('INSERT OR IGNORE INTO flow_audit_runs(day,task_id) VALUES (?,?)').run(day, '');
+  if (!claimed.changes) return null;
+  try {
+    const audit = dispatch();
+    db.query('UPDATE flow_audit_runs SET task_id=? WHERE day=?').run(audit.id, day);
+    return audit;
+  } catch (error) {
+    const cause = error instanceof Error ? error.stack ?? error.message : String(error);
+    db.query('INSERT INTO flow_audit_failures(day,failed_at,cause) VALUES (?,?,?)').run(day, now.toISOString(), cause);
+    report();
+    return null;
+  }
 }

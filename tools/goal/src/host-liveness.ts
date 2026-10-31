@@ -1,0 +1,224 @@
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { closeSync, existsSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { createConnection } from 'node:net';
+import { join, resolve } from 'node:path';
+import { createInterface } from 'node:readline';
+import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
+import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
+
+export type HostLivenessConfig = {
+  stateDirectory: string;
+  managerSocket: string;
+  mainCheckout: string;
+  command: string[];
+  /** Preserve the invoking CLI's working directory, including relative local configuration paths. */
+  launchDirectory?: string;
+  pollMs?: number;
+  minBackoffMs?: number;
+  maxBackoffMs?: number;
+};
+type HostState = { identity: ProcessIdentity; desired: boolean };
+type RetryState = { failures: number; nextAt: number };
+const statePath = (directory: string) => join(directory, 'manager-host-liveness.json');
+const retryPath = (directory: string) => join(directory, 'manager-host-liveness-retry.json');
+export const supervisorLeasePath = (directory: string) => join(directory, 'manager-host-supervisor.lease');
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+function writeJson(path: string, value: unknown): void {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, JSON.stringify(value), { mode: 0o600 });
+    renameSync(temporary, path);
+  } finally { rmSync(temporary, { force: true }); }
+}
+function readJson<T>(path: string): T | null {
+  try { return JSON.parse(readFileSync(path, 'utf8')) as T; }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+/** Called only under the host lease; identities include boot and start time, never just a PID. */
+export function recordHostLiveness(directory: string, desired: boolean): void {
+  const identity = processIdentity();
+  if (!identity) throw new Error('Cannot identify manager host');
+  writeJson(statePath(directory), { identity, desired });
+}
+
+async function socketReady(path: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection(path);
+    const finish = (ready: boolean) => { socket.destroy(); resolve(ready); };
+    socket.setTimeout(250, () => finish(false));
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+  });
+}
+
+/** All launchers share a startup lease, and the host itself still owns its existing socket lease. */
+export async function ensureHostRunning(config: HostLivenessConfig): Promise<void> {
+  if (await socketReady(config.managerSocket)) return;
+  const deadline = Date.now() + 45_000;
+  let lease;
+  for (;;) {
+    try { lease = acquireDirectoryLease(join(config.stateDirectory, 'manager-host-start.lease')); break; }
+    catch (error) {
+      if (!(error instanceof LeaseHeldError) || Date.now() >= deadline) throw error;
+      await pause(25);
+      if (await socketReady(config.managerSocket)) return;
+    }
+  }
+  try {
+    if (await socketReady(config.managerSocket)) return;
+    // A live host that has not listened yet (or is shutting down) must retain sole ownership.
+    for (;;) {
+      let probe;
+      try { probe = acquireDirectoryLease(`${config.managerSocket}.lease`); }
+      catch (error) {
+        if (!(error instanceof LeaseHeldError) || Date.now() >= deadline) throw error;
+        await pause(25);
+        if (await socketReady(config.managerSocket)) return;
+        continue;
+      }
+      probe.release();
+      break;
+    }
+    const logPath = join(config.stateDirectory, 'manager-host.log');
+    const log = openSync(logPath, 'a', 0o600);
+    let child;
+    try {
+      child = spawn(config.command[0]!, [...config.command.slice(1), '_manager-host'], {
+        cwd: config.launchDirectory ?? process.cwd(), env: process.env, detached: true, stdio: ['ignore', 'pipe', log],
+      });
+    } finally { closeSync(log); }
+    await new Promise<void>((resolve, reject) => {
+      const lines = createInterface({ input: child.stdout! });
+      const timeout = setTimeout(() => {
+        child.kill();
+        finish(new Error('Manager host startup timed out'));
+      }, Math.max(1, deadline - Date.now()));
+      const onError = (error: Error) => finish(error);
+      const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
+        finish(new Error(`Manager host exited (${code ?? signal}): ${readFileSync(logPath, 'utf8').slice(-4000)}`));
+      const finish = (error?: Error) => {
+        clearTimeout(timeout);
+        lines.close();
+        child.off('error', onError);
+        child.off('exit', onExit);
+        child.stdout!.destroy();
+        if (error) reject(error);
+        else { child.unref(); resolve(); }
+      };
+      child.once('error', onError);
+      child.once('exit', onExit);
+      lines.once('line', (line) => {
+        if (line === 'ready') finish();
+        else { child.kill(); finish(new Error(`Manager host startup: ${line}`)); }
+      });
+    });
+  } finally { lease.release(); }
+}
+
+/** Independent process: no host timer, provider request or worker sweep is needed to detect a dead host. */
+export async function superviseHost(config: HostLivenessConfig, signal?: AbortSignal, onReady?: () => void): Promise<void> {
+  const poll = config.pollMs ?? 1000;
+  const minimum = config.minBackoffMs ?? 250;
+  const maximum = config.maxBackoffMs ?? 30_000;
+  if (![poll, minimum, maximum].every((value) => Number.isSafeInteger(value) && value > 0) || maximum < minimum)
+    throw new Error('Host liveness intervals must be positive bounded milliseconds');
+  // A detached launcher may arrive after teardown. Acquiring a lease would recreate removed state.
+  if (!existsSync(config.stateDirectory)) { onReady?.(); return; }
+  let lease;
+  try { lease = acquireDirectoryLease(supervisorLeasePath(config.stateDirectory)); }
+  catch (error) { if (error instanceof LeaseHeldError) { onReady?.(); return; } throw error; }
+  let healthySince = Date.now();
+  try {
+    onReady?.();
+    while (!signal?.aborted && existsSync(config.stateDirectory)) {
+      const host = readJson<HostState>(statePath(config.stateDirectory));
+      if (!host?.desired) return;
+      if (sameProcess(host.identity)) {
+        if (Date.now() - healthySince >= 60_000 && existsSync(retryPath(config.stateDirectory)))
+          rmSync(retryPath(config.stateDirectory), { force: true });
+      } else {
+        healthySince = Date.now();
+        const now = Date.now();
+        const retry = readJson<RetryState>(retryPath(config.stateDirectory)) ?? { failures: 0, nextAt: 0 };
+        if (!retry.nextAt) {
+          writeJson(retryPath(config.stateDirectory), { failures: retry.failures, nextAt: now + minimum });
+        } else if (now >= retry.nextAt) {
+          // Persist before launching, so supervisor replacement cannot reset a crash loop's backoff.
+          const failures = Math.min(30, retry.failures + 1);
+          const delay = Math.min(maximum, minimum * 2 ** failures);
+          writeJson(retryPath(config.stateDirectory), { failures, nextAt: now + delay });
+          try { await ensureHostRunning(config); }
+          catch (error) { console.error('manager host liveness restart failed:', error); }
+        }
+      }
+      await pause(poll);
+    }
+  } finally { lease.release(); }
+}
+
+export async function startHostSupervisor(config: HostLivenessConfig): Promise<void> {
+  if (!existsSync(config.stateDirectory)) return;
+  // A live lease owner is sufficient; never scan processes or replace a live supervisor.
+  let probe;
+  try { probe = acquireDirectoryLease(supervisorLeasePath(config.stateDirectory)); }
+  catch (error) { if (error instanceof LeaseHeldError) return; throw error; }
+  probe.release();
+  const log = openSync(join(config.stateDirectory, 'manager-host-supervisor.log'), 'a', 0o600);
+  try {
+    const child = spawn(process.execPath, [import.meta.filename, '--detach', JSON.stringify({
+      ...config,
+      stateDirectory: resolve(config.stateDirectory), managerSocket: resolve(config.managerSocket),
+      mainCheckout: resolve(config.mainCheckout),
+      launchDirectory: resolve(config.launchDirectory ?? process.cwd()),
+    })], { cwd: config.launchDirectory ?? process.cwd(), env: process.env, detached: true, stdio: ['ignore', log, log] });
+    await new Promise<void>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('exit', (code, signal) => code === 0 ? resolve() : reject(new Error(`Host supervisor launcher exited (${code ?? signal})`)));
+    });
+  } finally { closeSync(log); }
+}
+
+if (import.meta.main) {
+  if (process.argv[2] === '--detach') {
+    // Reparent the supervisor before host readiness: it must survive its host and not join provider child ownership.
+    const child = spawn(process.execPath, [import.meta.filename, process.argv[3]!], {
+      env: process.env, detached: true, stdio: ['ignore', 'pipe', 'inherit'],
+    });
+    await new Promise<void>((resolve, reject) => {
+      const lines = createInterface({ input: child.stdout! });
+      const timeout = setTimeout(() => {
+        child.kill();
+        finish(new Error('Host supervisor startup timed out'));
+      }, 45_000);
+      const onError = (error: Error) => finish(error);
+      const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
+        finish(new Error(`Host supervisor exited before ready (${code ?? signal})`));
+      const finish = (error?: Error) => {
+        clearTimeout(timeout);
+        lines.close();
+        child.off('error', onError);
+        child.off('exit', onExit);
+        child.stdout!.destroy();
+        if (error) reject(error);
+        else { child.unref(); resolve(); }
+      };
+      child.once('error', onError);
+      child.once('exit', onExit);
+      lines.once('line', (line) => {
+        if (line === 'ready') finish();
+        else { child.kill(); finish(new Error(`Host supervisor startup: ${line}`)); }
+      });
+    });
+  } else {
+    const controller = new AbortController();
+    process.once('SIGTERM', () => controller.abort());
+    process.once('SIGINT', () => controller.abort());
+    await superviseHost(JSON.parse(process.argv[2]!), controller.signal, () => console.log('ready'));
+  }
+}
