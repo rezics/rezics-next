@@ -1687,6 +1687,9 @@ test('ordinary exited command-ready proof retries without reconciliation and ref
       { briefPath: submitted.path, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
     h.tasks.queueProofStart(task.id, { expectedAttempt: 0 }, h.actor);
     const ref = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory));
+    h.store.updateRetryIntent({ taskId: task.id, attempt: 0 }, (value) => {
+      value.status = 'started'; value.nextAttempt = ref.attempt;
+    });
     h.store.event(ref, 'proof-command-ready', { sourceCommit: h.binding.sourceCommit, argv: submitted.brief.acceptance.command });
     // A retained exited worker may still have the task's running state until host settlement.
     h.store.updateAttempt(ref, (value) => { value.state = 'exited'; value.endedAt = new Date().toISOString(); });
@@ -1694,7 +1697,7 @@ test('ordinary exited command-ready proof retries without reconciliation and ref
     expect(h.tasks.queueProofStart(task.id, { expectedAttempt: 1 }, h.actor).status).toBe('created');
     expect(h.store.proofReservation(task.id, 1)).toBeUndefined();
     expect(h.store.events(task.id, 1).filter((event) => event.kind === 'proof-logical-reconciled')).toHaveLength(0);
-    expect(h.store.retryIntents().filter((intent) => intent.taskId === task.id)).toHaveLength(1);
+    expect(h.store.retryIntents().filter((intent) => intent.taskId === task.id && intent.status === 'pending')).toHaveLength(1);
     const live = h.store.createTask(submitted.brief,
       { briefPath: submitted.path, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
     const liveRef = h.store.nextAttempt({ taskId: live.id, attempt: 0 }, (n) => ({
