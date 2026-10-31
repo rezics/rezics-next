@@ -23,6 +23,7 @@ import updateDisclosure from './statement-disclosure-update.sql';
 import readPrivateLinks from './private-links.sql';
 import bumpSecurity from './moderation-bump-security.sql';
 import readVisibility from './read-visibility.sql';
+import { recordPrivacyReduction } from './public-filter-source.ts';
 
 const NIL = '00000000-0000-0000-0000-000000000000';
 export type StatementReader = { account: string; moderator: (client: CommandTransaction) => Promise<boolean> };
@@ -321,6 +322,24 @@ export async function changeStatementDisclosure(
           candidate_id: options.candidate,
           revision,
           references: [],
+        });
+        await recordPrivacyReduction(tx, {
+          partition: partitionOf(route),
+          transactionId,
+          time: currentCommand(tx).time,
+          cause: 'consent',
+          affected: [
+            {
+              kind: 'consent',
+              route,
+              account: options.actor.accountId,
+              subject: row.subject_id,
+              candidate: options.candidate,
+            },
+          ],
+          impacts: [
+            { kind: 'keys', route, subject: row.subject_id, keys: [{ kind: 'property', property: row.property }] },
+          ],
         });
         const visibility = await readVisibility.run(tx, { route, subject_id: row.subject_id });
         const security = await bumpSecurity.run(tx, {

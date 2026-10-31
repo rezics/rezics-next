@@ -13,8 +13,11 @@ SELECT s.route,
        s.visibility,
        s.security_revision::text AS "securityRevision",
        s.current_release AS "currentRelease",
-       redirect.target::text AS redirect
+       redirect.target::text AS redirect,
+       COALESCE(state.ready, false) AS selection_ready,
+       revision.revision AS current_revision
 FROM requested
+CROSS JOIN input
 JOIN LATERAL (
   SELECT subject.route, subject.subject_id, subject.type, subject.visibility,
          subject.security_revision, subject.current_release
@@ -25,6 +28,8 @@ JOIN LATERAL (
     AND subject.route < (input.partition_no + 1) * 16
   LIMIT 1
 ) s ON true
+LEFT JOIN semantic.search_selection_state state ON state.route = s.route AND state.subject_id = s.subject_id
+  AND state.route >= input.partition_no * 16 AND state.route < (input.partition_no + 1) * 16
 LEFT JOIN LATERAL (
   SELECT target
   FROM semantic.redirect
@@ -34,4 +39,11 @@ LEFT JOIN LATERAL (
     AND route < (input.partition_no + 1) * 16
   ORDER BY sequence DESC
   LIMIT 1
-) redirect ON true;
+) redirect ON true
+LEFT JOIN LATERAL (
+  SELECT revision FROM semantic.revision v
+  WHERE v.route = s.route AND v.subject_id = s.subject_id
+    AND v.route >= input.partition_no * 16 AND v.route < (input.partition_no + 1) * 16
+  ORDER BY revision DESC LIMIT 1
+) revision ON true;
+

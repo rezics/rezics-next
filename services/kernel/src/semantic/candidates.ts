@@ -13,7 +13,12 @@ import { checkStatementInput } from '@rezics/definitions/validate';
 import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  runCommand,
+  type CommandAuthorization,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -28,6 +33,7 @@ import { baseOf, layeredRelease } from './extensions.ts';
 import { termContext } from '@rezics/definitions/extension';
 import { LINK_KEYS_CHANGED, LINKS_CHANGED } from './events.ts';
 import { SUBJECT_REVISED } from './events.ts';
+import { recordPrivacyReduction } from './public-filter-source.ts';
 import {
   factDataTypes,
   itemFacts,
@@ -807,6 +813,37 @@ export async function adoptCandidates(
           revision,
           slot,
         );
+        if (options.context === GLOBAL_CONTEXT) {
+          const previous = state.expanded
+            ? state.adoption?.mode === 'replace'
+              ? state.adoption.selection
+              : []
+            : state.compact.map((candidate) => ({ candidate: candidate.candidate_id, rank: candidate.rank }));
+          const nextRanks = new Map(options.selection.map(({ candidate, rank }) => [candidate, rank]));
+          const removed = previous.filter((entry) => nextRanks.get(entry.candidate) !== entry.rank);
+          if (removed.length)
+            await recordPrivacyReduction(tx, {
+              partition: partitionOf(route),
+              transactionId,
+              time: currentCommand(tx).time,
+              cause: 'selection',
+              affected: removed.map((entry) => ({
+                kind: 'selection' as const,
+                route,
+                subject: options.subject,
+                slot,
+                candidate: entry.candidate,
+              })),
+              impacts: [
+                {
+                  kind: 'keys',
+                  route,
+                  subject: options.subject,
+                  keys: [{ kind: 'property', property: options.property }],
+                },
+              ],
+            });
+        }
         for (const entry of selection) {
           const local = await currentAcceptance(tx, options.subject, entry.candidate, options.context);
           const effective =

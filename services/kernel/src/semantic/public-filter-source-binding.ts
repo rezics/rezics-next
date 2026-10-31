@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { publicFilterSource, publicFilterSourceOrigin } from './public-filter-source.ts';
+import { readOriginalPublicFilterProjectionPage } from './public-filter-projection.ts';
 import { systemClock } from '../clock.ts';
 import { runCommand, noEffect } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -392,7 +393,8 @@ function captureKeys(meaning: PublicFilterProjectionMeaning, input: PublicFilter
   }
   if (text)
     keys.push(...(['labels', 'aliases', 'descriptions'] as const).map((field) => ({ kind: 'field' as const, field })));
-  if (['name', 'collections', 'rating'].includes(input.sort)) keys.push({ kind: 'field', field: 'name_sort' });
+  if (['name', 'collections', 'rating'].includes(input.sort))
+    keys.push({ kind: 'field', field: 'name_sort' }, { kind: 'field', field: 'labels' });
   if (input.sort === 'collections') keys.push({ kind: 'function', input: 'public_collection_count' });
   if (input.sort === 'rating') keys.push({ kind: 'function', input: 'public_rating' });
   return keys.filter((key, index) => keys.findIndex((other) => isDeepStrictEqual(key, other)) === index);
@@ -740,12 +742,19 @@ export function createPublicFilterSourceBinding(
           throw new BindingError('configuration_changed');
         next = { ...next, version: BigInt(advancement.value.position), phase: 'project' };
       } else {
-        const page = await sourceReader(bootstrap.definition).readPublicFilterProjectionPage({
+        const source = sourceReader(bootstrap.definition);
+        const origin = publicFilterSourceOrigin(source);
+        if (!origin) throw new BindingError('source_missing');
+        const page = await readOriginalPublicFilterProjectionPage(origin, {
           subject: state.subject!,
           meaning: bootstrap.definition.meaning,
           inputLimit: request.inputLimit,
           frontier: state.projection,
           context,
+        }, {
+          bootstrap: nativeId(bootstrap.id),
+          execution: request.execution,
+          predecessor: request.frontier,
         });
         addCost(cost, page.cost);
         if (page.status !== 'progress' && page.status !== 'complete') {

@@ -4,6 +4,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
 import {
   authoritativeTimeValue,
+  currentCommand,
   principalCommandIdentity,
   runCommand,
   type CommandOutcome,
@@ -16,6 +17,7 @@ import { tupleRoute, type ImportedFieldGroup } from './imported-contract.ts';
 import type { RequestContext } from './model.ts';
 import type { SourceFenceEventData } from './source-fence-events.ts';
 import takedown from './takedown-source-fence.sql';
+import { recordPrivacyReduction } from '../semantic/public-filter-source.ts';
 
 export type SourceFenceDependencies = Readonly<{
   pool: Pool;
@@ -109,6 +111,14 @@ export async function takedownSourceFence(
       ]);
       const row = result.rows[0];
       if (!row) throw new Error('Source fence upsert returned no security revision');
+      await recordPrivacyReduction(tx, {
+        partition,
+        transactionId: command.transactionId,
+        time: currentCommand(tx).time,
+        cause: 'sourceTuple',
+        affected: [{ kind: 'sourceTuple', tuple: { route, source, external_id, field_group } }],
+        impacts: [{ kind: 'dependency', locator: { kind: 'sourceTuple', tuple: { route, source, external_id, field_group } } }],
+      });
       const data: SourceFenceEventData<'com.rezics.content.source_fence.taken_down.v1'> = {
         route,
         source,

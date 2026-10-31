@@ -5,8 +5,10 @@ import {
   type SubjectSourceKeyTraversal as SubjectSourceKeyPages,
 } from './subject-source-key-pages.ts';
 import type { Release } from '@rezics/definitions';
+import { relationSource } from './search-relations.ts';
 import { readRelease } from './definitions.ts';
 import type { Pool, PoolClient } from 'pg';
+import { CommandUnavailableError } from '../access/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
@@ -39,6 +41,8 @@ import { withReadTransaction } from './read.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 
 type SubjectRow = {
+  selection_ready: boolean;
+  current_revision: number | null;
   route: number;
   id: string;
   type: string;
@@ -118,7 +122,7 @@ function termValues(rows: FactRow[], kind: 'label' | 'description' | 'alias') {
   return [...current].map(([language, value]) => ({ language, value }));
 }
 
-async function inSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+export async function inSearchSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   return withConnection(pool, async (client) => {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
@@ -137,6 +141,7 @@ async function inSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T
 }
 
 export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource & SubjectSourceKeyPages {
+  const relations = relationSource(pool, routeKey);
   return {
     readSubjectKeyPage,
     async read(partition, ids): Promise<SubjectSnapshot> {
@@ -151,9 +156,12 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
       }
       const pairs = [...requested].map(([id, route]) => ({ id, route }));
 
-      return inSnapshot(pool, async (client) => {
+      const snapshot = await inSearchSnapshot(pool, async (client) => {
         const positionRow = await readPosition.run(client, { partition_no: partition });
-        const position = BigInt(positionRow?.position ?? '0');
+        if (!positionRow) throw new CommandUnavailableError('fenced', partition);
+        if (positionRow.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partition, positionRow.movedTo);
+        const position = BigInt(positionRow.position);
         if (pairs.length === 0) return { partition, position, subjects: [] };
 
         const rows = (await readSubjects.run(client, {
@@ -265,6 +273,7 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
           indexed.set(row.subject_id, properties);
         }
 
+        const relation = await relations.prepare(client, rows, releases, partition);
         const subjects: IndexedSubject[] = [];
         for (const { id } of pairs) {
           const row = found.get(id);
@@ -295,17 +304,31 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
             statements: indexedStatements,
           });
         }
-        return { partition, position, subjects };
+        return { partition, position, subjects, relation };
       });
+      // Release the source owner before independently anchoring foreign identities or tuples.
+      const relation = 'relation' in snapshot ? await relations.finish(snapshot.relation) : new Map();
+      for (const subject of snapshot.subjects) {
+        const selected = relation.get(subject.id);
+        if (!selected) continue;
+        subject.statements.push(...selected.statements);
+        if (selected.overflow.length) subject.relationFacetOverflow = selected.overflow;
+      }
+      return { partition: snapshot.partition, position: snapshot.position, subjects: snapshot.subjects };
     },
+
+    matchRelationFacets: relations.match,
 
     async count(partition) {
       assertPartition(partition);
-      return inSnapshot(pool, async (client) => {
+      return inSearchSnapshot(pool, async (client) => {
         const positionRow = await readPosition.run(client, { partition_no: partition });
+        if (!positionRow) throw new CommandUnavailableError('fenced', partition);
+        if (positionRow.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partition, positionRow.movedTo);
         const countRow = await count.run(client, { partition_no: partition });
         return {
-          position: BigInt(positionRow?.position ?? '0'),
+          position: BigInt(positionRow.position),
           count: Number(countRow?.visible ?? '0'),
         };
       });

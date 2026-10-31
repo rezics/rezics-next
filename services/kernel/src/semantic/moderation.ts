@@ -1,6 +1,11 @@
 import { subjectPageSlot, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import type { Pool } from 'pg';
-import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  runCommand,
+  type CommandAuthorization,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -23,6 +28,7 @@ import moderationUpdateVisibility from './moderation-update-visibility.sql';
 import moderationUpsertHidden from './moderation-upsert-hidden.sql';
 import readRedirect from './read-redirect.sql';
 import readVisibility from './read-visibility.sql';
+import { recordPrivacyReduction } from './public-filter-source.ts';
 import { expandSlot, slotView } from './slots.ts';
 
 export type SubjectVisibility = 'visible' | 'hidden' | 'taken_down';
@@ -250,6 +256,15 @@ export async function moderateSubject(
         body,
         transaction_id: transactionId,
       });
+      if (nextVisibility !== 'visible')
+        await recordPrivacyReduction(tx, {
+          partition: partitionOf(route),
+          transactionId,
+          time: currentCommand(tx).time,
+          cause: 'subject',
+          affected: [{ kind: 'subject', route, subject: options.subject }],
+          impacts: [{ kind: 'subject', route, subject: options.subject }],
+        });
       const securityRevision = Number(revision);
       const countDelta =
         current.visibility === 'visible' && nextVisibility !== 'visible'
@@ -409,6 +424,14 @@ export async function moderateStatement(
           candidate_id: options.candidate,
           visibility: nextVisibility,
           security_revision: revision,
+        });
+        await recordPrivacyReduction(tx, {
+          partition: partitionOf(route),
+          transactionId,
+          time: currentCommand(tx).time,
+          cause: 'candidate',
+          affected: [{ kind: 'selection', route, subject: options.subject, slot, candidate: options.candidate }],
+          impacts: [{ kind: 'keys', route, subject: options.subject, keys: [{ kind: 'property', property }] }],
         });
       }
       const securityRevision = Number(revision);

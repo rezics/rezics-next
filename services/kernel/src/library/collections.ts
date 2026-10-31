@@ -65,6 +65,7 @@ import batchParents from './collection-batch-parents.sql';
 import authorizationCollection from './collection-store-collection-authorization.sql';
 import restoreWindow from './collection-store-collection-restore-window.sql';
 import { resolveSubject } from './subject-anchor.ts';
+import { recordPrivacyReduction } from '../semantic/public-filter-source.ts';
 import {
   admitCollectionRule,
   authorizeCollectionRule,
@@ -220,6 +221,22 @@ function collectionEvents(kind: 'updated' | 'deleted', collectionId: string, lis
     });
   }
   return events;
+}
+
+async function recordPublicCollectionReduction(
+  tx: CommandTransaction,
+  route: number,
+  collectionId: string,
+  transactionId: string,
+): Promise<void> {
+  await recordPrivacyReduction(tx, {
+    partition: partitionOf(route),
+    transactionId,
+    time: currentCommand(tx).time,
+    cause: 'collection',
+    affected: [{ kind: 'collection', route, collection: collectionId }],
+    impacts: [{ kind: 'dependency', locator: { kind: 'collection', route, collection: collectionId } }],
+  });
 }
 
 function memberEvent(collectionId: string, memberId: string, subjectId: string): CommandEvent {
@@ -605,8 +622,12 @@ export function createCollectionCommands(config: {
       { collectionId: id, revision, filter: input.filter, ...(input.sort === undefined ? {} : { sort: input.sort }) },
       async (tx, command, route) => {
         if (!command.rule) throw new Error('Missing admitted Collection rule');
+        const previous = await activeCollection(tx, route, id);
         await updateSavedCollectionRule(tx, route, id, revision, command.rule, command);
-        return { value: await activeCollection(tx, route, id), events: collectionEvents('updated', id, false) };
+        const updated = await activeCollection(tx, route, id);
+        if (listed(previous) && listed(updated))
+          await recordPublicCollectionReduction(tx, route, id, command.transactionId);
+        return { value: updated, events: collectionEvents('updated', id, false) };
       },
       undefined,
       undefined,
@@ -667,6 +688,8 @@ export function createCollectionCommands(config: {
           command,
         );
         if (!value) throw new ProblemError('conflict');
+        if (wasListed && !listed(value))
+          await recordPublicCollectionReduction(tx, route, id, command.transactionId);
         return {
           value: current.membershipKind === 'dynamic' ? await activeCollection(tx, route, id) : value,
           events: collectionEvents('updated', id, wasListed !== listed(value)),
@@ -701,6 +724,7 @@ export function createCollectionCommands(config: {
         if (current.revision !== expected) throw new ProblemError('conflict');
         const value = await tombstoneCollection(tx, route, id, command);
         if (!value) throw notFound();
+        if (listed(current)) await recordPublicCollectionReduction(tx, route, id, command.transactionId);
         await createShelfCounters().collection(shelfWrite, -1);
         return {
           value: { ...value, deletionId: command.transactionId },
@@ -901,6 +925,8 @@ export function createCollectionCommands(config: {
         if (current.revision !== expectedRevision) throw new ProblemError('conflict');
         const value = await deleteMemberRow(tx, route, collectionId, memberId, expectedRevision, deletionId, command);
         if (!value) throw new ProblemError('conflict');
+        if (listed(current))
+          await recordPublicCollectionReduction(tx, route, collectionId, command.transactionId);
         return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
       },
     );

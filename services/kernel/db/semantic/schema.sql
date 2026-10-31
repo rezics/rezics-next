@@ -2908,6 +2908,218 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: adoption; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.adoption (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    context_id uuid NOT NULL,
+    head integer NOT NULL,
+    mode text NOT NULL,
+    selection jsonb NOT NULL,
+    revision integer NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT adoption_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT adoption_head_check CHECK ((head >= 1)),
+    CONSTRAINT adoption_mode_check CHECK ((mode = ANY (ARRAY['inherit'::text, 'replace'::text, 'suppress'::text]))),
+    CONSTRAINT adoption_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT adoption_selection_check CHECK ((jsonb_typeof(selection) = 'array'::text)),
+    CONSTRAINT adoption_selection_check1 CHECK ((jsonb_array_length(selection) <= 32)),
+    CONSTRAINT adoption_selection_check2 CHECK ((NOT jsonb_path_exists(selection, '$[*]?(@."candidate".type() != "string" || @."rank" != "normal" && @."rank" != "preferred")'::jsonpath))),
+    CONSTRAINT adoption_selection_check3 CHECK ((NOT jsonb_path_exists(selection, '$[*]?(!(exists (@."candidate")) || !(exists (@."rank")))'::jsonpath))),
+    CONSTRAINT adoption_selection_objects_check CHECK ((NOT jsonb_path_exists(selection, 'strict $[*]?(@.type() != "object")'::jsonpath)))
+);
+
+
+--
+-- Name: search_project_adoption(semantic.adoption); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.search_project_adoption(a semantic.adoption) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF a.context_id <> '00000000-0000-8000-8000-000000000000'::uuid THEN RETURN; END IF;
+  INSERT INTO semantic.search_selection_slot (route, subject_id, slot_id, expanded, head)
+    VALUES (a.route, a.subject_id, a.slot_id, true, a.head)
+    ON CONFLICT (route, subject_id, slot_id) DO UPDATE SET expanded = true, head = EXCLUDED.head
+      WHERE semantic.search_selection_slot.head < EXCLUDED.head;
+  IF NOT FOUND THEN RETURN; END IF;
+  DELETE FROM semantic.search_selected WHERE route = a.route AND subject_id = a.subject_id AND slot_id = a.slot_id;
+  IF a.mode <> 'replace' THEN RETURN; END IF;
+  INSERT INTO semantic.search_selected
+    (route, subject_id, slot_id, candidate_id, property, rank, ordinal, body, release, revision, source,
+      relation, compact, active, log_seq)
+    SELECT a.route, a.subject_id, a.slot_id, c.candidate_id, c.property, e.body->>'rank', e.ordinal,
+      c.statement, c.release, c.revision, r.source, c.relation, false, true, 0
+    FROM jsonb_array_elements(a.selection) WITH ORDINALITY AS e(body, ordinal)
+    JOIN semantic.candidate c ON c.route = a.route AND c.subject_id = a.subject_id AND c.slot_id = a.slot_id
+      AND c.candidate_id = (e.body->>'candidate')::uuid
+    JOIN semantic.revision r ON r.route = a.route AND r.subject_id = a.subject_id AND r.revision = c.revision;
+END;
+$$;
+
+
+--
+-- Name: fact; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.fact (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    log_seq integer NOT NULL,
+    operation text NOT NULL,
+    kind text NOT NULL,
+    language text,
+    property text,
+    statement_id uuid,
+    body jsonb NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    release text,
+    relation boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT fact_check CHECK ((((operation = 'expand'::text) AND (kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NULL) AND (body = '{}'::jsonb)) OR ((operation <> 'expand'::text) AND (((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])) AND (language IS NOT NULL) AND (property IS NULL) AND (statement_id IS NULL)) OR ((kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NOT NULL)))))),
+    CONSTRAINT fact_kind_check CHECK ((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text, 'statement'::text]))),
+    CONSTRAINT fact_log_seq_check CHECK ((((log_seq >= 1) AND (log_seq <= 33)) AND ((log_seq <> 33) OR (operation = 'expand'::text)))),
+    CONSTRAINT fact_operation_check CHECK ((operation = ANY (ARRAY['assert'::text, 'retract'::text, 'expand'::text]))),
+    CONSTRAINT fact_release_check CHECK ((((kind = 'statement'::text) AND (operation = 'assert'::text)) = (release IS NOT NULL))),
+    CONSTRAINT fact_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
+);
+
+
+--
+-- Name: search_project_fact(semantic.fact); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.search_project_fact(f semantic.fact) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE expanded_slot boolean; r semantic.revision%ROWTYPE;
+BEGIN
+  IF f.kind <> 'statement' THEN RETURN; END IF;
+  INSERT INTO semantic.search_selection_slot (route, subject_id, slot_id)
+    VALUES (f.route, f.subject_id, f.slot_id) ON CONFLICT DO NOTHING;
+  IF f.operation = 'expand' THEN
+    UPDATE semantic.search_selection_slot SET expanded = true
+      WHERE route = f.route AND subject_id = f.subject_id AND slot_id = f.slot_id;
+    DELETE FROM semantic.search_selected WHERE route = f.route AND subject_id = f.subject_id
+      AND slot_id = f.slot_id AND compact;
+    RETURN;
+  END IF;
+  SELECT expanded INTO expanded_slot FROM semantic.search_selection_slot
+    WHERE route = f.route AND subject_id = f.subject_id AND slot_id = f.slot_id;
+  IF expanded_slot THEN RETURN; END IF;
+  IF f.operation = 'retract' THEN
+    INSERT INTO semantic.search_selection_retraction VALUES (f.route, f.subject_id, f.slot_id, f.statement_id, f.log_seq)
+      ON CONFLICT (route, subject_id, slot_id, candidate_id) DO UPDATE
+        SET log_seq = greatest(semantic.search_selection_retraction.log_seq, EXCLUDED.log_seq);
+    UPDATE semantic.search_selected SET active = false, log_seq = f.log_seq
+      WHERE route = f.route AND subject_id = f.subject_id AND slot_id = f.slot_id
+        AND candidate_id = f.statement_id AND log_seq < f.log_seq;
+    RETURN;
+  END IF;
+  IF EXISTS (SELECT 1 FROM semantic.search_selection_retraction WHERE route = f.route AND subject_id = f.subject_id
+    AND slot_id = f.slot_id AND candidate_id = f.statement_id AND log_seq >= f.log_seq) THEN RETURN; END IF;
+  IF f.body->>'rank' NOT IN ('normal', 'preferred') THEN
+    UPDATE semantic.search_selected SET active = false, log_seq = f.log_seq
+      WHERE route = f.route AND subject_id = f.subject_id AND slot_id = f.slot_id
+        AND candidate_id = f.statement_id AND log_seq < f.log_seq;
+    RETURN;
+  END IF;
+  SELECT * INTO STRICT r FROM semantic.revision WHERE route = f.route AND subject_id = f.subject_id
+    AND recorded_transaction_id = f.recorded_transaction_id;
+  INSERT INTO semantic.search_selected
+    (route, subject_id, slot_id, candidate_id, property, rank, ordinal, body, release, revision, source,
+      relation, compact, active, log_seq)
+    VALUES (f.route, f.subject_id, f.slot_id, f.statement_id, f.property, f.body->>'rank', f.log_seq,
+      f.body, f.release, r.revision, r.source, f.relation, true, true, f.log_seq)
+    ON CONFLICT (route, subject_id, slot_id, candidate_id) DO UPDATE
+      SET active = true, log_seq = EXCLUDED.log_seq, body = EXCLUDED.body, rank = EXCLUDED.rank,
+          ordinal = EXCLUDED.ordinal, release = EXCLUDED.release, revision = EXCLUDED.revision, source = EXCLUDED.source
+      WHERE semantic.search_selected.log_seq < EXCLUDED.log_seq;
+END;
+$$;
+
+
+--
+-- Name: search_project_insert(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.search_project_insert() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE f semantic.fact%ROWTYPE; a semantic.adoption%ROWTYPE;
+BEGIN
+  INSERT INTO semantic.search_selection_state (route, subject_id)
+    VALUES (NEW.route, NEW.subject_id) ON CONFLICT DO NOTHING;
+  -- Serialize cold folding against only this source's native maintenance, never other homes.
+  PERFORM 1 FROM semantic.search_selection_state WHERE route = NEW.route AND subject_id = NEW.subject_id FOR UPDATE;
+  IF TG_ARGV[0] = 'fact' THEN f := NEW; PERFORM semantic.search_project_fact(f);
+  ELSE a := NEW; PERFORM semantic.search_project_adoption(a); END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: search_project_subject(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.search_project_subject() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO semantic.search_selection_state (route, subject_id, ready, phase)
+    VALUES (NEW.route, NEW.subject_id, true, 'done');
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: search_rebuild_one(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.search_rebuild_one(r integer, s uuid) RETURNS boolean
+    LANGUAGE plpgsql
+    AS $$
+DECLARE state semantic.search_selection_state%ROWTYPE; f semantic.fact%ROWTYPE; a semantic.adoption%ROWTYPE;
+BEGIN
+  INSERT INTO semantic.search_selection_state (route, subject_id)
+    SELECT r, s FROM semantic.subject WHERE route = r AND subject_id = s ON CONFLICT DO NOTHING;
+  SELECT * INTO state FROM semantic.search_selection_state WHERE route = r AND subject_id = s FOR UPDATE;
+  IF NOT FOUND THEN RETURN false; END IF;
+  IF state.ready THEN RETURN true; END IF;
+  IF state.phase = 'facts' THEN
+    SELECT * INTO f FROM semantic.fact WHERE route = r AND subject_id = s AND kind = 'statement'
+      AND (slot_id, log_seq) > (state.after_slot, state.after_seq) ORDER BY slot_id, log_seq LIMIT 1;
+    IF FOUND THEN
+      PERFORM semantic.search_project_fact(f);
+      UPDATE semantic.search_selection_state SET after_slot = f.slot_id, after_seq = f.log_seq WHERE route = r AND subject_id = s;
+      RETURN false;
+    END IF;
+    UPDATE semantic.search_selection_state SET phase = 'adoptions', after_slot = '00000000-0000-0000-0000-000000000000',
+      after_seq = 0 WHERE route = r AND subject_id = s;
+    RETURN false;
+  END IF;
+  SELECT * INTO a FROM semantic.adoption WHERE route = r AND subject_id = s
+    AND context_id = '00000000-0000-8000-8000-000000000000'::uuid
+    AND (slot_id, head) > (state.after_slot, state.after_seq) ORDER BY slot_id, head LIMIT 1;
+  IF FOUND THEN
+    PERFORM semantic.search_project_adoption(a);
+    UPDATE semantic.search_selection_state SET after_slot = a.slot_id, after_seq = a.head WHERE route = r AND subject_id = s;
+    RETURN false;
+  END IF;
+  UPDATE semantic.search_selection_state SET ready = true, phase = 'done' WHERE route = r AND subject_id = s;
+  RETURN true;
+END;
+$$;
+
+
+--
 -- Name: acceptance; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -2991,32 +3203,6 @@ CREATE TABLE semantic.account_agent_subject (
     CONSTRAINT account_agent_subject_account_route_check CHECK ((account_route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_agent_subject_receipt_check CHECK (((verified AND (receipt_id IS NOT NULL) AND ((length(receipt_id) >= 1) AND (length(receipt_id) <= 255))) OR ((NOT verified) AND (receipt_id IS NULL)))),
     CONSTRAINT account_agent_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
-);
-
-
---
--- Name: adoption; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.adoption (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    slot_id uuid NOT NULL,
-    context_id uuid NOT NULL,
-    head integer NOT NULL,
-    mode text NOT NULL,
-    selection jsonb NOT NULL,
-    revision integer NOT NULL,
-    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
-    CONSTRAINT adoption_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
-    CONSTRAINT adoption_head_check CHECK ((head >= 1)),
-    CONSTRAINT adoption_mode_check CHECK ((mode = ANY (ARRAY['inherit'::text, 'replace'::text, 'suppress'::text]))),
-    CONSTRAINT adoption_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT adoption_selection_check CHECK ((jsonb_typeof(selection) = 'array'::text)),
-    CONSTRAINT adoption_selection_check1 CHECK ((jsonb_array_length(selection) <= 32)),
-    CONSTRAINT adoption_selection_check2 CHECK ((NOT jsonb_path_exists(selection, '$[*]?(@."candidate".type() != "string" || @."rank" != "normal" && @."rank" != "preferred")'::jsonpath))),
-    CONSTRAINT adoption_selection_check3 CHECK ((NOT jsonb_path_exists(selection, '$[*]?(!(exists (@."candidate")) || !(exists (@."rank")))'::jsonpath))),
-    CONSTRAINT adoption_selection_objects_check CHECK ((NOT jsonb_path_exists(selection, 'strict $[*]?(@.type() != "object")'::jsonpath)))
 );
 
 
@@ -5607,6 +5793,38 @@ CREATE TABLE semantic.public_filter_bootstrap_account (
 
 
 --
+-- Name: public_filter_privacy_head; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_privacy_head (
+    partition_no integer NOT NULL,
+    position bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT public_filter_privacy_head_position_check CHECK ((position >= 0))
+);
+
+
+--
+-- Name: public_filter_privacy_log; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_privacy_log (
+    partition_no integer NOT NULL,
+    owner_epoch integer NOT NULL,
+    position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    cause text NOT NULL,
+    affected jsonb NOT NULL,
+    impacts jsonb NOT NULL,
+    recorded_at timestamp with time zone NOT NULL,
+    CONSTRAINT public_filter_privacy_log_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_privacy_log_position_check CHECK ((position > 0)),
+    CONSTRAINT public_filter_privacy_log_cause_check CHECK ((cause = ANY (ARRAY['subject'::text, 'candidate'::text, 'selection'::text, 'sourceTuple'::text, 'consent'::text, 'collection'::text]))),
+    CONSTRAINT public_filter_privacy_log_affected_check CHECK ((jsonb_typeof(affected) = 'array'::text)),
+    CONSTRAINT public_filter_privacy_log_impacts_check CHECK ((jsonb_typeof(impacts) = 'array'::text))
+);
+
+
+--
 -- Name: public_filter_read_definition; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -6069,6 +6287,86 @@ CREATE TABLE semantic.revision (
     CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT revision_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT revision_terms_check CHECK (((kind = 'terms'::text) = ((term_changes IS NOT NULL) AND (term_support IS NOT NULL))))
+);
+
+
+--
+-- Name: search_relation_probe; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.search_relation_probe (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    property text NOT NULL COLLATE pg_catalog."C",
+    value text NOT NULL COLLATE pg_catalog."C",
+    revision integer NOT NULL,
+    after_slot uuid NOT NULL,
+    after_candidate uuid NOT NULL
+);
+
+
+--
+-- Name: search_selected; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.search_selected (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    property text NOT NULL COLLATE pg_catalog."C",
+    rank text NOT NULL,
+    ordinal integer NOT NULL,
+    body jsonb NOT NULL,
+    release text NOT NULL,
+    revision integer NOT NULL,
+    source jsonb,
+    relation boolean NOT NULL,
+    compact boolean NOT NULL,
+    active boolean NOT NULL,
+    log_seq integer NOT NULL,
+    CONSTRAINT search_selected_rank_check CHECK ((rank = ANY (ARRAY['normal'::text, 'preferred'::text])))
+);
+
+
+--
+-- Name: search_selection_retraction; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.search_selection_retraction (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    log_seq integer NOT NULL
+);
+
+
+--
+-- Name: search_selection_slot; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.search_selection_slot (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    expanded boolean DEFAULT false NOT NULL,
+    head integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: search_selection_state; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.search_selection_state (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    ready boolean DEFAULT false NOT NULL,
+    phase text DEFAULT 'facts'::text NOT NULL,
+    after_slot uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    after_seq integer DEFAULT 0 NOT NULL,
+    CONSTRAINT search_selection_state_phase_check CHECK ((phase = ANY (ARRAY['facts'::text, 'adoptions'::text, 'done'::text])))
 );
 
 
@@ -7668,6 +7966,30 @@ ALTER TABLE ONLY semantic.public_filter_bootstrap
 
 
 --
+-- Name: public_filter_privacy_head public_filter_privacy_head_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_privacy_head
+    ADD CONSTRAINT public_filter_privacy_head_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: public_filter_privacy_log public_filter_privacy_log_tx_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_privacy_log
+    ADD CONSTRAINT public_filter_privacy_log_tx_key UNIQUE (partition_no, transaction_id);
+
+
+--
+-- Name: public_filter_privacy_log public_filter_privacy_log_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_privacy_log
+    ADD CONSTRAINT public_filter_privacy_log_pkey PRIMARY KEY (partition_no, position);
+
+
+--
 -- Name: public_filter_read_definition public_filter_read_definition_partition_no_source_id_config_key; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -7929,6 +8251,46 @@ ALTER TABLE ONLY semantic.retraction
 
 ALTER TABLE ONLY semantic.revision
     ADD CONSTRAINT revision_pkey PRIMARY KEY (route, subject_id, revision);
+
+
+--
+-- Name: search_relation_probe search_relation_probe_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_relation_probe
+    ADD CONSTRAINT search_relation_probe_pkey PRIMARY KEY (route, subject_id, property, value);
+
+
+--
+-- Name: search_selected search_selected_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_selected
+    ADD CONSTRAINT search_selected_pkey PRIMARY KEY (route, subject_id, slot_id, candidate_id);
+
+
+--
+-- Name: search_selection_retraction search_selection_retraction_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_selection_retraction
+    ADD CONSTRAINT search_selection_retraction_pkey PRIMARY KEY (route, subject_id, slot_id, candidate_id);
+
+
+--
+-- Name: search_selection_slot search_selection_slot_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_selection_slot
+    ADD CONSTRAINT search_selection_slot_pkey PRIMARY KEY (route, subject_id, slot_id);
+
+
+--
+-- Name: search_selection_state search_selection_state_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_selection_state
+    ADD CONSTRAINT search_selection_state_pkey PRIMARY KEY (route, subject_id);
 
 
 --
@@ -9145,6 +9507,48 @@ CREATE INDEX revision_identity_version ON semantic.revision USING btree (route, 
 --
 
 CREATE INDEX revision_transaction ON semantic.revision USING btree (recorded_transaction_id, route, subject_id);
+
+
+--
+-- Name: search_adoption_rebuild; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX search_adoption_rebuild ON semantic.adoption USING btree (route, subject_id, slot_id, head) WHERE (context_id = '00000000-0000-8000-8000-000000000000'::uuid);
+
+
+--
+-- Name: search_fact_descriptive; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX search_fact_descriptive ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE ((kind = 'statement'::text) AND (NOT relation));
+
+
+--
+-- Name: search_fact_rebuild; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX search_fact_rebuild ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE (kind = 'statement'::text);
+
+
+--
+-- Name: search_fact_terms; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX search_fact_terms ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE (kind <> 'statement'::text);
+
+
+--
+-- Name: search_selected_page; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX search_selected_page ON semantic.search_selected USING btree (route, subject_id, property, slot_id, candidate_id) WHERE active;
+
+
+--
+-- Name: search_selected_value; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX search_selected_value ON semantic.search_selected USING btree (route, subject_id, property, (((body -> 'value'::text) ->> 'content'::text)) COLLATE "C", slot_id, candidate_id) WHERE active;
 
 
 --
@@ -10816,6 +11220,27 @@ CREATE TRIGGER revision_immutable_truncate BEFORE TRUNCATE ON semantic.revision 
 
 
 --
+-- Name: adoption search_project_adoption; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER search_project_adoption AFTER INSERT ON semantic.adoption FOR EACH ROW WHEN ((new.context_id = '00000000-0000-8000-8000-000000000000'::uuid)) EXECUTE FUNCTION semantic.search_project_insert('adoption');
+
+
+--
+-- Name: fact search_project_fact; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER search_project_fact AFTER INSERT ON semantic.fact FOR EACH ROW WHEN ((new.kind = 'statement'::text)) EXECUTE FUNCTION semantic.search_project_insert('fact');
+
+
+--
+-- Name: subject search_project_subject; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER search_project_subject AFTER INSERT ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.search_project_subject();
+
+
+--
 -- Name: source_candidate source_candidate_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -11542,6 +11967,22 @@ ALTER TABLE ONLY semantic.public_filter_bootstrap_account
 
 
 --
+-- Name: public_filter_privacy_head public_filter_privacy_head_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_privacy_head
+    ADD CONSTRAINT public_filter_privacy_head_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: public_filter_privacy_log public_filter_privacy_log_head_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_privacy_log
+    ADD CONSTRAINT public_filter_privacy_log_head_fkey FOREIGN KEY (partition_no) REFERENCES semantic.public_filter_privacy_head(partition_no);
+
+
+--
 -- Name: public_filter_bootstrap public_filter_bootstrap_partition_no_read_definition_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -11654,6 +12095,54 @@ ALTER TABLE ONLY semantic.revision
 
 
 --
+-- Name: search_relation_probe search_relation_probe_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_relation_probe
+    ADD CONSTRAINT search_relation_probe_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: search_selected search_selected_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_selected
+    ADD CONSTRAINT search_selected_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: search_selected search_selected_route_subject_id_revision_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_selected
+    ADD CONSTRAINT search_selected_route_subject_id_revision_fkey FOREIGN KEY (route, subject_id, revision) REFERENCES semantic.revision(route, subject_id, revision);
+
+
+--
+-- Name: search_selection_retraction search_selection_retraction_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_selection_retraction
+    ADD CONSTRAINT search_selection_retraction_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: search_selection_slot search_selection_slot_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_selection_slot
+    ADD CONSTRAINT search_selection_slot_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: search_selection_state search_selection_state_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_selection_state
+    ADD CONSTRAINT search_selection_state_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
 -- Name: source_candidate source_candidate_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -11675,6 +12164,42 @@ ALTER TABLE ONLY semantic.statement_disclosure
 
 ALTER TABLE ONLY semantic.term_head
     ADD CONSTRAINT term_head_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+-- A live key/home interval is a barrier until native reverse-enrolment maintenance
+-- adopts its real receipts. It is neither a permission nor a replacement log.
+CREATE TABLE semantic.public_filter_privacy_pending (
+  partition_no integer NOT NULL REFERENCES semantic.public_filter_privacy_head(partition_no),
+  input_key text COLLATE "C" NOT NULL,
+  owner_epoch integer NOT NULL CHECK (owner_epoch > 0),
+  first_position bigint NOT NULL CHECK (first_position > 0),
+  through_position bigint NOT NULL,
+  enqueue_revision bigint NOT NULL CHECK (enqueue_revision > 0),
+  captured_through bigint,
+  captured_revision bigint,
+  captured_epoch integer,
+  fanout_frontier text,
+  PRIMARY KEY (partition_no, input_key),
+  CHECK (through_position >= first_position),
+  CHECK ((captured_through IS NULL) = (captured_revision IS NULL)),
+  CHECK ((captured_through IS NULL) = (captured_epoch IS NULL)),
+  CHECK (captured_through IS NULL OR
+    (captured_through BETWEEN first_position AND through_position AND
+     captured_revision > 0 AND captured_revision <= enqueue_revision AND captured_epoch > 0))
+);
+CREATE INDEX public_filter_privacy_pending_key
+  ON semantic.public_filter_privacy_pending USING btree (input_key, partition_no);
+
+-- Survives retirement of pending routing work. Missing means unknown, never a
+-- fabricated zero subject version. This contains no selected values or allow bit.
+CREATE TABLE semantic.public_filter_privacy_subject (
+  partition_no integer NOT NULL REFERENCES semantic.public_filter_privacy_head(partition_no),
+  route integer NOT NULL CHECK (route >= partition_no * 16 AND route < (partition_no + 1) * 16),
+  subject_id uuid NOT NULL,
+  owner_epoch integer NOT NULL CHECK (owner_epoch > 0),
+  position bigint NOT NULL CHECK (position > 0),
+  PRIMARY KEY (partition_no, subject_id)
+);
 
 
 --

@@ -13,7 +13,7 @@ import type { Statement } from './item.ts';
 import type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
 export type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
 
-/** Specification only. No runtime export, default composition or authorization certificate. */
+/** Shared native source contract. Its implementation remains local to Semantic and grants no permission. */
 export type PublicFilterCost = Readonly<{
   inputKeys: number;
   candidates: number;
@@ -245,7 +245,7 @@ export type PrivacyReductionObservation =
   | Unready
   | Unavailable;
 
-/** Future semantic/public-filter-source.ts export publicFilterSource, additive to subjectSource. */
+/** Native Semantic source, composed additively with the existing subjectSource. */
 export type PublicFilterSource = Readonly<{
   readPublicFilterProjectionPage(request: PublicFilterProjectionRequest): Promise<PublicFilterProjectionPage>;
   readPrivacyReductionHeads(request: PrivacyReductionObservationRequest): Promise<PrivacyReductionObservation>;
@@ -261,7 +261,7 @@ export type PublicFilterSourceFactory = (
   }>,
 ) => PublicFilterSource;
 
-/** Future named export recordPrivacyReduction in the same module. Must not open another transaction. */
+/** Named Semantic writer hook. It must not open another transaction. */
 export type RecordPrivacyReduction = (
   tx: CommandTransaction,
   reduction: PrivacyReduction,

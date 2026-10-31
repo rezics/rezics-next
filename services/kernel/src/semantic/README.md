@@ -544,6 +544,16 @@ lag allowance. Owner writes appear on the owner's next read. Semantic supplies t
 Search owns complete searchable visibility and preparation. Unsafe totals/facet counts over unchecked populations
 must be omitted without approximate/as_of, zero or row-length substitutes.
 
+### Native privacy-reduction log cost
+
+- Touches: wired subject, candidate, selection, consent, source-tuple and Collection reductions lock one authoritative
+  home head and append one immutable log row in the same command transaction.
+- Bound: append input is at most 1,000 total affected identities and impacts; each home page examines at most its
+  requested 1–1,000 log rows, including gaps as unknown rather than empty.
+- Growth check: `test/semantic/privacy-reduction-log.test.ts` covers monotonic per-home history and all 4,096 native
+  homes. Physical rows/blocks growth has not been measured in this change, and this log does not close population
+  cut or original projection readiness.
+
 ### Implementation status and retained evidence
 
 The selective native evidence capability above does not implement a general list evaluator. Its earlier
@@ -1345,6 +1355,25 @@ and refuses incomplete or changed observations with native unavailability. It ne
   The shared harness counts native Access, source, target, identity, fences and Realm work, examined/removed rows,
   blocks, statements, connections and bytes. Native refusal and projection-lag creation are covered by
   `test/content/realm-board-create-native.test.ts`.
+
+### Search current relation extraction
+
+- Touches: source-local current selection identities, the exact selected candidate and original revision,
+  current acceptance, moderation, disclosure and retraction points; independently anchored original/terminal
+  targets and imported tuple fences. The existing position point also checks native owner availability, including
+  for empty reads and counts. Native fact/adoption inserts maintain the keyed projection in the same transaction;
+  deprecated compact facts remain authoritative without entering current selection. Cold recovery retains its
+  consumed fact/adoption key under a source-local lock.
+- Bound: a sample examines at most 1000 selected keys and at most 128 per declared outgoing relation property;
+  an exact probe examines at most 128 matching selected keys within the shared 1000-key call budget. Rejects
+  consume that budget. Cold recovery consumes one historical fact/adoption key per call, with at most 32 selected
+  candidates per adoption. Sampling, withheld or unrepresentable qualifiers and exhausted probes remain unknown, never complete
+  negative evidence. These extraction bounds do not establish the separate whole-population privacy protocol.
+- Growth check: `test/semantic/search-source-facets.test.ts` exercises native degree129, exact off-sample
+  positives, deprecated facts and retained finite recovery without modifying an authoritative fact or checkpoint.
+  `test/semantic/search-source.test.ts` retains missing/moved-owner refusal, including the empty-ID case. Native default
+  worker caller evidence is in `test/search/released-relation-source.test.ts`. Three-scale physical work and
+  whole-population retained-cut readiness remain required before a complete projection/query claim.
 
 ### Anchored subject read
 
