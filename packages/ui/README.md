@@ -4,6 +4,11 @@
 
 Run `bun run storybook` in this directory to review components. Run `bun run check` to type-check the package and run its unit and accessible browser story tests.
 
+For isolated local agent inspection, follow [Storybook agent access](../../docs/development/storybook.md#agent-access).
+UI exposes `/mcp` and `/manifests/components.json` on its own dev server, using the same batched TypeScript metadata
+configuration as Web. Discover canonical component and story IDs with the installed documentation tools after the
+index and manifest are ready. Set Web's `STORYBOOK_UI_URL` to this UI server's origin when composing both catalogues.
+
 Tests run in a private network namespace that holds only loopback, so changes to the host's network interfaces cannot interrupt browser requests. Run one test file with `bun run test <file>` to use the same isolation. Run `bun run test:stories:slow-frames` after changing a story or an editor or overlay component: it delays every animation frame by 400 ms, which reproduces the failures a loaded host causes.
 
 The logo red (`--brand`) marks identity and never colors text; use ink blue (`--primary`) for colored text and actions. Source Serif 4 sets the cover placeholder's title and Work titles marked inside documents; titles in rows, cards and page headings use Manrope. Fonts are self-hosted, and theme selection belongs on `<html>` without a script. Mark icons in red with `fill-*` or `stroke-*` utilities, never `text-brand`.

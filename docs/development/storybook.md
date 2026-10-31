@@ -38,27 +38,47 @@ The Web landing integration check selects this command for changes under `apps/w
 
 ## Agent access
 
-Start an isolated local catalogue from the worktree root with an unused port:
+Start an isolated local catalogue from the worktree root with an unused exact loopback port:
 
 ```sh
 bun run --cwd apps/web storybook --host 127.0.0.1 --port 16497 --exact-port --ci
+# Or inspect the shared UI catalogue, using its own unused port:
+bun run --cwd packages/ui storybook --host 127.0.0.1 --port 16498 --exact-port --ci
 ```
 
-Connect an MCP client using Streamable HTTP to `http://127.0.0.1:16497/mcp`. Initialize the session, list tools and read
-their descriptions before choosing a tool. Read the component manifest from the same server with:
+Connect an MCP client using Streamable HTTP to that catalogue's `/mcp` endpoint, for example
+`http://127.0.0.1:16497/mcp`. Initialize the session, list tools and read their installed descriptions before choosing
+a tool. The CLI's startup message means the server is listening; a successful `/index.json` read establishes index
+readiness. Neither startup nor MCP initialization establishes component metadata readiness. Read the component
+manifest from the same server with:
 
 ```sh
 curl --fail --show-error --max-time 120 http://127.0.0.1:16497/manifests/components.json
 ```
 
-The canonical story index is at `http://127.0.0.1:16497/index.json`. Select a different unused port for another
-worktree; keep the endpoint and manifest on that worktree's server. The addon is already configured in both
-catalogues. Neither a shared dev server nor a public MCP service is required.
+The canonical story index is at `http://127.0.0.1:16497/index.json`. A successful JSON manifest response with local
+components, props and canonical stories establishes manifest readiness. Then call `docs-list` with
+`withStoryIds: true`, select a returned component ID with `docs-show`, and select a returned story ID with
+`docs-show-story`. Use `storybookId: "local"` for local component/story reads when Web also composes UI. These tools
+read metadata; they do not require opening a preview or running browser story tests.
 
-The web configuration enables `componentsManifest` and uses `docgenServer: false`: this alpha deliberately returns
-404 for the dev JSON manifest with server-side docgen. Builder-side React docgen enables the JSON endpoint; a successful
-MCP initialization does not confirm that manifest generation has completed. Storybook marks that mode deprecated for
-version 12, so revisit these flags when upgrading.
+Both configurations enable `componentsManifest`, `docgenServer: false` and `experimentalReactComponentMeta: true`.
+This alpha deliberately returns 404 for the dev JSON manifest with server-side docgen. With that service off, the
+React manifest preset otherwise uses synchronous React docgen for every imported JSX component, including wrappers
+and re-exports. The component-meta option resolves the same catalogue and batches selected component/subcomponent
+props by TypeScript project using a shared language service. It retains source imports, stories and docs without
+parsing every JSX dependency for props. The JSON manifest reports `meta.docgen: "react-component-meta"`.
+Builder-side docgen is deprecated for Storybook 12; revisit these flags when upgrading.
+
+Keep one server per catalogue and one outstanding request per endpoint. Retain the owned server/request handles,
+logs, endpoint and terminal results under `.temp/`. If a read times out, inspect its terminal error and the existing
+server log before making any further request; an empty response is unknown readiness, not a missing route. A JSON-RPC
+error or tool result with `isError: true` is a tool failure even when HTTP returns 200.
+
+Select different unused ports for another worktree; keep MCP, manifest and source identity on that worktree's server.
+Web retains its UI composition ref: when running both catalogues, set `STORYBOOK_UI_URL` to the own-worktree UI
+server's origin before starting Web. The local catalogue remains usable when that ref is unavailable. The addon is
+already configured in both catalogues. Neither a shared dev server nor a public MCP service is required.
 
 The default web preview uses `connectedStoryProviders` from `apps/web/src/stories/connected-story.tsx`.
 It supplies a missing QueryClient for connected regions such as local search history and imported subject scores.
@@ -76,7 +96,7 @@ manifest reads do not establish compatibility of browser story tests; do not ove
 
 Storybook 11 is used for its agent interface. An agent developing interface work uses the local one: the Storybook
 dev server started from its own worktree serves the MCP endpoint (`@storybook/addon-mcp`, `/mcp`) and the component
-manifest (`manifests/components.json`, enabled by `features.componentsManifest` in the web configuration), so the agent
+manifest (`manifests/components.json`, enabled in both configurations), so the agent
 reads components, stories and documentation, previews stories and runs their tests against its own uncommitted changes.
 The published catalogue may also serve a read-only documentation MCP (`@storybook/mcp`) from its manifest for reading
 the released catalogue; development never depends on it.

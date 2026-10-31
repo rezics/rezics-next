@@ -23,7 +23,13 @@ const shadcnEntries = [
 
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },
-  features: { viewportStoryGlobals: true } as NonNullable<StorybookConfig['features']> & { viewportStoryGlobals: true },
+  // Match Web's local JSON/MCP contract and batch metadata extraction by TS project.
+  features: {
+    viewportStoryGlobals: true,
+    componentsManifest: true,
+    docgenServer: false,
+    experimentalReactComponentMeta: true,
+  } as NonNullable<StorybookConfig['features']> & { viewportStoryGlobals: true },
   stories: [
     '../src/**/*.stories.tsx',
     ...(process.env.REZICS_UI_ACCESSIBILITY_PROBE === '1' ? ['../tests/fixtures/accessibility-probe.stories.tsx'] : []),

@@ -3,10 +3,14 @@
 The published review site combines two Storybooks into one entry point. The web Storybook is at `/`; it lists the
 page stories. The UI Storybook is built once into `/ui/` and composed into the same sidebar through a relative ref.
 During development, the ref uses the UI dev server at `http://localhost:6007`.
+Set `STORYBOOK_UI_URL` to the own-worktree UI origin when using isolated ports; Web's local source remains available
+when the composed catalogue is offline.
 
 For an isolated worktree dev server, its local `/mcp` connection and component manifest, follow
 [Agent access](../../../docs/development/storybook.md#agent-access). The web preview supplies missing connected-story
-query context while preserving page and per-story providers.
+query context while preserving page and per-story providers. Both catalogues use the alpha's batched TypeScript
+component metadata generator for the local JSON manifest. Server startup, index readiness and manifest readiness are
+separate stages; select canonical component/story IDs through the installed MCP documentation tools.
 
 The recursive story globs include nested owner modules. Keep each page or pattern's behavior states together under
 its supplied canonical folder and IDs, including `Patterns/Collection Editor`. Required states remain discoverable
