@@ -52,6 +52,16 @@ export async function readRequestCreationContext<Context>(
   return source;
 }
 
+/** Preserve any real verified context returned by the existing self-operation
+ * authorization adapter. Its historical void result supplies no provenance. */
+export async function authorizeUnprotectedRequest<Context>(
+  access: AccountWorkflowPorts<Context>,
+  input: AccountOperation,
+): Promise<Context | undefined> {
+  const context: unknown = await access.authorizeUnprotectedOperation?.(input);
+  return context == null ? undefined : (context as Context);
+}
+
 export type RequestParties = {
   erasure_subject_id: string | null;
   erasure_human_id: string | null;
@@ -71,6 +81,13 @@ export type RequestParties = {
   request_party_version: number;
   request_context_version: number;
 };
+
+// Payload/digest fields are deliberately excluded from scope reads.
+export const REQUEST_PARTY_COLUMNS = `erasure_subject_id,erasure_human_id,erasure_operator_id,
+  erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id,
+  erasure_initiator_id,erasure_delegate_id,erasure_actor_version,erasure_actor_id,
+  erasure_principal_id,erasure_source_client_id,erasure_client_owner_id,
+  erasure_source_client_owner_id,request_party_version,request_context_version`;
 
 /** Approved business variants supply targets, not acting identities. Exhaustive
  * switching keeps new operations closed until their source projection is added. */
@@ -174,21 +191,21 @@ export async function captureWorkflowRequest<Context>(
   // Read the approved producer even on replay; it remains the current-T authority.
   const source = await readRequestCreationContext(access, context);
   if (actors.version !== 1) return refused();
-  // Serialize concurrent first submits before discovering or creating any copy.
-  await connection.query("SELECT pg_advisory_xact_lock(hashtextextended('auth-request:'||$1,0))", [workflowId]);
-  const old = (
-    await connection.query<RequestParties & { digest: Buffer }>(
-      'SELECT * FROM auth_workflow_request WHERE workflow_id=$1 FOR UPDATE',
-      [workflowId],
-    )
-  ).rows[0];
-  if (old) {
+  const original = async () =>
+    (
+      await connection.query<RequestParties & { digest: Buffer }>(
+        `SELECT digest,${REQUEST_PARTY_COLUMNS} FROM auth_workflow_request WHERE workflow_id=$1 FOR UPDATE`,
+        [workflowId],
+      )
+    ).rows[0];
+  const replay = async (old: RequestParties & { digest: Buffer }) => {
     await admitParties(connection, old);
-    const digest = options.digest();
-    if (!old.digest.equals(digest)) return refused();
+    if (!old.digest.equals(options.digest())) return refused();
     await connection.query('UPDATE auth_workflow_request SET request=$2 WHERE workflow_id=$1', [workflowId, input]);
     return requestPartyScope(old);
-  }
+  };
+  const old = await original();
+  if (old) return replay(old);
   const target = operationParties(input, source);
   if (input.kind === 'organization') {
     if (!context || !access.stableCommandKey) return refused();
@@ -227,7 +244,7 @@ export async function captureWorkflowRequest<Context>(
     await connection.query('SELECT auth_erasure_admit_client($1)', [clientId]);
     const client = (
       await connection.query<{ owner: string | null }>(
-        'SELECT "userId" AS owner FROM auth_client WHERE client_id=$1 FOR KEY SHARE',
+        'SELECT "userId" AS owner FROM auth_client WHERE client_id=$1 FOR SHARE',
         [clientId],
       )
     ).rows[0];
@@ -239,14 +256,15 @@ export async function captureWorkflowRequest<Context>(
   // Neither the business digest nor pg's request JSON serialization occurs
   // until every original role/client has passed the actual current fences.
   const digest = options.digest();
-  await connection.query(
+  const inserted = await connection.query(
     `INSERT INTO auth_workflow_request (
       workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,
       erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id,
       erasure_initiator_id,erasure_delegate_id,erasure_actor_version,erasure_actor_id,
       erasure_principal_id,erasure_source_client_id,erasure_client_owner_id,
       erasure_source_client_owner_id,request_party_version,request_context_version
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+    ON CONFLICT(workflow_id) DO NOTHING RETURNING workflow_id`,
     [
       workflowId,
       digest,
@@ -270,5 +288,12 @@ export async function captureWorkflowRequest<Context>(
       row.request_context_version,
     ],
   );
+  if (!inserted.rowCount) {
+    // The primary-key conflict serialized a simultaneous first submit. Retain
+    // the winner's original parties, then recheck them before SDK serialization.
+    const winner = await original();
+    if (!winner) return refused();
+    return replay(winner);
+  }
   return requestPartyScope(row);
 }

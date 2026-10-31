@@ -927,7 +927,9 @@ nulls mean the source proved that role inapplicable. Actor and human are indepen
 The shared producer port is optional during integration: missing, malformed or
 unsupported context refuses with the existing generic unavailable response, before
 an attributed request or SDK copy commits. An actor-only callback cannot replace it.
-No public operation accepts this context. Current native `copyActors` supplies the
+No public operation accepts this context. Plain self operations retain any real verified
+context returned by their existing trusted authorization adapter; a void return
+remains unavailable provenance. Current native `copyActors` supplies the
 existing initiator/delegate roles and actor version unchanged; the request projection
 does not rename those roles to principal. The SDK's installed role vocabulary must
 already contain each projected actor/principal through its genuine native roles,

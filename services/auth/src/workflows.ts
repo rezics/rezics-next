@@ -8,7 +8,13 @@ import type {
   WorkflowContext,
   WorkflowFence,
 } from '@rezics/auth-contract';
-import { captureWorkflowRequest, requestPartyScope, type RequestParties } from './workflow-request-parties.ts';
+import {
+  authorizeUnprotectedRequest,
+  captureWorkflowRequest,
+  requestPartyScope,
+  REQUEST_PARTY_COLUMNS,
+  type RequestParties,
+} from './workflow-request-parties.ts';
 import { installNativeRoleProducer } from './erasure-coverage.ts';
 export type {
   AccountWorkflowPorts,
@@ -257,8 +263,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     };
   }
   async function requestScope(id: string, _input: AccountOperation, _context?: Context): Promise<CopyRole[]> {
-    const row = (await database.query<RequestParties>('SELECT * FROM auth_workflow_request WHERE workflow_id=$1', [id]))
-      .rows[0];
+    const row = (
+      await database.query<RequestParties>(
+        `SELECT ${REQUEST_PARTY_COLUMNS} FROM auth_workflow_request WHERE workflow_id=$1`,
+        [id],
+      )
+    ).rows[0];
     if (!row) denied();
     return requestPartyScope(row);
   }
@@ -1313,8 +1323,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     active();
     input = { ...input, operationKey: requestKey(key) };
     if (input.kind === 'transfer-acceptance') denied();
-    const context = 'authorization' in input ? await approved(input) : undefined;
-    if (!context) await access.authorizeUnprotectedOperation?.(input);
+    const context = 'authorization' in input ? await approved(input) : await authorizeUnprotectedRequest(access, input);
     const actors = await nativeActors(context);
     const id = workflowId(`operation:${key}`);
     // The stored result is private to the caller whose approval started it. The
