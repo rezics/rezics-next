@@ -208,6 +208,7 @@ test('Following management has a genuine discovery destination after the last un
     MouseEvent: window.MouseEvent,
     PointerEvent: window.PointerEvent,
     getComputedStyle: window.getComputedStyle.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
