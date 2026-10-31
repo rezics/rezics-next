@@ -107,7 +107,10 @@ export const REQUEST_PARTY_COLUMNS = `erasure_subject_id,erasure_human_id,erasur
 
 /** Approved business variants supply targets, not acting identities. Exhaustive
  * switching keeps new operations closed until their source projection is added. */
-export function operationParties(input: AccountOperation, source: Pick<ApprovedNativeCreationContext, 'operatorAccountId'>) {
+export function operationParties(
+  input: AccountOperation,
+  source: Pick<ApprovedNativeCreationContext, 'operatorAccountId'>,
+) {
   const base = {
     subject: null as string | null,
     operator: source.operatorAccountId,
