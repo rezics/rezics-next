@@ -496,3 +496,26 @@ test('nonhoisted Bun optional package custody rejects missing or wrong metadata,
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('a valid hoisted Bun copy cannot hide invalid metadata on the installed private dependency edge', () => {
+  const directory = temporaryDirectory();
+  try {
+    const { root, installation, platformRoot, platform } = nonhoistedBunInstallation(directory);
+    const native = pinnedArtifact(`${process.platform}-${process.arch}`, platform.tarball, platform.integrity);
+    symlinkSync(native, join(installation, platform.package), 'dir');
+    expect(checkPinnedBunInstallation(root).every((check) => check.status === 'compatible')).toBe(true);
+
+    const metadataPath = join(platformRoot, 'package.json');
+    const metadata = JSON.parse(readFileSync(metadataPath, 'utf8')) as { version: string };
+    writeFileSync(metadataPath, JSON.stringify({ ...metadata, version: '0.0.0-incompatible' }));
+    expect(checkPinnedBunInstallation(root).find((check) => check.field === 'workerCheck.bun.packages')?.status).toBe(
+      'incompatible',
+    );
+    rmSync(metadataPath);
+    expect(checkPinnedBunInstallation(root).find((check) => check.field === 'workerCheck.bun.custody')?.status).toBe(
+      'incompatible',
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
