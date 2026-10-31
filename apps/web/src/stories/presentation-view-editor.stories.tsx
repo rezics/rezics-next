@@ -1,11 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useMemo } from 'react';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { PROFILE_FORMAT, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
 import { PresentationViewEditor, type CurationEditorTransport } from '../features/pages/curate-view-editor';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime';
+import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime';
 import { AppShell } from '../shell/shell';
-import { PatternStory } from './page';
+import { PageStory, PatternStory } from './page';
 
 // Explicit inert profile data exercises the real editor. These are behavior states, not native publication receipts.
 const pageDocument = (id: string, level = 2): CompositionDocument => ({
@@ -225,5 +234,69 @@ export const ReloadUnavailable: Story = {
     await userEvent.click(within(dialog).getByRole('button', { name: m.curation_discard_reload() }));
     await expect(await canvas.findByText(m.curation_unavailable())).toBeVisible();
     await expect(canvas.getByText(m.curation_unsaved())).toBeVisible();
+  },
+};
+
+// Known routes let the shell's own links attempt a real departure and unmount this editor.
+function DepartureJourney(args: Parameters<typeof PresentationViewEditor>[0]) {
+  const locale = getLocale();
+  const router = useMemo(() => {
+    const root = createRootRoute({ component: Outlet });
+    const editor = createRoute({
+      getParentRoute: () => root,
+      path: '/curate/presentation',
+      component: () => (
+        <AppShell>
+          <PresentationViewEditor {...args} locale={locale} />
+        </AppShell>
+      ),
+    });
+    const destination = createRoute({
+      getParentRoute: () => root,
+      path: '/search',
+      component: () => <PageStory visitor="Signed In" path="/search" />,
+    });
+    return createRouter({
+      routeTree: root.addChildren([editor, destination]),
+      history: createMemoryHistory({
+        initialEntries: [localizeUrl(new URL('/curate/presentation', 'http://rezics.local')).pathname],
+      }),
+      rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
+    });
+  }, [args.initial, args.transport, args.preview, locale]);
+  return <RouterProvider router={router} />;
+}
+
+export const UnsavedNavigation: Story = {
+  ...Authoring,
+  render: (args) => (
+    <PatternStory visitor="Signed In" path="/curate/presentation">
+      <DepartureJourney {...args} />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = await editDetails(canvasElement);
+    const searchLink = () =>
+      canvas
+        .getAllByRole('link', { name: m.nav_search() })
+        .find((link) => link.getAttribute('aria-current') !== 'page' && link.getClientRects().length)!;
+    const origin = searchLink();
+    await userEvent.click(origin);
+    const body = within(canvasElement.ownerDocument.body);
+    const dialog = await body.findByRole('alertdialog', { name: m.curation_leave_title() });
+    await expect(dialog).toHaveAccessibleDescription(m.curation_leave_warning());
+    await userEvent.click(within(dialog).getByRole('button', { name: m.curation_stay() }));
+    await waitFor(() => expect(body.queryByRole('alertdialog')).not.toBeInTheDocument());
+    await expect(templateControls(canvasElement).template).toHaveValue(
+      JSON.stringify({ scope: 'type', key: 'schema:Book' }),
+    );
+    await expect(templateControls(canvasElement).view).toHaveValue('details');
+    await expect(await headingTextField(canvasElement)).toHaveValue('Retained draft');
+    await waitFor(() => expect(origin).toHaveFocus());
+    await userEvent.click(searchLink());
+    const leaving = await body.findByRole('alertdialog', { name: m.curation_leave_title() });
+    await userEvent.click(within(leaving).getByRole('button', { name: m.curation_leave() }));
+    await expect(await canvas.findByRole('heading', { level: 1, name: m.search_heading() })).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: m.curation_editor() })).not.toBeInTheDocument();
   },
 };

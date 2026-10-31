@@ -56,6 +56,7 @@ import {
 import type { PageEditorData } from './editor-config';
 import { CurationPublication, type PublicationConfirmation, type PublicationTransport } from './curation-publish';
 import { CurationFailureNotice, CurationPublicationRecovery } from './curation-publish-view';
+import { CurationNavigationGuard } from './curation-navigation-guard';
 
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
 
@@ -132,11 +133,15 @@ export function PresentationViewEditor({
   const [key, setKey] = useState('');
   const [correction, setCorrection] = useState<CorrectionTarget | null>(null);
   const editorRegion = useRef<HTMLElement>(null);
+  const pageRegion = useRef<HTMLElement>(null);
   const [focusRegion, setFocusRegion] = useState(0);
   useEffect(() => {
     if (focusRegion) editorRegion.current?.focus();
   }, [focusRegion]);
   const dirty = useMemo(() => draft !== null && hasDraftChanges(draft), [draft]);
+  const navigationGuard = (
+    <CurationNavigationGuard dirty={dirty} retainedPublication={pendingPublication} fallbackFocus={pageRegion} />
+  );
   const viewNames = presentationViewNames();
   const scopeNames = {
     generic: m.curation_generic(),
@@ -188,7 +193,13 @@ export function PresentationViewEditor({
     };
   }
 
-  if ((!current.ok && current.reason === 'forbidden') || failure?.reason === 'forbidden') return <ErrorPage />;
+  if ((!current.ok && current.reason === 'forbidden') || failure?.reason === 'forbidden')
+    return (
+      <>
+        {navigationGuard}
+        <ErrorPage />
+      </>
+    );
 
   async function reload() {
     if (inFlight.current) return;
@@ -290,6 +301,7 @@ export function PresentationViewEditor({
   if (!draft)
     return (
       <div className="space-y-4">
+        {navigationGuard}
         <CurationFailureNotice failure={failure ?? (current.ok ? { ok: false, reason: 'unavailable' } : current)} />
         <Button disabled={busy} onClick={() => void reload()}>
           {m.curation_reload()}
@@ -309,7 +321,8 @@ export function PresentationViewEditor({
   );
 
   return (
-    <article className="min-w-0 space-y-6 font-sans text-foreground" aria-busy={busy}>
+    <article ref={pageRegion} tabIndex={-1} className="min-w-0 space-y-6 font-sans text-foreground" aria-busy={busy}>
+      {navigationGuard}
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">{m.curation_heading()}</h1>
         <p className="text-muted-foreground">{m.curation_head({ head: saved.head })}</p>

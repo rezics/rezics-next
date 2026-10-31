@@ -3795,5 +3795,10 @@
   "order_recorded_tax": "Recorded tax",
   "order_tax_unavailable": "Tax information is unavailable.",
   "order_tax_code": "Tax code",
-  "benefit_details_unknown": "Benefit details are unavailable for this historical record."
+  "benefit_details_unknown": "Benefit details are unavailable for this historical record.",
+  "curation_leave_title": "Leave the presentation editor?",
+  "curation_leave_warning": "Leaving discards your unpublished changes in every template and view. Stay to keep editing.",
+  "curation_leave_recovery": "Leaving discards unpublished changes and this editor’s publication recovery state. It does not cancel a publication request or confirm what the server saved. Stay to keep your edits and recovery options.",
+  "curation_stay": "Stay in editor",
+  "curation_leave": "Leave and discard local work"
 }

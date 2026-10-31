@@ -32,7 +32,8 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
-  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
   const { PresentationViewEditor } = await import('../src/features/pages/curate-view-editor');
   const { m } = await import('../src/paraglide/messages.js');
   const document = (id: string): CompositionDocument => ({
@@ -113,16 +114,19 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     getParentRoute: () => rootRoute,
     path: initialLocation,
     component: () =>
-      createElement('div', null,
+      createElement(
+        'div',
+        null,
         createElement(Link, { to: '/search' }, 'Search destination'),
         createElement(PresentationViewEditor, {
           initial,
           locale: 'en',
           transport: {
             // Even a matching active read cannot establish an unknown write's outcome.
-            read: async () => attempts[0]
-              ? { ok: true, profile: attempts[0].profile, digest: profileDigest(attempts[0].profile), head: 8 }
-              : initial,
+            read: async () =>
+              attempts[0]
+                ? { ok: true, profile: attempts[0].profile, digest: profileDigest(attempts[0].profile), head: 8 }
+                : initial,
             publish: async (input) => {
               attempts.push(structuredClone(input));
               return confirmWrites
@@ -136,7 +140,9 @@ test('default presentation editor protects unsaved drafts and unresolved publica
   const destinationRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/search',
-    onEnter: () => { arrivals++; },
+    onEnter: () => {
+      arrivals++;
+    },
     component: () => createElement('h1', null, 'Actual search destination'),
   });
   const router = createRouter({
@@ -162,9 +168,12 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     return event.defaultPrevented;
   };
   const assertSelection = () => {
-    expect((host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>).value)
-      .toBe(JSON.stringify({ scope: 'type', key: 'schema:Book' }));
-    expect((host.querySelector('#curation-view') as InstanceType<typeof window.HTMLSelectElement>).value).toBe('details');
+    expect((host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
+      JSON.stringify({ scope: 'type', key: 'schema:Book' }),
+    );
+    expect((host.querySelector('#curation-view') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
+      'details',
+    );
   };
   try {
     await router.load();
@@ -178,6 +187,14 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     await edit('text.fr', 'Brouillon');
     await edit('text.fr', '');
     expect(unloadIsProtected()).toBe(true);
+    const draftDialog = await attemptDeparture();
+    expect(draftDialog.textContent).toContain(m.curation_leave_warning());
+    await click(m.curation_stay());
+    await settle(() => !window.document.querySelector('[role="alertdialog"]'));
+    assertSelection();
+    expect(textField('text.en')!.value).toBe('Original publication');
+    expect(textField('text.fr')!.value).toBe('');
+    expect(attempts).toHaveLength(0);
     await click(m.curation_publish());
     await settle(() => !!host.textContent?.includes(m.curation_unknown()));
     expect(attempts).toHaveLength(1);
@@ -210,7 +227,9 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     await act(async () => router.history.back());
     await settle(() => !!window.document.querySelector('[role="alertdialog"]'));
     await act(async () => {
-      window.document.activeElement?.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      window.document.activeElement?.dispatchEvent(
+        new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
     });
     await settle(() => !window.document.querySelector('[role="alertdialog"]'));
     expect(router.state.location.pathname).toBe(initialLocation);
@@ -224,7 +243,9 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     await settle(() => attempts.length === 2);
     expect(attempts).toEqual([original, original]);
     await click(m.curation_reload_head());
-    await settle(() => !!host.textContent?.includes(m.curation_actual_head({ head: 8, digest: profileDigest(original.profile) })));
+    await settle(
+      () => !!host.textContent?.includes(m.curation_actual_head({ head: 8, digest: profileDigest(original.profile) })),
+    );
     expect(attempts).toEqual([original, original]);
     // Clearing the visible draft still leaves mounted unknown-outcome recovery to protect.
     await click(m.curation_view_discard());
@@ -244,7 +265,9 @@ test('default presentation editor protects unsaved drafts and unresolved publica
 
     // A confirmed publication with no later draft removes both exit protections.
     confirmWrites = true;
-    await act(async () => { await router.navigate({ to: initialLocation }); });
+    await act(async () => {
+      await router.navigate({ to: initialLocation });
+    });
     await select('curation-template', JSON.stringify({ scope: 'type', key: 'schema:Book' }));
     await select('curation-view', 'details');
     await heading('details');
@@ -254,7 +277,9 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     expect(host.textContent).toContain(m.curation_saved());
     expect(attempts).toHaveLength(3);
     expect(unloadIsProtected()).toBe(false);
-    await act(async () => { (host.querySelector('a')! as unknown as HTMLElement).click(); });
+    await act(async () => {
+      (host.querySelector('a')! as unknown as HTMLElement).click();
+    });
     await settle(() => router.state.location.pathname === '/search');
     expect(arrivals).toBe(2);
     expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
