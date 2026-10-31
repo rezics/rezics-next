@@ -145,7 +145,7 @@ typeDescriptions:
 propertyDescriptions:
   schema:wordCount: "書籍作品的精確單字數，以無單位整數記錄；不是字元數，也不是特定版本的頁數。"
   schema:exampleOfWork: "此版本或發行版所體現的創作作品；連結作品本身，而非個人副本。"
-  schema:isbn: "此版本的 ISBN-13，以不含分隔符號的 13 位數字記錄，例如 9780140328721。"
+  schema:isbn: "此版本的 ISBN-13，以 978 或 979 起頭的 13 位數字記錄，連字號可省略，例如 9780140328721 或 978-0-14-032872-1。"
   schema:publisher: "被署名為此版本或發行版出版者的個人或組織。"
   schema:numberOfPages: "此版本的頁數，以無單位且至少為 1 的整數數量記錄。"
   schema:translator: "被署名為此版本或出版物翻譯者的個人或組織。"

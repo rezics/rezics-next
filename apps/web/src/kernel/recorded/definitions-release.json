@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:5baaf49db2bd5d7e669b292bb349ade9dee1ae4f349896defa494240b48bd8f1",
+  "digest": "sha256:9a63b9e0dd4541870a3f9a6cf34208cefc97013e066fdd238bc6a78e119be5fc",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -3653,14 +3653,14 @@
         "qualifiers": [],
         "multivalued": false,
         "descriptions": {
-          "de": "Die ISBN-13 der Ausgabe als 13 Ziffern ohne Trennzeichen, etwa 9780140328721.",
-          "en": "The edition's ISBN-13, as 13 digits without separators, for example 9780140328721.",
-          "es": "El ISBN-13 de la edición, con 13 dígitos sin separadores, por ejemplo 9780140328721.",
-          "fr": "L’ISBN-13 de l’édition, soit 13 chiffres sans séparateurs, par exemple 9780140328721.",
-          "ja": "版のISBN-13。9780140328721のように区切り記号なしの13桁で記録します。",
-          "ko": "판본의 ISBN-13입니다. 9780140328721처럼 구분 기호 없는 13자리 숫자로 기록합니다.",
-          "zh-Hans": "此版本的 ISBN-13，以不带分隔符的 13 位数字记录，如 9780140328721。",
-          "zh-Hant": "此版本的 ISBN-13，以不含分隔符號的 13 位數字記錄，例如 9780140328721。"
+          "de": "Die ISBN-13 der Ausgabe beginnt mit 978 oder 979; Bindestriche sind optional, etwa 9780140328721 oder 978-0-14-032872-1.",
+          "en": "The edition's ISBN-13, starting with 978 or 979; hyphens are optional, for example 9780140328721 or 978-0-14-032872-1.",
+          "es": "El ISBN-13 de la edición empieza por 978 o 979; los guiones son opcionales, por ejemplo 9780140328721 o 978-0-14-032872-1.",
+          "fr": "L’ISBN-13 de l’édition commence par 978 ou 979 ; les traits d’union sont facultatifs, par exemple 9780140328721 ou 978-0-14-032872-1.",
+          "ja": "版のISBN-13。978または979で始まる13桁で、ハイフンは省略できます。例：9780140328721、978-0-14-032872-1。",
+          "ko": "판본의 ISBN-13입니다. 978 또는 979로 시작하는 13자리 숫자이며 하이픈은 생략할 수 있습니다. 예: 9780140328721, 978-0-14-032872-1.",
+          "zh-Hans": "此版本的 ISBN-13，以 978 或 979 开头的 13 位数字记录，可带连字符，如 9780140328721 或 978-0-14-032872-1。",
+          "zh-Hant": "此版本的 ISBN-13，以 978 或 979 起頭的 13 位數字記錄，連字號可省略，例如 9780140328721 或 978-0-14-032872-1。"
         }
       },
       "schema:name": {

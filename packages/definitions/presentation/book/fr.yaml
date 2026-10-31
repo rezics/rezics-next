@@ -179,7 +179,7 @@ libraryProfiles:
 propertyDescriptions:
   schema:wordCount: "Nombre exact de mots de l’œuvre, entier sans unité ; ni nombre de caractères ni pagination d’une édition."
   schema:exampleOfWork: "L’œuvre dont cette édition est une réalisation ; relier l’œuvre elle-même, pas un exemplaire personnel."
-  schema:isbn: "L’ISBN-13 de l’édition, soit 13 chiffres sans séparateurs, par exemple 9780140328721."
+  schema:isbn: "L’ISBN-13 de l’édition commence par 978 ou 979 ; les traits d’union sont facultatifs, par exemple 9780140328721 ou 978-0-14-032872-1."
   schema:publisher: "Une personne ou organisation créditée pour la publication de cette édition."
   schema:numberOfPages: "Nombre de pages de l’édition, sous forme de quantité entière sans unité d’au moins 1."
   schema:translator: "Une personne ou organisation créditée pour la traduction de cette édition ou publication."
