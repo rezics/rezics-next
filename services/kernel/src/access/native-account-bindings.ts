@@ -49,6 +49,7 @@ import { routeOf } from '../route/route.ts';
 import { seal, unseal } from '../tokens/seal.ts';
 import { ResourceAccessWriteDeniedError } from './resource-denials.ts';
 import { IdempotencyConflictError } from '../command/command.ts';
+import { readNativeCopyActors, readNativeCreationContext } from './native-creation-context.ts';
 
 /** Auth-host-owned receipt/staging point-read closures, never request fields or
  * fixture maps. Persist the real createPending command reference under the exact
@@ -57,11 +58,7 @@ import { IdempotencyConflictError } from '../command/command.ts';
  * Each callback must have a concrete bounded implementation, without enumerating
  * staging records, command receipts, or lifecycle history to locate a match.
  */
-export type NativeWorkflowProofPorts = {
-  recordPending(input: { accountId: string; reservationId: string; reference: string }): Promise<void>;
-  pendingReference(input: { accountId: string; reservationId: string }): Promise<string | null>;
-  provisioningEvidence(input: { accountId: string; reservationId: string }): Promise<unknown>;
-};
+export type NativeWorkflowProofPorts = AuthWorkflowProofPorts;
 /** The Auth host composes the actual verifier factories with its private storage
  * and keys. Kernel receives verification capabilities only. Missing recovery
  * evidence must fail closed; it cannot be replaced by a synthetic receipt.
@@ -188,7 +185,7 @@ function authWorkflowBoundary<T extends object>(ports: T): T {
 export function createNativeAccountBindings(config: NativeAccountBindingsConfig): NativeAccountBindings {
   const { pool, access, actions, referenceKeys, proofs } = config;
   if (config.clock) installAccessClock(access, config.clock);
-  const workflow = proofs.workflow as AuthWorkflowProofPorts;
+  const workflow = proofs.workflow;
   const internalLifecycle = createLifecycleInternals({
     pool,
     routeKey: config.routeKey,
@@ -248,7 +245,10 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
         config.auth().internal.verifyCredentialEffect(reference, expected),
     }));
   const boundary = () => ({ pool, deadline: deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS) });
+  const creationContext: NonNullable<TrustedAccessPorts['readNativeCreationContext']> = (input) =>
+    readNativeCreationContext({ pool, access, approvals }, input, boundary());
   const trustedAccess: TrustedAccessPorts & ManagementMembershipAccess & AutomatedOperatorAccess = {
+    readNativeCreationContext: creationContext,
     ...createAutomatedOperatorAccess({
       pool,
       access,
@@ -377,23 +377,8 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       throw new WorkflowApprovalUnavailableError();
     },
     actorAccountId: (context) => context.actor.accountId,
-    async copyActors(context) {
-      const roles: { accountId: string; role: 'human' | 'initiator' | 'delegate' }[] = [
-        { accountId: context.actor.accountId, role: 'human' },
-        { accountId: context.actor.accountId, role: 'initiator' },
-      ];
-      if (context.actor.requestedBy) {
-        const assignment = await readAssignment(
-          pool,
-          context.actor.requestedBy,
-          context.actor.accountId,
-          accessClock(access),
-        );
-        if (assignment.kind !== 'resolved') throw new WorkflowApprovalUnavailableError();
-        roles.push({ accountId: assignment.principalId, role: 'delegate' });
-      }
-      return roles;
-    },
+    readNativeCreationContext: creationContext,
+    copyActors: (context) => readNativeCopyActors({ pool, access }, context),
     stableCommandKey: (context, phase) => `${required(workflowApprovalBinding(context)).commandKeyPrefix}:${phase}`,
     approvalBinding: (context) => workflowApprovalBinding(context),
     readContinuation: (operationKey, accountId) => continuations.read(operationKey, accountId),

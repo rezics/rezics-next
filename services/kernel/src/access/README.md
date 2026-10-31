@@ -2213,6 +2213,52 @@ A completed workflow result is private to the caller whose approval started it: 
 
 - Growth check: `test/access/growth-workflow-approvals.test.ts`, exact `checkGrowth` names `approve: same-actor history`, `resolve: same-actor history`, `denied replay: same-actor history`, `expiry sweep: same-actor history`, `approve: unrelated accounts and resources`, `resolve: unrelated accounts and resources`, `denied replay: unrelated accounts and resources`, and `expiry sweep: unrelated accounts and resources`, at [1, 8, 64].
 
+### Native creation attribution
+
+`@rezics/auth-contract` exports the literal `NativeCreationContext` and
+`NativeCreationContextRequest` from `native-creation-context.ts`. Native composition binds the exact
+`readNativeCreationContext` function on both `trustedAccess` and `workflowPorts`. Auth can call either before
+creating a new private automated-registration stage or existing workflow request. Historical hosts may omit
+the port; absence never establishes empty party scope. This adopts the Access source projection requested by
+[Auth's metadata privacy contract](../../../auth/src/metadata-privacy-contract.md), without adding a contact
+command or personal metadata permission.
+
+The request supplies the original approval reference, logical `operationKey` and complete existing
+`AccountOperation`. The existing approval resolver compares the original immutable business operation and key,
+restores the native approval identity, and runs its unchanged current-T formula with the original client,
+scopes and assignment. Automated creation's initial empty registration ID is valid before allocation; a later
+registration ID must match Auth's existing exact `NativeWorkflowProofPorts.creationBinding` reader. Access
+receives that bounded closure, never Auth SQL, credentials or a database handle. The reader renews no approval
+or replay authority and returns no private result or business payload.
+
+The immutable basis is the native approval reference, logical operation key, operation digest and existing
+stable command prefix (`commandKey`). Native steps continue appending their existing fixed phase to that prefix.
+The closed operation projection carries only its native kind, permission action, permission resource ID and,
+for `client-reduction`, exact target client ID. It does not invent a new account target before creation.
+Auth alone supplies a target client's locked owner; Access does not read `auth_client` or infer ownership
+from the actor, client ID or permission resource.
+
+The actor and authenticated `sourceClientId` come from the resolved native identity. `copyActors` and the
+projection share one current native party reader: an active, unfenced actor without an operator proves its
+own human role; a present `requested_by` must resolve the exact current native assignment and principal.
+No assignment makes the principal role inapplicable for that command. An automated actor's approval has
+no original opening locator, so it returns typed `unavailable: opening-provenance`; neither the actor nor
+its operator is substituted for the missing human. A missing historical approval returns typed
+`unavailable: historical-provenance`. Existing private-copy attribution refuses unavailable roles.
+
+The operator is the exact operator in an approved automated creation, opening or transfer, or the current
+native operator whose management authorizes an automated-account deletion. An opening additionally checks
+the named subject's current native operator relation. Commands using no operator relation carry null for
+that role. No role is inferred from a handle, email, JSON field, ciphertext or arbitrary requested-by string.
+The source performs only the existing bounded approval/formula reads and released account/assignment point
+reads; a one-connection pool suffices, with constant extra rows/statements and logarithmic indexed lookups.
+
+This is private attribution data. It cannot replace an Actor, authorize an effect or result disclosure,
+prove erasure, cover shared-history copies, or claim native/participant completion. New Auth consumers must
+compose their own source transaction and custody before opening a private writer. The focused native cases
+are in `test/access/native-creation-context.test.ts`; their integration acceptance is separate from this
+source implementation.
+
 ### Committed cleanup continuation
 
 A committed continuation has an immutable root, derived allowlist entries and completions. Its initial allowlist has

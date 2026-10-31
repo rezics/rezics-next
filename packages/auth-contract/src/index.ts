@@ -1,4 +1,6 @@
 import type { AuthErasureObligationPorts } from './auth-erasure-obligations.ts';
+import type { ReadNativeCreationContext } from './native-creation-context.ts';
+export type * from './native-creation-context.ts';
 export type * from './auth-erasure-obligations.ts';
 export * from './management';
 
@@ -230,6 +232,8 @@ export type AuthErasureProofPorts = {
 
 /** Internal application ports. Never construct these results from HTTP fields. */
 interface SharedAccessPorts extends AuthErasureProofPorts, Partial<AuthErasureObligationPorts> {
+  /** Private attribution only, resolved before creating a new private copy. */
+  readNativeCreationContext?: ReadNativeCreationContext;
   /** Sign-in may expose a suspended human's state privately for a refusal after credential verification. */
   readAccount(accountId: string, purpose?: 'signin'): Promise<AccessAccount | null>;
   /** Deleted and fenced accounts only. Ordinary reads stay empty for those rows. */
@@ -441,6 +445,7 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
    * Callback-only historical hosts may omit this adapter. */
   authorizeUnprotectedOperation?(operation: AccountOperation): Promise<void>;
   actorAccountId?(context: Context): string;
+  readNativeCreationContext?: ReadNativeCreationContext;
   copyActors?(context: Context): Promise<readonly { accountId: string; role: 'human' | 'initiator' | 'delegate' }[]>;
   stableCommandKey?(context: Context, phase: string): string;
   /** Durable approval metadata for the resolved context. Absent on historical hosts. */

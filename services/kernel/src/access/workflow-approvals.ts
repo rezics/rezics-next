@@ -13,6 +13,7 @@ import canonicalize from 'canonicalize';
 import type {
   AccountOperation as ContractAccountOperation,
   NativeWorkflowProofPorts,
+  NativeCreationContext,
   WorkflowResponsibility,
 } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
@@ -89,6 +90,12 @@ export type WorkflowApprovalBinding = Readonly<{
   commandKeyPrefix: string;
 }>;
 const bindings = new WeakMap<LifecycleRequest, WorkflowApprovalBinding>();
+type CreationSource = Pick<NativeCreationContext, 'approvalReference' | 'operation' | 'operatorAccountId'>;
+const creationSources = new WeakMap<LifecycleRequest, Readonly<CreationSource>>();
+/** Same native resolution as workflowApprovalBinding, with no business payload. */
+export function workflowApprovalCreationSource(request: LifecycleRequest): Readonly<CreationSource> | undefined {
+  return creationSources.get(request);
+}
 /** Return only durable binding metadata; never serialize the resolved context. */
 export function workflowApprovalBinding(request: LifecycleRequest): WorkflowApprovalBinding | undefined {
   return bindings.get(request);
@@ -131,7 +138,11 @@ type NativeKind =
   | 'client-reduction'
   | 'transfer'
   | 'transfer-acceptance';
-type Descriptor = { action: string; target: string; targetKind: 'actor' | 'organization' | 'either' | 'global' };
+type Descriptor = {
+  action: NativeCreationContext['operation']['action'];
+  target: string;
+  targetKind: 'actor' | 'organization' | 'either' | 'global';
+};
 /** Server-owned closed descriptors. Missing adapters deny explicitly; a catalogue
  * entry alone can never manufacture native authority for one of these kinds. */
 const unavailableAdapters = {
@@ -676,6 +687,27 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         commandKeyPrefix: `wf:${hash([actor.accountId, row.operationKey])}`,
       }),
     );
+    if (operation.kind !== 'credential' && operation.kind !== 'transfer-acceptance' && operation.kind !== 'consent')
+      creationSources.set(
+        request,
+        Object.freeze({
+          approvalReference: reference,
+          operatorAccountId:
+            operation.kind === 'automated' || operation.kind === 'opening' || operation.kind === 'transfer'
+              ? operation.operatorAccountId
+              : operation.kind === 'delete' &&
+                  descriptor.target !== operation.accountId &&
+                  descriptor.targetKind !== 'global'
+                ? descriptor.target
+                : null,
+          operation: Object.freeze({
+            kind: operation.kind,
+            action: descriptor.action,
+            targetResourceId: descriptor.target,
+            targetClientId: operation.kind === 'client-reduction' ? operation.clientId : null,
+          }),
+        }),
+      );
     return { request, row, actor, operation, descriptor };
   }
   async function resolve(
