@@ -336,6 +336,8 @@ edition, publication, episode and character, document-valued authored summaries,
 Concept-valued roles and classification, and identifiers without page URLs. Quantity
 guidance uses each property's existing units: cooking time is actual cooking duration
 in whole minutes, running time is in seconds, and servings are a unitless count.
+Identifier examples follow the admitted forms: ISBN-13 may include hyphens;
+GTIN is an 8-, 12-, 13- or 14-digit string.
 Source-record revisions are not edition names. Labels and catalogue constraints
 remain unchanged. The compiler has no special case for any vertical.
 
