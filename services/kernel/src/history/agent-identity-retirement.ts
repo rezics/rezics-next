@@ -4,6 +4,7 @@ import type {
 } from '../semantic/identity-source-consumer-custody.ts';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import type { KernelClock } from '../clock.ts';
 import {
   currentCommand,
   currentCommandResources,
@@ -17,6 +18,29 @@ import { AGENT_IDENTITY_SDK_FENCE_CONSUMER, readAgentIdentitySDKReceivingBinding
 import { historyDeadline, lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
 import type { HistoryArtifact, HistoryBarrier, HistoryReadiness } from './registry.ts';
 import sourceSelect from './agent-identity-retirement-source.sql';
+
+/** Declaration-only adapter from the original producer's published module. Replace with
+ * original type aliases when semantic/identity-source-consumer-maintenance.ts is integrated.
+ * There is no local issuer, allocation or runtime substitute for that module. */
+declare const identitySourceConsumerMaintenance: unique symbol;
+export type IdentitySourceConsumerMaintenanceWork = Readonly<{
+  [identitySourceConsumerMaintenance]: true;
+}>;
+export type IdentitySourceConsumerMaintenanceContext = Readonly<{
+  deadline: number;
+  identityConsumerWork: IdentitySourceConsumerMaintenanceWork;
+}>;
+type IdentitySourceConsumerMaintenanceModule = {
+  withIdentitySourceConsumerMaintenance<T>(
+    deps: Readonly<{
+      pool: Pool;
+      env: Readonly<Record<string, string | undefined>>;
+      clock?: KernelClock;
+    }>,
+    context: Readonly<{ deadline: number }>,
+    body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>,
+  ): Promise<T>;
+};
 
 /** Released foreign staging is not cleanup authority. The receiving owner must verify
  * the original source and its native terminal transfer before settling its obligation. */

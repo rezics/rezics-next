@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
+import type { IdentitySourceConsumerMaintenanceWork } from './agent-identity-retirement.ts';
 import { currentCommand, CommandUnavailableError, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -15,7 +16,10 @@ import {
 } from './registry.ts';
 
 export type HistoryReceivingDependencies = Readonly<{ pool: Pool; clock?: () => Date }>;
-export type HistoryReceivingContext = Readonly<{ deadline: number }>;
+export type HistoryReceivingContext = Readonly<{
+  deadline: number;
+  identityConsumerWork?: IdentitySourceConsumerMaintenanceWork;
+}>;
 declare const ownerCoverage: unique symbol;
 declare const receivingReceipt: unique symbol;
 export type HistoryOwnerCoverage = { readonly [ownerCoverage]: true };
