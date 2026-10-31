@@ -88,7 +88,7 @@ function fieldName(property: string) {
 }
 async function addField(canvasElement: HTMLElement, property: string) {
   const canvas = within(canvasElement);
-  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.publication_field() }), property);
+  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.character_add_fact() }), property);
   await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
   const heading = canvas.getAllByRole('heading', { name: fieldName(property) }).at(-1)!;
   return within(heading.closest('section')!);

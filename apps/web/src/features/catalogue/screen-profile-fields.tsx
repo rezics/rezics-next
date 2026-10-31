@@ -223,13 +223,13 @@ export function ScreenInitialFields({
       <legend className="text-lg font-semibold">{m.screen_initial_facts({}, o)}</legend>
       <p className="text-sm text-muted-foreground">{m.screen_native_help({}, o)}</p>
       <Field>
-        <FieldLabel htmlFor="screen-add-field">{m.publication_field({}, o)}</FieldLabel>
+        <FieldLabel htmlFor="screen-add-field">{m.character_add_fact({}, o)}</FieldLabel>
         <NativeSelect
           id="screen-add-field"
           value={fields.includes(property) ? property : ''}
           onChange={(event) => setProperty(event.target.value)}
         >
-          <NativeSelectOption value="">{m.publication_field({}, o)}</NativeSelectOption>
+          <NativeSelectOption value="">{m.character_add_fact({}, o)}</NativeSelectOption>
           {Object.entries(groups)
             .filter(([group]) => group !== 'authored')
             .map(([group, ids]) => (

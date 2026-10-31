@@ -87,7 +87,7 @@ async function fill(canvasElement: HTMLElement) {
   );
   await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'The observatory');
   for (const property of ['schema:duration', 'schema:episodeNumber', 'schema:isPartOf']) {
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.publication_field() }), property);
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), property);
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     const section = within(canvas.getByRole('heading', { name: field(property) }).closest('section')!);
     if (property === 'schema:duration') {
@@ -117,7 +117,7 @@ export const Route: Story = {
       await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
       'schema:Episode',
     );
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.publication_field() }), 'schema:duration');
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:duration');
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     const duration = within(canvas.getByRole('heading', { name: field('schema:duration') }).closest('section')!);
     await userEvent.type(duration.getByRole('textbox', { name: m.correction_amount() }), '+1440');

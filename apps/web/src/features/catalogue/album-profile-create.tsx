@@ -221,7 +221,7 @@ export function AlbumProfileCreate({
         ))}
         <fieldset disabled={locked} className="flex flex-wrap items-end gap-3">
           <Field className="min-w-0 flex-1">
-            <FieldLabel htmlFor="album-field">{m.publication_field({}, o)}</FieldLabel>
+            <FieldLabel htmlFor="album-field">{m.character_add_fact({}, o)}</FieldLabel>
             <NativeSelect id="album-field" value={property} onChange={(event) => setProperty(event.target.value)}>
               <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
               {choices

@@ -296,7 +296,7 @@ export function RecipeEditor({
             ))}
             <div className="flex flex-wrap items-end gap-3">
               <Field className="min-w-48 flex-1">
-                <FieldLabel htmlFor="recipe-field">{m.publication_field({}, o)}</FieldLabel>
+                <FieldLabel htmlFor="recipe-field">{m.character_add_fact({}, o)}</FieldLabel>
                 <NativeSelect
                   id="recipe-field"
                   disabled={locked}

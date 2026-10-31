@@ -95,7 +95,7 @@ const fieldName = (id: string) =>
 async function fill(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.type(await canvas.findByRole('textbox', { name: m.catalogue_create_label() }), 'Harbour sessions');
-  await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.publication_field() }), 'schema:datePublished');
+  await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:datePublished');
   await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
   const date = within(canvas.getByRole('group', { name: fieldName('schema:datePublished') }));
   await userEvent.selectOptions(date.getByRole('combobox', { name: m.correction_precision() }), '9');
@@ -131,7 +131,7 @@ export const ReaderUnavailable = failure('reader-unavailable', () => m.catalogue
 export const Created: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.publication_field() }), 'schema:contributor');
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:contributor');
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     const artist = within(canvas.getByRole('group', { name: fieldName('schema:contributor') }));
     await userEvent.type(artist.getByRole('combobox', { name: fieldName('schema:contributor') }), 'Harbour');

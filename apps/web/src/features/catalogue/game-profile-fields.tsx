@@ -128,9 +128,9 @@ export function GameInitialFacts({
       <legend className="font-sans text-lg font-semibold">{m.game_profile_initial({}, o)}</legend>
       <p className="text-sm text-muted-foreground">{m.game_profile_optional({}, o)}</p>
       <Field>
-        <FieldLabel>{m.publication_field({}, o)}</FieldLabel>
+        <FieldLabel>{m.character_add_fact({}, o)}</FieldLabel>
         <NativeSelect
-          aria-label={m.publication_field({}, o)}
+          aria-label={m.character_add_fact({}, o)}
           value={property}
           onChange={(event) => setProperty(event.target.value)}
         >
