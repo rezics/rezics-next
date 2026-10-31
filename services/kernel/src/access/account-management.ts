@@ -53,10 +53,33 @@ export const managedAccountsSchema = t.Object(
   },
   closed,
 );
+const managedAuthOperationId = t.Union([
+  t.Literal('auth.account.rename'),
+  t.Literal('auth.organization.membership'),
+  t.Literal('auth.operator.transfer'),
+  t.Literal('auth.organization.delete'),
+]);
+export type ManagedAuthOperationId = Static<typeof managedAuthOperationId>;
+const managedAuthActions = t.Union([
+  t.Object(
+    {
+      state: t.Literal('ready'),
+      operations: t.Array(
+        t.Object(
+          { operationId: managedAuthOperationId, action: t.String(), resource: t.Object({ route: t.Number(), id }, closed) },
+          closed,
+        ),
+      ),
+    },
+    closed,
+  ),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+]);
 export const accountManagementSchema = t.Object(
   {
     account: identity,
     self: t.Boolean(),
+    authActions: t.Optional(managedAuthActions),
     role: t.Union([role, t.Null()]),
     operator: t.Union([identity, t.Null()]),
     relation: t.Union([t.Object({ operatorAccountId: id, reservationId: id, version: t.String() }, closed), t.Null()]),
