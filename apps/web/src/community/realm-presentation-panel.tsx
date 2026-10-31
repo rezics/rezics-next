@@ -39,12 +39,5 @@ export function RealmAppearancePanel({ realmId }: { realmId: string }) {
   });
   const initial = isError ? unavailable : data;
   if (viewer === null || !initial || initial.kind === 'hidden') return null;
-  return (
-    <RealmAppearanceSettings
-      key={`${realmId}:${viewer}`}
-      realmId={realmId}
-      initial={initial}
-      adapter={adapter}
-    />
-  );
+  return <RealmAppearanceSettings key={`${realmId}:${viewer}`} realmId={realmId} initial={initial} adapter={adapter} />;
 }
