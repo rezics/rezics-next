@@ -1115,6 +1115,8 @@ export type TrainOptions = {
   runCandidateGit?: CandidateGitRunner;
   /** Real launch smoke seam; production uses the bounded candidate smoke after control-plane checks. */
   runLaunchSmoke?: GateRunner;
+  /** Ordinary main releases wait asynchronously for dev, then defer. Bounded to at most 30 seconds. */
+  controlPlaneDevLeaseTimeoutMs?: number;
   gateIdentity?: string;
   mainBranch?: string;
   integrationBranch?: string;
@@ -1217,7 +1219,9 @@ export class MergeTrain {
       new Promise<void>((resolve, reject) => {
         setTimeout(() => this.drain(lane, failWhenInitiallyHeld, handOffOnce).then(resolve, reject), 0);
       });
-    await Promise.all([start('main'), start('dev')]);
+    // Start dev first: a strict run must not mistake its own main release's dev lease for another train.
+    // Once dev has acquired its lane, later contention already uses the normal quiet return path.
+    await Promise.all([start('dev'), start('main')]);
   }
 
   private async drain(
@@ -1314,7 +1318,12 @@ export class MergeTrain {
                 }
               }
             } else {
-              const outcome = await this.integrate(entry);
+              const outcome = await this.integrateOrdinary(entry, lane);
+              if (!outcome) {
+                // Leave the request pending for the next pump, without retrying contention in this drain.
+                if (o.codeIsCurrent && !o.codeIsCurrent()) await handOff();
+                return;
+              }
               const workspaceFailures = this.workspaceFailures.get(entry.id);
               this.workspaceFailures.delete(entry.id);
               if (workspaceFailures) {
@@ -1903,6 +1912,51 @@ export class MergeTrain {
       if (retry) continue;
     }
     return { outcomes: orderedOutcomes(), deferredIds: [...deferred], skippedIds: [...skipped] };
+  }
+
+  /** The main lane is already owned. Dev drains never acquire main, so this ordering cannot form a lease cycle. */
+  private async integrateOrdinary(entry: LandingEntry, lane: 'main' | 'dev'): Promise<GateOutcome | undefined> {
+    const o = this.options;
+    if (
+      lane !== 'main' ||
+      o.integrationBranch === undefined ||
+      taskIntegrationTarget(o.stateDirectory, entry.request.taskId).goal !== 'control-plane'
+    )
+      return this.integrate(entry);
+
+    const timeoutMs = o.controlPlaneDevLeaseTimeoutMs ?? 30_000;
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > 30_000)
+      throw new Error('Control-plane dev lease wait must be within 30 seconds');
+    const deadline = performance.now() + timeoutMs;
+    for (;;) {
+      o.fence.assertCurrent(entry.request);
+      if (o.codeIsCurrent && !o.codeIsCurrent()) return;
+      let lease: ReturnType<typeof acquireDirectoryLease>;
+      try {
+        lease = acquireDirectoryLease(join(o.stateDirectory, 'train.lease'));
+      } catch (error) {
+        if (!(error instanceof LeaseHeldError)) throw error;
+        const remaining = deadline - performance.now();
+        if (remaining <= 0) {
+          appendFileSync(
+            join(o.stateDirectory, `landing-${entry.id}.log`),
+            `Control-plane release deferred: dev train lease held after waiting ${timeoutMs}ms; request remains pending\n`,
+          );
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.min(50, remaining)));
+        continue;
+      }
+      try {
+        o.fence.assertCurrent(entry.request);
+        if (o.codeIsCurrent && !o.codeIsCurrent()) return;
+        // Capture refs and form the candidate only after both lanes are owned. Keep dev through every proof,
+        // propagation preparation and the existing final atomic main/dev/stabilize compare-and-swap.
+        return await this.integrate(entry);
+      } finally {
+        lease.release();
+      }
+    }
   }
 
   private async integrate(entry: LandingEntry): Promise<GateOutcome> {

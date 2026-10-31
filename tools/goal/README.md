@@ -76,8 +76,14 @@ brief continue to be written and formatted from that brief.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
 enqueues its landing request, and starts the train. Requests targeting `main` use the `train-main.lease`; other
-requests use `train.lease`. The two lanes select and order their own requests, so a long control-plane landing on
-`main` can run alongside a dev landing. Each lane remains serial. A train releases its lease and checks its lane's
+requests use `train.lease`. The two lanes select and order their own requests. An ordinary control-plane release,
+while holding the main lane, acquires the existing dev lane before capturing refs or forming its candidate. It retains
+both through the complete required checks, captured-dev compatibility, provider lifecycle, propagation preparation
+and final atomic main/dev/stabilize compare-and-swap. Dev drains never wait for main. Contention waits asynchronously
+for at most 30 seconds, preserves the live owner and leaves the request pending for a later pump on timeout. A stale
+controller hands off, and cancellation or any exit releases only its owned leases. External ref changes still
+invalidate proof through the existing ref guards and finite retry budget. Other main and dev work retains independent
+lanes. Each lane remains serial. A train releases its lease and checks its lane's
 queue again, reacquiring the lease to drain a request that arrived during shutdown. Detached train processes wait for
 the lane lease and recheck the control-plane version while they wait. Every process records the Git object id for
 `main:tools/goal` when it starts; a stale train finishes its active landing, releases its lease and hands the remaining
@@ -590,6 +596,41 @@ booleans, current structured result, current-run event suffix, and check identit
 raw tool arguments and tool output are omitted. Resuming clears the recorded current result until that turn exits;
 an older waiting result cannot stand in for the current failure. Cleanup does not discard this evidence.
 
+Workspace gate parity is a separate postintegration obligation. Minimal `launch-smoke` keeps the real provider
+launch/wait/wake path and records `worker-root-workspace-gate-parity` as deferred and unverified. That entry is not a
+required passing scenario for minimal smoke. It does not certify native parity.
+
+The bounded consumer at `scripts/gate-parity.ts` requires two explicit checkout roots:
+
+```sh
+bun tools/goal/scripts/gate-parity.ts --input-root <candidate> --scripts-root <delivered-dev-checkout>
+```
+
+Without `--execute` this only plans: it captures each root's exact commit, tree and dirty status, reads the existing
+check-script compatibility contract and discovers literal executable producer fixtures and their supported exports.
+The supplied scripts root identifies delivered development scripts independently of an older main-based worker.
+Discovery never imports a possibly unguarded root gate, guesses `--workspaces`, assumes a Git export, or claims a
+runtime pass from source inspection. Missing boundaries appear once in the plan with their owning team.
+
+Explicit postintegration execution adds `--execute`, or uses
+`launch-smoke.ts --parity execute --scripts-root <delivered-dev-checkout>`. It reports the plan before execution,
+clones both captured commits under this consumer worktree's `.temp/goal`, installs their frozen dependencies, and runs
+only the discovered producer commands. The existing compatibility checker tests worker/remote command contracts;
+selected-gate and persistence-ownership fixtures collect supporting evidence. Auth and native Web regressions enter
+their delivered owner check commands. There is no full root gate fallback, raw native test or database injection.
+Commands record actual argv, cwd, bounded output and outcome. The installed producer Bun owns command execution;
+caller database/lane/explicit persistence overrides are cleared, while ordinary placement settings are retained.
+A total 270-second execution budget bounds child process groups. Cleanup removes only nonce-marked clones and owned
+children; Auth/Web retain their own native resource cleanup. Neither supplied checkout's refs or config are changed.
+
+Producer fixture success is supporting evidence only. The current delivered contracts still lack an executable
+comparison of actual worker/root workspace checks, usable Git metadata after sync, and genuine nested native Auth
+placement. These are named unavailable results owned by the Git/gate and Auth teams, even when supporting fixtures
+pass. The native concurrent Web persistence regression remains an explicit later obligation and is available only
+with its placed Web check command. Execution exits nonzero for unavailable boundaries or failed producer commands;
+minimal smoke defers it so missing producers do not disable every control-plane landing. Completion of this consumer
+requires its workspace typecheck; native/browser/remote parity must be verified after integration.
+
 Before any release ref moves, the train checks the executable main-consumer/dev-script contract against the exact
 snapshotted dev script tree. It installs dependencies in a detached worktree at that dev commit, then runs
 `bun tools/goal/scripts/check-compatibility.ts --scripts-root <dev-script-worktree>`. The contract verifies the
@@ -600,6 +641,22 @@ resumes the same attempt, and records named scenario and regression evidence. A 
 candidate, dev script tree and scenario results. A failed, timed-out, capacity-waiting or incomplete suite or contract
 is unverified and cannot certify `main`; no baseline allowance can turn a required failure into a pass. Candidate
 mutation or a stale main, stabilize or dev ref invalidates the run and starts validation again.
+
+The existing local-placement, compatibility and smoke test fixtures share `checkScriptFixture` in `src/test-support.ts`.
+It captures the development ref as one immutable commit before reading files, including the manifest and lockfile
+used by compatibility probes. It copies only the worker-check runtime dependencies: worker-check, remote-check,
+check-git, check-ledger, stack-run, stack-lease, check-custody, check-artifacts, check-memory and the check-host Docker
+wrapper. The stack-run and check-artifacts imports share that same snapshot, including their transitive custody
+dependency. Negative probes transform those copied sources; package identity, pinned Bun verification and wrapper
+policy remain part of the existing assertions.
+These fixture copies do not replace the train's detached dev checkout or its release-ref validation.
+
+The Bun artifact contract retains `bun@1.4.4-canary.20261027.1` and accepts the supplied exact
+`bun@1.4.4-canary.20261031.1` artifact on Linux x64. The latter's installed package version is
+`1.4.4-canary.20261031.1+34cbc70`; its runtime reports `1.4.4` and must match the recorded revision and executable
+hash. Unknown pins and unprovided platforms remain incompatible. Fixture artifact caches are keyed by integrity so
+different pins cannot reuse each other's archives. Metadata support does not certify executable compatibility or
+native lifecycle parity; those remain controller release obligations.
 
 The train precomputes merge candidates for `main`, `stabilize` when that branch exists, and `dev`, then publishes the
 ref changes in one Git compare-and-swap transaction. If `stabilize` is absent, it prepares `main` directly into `dev`.

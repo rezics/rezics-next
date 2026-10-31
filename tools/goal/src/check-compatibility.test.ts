@@ -258,7 +258,11 @@ import { checkPinnedBunInstallation } from './check-compatibility.ts';
 
 /** Provision authentic immutable npm artifacts, never a shim reporting a desired positive version. */
 function pinnedArtifact(packageName: string, url: string, integrity: string): string {
-  const cache = join(repositoryRoot, '.temp/check-compatibility-artifacts');
+  const cache = join(
+    repositoryRoot,
+    '.temp/check-compatibility-artifacts',
+    createHash('sha256').update(integrity).digest('hex'),
+  );
   const directory = join(cache, packageName);
   const archive = join(cache, `${packageName}.tgz`);
   mkdirSync(directory, { recursive: true });
@@ -302,6 +306,7 @@ function completeScriptsRoot(directory: string) {
     .packageManager;
   const artifact = CHECK_COMPATIBILITY_CONTRACT.workerCheck.bun.artifacts[pin];
   if (!artifact) throw new Error(`No trusted identity for actual dev pin ${pin}`);
+  expect(pin).toBe(`bun@${artifact.packageVersion.split('+')[0]}`);
   const platform = artifact.platforms[`${process.platform}-${process.arch}`];
   if (!platform) throw new Error(`No trusted platform artifact for ${process.platform}-${process.arch}`);
   const wrapper = pinnedArtifact('bun', artifact.packageTarball, artifact.packageIntegrity);
