@@ -58,11 +58,21 @@ test('sort keeps an ordinary localized GET form with all supported inputs and no
       state,
     }),
   );
-  expect(html).toContain('method="get" action="/zh-Hant/search"');
+  expect(html).toMatch(/<form\b[^>]*method="get"/);
+  expect(html).toMatch(/<form\b[^>]*action="\/zh-Hant\/search"/);
   for (const name of [
-    'q', 'type', 'sort', 'kinds', 'language', 'filter', 'condition',
-    'r.schema:datePublished', 'f.schema:genre', 'f.schema:keywords',
-  ]) expect(html).toContain(`name="${name}"`);
+    'q',
+    'type',
+    'sort',
+    'kinds',
+    'language',
+    'filter',
+    'condition',
+    'r.schema:datePublished',
+    'f.schema:genre',
+    'f.schema:keywords',
+  ])
+    expect(html).toContain(`name="${name}"`);
   expect(html).not.toContain('name="cursor"');
 });
 
