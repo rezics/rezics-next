@@ -15,15 +15,22 @@ import { PUBLIC_PREPARATION_WORKFLOW } from './public-preparation-store.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
-import type { WorkModule } from '../work/registry.ts';
+import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { createOpenSearch, SearchUnavailableError } from './opensearch.ts';
 import { startSearchIndexing } from './runner.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { registerSearchErasure, markSearchPersonalErasure, stepSearchErasure } from './erasure.ts';
+import type { ScopeRuntime } from './service-scope.ts';
 
 export type SearchConfig = { url: string; prefix: string };
 
 const PREFIX = /^[a-z0-9][a-z0-9-]{0,47}$/;
+const collectionPublicationScopeRuntimes = new WeakMap<WorkContext, ScopeRuntime>();
+
+/** The Library consumer borrows this worker's existing Search client and rated source for a guarded step. */
+export function collectionPublicationScopeRuntime(context: WorkContext): ScopeRuntime | undefined {
+  return collectionPublicationScopeRuntimes.get(context);
+}
 
 /** `undefined` when search is not configured. The URL and prefix are refused by name. */
 export function readSearchConfig(env: { readonly [name: string]: string | undefined }): SearchConfig | undefined {
@@ -235,6 +242,13 @@ export const searchWorkModule: WorkModule = {
     const routeKey = readMembershipRouteKey(context.env);
     const search = createOpenSearch(config.url);
     const source = createRatedSubjectSource(context.pool, routeKey).source;
+    collectionPublicationScopeRuntimes.set(context, {
+      pool: context.pool,
+      client: search,
+      prefix: config.prefix,
+      source,
+      clock: context.clock,
+    });
     const listing = subjectListingSource(context.pool);
     let active: PublicPreparation | undefined;
     let scoped: ReturnType<typeof createScopePreparation> | undefined;

@@ -20,6 +20,11 @@ import type { Collection, CollectionMember } from './collection-model.ts';
 import { collectionReadView, createCollectionReads } from './collection-reads.ts';
 import { createCollectionCommands } from './collections.ts';
 import { createCollectionPublications } from './collection-publication.ts';
+import { createCollectionPublicationService } from './collection-publication-service.ts';
+import {
+  collectionPublicationStatusSchema,
+  collectionPublishQueryRequestSchema,
+} from './collection-publication-http.ts';
 import { collectionPresentation } from './collection-presentation.ts';
 import { parseCollectionRule } from './collection-rules.ts';
 import { listSitemapCollections } from './sitemap.ts';
@@ -191,6 +196,7 @@ const fullSubjectPage = t.Object(
   closed,
 );
 const collectionParams = t.Object({ collectionId: id }, closed);
+const collectionPublicationParams = t.Object({ id: t.String({ format: 'uuid' }) }, closed);
 const memberParams = t.Object({ collectionId: id, memberId: id }, closed);
 const headers = t.Object({
   [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }),
@@ -324,6 +330,13 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
   let commands: ReturnType<typeof createCollectionCommands> | undefined;
   let reads: ReturnType<typeof createCollectionReads> | undefined;
   let publications: ReturnType<typeof createCollectionPublications> | undefined;
+  let wholeQueryPublications: ReturnType<typeof createCollectionPublicationService> | undefined;
+  const wholeQuery = () =>
+    (wholeQueryPublications ??= createCollectionPublicationService({
+      pool,
+      access: dependencies.access(),
+      clock,
+    }));
   const publish = () =>
     (publications ??= createCollectionPublications({
       pool,
@@ -377,6 +390,51 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
   }
   const sitemapQuery = strict(SitemapQuerySchema);
   return app
+    .post(
+      customMethod('/v1/collections/:collectionId', 'publish'),
+      {
+        params: collectionParams,
+        headers,
+        body: strict(collectionPublishQueryRequestSchema),
+        response: {
+          200: strict(collectionPublicationStatusSchema),
+          202: strict(collectionPublicationStatusSchema),
+          ...failures,
+        },
+        detail: detail('collection.publish_query', 'collection:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() =>
+            wholeQuery().begin(actor, {
+              collectionId: params.collectionId,
+              revision: body.revision,
+              visibility: body.visibility,
+            }, key),
+          ),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        const status = await wholeQuery().status(actor, result.value.locator.publicationId);
+        set.status = status.phase === 'staging' || status.phase === 'awaiting_activation' ? 202 : 200;
+        return status;
+      },
+    )
+    .get(
+      '/v1/collectionPublications/:id',
+      {
+        params: collectionPublicationParams,
+        response: { 200: strict(collectionPublicationStatusSchema), ...failures },
+        detail: detail('collection_publication.get', 'collection:update'),
+      },
+      async ({ params, actor, admission, job, set }) => {
+        requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () => wholeQuery().status(actor, params.id));
+      },
+    )
     .post(
       customMethod('/v1/collections/:collectionId', 'publishSelected'),
       {

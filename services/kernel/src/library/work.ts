@@ -7,6 +7,7 @@ import { syncSubjectListing } from './listing.ts';
 import memberSubjects from './work-member-subjects.sql';
 import type { ShelfMaintenanceOps } from './shelf-maintenance-ops-contract.ts';
 import { registerLibraryErasure } from './erasure-participant.ts';
+import { registerCollectionPublicationWork } from './collection-publication-work.ts';
 
 const COLLECTION_LISTING_WORKFLOW = 'library.collectionListing';
 const PAGE_SIZE = 100;
@@ -15,6 +16,7 @@ const SEGMENT_PAGES = 2;
 export function registerLibraryWork(context: WorkContext, maintenance?: ShelfMaintenanceOps): void {
   const { pool, client, addEffects } = context;
   registerLibraryErasure(context, maintenance);
+  registerCollectionPublicationWork(context);
   const syncPage = DBOS.registerStep<unknown, [string, string], string | null>(
     async (collectionId: string, after: string): Promise<string | null> => {
       // The route/Collection/subject index bounds this seek, including tombstoned Collections.

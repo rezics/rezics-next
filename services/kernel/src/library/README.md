@@ -209,9 +209,9 @@ write basis and exact creation receipt PK/commitment. Accounts' native restorer 
 return private domain data on the supplied client. Missing/collected evidence has no reconstruction path. Current
 rule use compares incarnation, Collection/rule revision, source generation, accepted release and canonical rule digest.
 `advanceCollectionPublicationEpisodePhase` delegates mechanical admission to the existing live Core work-step port
-and performs version CAS; it cannot complete output. The owning work-admission/getter, bounded query staging, final
-human command and default receiving composition remain independent dependencies. Their unavailable implementations
-are not successful empty results. `builtin-materialization.ts` uses the existing parent-creation capability and native
+and performs version CAS; it cannot complete output. `collection-publication-service.ts` binds begin and owner-private
+status to those readers, while `collection-publication-work.ts` registers staging and final activation on the existing
+Library workflow. `builtin-materialization.ts` uses the existing parent-creation capability and native
 grant initializer for the first owner write (logical revision 0 to native revision 1), keeping Everything/state IDs
 stable and accepted meaning pinned in the native header. Its storage title defaults to `Everything` or the accepted
 state identifier until an owner changes it; no query AST is retained there. Liked refuses. The existing canonical
@@ -303,9 +303,10 @@ cannot supply a count, completion flag or proof. The retained definition digest 
 each step still compares the whole getter result before and after foreign work. Moving a sealed episode to
 `awaiting_activation` therefore does not reinterpret its pinned meaning or invalidate its unchanged native seal.
 
-The delivered c19 episode admission/getter still throw `dependency_unavailable`, and Search's delivered work-context
-union has no `collection-publication` branch. Staging explicitly refuses that missing foreign boundary; it does not
-alias Members/Kind or restore an Actor. The current shared evaluator also lacks native owner-work evaluation and a
+The published c19 work-admission functions still throw `dependency_unavailable`; Search's work-context union now has
+the distinct `collection-publication` branch and its worker exposes the existing Search scope runtime to Library.
+Staging therefore remains unavailable until the Search-owned native admission/getter and guarded evaluator branches
+are integrated; it does not alias Members/Kind or restore an Actor. The current shared evaluator also lacks native owner-work evaluation and a
 durable publication leaf-resume binding. Catalogue leaf sealing remains unavailable until Search exposes its actual
 current public Source/index proof in addition to the private owner capture. No index dependency is invented for a
 pure owner query. These are explicit unsupported native branches, not successful empty outputs or native acceptance.
@@ -330,7 +331,7 @@ The selected routes are `POST customMethod('/v1/collections/:collectionId', 'pub
 (`POST /v1/collections/{collectionId}:publish`, operation `collection.publish_query`) and
 `GET /v1/collectionPublications/:id` (operation `collection_publication.get`). Both require current
 `collection:update` and the existing `gate:collections`; status is owner-private and `private, no-store`.
-These are declarations for composition, not currently mounted endpoints.
+The endpoints are mounted through the ordinary gated native API and use the existing `collection:update` action.
 
 The closed request is `{revision,visibility:'public'|'unlisted'}` with ordinary Idempotency-Key. Revision zero
 allows an actual logical built-in's first materialization by the owning command. Requests supply neither an
@@ -343,10 +344,11 @@ Internal creation retains its required `durableInitiator` commitment unchanged.
 
 The actual native episode types live in `collection-publication-episode-contract.ts`; the distinct mechanical
 role's locator and admission/getter declarations live in `collection-publication-work-admission.ts`. The latter
-two functions remain typed unavailable adapters. Begin, owner-private status read, original-operation reader,
-bounded staging/seal and final activation function declarations/bodies are absent in this checkout. Their owning
-producers must publish them before service/routes and the single existing Library WorkModule can bind them.
-There is no fallback successful publication, new runtime or substitute selected-set producer.
+two functions remain typed unavailable adapters pending their Search-owned native implementation. The mounted
+service uses the real begin/status/initiator readers; the single existing Library WorkModule registers locator-only
+staging and final activation. No fallback successful publication, new runtime or substitute selected-set producer is
+used. Until the native work-admission boundary is integrated, accepted progress remains unavailable rather than
+reporting an empty or completed result.
 `collection-publication-http.test.ts` retains the unmet real API/default-worker acceptance and focused closed
 grammar/privacy assertions. It uses the existing native fixture and actual output rows/receipt, with no replacement
 worker or domain backend. Schema availability and local typing do not establish that native acceptance.

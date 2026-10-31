@@ -294,6 +294,8 @@ const typed = [
   'GET /v1/collections/:collectionId/rule',
   'PUT /v1/collections/:collectionId/rule',
   'POST /v1/collections/:collectionId/$publishSelected',
+  'POST /v1/collections/:collectionId/$publish',
+  'GET /v1/collectionPublications/:id',
   'DELETE /v1/collections/:collectionId',
   'POST /v1/collections/:collectionId/$restore',
   'GET /v1/collections/:collectionId/members',
