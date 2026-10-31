@@ -21,7 +21,20 @@ export const routes: FakeRoute[] = [
     path: `/v1/offers/${shellErrorOfferId}`,
     story: () => {
       reads++;
-      if (outcome === 'closed') return { status: 403, body: { code: 'platform_closed' } };
+      if (outcome === 'closed')
+        return {
+          status: 403,
+          headers: { 'content-type': 'application/problem+json' },
+          __responseBody: {
+            type: 'https://rezics.com/problems/platform_closed',
+            title: 'Platform Closed',
+            status: 403,
+            code: 'platform_closed',
+            retryable: false,
+            effect_status: 'not_applicable',
+            request_id: 'story-shell-closed',
+          },
+        };
       if (outcome === 'missing') return { status: 404, body: { code: 'not_found' } };
       if (reads === 1 || outcome === 'still-unavailable')
         return { status: 503, headers: { 'retry-after': '1' }, body: { code: 'dependency_unavailable' } };
