@@ -64,7 +64,12 @@ language/theme, image failures, horizontal document width and the observed story
 
 The 390 capture exercises CSS responsiveness using a desktop Chromium user agent and pointer. It does not prove
 physical-phone keyboard, touch, safe-area or screen-reader behavior. Full-document images do not prove that fixed
-controls avoid overlap at every scroll position. Dark themes, other locales, zoom, 320 CSS pixels, authenticated
+controls avoid overlap at every scroll position. Post-play scroll offsets can paint sticky headers and fixed
+bottom navigation partway down a full-document image. This is a capture artifact, not proof of a duplicated shell.
+A fresh `pages-catalogue-create-subject--invalid-fields` phone comparison records scrollY 853 and the real sticky
+header at viewport top 0; the separate `comparisons/*--top.png` after scrolling to zero shows one ordinary header.
+The settings comparison likewise supplies an actual first viewport. These bounded comparisons prevent misdiagnosing
+post-play full-document chrome as a product composition defect; original images remain unchanged. Dark themes, other locales, zoom, 320 CSS pixels, authenticated
 production journeys and undisplayed interactive branches are not silently counted as observed.
 
 Public Storybook may automatically run a story's existing `play`; this audit does not invoke a test runner or
@@ -265,7 +270,12 @@ this report does not silently expand the contract while repairing the settled Ho
 
 **Defect class: incomplete fixture/composition boundary; owner seam: Web Subject Page providers and Commerce slot.**
 The required `patterns-subjects-purchase-entry-slot--empty` captures must be read as the actual composed page shown,
-not merely a missing slot node. NAMED_PURCHASE_RESULT
+not merely a missing slot node. Both widths show a cover, title, About/facts and two editions, followed by five
+consecutive failed sections: Characters, Credits, Reviews, Discussion and Lists, each with “This section could
+not be loaded” and Retry. The slot is absent, but the composed page is **missing data**, with unfinished hierarchy
+as a secondary finding. The 390 image is over 2,000 pixels tall before the final contribution links; the desktop
+also exposes the failed sections in the full document. These are the current public
+`shots/patterns-subjects-purchase-entry-slot--empty--1280.png` and `--390.png`, not the older frozen capture.
 
 `apps/web/src/stories/patterns/subject-purchase-slot.stories.tsx` mounts the full `SubjectPage` in `PatternStory`,
 casts a recorded page through `unknown` to `SubjectPageData`, and supplies slot fixtures. Empty checks that the
@@ -282,7 +292,12 @@ unavailable states as separately named states rather than using them as the only
 ### Subject Rating Ready is a local visual example
 
 **Defect class: unfinished rating hierarchy and limited integration evidence; owner seam: Ratings/Presentation and Web.**
-NAMED_RATING_RESULT
+Both `shots/patterns-subjects-subject-rating--ready--1280.png` and `--390.png` render without a main error wall,
+but remain **unfinished design**. The opened distribution is a three-column list of numeric bucket/count pairs,
+including many zeroes, rather than a readable visual distribution. The same Global 8.4 / 1,203 ratings is repeated
+in a separate Kokoro card below the primary block. Processing/Bayesian explanatory copy has comparable visual
+weight to the result. At 390 the card's rating wraps at the far right; it fits, so this is not classified as a
+broken-layout cell. The page is a local rating presentation example, not an integrated Subject rating journey.
 
 `apps/web/src/stories/subject-rating/subject-rating.stories.tsx` obtains figures from `kernel/fake/ratings`.
 The Ready play checks that “8.4” appears and opens distribution details; Vote updates component-local state.
@@ -312,8 +327,8 @@ pages with related information grouped into tabs/sections. These references disa
 pattern is prioritisation and disclosure, not copying one site's typography or assuming its backend model.
 
 `apps/web/src/features/pages/subject.tsx` composes read plans and page layout; `subject-ratings-view.tsx` handles
-some failures locally. The PageStory supplies a query provider, router and fake/recorded transport, but some
-compositions can still reach hooks without the required provider. A visible “No QueryClient set” error is a
+some failures locally. The PageStory supplies a query provider, router and fake/recorded transport, but direct component exports that
+bypass it can still reach hooks without the required provider. A visible “No QueryClient set” error is a
 provider-composition defect, not proof that the Subject API is down. Diagnose each error against its actual fixture
 and source boundary before grouping it with genuine unavailable reads.
 
