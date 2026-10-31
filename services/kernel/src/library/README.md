@@ -273,6 +273,55 @@ lease, infers NoData or deletes a source copy. Source-local inventory returns th
 and member counts in one indexed bounded range. It does not certify receiving/control/reader cleanup or terminal
 account erasure. Terminal public freeze and the actual shared disposition binding remain pending.
 
+### Whole-query publication staging
+
+`collection-publication-staging.ts` is the sole bounded staging producer. Its literal entry point is
+`stageCollectionPublicationStep(tx: OperationalTransaction, locator: CollectionPublicationLocator,
+options: CollectionPublicationStagingOptions)`. The original module also exports
+`readCollectionPublicationStagingCheckpoint` and `readCollectionPublicationStagingSeal`. The first takes the genuine
+operational transaction and shared `NativeCollectionWork`; the second freshly reads native committed state on either
+an admitted work transaction or the actual authorized final Collection command. Returned references are not grants.
+
+The episode's ordinary begin command uses `beginWholeQueryCollectionSourceOutput` in the existing native output
+allocator. `expected_members` remains NULL while B builds; zero is reserved for a genuinely known empty selection or
+an exhausted whole query at final activation. The original two-retained-generation limit, curator/SDK/epoch writer
+guards and destination disposition requirements remain. B never changes the selected head A. Selected-list append
+hooks refuse whole-query generations. Final activation remains the ordinary `completeCollectionSourceOutput` hook,
+which requires its shared work ledger and exact episode locator and independently rereads the native staging seal.
+
+Each step admits and reads the whole current c19 definition on the same Core client before Source/Type work. It
+uses the shared Source, id order, compiler and evaluator, transferring one allowance in every dimension. A private
+bounded frontier retains at most one unfinished canonical subject and native leaf progress. Unused suffix/lookahead
+is charged and sought again after the last settled key. Positive and excluded subjects retain their native evidence
+references; complete original/terminal, raw, negative and order dependencies remain in the native Source capture and
+scoped observation. Neither a raw-source exhausted bit nor a first canonical page seals the query. Canonical native
+capture exhaustion, all query decisions, final current custody/identity/source fences and whole-definition equality
+are required. Rows, evidence, checkpoint CAS and native exhaustion receipt commit together. The fresh seal reader
+checks the exact receipt/header native transaction, version, member/evidence fences, native canonical generation and
+current custody/identity/source, including the actual owner fact-source fence, before returning a count. A caller
+cannot supply a count, completion flag or proof. The retained definition digest excludes only the scheduling phase;
+each step still compares the whole getter result before and after foreign work. Moving a sealed episode to
+`awaiting_activation` therefore does not reinterpret its pinned meaning or invalidate its unchanged native seal.
+
+The delivered c19 episode admission/getter still throw `dependency_unavailable`, and Search's delivered work-context
+union has no `collection-publication` branch. Staging explicitly refuses that missing foreign boundary; it does not
+alias Members/Kind or restore an Actor. The current shared evaluator also lacks native owner-work evaluation and a
+durable publication leaf-resume binding. Catalogue leaf sealing remains unavailable until Search exposes its actual
+current public Source/index proof in addition to the private owner capture. No index dependency is invented for a
+pure owner query. These are explicit unsupported native branches, not successful empty outputs or native acceptance.
+The original public DYNAMIC whole-query/lifecycle/C5 outcomes remain unproved. The new focused output-mode assertions
+exercise real native interrupted/replayed allocation, unknown versus empty cardinality, ordinary-hook refusal,
+changed fences, selected-A preservation and the third-copy limit; they are source assertions, not a whole-query pass.
+
+Retention/custody inventory: `collection_publication_staging` is keyed by `(route,collection_id,generation)`, with
+exact publication and account indexes; it retains only immutable rule/native source/custody references, digests,
+scope basis and a bounded frontier, never another private AST or Actor. `collection_publication_staging_evidence`
+adds the exact canonical subject key, including excluded decisions. `collection_publication_staging_seal` retains
+the native version/fences/commit position. All three are noncascading FK descendants of the existing retained output
+and join its positive account-erasure inventory, including after source curator minimization. Account/receiving and
+native admission fences reject late writers. Disposition must remove evidence/seal before staging and output; there
+is no new cleanup participant, reclaim, lease ACK, public Search payload, work payload mirror or terminal completion.
+
 ### Explicit selected-set publication
 
 `POST /v1/collections/{collectionId}:publishSelected` takes the closed body `{revision,subjectIds}` and ordinary

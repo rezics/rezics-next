@@ -5,6 +5,9 @@ import { currentCommand, registerCommandCallback, type CommandTransaction } from
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import lock from './collection-source-output-lock.sql';
+import { readCollectionPublicationStagingSeal } from './collection-publication-staging.ts';
+import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
+import type { NativeCollectionWork } from './collection-source-work.ts';
 
 /** Native receipt locator/provenance only. It carries no viewer or subject permission. */
 export type CollectionOutputPublication = Readonly<{
@@ -22,6 +25,7 @@ type Build = {
   account_id: string | null;
   source_generation: string;
   expected_members: string | null;
+  output_mode: 'selected' | 'whole_query';
   written_members: string;
   member_count: string;
   after_subject_id: string | null;
@@ -69,7 +73,7 @@ async function writer(tx: CommandTransaction, input: CollectionOutputRef) {
 async function build(tx: Client, input: CollectionOutputRef): Promise<Build> {
   const row = (
     await tx.query<Build>(
-      `SELECT account_id::text,source_generation::text,expected_members::text,written_members::text,member_count::text,after_subject_id::text,state
+      `SELECT account_id::text,source_generation::text,expected_members::text,output_mode,written_members::text,member_count::text,after_subject_id::text,state
      FROM library.collection_source_output
      WHERE route=$1 AND collection_id=$2 AND generation=$3 FOR UPDATE`,
       [input.route, input.collectionId, input.generation],
@@ -85,6 +89,20 @@ export async function beginCollectionSourceOutput(
 ): Promise<void> {
   if (!Number.isSafeInteger(input.expectedMembers) || input.expectedMembers < 0)
     throw new RangeError('Invalid output size');
+  await allocate(tx, input, input.expectedMembers);
+}
+
+/** The episode's ordinary admitted begin command allocates UNKNOWN cardinality in the same native namespace.
+ * This shares the original allocator/capacity rules. It neither selects B nor creates another generation ID.
+ */
+export async function beginWholeQueryCollectionSourceOutput(
+  tx: CommandTransaction,
+  input: CollectionOutputRef,
+): Promise<void> {
+  await allocate(tx, input, null);
+}
+
+async function allocate(tx: CommandTransaction, input: CollectionOutputRef, expectedMembers: number | null) {
   const source = await writer(tx, input);
   // A current A and a building B fit two retained generations. Until actual disposition is bound,
   // old/cancelled copies still occupy capacity; an unbounded sequence of abandoned builds is not admitted.
@@ -97,24 +115,26 @@ export async function beginCollectionSourceOutput(
     throw new ProblemError('dependency_unavailable');
   await tx.query(
     `INSERT INTO library.collection_source_output
-     (route,collection_id,generation,source_generation,expected_members,account_id)
-     VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+     (route,collection_id,generation,source_generation,expected_members,account_id,output_mode)
+     VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
     [
       input.route,
       input.collectionId,
       input.generation,
       source.sourceGeneration,
-      input.expectedMembers,
+      expectedMembers,
       source.accountId,
+      expectedMembers === null ? 'whole_query' : 'selected',
     ],
   );
   const current = await build(tx, input);
+  // Whole-query allocation keeps cardinality unknown; match its mode and nullable size together.
   if (
     current.state !== 'building' ||
-    current.expected_members === null ||
     current.account_id !== source.accountId ||
     current.source_generation !== source.sourceGeneration ||
-    BigInt(current.expected_members) !== BigInt(input.expectedMembers)
+    current.output_mode !== (expectedMembers === null ? 'whole_query' : 'selected') ||
+    current.expected_members !== (expectedMembers === null ? null : String(expectedMembers))
   )
     throw conflict();
 }
@@ -143,6 +163,7 @@ export async function appendCollectionSourceOutput(
     current = await build(tx, input);
   if (
     current.state !== 'building' ||
+    current.output_mode !== 'selected' ||
     current.expected_members === null ||
     current.account_id !== source.accountId ||
     current.source_generation !== source.sourceGeneration ||
@@ -166,9 +187,25 @@ export async function appendCollectionSourceOutput(
 export async function completeCollectionSourceOutput(
   tx: CommandTransaction,
   input: CollectionOutputRef,
+  staging?: Readonly<{ locator: CollectionPublicationLocator; work: NativeCollectionWork }>,
 ): Promise<void> {
-  const source = await writer(tx, input),
+  const source = await writer(tx, input);
+  let current = await build(tx, input);
+  if (current.output_mode === 'whole_query') {
+    if (!staging) throw conflict();
+    // Fresh native rereading on the actual authorized command, never a caller-supplied completion proof.
+    const seal = await readCollectionPublicationStagingSeal(tx, staging.locator, staging.work);
+    if (
+      !seal || seal.output.route !== input.route || seal.output.collectionId !== input.collectionId ||
+      seal.output.generation !== input.generation
+    ) throw conflict();
+    await tx.query(
+      `UPDATE library.collection_source_output SET expected_members=$4
+       WHERE route=$1 AND collection_id=$2 AND generation=$3 AND output_mode='whole_query' AND expected_members IS NULL`,
+      [input.route, input.collectionId, input.generation, seal.members],
+    );
     current = await build(tx, input);
+  }
   if (
     current.state !== 'building' ||
     current.expected_members === null ||

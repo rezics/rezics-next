@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import type { IdentitySourceConsumerMaintenanceWork } from './agent-identity-retirement.ts';
+import type { IdentitySourceConsumerMaintenanceWork } from '../semantic/identity-source-consumer-maintenance.ts';
 import { currentCommand, CommandUnavailableError, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
