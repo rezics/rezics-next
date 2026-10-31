@@ -36,8 +36,7 @@ export type ProfileEditorState = {
 
 function failureMetadata(error: unknown): EditableProfileFailure | undefined {
   return (
-    profileReadFailure(error) ??
-    (isPlatformClosedError(error) ? { status: 403, code: 'platform_closed' } : undefined)
+    profileReadFailure(error) ?? (isPlatformClosedError(error) ? { status: 403, code: 'platform_closed' } : undefined)
   );
 }
 

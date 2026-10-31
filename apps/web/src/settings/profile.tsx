@@ -46,7 +46,8 @@ export function ProfileFeedback({
   const unavailable = state.readStatus === 'failed' || state.phase === 'unavailable' || denied;
   const failed = ['uncertain', 'refused', 'review'].includes(state.phase) && state.scope === scope;
   const uncertainScope = state.attempt?.scope ?? state.scope;
-  const uncertain = uncertainScope === 'views' ? m.settings_public_activity_unknown() : m.settings_profile_save_unknown();
+  const uncertain =
+    uncertainScope === 'views' ? m.settings_public_activity_unknown() : m.settings_profile_save_unknown();
   return (
     <div className="space-y-3">
       {state.phase === 'loading' ? <p role="status">{m.settings_profile_loading()}</p> : null}
@@ -337,7 +338,9 @@ export function ProfileCard({
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
                 disabled={closed || busy || uploading || !!state.attempt || !changed}
               >
-                {state.phase === 'saving' && state.scope === 'profile' ? m.settings_saving() : m.settings_profile_save()}
+                {state.phase === 'saving' && state.scope === 'profile'
+                  ? m.settings_saving()
+                  : m.settings_profile_save()}
               </Button>
               <Button
                 type="button"
