@@ -106,11 +106,12 @@ export async function readNativeKindTypeAnchor(
   });
   lockReservation.dispatch();
   try {
-    const locked = await client.query<{ version: string }>({
+    const query = {
       text: kindTypeLock.sql,
       values: lockValues,
       query_timeout: Math.max(1, deadline - Date.now()),
-    });
+    };
+    const locked = await client.query<{ version: string }>(query);
     if (locked.rows.length !== 1) throw new AccessUnavailableError('contention');
     lockReservation.settle({ bytes: lockBytes + sourceBytes(locked.rows), emptySeeks: 0 });
   } catch (error) {
@@ -130,11 +131,12 @@ export async function readNativeKindTypeAnchor(
   const reservation = work.reserve(kindTypeAnchorFootprint(inputBytes));
   reservation.dispatch();
   try {
-    const result = await client.query<NativeKindTypeAnchor>({
+    const query = {
       text: kindTypeAnchor.sql,
       values,
       query_timeout: Math.max(1, deadline - Date.now()),
-    });
+    };
+    const result = await client.query<NativeKindTypeAnchor>(query);
     const row = result.rows[0];
     if (result.rows.length !== 1 || !row || !row.writer_enrolled || row.subject_id !== input.subjectId)
       throw new AccessUnavailableError('contention');
