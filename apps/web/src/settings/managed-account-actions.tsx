@@ -13,6 +13,7 @@ import {
   type ManagedAccountActionsIO,
   type ManagedAccountActionsTarget,
   type ManagedActionName,
+  type ManagedAuthNavigation,
 } from './managed-account-actions-read';
 
 const nativeIO: ManagedAccountActionsIO = (data) => readManagedAccountActions({ data });
@@ -24,9 +25,10 @@ const labels: Record<ManagedActionName, () => string> = {
   delete: () => m.managed_actions_delete(),
 };
 
-type ViewerProps = ManagedAccountActionsTarget & { viewerId: string; io?: ManagedAccountActionsIO };
+type ActionsProps = ManagedAccountActionsTarget & { authNavigation?: ManagedAuthNavigation | undefined };
+type ViewerProps = ActionsProps & { viewerId: string; io?: ManagedAccountActionsIO };
 
-function TargetActions({ viewerId, io = nativeIO, ...target }: ViewerProps) {
+function TargetActions({ viewerId, io = nativeIO, authNavigation, ...target }: ViewerProps) {
   const [read] = useState(() => new ManagedAccountActionsRead({ accountId: target.accountId, viewerId }, io));
   const { result, pending } = useSyncExternalStore(read.subscribe, read.snapshot, read.snapshot);
   const retryFailure = useMemo(
@@ -37,6 +39,8 @@ function TargetActions({ viewerId, io = nativeIO, ...target }: ViewerProps) {
     [result],
   );
   const waiting = usePreferenceRetry(retryFailure);
+  const navigation =
+    authNavigation?.viewerId === viewerId && authNavigation.accountId === target.accountId ? authNavigation : undefined;
   useEffect(() => {
     void read.load();
   }, [read]);
@@ -48,14 +52,50 @@ function TargetActions({ viewerId, io = nativeIO, ...target }: ViewerProps) {
         </CardTitle>
         <CardDescription>{m.managed_actions_selection()}</CardDescription>
       </CardHeader>
-      <CardContent>
-        {result?.state === 'ready' ? (
+      <CardContent className="space-y-3">
+        {result?.state !== 'ready' ? (
+          <div className="space-y-3">
+            {navigation ? <p className="font-medium">{m.managed_actions_profile()}</p> : null}
+            <p
+              role="status"
+              data-response-status={result?.status ?? ''}
+              data-response-code={result?.code ?? ''}
+              data-retry-after={result?.retryAfter}
+            >
+              {pending || result === null
+                ? m.managed_actions_loading()
+                : result.state === 'denied'
+                  ? m.managed_actions_denied()
+                  : m.managed_actions_unavailable()}
+            </p>
+            {result?.state === 'unavailable' ? (
+              <>
+                {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
+                <Button type="button" variant="outline" disabled={pending || waiting} onClick={() => void read.retry()}>
+                  {m.managed_actions_retry()}
+                </Button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+        {result?.state === 'ready' || navigation ? (
           <ul className="space-y-3" aria-label={m.managed_actions_title()}>
             {managedAccountActionNames(target, viewerId).map((name) => {
-              const action = result.actions[name];
-              // Only the installed Accounts-owned local profile route is currently mapped.
+              // Profile and Auth entry observations have independent sources and failure/retry lifetimes.
+              if (name === 'profile' && result?.state !== 'ready') return null;
+              const authAction = name === 'profile' ? undefined : navigation?.actions[name];
+              const action =
+                name === 'profile' && result?.state === 'ready'
+                  ? result.actions.profile
+                  : (authAction ?? { state: 'unavailable' as const, owner: 'Accounts authActions' });
               const href =
-                name === 'profile' && action.state === 'available' ? accountProfileHref(target.accountId) : null;
+                action.state === 'available'
+                  ? name === 'profile'
+                    ? accountProfileHref(target.accountId)
+                    : authAction?.state === 'available'
+                      ? authAction.href
+                      : null
+                  : null;
               return (
                 <li key={name} className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                   {href ? (
@@ -85,30 +125,7 @@ function TargetActions({ viewerId, io = nativeIO, ...target }: ViewerProps) {
               );
             })}
           </ul>
-        ) : (
-          <div className="space-y-3">
-            <p
-              role="status"
-              data-response-status={result?.status ?? ''}
-              data-response-code={result?.code ?? ''}
-              data-retry-after={result?.retryAfter}
-            >
-              {pending || result === null
-                ? m.managed_actions_loading()
-                : result.state === 'denied'
-                  ? m.managed_actions_denied()
-                  : m.managed_actions_unavailable()}
-            </p>
-            {result?.state === 'unavailable' ? (
-              <>
-                {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
-                <Button type="button" variant="outline" disabled={pending || waiting} onClick={() => void read.retry()}>
-                  {m.managed_actions_retry()}
-                </Button>
-              </>
-            ) : null}
-          </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -125,7 +142,7 @@ export function ManagedAccountActionsForViewer(props: ViewerProps) {
 }
 
 /** Session changes and target selection discard previous capabilities before any new private read. */
-export function ManagedAccountActions(props: ManagedAccountActionsTarget) {
+export function ManagedAccountActions(props: ActionsProps) {
   const session = useSession();
   if (session.state !== 'signed-in' || !session.subject || !session.csrfToken)
     return (

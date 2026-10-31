@@ -5,6 +5,7 @@ import type { NativePreferenceFailure } from './preferences';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { MediaProblem } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
+import { projectManagedAuthNavigation, type ManagedAuthNavigation } from './managed-account-actions-read';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const id = v.pipe(v.string(), v.regex(uuidPattern));
@@ -38,8 +39,10 @@ const managementSchema = v.strictObject({
     next: text,
   }),
   responsibilities: v.nullable(responsibilityPage),
+  // Validate this optional dependency separately: a malformed action observation cannot hide read-only detail.
+  authActions: v.optional(v.unknown()),
 });
-export type ManagementDetail = v.InferOutput<typeof managementSchema>;
+export type ManagementDetail = Omit<v.InferOutput<typeof managementSchema>, 'authActions'>;
 export type ManagementIdentity = ManagementDetail['account'];
 export type DetailSection = 'members' | 'responsibilities';
 export type DetailRequest = {
@@ -50,7 +53,7 @@ export type DetailRequest = {
 };
 export type DetailFailure = NativePreferenceFailure & { transient: boolean };
 export type DetailResult =
-  | { ok: true; viewerId: string; value: ManagementDetail }
+  | { ok: true; viewerId: string; value: ManagementDetail; authNavigation?: ManagedAuthNavigation }
   | { ok: false; failure: DetailFailure };
 export type DetailRead = (input: DetailRequest) => Promise<DetailResult>;
 
@@ -107,6 +110,7 @@ export async function loadManagedAccountDetail(
   client: KernelClient,
   authorization: string,
   input: DetailRequest,
+  env: Parameters<typeof projectManagedAuthNavigation>[3] = {},
 ): Promise<DetailResult> {
   try {
     const result = await client.accounts({ accountId: input.accountId }).management.get({
@@ -123,14 +127,19 @@ export async function loadManagedAccountDetail(
     const parsed = v.safeParse(managementSchema, result.data);
     if (!parsed.success || parsed.output.account.id.toLowerCase() !== input.accountId.toLowerCase())
       return { ok: false, failure: { status: 502, code: 'invalid_response', transient: false } };
-    const value = parsed.output;
+    const { authActions, ...value } = parsed.output;
     if (value.members.state === 'denied') value.members = { state: 'denied', items: [], next: null };
     if (
       value.members.items.some((item) => item.account && item.account.id !== item.accountId) ||
       value.responsibilities?.items.some((item) => item.account && item.account.id !== item.accountId)
     )
       return { ok: false, failure: { status: 502, code: 'invalid_response', transient: false } };
-    return { ok: true, viewerId: input.viewerId, value };
+    return {
+      ok: true,
+      viewerId: input.viewerId,
+      value,
+      authNavigation: projectManagedAuthNavigation(authActions, value, input.viewerId, env),
+    };
   } catch (error) {
     return { ok: false, failure: thrownFailure(error) };
   }
@@ -163,7 +172,7 @@ export const readManagedAccountDetail = createServerFn({ method: 'GET' })
       if (!authorization || sessionSubject(request) !== data.viewerId)
         return { ok: false, failure: detailFailure(401) };
       // account.read_management has public exposure. Native admission and current Access still run on every GET.
-      return loadManagedAccountDetail(kernelClient(), authorization, data);
+      return loadManagedAccountDetail(kernelClient(), authorization, data, env as Partial<SessionEnv>);
     } catch (error) {
       return { ok: false, failure: thrownFailure(error) };
     }
@@ -177,6 +186,7 @@ type SectionState<T> = {
 };
 export type DetailSnapshot = {
   detail?: (Pick<ManagementDetail, 'account' | 'self' | 'role' | 'operator'> & { operated: boolean }) | undefined;
+  authNavigation?: ManagedAuthNavigation | undefined;
   pending: boolean;
   failure?: DetailFailure | undefined;
   members: SectionState<ManagementDetail['members']>;
@@ -192,6 +202,7 @@ const empty = (): DetailSnapshot => ({
 export class ManagedAccountReader {
   private state = empty();
   private generation = 0;
+  private actionObservation = 0;
   private listeners = new Set<() => void>();
   constructor(
     readonly viewerId: string,
@@ -211,16 +222,22 @@ export class ManagedAccountReader {
   }
   clear = () => {
     this.generation++;
+    this.actionObservation++;
     this.publish(empty());
   };
   async load(section?: DetailSection, cursor?: string) {
     if (this.state.pending || (section && this.state[section].pending)) return;
     if (!section && (this.state.members.pending || this.state.responsibilities.pending)) return;
     const generation = this.generation;
+    const observation = ++this.actionObservation;
     this.publish(
       section
-        ? { ...this.state, [section]: { ...this.state[section], pending: true, failure: undefined } }
-        : { ...this.state, pending: true, failure: undefined },
+        ? {
+            ...this.state,
+            authNavigation: undefined,
+            [section]: { ...this.state[section], pending: true, failure: undefined },
+          }
+        : { ...this.state, authNavigation: undefined, pending: true, failure: undefined },
     );
     let result: DetailResult;
     try {
@@ -243,10 +260,16 @@ export class ManagedAccountReader {
       const { failure } = result;
       if ([401, 403, 404].includes(failure.status ?? 0) || !section) {
         if (!failure.transient) this.generation++;
-        this.publish({ ...(failure.transient ? this.state : empty()), pending: false, failure });
+        this.publish({
+          ...(failure.transient ? this.state : empty()),
+          authNavigation: undefined,
+          pending: false,
+          failure,
+        });
       } else
         this.publish({
           ...this.state,
+          authNavigation: undefined,
           [section]: {
             ...this.state[section],
             page: failure.transient ? this.state[section].page : undefined,
@@ -262,6 +285,8 @@ export class ManagedAccountReader {
     // An authority loss observed by either feed invalidates other in-flight pages as well.
     if (restricted) this.generation++;
     this.publish({
+      // An older feed reply cannot restore an entry after a newer read removed its proof.
+      authNavigation: observation === this.actionObservation ? result.authNavigation : this.state.authNavigation,
       detail: {
         account: detail.account,
         self: detail.self,

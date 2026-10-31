@@ -306,3 +306,155 @@ test('late retries cannot publish into a new viewer, target or CSRF lifetime', a
     expect(calls).toBe(2);
   }
 });
+
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ManagedAccountActionsForViewer } from '../src/settings/managed-account-actions';
+import { projectManagedAuthNavigation } from '../src/settings/managed-account-actions-read';
+import type { ManagementDetail } from '../src/settings/managed-account-detail-read';
+
+const deployedAuth = {
+  AUTH_ISSUER: 'https://auth.test',
+  AUTH_MANAGEMENT_PAGE_ROUTES: JSON.stringify([
+    '/account/rename',
+    '/organizations/members',
+    '/operators/transfer',
+    '/organizations/delete',
+  ]),
+};
+function managementTarget(): ManagementDetail {
+  return {
+    account: { id: accountId, kind: 'organization', handle: null, displayName: null },
+    self: false,
+    role: 'owner',
+    operator: null,
+    relation: null,
+    members: { state: 'ready', items: [], next: null },
+    responsibilities: { items: [], next: null },
+  };
+}
+const entry = (operationId: string, action: string, id = accountId, route = 0) => ({
+  operationId,
+  action,
+  resource: { route, id },
+});
+
+test('exact native Auth entries require deployment and preserve the actual source operator while selecting the operated target', () => {
+  const organization = managementTarget();
+  const native = {
+    state: 'ready',
+    operations: [
+      entry('auth.organization.membership', 'organization:membership'),
+      entry('auth.organization.delete', 'account:delete'),
+    ],
+  };
+  const projected = projectManagedAuthNavigation(native, organization, viewerId, deployedAuth);
+  expect(projected.actions.members).toEqual({
+    state: 'available',
+    href: `https://auth.test/organizations/members?organizationId=${accountId}`,
+  });
+  expect(projected.actions.delete).toEqual({
+    state: 'available',
+    href: `https://auth.test/organizations/delete?organizationId=${accountId}`,
+  });
+  expect(projected.actions.rename.state).toBe('denied');
+  expect(projected.actions.transfer.state).toBe('denied');
+  for (const env of [{}, { AUTH_ISSUER: 'https://auth.test' }, { ...deployedAuth, AUTH_MANAGEMENT_PAGE_ROUTES: '[]' }])
+    expect(projectManagedAuthNavigation(native, organization, viewerId, env).actions.members.state).toBe('unavailable');
+
+  const self: ManagementDetail = {
+    ...organization,
+    account: { ...organization.account, id: viewerId, kind: 'actor' },
+    self: true,
+  };
+  expect(
+    projectManagedAuthNavigation(
+      { state: 'ready', operations: [entry('auth.account.rename', 'account:update', viewerId)] },
+      self,
+      viewerId,
+      deployedAuth,
+    ).actions.rename,
+  ).toEqual({ state: 'available', href: 'https://auth.test/account/rename' });
+
+  const sourceId = '019a0000-0000-7000-8000-123400000003';
+  const operated: ManagementDetail = {
+    ...organization,
+    account: { ...organization.account, kind: 'actor' },
+    relation: { operatorAccountId: sourceId, reservationId: viewerId, version: 'private-source-version' },
+    operator: { ...organization.account, id: sourceId, kind: 'actor' },
+  };
+  const transfer = {
+    state: 'ready',
+    operations: [entry('auth.operator.transfer', 'account:manage', sourceId, 0x1234)],
+  };
+  const navigation = projectManagedAuthNavigation(transfer, operated, viewerId, deployedAuth);
+  expect(navigation.actions.transfer).toEqual({
+    state: 'available',
+    href: `https://auth.test/operators/transfer?accountId=${accountId}`,
+  });
+  expect(JSON.stringify(navigation)).not.toContain(sourceId);
+  expect(JSON.stringify(navigation)).not.toContain('private-source-version');
+  for (const invalid of [
+    { state: 'ready', operations: [entry('auth.operator.transfer', 'account:manage')] },
+    { state: 'ready', operations: [entry('auth.operator.transfer', 'account:manage', sourceId, 0)] },
+    { state: 'ready', operations: [entry('operator.transfer', 'account:manage', sourceId, 0x1234)] },
+    { state: 'ready', operations: [entry('auth.operator.transfer', 'account:update', sourceId, 0x1234)] },
+  ])
+    expect(projectManagedAuthNavigation(invalid, operated, viewerId, deployedAuth).actions.transfer.state).toBe(
+      'unavailable',
+    );
+  expect(
+    projectManagedAuthNavigation(transfer, { ...operated, relation: null }, viewerId, deployedAuth).actions.transfer
+      .state,
+  ).toBe('unavailable');
+});
+
+test('missing, unavailable or malformed entry dependencies never gain links from roles, generic operations or old viewer/target projections', () => {
+  const organization = managementTarget();
+  for (const native of [
+    undefined,
+    { state: 'unavailable' },
+    null,
+    { state: 'ready', operations: [entry('account.update', 'account:update')] },
+    { state: 'ready', operations: [entry('auth.organization.delete', 'account:update')] },
+    {
+      state: 'ready',
+      operations: [
+        entry('auth.organization.delete', 'account:delete'),
+        entry('auth.organization.delete', 'account:delete'),
+      ],
+    },
+    { state: 'ready', operations: [entry('auth.organization.delete', 'account:delete')], approval: true },
+  ])
+    expect(
+      Object.values(projectManagedAuthNavigation(native, organization, viewerId, deployedAuth).actions).every(
+        (action) => action.state === 'unavailable',
+      ),
+    ).toBe(true);
+  expect(
+    Object.values(
+      projectManagedAuthNavigation({ state: 'ready', operations: [] }, organization, viewerId, deployedAuth).actions,
+    ).every((action) => action.state === 'denied'),
+  ).toBe(true);
+  const authNavigation = projectManagedAuthNavigation(
+    { state: 'ready', operations: [entry('auth.organization.delete', 'account:delete')] },
+    organization,
+    viewerId,
+    deployedAuth,
+  );
+  const props = {
+    viewerId,
+    accountId,
+    nativeAccountKind: 'organization' as const,
+    self: false,
+    operated: false,
+    authNavigation,
+  };
+  const render = (changes = {}) =>
+    renderToStaticMarkup(createElement(ManagedAccountActionsForViewer, { ...props, ...changes }));
+  expect(render()).toContain(`https://auth.test/organizations/delete?organizationId=${accountId}`);
+  // Profile is still loading in this render: it cannot hide a separately proven Auth entry.
+  expect(render()).not.toContain(`/accounts/${accountId}/profile`);
+  for (const changes of [{ accountId: viewerId }, { viewerId: accountId }, { nativeAccountKind: 'actor' }])
+    expect(render(changes)).not.toContain('https://auth.test/');
+});

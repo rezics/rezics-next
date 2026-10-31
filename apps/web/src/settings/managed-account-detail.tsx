@@ -248,6 +248,7 @@ export function ManagedAccountDetailCard({
               nativeAccountKind={detail.account.kind}
               operated={detail.operated}
               self={detail.self}
+              authNavigation={state.authNavigation}
             />
             <Button type="button" variant="outline" disabled={busy} onClick={() => void reader.load()}>
               {m.managed_refresh()}

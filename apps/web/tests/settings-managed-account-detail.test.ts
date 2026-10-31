@@ -253,3 +253,110 @@ test('the existing localized settings account region selects only an immutable I
     queryClient.clear();
   }
 });
+
+test('Connect exact native Auth entries to deployed management destinations preserving the current native and draft/recovery contracts', async () => {
+  const env = {
+    AUTH_ISSUER: 'https://auth.test',
+    AUTH_MANAGEMENT_PAGE_ROUTES: '["/organizations/members","/organizations/delete"]',
+  };
+  const operations = [
+    {
+      operationId: 'auth.organization.membership',
+      action: 'organization:membership',
+      resource: { route: 0, id: accountId },
+    },
+    { operationId: 'auth.organization.delete', action: 'account:delete', resource: { route: 0, id: accountId } },
+  ];
+  let body: unknown = detail();
+  const requests: Request[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(body);
+    },
+  });
+  const read = () => loadManagedAccountDetail(client, 'Bearer current-viewer', { viewerId, accountId }, env);
+  const legacy = await read();
+  expect(legacy.ok && legacy.value).toEqual(detail());
+  expect(legacy.ok && legacy.authNavigation?.actions.members.state).toBe('unavailable');
+  for (const authActions of [
+    { state: 'unavailable' },
+    { state: 'ready', operations: 'invalid' },
+    { state: 'ready', operations: [{ ...operations[0], resource: { route: -1, id: accountId } }] },
+  ]) {
+    body = { ...detail(), authActions };
+    const result = await read();
+    expect(result.ok && result.value).toEqual(detail());
+    expect(result.ok && result.authNavigation?.actions.members.state).toBe('unavailable');
+  }
+  body = { ...detail(), authActions: { state: 'ready', operations } };
+  const positive = await read();
+  expect(positive.ok && positive.value).toEqual(detail());
+  expect(positive.ok && positive.authNavigation?.actions.members).toEqual({
+    state: 'available',
+    href: `https://auth.test/organizations/members?organizationId=${accountId}`,
+  });
+  expect(positive.ok && positive.authNavigation?.actions.delete.state).toBe('available');
+  expect(positive.ok && positive.value).not.toHaveProperty('authActions');
+  expect(requests).toHaveLength(5); // Exactly the existing management GET per requested observation.
+  for (const request of requests) {
+    expect(new URL(request.url).pathname).toBe(`/v1/accounts/${accountId}/management`);
+    expect(request.method).toBe('GET');
+    expect(request.headers.get('authorization')).toBe('Bearer current-viewer');
+    expect(request.cache).toBe('no-store');
+    expect(new URL(request.url).search).toBe('');
+  }
+});
+
+test('detail Refresh and feed reads drop stale Auth links immediately and older replies cannot override newer missing or denied observations', async () => {
+  const { projectManagedAuthNavigation } = await import('../src/settings/managed-account-actions-read');
+  const value = detail();
+  const authNavigation = projectManagedAuthNavigation(
+    {
+      state: 'ready',
+      operations: [
+        { operationId: 'auth.organization.delete', action: 'account:delete', resource: { route: 0, id: accountId } },
+      ],
+    },
+    value,
+    viewerId,
+    { AUTH_ISSUER: 'https://auth.test', AUTH_MANAGEMENT_PAGE_ROUTES: '["/organizations/delete"]' },
+  );
+  const positive: DetailResult = { ok: true, viewerId, value, authNavigation };
+  const pending: ((result: DetailResult) => void)[] = [];
+  let defer = false;
+  const reader = new ManagedAccountReader(viewerId, accountId, async () =>
+    defer ? new Promise((resolve) => pending.push(resolve)) : positive,
+  );
+  await reader.load();
+  expect(reader.snapshot().authNavigation?.actions.delete.state).toBe('available');
+  defer = true;
+  const refresh = reader.load();
+  expect(reader.snapshot().authNavigation).toBeUndefined();
+  pending[0]!({ ok: false, failure: detailFailure(503, { code: 'dependency_unavailable' }) });
+  await refresh;
+  expect(reader.snapshot().authNavigation).toBeUndefined();
+  expect(reader.snapshot().detail?.account).toEqual(value.account); // Read-only recovery retains its own content.
+  const older = reader.load('members', memberCursor);
+  const newer = reader.load('responsibilities', operatorCursor);
+  const denied = projectManagedAuthNavigation({ state: 'ready', operations: [] }, value, viewerId, {});
+  pending[2]!({ ok: true, viewerId, value, authNavigation: denied });
+  await newer;
+  expect(reader.snapshot().authNavigation?.actions.delete.state).toBe('denied');
+  pending[1]!(positive);
+  await older;
+  expect(reader.snapshot().authNavigation?.actions.delete.state).toBe('denied');
+  const missing = reader.load();
+  pending[3]!(ready());
+  await missing;
+  expect(reader.snapshot().authNavigation).toBeUndefined();
+  const stale = reader.load();
+  reader.clear(); // Viewer, CSRF and target changes replace/clear this immutable reader.
+  pending[4]!(positive);
+  await stale;
+  expect(reader.snapshot().authNavigation).toBeUndefined();
+  const switched = new ManagedAccountReader(viewerId, actorId, async () => positive);
+  await switched.load();
+  expect(switched.snapshot().detail).toBeUndefined();
+  expect(switched.snapshot().authNavigation).toBeUndefined();
+});
