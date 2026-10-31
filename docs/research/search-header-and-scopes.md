@@ -381,7 +381,7 @@ All URLs below were consulted on 31 October 2026. Official documentation establi
 | Bilibili — [public search entry](https://search.bilibili.com/all?keyword=%E6%90%9C%E7%B4%A2) | Observation was redirected to an official browser-upgrade page | Chinese video reference considered, but no current filter layout could be established. No secondary how-to was substituted as primary evidence |
 | Linear — [search](https://linear.app/docs/search), [filters](https://linear.app/docs/filters) | Recent issues/queries, filter creation through mentions/menu; current-view search differs from full search and documents a 500-result ceiling | Explain local scope and limits. Its title-only temporary view filter and result ceiling would weaken REZICS's settled full-text/million-member contract |
 
-This survey has 21 products, including all specifically requested products. Nineteen have substantive documented/source/supplied-image patterns; Goodreads live access and Bilibili live UI are limited as stated. No inference about inaccessible authenticated screens is presented as observation.
+This survey has 21 products, including all specifically requested products. It distinguishes documented/source/supplied-image patterns from the limited Goodreads live access and inaccessible Bilibili live UI. No inference about inaccessible authenticated screens is presented as observation.
 
 ### Established source inspected and licence custody
 
