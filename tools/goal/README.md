@@ -1096,6 +1096,20 @@ crash, missing registration and unknown custody retain capacity. Only an owned t
 proven-never-started refusal, releases it. The wrapper's infrastructure rerun retains the same logical reservation.
 Historical unbound managed UUIDs use admission policy B. Before a new proof start and during host recovery, the
 controller's trusted current reader reads their historical cwd as data; it never imports code from that old cwd.
+Local settings may select `integration.checkScriptReaderRoot`, an absolute path or a path relative to the main
+checkout, for this historical data reader. Operations configures a clean immutable captured integration checkout
+after the native source release; no private capture path is built in. Without the setting, the running controller's
+checkout is used and must meet the same validation. Before import, Goal requires a canonical Git root, a clean tracked
+tree, a captured commit containing the delivered producer and ancestral to the configured integration branch, and
+byte-exact regular files for the entire native TypeScript import closure against the controller's Git objects.
+Imports outside that native closure or from packages are refused. A root already imported in this process cannot
+move to another commit. This setting only supplies the historical reader: actual proof execution and current
+reservation observation continue using their own captured producer and immutable binding.
+
+An unavailable or invalid reader refuses new proof admission before any attempt or reservation. Host sweeps retain
+all uncertain reservations and historical classifications, record one durable `historical-proof-reader-unavailable`
+diagnostic per changed cause, and continue ordinary orphan, retry, check-wake and held recovery. Repeated sweeps
+with the same failure do not add events. Missing reader code never proves terminal custody or physical cleanup.
 Retained v1 ownership, boot/start/group runner identity and the current native registry identify actually live local
 processes using `sameProcess`. Each live historical logical check occupies one of the three slots. Missing results,
 gone recorded processes, unavailable identities and unknown remote custody are durably archived in

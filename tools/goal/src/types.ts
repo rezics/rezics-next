@@ -119,6 +119,8 @@ export type Settings = {
     supermanager: string;
     /** Authenticated operations manager allowed to register original proofs for another owner. */
     operationsManager?: string;
+    /** Clean captured integration source used only to read historical native custody data. */
+    checkScriptReaderRoot?: string;
     managerLimits: { turns: number; turnsWithoutDecision: number; wallMs: number };
     tmuxCommand: string;
     tmuxSession: string;

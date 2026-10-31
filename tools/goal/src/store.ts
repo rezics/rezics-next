@@ -398,6 +398,18 @@ export class WorkerStore implements AttemptFence {
         .run(check.taskId, check.attempt, 'historical-proof-classified', new Date().toISOString(), JSON.stringify(body));
     }).immediate();
   }
+  /** Diagnostic only: a missing reader cannot reclassify history or release logical/physical custody. */
+  historicalProofReaderUnavailable(check: HistoricalProofCheck, cause: string): void {
+    this.db.transaction(() => {
+      const previous = this.db.query(`SELECT body FROM worker_events
+        WHERE kind='historical-proof-reader-unavailable' ORDER BY sequence DESC LIMIT 1`)
+        .get() as { body: string } | null;
+      const body = JSON.stringify({ cause });
+      if (previous?.body === body) return;
+      this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+        .run(check.taskId, check.attempt, 'historical-proof-reader-unavailable', new Date().toISOString(), body);
+    }).immediate();
+  }
   /** Unclassified facts wait for the trusted reader. Only explicitly archived historical unknowns leave the cap. */
   historicalProofSlots(goal?: string): HistoricalProofCheck[] {
     return this.historicalProofChecks(goal).filter((check) => {

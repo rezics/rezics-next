@@ -900,8 +900,18 @@ export class WorkerJob implements GateOutcomeSink {
     const store = this.tasks.store;
     this.reportCancelledDependencies();
     // The same recovery sweep also observes detached custody after a model exit or cancellation.
-    if (adoptRunning)
-      await refreshHistoricalProofAdmission(store, join(this.tasks.settings.stateDirectory, 'check-registry'));
+    if (adoptRunning) {
+      try {
+        await refreshHistoricalProofAdmission(store, join(this.tasks.settings.stateDirectory, 'check-registry'), {
+          root: this.tasks.settings.integration.checkScriptReaderRoot ?? resolve(import.meta.dir, '../../..'),
+          integrationRoot: this.tasks.settings.mainCheckout,
+          integrationBranch: this.tasks.settings.integrationBranch,
+        });
+      } catch (error) {
+        // Proof admission stays unavailable, with a bounded durable diagnostic. Other recovery must continue.
+        if (!(error instanceof ProofUnavailableError)) throw error;
+      }
+    }
     if (adoptRunning)
       for (const run of store.activeProofReservations()) {
         try {

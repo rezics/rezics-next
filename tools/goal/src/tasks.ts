@@ -920,7 +920,11 @@ export class WorkerTasks {
   }
   async refreshProofAdmission(task: Task): Promise<void> {
     if (task.brief.kind === 'verification')
-      await refreshHistoricalProofAdmission(this.store, join(this.settings.stateDirectory, 'check-registry'), task.brief.goal);
+      await refreshHistoricalProofAdmission(this.store, join(this.settings.stateDirectory, 'check-registry'), {
+        root: this.settings.integration.checkScriptReaderRoot ?? resolve(import.meta.dir, '../../..'),
+        integrationRoot: this.settings.mainCheckout,
+        integrationBranch: this.settings.integrationBranch,
+      }, task.brief.goal);
   }
   /** `leased` when the caller already holds the task's lease. */
   private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {

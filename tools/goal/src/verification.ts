@@ -213,12 +213,13 @@ export function parseProofMetadata(value: unknown): ProofMetadata {
 
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { isBuiltin } from 'node:module';
 import { hostname } from 'node:os';
 import { sameProcess, type ProcessIdentity } from './process.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { Brief, Task } from './types.ts';
 import type { AuthenticatedManager } from './priority-authority.ts';
 import type { WorkerStore } from './store.ts';
@@ -710,13 +711,68 @@ export function classifyHistoricalProof(check: HistoricalProofCheck, reader: His
   if (errors.length) evidence.cause += `; ${errors.join('; ')}`;
   return evidence;
 }
-/** Import the controller's trusted current reader, never code from a historical/deleted cwd. */
-async function loadHistoricalProofReader(registry: string): Promise<HistoricalProofReader> {
-  const wrapper = join(import.meta.dir, '../../../scripts/worker-check.ts');
+export type HistoricalProofReaderSource = {
+  root: string;
+  integrationRoot: string;
+  integrationBranch: string;
+};
+const importedHistoricalSources = new Map<string, string>();
+/** Validate code against the controller's Git objects before importing any part of the native module closure. */
+export function validateHistoricalProofReaderSource(source: HistoricalProofReaderSource): string {
+  const { root, integrationRoot, integrationBranch } = source;
+  if (!isAbsolute(root) || realpathSync(root) !== root || git(root, ['rev-parse', '--show-toplevel']) !== root)
+    throw new Error('Historical reader root must be a canonical Git checkout root');
+  const commit = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
+  for (const [ancestor, descendant] of [[PROOF_PRODUCER_COMMIT, commit], [commit, `refs/heads/${integrationBranch}`]]) {
+    if (spawnSync('git', ['merge-base', '--is-ancestor', ancestor!, descendant!], {
+      cwd: integrationRoot, stdio: 'ignore',
+    }).status !== 0)
+      throw new Error('Historical reader source must contain the delivered producer and be a captured integration ancestor');
+  }
+  if (git(root, ['status', '--porcelain', '--untracked-files=no']))
+    throw new Error('Historical reader source must be Git-clean');
+  if (importedHistoricalSources.has(root) && importedHistoricalSources.get(root) !== commit)
+    throw new Error('Imported historical reader source changed; configure an immutable captured checkout');
+  const pending = ['scripts/worker-check.ts', 'scripts/check-custody.ts'];
+  const visited = new Set<string>();
+  const scanner = new Bun.Transpiler({ loader: 'ts' });
+  while (pending.length) {
+    const path = pending.pop()!;
+    if (visited.has(path)) continue;
+    visited.add(path);
+    const absolute = resolve(root, path);
+    if (!path.startsWith('scripts/') || !path.endsWith('.ts') ||
+        realpathSync(absolute) !== absolute || !lstatSync(absolute).isFile())
+      throw new Error(`Historical reader module is not a canonical native source file: ${path}`);
+    const entry = git(integrationRoot, ['ls-tree', commit, '--', path]);
+    if (!/^100644 blob [0-9a-f]{40}\t/.test(entry))
+      throw new Error(`Historical reader module is not a captured regular file: ${path}`);
+    const expected = spawnSync('git', ['show', `${commit}:${path}`], {
+      cwd: integrationRoot, maxBuffer: 8 * 1024 * 1024,
+    });
+    const contents = readFileSync(absolute);
+    if (expected.status !== 0 || !contents.equals(expected.stdout))
+      throw new Error(`Historical reader module differs from captured integration source: ${path}`);
+    for (const dependency of scanner.scanImports(contents.toString('utf8'))) {
+      if (isBuiltin(dependency.path)) continue;
+      if (!dependency.path.startsWith('./') && !dependency.path.startsWith('../'))
+        throw new Error(`Historical reader module has an unsupported package import: ${dependency.path}`);
+      pending.push(relative(root, resolve(dirname(absolute), dependency.path)));
+    }
+  }
+  return commit;
+}
+/** Import validated current producer code; historical cwd is passed only as data to its read APIs. */
+export async function loadHistoricalProofReader(registry: string, source: HistoricalProofReaderSource): Promise<HistoricalProofReader> {
+  const commit = validateHistoricalProofReaderSource(source);
+  const wrapper = join(source.root, 'scripts/worker-check.ts');
   const reader = await loadProofReader(wrapper);
   const custody: unknown = await import(pathToFileURL(join(wrapper, '../check-custody.ts')).href);
   if (!isObject(custody) || typeof custody.validRegistration !== 'function')
     throw new Error('Native historical v1 registration validator unavailable');
+  if (validateHistoricalProofReaderSource(source) !== commit)
+    throw new Error('Historical reader source changed during import');
+  importedHistoricalSources.set(source.root, commit);
   const validRegistration = custody.validRegistration;
   return {
     ...reader,
@@ -749,13 +805,17 @@ async function loadHistoricalProofReader(registry: string): Promise<HistoricalPr
   };
 }
 /** Run before admission and during recovery; all original records and physical lease accounting stay untouched. */
-export async function refreshHistoricalProofAdmission(store: WorkerStore, registry: string, goal?: string): Promise<void> {
+export async function refreshHistoricalProofAdmission(
+  store: WorkerStore, registry: string, source: HistoricalProofReaderSource, goal?: string,
+): Promise<void> {
   const checks = store.historicalProofChecks(goal);
   if (!checks.length) return;
   let reader: HistoricalProofReader;
-  try { reader = await loadHistoricalProofReader(registry); }
+  try { reader = await loadHistoricalProofReader(registry, source); }
   catch (error) {
-    throw new ProofUnavailableError(`Historical admission requires the trusted current native reader: ${String(error)}`);
+    const cause = `Historical admission requires the trusted current native reader: ${String(error)}`;
+    store.historicalProofReaderUnavailable(checks[0]!, cause);
+    throw new ProofUnavailableError(cause);
   }
   for (const check of checks) store.classifyHistoricalProof(check, classifyHistoricalProof(check, reader));
 }
