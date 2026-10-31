@@ -18,6 +18,7 @@ export const SUBJECT_OFFERS_PAGE_SIZE = 10;
 export const SUBJECT_OFFERS_MAX_PAGE_SIZE = 20;
 type NativeSubjectOffersRead = ReturnType<KernelClient['subjects']>['offers']['get'];
 export type NativeSubjectOffersOptions = NonNullable<Parameters<NativeSubjectOffersRead>[0]>;
+export type SubjectOffersQuery = NonNullable<NativeSubjectOffersOptions['query']>;
 /** Closed public discovery DTO. No ownership, permission or source-body fields. */
 export type SubjectOffersPage = NonNullable<Awaited<ReturnType<NativeSubjectOffersRead>>['data']>;
 export type SubjectOffer = SubjectOffersPage['offers'][number];
@@ -36,7 +37,7 @@ export interface SubjectOffersApi {
   read(input: {
     subjectId: string;
     locale: string;
-    query: NativeSubjectOffersOptions['query'];
+    query: SubjectOffersQuery;
     authorization: string | null;
   }): Promise<{ status: number; data: unknown; code?: string | null }>;
 }
