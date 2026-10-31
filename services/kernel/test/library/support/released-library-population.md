@@ -221,6 +221,10 @@ For this source delivery, run only the foreground local kernel typecheck after c
 env -u GOAL_TASK_ID -u KERNEL_CHECK_REMOTE REZICS_STACK_REMOTE=off bun run --cwd services/kernel typecheck
 ```
 
+The foreground local command passed with exit `0`, including kernel construction. Native integration tests were
+added but were not run; there are no observed native outcomes from this delivery. Typing proves neither successful
+selected publication nor the remaining whole-query, lifecycle, cost or Zone composition outcomes.
+
 The literal native test titles proposed for freezing are:
 
 - `released native Library population is created only through actual owner APIs and discriminates state-only label-only retained-session holding shell follow-only and other-owner support without a synthetic released model`
