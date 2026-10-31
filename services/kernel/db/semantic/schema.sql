@@ -1236,6 +1236,27 @@ END; $$;
 
 
 --
+-- Name: capture_term_head(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_term_head() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.kind='statement' THEN RETURN NEW; END IF;
+ INSERT INTO semantic.term_head(route,subject_id,kind,language,slot_id,first_seq,support_transaction_id)
+ VALUES(NEW.route,NEW.subject_id,NEW.kind,NEW.language,NEW.slot_id,
+   CASE WHEN NEW.kind='alias' THEN 1 ELSE NEW.log_seq END,NEW.recorded_transaction_id)
+ ON CONFLICT(route,subject_id,kind,language) DO UPDATE
+ SET slot_id=EXCLUDED.slot_id,first_seq=EXCLUDED.first_seq,active=true
+ WHERE term_head.slot_id=EXCLUDED.slot_id OR EXISTS (
+   SELECT 1 FROM semantic.revision r WHERE r.route=NEW.route AND r.subject_id=NEW.subject_id
+     AND r.recorded_transaction_id=NEW.recorded_transaction_id AND r.kind='identity');
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: capture_zone_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -2816,6 +2837,76 @@ CREATE TABLE semantic.contribution_lifecycle (
 
 
 --
+-- Name: fact; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.fact (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    log_seq integer NOT NULL,
+    operation text NOT NULL,
+    kind text NOT NULL,
+    language text,
+    property text,
+    statement_id uuid,
+    body jsonb NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    release text,
+    relation boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT fact_check CHECK ((((operation = 'expand'::text) AND (kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NULL) AND (body = '{}'::jsonb)) OR ((operation <> 'expand'::text) AND (((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])) AND (language IS NOT NULL) AND (property IS NULL) AND (statement_id IS NULL)) OR ((kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NOT NULL)))))),
+    CONSTRAINT fact_kind_check CHECK ((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text, 'statement'::text]))),
+    CONSTRAINT fact_log_seq_check CHECK ((((log_seq >= 1) AND (log_seq <= 33)) AND ((log_seq <> 33) OR (operation = 'expand'::text)))),
+    CONSTRAINT fact_operation_check CHECK ((operation = ANY (ARRAY['assert'::text, 'retract'::text, 'expand'::text]))),
+    CONSTRAINT fact_release_check CHECK ((((kind = 'statement'::text) AND (operation = 'assert'::text)) = (release IS NOT NULL))),
+    CONSTRAINT fact_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
+);
+
+
+--
+-- Name: term_head; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.term_head (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    kind text NOT NULL,
+    language text NOT NULL,
+    slot_id uuid NOT NULL,
+    first_seq integer NOT NULL,
+    support_transaction_id uuid NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    CONSTRAINT term_head_first_seq_check CHECK ((first_seq >= 1)),
+    CONSTRAINT term_head_kind_check CHECK ((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])))
+);
+
+
+--
+-- Name: current_term_fact; Type: VIEW; Schema: semantic; Owner: -
+--
+
+CREATE VIEW semantic.current_term_fact AS
+ SELECT f.route,
+    f.subject_id,
+    f.slot_id,
+    f.log_seq,
+    f.operation,
+    f.kind,
+    f.language,
+    f.property,
+    f.statement_id,
+    f.body,
+    h.support_transaction_id AS recorded_transaction_id,
+    f.release,
+    f.relation,
+    f.erasure_key
+   FROM (semantic.term_head h
+     JOIN semantic.fact f ON (((f.route = h.route) AND (f.subject_id = h.subject_id) AND (f.slot_id = h.slot_id) AND (f.log_seq >= h.first_seq))))
+  WHERE (h.active AND (f.operation = 'assert'::text));
+
+
+--
 -- Name: definition_activation; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -3240,34 +3331,6 @@ CREATE TABLE semantic.facet_population_frontier (
     complete boolean NOT NULL,
     expires bigint NOT NULL,
     CONSTRAINT facet_population_frontier_subjects_check CHECK (((jsonb_typeof(subjects) = 'array'::text) AND (jsonb_array_length(subjects) <= 256)))
-);
-
-
---
--- Name: fact; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.fact (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    slot_id uuid NOT NULL,
-    log_seq integer NOT NULL,
-    operation text NOT NULL,
-    kind text NOT NULL,
-    language text,
-    property text,
-    statement_id uuid,
-    body jsonb NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    release text,
-    relation boolean DEFAULT false NOT NULL,
-    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
-    CONSTRAINT fact_check CHECK ((((operation = 'expand'::text) AND (kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NULL) AND (body = '{}'::jsonb)) OR ((operation <> 'expand'::text) AND (((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])) AND (language IS NOT NULL) AND (property IS NULL) AND (statement_id IS NULL)) OR ((kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NOT NULL)))))),
-    CONSTRAINT fact_kind_check CHECK ((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text, 'statement'::text]))),
-    CONSTRAINT fact_log_seq_check CHECK ((((log_seq >= 1) AND (log_seq <= 33)) AND ((log_seq <> 33) OR (operation = 'expand'::text)))),
-    CONSTRAINT fact_operation_check CHECK ((operation = ANY (ARRAY['assert'::text, 'retract'::text, 'expand'::text]))),
-    CONSTRAINT fact_release_check CHECK ((((kind = 'statement'::text) AND (operation = 'assert'::text)) = (release IS NOT NULL))),
-    CONSTRAINT fact_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
 );
 
 
@@ -5221,12 +5284,15 @@ CREATE TABLE semantic.revision (
     revocation_receipt_id text,
     revoked_survivor_id uuid,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
-    CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text, 'retract'::text, 'identity'::text]))),
+    term_changes jsonb,
+    term_support integer[],
+    CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text, 'retract'::text, 'identity'::text, 'terms'::text]))),
     CONSTRAINT revision_release_check CHECK ((release ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT revision_revision_check CHECK ((revision >= 1)),
     CONSTRAINT revision_revocation_receipt_check CHECK (((revocation_receipt_id IS NULL) OR ((length(revocation_receipt_id) >= 1) AND (length(revocation_receipt_id) <= 255)))),
     CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT revision_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
+    CONSTRAINT revision_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT revision_terms_check CHECK (((kind = 'terms'::text) = ((term_changes IS NOT NULL) AND (term_support IS NOT NULL))))
 );
 
 
@@ -7058,6 +7124,14 @@ ALTER TABLE ONLY semantic.subject
 
 
 --
+-- Name: term_head term_head_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.term_head
+    ADD CONSTRAINT term_head_pkey PRIMARY KEY (route, subject_id, kind, language);
+
+
+--
 -- Name: acceptance_current_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -7126,17 +7200,19 @@ CREATE UNIQUE INDEX candidate_erasure_key ON semantic.candidate USING btree (era
 
 CREATE INDEX candidate_page ON semantic.candidate USING btree (route, subject_id, slot_id, revision, view_order, candidate_id);
 
--- Name: candidate_scope_leaf_pair; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX candidate_scope_leaf_pair ON semantic.candidate USING btree (route, subject_id, property, ((statement -> 'value'::text) ->> 'content'::text), candidate_id) WHERE (((statement -> 'value'::text) ->> 'type'::text) = 'value'::text AND ((statement -> 'value'::text) ->> 'content'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text);
-
 
 --
 -- Name: candidate_revision_detail; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE INDEX candidate_revision_detail ON semantic.candidate USING btree (route, subject_id, revision);
+
+
+--
+-- Name: candidate_scope_leaf_pair; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX candidate_scope_leaf_pair ON semantic.candidate USING btree (route, subject_id, property, (((statement -> 'value'::text) ->> 'content'::text)), candidate_id) WHERE ((((statement -> 'value'::text) ->> 'type'::text) = 'value'::text) AND (((statement -> 'value'::text) ->> 'content'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text));
 
 
 --
@@ -7320,11 +7396,6 @@ CREATE UNIQUE INDEX facet_population_successor ON semantic.facet_population_fron
 
 CREATE INDEX fact_compact_candidate ON semantic.fact USING btree (route, subject_id, statement_id, log_seq DESC) WHERE ((kind = 'statement'::text) AND (operation = 'assert'::text) AND (statement_id IS NOT NULL));
 
--- Name: fact_scope_leaf_pair; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX fact_scope_leaf_pair ON semantic.fact USING btree (route, subject_id, property, ((body -> 'value'::text) ->> 'content'::text), erasure_key) WHERE ((kind = 'statement'::text) AND (operation = 'assert'::text) AND ((body -> 'value'::text) ->> 'type'::text) = 'value'::text AND ((body -> 'value'::text) ->> 'content'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text);
-
 
 --
 -- Name: fact_erasure_key; Type: INDEX; Schema: semantic; Owner: -
@@ -7352,6 +7423,13 @@ CREATE INDEX fact_publication_descriptive ON semantic.fact USING btree (route, s
 --
 
 CREATE INDEX fact_publication_relations ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE relation;
+
+
+--
+-- Name: fact_scope_leaf_pair; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_scope_leaf_pair ON semantic.fact USING btree (route, subject_id, property, (((body -> 'value'::text) ->> 'content'::text)), erasure_key) WHERE ((kind = 'statement'::text) AND (operation = 'assert'::text) AND (((body -> 'value'::text) ->> 'type'::text) = 'value'::text) AND (((body -> 'value'::text) ->> 'content'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text));
 
 
 --
@@ -8104,6 +8182,13 @@ CREATE INDEX subject_page_repair_runnable ON semantic.subject_page_repair USING 
 
 
 --
+-- Name: term_head_active; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX term_head_active ON semantic.term_head USING btree (route, subject_id, kind, language) WHERE active;
+
+
+--
 -- Name: acceptance_current acceptance_current_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -8206,6 +8291,9 @@ CREATE TRIGGER context_activation_record_purge_gate BEFORE INSERT OR DELETE OR U
 --
 
 CREATE CONSTRAINT TRIGGER context_activation_record_purge_writer AFTER INSERT OR UPDATE ON semantic.context_extension_activation DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_resource_writer();
+
+
+--
 -- Name: context context_directory_dirty; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -8742,6 +8830,13 @@ CREATE TRIGGER fact_immutable BEFORE DELETE OR UPDATE ON semantic.fact FOR EACH 
 --
 
 CREATE TRIGGER fact_immutable_truncate BEFORE TRUNCATE ON semantic.fact FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: fact fact_term_head; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER fact_term_head AFTER INSERT ON semantic.fact FOR EACH ROW EXECUTE FUNCTION semantic.capture_term_head();
 
 
 --
@@ -10147,6 +10242,14 @@ ALTER TABLE ONLY semantic.source_candidate
 
 ALTER TABLE ONLY semantic.statement_disclosure
     ADD CONSTRAINT statement_disclosure_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
+
+
+--
+-- Name: term_head term_head_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.term_head
+    ADD CONSTRAINT term_head_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
 
 
 --
