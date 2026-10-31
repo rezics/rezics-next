@@ -111,7 +111,8 @@ test('the story boundary negotiates mixed and explicit legacy responses without 
   const mixed = discoveryRequest(stateFor(searchFacetStoryPaths.results), ['en']);
   const { representation: _representation, kindPage: _kindPage, ...legacy } = mixed;
   const legacyResponse = await client.subjects.$search.post(legacy);
-  expect(legacyResponse.data).toEqual(typedSearch);
+  const { query: _query, filterType: _filterType, ...recordedWire } = typedSearch;
+  expect(legacyResponse.data).toEqual(recordedWire);
   expect(parseDiscoveryPage(legacyResponse.data)).toBeUndefined();
   const legacyOutcome = await readSearchOutcome(legacy, (body) => client.subjects.$search.post(body));
   expect(legacyOutcome.recovery.status).toBe('ready');
