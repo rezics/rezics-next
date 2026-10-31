@@ -169,6 +169,9 @@ export function PersonalLibraryPage({
   const readContinue = useCallback(() => readContinueEntries({ data: {} }), []);
   const resume = useContinueRefresh(continueState, readContinue, locale);
   const currentContinue = continueState ? resume.result : undefined;
+  // Only a successful exhausted source establishes absence; readiness and failed reads remain visible.
+  const continueAbsent =
+    currentContinue?.state === 'loaded' && currentContinue.entries.length === 0 && currentContinue.next === null;
 
   if (!page.signedIn)
     return (
@@ -199,13 +202,15 @@ export function PersonalLibraryPage({
         />
         {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken ?? null} /> : null}
         {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
-        <ContinueSection
-          {...(currentContinue ? { state: currentContinue } : continueEntries ? { entries: continueEntries } : {})}
-          onRetry={() => void resume.refresh()}
-          busy={resume.busy}
-          locale={locale}
-          density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
-        />
+        {continueAbsent ? null : (
+          <ContinueSection
+            {...(currentContinue ? { state: currentContinue } : continueEntries ? { entries: continueEntries } : {})}
+            onRetry={() => void resume.refresh()}
+            busy={resume.busy}
+            locale={locale}
+            density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
+          />
+        )}
         <section aria-labelledby="tracked-entries-heading" className="space-y-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <h2 id="tracked-entries-heading" className="text-2xl font-semibold">
