@@ -384,8 +384,7 @@ export function SettingsPageView({
   const session = hydrated ? browserSession : (requestSession ?? browserSession);
   const managedTarget = managedAccountTarget(location.publicHref);
   const signedOut =
-    !retrying &&
-    (session.state === 'signed-out' || (!hydrated && !page.signedIn && session.state === 'unknown'));
+    !retrying && (session.state === 'signed-out' || (!hydrated && !page.signedIn && session.state === 'unknown'));
   const ready =
     !retrying &&
     !retryFailed &&

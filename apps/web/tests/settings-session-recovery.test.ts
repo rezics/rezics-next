@@ -36,7 +36,8 @@ mock.module('cloudflare:workers', () => ({
 }));
 
 const { sessionQuery } = await import('../src/session/query');
-const { SettingsPageView, SettingsSessionRecovery, retrySettingsSession } = await import('../src/settings/settings-page');
+const { SettingsPageView, SettingsSessionRecovery, retrySettingsSession } =
+  await import('../src/settings/settings-page');
 type PageProps = Parameters<typeof SettingsPageView>[0];
 type Session = NonNullable<PageProps['requestSession']>;
 const prepared: PageProps['page'] = {
@@ -56,19 +57,23 @@ function deferred<T>() {
 
 async function pageMarkup(client: QueryClient, requestSession?: Session, path = '/fr/settings?from=account#display') {
   const root = createRootRoute({
-    component: () => createElement(SettingsPageView, {
-      page: prepared,
-      csrfToken: 'ignored-prop',
-      ...(requestSession ? { requestSession } : {}),
-    }),
+    component: () =>
+      createElement(SettingsPageView, {
+        page: prepared,
+        csrfToken: 'ignored-prop',
+        ...(requestSession ? { requestSession } : {}),
+      }),
   });
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: [path] }) });
   await router.load();
-  return renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })));
+  return renderToStaticMarkup(
+    createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
+  );
 }
 const fallback = (props: Parameters<typeof SettingsSessionRecovery>[0]) =>
   renderToStaticMarkup(createElement(SettingsSessionRecovery, props));
-const retryButtons = (html: string) => html.match(new RegExp(`<button\\b[^>]*>${m.settings_retry()}</button>`, 'g')) ?? [];
+const retryButtons = (html: string) =>
+  html.match(new RegExp(`<button\\b[^>]*>${m.settings_retry()}</button>`, 'g')) ?? [];
 const noPrivateSections = (html: string) => {
   expect(html).not.toMatch(/id="(?:reading|notifications|privacy|verification|profile|public-activity)"/);
   expect(html).not.toMatch(/name="(?:csrf_token|expectedVersion|idempotencyKey)"/);
@@ -133,7 +138,11 @@ describe('Recover Settings after an initial session read failure without weakeni
       expect(requests - before).toBe(1);
       for (let attempt = 0; attempt < 2; attempt++) {
         await expect(retrySettingsSession(client, invalidate)).rejects.toThrow('initial session transport failed');
-        const html = fallback({ state: 'unknown', sessionRead: client.getQueryState(sessionQuery.queryKey), onRetry() {} });
+        const html = fallback({
+          state: 'unknown',
+          sessionRead: client.getQueryState(sessionQuery.queryKey),
+          onRetry() {},
+        });
         expect(retryButtons(html)).toHaveLength(1);
         expect(retryButtons(html)[0]).not.toContain('disabled');
       }
@@ -158,7 +167,12 @@ describe('Recover Settings after an initial session read failure without weakeni
       expect(html).toContain('/auth/sign-in?return_to=%2Ffr%2Fsettings%3Ffrom%3Daccount%23display');
       expect(retryButtons(html)).toHaveLength(0);
       noPrivateSections(html);
-      expect(client.getQueryCache().getAll().map((query) => query.queryKey)).toEqual([sessionQuery.queryKey]);
+      expect(
+        client
+          .getQueryCache()
+          .getAll()
+          .map((query) => query.queryKey),
+      ).toEqual([sessionQuery.queryKey]);
       expect(sessionQuery.retry).toBe(false);
       expect(sessionQuery.staleTime).toBe(Infinity);
       expect(sessionQuery.refetchOnWindowFocus).toBe(false);
@@ -213,14 +227,21 @@ describe('Recover Settings after an initial session read failure without weakeni
     const client = new QueryClient();
     const before = requests;
     try {
-      client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'current-viewer', csrfToken: 'cached-token' });
+      client.setQueryData(sessionQuery.queryKey, {
+        state: 'signed-in',
+        subject: 'current-viewer',
+        csrfToken: 'cached-token',
+      });
       const hydration = await pageMarkup(client);
       expect(hydration).toContain(m.settings_sections_loading());
       expect(hydration).toContain(m.settings_display_heading());
       noPrivateSections(hydration);
       expect(hydration).not.toContain('cached-token');
-      const html = await pageMarkup(client, { state: 'unavailable', csrfToken: null },
-        '/fr/settings?managedAccount=019a0000-0000-7000-8000-000000000002&view=accounts#account');
+      const html = await pageMarkup(
+        client,
+        { state: 'unavailable', csrfToken: null },
+        '/fr/settings?managedAccount=019a0000-0000-7000-8000-000000000002&view=accounts#account',
+      );
       expect(html).toContain(m.settings_session_unavailable());
       expect(html).toContain(m.managed_detail_title());
       expect(html).toContain('/fr/settings?view=accounts#account');
