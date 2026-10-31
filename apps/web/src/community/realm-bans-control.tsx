@@ -95,11 +95,11 @@ function targetMessage(state: BanTargetState['state']) {
 function TargetPreview({ target }: { target: RealmBanTarget }) {
   const { account, lookupHandle } = target;
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-muted p-4">
+    <div className="flex min-w-0 items-center gap-3 rounded-xl bg-muted p-4">
       <Avatar aria-hidden="true">
         <AvatarFallback>{initials(account.displayName || account.handle)}</AvatarFallback>
       </Avatar>
-      <div className="min-w-0 space-y-1 break-words text-sm">
+      <div className="min-w-0 space-y-1 wrap-anywhere text-sm">
         {account.displayName ? <p className="font-medium">{account.displayName}</p> : null}
         <p>@{account.handle}</p>
         {'movedTo' in account && account.movedTo ? (
@@ -269,7 +269,11 @@ export function RealmBansControl({
 
   const disabled = !ready || busy || retry !== null;
   return (
-    <section aria-labelledby={`${id}-title`} className="space-y-5" aria-busy={busy || view.state === 'loading'}>
+    <section
+      aria-labelledby={`${id}-title`}
+      className="min-w-0 space-y-5 wrap-anywhere"
+      aria-busy={busy || view.state === 'loading'}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id={`${id}-title`} className="text-xl font-semibold">
           {m.realm_bans_heading()}
@@ -277,6 +281,7 @@ export function RealmBansControl({
         <Button
           type="button"
           variant="outline"
+          className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           disabled={busy || view.state === 'loading' || retry !== null}
           onClick={() => {
             setConfirm(null);
@@ -294,7 +299,7 @@ export function RealmBansControl({
         <>
           <p className="max-w-prose text-sm text-muted-foreground">{m.realm_bans_help()}</p>
           <form
-            className="max-w-xl space-y-4"
+            className="min-w-0 max-w-xl space-y-4"
             onSubmit={(event) => {
               event.preventDefault();
               if (!disabled && selected) setBanConfirm(true);
@@ -304,6 +309,7 @@ export function RealmBansControl({
               <FieldLabel htmlFor={`${id}-account`}>{m.realm_bans_account()}</FieldLabel>
               <Input
                 id={`${id}-account`}
+                className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                 required
                 autoComplete="off"
                 spellCheck={false}
@@ -322,6 +328,7 @@ export function RealmBansControl({
               <Button
                 type="button"
                 variant="outline"
+                className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                 disabled={disabled || !query.trim() || target.state === 'pending'}
                 onClick={() => void findTarget()}
               >
@@ -339,6 +346,7 @@ export function RealmBansControl({
                   <Button
                     type="button"
                     variant="outline"
+                    className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                     disabled={disabled}
                     onClick={() => {
                       setSelected(target.target);
@@ -358,6 +366,7 @@ export function RealmBansControl({
               <FieldLabel htmlFor={`${id}-reason`}>{m.realm_bans_reason()}</FieldLabel>
               <Textarea
                 id={`${id}-reason`}
+                className="min-w-0 max-w-full pointer-coarse:min-w-11"
                 maxLength={1024}
                 value={reason}
                 disabled={disabled}
@@ -367,19 +376,34 @@ export function RealmBansControl({
                 }}
               />
             </Field>
-            <Button type="submit" disabled={disabled || !selected || target.state !== 'ready'}>
+            <Button
+              type="submit"
+              className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+              disabled={disabled || !selected || target.state !== 'ready'}
+            >
               {m.realm_bans_ban()}
             </Button>
             {banConfirm && selected ? (
               <div className="space-y-3 rounded-xl border p-4">
                 <p className="text-sm">{m.realm_bans_ban_confirm()}</p>
                 <TargetPreview target={selected} />
-                <p className="whitespace-pre-wrap break-words text-sm">{reason || m.realm_bans_no_reason()}</p>
+                <p className="whitespace-pre-wrap wrap-anywhere text-sm">{reason || m.realm_bans_no_reason()}</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" disabled={disabled} onClick={() => void submitBan()}>
+                  <Button
+                    type="button"
+                    className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                    disabled={disabled}
+                    onClick={() => void submitBan()}
+                  >
                     {m.realm_bans_confirm_ban()}
                   </Button>
-                  <Button type="button" variant="ghost" disabled={disabled} onClick={() => setBanConfirm(false)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                    disabled={disabled}
+                    onClick={() => setBanConfirm(false)}
+                  >
                     {m.realm_bans_cancel()}
                   </Button>
                 </div>
@@ -396,13 +420,14 @@ export function RealmBansControl({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 basis-56 space-y-1">
                       <p className="break-all text-sm font-medium">{ban.accountId}</p>
-                      <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                      <p className="whitespace-pre-wrap wrap-anywhere text-sm text-muted-foreground">
                         {ban.reason || m.realm_bans_no_reason()}
                       </p>
                     </div>
                     <Button
                       type="button"
                       variant="outline"
+                      className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                       disabled={disabled}
                       onClick={() => setConfirm(ban.accountId)}
                     >
@@ -415,6 +440,7 @@ export function RealmBansControl({
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
+                          className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                           disabled={disabled}
                           onClick={() =>
                             void change({
@@ -428,7 +454,13 @@ export function RealmBansControl({
                         >
                           {m.realm_bans_confirm()}
                         </Button>
-                        <Button type="button" variant="ghost" disabled={disabled} onClick={() => setConfirm(null)}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                          disabled={disabled}
+                          onClick={() => setConfirm(null)}
+                        >
                           {m.realm_bans_cancel()}
                         </Button>
                       </div>
@@ -442,6 +474,7 @@ export function RealmBansControl({
             <Button
               type="button"
               variant="outline"
+              className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
               disabled={disabled}
               onClick={() => {
                 setConfirm(null);
@@ -463,6 +496,7 @@ export function RealmBansControl({
             <Button
               type="button"
               variant="outline"
+              className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
               disabled={busy || !ready || view.state !== 'ready'}
               onClick={() => void change(retry)}
             >
