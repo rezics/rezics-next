@@ -99,28 +99,54 @@ export const searchVerificationSubjects = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     if (!input || typeof input !== 'object' || typeof (input as { query?: unknown }).query !== 'string')
       throw new Error('Invalid query');
-    return (input as { query: string }).query.slice(0, 100);
+    const query = (input as { query: string }).query;
+    // Retain the input's UTF-16 budget without cutting a code point in half.
+    return query.slice(0, 100).replace(/[\uD800-\uDBFF]$/u, '');
   })
   .handler(async ({ data: query }) => {
     setResponseHeader('cache-control', 'private, no-store');
     if (!query.trim()) return [];
     const { request } = await viewer();
-    const result = await suggestSubjects(query, request);
-    const release = await readRelease().catch(() => undefined);
-    const roots = (type: string, visited = new Set<string>()): Set<string> => {
-      if (type === 'schema:Person' || type === 'schema:Organization') return new Set([type]);
-      if (visited.has(type)) return new Set();
-      visited.add(type);
-      return new Set((release?.types[type]?.bases ?? []).flatMap((base) => [...roots(base, visited)]));
-    };
-    return result.subjects.flatMap((subject) => {
-      const title = subject.summary?.label?.value ?? Object.values(subject.labels)[0] ?? subject.id;
-      const baseTypes = roots(subject.type);
-      if (baseTypes.has('schema:Person')) return [{ id: subject.id, title, type: m.settings_verification_person() }];
-      if (baseTypes.has('schema:Organization'))
-        return [{ id: subject.id, title, type: m.settings_verification_organization() }];
-      return [];
-    });
+    try {
+      const result = await suggestSubjects(query, request);
+      // Native empty suggestions need no eligibility metadata.
+      if (result.subjects.length === 0) return [];
+      const release = await readRelease();
+      if (!release?.types || typeof release.types !== 'object' || Array.isArray(release.types))
+        throw new Error('Invalid eligibility metadata');
+      const resolved = new Map<string, Set<string>>();
+      const roots = (type: string, visited = new Set<string>()): Set<string> => {
+        const known = resolved.get(type);
+        if (known) return known;
+        const definition = Object.hasOwn(release.types, type) ? release.types[type] : undefined;
+        if (
+          !definition ||
+          typeof definition !== 'object' ||
+          Array.isArray(definition) ||
+          (definition.bases !== undefined &&
+            (!Array.isArray(definition.bases) || definition.bases.some((base) => typeof base !== 'string' || !base))) ||
+          visited.has(type)
+        )
+          throw new Error('Invalid eligibility metadata');
+        if (type === 'schema:Person' || type === 'schema:Organization') return new Set([type]);
+        visited.add(type);
+        const result = new Set((definition.bases ?? []).flatMap((base) => [...roots(base, visited)]));
+        visited.delete(type);
+        resolved.set(type, result);
+        return result;
+      };
+      return result.subjects.flatMap((subject) => {
+        const title = subject.summary?.label?.value ?? Object.values(subject.labels)[0] ?? subject.id;
+        const baseTypes = roots(subject.type);
+        if (baseTypes.has('schema:Person')) return [{ id: subject.id, title, type: m.settings_verification_person() }];
+        if (baseTypes.has('schema:Organization'))
+          return [{ id: subject.id, title, type: m.settings_verification_organization() }];
+        return [];
+      });
+    } catch {
+      // The chooser exposes only its existing failed state and explicit Retry.
+      throw new Error(m.settings_verification_search_failed());
+    }
   });
 
 export const requestVerificationAction = createServerFn({ method: 'POST' })

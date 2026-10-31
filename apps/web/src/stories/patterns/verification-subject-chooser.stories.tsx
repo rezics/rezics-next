@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { VerificationSubjectChooserView, type VerificationSubject } from '../../settings/verification-subject-chooser';
 
@@ -76,7 +76,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The production verification chooser with bounded, local interface fakes. Review these same states with phone390 and desktop1280 viewport globals. Native search and authorization proof remain with integration verification.',
+          'The production verification chooser with explicitly illustrative local IO, including dependency failure, real empty and IME composition. Review these same states with phone390 and desktop1280 viewport globals and shared locale/theme globals. Native search and authorization proof remain with integration verification.',
       },
     },
   },
@@ -175,6 +175,40 @@ export const LoadingAndLateCompletion: Story = {
     fixture(canvasElement).finish();
     await expect(popup().queryByRole('option')).toBeNull();
     await expect(fixture(canvasElement).selections).toEqual([]);
+    await expect(fixture(canvasElement).submits).toBe(0);
+  },
+};
+
+export const CompositionAndCommittedTerm: Story = {
+  args: { scenario: 'delayed' },
+  play: async ({ canvasElement }) => {
+    const canvas = view(canvasElement);
+    const input = canvas.getByRole('combobox');
+    await userEvent.type(input, 'Avery');
+    await waitFor(() => expect(fixture(canvasElement).calls).toEqual(['Avery']));
+    const priorCompletion = fixture(canvasElement).finish;
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: 'あ' } });
+    // Deliberately keep the IME session open longer than the production debounce.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    priorCompletion();
+    await expect(fixture(canvasElement).calls).toEqual(['Avery']);
+    await expect(popup().queryByRole('option')).toBeNull();
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true });
+    fireEvent(input, enter);
+    await expect(enter.defaultPrevented).toBe(true);
+    await expect(fixture(canvasElement).selections).toEqual([]);
+    fireEvent.change(input, { target: { value: 'あべ' } });
+    fireEvent.compositionEnd(input, { data: 'あべ' });
+    await waitFor(() => expect(fixture(canvasElement).calls).toEqual(['Avery', 'あべ']));
+    fixture(canvasElement).finish();
+    await popup().findAllByRole('option');
+    await expect(input).toHaveValue('あべ');
+    await userEvent.keyboard('{Enter}');
+    await expect(fixture(canvasElement).selections).toEqual([]);
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    await canvas.findByRole('button', { name: m.settings_verification_change_subject() });
+    await expect(fixture(canvasElement).selections.at(-1)?.id).toBe('native-person-id');
     await expect(fixture(canvasElement).submits).toBe(0);
   },
 };

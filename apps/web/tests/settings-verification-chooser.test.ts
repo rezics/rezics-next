@@ -110,3 +110,71 @@ test('the chooser exposes a labelled bounded combobox and selected presentation 
   expect(selected).toContain('disabled');
   expect(selected).not.toContain('role="combobox"');
 });
+
+test('unfinished composition cancels queued and old requests; only the committed current term is debounced', async () => {
+  const requests: { query: string; signal: AbortSignal; finish: (subjects: Subject[]) => void }[] = [];
+  const search = new VerificationSubjectSearch(
+    (query, signal) => new Promise((finish) => requests.push({ query, signal, finish })),
+  );
+  search.setEnabled(true);
+  try {
+    search.edit('queued');
+    search.startComposition();
+    search.edit('あ');
+    await settle();
+    expect(requests).toHaveLength(0);
+    expect(search.snapshot()).toEqual({ query: 'あ', phase: 'idle', subjects: [] });
+    search.endComposition('あべ');
+    expect(requests).toHaveLength(0);
+    await settle();
+    expect(requests.map((request) => request.query)).toEqual(['あべ']);
+    search.startComposition();
+    expect(requests[0]!.signal.aborted).toBe(true);
+    requests[0]!.finish([person]);
+    await flush();
+    expect(search.current(person)).toBe(false);
+    search.edit('スタ');
+    await settle();
+    expect(requests).toHaveLength(1);
+    search.endComposition('スタジオ');
+    await settle();
+    expect(requests.map((request) => request.query)).toEqual(['あべ', 'スタジオ']);
+    requests[1]!.finish([organization]);
+    await flush();
+    expect(search.current(organization)).toBe(true);
+    // Exact current-result identity is still required, even for matching IDs.
+    expect(search.current({ ...organization })).toBe(false);
+    search.startComposition();
+    search.setEnabled(false);
+    search.endComposition('discarded');
+    await settle();
+    expect(requests).toHaveLength(2);
+    expect(search.snapshot()).toEqual({ query: '', phase: 'idle', subjects: [] });
+  } finally {
+    search.setEnabled(false);
+  }
+});
+
+test('the chooser query keeps complete astral characters within its existing input budget', async () => {
+  const queries: string[] = [];
+  const search = new VerificationSubjectSearch(async (query) => {
+    queries.push(query);
+    return [];
+  });
+  search.setEnabled(true);
+  try {
+    search.edit(`${'a'.repeat(98)}😀extra`);
+    expect(search.snapshot().query).toBe(`${'a'.repeat(98)}😀`);
+    await settle();
+    search.edit(`${'a'.repeat(99)}😀extra`);
+    expect(search.snapshot().query).toBe('a'.repeat(99));
+    // Native maxlength may already have truncated the input before the controlled edit.
+    search.edit(`${'a'.repeat(99)}\uD83D`);
+    expect(search.snapshot().query).toBe('a'.repeat(99));
+    await settle();
+    expect(queries).toEqual([`${'a'.repeat(98)}😀`, 'a'.repeat(99)]);
+    expect(queries.every((query) => query.isWellFormed())).toBe(true);
+  } finally {
+    search.setEnabled(false);
+  }
+});

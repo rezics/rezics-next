@@ -20,6 +20,7 @@ const idle: SearchState = { query: '', phase: 'idle', subjects: [] };
 export class VerificationSubjectSearch {
   private state = idle;
   private enabled = false;
+  private composing = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private request: AbortController | undefined;
   private listeners = new Set<() => void>();
@@ -35,11 +36,16 @@ export class VerificationSubjectSearch {
     this.state = state;
     this.listeners.forEach((listener) => listener());
   }
-  clear = () => {
+  private cancel() {
     clearTimeout(this.timer);
+    this.timer = undefined;
     const request = this.request;
     this.request = undefined;
     request?.abort();
+  }
+  clear = () => {
+    this.cancel();
+    this.composing = false;
     this.update(idle);
   };
   setEnabled(enabled: boolean) {
@@ -48,20 +54,32 @@ export class VerificationSubjectSearch {
   }
   edit = (value: string) => {
     if (!this.enabled) return;
-    this.clear();
-    const query = value.slice(0, 100);
-    this.update({ query, phase: query.trim() ? 'pending' : 'idle', subjects: [] });
-    if (query.trim()) this.timer = setTimeout(() => void this.send(), 250);
+    this.cancel();
+    const query = value.slice(0, 100).replace(/[\uD800-\uDBFF]$/u, '');
+    this.update({ query, phase: !this.composing && query.trim() ? 'pending' : 'idle', subjects: [] });
+    if (!this.composing && query.trim()) this.timer = setTimeout(() => void this.send(), 250);
+  };
+  isComposing = () => this.composing;
+  startComposition = () => {
+    if (!this.enabled) return;
+    this.cancel();
+    this.composing = true;
+    this.update({ query: this.state.query, phase: 'idle', subjects: [] });
+  };
+  endComposition = (value: string) => {
+    if (!this.enabled || !this.composing) return;
+    this.composing = false;
+    this.edit(value);
   };
   retry = () => {
     if (this.enabled && this.state.phase === 'failed') void this.send();
   };
   current(subject: VerificationSubject) {
-    return this.enabled && this.state.phase === 'ready' && this.state.subjects.includes(subject);
+    return this.enabled && !this.composing && this.state.phase === 'ready' && this.state.subjects.includes(subject);
   }
   private async send() {
     const query = this.state.query;
-    if (!this.enabled || !query.trim()) return;
+    if (!this.enabled || this.composing || !query.trim()) return;
     const request = new AbortController();
     this.request = request;
     this.update({ query, phase: 'loading', subjects: [] });
@@ -123,14 +141,16 @@ export function VerificationSubjectChooserView({
   const input = useRef<HTMLInputElement>(null);
   const change = useRef<HTMLButtonElement>(null);
   const focus = useRef<'input' | 'change' | null>(null);
+  const highlighted = useRef<VerificationSubject | undefined>(undefined);
   const [lookup] = useState(() => new VerificationSubjectSearch(search));
   const state = useSyncExternalStore(lookup.subscribe, lookup.snapshot, lookup.snapshot);
   const [open, setOpen] = useState(false);
+  const locale = getLocale();
   useEffect(() => {
     lookup.setEnabled(!disabled && !selected);
     if (disabled || selected) setOpen(false);
     return () => lookup.setEnabled(false);
-  }, [lookup, disabled, selected]);
+  }, [lookup, disabled, selected, locale]);
   useEffect(() => {
     if (disabled) focus.current = null;
     else if (focus.current === 'input' && !selected) {
@@ -181,6 +201,9 @@ export function VerificationSubjectChooserView({
             open={!disabled && open && subjects.length > 0}
             onOpenChange={setOpen}
             itemToStringLabel={(subject: VerificationSubject) => subject.title}
+            onItemHighlighted={(subject) => {
+              highlighted.current = subject;
+            }}
             onInputValueChange={(value, details) => {
               if (details.reason === 'input-change' || details.reason === 'input-clear') {
                 lookup.edit(value);
@@ -206,9 +229,26 @@ export function VerificationSubjectChooserView({
               aria-describedby={`${id}-help ${id}-status`}
               aria-busy={!disabled && busy}
               onBlur={() => setOpen(false)}
+              onCompositionStart={() => {
+                lookup.startComposition();
+                setOpen(false);
+              }}
+              onCompositionEnd={(event) => {
+                lookup.endComposition(event.currentTarget.value);
+                setOpen(true);
+              }}
               onKeyDown={(event) => {
                 // Enter chooses only an explicitly highlighted result; it never submits the parent form.
-                if (event.key === 'Enter' && !event.nativeEvent.isComposing) event.preventDefault();
+                const composing = lookup.isComposing() || event.nativeEvent.isComposing || event.keyCode === 229;
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  if (composing || !open || !highlighted.current || !lookup.current(highlighted.current))
+                    event.preventBaseUIHandler();
+                }
+                if (composing) {
+                  event.preventBaseUIHandler();
+                  return;
+                }
                 if (event.key === 'Escape') setOpen(false);
               }}
             />
