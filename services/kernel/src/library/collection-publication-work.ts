@@ -34,10 +34,7 @@ import { ProblemError } from '../http/problem.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { readCollection } from './collection-store.ts';
-import {
-  authorizeCollectionRule,
-  prepareCollectionRuleAuthority,
-} from './collection-rules.ts';
+import { authorizeCollectionRule, prepareCollectionRuleAuthority } from './collection-rules.ts';
 import { admitSavedCollectionMemberQuery, prepareNativeCollectionMemberAuthority } from './owner-filter.ts';
 import { completeCollectionSourceOutput } from './collection-source-output.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
@@ -144,10 +141,7 @@ async function stage(context: Context, input: WorkflowInput): Promise<'more' | '
           throw unavailable();
       }
       if (result.state === 'more') {
-        await enqueueIntent(
-          tx,
-          intent(locator, `${locator.publicationId}:${result.checkpoint.version}`),
-        );
+        await enqueueIntent(tx, intent(locator, `${locator.publicationId}:${result.checkpoint.version}`));
         return 'more';
       }
       return 'sealed';
@@ -375,12 +369,14 @@ async function activate(context: Context, input: WorkflowInput): Promise<void> {
       const version = await readCollectionPublicationEpisodeVersion(tx, locator);
       if (
         version === null ||
-        !(await tx.query(
-          `UPDATE library.collection_publication_episode SET phase='complete',version=version+1
+        !(
+          await tx.query(
+            `UPDATE library.collection_publication_episode SET phase='complete',version=version+1
            WHERE route=$1 AND publication_id=$2 AND owner_account_id=$3 AND collection_id=$4
              AND version=$5 AND phase='awaiting_activation' RETURNING publication_id`,
-          [route, locator.publicationId, locator.ownerAccountId, locator.collectionId, version],
-        )).rows.length
+            [route, locator.publicationId, locator.ownerAccountId, locator.collectionId, version],
+          )
+        ).rows.length
       )
         throw unavailable();
       return {
@@ -411,14 +407,18 @@ function isSameSource(
 
 /** Register the locator-only continuation on the Library module's existing workflows queue. */
 export function registerCollectionPublicationWork(context: WorkContext): void {
-  const step = DBOS.registerStep(
-    async (input: WorkflowInput) => stage(context, input),
-    { name: 'library.collectionPublicationStage', retriesAllowed: true, maxAttempts: 3, intervalSeconds: 1 },
-  );
-  const activateStep = DBOS.registerStep(
-    async (input: WorkflowInput) => activate(context, input),
-    { name: 'library.collectionPublicationActivate', retriesAllowed: true, maxAttempts: 3, intervalSeconds: 1 },
-  );
+  const step = DBOS.registerStep(async (input: WorkflowInput) => stage(context, input), {
+    name: 'library.collectionPublicationStage',
+    retriesAllowed: true,
+    maxAttempts: 3,
+    intervalSeconds: 1,
+  });
+  const activateStep = DBOS.registerStep(async (input: WorkflowInput) => activate(context, input), {
+    name: 'library.collectionPublicationActivate',
+    retriesAllowed: true,
+    maxAttempts: 3,
+    intervalSeconds: 1,
+  });
   DBOS.registerWorkflow(
     async (input: WorkflowInput) => {
       const result = await step(input);

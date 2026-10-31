@@ -9,10 +9,7 @@ import { accessCheck, type Access, type AccountActor, type Actor } from '../requ
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import type { KernelClock } from '../clock.ts';
-import {
-  authorizeCollectionRule,
-  prepareCollectionRuleAuthority,
-} from './collection-rules.ts';
+import { authorizeCollectionRule, prepareCollectionRuleAuthority } from './collection-rules.ts';
 import {
   readCollectionPublicationEpisode,
   readCollectionPublicationRule,
@@ -68,15 +65,17 @@ export function createCollectionPublicationService(dependencies: Dependencies) {
   async function locate(publicationId: string, deadline: number): Promise<CollectionPublicationLocator | null> {
     const route = routeOf(publicationId);
     if (route === null) return null;
-    const row = await withConnection(pool, async (connection) =>
-      (
-        await deadlineClient(connection, deadline).query<{ ownerAccountId: string; collectionId: string }>(
-          `SELECT owner_account_id::text AS "ownerAccountId",collection_id::text AS "collectionId"
+    const row = await withConnection(
+      pool,
+      async (connection) =>
+        (
+          await deadlineClient(connection, deadline).query<{ ownerAccountId: string; collectionId: string }>(
+            `SELECT owner_account_id::text AS "ownerAccountId",collection_id::text AS "collectionId"
            FROM library.collection_publication_episode
            WHERE route=$1 AND publication_id=$2`,
-          [route, publicationId],
-        )
-      ).rows[0],
+            [route, publicationId],
+          )
+        ).rows[0],
     );
     if (!row) return null;
     if (routeOf(row.ownerAccountId) !== route || routeOf(row.collectionId) !== route) {
@@ -164,7 +163,13 @@ export function createCollectionPublicationService(dependencies: Dependencies) {
       const time = await withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
       const first = await snapshot(actor, locator, time, deadline);
       const checks = first.rule
-        ? await prepareCollectionRuleAuthority({ pool, access }, actor, first.rule.filter, { time, read: true }, deadline)
+        ? await prepareCollectionRuleAuthority(
+            { pool, access },
+            actor,
+            first.rule.filter,
+            { time, read: true },
+            deadline,
+          )
         : [];
       const final = await readOnly(pool, async (connection) => {
         const client = deadlineClient(connection, deadline);

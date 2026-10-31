@@ -409,11 +409,15 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() =>
-            wholeQuery().begin(actor, {
-              collectionId: params.collectionId,
-              revision: body.revision,
-              visibility: body.visibility,
-            }, key),
+            wholeQuery().begin(
+              actor,
+              {
+                collectionId: params.collectionId,
+                revision: body.revision,
+                visibility: body.visibility,
+              },
+              key,
+            ),
           ),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
