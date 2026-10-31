@@ -9,7 +9,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import memberRecording from '../kernel/recorded/library-collection-members.json';
 import subjectRecording from '../kernel/recorded/subject.json';
 import definitionsRecording from '../kernel/recorded/definitions-release.json';
-import { collectionStoryPaths } from '../kernel/fake/collection-stories';
+import { collectionStoryMembers, collectionStoryPaths } from '../kernel/fake/collection-stories';
 import { setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { collectionReadStoryIds } from '../kernel/fake/collection-read-stories';
 import { m } from '../paraglide/messages.js';
@@ -93,8 +93,32 @@ async function collectionReadyWithHover(context: { canvasElement: HTMLElement })
   if (member) await userEvent.hover(member);
 }
 
+async function bookRowFactsReady(context: { canvasElement: HTMLElement }) {
+  const locale = getLocale();
+  const type = pickText(definitionsRecording.release.types['schema:Book'].labels, locale).text;
+  for (const member of collectionStoryMembers) {
+    const link = await within(context.canvasElement).findByRole('link', { name: member.subject.label.value });
+    const row = link.closest('[data-slot="list-row"], [data-slot="collection-member-card"]')!;
+    await expect(within(row as HTMLElement).getByText(type, { exact: true })).toBeVisible();
+    const details = row.querySelector('[data-slot="member-list-row-facts"]');
+    await expect(details).toBeVisible();
+    const author = member.facts['schema:author']![0]!;
+    if (author.kind === 'item') await expect(details).toHaveTextContent(pickText(author.labels, locale).text);
+    const publication = member.facts['schema:datePublished']?.[0];
+    if (publication?.kind === 'time')
+      await expect(details).toHaveTextContent(
+        new Intl.NumberFormat(locale, { useGrouping: false }).format(publication.year),
+      );
+    const image = row.querySelector('img');
+    if (member.subject.cover)
+      await expect(image).toHaveAttribute('src', expect.stringContaining(member.subject.cover.media));
+    else await expect(image).toBeNull();
+  }
+}
+
 async function compactCollectionReady(context: { canvasElement: HTMLElement }) {
   await collectionReadyWithHover(context);
+  await bookRowFactsReady(context);
   const canvas = within(context.canvasElement);
   await expect(canvas.queryByRole('button', { name: m.reaction_like() })).toBeNull();
   await expect(canvas.queryByRole('button', { name: m.library_subject_save() })).toBeNull();
@@ -245,13 +269,17 @@ export const CuratorPublicMany: Story = {
   ...variantStory(variants.CuratorPublicMany),
   play: async (context) => {
     await variantReady(context, variants.CuratorPublicMany.title);
-    await expect(within(context.canvasElement).getByText(m.library_member_count({ count: 4 }))).toBeVisible();
+    await expect(
+      await within(context.canvasElement).findByText(m.library_member_count({ count: 4 }), { exact: true }),
+    ).toBeVisible();
+    await bookRowFactsReady(context);
   },
 };
 export const GridLayout: Story = {
   name: 'Grid Layout',
   play: async (context) => {
     await collectionReadyWithHover(context);
+    await bookRowFactsReady(context);
     await expect(context.canvasElement.querySelector('[data-slot="cover-grid"]')).toBeVisible();
     await expect(context.canvasElement.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(4);
   },
@@ -385,6 +413,7 @@ export const AnotherReader: Story = {
   render: () => <PageStory visitor="Signed In" path={`/collections/${variants.ReaderPublicMany.id}`} />,
   play: async (context) => {
     await variantReady(context, variants.ReaderPublicMany.title);
+    await bookRowFactsReady(context);
     const canvas = within(context.canvasElement);
     const trigger = canvas.getByRole('button', { name: m.library_collection_actions() });
     await userEvent.click(trigger);

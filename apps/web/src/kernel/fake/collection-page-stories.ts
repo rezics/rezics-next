@@ -138,11 +138,7 @@ function collectionResponse(request?: Request) {
 function listResponse(request: Request) {
   const url = new URL(request.url);
   const cursor = url.searchParams.get('cursor');
-  const members = editedMembers.map((member) =>
-    mode === 'presentation' && member.subject.id === subject.summary.id
-      ? { ...member, subject: clone(subject.summary) }
-      : member,
-  );
+  const members = editedMembers;
   if (mode === 'unlisted' && !request.headers.has('authorization')) return { status: 200, members: [], next: null };
   if (mode === 'preparing')
     return {

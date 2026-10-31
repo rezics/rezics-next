@@ -9,6 +9,11 @@ import memberRecording from '../src/kernel/recorded/library-collection-members.j
 import { subjectOf } from '../src/library/reads';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
+import { collectionStoryMembers } from '../src/kernel/fake/collection-stories';
+import definitions from '../src/kernel/recorded/definitions-release.json';
+import subjectRecording from '../src/kernel/recorded/subject.json';
+import { parseListPresentation } from '@rezics/ui/cover';
+import { pickText } from '@rezics/composition';
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
 const { CollectionPage } = await import('../src/library/collection-page');
@@ -119,5 +124,45 @@ test('compact presentation preserves genuine member preparation, unavailable fee
     expect(html).not.toContain(m.library_collection_empty());
     expect(html).not.toContain('data-slot="member-list-row-title"');
     expect(html).not.toContain(m.library_collection_export_label());
+  }
+});
+
+test('existing Collection pages render supplied Book author and publication year with type labels in every launch locale', async () => {
+  const previousLocale = getLocale();
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      const html = await render({
+        ...page,
+        listPresentations: {
+          'schema:Book': parseListPresentation(definitions.release.types['schema:Book'].listPresentation)!,
+        },
+        members: collectionStoryMembers.map((member) => ({
+          ...member,
+          subject: {
+            ...subjectOf(member.subject)!,
+            typeLabel: pickText(definitions.release.types['schema:Book'].labels, locale).text,
+          },
+        })),
+      });
+      expect(html.match(/data-slot="member-list-row-title"/g)).toHaveLength(4);
+      const facts = [...html.matchAll(/<p\b[^>]*data-slot="member-list-row-facts"[^>]*>([\s\S]*?)<\/p>/g)]
+        .map((match) => match[1]!);
+      expect(facts).toHaveLength(4);
+      for (const [index, author, year] of [
+        [0, locale === 'ja' ? '川端康成' : 'Yasunari Kawabata', 1937],
+        [1, locale === 'ja' ? '紫式部' : 'Murasaki Shikibu', undefined],
+        [2, pickText(subjectRecording.related['01a17a3b-07ab-779f-a76f-c4de973680d4'].labels, locale).text, 1943],
+        [3, locale === 'ja' ? '夏目漱石' : 'Natsume Sōseki', 1914],
+      ] as const) {
+        expect(facts[index]!).toContain(author);
+        if (year !== undefined)
+          expect(facts[index]!).toContain(new Intl.NumberFormat(locale, { useGrouping: false }).format(year));
+      }
+      expect(html).toContain('data-slot="collection-hero"');
+      expect(html).toContain('data-slot="collection-toolbar"');
+    }
+  } finally {
+    setLocale(previousLocale, { reload: false });
   }
 });

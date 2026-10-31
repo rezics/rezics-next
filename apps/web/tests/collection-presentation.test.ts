@@ -8,6 +8,10 @@ import { subjectOf, type CollectionMember } from '../src/library/reads';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 import recording from '../src/kernel/recorded/library-collection-members.json';
 import definitions from '../src/kernel/recorded/definitions-release.json';
+import subjectRecording from '../src/kernel/recorded/subject.json';
+import agentRecording from '../src/kernel/recorded/agent-page.json';
+import { collectionStoryMembers, routes } from '../src/kernel/fake/collection-stories';
+import { routes as pageRoutes, setCollectionStoryMode } from '../src/kernel/fake/collection-page-stories';
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
 const { CollectionReadMembers } = await import('../src/library/collection-page');
@@ -112,4 +116,59 @@ test('Collection geometry follows actual Type hints while owner/dominant Collect
     expect(html).toContain(`/subjects/${book.subject!.id}/`);
     expect(html).not.toContain('<img');
   }
+});
+
+test('Collection Book fixture art belongs to its actual title and supplies safe author and work publication facts', async () => {
+  expect(collectionStoryMembers.map((member) => member.id)).toEqual(recording.members.map((member) => member.id));
+  expect(collectionStoryMembers.map((member) => member.note)).toEqual(recording.members.map((member) => member.note));
+  const [snow, genji, prince, kokoro] = collectionStoryMembers;
+  expect(snow!.subject.cover).toBeNull();
+  expect(genji!.subject.cover).toBeNull();
+  expect(prince!.subject.label.value).toBe(subjectRecording.summary.label.value);
+  expect(prince!.subject.cover).toEqual(subjectRecording.summary.cover);
+  expect(kokoro!.subject.label.value).toBe(agentRecording.reads.r2.body.links[0]!.summary.label.value);
+  expect(kokoro!.subject.cover).toEqual(agentRecording.reads.r2.body.links[0]!.summary.cover);
+  expect(prince!.subject.cover!.media).not.toBe(kokoro!.subject.cover!.media);
+  for (const [member, author, year] of [
+    [snow!, 'Yasunari Kawabata', 1937],
+    [genji!, 'Murasaki Shikibu', undefined],
+    [prince!, 'Antoine de Saint-Exupéry', 1943],
+    [kokoro!, 'Natsume Sōseki', 1914],
+  ] as const) {
+    expect(member.facts['schema:author']).toContainEqual(
+      expect.objectContaining({ kind: 'item', labels: expect.objectContaining({ en: author }) }),
+    );
+    expect(member.facts['schema:datePublished']).toEqual(year === undefined ? undefined : [{ kind: 'time', year }]);
+  }
+  // Both fake routes feeding the existing pages use the same presentation boundary; recordings stay untouched.
+  const request = new Request('https://rezics.test/v1/collections/01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7ba2/members');
+  const route = routes[0]!;
+  const result = await route.story!({
+    request,
+    recordings: { 'library-collection-members': recording },
+    match: (route.path as RegExp).exec(new URL(request.url).pathname),
+  });
+  expect(result?.members).toEqual(collectionStoryMembers);
+  for (const mode of ['many', 'public-reader', 'presentation'] as const) {
+    setCollectionStoryMode(mode);
+    const pageRoute = pageRoutes.find(
+      (route) => route.method === 'GET' && route.path instanceof RegExp && route.path.test(new URL(request.url).pathname),
+    )!;
+    const page = await pageRoute.story!({ request, recordings: {}, match: null });
+    expect(page?.members).toEqual(collectionStoryMembers);
+  }
+  setCollectionStoryMode('many');
+  expect(recording.members.every((member) => member.subject.cover === null && !('facts' in member))).toBe(true);
+});
+
+test('an unlabelled author reference stays absent while a supplied publication year remains visible', () => {
+  const html = renderDetails({
+    subject: book.subject,
+    facts: {
+      'schema:author': [{ kind: 'item', id: 'private-or-unknown-author', labels: {} }],
+      'schema:datePublished': [{ kind: 'time', year: 1943 }],
+    },
+  });
+  expect(html).not.toContain('private-or-unknown-author');
+  expect(html).toContain(new Intl.NumberFormat(getLocale(), { useGrouping: false }).format(1943));
 });
