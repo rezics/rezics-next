@@ -21,7 +21,7 @@ import { collectionReadView, createCollectionReads } from './collection-reads.ts
 import { createCollectionCommands } from './collections.ts';
 import { createCollectionPublications } from './collection-publication.ts';
 import { collectionPresentation } from './collection-presentation.ts';
-import { parseCollectionRule, requireCollectionRuleExecution } from './collection-rules.ts';
+import { parseCollectionRule } from './collection-rules.ts';
 import { listSitemapCollections } from './sitemap.ts';
 
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';

@@ -6,12 +6,13 @@ import { systemClock } from '../clock.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import type { AccountActor } from '../request/access.ts';
+import type { AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { CollectionSourceObservation, WorkReceipt } from './collection-source.ts';
 import type { DynamicMemberView } from './builtin-runtime.ts';
+import { attachCollectionListFacts } from './collection-list-facts.ts';
 
 /** Structural/source compatibility is not disclosure. Each positive is checked by the native Source again. */
 function sameSource(left: CollectionSourceObservation, right: CollectionSourceObservation) {
@@ -30,30 +31,33 @@ function sameSource(left: CollectionSourceObservation, right: CollectionSourceOb
  * Common canonical member caller. The delivered Source owns candidate order, alias completion,
  * original+terminal disclosure and source-scoped identity currentness. No raw-ID page is normalized here.
  */
-export async function readOwnerMembers(
+export async function readCollectionSourceMembers(
   deps: OwnerQueryDependencies & { tokens: KeyRing },
   input: {
-    actor: AccountActor;
+    actor: Actor;
+    scope: 'private_builtin' | 'activated_output';
     collectionId: string;
     limit: number;
     cursor?: string | null;
     deadline: number;
     query?: { filter: FilterDocument; releaseDigest: string };
+    view?: 'BASIC' | 'FULL';
     /** Actual owner-home reread after releasing all foreign source homes. */
     revalidateOwner: () => Promise<void>;
     /** Actual native source version, independent of identity and permission. */
     readSourceVersion: () => Promise<string>;
   },
 ): Promise<{ members: DynamicMemberView[]; next: string | null }> {
+  if (input.scope === 'activated_output' && input.query) throw new ProblemError('unsupported_query');
   const clock = deps.clock ?? systemClock;
   const binding = {
     route: 'GET /v1/collections/:collectionId/members',
-    viewer: input.actor.accountId,
+    viewer: input.actor.kind === 'account' ? input.actor.accountId : null,
     query: {
       collectionId: input.collectionId,
       limit: input.limit,
       order: 'id',
-      source: 'private_builtin',
+      source: input.scope,
       ...(input.query
         ? {
             filter: createHash('sha256').update(canonicalize(input.query.filter)!).digest('hex'),
@@ -94,14 +98,18 @@ export async function readOwnerMembers(
       collectionId: input.collectionId,
       deadline: input.deadline,
       work: ledger,
-      logical: true,
+      logical: input.scope === 'private_builtin',
       at,
     });
     const prepared = runtime.source;
     const source = runtime.native;
     const filtered = input.query ? await runtime.filter(input.query.filter, input.query.releaseDigest) : null;
     const observed = prepared.observation;
-    if (observed.authority.kind !== 'private_builtin' || observed.authority.curatorAccountId !== input.actor.accountId)
+    if (
+      observed.authority.kind !== input.scope ||
+      (observed.authority.kind === 'private_builtin' &&
+        (input.actor.kind !== 'account' || observed.authority.curatorAccountId !== input.actor.accountId))
+    )
       throw new ProblemError('not_found');
     let after: string | null = null;
     if (position?.ok) {
@@ -177,14 +185,15 @@ export async function readOwnerMembers(
     if (members.length <= input.limit && !exhausted) throw new ProblemError('dependency_unavailable');
     const shown = members.slice(0, input.limit);
     // A wait or foreign-home read cannot reuse the old T for final disclosure.
-    const finalAt = await withConnection(deps.pool, (client) => mintReadTime(client, clock));
-    try {
+    const revalidate = async () => {
+      const finalAt = await withConnection(deps.pool, (client) => mintReadTime(client, clock));
+      try {
       const finalRuntime = await openOwnerQuery(deps, {
         actor: input.actor,
         collectionId: input.collectionId,
         deadline: input.deadline,
         work: ledger,
-        logical: true,
+        logical: input.scope === 'private_builtin',
         at: finalAt,
       });
       const current = finalRuntime.source;
@@ -231,11 +240,21 @@ export async function readOwnerMembers(
       }
       await input.revalidateOwner();
       if ((await input.readSourceVersion()) !== version) throw new ProblemError('semantic_not_ready');
-    } finally {
-      releaseOperationalTime(finalAt);
-    }
+      } finally {
+        releaseOperationalTime(finalAt);
+      }
+    };
+    await revalidate();
+    const disclosed = input.view === 'FULL'
+      ? await attachCollectionListFacts(
+          { ...deps, routeKey: requiredRouteKey(deps.routeKey), actor: input.actor, deadline: input.deadline },
+          shown,
+          { revalidate },
+        )
+      : shown;
+    if (disclosed.length !== shown.length) throw new ProblemError('dependency_unavailable');
     return {
-      members: shown,
+      members: disclosed,
       next:
         members.length > input.limit
           ? await encodeListCursor(
@@ -252,4 +271,17 @@ export async function readOwnerMembers(
   } finally {
     releaseOperationalTime(at);
   }
+}
+
+function requiredRouteKey(key: Uint8Array | undefined): Uint8Array {
+  if (!key) throw new ProblemError('dependency_unavailable');
+  return key;
+}
+
+/** Existing private built-in caller, with unchanged native owner and query authority. */
+export function readOwnerMembers(
+  deps: OwnerQueryDependencies & { tokens: KeyRing },
+  input: Omit<Parameters<typeof readCollectionSourceMembers>[1], 'actor' | 'scope'> & { actor: AccountActor },
+) {
+  return readCollectionSourceMembers(deps, { ...input, scope: 'private_builtin' });
 }

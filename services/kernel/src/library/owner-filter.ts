@@ -14,7 +14,7 @@ import { parseStrictJson } from '../http/strict-json.ts';
 import { accessCheck, AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { routeOf } from '../route/route.ts';
-import { activeRelease, freeze } from '../semantic/definitions.ts';
+import { activeRelease, freeze, readRelease } from '../semantic/definitions.ts';
 import type { RelationFacetMatch } from '../search/source.ts';
 import {
   compileCurrentOwnerFilter,
@@ -26,6 +26,7 @@ import { holdsCurrentStatements, holdsCurrentType } from '../search/current-leaf
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { createCollectionSource, type PrepareCollectionSource, type WorkDimensions } from './collection-source.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
+import type { AdmittedCollectionRule } from './collection-rules.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import {
   hasCopyStatus,
@@ -535,6 +536,34 @@ export async function admitCollectionMemberQuery(
       invalidFilter(error);
     }
   }
+  return finishCollectionMemberAdmission(deps, viewer, filter, release, releaseDigest, deadline);
+}
+
+/** Stored expanded meaning keeps its accepted release; it is never reinterpreted by current activation. */
+export async function admitSavedCollectionMemberQuery(
+  deps: Dependencies,
+  viewer: Actor,
+  rule: AdmittedCollectionRule,
+  options: CollectionMemberQuery,
+  deadline: number,
+): Promise<CollectionMemberAdmission> {
+  requireAccessDeadline(deadline);
+  if (options.filter !== undefined || (options.sort !== undefined && options.sort !== rule.sort))
+    throw new ProblemError('unsupported_query');
+  const release = await readRelease(deps.pool, rule.releaseDigest);
+  requireAccessDeadline(deadline);
+  if (!release) throw new ProblemError('dependency_unavailable');
+  return finishCollectionMemberAdmission(deps, viewer, rule.filter, release, rule.releaseDigest, deadline);
+}
+
+async function finishCollectionMemberAdmission(
+  deps: Dependencies,
+  viewer: Actor,
+  filter: FilterDocument | undefined,
+  release: Release | null,
+  releaseDigest: string | null,
+  deadline: number,
+): Promise<CollectionMemberAdmission> {
   const reads = filter === undefined ? [] : privateReads(filter);
   if (reads.length) {
     if (viewer.kind !== 'account') throw new AuthenticationError(401, 'Bearer');

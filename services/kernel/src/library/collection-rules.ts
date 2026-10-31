@@ -13,6 +13,7 @@ import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type AccessCheck, type AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { activeRelease } from '../semantic/definitions.ts';
+import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
 import type { CollectionDraft } from './collection-model.ts';
 import type { PreparationDefinition } from './members-preparation.ts';
 import read from './collection-rules-read.sql';
@@ -67,8 +68,11 @@ export async function admitCollectionRule(pool: Pool, rule: CollectionRule): Pro
   const current = await activeRelease(pool);
   if (!current) throw new ProblemError('semantic_not_ready');
   try {
+    const filter = admitFilter(rule.filter, current.release, { owner: true });
+    // Compile the actual expanded native plan before accepting a definition. Saving needs no result Source.
+    compileCurrentOwnerFilter(filter);
     return {
-      filter: admitFilter(rule.filter, current.release, { owner: true }),
+      filter,
       sort: rule.sort,
       releaseDigest: current.digest,
     };
@@ -125,15 +129,6 @@ export async function authorizeCollectionRule(
   checks: readonly AccessCheck[],
 ): Promise<void> {
   for (const check of checks) if (!(await check(tx, attempt.time))) throw new GrantDeniedError();
-}
-
-/**
- * The common Source does not yet publish a saved-filter execution admission declaration in this checkout.
- * Keep the caller boundary unavailable, rather than fabricate a native plan, readiness or preparation receipt.
- * Replace this call only by the delivered common producer, not a caller-side evaluator or injected allow flag.
- */
-export async function requireCollectionRuleExecution(): Promise<never> {
-  throw new ProblemError('dependency_unavailable');
 }
 
 /**

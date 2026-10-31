@@ -70,7 +70,6 @@ import {
   insertSavedCollection,
   parseCollectionRule,
   prepareCollectionRuleAuthority,
-  requireCollectionRuleExecution,
   updateSavedCollectionRule,
   type AdmittedCollectionRule,
   type CollectionRule,
@@ -411,7 +410,8 @@ export function createCollectionCommands(config: {
       async (tx, attempt, prepared) => {
         if (!prepared.admitted) return;
         await authorizeCollectionRule(tx, attempt, prepared.checks);
-        await requireCollectionRuleExecution();
+        // A create stores a private definition. Public metadata/membership needs explicit publication.
+        if (visibility !== 'private') throw new ProblemError('dependency_unavailable');
       },
     );
   }
@@ -532,7 +532,6 @@ export function createCollectionCommands(config: {
           if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
           throw error;
         }
-        if (rule) await requireCollectionRuleExecution();
         return mode;
       },
     };

@@ -9,7 +9,6 @@ import type { Access } from '../request/access.ts';
 import { PARTITIONS } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createCollectionReads } from './collection-reads.ts';
-import { requireCollectionRuleExecution } from './collection-rules.ts';
 import { readSitemapCandidates, type SitemapAfter } from './sitemap-discovery.ts';
 import { decodeSitemapPosition, encodeSitemapPosition, type SitemapPosition } from './sitemap-position.ts';
 
@@ -72,7 +71,7 @@ export async function listSitemapCollections(
         const collection = await reads.readCollection(reader, row.id, deadline);
         if (collection.visibility === 'public') {
           if ('updatedAt' in collection) items.push({ id: collection.id, lastModified: collection.updatedAt });
-          else await requireCollectionRuleExecution();
+          else items.push(await reads.readSitemapCollection(collection.id, deadline));
         }
       } catch (error) {
         if (!(error instanceof ProblemError && error.code === 'not_found')) throw error;

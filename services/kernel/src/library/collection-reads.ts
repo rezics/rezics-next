@@ -2,7 +2,7 @@ import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runt
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
-import { mintReadTime, type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
+import { mintReadTime, releaseOperationalTime, type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
 import { readAccount, type Account } from '../access/account-data.ts';
 import { readPublicViews } from '../access/index.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
@@ -33,11 +33,11 @@ import {
   authorizeCollectionRule,
   prepareCollectionRuleAuthority,
   readSavedCollectionRule,
-  requireCollectionRuleExecution,
 } from './collection-rules.ts';
-import { admitCollectionMemberQuery, type CollectionMemberQuery } from './owner-filter.ts';
+import { admitCollectionMemberQuery, admitSavedCollectionMemberQuery, type CollectionMemberQuery } from './owner-filter.ts';
 import type { SearchService } from '../search/service-scope.ts';
-import { readOwnerFilterPage } from './owner-filter-plan.ts';
+import { bindOwnerFilterRead, readBoundOwnerFilterPage, readOwnerFilterPage } from './owner-filter-plan.ts';
+import { readCollectionSourceMembers } from './owner-index-members.ts';
 import { readCollectionPreviews, type CollectionPreview } from './collection-preview.ts';
 import { createCollectionPreviewPreparation, type PreviewPreparationDependencies } from './collection-preview-work.ts';
 
@@ -305,6 +305,7 @@ export function createCollectionReads(
     listAccountCollections,
     listMembers,
     readMembers,
+    readSitemapCollection,
     listSubjectCollections,
   };
 
@@ -620,8 +621,11 @@ export function createCollectionReads(
   ) {
     pageRequest(options, ['cursor', 'limit', 'filter', 'sort', 'view']);
     const logical = await builtins.read(viewer, collectionId, 'collection:read', deadline);
+    const collection = logical ? null : await loadCollection(viewer, collectionId, deadline);
+    if (!logical && !collection) throw notFound();
+    if (collection?.membershipKind === 'dynamic')
+      return readDynamicMembers(viewer, collection, options, deadline);
     if (options.filter !== undefined || options.sort !== undefined) {
-      if (!logical && !(await loadCollection(viewer, collectionId, deadline))) throw notFound();
       if (logical) {
         const admission = await admitCollectionMemberQuery(dependencies, viewer, options, deadline);
         if (!admission.filter || !admission.releaseDigest)
@@ -649,16 +653,104 @@ export function createCollectionReads(
       : listMembers(viewer, collectionId, page, deadline);
   }
 
+  async function readDynamicMembers(
+    viewer: Actor,
+    collection: StoredCollection,
+    options: CollectionMemberQuery,
+    deadline: number,
+  ) {
+    const collectionId = collection.id;
+    const route = routeOf(collectionId)!;
+    const revalidate = async () => {
+      const current = await loadCollection(viewer, collectionId, deadline);
+      if (!current) throw notFound();
+      if (
+        current.revision !== collection.revision ||
+        current.sourceGeneration !== collection.sourceGeneration ||
+        current.visibility !== collection.visibility ||
+        current.curatorAccountId !== collection.curatorAccountId
+      )
+        throw new ProblemError('stale_cursor');
+    };
+    if (collection.visibility !== 'private') {
+      // Explicit COMPLETE output is the entire public read authority. Never load the curator's rule here.
+      if (options.filter !== undefined || (options.sort !== undefined && options.sort !== 'id'))
+        throw new ProblemError('unsupported_query');
+      return readCollectionSourceMembers(dependencies, {
+        actor: viewer,
+        collectionId,
+        scope: 'activated_output',
+        limit: options.limit ?? DEFAULT_PAGE_SIZE,
+        ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+        ...(options.view === undefined ? {} : { view: options.view }),
+        deadline,
+        revalidateOwner: revalidate,
+        async readSourceVersion() {
+          await revalidate();
+          return collection.sourceGeneration;
+        },
+      });
+    }
+    // A management grant is insufficient to execute another curator's private predicates.
+    if (viewer.kind !== 'account' || viewer.accountId !== collection.curatorAccountId || routeOf(viewer.accountId) !== route)
+      throw notFound();
+    const saved = await readOnly(pool, (client) => readSavedCollectionRule(client, route, collectionId));
+    if (!saved) throw new ProblemError('dependency_unavailable');
+    if (saved.collectionRevision !== collection.revision || saved.sourceGeneration !== collection.sourceGeneration)
+      throw new ProblemError('stale_cursor');
+    const admission = await admitSavedCollectionMemberQuery(dependencies, viewer, saved, options, deadline);
+    const bound = await bindOwnerFilterRead(dependencies, viewer, collectionId, admission, deadline);
+    if (bound.status !== 'bound') throw new ProblemError('dependency_unavailable');
+    const { binding } = bound;
+    if (
+      binding.input.actor !== viewer ||
+      binding.input.collectionId !== collectionId ||
+      binding.input.deadline > deadline ||
+      binding.scope.key.source.kind !== 'library' ||
+      binding.scope.key.source.identity.scope !== 'private_builtin' ||
+      binding.scope.key.source.identity.accountId !== viewer.accountId ||
+      binding.scope.key.source.identity.route !== route ||
+      binding.scope.key.source.identity.generation !== saved.sourceGeneration
+    )
+      throw new ProblemError('dependency_unavailable');
+    const authorize = async (time: AuthoritativeTime) => {
+      const checks = await prepareCollectionRuleAuthority(dependencies, viewer, saved.filter, { time, read: true }, deadline);
+      await readOnly(pool, (client) => authorizeCollectionRule(client, { time }, checks));
+      await revalidate();
+    };
+    await authorize(binding.input.at);
+    const result = await readBoundOwnerFilterPage(dependencies, admission, options, binding);
+    const finalTime = await withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), dependencies.clock));
+    try {
+      await authorize(finalTime);
+    } finally {
+      releaseOperationalTime(finalTime);
+    }
+    return result;
+  }
+
+  /** Sitemap timestamps belong to stored metadata, never to the public dynamic Collection DTO. */
+  async function readSitemapCollection(collectionId: string, deadline: number) {
+    const viewer = { kind: 'anonymous' } as const;
+    const collection = await loadCollection(viewer, collectionId, deadline);
+    if (!collection || collection.visibility !== 'public') throw notFound();
+    if (collection.membershipKind === 'dynamic') {
+      // Prove an actual selected output through the ordinary Source reader, including genuine empty output.
+      await readDynamicMembers(viewer, collection, { limit: 1 }, deadline);
+    }
+    return { id: collection.id, lastModified: iso(collection.updatedAt) };
+  }
+
   async function listMembers(
     viewer: Actor,
     collectionId: string,
     options: { cursor?: string | null; limit?: number } = {},
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
-  ): Promise<{ members: MemberView[]; next: string | null }> {
+  ) {
     const page = pageRequest(options, ['cursor', 'limit']);
     const collection = await loadCollection(viewer, collectionId, deadline);
     if (!collection) throw notFound();
-    if (collection.membershipKind === 'dynamic') await requireCollectionRuleExecution();
+    if (collection.membershipKind === 'dynamic') return readDynamicMembers(viewer, collection, options, deadline);
     const route = routeOf(collectionId)!;
     const binding: CursorBinding = {
       operation: 'library.collection.members',
