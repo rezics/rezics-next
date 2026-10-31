@@ -1,4 +1,10 @@
 import { afterEach, expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { approvedScopes, type Consent } from '../src/consent';
+import { permissionDescription, permissionRemovalLabel } from '../src/permission-description';
+import { Permission, RemovablePermission, RequestedPermission } from '../src/permission-view';
+import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import {
   createConsentReduction,
   parseInventoryPage,
@@ -152,4 +158,89 @@ test('Remove-all remains the empty-subset alias and inventory strips metadata wh
   expect(
     parseInventoryPage('consents', { consents: [{ ...grant(), granted: ['openid', 'openid'] }], next: null }),
   ).toEqual({ kind: 'unavailable' });
+});
+
+test('Approval and removal explain exact native capabilities without changing registered intersection or subset-only authority', async () => {
+  const previousLocale = getLocale();
+  setLocale('en', { reload: false });
+  try {
+    const unknown = `subject:read:${'unfamiliar_'.repeat(10)}`;
+    const otherUnknown = '<custom:permission>';
+    const nativeConsent: Consent = {
+      client_id: 'third-party',
+      display_name: 'Reading companion',
+      scopes: ['openid', 'offline_access', 'subject:read', unknown, otherUnknown, 'account:read'],
+      granted: ['openid', 'offline_access'],
+    };
+    const requested = [
+      'subject:read',
+      unknown,
+      otherUnknown,
+      'account:update',
+      'openid',
+      'offline_access',
+      'account:read',
+      'library:read',
+    ];
+    const expectedStates = [
+      'New access',
+      'New access',
+      'New access',
+      'Not available',
+      'Already granted',
+      'Already granted',
+      'New access',
+      'Not available',
+    ];
+    for (const [index, scope] of requested.entries()) {
+      const approval = renderToStaticMarkup(
+        createElement('li', null, createElement(RequestedPermission, { scope, consent: nativeConsent })),
+      );
+      const review = renderToStaticMarkup(createElement('li', null, createElement(Permission, { scope })));
+      const { label, detail } = permissionDescription(scope);
+      expect(approval).toContain(review.slice(4, -5));
+      expect(approval).toContain(expectedStates[index]!);
+      expect(approval).toContain(label);
+      expect(approval).toContain(detail);
+      expect(approval.indexOf(label)).toBeLessThan(approval.indexOf('<code'));
+      expect(review).toContain(renderToStaticMarkup(createElement('code', null, scope)).replace('<code>', '>'));
+      expect(approval).not.toContain('<input');
+    }
+    expect(permissionDescription('subject:read').label).toBe('Read catalogue entries');
+    expect(permissionDescription('openid').detail).toContain('identify your REZICS account');
+    expect(permissionDescription('offline_access').detail).toContain('while its current authorization remains valid');
+    expect(permissionDescription(unknown).label).toBe('Unrecognized permission');
+    expect(permissionDescription('library:read').label).toBe('Unrecognized permission');
+    expect(permissionRemovalLabel(unknown)).toBe(`Remove: Unrecognized permission (${unknown})`);
+    expect(permissionRemovalLabel(otherUnknown)).toBe(`Remove: Unrecognized permission (${otherUnknown})`);
+    expect(permissionRemovalLabel('subject:read')).toBe('Remove: Read catalogue entries (subject:read)');
+    const removal = renderToStaticMarkup(createElement(RemovablePermission, { scope: unknown, onRemove: () => {} }));
+    expect(removal).toContain(`aria-label="Remove: Unrecognized permission (${unknown})"`);
+    expect(removal).toContain('aria-describedby=');
+    expect(removal).toContain(`>${unknown}</code>`);
+
+    const approved = approvedScopes(nativeConsent, [...requested, 'subject:read']);
+    expect(approved).toEqual(['openid', 'offline_access', 'subject:read', unknown, otherUnknown, 'account:read']);
+    const consent = { ...grant(), granted: approved };
+    const retained = approved.filter((scope) => scope !== 'offline_access' && scope !== unknown);
+    expect(createConsentReduction(consent, retained)?.current).toEqual(approved);
+    const calls = transport((call) =>
+      call.body === null
+        ? Response.json({ ...nativeConsent, granted: approved })
+        : Response.json({ client_id: 'third-party', scope: retained }),
+    );
+    expect(await reduceConsent(consent, retained)).toEqual({ kind: 'accepted' });
+    expect(calls.map(({ path, body }) => ({ path, body }))).toEqual([
+      { path: '/consent/third-party', body: null },
+      {
+        path: '/consent',
+        body: { client_id: 'third-party', scope: ['openid', 'subject:read', otherUnknown, 'account:read'] },
+      },
+    ]);
+    expect(await reduceConsent(consent, [...retained, 'account:update'])).toEqual({ kind: 'denied' });
+    expect(calls).toHaveLength(2);
+    expect(consent.granted).toEqual(approved);
+  } finally {
+    setLocale(previousLocale, { reload: false });
+  }
 });

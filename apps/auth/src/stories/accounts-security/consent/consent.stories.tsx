@@ -2,6 +2,7 @@ import { SecurityInventory, type InventorySource } from '../../../security-inven
 import type { GrantedConsent, InventoryPage } from '../../../security-inventory';
 import { AuthPage } from '../../../frame';
 import { m } from '../../../paraglide/messages.js';
+import { permissionRemovalLabel } from '../../../permission-description';
 import {
   AuthStory,
   authLocale,
@@ -41,7 +42,14 @@ async function selectSubset(canvas: HTMLElement) {
   (await waitFor(() => button(canvas, m.auth_inventory_review_named({ name: 'Reading companion' })))).click();
   const review = await waitFor(() => button(canvas, m.auth_inventory_review_removal()));
   if (!review.disabled) throw new Error('Unchanged selection cannot be submitted');
-  (await waitFor(() => button(canvas, m.auth_inventory_remove_permission({ scope: 'offline_access' })))).click();
+  await waitFor(() => canvas.textContent?.includes(m.auth_permission_description_subject_read()));
+  (
+    await waitFor(() =>
+      [...canvas.querySelectorAll('button')].find(
+        (entry) => entry.getAttribute('aria-label') === permissionRemovalLabel('offline_access'),
+      ),
+    )
+  ).click();
   (await waitFor(() => !review.disabled && review)).click();
   await waitFor(() => canvas.textContent?.includes(m.auth_inventory_reduce_confirm({ name: 'Reading companion' })));
   const fieldset = canvas.querySelector('fieldset');
@@ -130,7 +138,12 @@ export const DeletionPreflight = {
       <AuthPage heading={m.auth_account_delete_heading()}>
         <SecurityInventory
           preflight
-          source={inventory(() => [{ ...consent, granted: ['openid', '<unknown:permission>'] }])}
+          source={inventory(() => [
+            {
+              ...consent,
+              granted: ['openid', '<unknown:permission>', `subject:read:${'unfamiliar_'.repeat(10)}`],
+            },
+          ])}
         />
       </AuthPage>
     </AuthStory>
@@ -140,6 +153,7 @@ export const DeletionPreflight = {
     await waitFor(() =>
       [...canvasElement.querySelectorAll('code')].some((code) => code.textContent === '<unknown:permission>'),
     );
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_permission_description_unknown_detail()));
     if (canvasElement.querySelector('unknown\\:permission')) throw new Error('Unknown tokens must render as text');
     if (
       button(canvasElement, m.auth_inventory_review_named({ name: 'Reading companion' })) ||

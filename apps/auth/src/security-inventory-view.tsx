@@ -5,6 +5,7 @@ import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@rezic
 import { AuthButton as Button } from './button';
 import { ErrorAlert } from './alert';
 import { m } from './paraglide/messages.js';
+import { Permission, PermissionLimits, RemovablePermission } from './permission-view';
 import {
   loadInventory,
   reduceConsent,
@@ -17,21 +18,6 @@ import {
 
 export type InventorySource = typeof loadInventory;
 type Selection = { consent: GrantedConsent; retained: string[]; confirming: boolean };
-
-function Permission({ scope }: { scope: string }) {
-  const label =
-    scope === 'openid'
-      ? m.auth_consent_scope_openid()
-      : scope === 'offline_access'
-        ? m.auth_consent_scope_offline_access()
-        : null;
-  return (
-    <span className="wrap-anywhere">
-      {label ? <>{label} — </> : null}
-      <code>{scope}</code>
-    </span>
-  );
-}
 
 function inventoryMessage(kind: Exclude<InventoryPage<InventoryView>['kind'], 'ready'>): string {
   if (kind === 'signed-out') return m.auth_account_operation_sign_in_required();
@@ -61,6 +47,7 @@ function InventoryList<V extends InventoryView>({
   const [reducing, setReducing] = useState(false);
   const generation = useRef(0);
   const submitting = useRef(false);
+  const reviewElement = useRef<HTMLFieldSetElement>(null);
   const heading = view === 'clients' ? m.auth_inventory_clients_heading() : m.auth_inventory_consents_heading();
   const headingId = `inventory-${view}-heading`;
 
@@ -80,6 +67,13 @@ function InventoryList<V extends InventoryView>({
       generation.current++;
     };
   }, [source, view]);
+
+  useEffect(() => {
+    if (!selection) return;
+    // Removing a row also removes its focused button. Keep keyboard review in the draft.
+    const target = selection.confirming ? reviewElement.current : reviewElement.current?.querySelector('button');
+    target?.focus();
+  }, [selection]);
 
   async function navigate(target?: string, direction: 'next' | 'previous' | 'reset' = 'reset') {
     if (pending || reducing) return;
@@ -188,8 +182,14 @@ function InventoryList<V extends InventoryView>({
     if (!selection || selection.consent.client_id !== row.client_id || preflight) return null;
     const removed = selection.consent.granted.filter((scope) => !selection.retained.includes(scope));
     return (
-      <fieldset disabled={reducing || pending} className="flex min-w-0 flex-col gap-3" aria-busy={reducing}>
-        <legend className="font-semibold">
+      <fieldset
+        ref={reviewElement}
+        tabIndex={-1}
+        disabled={reducing || pending}
+        className="flex min-w-0 flex-col gap-3 wrap-anywhere"
+        aria-busy={reducing}
+      >
+        <legend className="max-w-full font-semibold wrap-anywhere">
           {m.auth_inventory_review_named({ name: row.display_name?.trim() || m.auth_inventory_unnamed() })}
         </legend>
         {selection.confirming ? (
@@ -203,21 +203,17 @@ function InventoryList<V extends InventoryView>({
             <p>{m.auth_inventory_choose_removals()}</p>
             <ul className="flex flex-col gap-3" aria-label={m.auth_inventory_retained()}>
               {selection.retained.map((scope) => (
-                <li key={scope} className="flex flex-wrap items-center gap-3">
-                  <Permission scope={scope} />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
+                <li key={scope} className="grid min-w-0 gap-2">
+                  <RemovablePermission
+                    scope={scope}
+                    onRemove={() =>
                       setSelection((draft) =>
                         draft && !draft.confirming
                           ? { ...draft, retained: draft.retained.filter((entry) => entry !== scope) }
                           : draft,
                       )
                     }
-                  >
-                    {m.auth_inventory_remove_permission({ scope })}
-                  </Button>
+                  />
                 </li>
               ))}
             </ul>
@@ -228,7 +224,7 @@ function InventoryList<V extends InventoryView>({
             <p>{m.auth_inventory_removed()}</p>
             <ul>
               {removed.map((scope) => (
-                <li key={scope}>
+                <li key={scope} className="grid min-w-0 gap-1">
                   <Permission scope={scope} />
                 </li>
               ))}
@@ -265,6 +261,7 @@ function InventoryList<V extends InventoryView>({
       <p className="text-muted-foreground">
         {view === 'clients' ? m.auth_inventory_clients_description() : m.auth_inventory_consents_description()}
       </p>
+      {view === 'consents' ? <PermissionLimits /> : null}
       {preflight && view === 'clients' ? <p>{m.auth_inventory_preflight()}</p> : null}
       {notice ? (
         <Alert role="status">
@@ -318,6 +315,7 @@ function InventoryList<V extends InventoryView>({
                             : m.auth_inventory_permissions({ count: row.granted.length })}
                         </Badge>
                         <ul
+                          className="grid min-w-0 gap-4"
                           aria-label={
                             row.granted.length === 1
                               ? m.auth_inventory_permission({ count: 1 })
@@ -325,7 +323,7 @@ function InventoryList<V extends InventoryView>({
                           }
                         >
                           {row.granted.map((scope) => (
-                            <li key={scope}>
+                            <li key={scope} className="grid min-w-0 gap-1">
                               <Permission scope={scope} />
                             </li>
                           ))}

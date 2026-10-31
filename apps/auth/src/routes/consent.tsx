@@ -6,6 +6,7 @@ import { AuthPage } from '../frame';
 import { authPost, failureMessage } from '../api';
 import { approvedScopes, readConsent, type Consent } from '../consent';
 import { ErrorAlert } from '../alert';
+import { PermissionLimits, RequestedPermission } from '../permission-view';
 
 export const Route = createFileRoute('/consent')({
   head: () => ({ meta: [{ title: `${m.auth_consent_heading()} · REZICS` }] }),
@@ -21,12 +22,6 @@ function ConsentPage() {
 }
 
 type State = 'loading' | 'ready' | 'signed-out' | 'not-found' | 'failed' | 'approved' | 'declined';
-
-function scopeDescription(scope: string): string {
-  if (scope === 'openid') return m.auth_consent_scope_openid();
-  if (scope === 'offline_access') return m.auth_consent_scope_offline_access();
-  return m.auth_consent_scope_unrecognized();
-}
 
 function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }) {
   const [state, setState] = useState<State>(clientId ? 'loading' : 'not-found');
@@ -98,25 +93,16 @@ function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }
               <p className="font-semibold wrap-anywhere">{consent.display_name ?? consent.client_id}</p>
             </div>
             {requested.length ? (
-              <ul className="m-0 grid list-none gap-4 p-0">
-                {requested.map((id) => {
-                  const available = consent.scopes.includes(id);
-                  const description = scopeDescription(id);
-                  return (
-                    <li key={id} className="grid gap-1 wrap-anywhere">
-                      <span>{description}</span>
-                      <code className="font-mono text-sm text-muted-foreground">{id}</code>
-                      <span className="text-sm text-muted-foreground">
-                        {!available
-                          ? m.auth_consent_not_available()
-                          : consent.granted.includes(id)
-                            ? m.auth_consent_already_granted()
-                            : m.auth_consent_new()}
-                      </span>
+              <>
+                <PermissionLimits />
+                <ul className="m-0 grid min-w-0 list-none gap-4 p-0">
+                  {requested.map((id) => (
+                    <li key={id} className="grid min-w-0 gap-1 wrap-anywhere">
+                      <RequestedPermission scope={id} consent={consent} />
                     </li>
-                  );
-                })}
-              </ul>
+                  ))}
+                </ul>
+              </>
             ) : (
               <p>{m.auth_consent_empty()}</p>
             )}
