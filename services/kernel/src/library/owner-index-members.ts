@@ -93,14 +93,28 @@ export async function readCollectionSourceMembers(
   const at = await withConnection(deps.pool, (client) => mintReadTime(client, clock));
   try {
     const context = { actor: input.actor, at, deadline: input.deadline };
-    const runtime = await openOwnerQuery(deps, {
-      actor: input.actor,
-      collectionId: input.collectionId,
-      deadline: input.deadline,
-      work: ledger,
-      logical: input.scope === 'private_builtin',
-      at,
-    });
+    let runtime;
+    try {
+      runtime = await openOwnerQuery(deps, {
+        actor: input.actor,
+        collectionId: input.collectionId,
+        deadline: input.deadline,
+        work: ledger,
+        logical: input.scope === 'private_builtin',
+        at,
+      });
+    } catch (error) {
+      // Without a submitted continuation, a stale derived public generation is unavailable preparation.
+      // It must not be returned as an old selection or inferred as an empty result.
+      if (
+        input.scope === 'activated_output' &&
+        input.cursor == null &&
+        error instanceof ProblemError &&
+        error.code === 'stale_cursor'
+      )
+        throw new ProblemError('dependency_unavailable');
+      throw error;
+    }
     const prepared = runtime.source;
     const source = runtime.native;
     const filtered = input.query ? await runtime.filter(input.query.filter, input.query.releaseDigest) : null;
