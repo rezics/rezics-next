@@ -212,7 +212,7 @@ export const CollectionsClosed: Story = {
       'id',
       'settings-display-heading',
     );
-    await expect(view.getByRole('link', { name: m.settings_display_heading(), exact: true })).toHaveAttribute(
+    await expect(view.getByRole('link', { name: m.settings_display_heading() })).toHaveAttribute(
       'href',
       '#display',
     );
