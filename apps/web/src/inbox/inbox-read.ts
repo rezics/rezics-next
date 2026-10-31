@@ -9,22 +9,14 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { reporterStatusResponse } from '../moderation/reporter-status-model';
+import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 
 export const INBOX_PAGE_SIZE = 20;
 
-export type InboxNotice = {
-  id: string;
-  kind: 'reply' | 'mention' | 'moderation_decision';
-  createdAt: string;
-  actorId: string | null;
-  threadId: string | null;
-  postId: string | null;
-  decisionId: string | null;
-  reportId: string | null;
-  unread: boolean;
-};
-type NoticePage = { items: InboxNotice[]; next: string | null };
+type NoticeRead = Awaited<ReturnType<ReturnType<KernelClient['accounts']>['notifications']['get']>>;
+type NoticePage = NonNullable<NoticeRead['data']>;
+export type InboxNotice = NoticePage['items'][number];
 type ResolvedNotice = InboxNotice & {
   href?: string;
   text: string;
@@ -65,9 +57,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function nativeFailure(value: unknown, status?: number): NativeInboxFailure {
+function nativeFailure(value: unknown, status?: number, headers?: HeadersInit): NativeInboxFailure {
   const root = isRecord(value) ? value : undefined;
   const problem = root && isRecord(root.value) ? root.value : root && isRecord(root.problem) ? root.problem : root;
+  const retryAfter =
+    (headers === undefined ? undefined : new Headers(headers).get('retry-after')) ??
+    (value instanceof MediaProblem ? new Headers(value.headers).get('retry-after') : undefined);
   return {
     status:
       status ??
@@ -83,14 +78,59 @@ function nativeFailure(value: unknown, status?: number): NativeInboxFailure {
       : problem && typeof problem.requestId === 'string'
         ? { requestId: problem.requestId }
         : {}),
-    ...(root && typeof root.retryAfter === 'string' ? { retryAfter: root.retryAfter } : {}),
+    ...(retryAfter ? { retryAfter } : {}),
   };
 }
 
 function failureState(failure: NativeInboxFailure): 'closed' | 'preparing' | 'unavailable' {
   if (failure.code === 'platform_closed') return 'closed';
-  if (failure.status === 503) return 'preparing';
+  // Neither the native notice API nor its current target reads declare a preparation problem.
   return 'unavailable';
+}
+
+export function inboxReadFailure(error: unknown): Extract<InboxPage, { failure: NativeInboxFailure }> {
+  const failure =
+    error instanceof InboxReadError
+      ? error.failure
+      : nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined);
+  return { signedIn: true, state: failureState(failure), failure };
+}
+
+/** The native DTO declares string IDs; require a nonempty, unambiguous route segment. */
+function noticeId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && !/[\s/\\?#%]/.test(value) && value !== '.' && value !== '..';
+}
+
+function validNotice(value: unknown): value is InboxNotice {
+  if (
+    !isRecord(value) ||
+    !noticeId(value.id) ||
+    (value.kind !== 'reply' && value.kind !== 'mention' && value.kind !== 'moderation_decision') ||
+    typeof value.createdAt !== 'string' ||
+    !Number.isFinite(Date.parse(value.createdAt)) ||
+    new Date(value.createdAt).toISOString() !== value.createdAt ||
+    typeof value.unread !== 'boolean'
+  )
+    return false;
+  for (const field of ['actorId', 'threadId', 'postId', 'decisionId', 'reportId'] as const) {
+    if (value[field] !== null && !noticeId(value[field])) return false;
+  }
+  if (value.postId !== null && value.threadId === null) return false;
+  if (value.kind === 'moderation_decision') {
+    // Actioned reports can carry both report and decision IDs. Decisions can also retain post/thread IDs.
+    return value.actorId === null && (value.reportId !== null || value.decisionId !== null);
+  }
+  return value.threadId !== null && value.postId !== null && value.decisionId === null && value.reportId === null;
+}
+
+function validNoticePage(value: unknown): value is NoticePage {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.items) &&
+    value.items.length <= INBOX_PAGE_SIZE &&
+    (value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096)) &&
+    value.items.every(validNotice)
+  );
 }
 
 /** Resolves thin notice identities through their existing owner reads, once per distinct target. */
@@ -149,7 +189,7 @@ export async function resolveInboxItems(page: NoticePage, reads: InboxReads): Pr
   return { items, next: page.next };
 }
 
-type ReadResult = { data?: unknown; error?: unknown; status?: number };
+type ReadResult = { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit };
 type InboxKernelClient = {
   accounts: (params: { accountId: string }) => {
     notifications: {
@@ -167,11 +207,11 @@ function authHeaders(authorization: string) {
 }
 
 function failTargetRead(result: ReadResult): boolean {
-  if (!result.error) return false;
-  const failure = nativeFailure(result.error, result.status);
-  if (failure.code === 'platform_closed' || failure.status === 503 || failure.status === null || failure.status >= 500)
-    throw new InboxReadError(failure);
-  return true;
+  if (!result.error && result.status === 200) return false;
+  const failure = nativeFailure(result.error, result.status, result.headers);
+  if (failure.code !== 'platform_closed' && (failure.status === 401 || failure.status === 403 || failure.status === 404))
+    return true;
+  throw new InboxReadError(failure);
 }
 
 async function readNoticePage(client: InboxKernelClient, accountId: string, authorization: string, cursor?: string) {
@@ -179,16 +219,9 @@ async function readNoticePage(client: InboxKernelClient, accountId: string, auth
     query: { limit: INBOX_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
     headers: authHeaders(authorization),
   });
-  if (result.error || !result.data) throw new InboxReadError(nativeFailure(result.error, result.status));
-  const page = result.data as NoticePage;
-  if (
-    !Array.isArray(page.items) ||
-    page.items.length > INBOX_PAGE_SIZE ||
-    (page.next !== null && (typeof page.next !== 'string' || page.next.length > 4096)) ||
-    page.items.some((item) => !item || typeof item.unread !== 'boolean')
-  )
-    throw new InboxReadError({ status: result.status ?? null });
-  return page;
+  if (result.error || result.status !== 200 || !validNoticePage(result.data))
+    throw new InboxReadError(nativeFailure(result.error, result.status, result.headers));
+  return result.data;
 }
 
 async function currentInboxReads(client: InboxKernelClient, authorization: string): Promise<InboxReads> {
@@ -305,15 +338,7 @@ export const readInboxPage = createServerFn({ method: 'GET' })
         ...(await loadInboxPage(kernelClient(), accountId, authorization, data.cursor)),
       };
     } catch (error) {
-      const failure =
-        error instanceof InboxReadError
-          ? error.failure
-          : nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined);
-      return {
-        signedIn: true,
-        state: failureState(failure),
-        failure,
-      };
+      return inboxReadFailure(error);
     }
   });
 
@@ -336,7 +361,8 @@ export async function loadUnreadCount(
     const result = await client
       .accounts({ accountId })
       .notifications.count.get({ headers: authHeaders(authorization) });
-    if (result.error || !result.data) throw new InboxReadError(nativeFailure(result.error, result.status));
+    if (result.error || !result.data)
+      throw new InboxReadError(nativeFailure(result.error, result.status, result.headers));
     const count = result.data;
     if (
       !Number.isInteger(count.count) ||

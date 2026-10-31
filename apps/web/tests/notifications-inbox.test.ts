@@ -432,3 +432,134 @@ test('stale seen outcomes cannot invalidate the next viewer badge or dispatch an
     }
   }
 });
+
+test('native service failures never claim preparation, preserve problem details, and keep platform closure distinct', async () => {
+  const { inboxReadFailure } = await import('../src/inbox/inbox-read');
+  // Current notice/target routes declare no preparation problem, including a bare 503 or an unknown code.
+  for (const code of [undefined, 'dependency_unavailable', 'deadline_exceeded', 'preparing', 'platform_closed']) {
+    let requests = 0;
+    const status = code === 'platform_closed' ? 403 : 503;
+    const client = createKernelClient('http://kernel.local', {
+      fetch: (async () => {
+        requests += 1;
+        return Response.json(
+          { ...(code ? { code } : {}), status, request_id: 'native-list-request', retryable: status === 503 },
+          { status },
+        );
+      }) as typeof fetch,
+    });
+    const result = await loadInboxPage(client, 'reporter-1', 'Bearer reporter').catch(inboxReadFailure);
+    expect(result).toEqual({
+      signedIn: true,
+      state: code === 'platform_closed' ? 'closed' : 'unavailable',
+      failure: {
+        status,
+        ...(code ? { code } : {}),
+        retryable: status === 503,
+        requestId: 'native-list-request',
+      },
+    });
+    expect(requests).toBe(1);
+  }
+});
+
+test('actual Retry-After survives list, target and thrown native failures; only a valid header supplies a wait', async () => {
+  const { inboxReadFailure } = await import('../src/inbox/inbox-read');
+  const { MediaProblem } = await import('../src/media/kernel');
+  const { preferenceRetryDeadline } = await import('../src/settings/preference-failure-retry');
+  const now = Date.parse('2026-10-31T00:00:00.000Z');
+  for (const targetFailure of [false, true]) {
+    for (const retryAfter of ['30', 'Sat, 31 Oct 2026 00:01:00 GMT', 'invalid', undefined]) {
+      const paths: string[] = [];
+      const client = createKernelClient('http://kernel.local', {
+        fetch: (async (input, init) => {
+          const request = new Request(input, init);
+          const path = new URL(request.url).pathname;
+          paths.push(path);
+          expect(request.method).toBe('GET');
+          if (targetFailure && path.endsWith('/notifications'))
+            return Response.json({ items: [{ ...reporterNotice, decisionId: decision }], next: null });
+          return Response.json(
+            { status: 503, code: 'deadline_exceeded', retryable: true, request_id: 'native-deadline', retryAfter: '99' },
+            { status: 503, headers: retryAfter === undefined ? {} : { 'Retry-After': retryAfter } },
+          );
+        }) as typeof fetch,
+      });
+      const result = await loadInboxPage(client, 'reporter-1', 'Bearer reporter').catch(inboxReadFailure);
+      expect(result).toEqual({
+        signedIn: true,
+        state: 'unavailable',
+        failure: {
+          status: 503,
+          code: 'deadline_exceeded',
+          retryable: true,
+          requestId: 'native-deadline',
+          ...(retryAfter === undefined ? {} : { retryAfter }),
+        },
+      });
+      expect(paths).toEqual([
+        '/v1/accounts/reporter-1/notifications',
+        ...(targetFailure ? [`/v1/reports/${report}`] : []),
+      ]);
+      expect(preferenceRetryDeadline(retryAfter, now)).toBe(
+        retryAfter === '30' ? now + 30_000 : retryAfter?.endsWith('GMT') ? now + 60_000 : 0,
+      );
+    }
+  }
+  const native = new MediaProblem(
+    {
+      type: 'https://rezics.com/problems/deadline_exceeded',
+      title: 'Deadline Exceeded',
+      status: 503,
+      code: 'deadline_exceeded',
+      retryable: true,
+      request_id: 'thrown-target',
+    } as ConstructorParameters<typeof MediaProblem>[0],
+    { 'Retry-After': '30' },
+  );
+  const result = await resolveInboxItems(
+    { items: [reporterNotice], next: null },
+    {
+      post: async () => null,
+      decision: async () => null,
+      report: async () => {
+        throw native;
+      },
+    },
+  ).catch(inboxReadFailure);
+  expect(result).toEqual({
+    signedIn: true,
+    state: 'unavailable',
+    failure: { status: 503, code: 'deadline_exceeded', retryable: true, requestId: 'thrown-target', retryAfter: '30' },
+  });
+});
+
+test('malformed native notice pages refuse all target and seen IO before any row can render', async () => {
+  const { inboxReadFailure } = await import('../src/inbox/inbox-read');
+  const malformed = [
+    { createdAt: 'not-a-timestamp' },
+    { createdAt: '2026-02-30T10:00:00.000Z' },
+    { id: 42 },
+    { id: '' },
+    { actorId: {} },
+    { kind: 'report_outcome' },
+    { reportId: 'report/another-route' },
+    { reportId: undefined },
+    { postId: post, threadId: null },
+    { reportId: null, decisionId: null },
+    { kind: 'mention', reportId: null, threadId: thread, postId: null },
+  ].map((invalid) => ({ items: [reporterNotice, { ...reporterNotice, ...invalid }], next: null }));
+  for (const payload of [null, [], 'unknown', {}, { items: [], next: 123 }, ...malformed]) {
+    const requests: string[] = [];
+    const client = createKernelClient('http://kernel.local', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(`${request.method} ${new URL(request.url).pathname}`);
+        return Response.json(payload);
+      }) as typeof fetch,
+    });
+    const result = await loadInboxPage(client, 'reporter-1', 'Bearer reporter').catch(inboxReadFailure);
+    expect(result).toEqual({ signedIn: true, state: 'unavailable', failure: { status: 200 } });
+    expect(requests).toEqual(['GET /v1/accounts/reporter-1/notifications']);
+  }
+});

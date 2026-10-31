@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
 import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
+import { inboxReadRecoveryStory } from '../kernel/fake/notifications';
 
 const meta = { title: 'Pages/Account/Inbox', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -35,13 +37,48 @@ export const Unavailable: Story = {
   play: rowsReady,
 };
 export const Preparing: Story = {
-  name: 'Inbox preparing',
+  name: 'Service unavailable (503)',
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
   render: () => <InboxStory fixture="preparing" />,
   play: async ({ canvasElement }) => {
     const status = await within(canvasElement).findByRole('status');
     await expect(status).toHaveAttribute('data-response-status', '503');
     await within(status).findByRole('button', { name: m.inbox_retry() });
     await expect(within(canvasElement).queryByText(m.inbox_empty())).toBeNull();
+    await within(status).findByText(m.inbox_unavailable());
+    await expect(within(status).getByRole('button', { name: m.inbox_retry() })).toBeEnabled();
+    await expect(within(status).queryByText(m.inbox_preparing())).toBeNull();
+    await expect(within(status).queryByText(m.settings_retry_wait())).toBeNull();
+  },
+};
+
+function WaitingInboxStory() {
+  useState(() => {
+    inboxReadRecoveryStory.reads = 0;
+  });
+  return <InboxStory fixture="retry-after" />;
+}
+
+export const RetryAfterRecovery: Story = {
+  name: 'Unavailable, wait, then retry',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <WaitingInboxStory />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const status = await view.findByRole('status');
+    await expect(status).toHaveAttribute('data-response-code', 'deadline_exceeded');
+    await expect(status).toHaveAttribute('data-retry-after', '2');
+    await within(status).findByText(m.inbox_unavailable());
+    await within(status).findByText(m.settings_retry_wait());
+    const retry = within(status).getByRole('button', { name: m.inbox_retry() });
+    await expect(retry).toBeDisabled();
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 5000 });
+    await expect(inboxReadRecoveryStory.reads).toBe(1);
+    await expect(view.queryByText(m.inbox_empty())).toBeNull();
+    await userEvent.click(retry);
+    await view.findByText(m.inbox_empty());
+    await expect(inboxReadRecoveryStory.reads).toBe(2);
+    await expect(view.queryByText(m.inbox_unavailable())).toBeNull();
   },
 };
 export const Closed: Story = {

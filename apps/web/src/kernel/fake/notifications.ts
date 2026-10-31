@@ -113,6 +113,8 @@ const fixtures = {
   ],
 } as const;
 
+export const inboxReadRecoveryStory = { reads: 0 };
+
 const list: FakeRoute = {
   method: 'GET',
   path: accountRoute,
@@ -125,6 +127,19 @@ const list: FakeRoute = {
         : (recordings['notifications-count'] ?? { status: 200, count: 0, capped: false });
     }
     const fixture = url.searchParams.get('fixture') ?? storyFixture(request);
+    if (fixture === 'retry-after') {
+      inboxReadRecoveryStory.reads += 1;
+      if (inboxReadRecoveryStory.reads > 1)
+        return recordings['notifications-inbox-empty'] ?? { status: 200, items: [], next: null };
+      return {
+        status: 503,
+        headers: { 'Retry-After': '2' },
+        type: 'https://rezics.com/problems/deadline_exceeded',
+        code: 'deadline_exceeded',
+        retryable: true,
+        request_id: 'story-inbox-deadline',
+      };
+    }
     if (fixture === 'preparing')
       return {
         status: 503,

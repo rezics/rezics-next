@@ -10,6 +10,7 @@ import { useInboxViewer, type InboxViewer } from './inbox-viewer';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
+import { usePreferenceRetry } from '../settings/preference-failure-retry';
 import { emptyInboxPagination, nextInboxPage, readableInboxPage, receiveInboxPage } from './inbox-pagination';
 import type { InboxSeenAttempt, ResolvedInboxPage } from './inbox-read';
 
@@ -152,6 +153,7 @@ export function ViewerInboxPage({
   const readable = readableInboxPage(received);
   const page = pageQuery.data?.signedIn && pageQuery.data.state === 'ready' ? pageQuery.data : null;
   const operationState = pageQuery.data?.signedIn && pageQuery.data.state !== 'ready' ? pageQuery.data : null;
+  const waiting = usePreferenceRetry(operationState?.failure);
   const pageSignedOut = pageQuery.data !== undefined && !pageQuery.data.signedIn;
 
   useEffect(() => {
@@ -197,6 +199,7 @@ export function ViewerInboxPage({
       role="status"
       data-response-status={operationState?.failure.status ?? ''}
       data-response-code={operationState?.failure.code ?? ''}
+      data-retry-after={operationState?.failure.retryAfter}
       className="mt-6 rounded-lg border border-border p-5"
     >
       <p className="text-muted-foreground">
@@ -209,11 +212,12 @@ export function ViewerInboxPage({
       {cursor !== undefined && readable?.items.length ? (
         <p className="mt-2 text-sm text-muted-foreground">{m.inbox_page_retry_hint()}</p>
       ) : null}
+      {waiting ? <p className="mt-2 text-sm text-muted-foreground">{m.settings_retry_wait()}</p> : null}
       <Button
         variant="outline"
         className="mt-4"
         onClick={() => void pageQuery.refetch()}
-        disabled={pageQuery.isFetching}
+        disabled={pageQuery.isFetching || waiting}
       >
         {m.inbox_retry()}
       </Button>
