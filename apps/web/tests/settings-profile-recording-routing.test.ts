@@ -1,11 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { loadThreadPage } from '../src/threads/thread-page';
-import {
-  createRecordedKernelFetch,
-  deletedOrganizationId,
-  mentionThreadId,
-} from '../src/kernel/fake';
+import { createRecordedKernelFetch, deletedOrganizationId, mentionThreadId } from '../src/kernel/fake';
 import { answerFakeRoute } from '../src/kernel/fake-modules';
 import { traversalSubjects } from '../src/kernel/fake/edition-work';
 import accountsRecording from '../src/kernel/recorded/accounts.json';
@@ -105,9 +101,7 @@ test('Settings profile recording handles only its exact scene and single owned t
     expect(await (await fetchRecorded(unrelatedScene)).json()).toEqual({ accounts: [mira], next: null });
 
     story('/en/settings?profile=organization');
-    const organizationProfile = await fetchRecorded(
-      new Request(`${kernelUrl}/v1/accounts/${storyViewerId}/profile`),
-    );
+    const organizationProfile = await fetchRecorded(new Request(`${kernelUrl}/v1/accounts/${storyViewerId}/profile`));
     expect(organizationProfile.status).toBe(200);
     expect(await organizationProfile.json()).toMatchObject({
       profile: { id: storyViewerId, kind: 'organization', speakersListed: false },

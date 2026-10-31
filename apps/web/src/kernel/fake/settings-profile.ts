@@ -76,9 +76,11 @@ const profileVariants = new Set([
 ]);
 
 function settingsProfileVariant(): string | undefined {
-  const context = (globalThis as typeof globalThis & {
-    __rezicsStoryContext?: { visitor?: string; url?: string };
-  }).__rezicsStoryContext;
+  const context = (
+    globalThis as typeof globalThis & {
+      __rezicsStoryContext?: { visitor?: string; url?: string };
+    }
+  ).__rezicsStoryContext;
   if (context?.visitor !== 'Signed In' || !context.url) return;
 
   let page: URL;
