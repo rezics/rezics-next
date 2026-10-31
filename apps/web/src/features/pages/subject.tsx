@@ -329,10 +329,33 @@ function placesSlot(content: readonly unknown[], name: string): boolean {
   );
 }
 
-/** A subject with nothing but its title: the read succeeded and holds no statement. */
+/** Invite first facts only when the admitted subject and its planned relation reads confirm emptiness. */
 function hasOnlyTitle(page: SubjectPageData): boolean {
   const read = subjectBody(page);
-  return !!read && Object.values(read.subject.statements).every((statements) => !statements?.length);
+  if (
+    !read ||
+    Object.values(read.subject.statements).some((statements) => statements?.length) ||
+    Object.values(read.subject.relationCounts ?? {}).some((count) => count > 0) ||
+    Object.values(read.subject.descriptions).some((description) => description.trim())
+  )
+    return false;
+  const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
+  return Object.entries(plan.reads).every(([key, planned]) => {
+    if ((planned.kind !== 'links' && planned.kind !== 'relations') || planned.id !== page.subject) return true;
+    const result = page.reads[key];
+    if (result?.status !== 200 || !isRecord(result.body)) return false;
+    const body = result.body;
+    const rows = planned.kind === 'links' ? body.links : body.relations;
+    // Missing/withheld rows, unknown counts and an unfinished page cannot certify a title-only subject.
+    return (
+      Array.isArray(rows) &&
+      rows.length === 0 &&
+      body.next === null &&
+      isRecord(body.count) &&
+      body.count.value === 0 &&
+      body.count.exact === true
+    );
+  });
 }
 
 /** The view's name and a way back to the subject, above the tabs of every view but the overview. */

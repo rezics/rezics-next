@@ -62,7 +62,7 @@ test('restart also preserves repeated query values and works without a cursor or
   }
 });
 
-test('all eight current locales keep dependency failures distinct and conceal raw error causes', async () => {
+test('all eight current locales report dependency failures as unavailable and conceal raw error causes', async () => {
   for (const locale of locales) {
     setLocale(locale, { reload: false });
     const messages = await Bun.file(new URL(`../messages/${locale}.json`, import.meta.url)).json();
@@ -75,7 +75,7 @@ test('all eight current locales keep dependency failures distinct and conceal ra
       expect(html).not.toContain('dependency_unavailable');
     }
     expect(unavailable).toContain(messages.subject_view_unavailable);
-    expect(dependency).toContain(messages.subject_view_changed);
-    expect(dependency).not.toContain(messages.subject_view_unavailable);
+    expect(dependency).toContain(messages.subject_view_unavailable);
+    expect(dependency).not.toContain(messages.subject_view_changed);
   }
 });
