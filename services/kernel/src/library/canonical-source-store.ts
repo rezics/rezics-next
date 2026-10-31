@@ -195,6 +195,9 @@ import {
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
 import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import { readOwnerNativeFactPage, type OwnerNativeFactDriver } from './owner-index.ts';
+import ownerFacts from './collection-source-native-facts.sql';
+import { deadlineClient } from '../access/authenticate.ts';
 
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
 const contexts = new WeakMap<Pool, WorkContext>();
@@ -369,6 +372,11 @@ async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedg
             metadata.stateId,
           ])
         : null,
+    // Bind coverage into the actual generation commitment. An entry-only generation from an earlier
+    // producer cannot be promoted into complete independent support by a reader or a positive witness.
+    ...(metadata.authority === 'private_builtin' && metadata.builtinKind === 'state'
+      ? { originalCoverage: 'owner-facts-v1' as const }
+      : {}),
   };
   const basis: CanonicalBasis = { ...components, digest: hash(components) };
   return { metadata, basis };
@@ -637,15 +645,38 @@ export async function repairCanonicalSourceStep(
     if (row.driver === 'done') return notReady(l, 'incomplete');
     const limit = Math.min(100, l.allowance().remaining.candidateKeys);
     if (!limit) return notReady(l, 'allowance');
-    const page = await l.run((allowance) =>
-      readNativeCollectionRawPage(pool, observed.metadata, {
-        driver: row.driver === 'done' ? 'entry' : row.driver,
-        after: input.repair.after,
-        limit,
-        deadline: input.deadline,
-        allowance,
-      }),
-    );
+    const independentState = observed.metadata.authority === 'private_builtin' && observed.metadata.builtinKind === 'state';
+    // Retained preparation closes the independent OWNER population, not the chosen state's entry slice.
+    // The ordinary Source raw API deliberately keeps its entry-only state semantics. No Everything Source
+    // or positive alias supplies permission/coverage here. Every range is a native indexed raw100 seek.
+    const page = independentState
+      ? await l.bounded(
+          {
+            candidateKeys: limit,
+            nativeRows: 8 * limit + 8,
+            nativePoints: 1,
+            statements: 1,
+            emptySeeks: 1,
+            bytes: Buffer.byteLength(ownerFacts.sql) + 1024 + 256 * limit,
+          },
+          () => withConnection(pool, (client) => readOwnerNativeFactPage(
+            deadlineClient(client, input.deadline),
+            observed.metadata.curatorAccountId!,
+            row.driver as OwnerNativeFactDriver,
+            input.repair.after,
+            limit,
+          )),
+          (page) => ({ candidateKeys: page.rows.length, emptySeeks: page.rows.length === 0 ? 1 : 0 }),
+        )
+      : await l.run((allowance) =>
+          readNativeCollectionRawPage(pool, observed.metadata, {
+            driver: row.driver === 'done' ? 'entry' : row.driver,
+            after: input.repair.after,
+            limit,
+            deadline: input.deadline,
+            allowance,
+          }),
+        );
     const originals = [...new Set(page.rows.map((r) => r.key.storedSubjectId))];
     const mappings = await l.bounded(
       {
@@ -689,9 +720,7 @@ export async function repairCanonicalSourceStep(
       const sequence: readonly CanonicalRawKey['driver'][] =
         observed.metadata.authority === 'curated'
           ? ['member']
-          : observed.metadata.builtinKind === 'state'
-            ? ['entry']
-            : ['entry', 'label', 'session', 'copy'];
+          : ['entry', 'label', 'session', 'copy'];
       const nextDriver = page.exhausted
         ? (sequence[sequence.indexOf(row.driver === 'done' ? 'entry' : row.driver) + 1] ?? 'done')
         : row.driver;

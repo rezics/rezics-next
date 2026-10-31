@@ -182,9 +182,6 @@ export async function readNativeOwnerFilterClosure(
   )
     return { status: 'unavailable' } as const;
   const { dependencies, metadata, admission, attempt } = saved;
-  // A state Source indexes only entry originals; it cannot close independent private-support aliases.
-  if (admission.owner && metadata.authority === 'private_builtin' && metadata.builtinKind === 'state')
-    return { status: 'unavailable' } as const;
   const { actor, at, deadline } = binding.input;
   const input = { route: metadata.route, collectionId: metadata.collectionId, deadline };
   const state = await ownerFilterCanonical(work, (allowance) =>
@@ -192,6 +189,10 @@ export async function readNativeOwnerFilterClosure(
   );
   if (state.state !== 'ready' || state.basis.digest !== source.observation.basis.digest)
     return { status: 'unavailable' } as const;
+  if (
+    metadata.authority === 'private_builtin' && metadata.builtinKind === 'state' &&
+    state.basis.originalCoverage !== 'owner-facts-v1'
+  ) return { status: 'unavailable' } as const;
   const keys: CanonicalRawKey[] = [];
   let after: CanonicalRawKey | null = null;
   for (;;) {
