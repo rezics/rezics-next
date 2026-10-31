@@ -54,6 +54,7 @@ import {
   isPhysicalRunId,
   ownershipFromEnvironment,
   physicalHistoryPath,
+  detachedGroupTerminal,
   processGroupMembers,
   processIdentity,
   readJsonFile,
@@ -238,6 +239,12 @@ type CheckPhysicalStart = (start: () => ReturnType<typeof spawn>) => Promise<Ret
 class CheckCancelled extends Error {
   constructor() {
     super('worker-check: logical check was cancelled before command start');
+  }
+}
+
+class CheckSetupFailure extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
   }
 }
 
@@ -580,7 +587,7 @@ function validateProofOwner(binding: ControllerProofBindingV1): void {
 /** Derive execution without changing the saved original or interpreting shell text. */
 export function controllerProofExecutionArgv(binding: ControllerProofBindingV1): string[] {
   const { argv } = validateControllerProofBinding(binding);
-  if (!argv.some((arg) => /(?:^|[/\\\s])worker-check\.ts(?:$|\s)/.test(arg))) return [...argv];
+  if (!argv.some((arg) => /(?:^|[/\\\s"'=])worker-check\.ts(?:$|[/\\\s"';])/.test(arg))) return [...argv];
   const prefix = ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test'];
   const files = argv.slice(prefix.length);
   if (
@@ -638,6 +645,20 @@ function validateProofRecord(record: CheckRecord): ControllerProofState | undefi
     )
   ) {
     throw new Error('worker-check: controller proof physical binding changed or was revoked');
+  }
+  if (record.physicalArgv && JSON.stringify(record.physicalArgv) !== JSON.stringify(binding.argv)) {
+    const predecessor = record.waitForPhysicalRunId
+      ? readPhysicalRecord(binding.cwd, binding.checkId, record.waitForPhysicalRunId)
+      : undefined;
+    if (
+      record.reruns !== 1 ||
+      state.physical.length !== 2 ||
+      state.physical[1]?.physicalRunId !== record.physicalRunId ||
+      state.physical[0]?.physicalRunId !== predecessor?.physicalRunId ||
+      !predecessor || predecessor.status !== 'finished' || !predecessor.exitCode ||
+      !sameControllerProofBinding(predecessor.controllerProof, binding) ||
+      JSON.stringify(record.physicalArgv) !== JSON.stringify(controllerOverloadArgv({ ...record, log: predecessor.log }))
+    ) throw new Error('worker-check: controller proof physical argv is not an admitted original rerun');
   }
   validateProofSource(binding);
   validateProofExecutionSource(binding);
@@ -775,6 +796,40 @@ export async function startControllerWorkerCheck(value: ControllerProofBindingV1
     if (launch) launchDetachedRunner(launch, process.env);
     return answer;
   } catch (error) {
+    // A failed setup handshake still owns a registered physical runner. Use the ordinary stop protocol,
+    // never a refusal inferred from the exception, to establish that runner's complete terminal custody.
+    if (launch) {
+      try {
+        const current = readRecord(binding.cwd, binding.checkId);
+        const registry = registryForStart(process.env, current.ownership);
+        if (
+          registry &&
+          current.physicalRunId === launch.physicalRunId &&
+          current.status === 'finished' &&
+          current.exitCode !== undefined &&
+          current.runnerIdentity &&
+          current.runnerHost &&
+          readyReceipt(binding.cwd, binding.checkId, current.physicalRunId!)?.status === 'failed' &&
+          validControllerProofRegistration(
+            readJsonFile(join(registry, `${binding.checkId}.${current.physicalRunId}.json`)), binding,
+          )
+        ) {
+          const cleanup = await stopWorkerCheck(binding.checkId, binding.cwd, {
+            ownership: { taskId: binding.taskId, attempt: binding.attempt },
+            physicalRunId: current.physicalRunId!,
+            runnerIdentity: current.runnerIdentity,
+            runnerHost: current.runnerHost,
+          });
+          if (
+            (cleanup.disposition === 'stopped' || cleanup.disposition === 'already-terminal') &&
+            cleanup.localTerminal && cleanup.resultTerminal &&
+            (cleanup.remoteTerminal === null || cleanup.remoteTerminal === true)
+          ) return { version: 1, outcome: 'started', binding, resultPath: recordPath(binding.cwd, binding.checkId) };
+        }
+      } catch {
+        // Intent, raw setup failure and uncertain custody remain retained below.
+      }
+    }
     // Missing records, sockets, PIDs and launch receipts cannot undo durable execution intent.
     return unknown(error instanceof Error ? error.message : String(error));
   }
@@ -1357,6 +1412,7 @@ export async function runWorkerCheck(
   allowOverloadRerun = true,
   physicalRunId: string = randomUUID(),
   startPhysical?: CheckPhysicalStart,
+  prepared?: () => void,
 ): Promise<number> {
   if (argv.length === 0) throw new Error('A check command is required');
   ownershipFromEnvironment(process.env);
@@ -1428,7 +1484,22 @@ export async function runWorkerCheck(
   const needsStack = workerCheckNeedsStack(argv, root);
   const commandClass = checkClass(argv, root);
   argv = scopeRootTypecheck(argv, root, env, (line) => writeSync(descriptor, `${line}\n`));
-  const command = resolveRepositoryBun(argv, root);
+  const command = (() => {
+    try {
+      const resolved = resolveRepositoryBun(argv, root);
+      prepared?.();
+      return resolved;
+    } catch (error) {
+      try {
+        // Keep the native diagnostic verbatim. This is setup output, not a test verdict.
+        writeSync(descriptor, `${error instanceof Error ? error.message : String(error)}\n`);
+      } finally {
+        wait.stop();
+        closeSync(descriptor);
+      }
+      throw new CheckSetupFailure(error);
+    }
+  })();
   const checkout = mainCheckout(root);
   let ledger: CheckLedgerEntry | undefined;
   let ledgerStarted = 0;
@@ -2764,8 +2835,9 @@ async function stopWorkerCheckOwned(
       const stoppedTree = await terminateDetachedGroup(expected.runnerIdentity);
       localTerminal = stoppedTree.terminal;
       stopped = localTerminal;
-    } else localTerminal = true;
+    } else localTerminal = detachedGroupTerminal(expected.runnerIdentity);
   }
+  localTerminal = localTerminal && detachedGroupTerminal(expected.runnerIdentity);
 
   let remote = history.remoteExpected
     ? remoteTerminalState(root, expected.physicalRunId)
@@ -3436,7 +3508,7 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
         throw new Error('worker-check: check registration could not be verified');
     }
     record = updated;
-    writeReadyReceipt(root, id, physicalRunId, { status: 'ready', physicalRunId });
+    if (!updated.controllerProof) writeReadyReceipt(root, id, physicalRunId, { status: 'ready', physicalRunId });
   });
   if (!record) throw new Error('worker-check: runner did not acquire its physical identity');
   const finish = async (exitCode: number): Promise<void> => {
@@ -3507,11 +3579,21 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
           return start();
         });
       },
+      record.controllerProof
+        ? () => writeReadyReceipt(root, id, physicalRunId, { status: 'ready', physicalRunId })
+        : undefined,
     );
     await finish(exitCode);
     return exitCode;
   } catch (error) {
-    await finish(error instanceof CheckCancelled || checkCancelled(root, id) ? 125 : 1);
+    const code = error instanceof CheckCancelled || checkCancelled(root, id) ? 125 : 1;
+    await finish(code);
+    if (error instanceof CheckSetupFailure) {
+      if (record.controllerProof) writeReadyReceipt(root, id, physicalRunId, {
+        status: 'failed', physicalRunId, error: error.message,
+      });
+      return code;
+    }
     if (error instanceof CheckCancelled) return 125;
     throw error;
   }

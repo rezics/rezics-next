@@ -12,6 +12,7 @@ import {
   type ControllerProofBindingV1,
   ownershipFromEnvironment,
   processIdentity,
+  detachedGroupTerminal,
   type CheckCustodyExpectation,
 } from './check-custody.ts';
 import {
@@ -454,4 +455,26 @@ test('controller proof registration requires actual bound runner and physical cu
   expect(validControllerProofRegistration(registration, binding)).toBe(false);
   expect(validControllerProofRegistration({ ...registration, controllerProof: undefined }, binding)).toBe(false);
   expect(validControllerProofRegistration({ ...registration, extra: true }, binding)).toBe(false);
+});
+
+test('setup cleanup needs a positive owned group observation; absent PID or unreadable identity stays unknown', () => {
+  const proc = rootFixture();
+  const identity = { pid: 1234, group: 1234, start: '100', boot: randomUUID() };
+  expect(detachedGroupTerminal(identity, proc)).toBe(false);
+  mkdirSync(join(proc, 'sys/kernel/random'), { recursive: true });
+  writeFileSync(join(proc, 'sys/kernel/random/boot_id'), randomUUID());
+  expect(detachedGroupTerminal(identity, proc)).toBe(false);
+  writeFileSync(join(proc, 'sys/kernel/random/boot_id'), identity.boot);
+  mkdirSync(join(proc, '5678'));
+  expect(detachedGroupTerminal(identity, proc)).toBe(false);
+  const fields = ['S', '1', String(identity.group), ...Array(16).fill('0'), '101'];
+  writeFileSync(join(proc, '5678/stat'), `5678 (owned child) ${fields.join(' ')}`);
+  expect(detachedGroupTerminal(identity, proc)).toBe(false);
+  rmSync(join(proc, '5678'), { recursive: true });
+  expect(detachedGroupTerminal(identity, proc)).toBe(true);
+  expect(detachedGroupTerminal({ ...identity, group: 9 }, proc)).toBe(false);
+  mkdirSync(join(proc, String(identity.pid)));
+  fields[2] = '9999';
+  writeFileSync(join(proc, String(identity.pid), 'stat'), `${identity.pid} (reused) ${fields.join(' ')}`);
+  expect(detachedGroupTerminal(identity, proc)).toBe(false);
 });

@@ -438,6 +438,40 @@ export function processGroupMembers(group: number): RunnerIdentity[] {
   }
 }
 
+/** Positive local observation; an unreadable procfs or a missing PID alone is never terminal custody. */
+export function detachedGroupTerminal(identity: RunnerIdentity, procRoot = '/proc'): boolean {
+  try {
+    validateRunnerIdentity(identity);
+    if (
+      identity.group !== identity.pid ||
+      readFileSync(join(procRoot, 'sys/kernel/random/boot_id'), 'utf8').trim() !== identity.boot
+    ) return false;
+    for (const name of readdirSync(procRoot)) {
+      if (!/^\d+$/.test(name)) continue;
+      let stat: string;
+      try {
+        stat = readFileSync(join(procRoot, name, 'stat'), 'utf8');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        try {
+          lstatSync(join(procRoot, name));
+          return false;
+        } catch (directoryError) {
+          if ((directoryError as NodeJS.ErrnoException).code === 'ENOENT') continue;
+          throw directoryError;
+        }
+      }
+      const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+      if (!stat.startsWith(`${name} (`) || !fields[19] || !/^\d+$/.test(fields[2] ?? '')) return false;
+      if (fields[0] === 'Z' || fields[0] === 'X') continue;
+      if (Number(name) === identity.pid || Number(fields[2]) === identity.group) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function processTreeMembers(rootPid: number): RunnerIdentity[] {
   try {
     const parents = new Map<number, number>();

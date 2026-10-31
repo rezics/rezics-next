@@ -157,6 +157,14 @@ Foreign or aliased wrapper paths, recursive wrappers, extra flags, shell text an
 before physical intent. The original wrapper argv stays in binding, registration and the logical record; the producer
 derives execution internally on start and rerun, without invoking another wrapper or allocating another logical UUID.
 
+A bound runner registers before probing the pinned runtime and acknowledges startup after that owned setup succeeds,
+before memory admission or command execution. A failed pin probe retains its exact raw diagnostic and nonzero result,
+closes its log descriptor and wait recorder, and reports failed startup. The launcher drains that same owned runner
+through the existing startup/stop lifecycle. Only validated registration, a terminal original result and positive local
+and any required remote cleanup permit terminal proof/history and a bound `started` result for the failed check.
+Missing or uncertain custody returns `unavailable`; a setup exception cannot turn execution intent into a capacity-free
+refusal. Absent PIDs and failed procfs observations cannot establish local cleanup. Historical records are untouched.
+
 Exclusive registry token/check claims and monotonic custody under the existing logical check fence prevent duplicate
 execution and revival. Exact replay returns the existing result path. `refused-never-started` requires a durable
 pre-intent refusal that prevents every physical incarnation; loss of registry, claims, intent, registration or result
