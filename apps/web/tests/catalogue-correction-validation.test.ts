@@ -41,12 +41,16 @@ test('A contributor can find and correct an invalid date without reading an API 
   };
   const edit = async (label: string, value: string) => {
     const control = input(label);
-    await act(async () => {
-      const prototype =
-        control.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
-      Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(control, value);
-      control.dispatchEvent(new window.Event(control.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
-    });
+    const values =
+      control.tagName === 'SELECT' ? [value] : ['', ...Array.from(value, (_, index) => value.slice(0, index + 1))];
+    for (const next of values) {
+      await act(async () => {
+        const prototype =
+          control.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
+        Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(control, next);
+        control.dispatchEvent(new window.Event(control.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+      });
+    }
     return control;
   };
   const submit = () =>
@@ -70,6 +74,9 @@ test('A contributor can find and correct an invalid date without reading an API 
     await edit(m.correction_month({}, o), '2');
     const day = await edit(m.correction_day({}, o), '30');
     const dayId = day.id;
+    expect(input(m.correction_year({}, o)).value).toBe('1946');
+    expect(input(m.correction_month({}, o)).value).toBe('2');
+    expect(day.value).toBe('30');
     await submit();
     expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
     const summary = host.querySelector(`ul[aria-label="${m.correction_errors({}, o)}"]`)!;

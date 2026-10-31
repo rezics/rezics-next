@@ -302,7 +302,7 @@ function ScalarControl({
                 field(
                   'month',
                   m.correction_month({}, o),
-                  date?.[2] === '00' ? '' : (date?.[2] ?? ''),
+                  date && date[2] !== '00' ? String(Number(date[2])) : '',
                   (value) => setDate(1, value),
                   'number',
                 )}
@@ -310,7 +310,7 @@ function ScalarControl({
                 field(
                   'day',
                   m.correction_day({}, o),
-                  date?.[3] === '00' ? '' : (date?.[3] ?? ''),
+                  date && date[3] !== '00' ? String(Number(date[3])) : '',
                   (value) => setDate(2, value),
                   'number',
                 )}
