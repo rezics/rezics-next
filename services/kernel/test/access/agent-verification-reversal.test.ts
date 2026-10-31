@@ -1462,19 +1462,30 @@ test('Close genuine identity SDK future writers and receiving retirement', async
   try {
     await client.registerQueue('workflows', {});
     expect(await enqueueAgentIdentityReversal(pool, client, decision)).toBe('admitted');
-    const native = (await pool.query('SELECT * FROM core.agent_identity_work WHERE workflow_id=$1', [source.workflowId]))
-      .rows[0];
-    const inputs = (await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [source.workflowId]))
-      .rows[0].inputs;
+    const native = (
+      await pool.query('SELECT * FROM core.agent_identity_work WHERE workflow_id=$1', [source.workflowId])
+    ).rows[0];
+    const inputs = (
+      await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [source.workflowId])
+    ).rows[0].inputs;
     const erased = (
-      await pool.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text', [
-        accountRoute, account.id,
-      ])
+      await pool.query(
+        'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
+        [accountRoute, account.id],
+      )
     ).rows[0];
     const barrier = { accountId: account.id, accountRoute, version: erased.version, at: erased.at };
     const reference = {
-      receipt, job, barrier, erasedRole: 'subject' as const,
-      source: { partition: source.partition, epoch: source.epoch, position: source.position, transactionId: source.transactionId },
+      receipt,
+      job,
+      barrier,
+      erasedRole: 'subject' as const,
+      source: {
+        partition: source.partition,
+        epoch: source.epoch,
+        position: source.position,
+        transactionId: source.transactionId,
+      },
       sourceDigest: source.digest,
     };
     // Real Source/participant publication is already complete. Semantic's retained receipt
@@ -1485,54 +1496,101 @@ test('Close genuine identity SDK future writers and receiving retirement', async
     expect(stage.handoff.custodyId).toBe(native.custody_id);
     expect(stage.handoff.source).toEqual(native.source);
     expect(stage.consumer).toBeNull();
-    const verify = (candidate = stage) => runCommand(pool, { partition: source.partition }, async (tx) =>
-      noEffect(await verifyAgentIdentityRetirementStage(tx, candidate)),
-    );
+    const verify = (candidate = stage) =>
+      runCommand(pool, { partition: source.partition }, async (tx) =>
+        noEffect(await verifyAgentIdentityRetirementStage(tx, candidate)),
+      );
     expect((await verify()).value).toEqual({ state: 'pending', gap: 'identity-source-consumer-custody-pending' });
-    expect((await verify({ ...stage, handoff: { ...stage.handoff, generation: '0' } })).value.gap)
-      .toBe('identity-sdk-retirement-source-fence-changed');
-    await expect(runCommand(pool, { partition: 0 }, async (tx) =>
-      noEffect(await verifyAgentIdentityRetirementStage(tx, stage)),
-    )).rejects.toThrow('SAME native source home');
+    expect((await verify({ ...stage, handoff: { ...stage.handoff, generation: '0' } })).value.gap).toBe(
+      'identity-sdk-retirement-source-fence-changed',
+    );
+    await expect(
+      runCommand(pool, { partition: 0 }, async (tx) => noEffect(await verifyAgentIdentityRetirementStage(tx, stage))),
+    ).rejects.toThrow('SAME native source home');
     const artifact = {
       partition: 0,
       locator: { artifactType: 'durable-work/v1' as const, workId: native.custody_id },
       accounts: native.accounts,
     };
-    expect((await runCommand(pool, { partition: 0 }, async (tx) =>
-      noEffect(await agentIdentityRetirementReadiness(tx, artifact, barrier)),
-    )).value).toEqual({ ready: false, gap: AGENT_IDENTITY_SDK_RETIREMENT.gap });
-    expect((await runCommand(pool, { partition: 0 }, async (tx) =>
-      noEffect(await agentIdentityRetirementReadiness(tx, { ...artifact, accounts: [] }, barrier)),
-    )).value).toEqual({ ready: false, gap: 'identity-sdk-retirement-role-scope-changed' });
+    expect(
+      (
+        await runCommand(pool, { partition: 0 }, async (tx) =>
+          noEffect(await agentIdentityRetirementReadiness(tx, artifact, barrier)),
+        )
+      ).value,
+    ).toEqual({ ready: false, gap: AGENT_IDENTITY_SDK_RETIREMENT.gap });
+    expect(
+      (
+        await runCommand(pool, { partition: 0 }, async (tx) =>
+          noEffect(await agentIdentityRetirementReadiness(tx, { ...artifact, accounts: [] }, barrier)),
+        )
+      ).value,
+    ).toEqual({ ready: false, gap: 'identity-sdk-retirement-role-scope-changed' });
     const registry = new HistoryRegistry();
-    registry.registerOwner({ name: AGENT_IDENTITY_WORK_OWNER, artifactType: 'durable-work/v1', version: 1,
-      readiness: agentIdentityRetirementReadiness });
-    expect(await minimizeHistoryWork(pool, client,
-      { partition_no: 0, account_route: accountRoute, account_id: account.id },
-      Buffer.from(encodeLocator(artifact.locator)), registry, barrier,
-    )).toBe(AGENT_IDENTITY_SDK_RETIREMENT.gap);
-    expect(await readAgentIdentitySDKRetirementGap(pool, receipt, { deadline: Date.now() + 5000 }))
-      .toBe(AGENT_IDENTITY_SDK_RETIREMENT.gap);
-    expect(await readAgentIdentitySDKRetirementGap(pool, { ...receipt, receipt: randomUUID() }, { deadline: Date.now() + 5000 }))
-      .toBe('agent-identity-sdk-recording-port-unavailable');
+    registry.registerOwner({
+      name: AGENT_IDENTITY_WORK_OWNER,
+      artifactType: 'durable-work/v1',
+      version: 1,
+      readiness: agentIdentityRetirementReadiness,
+    });
+    expect(
+      await minimizeHistoryWork(
+        pool,
+        client,
+        { partition_no: 0, account_route: accountRoute, account_id: account.id },
+        Buffer.from(encodeLocator(artifact.locator)),
+        registry,
+        barrier,
+      ),
+    ).toBe(AGENT_IDENTITY_SDK_RETIREMENT.gap);
+    expect(await readAgentIdentitySDKRetirementGap(pool, receipt, { deadline: Date.now() + 5000 })).toBe(
+      AGENT_IDENTITY_SDK_RETIREMENT.gap,
+    );
+    expect(
+      await readAgentIdentitySDKRetirementGap(
+        pool,
+        { ...receipt, receipt: randomUUID() },
+        { deadline: Date.now() + 5000 },
+      ),
+    ).toBe('agent-identity-sdk-recording-port-unavailable');
     // Core rejects a caller's ready flag as well as deletion of permanent native custody.
-    await expect(pool.query('UPDATE core.history_work SET owner_ready=true WHERE partition_no=0 AND work_id=$1', [native.custody_id]))
-      .rejects.toThrow('durable source transfer and permanent native writer fence');
-    await expect(pool.query('DELETE FROM core.history_work WHERE partition_no=0 AND work_id=$1', [native.custody_id]))
-      .rejects.toThrow('retirement custody is permanent');
-    await expect(pool.query(`UPDATE core.agent_identity_sdk_obligation SET future_writer_state='closed'
+    await expect(
+      pool.query('UPDATE core.history_work SET owner_ready=true WHERE partition_no=0 AND work_id=$1', [
+        native.custody_id,
+      ]),
+    ).rejects.toThrow('durable source transfer and permanent native writer fence');
+    await expect(
+      pool.query('DELETE FROM core.history_work WHERE partition_no=0 AND work_id=$1', [native.custody_id]),
+    ).rejects.toThrow('retirement custody is permanent');
+    await expect(
+      pool.query(
+        `UPDATE core.agent_identity_sdk_obligation SET future_writer_state='closed'
       WHERE partition_no=$1 AND source_route=$2 AND source_account_id=$3 AND source_direction=$4 AND source_receipt_id=$5`,
-      [partitionOf(accountRoute), accountRoute, account.id, receipt.kind, receipt.receipt],
-    )).rejects.toThrow();
-    expect((await pool.query('SELECT owner_ready,state,absence_verified FROM core.history_work WHERE partition_no=0 AND work_id=$1', [native.custody_id])).rows[0])
-      .toEqual({ owner_ready: false, state: 'pending', absence_verified: false });
-    expect((await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [source.workflowId])).rows[0].inputs).toBe(inputs);
+        [partitionOf(accountRoute), accountRoute, account.id, receipt.kind, receipt.receipt],
+      ),
+    ).rejects.toThrow();
+    expect(
+      (
+        await pool.query(
+          'SELECT owner_ready,state,absence_verified FROM core.history_work WHERE partition_no=0 AND work_id=$1',
+          [native.custody_id],
+        )
+      ).rows[0],
+    ).toEqual({ owner_ready: false, state: 'pending', absence_verified: false });
+    expect(
+      (await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [source.workflowId])).rows[0]
+        .inputs,
+    ).toBe(inputs);
     expect((await client.getWorkflow(source.workflowId))?.status).toBe('ENQUEUED');
-    expect((await pool.query(`SELECT minimized FROM access.agent_identity_intent
+    expect(
+      (
+        await pool.query(
+          `SELECT minimized FROM access.agent_identity_intent
       WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
-      [accountRoute, account.id, receipt.kind, receipt.receipt],
-    )).rows[0].minimized).toBe(false);
+          [accountRoute, account.id, receipt.kind, receipt.receipt],
+        )
+      ).rows[0].minimized,
+    ).toBe(false);
   } finally {
     await client.close();
   }

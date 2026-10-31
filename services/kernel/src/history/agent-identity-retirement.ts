@@ -109,7 +109,8 @@ export async function verifyAgentIdentityRetirementStage(
   if (currentCommand(tx).partition !== stage.reference.source.partition || currentCommand(tx).basis !== null)
     throw new TypeError('Identity retirement requires its SAME native source home');
   historyDeadline(currentCommandResources(tx), stage.reference.source.partition);
-  if (!(await lockHistoryBarrier(tx, stage.reference.barrier))) return pending('identity-sdk-retirement-barrier-changed');
+  if (!(await lockHistoryBarrier(tx, stage.reference.barrier)))
+    return pending('identity-sdk-retirement-barrier-changed');
   const handoff = await sourceHandoff(tx, stage.reference);
   if (!handoff || !same(handoff, stage.handoff)) return pending('identity-sdk-retirement-source-fence-changed');
   const { verifyIdentitySourceConsumerCustody } = await import('../semantic/identity-source-consumer-custody.ts');
@@ -173,7 +174,9 @@ export async function readAgentIdentitySDKRetirementGap(
   return withConnection(pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
-      await tx.query("SELECT set_config('statement_timeout',$1,true)", [`${Math.max(1, context.deadline - Date.now())}ms`]);
+      await tx.query("SELECT set_config('statement_timeout',$1,true)", [
+        `${Math.max(1, context.deadline - Date.now())}ms`,
+      ]);
       const row = (
         await tx.query('SELECT custody_id FROM core.agent_identity_work WHERE source_key=$1', [
           agentIdentityWorkSourceKey(receipt),
@@ -183,7 +186,9 @@ export async function readAgentIdentitySDKRetirementGap(
       const mapping = row ? await resolveAgentIdentitySDKWork(tx, row.custody_id) : null;
       historyDeadline(context, 0);
       await tx.query('COMMIT');
-      return mapping?.gap ?? (mapping ? AGENT_IDENTITY_SDK_RETIREMENT.gap : 'agent-identity-sdk-recording-port-unavailable');
+      return (
+        mapping?.gap ?? (mapping ? AGENT_IDENTITY_SDK_RETIREMENT.gap : 'agent-identity-sdk-recording-port-unavailable')
+      );
     } catch (error) {
       await tx.query('ROLLBACK');
       throw error;
