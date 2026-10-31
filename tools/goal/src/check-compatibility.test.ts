@@ -524,10 +524,11 @@ import { copyFileSync } from 'node:fs';
 
 /** Reproduce optimizeBun's move using private files and the genuine pinned artifact bytes. */
 function movedBunInstallation(directory: string, nested = true) {
-  const fixture = nested ? nonhoistedBunInstallation(directory) : completeScriptsRoot(directory);
+  const privateFixture = nested ? nonhoistedBunInstallation(directory) : undefined;
+  const fixture = privateFixture ?? completeScriptsRoot(directory);
   const platform = fixture.artifact.platforms[`${process.platform}-${process.arch}`]!;
-  const platformRoot = 'platformRoot' in fixture ? fixture.platformRoot : join(directory, 'moved-platform');
-  if (!('platformRoot' in fixture)) {
+  const platformRoot = privateFixture?.platformRoot ?? join(directory, 'moved-platform');
+  if (!privateFixture) {
     mkdirSync(join(platformRoot, 'bin'), { recursive: true });
     writeFileSync(
       join(platformRoot, 'package.json'),
