@@ -40,7 +40,7 @@ const config: StorybookConfig = {
   refs: {
     ui: { title: 'Components', url: process.env.STORYBOOK_UI_URL ?? 'http://localhost:6007' },
   },
-  addons: ['@storybook/addon-vitest', '@storybook/addon-a11y', '@storybook/addon-docs'],
+  addons: ['@storybook/addon-vitest', '@storybook/addon-a11y', '@storybook/addon-mcp', '@storybook/addon-docs'],
   core: { disableTelemetry: true },
   // Generated cover images for the recorded summaries, served where the site's media route would be.
   staticDirs: [

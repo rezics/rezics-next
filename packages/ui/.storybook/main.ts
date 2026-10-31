@@ -29,7 +29,7 @@ const config: StorybookConfig = {
     ...(process.env.REZICS_UI_ACCESSIBILITY_PROBE === '1' ? ['../tests/fixtures/accessibility-probe.stories.tsx'] : []),
   ],
   storySorts: [{ order: ['Components', 'shadcn'] }],
-  addons: ['@storybook/addon-vitest', '@storybook/addon-a11y'],
+  addons: ['@storybook/addon-vitest', '@storybook/addon-a11y', '@storybook/addon-mcp'],
   core: { disableTelemetry: true },
   async viteFinal(config) {
     config.plugins ??= [];
