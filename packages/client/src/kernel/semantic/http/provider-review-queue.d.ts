@@ -262,7 +262,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                             }[];
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -273,7 +273,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -284,7 +284,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -306,7 +306,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -346,7 +346,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 subject: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -357,7 +357,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -368,7 +368,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -379,7 +379,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -390,7 +390,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -412,7 +412,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -449,7 +449,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                             redirected: string;
                             revision: number;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -460,7 +460,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -471,7 +471,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -482,7 +482,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -493,7 +493,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -515,7 +515,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -698,7 +698,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 to: string;
                             };
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -709,7 +709,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -729,9 +729,13 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -770,7 +774,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -781,7 +785,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -792,7 +796,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -803,7 +807,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -814,7 +818,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -836,7 +840,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -880,7 +884,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -891,7 +895,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -902,7 +906,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -913,7 +917,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -924,7 +928,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -946,7 +950,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -986,7 +990,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -997,7 +1001,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1008,7 +1012,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1019,7 +1023,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1030,7 +1034,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1052,7 +1056,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1095,7 +1099,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 candidate: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1106,7 +1110,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1117,7 +1121,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1128,7 +1132,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1150,7 +1154,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1190,7 +1194,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     candidate: string;
                                     deleted: boolean;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1201,7 +1205,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1212,7 +1216,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1223,7 +1227,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1245,7 +1249,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1287,7 +1291,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         candidate: string;
                                         deleted: boolean;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1298,7 +1302,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1309,7 +1313,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1320,7 +1324,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1342,7 +1346,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1392,7 +1396,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1403,7 +1407,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1414,7 +1418,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1425,7 +1429,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1436,7 +1440,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1458,7 +1462,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1508,7 +1512,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1519,7 +1523,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1530,7 +1534,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1541,7 +1545,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1552,7 +1556,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1574,7 +1578,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1620,7 +1624,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1631,7 +1635,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1642,7 +1646,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1653,7 +1657,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1664,7 +1668,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1686,7 +1690,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1736,7 +1740,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1747,7 +1751,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1758,7 +1762,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1769,7 +1773,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1780,7 +1784,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1802,7 +1806,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1848,7 +1852,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1859,7 +1863,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1870,7 +1874,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1881,7 +1885,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1892,7 +1896,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1914,7 +1918,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1974,7 +1978,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 };
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1985,7 +1989,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1996,7 +2000,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2007,7 +2011,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2018,7 +2022,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2040,7 +2044,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2193,7 +2197,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 } | null;
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2204,7 +2208,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2215,7 +2219,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2235,9 +2239,13 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2327,7 +2335,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         }[];
                                     };
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2338,7 +2346,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2349,7 +2357,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2369,9 +2377,13 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     on: string;
                                     found?: unknown;
                                     property?: string;
-                                    expected?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2425,7 +2437,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 }[];
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2436,7 +2448,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2447,7 +2459,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2467,9 +2479,13 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2497,7 +2513,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                     query: unknown;
                     headers: unknown;
                     response: {
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2594,7 +2610,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2605,7 +2621,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2616,7 +2632,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2636,9 +2652,13 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2676,7 +2696,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2687,7 +2707,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2698,7 +2718,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2709,7 +2729,22 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2896,7 +2931,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2907,7 +2942,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2918,7 +2953,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2938,9 +2973,13 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3126,7 +3165,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3137,7 +3176,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3148,7 +3187,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3168,9 +3207,13 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3207,7 +3250,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 candidate: string;
                                 disclosed: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3218,7 +3261,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3229,7 +3272,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3240,7 +3283,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3251,7 +3294,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3273,7 +3316,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3310,7 +3353,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 candidate: string;
                                 retracted: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3321,7 +3364,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3332,7 +3375,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3343,7 +3386,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3354,7 +3397,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3376,7 +3419,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3423,7 +3466,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3434,7 +3477,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3445,7 +3488,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3456,7 +3499,22 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3611,7 +3669,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                     202: {
                         next: string;
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -3622,7 +3680,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -3633,7 +3691,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -3644,7 +3702,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                         detail: unknown;
                         errors: unknown;
                     };
-                    404: {
+                    404: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -3664,9 +3722,13 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                         on: string;
                         found?: unknown;
                         property?: string;
-                        expected?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;

@@ -128,7 +128,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             }[];
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -139,7 +139,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -150,7 +150,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -172,7 +172,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -212,7 +212,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 subject: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -223,7 +223,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -234,7 +234,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -245,7 +245,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -256,7 +256,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -278,7 +278,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -315,7 +315,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             redirected: string;
                             revision: number;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -326,7 +326,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -337,7 +337,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -348,7 +348,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -359,7 +359,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -381,7 +381,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -564,7 +564,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 to: string;
                             };
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -575,7 +575,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -595,9 +595,13 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -636,7 +640,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -647,7 +651,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -658,7 +662,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -669,7 +673,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -680,7 +684,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -702,7 +706,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -746,7 +750,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -757,7 +761,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -768,7 +772,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -779,7 +783,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -790,7 +794,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -812,7 +816,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -852,7 +856,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -863,7 +867,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -874,7 +878,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -885,7 +889,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -896,7 +900,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -918,7 +922,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -961,7 +965,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 candidate: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -972,7 +976,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -983,7 +987,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -994,7 +998,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1016,7 +1020,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1056,7 +1060,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     candidate: string;
                                     deleted: boolean;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1067,7 +1071,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1078,7 +1082,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1089,7 +1093,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1111,7 +1115,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1153,7 +1157,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         candidate: string;
                                         deleted: boolean;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1164,7 +1168,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1175,7 +1179,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1186,7 +1190,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1208,7 +1212,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1258,7 +1262,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1269,7 +1273,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1280,7 +1284,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1291,7 +1295,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1302,7 +1306,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1324,7 +1328,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1374,7 +1378,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1385,7 +1389,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1396,7 +1400,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1407,7 +1411,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1418,7 +1422,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1440,7 +1444,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1486,7 +1490,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1497,7 +1501,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1508,7 +1512,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1519,7 +1523,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1530,7 +1534,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1552,7 +1556,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1602,7 +1606,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1613,7 +1617,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1624,7 +1628,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1635,7 +1639,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1646,7 +1650,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1668,7 +1672,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1714,7 +1718,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1725,7 +1729,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1736,7 +1740,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1747,7 +1751,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1758,7 +1762,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1780,7 +1784,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1840,7 +1844,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 };
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1851,7 +1855,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1862,7 +1866,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1873,7 +1877,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1884,7 +1888,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1906,7 +1910,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2059,7 +2063,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 } | null;
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2070,7 +2074,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2081,7 +2085,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2101,9 +2105,13 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2193,7 +2201,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                         }[];
                                     };
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2204,7 +2212,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2215,7 +2223,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2235,9 +2243,13 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     on: string;
                                     found?: unknown;
                                     property?: string;
-                                    expected?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2291,7 +2303,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 }[];
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2302,7 +2314,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2313,7 +2325,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2333,9 +2345,13 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2363,7 +2379,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                     query: unknown;
                     headers: unknown;
                     response: {
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2460,7 +2476,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2471,7 +2487,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2482,7 +2498,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2502,9 +2518,13 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2542,7 +2562,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2553,7 +2573,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2564,7 +2584,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2575,7 +2595,22 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2762,7 +2797,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2773,7 +2808,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2784,7 +2819,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2804,9 +2839,13 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2992,7 +3031,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3003,7 +3042,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3014,7 +3053,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3034,9 +3073,13 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3073,7 +3116,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 candidate: string;
                                 disclosed: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3084,7 +3127,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3095,7 +3138,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3106,7 +3149,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3117,7 +3160,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3139,7 +3182,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3176,7 +3219,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 candidate: string;
                                 retracted: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3187,7 +3230,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3198,7 +3241,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3209,7 +3252,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3220,7 +3263,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3242,7 +3285,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3289,7 +3332,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3300,7 +3343,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3311,7 +3354,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3322,7 +3365,22 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3360,7 +3418,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         201: {
                             digest: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3371,7 +3429,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3382,7 +3440,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3404,7 +3462,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3438,7 +3496,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 digest: string;
                                 release: Record<string, any>;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3449,7 +3507,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3460,7 +3518,22 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3492,7 +3565,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             digest: string;
                             head: number;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3503,7 +3576,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3514,7 +3587,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3553,7 +3626,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     digest: string;
                                     head: number;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3564,7 +3637,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3575,7 +3648,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3586,7 +3659,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3597,7 +3670,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3619,7 +3692,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3662,7 +3735,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 201: {
                                     digest: string;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3673,7 +3746,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3684,7 +3757,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3695,7 +3768,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3717,7 +3790,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3761,7 +3834,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                             digest: string;
                                             head: number;
                                         };
-                                        400: {
+                                        400: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3772,7 +3845,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        401: {
+                                        401: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3783,7 +3856,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        403: {
+                                        403: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3794,7 +3867,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        404: {
+                                        404: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3805,7 +3878,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        409: {
+                                        409: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3827,7 +3900,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        503: {
+                                        503: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3867,7 +3940,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 head: number;
                                 extension: Record<string, any> | null;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3878,7 +3951,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3889,7 +3962,22 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3922,7 +4010,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         200: Readonly<{
                             images: readonly import("./media-presentation.ts").DocumentImagePresentation[];
                         }>;
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3933,7 +4021,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3944,7 +4032,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3964,9 +4052,13 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        500: {
+                        500: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3977,7 +4069,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4044,7 +4136,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             purpose: "avatar" | "realm-banner" | "realm-icon";
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4055,7 +4147,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4066,7 +4158,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4077,7 +4169,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         detail: unknown;
                         errors: unknown;
                     };
-                    404: {
+                    404: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4088,7 +4180,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         detail: unknown;
                         errors: unknown;
                     };
-                    409: {
+                    409: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4110,7 +4202,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         detail: unknown;
                         errors: unknown;
                     };
-                    429: {
+                    429: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4121,7 +4213,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         detail: unknown;
                         errors: unknown;
                     };
-                    500: {
+                    500: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4132,7 +4224,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4192,7 +4284,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     purpose: "avatar" | "realm-banner" | "realm-icon";
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4203,7 +4295,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4214,7 +4306,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4225,7 +4317,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4236,7 +4328,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4258,7 +4350,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            429: {
+                            429: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4269,7 +4361,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            500: {
+                            500: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4280,7 +4372,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4334,7 +4426,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 purpose: "avatar" | "realm-banner" | "realm-icon";
                             };
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4345,7 +4437,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4356,7 +4448,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4367,7 +4459,22 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        500: {
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        500: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4378,7 +4485,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4421,7 +4528,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     state: "uploaded";
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4432,7 +4539,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4443,7 +4550,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4454,7 +4561,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4465,7 +4572,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4487,7 +4594,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            429: {
+                            429: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4498,7 +4605,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            500: {
+                            500: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4509,7 +4616,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4542,7 +4649,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                     };
                     response: {
                         204: void;
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4553,7 +4660,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4564,7 +4671,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4575,7 +4682,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4586,7 +4693,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4608,7 +4715,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        429: {
+                        429: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4619,7 +4726,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        500: {
+                        500: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4630,7 +4737,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;

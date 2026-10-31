@@ -129,7 +129,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             }[];
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -140,7 +140,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -151,7 +151,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -173,7 +173,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -213,7 +213,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 subject: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -224,7 +224,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -235,7 +235,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -246,7 +246,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -257,7 +257,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -279,7 +279,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -316,7 +316,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             redirected: string;
                             revision: number;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -327,7 +327,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -338,7 +338,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -349,7 +349,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -360,7 +360,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -382,7 +382,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -565,7 +565,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 to: string;
                             };
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -576,7 +576,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -596,9 +596,13 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -637,7 +641,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -648,7 +652,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -659,7 +663,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -670,7 +674,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -681,7 +685,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -703,7 +707,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -747,7 +751,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -758,7 +762,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -769,7 +773,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -780,7 +784,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -791,7 +795,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -813,7 +817,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -853,7 +857,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -864,7 +868,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -875,7 +879,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -886,7 +890,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -897,7 +901,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -919,7 +923,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -962,7 +966,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 candidate: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -973,7 +977,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -984,7 +988,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -995,7 +999,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1017,7 +1021,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1057,7 +1061,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     candidate: string;
                                     deleted: boolean;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1068,7 +1072,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1079,7 +1083,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1090,7 +1094,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1112,7 +1116,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1154,7 +1158,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         candidate: string;
                                         deleted: boolean;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1165,7 +1169,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1176,7 +1180,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1187,7 +1191,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1209,7 +1213,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1259,7 +1263,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1270,7 +1274,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1281,7 +1285,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1292,7 +1296,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1303,7 +1307,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1325,7 +1329,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1375,7 +1379,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1386,7 +1390,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1397,7 +1401,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1408,7 +1412,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1419,7 +1423,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1441,7 +1445,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1487,7 +1491,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1498,7 +1502,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1509,7 +1513,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1520,7 +1524,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1531,7 +1535,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1553,7 +1557,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1603,7 +1607,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1614,7 +1618,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1625,7 +1629,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1636,7 +1640,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1647,7 +1651,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1669,7 +1673,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1715,7 +1719,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1726,7 +1730,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1737,7 +1741,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1748,7 +1752,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1759,7 +1763,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1781,7 +1785,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1841,7 +1845,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 };
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1852,7 +1856,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1863,7 +1867,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1874,7 +1878,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1885,7 +1889,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1907,7 +1911,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2060,7 +2064,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 } | null;
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2071,7 +2075,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2082,7 +2086,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2102,9 +2106,13 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2194,7 +2202,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         }[];
                                     };
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2205,7 +2213,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2216,7 +2224,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2236,9 +2244,13 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     on: string;
                                     found?: unknown;
                                     property?: string;
-                                    expected?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2292,7 +2304,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 }[];
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2303,7 +2315,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2314,7 +2326,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2334,9 +2346,13 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2364,7 +2380,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                     query: unknown;
                     headers: unknown;
                     response: {
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2461,7 +2477,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2472,7 +2488,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2483,7 +2499,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2503,9 +2519,13 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2543,7 +2563,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2554,7 +2574,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2565,7 +2585,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2576,7 +2596,22 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2763,7 +2798,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2774,7 +2809,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2785,7 +2820,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2805,9 +2840,13 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2993,7 +3032,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3004,7 +3043,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3015,7 +3054,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3035,9 +3074,13 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3074,7 +3117,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 candidate: string;
                                 disclosed: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3085,7 +3128,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3096,7 +3139,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3107,7 +3150,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3118,7 +3161,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3140,7 +3183,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3177,7 +3220,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 candidate: string;
                                 retracted: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3188,7 +3231,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3199,7 +3242,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3210,7 +3253,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3221,7 +3264,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3243,7 +3286,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3290,7 +3333,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3301,7 +3344,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3312,7 +3355,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3323,7 +3366,22 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;

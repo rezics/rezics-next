@@ -132,7 +132,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             }[];
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -143,7 +143,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -154,7 +154,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -176,7 +176,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -216,7 +216,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 subject: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -227,7 +227,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -238,7 +238,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -249,7 +249,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -260,7 +260,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -282,7 +282,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -319,7 +319,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             redirected: string;
                             revision: number;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -330,7 +330,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -341,7 +341,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -352,7 +352,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -363,7 +363,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -385,7 +385,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -568,7 +568,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 to: string;
                             };
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -579,7 +579,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -599,9 +599,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -640,7 +644,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -651,7 +655,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -662,7 +666,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -673,7 +677,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -684,7 +688,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -706,7 +710,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -750,7 +754,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -761,7 +765,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -772,7 +776,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -783,7 +787,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -794,7 +798,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -816,7 +820,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -856,7 +860,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -867,7 +871,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -878,7 +882,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -889,7 +893,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -900,7 +904,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -922,7 +926,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -965,7 +969,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 candidate: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -976,7 +980,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -987,7 +991,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -998,7 +1002,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1020,7 +1024,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1060,7 +1064,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     candidate: string;
                                     deleted: boolean;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1071,7 +1075,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1082,7 +1086,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1093,7 +1097,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1115,7 +1119,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1157,7 +1161,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         candidate: string;
                                         deleted: boolean;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1168,7 +1172,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1179,7 +1183,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1190,7 +1194,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1212,7 +1216,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1262,7 +1266,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1273,7 +1277,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1284,7 +1288,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1295,7 +1299,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1306,7 +1310,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1328,7 +1332,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1378,7 +1382,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1389,7 +1393,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1400,7 +1404,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1411,7 +1415,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1422,7 +1426,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1444,7 +1448,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1490,7 +1494,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1501,7 +1505,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1512,7 +1516,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1523,7 +1527,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1534,7 +1538,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1556,7 +1560,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1606,7 +1610,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1617,7 +1621,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1628,7 +1632,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1639,7 +1643,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1650,7 +1654,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1672,7 +1676,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1718,7 +1722,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1729,7 +1733,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1740,7 +1744,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1751,7 +1755,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1762,7 +1766,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1784,7 +1788,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1844,7 +1848,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 };
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1855,7 +1859,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1866,7 +1870,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1877,7 +1881,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1888,7 +1892,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1910,7 +1914,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2063,7 +2067,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 } | null;
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2074,7 +2078,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2085,7 +2089,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2105,9 +2109,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2197,7 +2205,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         }[];
                                     };
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2208,7 +2216,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2219,7 +2227,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2239,9 +2247,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     on: string;
                                     found?: unknown;
                                     property?: string;
-                                    expected?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2295,7 +2307,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 }[];
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2306,7 +2318,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2317,7 +2329,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2337,9 +2349,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2367,7 +2383,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                     query: unknown;
                     headers: unknown;
                     response: {
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2464,7 +2480,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2475,7 +2491,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2486,7 +2502,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2506,9 +2522,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2546,7 +2566,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2557,7 +2577,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2568,7 +2588,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2579,7 +2599,22 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2766,7 +2801,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2777,7 +2812,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2788,7 +2823,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2808,9 +2843,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2996,7 +3035,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3007,7 +3046,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3018,7 +3057,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3038,9 +3077,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3077,7 +3120,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 candidate: string;
                                 disclosed: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3088,7 +3131,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3099,7 +3142,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3110,7 +3153,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3121,7 +3164,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3143,7 +3186,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3180,7 +3223,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 candidate: string;
                                 retracted: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3191,7 +3234,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3202,7 +3245,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3213,7 +3256,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3224,7 +3267,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3246,7 +3289,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3293,7 +3336,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3304,7 +3347,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3315,7 +3358,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3326,7 +3369,22 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3364,7 +3422,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                         201: {
                             digest: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3375,7 +3433,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3386,7 +3444,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3408,7 +3466,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3442,7 +3500,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 digest: string;
                                 release: Record<string, any>;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3453,7 +3511,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3464,7 +3522,22 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3496,7 +3569,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             digest: string;
                             head: number;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3507,7 +3580,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3518,7 +3591,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3557,7 +3630,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     digest: string;
                                     head: number;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3568,7 +3641,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3579,7 +3652,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3590,7 +3663,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3601,7 +3674,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3623,7 +3696,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3666,7 +3739,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 201: {
                                     digest: string;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3677,7 +3750,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3688,7 +3761,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3699,7 +3772,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3721,7 +3794,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3765,7 +3838,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                             digest: string;
                                             head: number;
                                         };
-                                        400: {
+                                        400: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3776,7 +3849,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        401: {
+                                        401: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3787,7 +3860,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        403: {
+                                        403: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3798,7 +3871,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        404: {
+                                        404: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3809,7 +3882,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        409: {
+                                        409: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3831,7 +3904,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        503: {
+                                        503: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3871,7 +3944,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 head: number;
                                 extension: Record<string, any> | null;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3882,7 +3955,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3893,7 +3966,22 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3929,7 +4017,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             fenced: boolean;
                             securityRevision: string | null;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3940,7 +4028,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3951,7 +4039,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3971,9 +4059,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        500: {
+                        500: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3984,7 +4076,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4021,7 +4113,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                         200: {
                             securityRevision: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4032,7 +4124,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4043,7 +4135,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4054,7 +4146,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4065,7 +4157,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        413: {
+                        413: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4087,7 +4179,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        429: {
+                        429: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4098,7 +4190,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        500: {
+                        500: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4109,7 +4201,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4828,7 +4920,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
     params: import("typebox").TObject<{
         id: import("typebox").TString;
     }>;
-    parse: ("json" | (({ request, contentType }: {
+    parse: ("json" | (({ request, contentType }: Omit<{
         server: import("elysia").Server | null;
         redirect: import("elysia").redirect;
         set: {
@@ -5041,232 +5133,117 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                 errors: unknown;
             };
         }>;
-        defer: (fn: import("elysia/types").AfterResponseHandler<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
-            params: import("typebox").TObject<{
-                id: import("typebox").TString;
-            }>;
-            parse: unknown;
-            transform: unknown;
-            headers: import("typebox").TObject<{
-                "idempotency-key": import("typebox").TString;
-            }>;
-            body: {
-                '~standard': {
-                    version: 1;
-                    vendor: string;
-                    types: {
-                        input: {
-                            reason: string;
-                        };
-                        output: {
-                            reason: string;
-                        };
-                    } | undefined;
-                    validate(value: unknown): {
-                        value: {
-                            reason: string;
-                        };
-                        issues?: never;
-                    } | {
-                        value?: never;
-                        issues: {
-                            message: string;
-                        }[];
-                    };
-                    jsonSchema: {
-                        input: () => import("typebox").TObject<{
-                            reason: import("typebox").TString;
-                        }>;
-                        output: () => import("typebox").TObject<{
-                            reason: import("typebox").TString;
-                        }>;
-                    };
-                };
+        defer: (fn: import("elysia/types").AfterResponseHandler<{
+            params: {
+                id: string;
             };
+            query: undefined;
             response: {
-                200: {
-                    '~standard': {
-                        version: 1;
-                        vendor: string;
-                        types: {
-                            input: MediaTakedownResponse;
-                            output: MediaTakedownResponse;
-                        } | undefined;
-                        validate(value: unknown): {
-                            value: MediaTakedownResponse;
-                            issues?: never;
-                        } | {
-                            value?: never;
-                            issues: {
-                                message: string;
-                            }[];
-                        };
-                        jsonSchema: {
-                            input: () => import("typebox").TUnsafe<MediaTakedownResponse>;
-                            output: () => import("typebox").TUnsafe<MediaTakedownResponse>;
-                        };
-                    };
-                } & {
-                    headers: {
-                        readonly "rezics-session-token": import("typebox").TString;
-                        readonly 'cache-control': import("typebox").TString;
-                    };
+                200: MediaTakedownResponse;
+                400: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
                 };
-                400: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                401: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                403: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                404: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                413: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                422: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                429: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                500: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                503: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
+                401: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                403: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                404: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                413: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                422: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                429: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                500: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                503: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
             };
-            detail: {
-                operationId: string;
-                'x-exposure': string;
-                'x-action': string;
-                'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-                security: {
-                    bearerAuth: never[];
-                }[];
-            };
-        }, {}, "/v1/media/:id/$takeDown">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, import("elysia").DefaultSingleton & {
-            derive: {
-                readonly admission: import("../http/admission.ts").Admission;
-                readonly job: {
-                    deadline: number;
-                    signal: AbortSignal;
-                };
-                readonly actor: import("../request/access.ts").AccountActor | {
-                    kind: 'anonymous';
-                };
-                readonly session: {
-                    readonly components: import("../tokens/session.ts").SessionComponent[];
-                    record(component: import("../tokens/session.ts").SessionComponent): void;
-                };
-                readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-                readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-            };
-        } & {
-            derive: unknown;
+        }, {
+            decorator: {};
+            store: {};
+            derive: {};
         } & {
             decorator: {
                 contentType: string;
@@ -5277,34 +5254,18 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
         rid?: string;
         request: Request;
         store: {};
-        body: {
-            reason: string;
-        };
+        body: unknown;
         query: Record<string, string | undefined>;
         params: {
             id: string;
         };
-        headers: {
-            "idempotency-key": string;
-        };
+        headers: Record<string, string | undefined>;
         cookie: Record<string, import("elysia").Cookie<unknown>>;
         contentType: string;
-        readonly admission: import("../http/admission.ts").Admission;
-        readonly job: {
-            deadline: number;
-            signal: AbortSignal;
-        };
-        readonly actor: import("../request/access.ts").AccountActor | {
-            kind: 'anonymous';
-        };
-        readonly session: {
-            readonly components: import("../tokens/session.ts").SessionComponent[];
-            record(component: import("../tokens/session.ts").SessionComponent): void;
-        };
-        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    }, "cookie"> & {
+        cookie: undefined;
     }) => Promise<any>))[];
-    transform: ({ request }: {
+    transform: ({ request }: Omit<{
         server: import("elysia").Server | null;
         redirect: import("elysia").redirect;
         set: {
@@ -5517,263 +5478,132 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                 errors: unknown;
             };
         }>;
-        defer: (fn: import("elysia/types").AfterResponseHandler<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
-            params: import("typebox").TObject<{
-                id: import("typebox").TString;
-            }>;
-            parse: unknown;
-            transform: unknown;
-            headers: import("typebox").TObject<{
-                "idempotency-key": import("typebox").TString;
-            }>;
-            body: {
-                '~standard': {
-                    version: 1;
-                    vendor: string;
-                    types: {
-                        input: {
-                            reason: string;
-                        };
-                        output: {
-                            reason: string;
-                        };
-                    } | undefined;
-                    validate(value: unknown): {
-                        value: {
-                            reason: string;
-                        };
-                        issues?: never;
-                    } | {
-                        value?: never;
-                        issues: {
-                            message: string;
-                        }[];
-                    };
-                    jsonSchema: {
-                        input: () => import("typebox").TObject<{
-                            reason: import("typebox").TString;
-                        }>;
-                        output: () => import("typebox").TObject<{
-                            reason: import("typebox").TString;
-                        }>;
-                    };
-                };
+        defer: (fn: import("elysia/types").AfterResponseHandler<{
+            params: {
+                id: string;
             };
+            query: undefined;
             response: {
-                200: {
-                    '~standard': {
-                        version: 1;
-                        vendor: string;
-                        types: {
-                            input: MediaTakedownResponse;
-                            output: MediaTakedownResponse;
-                        } | undefined;
-                        validate(value: unknown): {
-                            value: MediaTakedownResponse;
-                            issues?: never;
-                        } | {
-                            value?: never;
-                            issues: {
-                                message: string;
-                            }[];
-                        };
-                        jsonSchema: {
-                            input: () => import("typebox").TUnsafe<MediaTakedownResponse>;
-                            output: () => import("typebox").TUnsafe<MediaTakedownResponse>;
-                        };
-                    };
-                } & {
-                    headers: {
-                        readonly "rezics-session-token": import("typebox").TString;
-                        readonly 'cache-control': import("typebox").TString;
-                    };
+                200: MediaTakedownResponse;
+                400: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
                 };
-                400: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                401: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                403: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                404: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                413: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                422: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                429: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                500: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                503: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
+                401: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                403: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                404: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                413: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                422: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                429: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                500: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                503: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
             };
-            detail: {
-                operationId: string;
-                'x-exposure': string;
-                'x-action': string;
-                'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-                security: {
-                    bearerAuth: never[];
-                }[];
-            };
-        }, {}, "/v1/media/:id/$takeDown">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, import("elysia").DefaultSingleton & {
-            derive: {
-                readonly admission: import("../http/admission.ts").Admission;
-                readonly job: {
-                    deadline: number;
-                    signal: AbortSignal;
-                };
-                readonly actor: import("../request/access.ts").AccountActor | {
-                    kind: 'anonymous';
-                };
-                readonly session: {
-                    readonly components: import("../tokens/session.ts").SessionComponent[];
-                    record(component: import("../tokens/session.ts").SessionComponent): void;
-                };
-                readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-                readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-            };
-        } & {
-            derive: unknown;
+        }, {
+            decorator: {};
+            store: {};
+            derive: {};
         }>) => import("elysia/types").MaybePromise<void>;
         readonly path: string;
         route?: string;
         rid?: string;
         request: Request;
         store: {};
-        body: {
-            reason: string;
-        };
+        body: unknown;
         query: Record<string, string | undefined>;
         params: {
             id: string;
         };
-        headers: {
-            "idempotency-key": string;
-        };
+        headers: Record<string, string | undefined>;
         cookie: Record<string, import("elysia").Cookie<unknown>>;
-        readonly admission: import("../http/admission.ts").Admission;
-        readonly job: {
-            deadline: number;
-            signal: AbortSignal;
-        };
-        readonly actor: import("../request/access.ts").AccountActor | {
-            kind: 'anonymous';
-        };
-        readonly session: {
-            readonly components: import("../tokens/session.ts").SessionComponent[];
-            record(component: import("../tokens/session.ts").SessionComponent): void;
-        };
-        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    }, "cookie"> & {
+        cookie: undefined;
     }) => void;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;

@@ -92,7 +92,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         }[];
                         next: null;
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -103,7 +103,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -114,7 +114,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -134,9 +134,13 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         on: string;
                         found?: unknown;
                         property?: string;
-                        expected?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -428,7 +432,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             next: string | null;
                             as_of: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -439,7 +443,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -450,7 +454,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -461,7 +465,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -483,7 +487,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -530,7 +534,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             }[];
                             as_of: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -541,7 +545,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -552,7 +556,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -563,7 +567,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -585,7 +589,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;

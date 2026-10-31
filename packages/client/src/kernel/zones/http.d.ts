@@ -137,7 +137,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             }[];
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -148,7 +148,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -159,7 +159,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -181,7 +181,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -221,7 +221,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 subject: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -232,7 +232,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -243,7 +243,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -254,7 +254,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -265,7 +265,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -287,7 +287,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -324,7 +324,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             redirected: string;
                             revision: number;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -335,7 +335,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -346,7 +346,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -357,7 +357,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -368,7 +368,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -390,7 +390,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -573,7 +573,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 to: string;
                             };
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -584,7 +584,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -604,9 +604,13 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -645,7 +649,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -656,7 +660,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -667,7 +671,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -678,7 +682,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -689,7 +693,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -711,7 +715,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -755,7 +759,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -766,7 +770,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -777,7 +781,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -788,7 +792,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -799,7 +803,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -821,7 +825,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -861,7 +865,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -872,7 +876,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -883,7 +887,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -894,7 +898,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -905,7 +909,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -927,7 +931,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -970,7 +974,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 candidate: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -981,7 +985,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -992,7 +996,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1003,7 +1007,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1025,7 +1029,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1065,7 +1069,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     candidate: string;
                                     deleted: boolean;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1076,7 +1080,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1087,7 +1091,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1098,7 +1102,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1120,7 +1124,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1162,7 +1166,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         candidate: string;
                                         deleted: boolean;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1173,7 +1177,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1184,7 +1188,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1195,7 +1199,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1217,7 +1221,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1267,7 +1271,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1278,7 +1282,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1289,7 +1293,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1300,7 +1304,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1311,7 +1315,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1333,7 +1337,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1383,7 +1387,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1394,7 +1398,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1405,7 +1409,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1416,7 +1420,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1427,7 +1431,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1449,7 +1453,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1495,7 +1499,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1506,7 +1510,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1517,7 +1521,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1528,7 +1532,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1539,7 +1543,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1561,7 +1565,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1611,7 +1615,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1622,7 +1626,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1633,7 +1637,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1644,7 +1648,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1655,7 +1659,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1677,7 +1681,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1723,7 +1727,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1734,7 +1738,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1745,7 +1749,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1756,7 +1760,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1767,7 +1771,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1789,7 +1793,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1849,7 +1853,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 };
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1860,7 +1864,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1871,7 +1875,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1882,7 +1886,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1893,7 +1897,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1915,7 +1919,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2068,7 +2072,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 } | null;
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2079,7 +2083,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2090,7 +2094,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2110,9 +2114,13 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2202,7 +2210,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         }[];
                                     };
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2213,7 +2221,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2224,7 +2232,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2244,9 +2252,13 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     on: string;
                                     found?: unknown;
                                     property?: string;
-                                    expected?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2300,7 +2312,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 }[];
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2311,7 +2323,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2322,7 +2334,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2342,9 +2354,13 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2372,7 +2388,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     query: unknown;
                     headers: unknown;
                     response: {
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2469,7 +2485,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2480,7 +2496,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2491,7 +2507,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2511,9 +2527,13 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2551,7 +2571,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2562,7 +2582,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2573,7 +2593,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2584,7 +2604,22 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2771,7 +2806,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2782,7 +2817,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2793,7 +2828,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2813,9 +2848,13 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3001,7 +3040,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3012,7 +3051,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3023,7 +3062,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3043,9 +3082,13 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3082,7 +3125,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 candidate: string;
                                 disclosed: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3093,7 +3136,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3104,7 +3147,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3115,7 +3158,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3126,7 +3169,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3148,7 +3191,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3185,7 +3228,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 candidate: string;
                                 retracted: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3196,7 +3239,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3207,7 +3250,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3218,7 +3261,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3229,7 +3272,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3251,7 +3294,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3298,7 +3341,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3309,7 +3352,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3320,7 +3363,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3331,7 +3374,22 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3369,7 +3427,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         201: {
                             digest: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3380,7 +3438,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3391,7 +3449,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3413,7 +3471,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3447,7 +3505,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 digest: string;
                                 release: Record<string, any>;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3458,7 +3516,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3469,7 +3527,22 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3501,7 +3574,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             digest: string;
                             head: number;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3512,7 +3585,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3523,7 +3596,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3562,7 +3635,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     digest: string;
                                     head: number;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3573,7 +3646,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3584,7 +3657,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3595,7 +3668,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3606,7 +3679,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3628,7 +3701,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3671,7 +3744,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 201: {
                                     digest: string;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3682,7 +3755,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3693,7 +3766,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3704,7 +3777,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3726,7 +3799,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3770,7 +3843,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                             digest: string;
                                             head: number;
                                         };
-                                        400: {
+                                        400: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3781,7 +3854,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        401: {
+                                        401: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3792,7 +3865,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        403: {
+                                        403: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3803,7 +3876,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        404: {
+                                        404: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3814,7 +3887,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        409: {
+                                        409: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3836,7 +3909,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        503: {
+                                        503: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3876,7 +3949,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 head: number;
                                 extension: Record<string, any> | null;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3887,7 +3960,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3898,7 +3971,22 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3991,7 +4079,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             restoreUntil: string | null;
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4002,7 +4090,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4013,7 +4101,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4024,7 +4112,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    404: {
+                    404: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4035,7 +4123,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    409: {
+                    409: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4046,7 +4134,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    412: {
+                    412: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4068,7 +4156,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4128,7 +4216,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         }[];
                         next: string | null;
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4139,7 +4227,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4150,7 +4238,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4161,7 +4249,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    404: {
+                    404: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4172,7 +4260,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    409: {
+                    409: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4183,7 +4271,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    412: {
+                    412: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4205,7 +4293,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4260,7 +4348,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 }[];
                             };
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4271,7 +4359,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4282,7 +4370,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4293,7 +4381,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4304,7 +4392,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4315,7 +4403,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        412: {
+                        412: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4326,7 +4414,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        422: {
+                        422: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4337,7 +4425,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4399,7 +4487,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 configuration: import("@rezics/composition").ZoneStarter;
                                 mounts: string[];
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4410,7 +4498,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4421,7 +4509,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4432,7 +4520,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4443,7 +4531,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4454,7 +4542,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4465,7 +4553,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            422: {
+                            422: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4476,7 +4564,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4575,7 +4663,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             202: {
                                 next: string;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4586,7 +4674,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4597,7 +4685,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4608,7 +4696,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4619,7 +4707,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4630,7 +4718,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4652,7 +4740,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4719,7 +4807,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     restoreUntil: string | null;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4730,7 +4818,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4741,7 +4829,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4752,7 +4840,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4763,7 +4851,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4774,7 +4862,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4796,7 +4884,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4862,7 +4950,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     restoreUntil: string | null;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4873,7 +4961,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4884,7 +4972,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4895,7 +4983,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4906,7 +4994,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4917,7 +5005,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4939,7 +5027,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5002,7 +5090,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 restoreUntil: string | null;
                             };
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5013,7 +5101,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5024,7 +5112,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5035,7 +5123,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5046,7 +5134,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5057,7 +5145,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        412: {
+                        412: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5079,7 +5167,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;

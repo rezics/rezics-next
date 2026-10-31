@@ -134,7 +134,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             }[];
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -145,7 +145,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -156,7 +156,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -178,7 +178,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -218,7 +218,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 subject: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -229,7 +229,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -240,7 +240,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -251,7 +251,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -262,7 +262,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -284,7 +284,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -321,7 +321,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             redirected: string;
                             revision: number;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -332,7 +332,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -343,7 +343,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -354,7 +354,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -365,7 +365,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -387,7 +387,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -570,7 +570,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 to: string;
                             };
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -581,7 +581,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -601,9 +601,13 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -642,7 +646,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -653,7 +657,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -664,7 +668,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -675,7 +679,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -686,7 +690,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -708,7 +712,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -752,7 +756,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -763,7 +767,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -774,7 +778,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -785,7 +789,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -796,7 +800,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -818,7 +822,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -858,7 +862,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -869,7 +873,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -880,7 +884,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -891,7 +895,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -902,7 +906,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -924,7 +928,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -967,7 +971,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 candidate: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -978,7 +982,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -989,7 +993,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1000,7 +1004,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1022,7 +1026,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1062,7 +1066,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     candidate: string;
                                     deleted: boolean;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1073,7 +1077,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1084,7 +1088,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1095,7 +1099,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1117,7 +1121,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1159,7 +1163,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         candidate: string;
                                         deleted: boolean;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1170,7 +1174,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1181,7 +1185,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1192,7 +1196,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1214,7 +1218,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1264,7 +1268,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1275,7 +1279,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1286,7 +1290,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1297,7 +1301,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1308,7 +1312,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1330,7 +1334,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1380,7 +1384,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1391,7 +1395,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1402,7 +1406,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1413,7 +1417,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1424,7 +1428,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1446,7 +1450,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1492,7 +1496,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1503,7 +1507,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1514,7 +1518,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1525,7 +1529,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1536,7 +1540,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1558,7 +1562,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1608,7 +1612,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1619,7 +1623,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1630,7 +1634,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1641,7 +1645,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1652,7 +1656,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1674,7 +1678,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1720,7 +1724,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1731,7 +1735,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1742,7 +1746,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1753,7 +1757,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1764,7 +1768,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1786,7 +1790,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1846,7 +1850,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 };
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1857,7 +1861,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1868,7 +1872,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1879,7 +1883,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1890,7 +1894,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1912,7 +1916,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2065,7 +2069,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 } | null;
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2076,7 +2080,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2087,7 +2091,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2107,9 +2111,13 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2199,7 +2207,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         }[];
                                     };
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2210,7 +2218,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2221,7 +2229,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2241,9 +2249,13 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     on: string;
                                     found?: unknown;
                                     property?: string;
-                                    expected?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2297,7 +2309,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 }[];
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2308,7 +2320,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2319,7 +2331,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2339,9 +2351,13 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2369,7 +2385,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                     query: unknown;
                     headers: unknown;
                     response: {
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2466,7 +2482,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2477,7 +2493,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2488,7 +2504,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2508,9 +2524,13 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2548,7 +2568,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2559,7 +2579,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2570,7 +2590,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2581,7 +2601,22 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2768,7 +2803,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2779,7 +2814,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2790,7 +2825,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2810,9 +2845,13 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2998,7 +3037,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3009,7 +3048,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3020,7 +3059,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3040,9 +3079,13 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3079,7 +3122,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 candidate: string;
                                 disclosed: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3090,7 +3133,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3101,7 +3144,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3112,7 +3155,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3123,7 +3166,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3145,7 +3188,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3182,7 +3225,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 candidate: string;
                                 retracted: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3193,7 +3236,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3204,7 +3247,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3215,7 +3258,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3226,7 +3269,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3248,7 +3291,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3295,7 +3338,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3306,7 +3349,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3317,7 +3360,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3328,7 +3371,22 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3366,7 +3424,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         201: {
                             digest: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3377,7 +3435,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3388,7 +3446,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3410,7 +3468,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3444,7 +3502,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 digest: string;
                                 release: Record<string, any>;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3455,7 +3513,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3466,7 +3524,22 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3498,7 +3571,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             digest: string;
                             head: number;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3509,7 +3582,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3520,7 +3593,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3559,7 +3632,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     digest: string;
                                     head: number;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3570,7 +3643,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3581,7 +3654,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3592,7 +3665,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3603,7 +3676,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3625,7 +3698,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3668,7 +3741,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 201: {
                                     digest: string;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3679,7 +3752,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3690,7 +3763,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3701,7 +3774,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3723,7 +3796,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3767,7 +3840,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                             digest: string;
                                             head: number;
                                         };
-                                        400: {
+                                        400: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3778,7 +3851,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        401: {
+                                        401: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3789,7 +3862,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        403: {
+                                        403: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3800,7 +3873,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        404: {
+                                        404: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3811,7 +3884,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        409: {
+                                        409: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3833,7 +3906,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        503: {
+                                        503: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3873,7 +3946,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 head: number;
                                 extension: Record<string, any> | null;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3884,7 +3957,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3895,7 +3968,22 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4037,7 +4125,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         revision: number;
                         next: string | null;
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4048,7 +4136,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4059,7 +4147,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4070,7 +4158,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         detail: unknown;
                         errors: unknown;
                     };
-                    404: {
+                    404: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4081,7 +4169,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         detail: unknown;
                         errors: unknown;
                     };
-                    409: {
+                    409: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4103,7 +4191,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4139,7 +4227,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                         200: {
                             revision: number;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4150,7 +4238,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4161,7 +4249,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4172,7 +4260,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4183,7 +4271,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4205,7 +4293,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4722,7 +4810,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
     query: import("typebox").TObject<{
         revision: Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>;
     }>;
-    transform: ({ request }: {
+    transform: ({ request }: Omit<{
         server: import("elysia").Server | null;
         redirect: import("elysia").redirect;
         set: {
@@ -4895,148 +4983,101 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                 revision: number;
             };
         }>;
-        defer: (fn: import("elysia/types").AfterResponseHandler<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
-            params: import("typebox").TObject<{
-                collectionId: import("typebox").TString;
-            }>;
-            headers: import("typebox").TObject<{
-                "idempotency-key": import("typebox").TString;
-            }>;
-            query: import("typebox").TObject<{
-                revision: Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>;
-            }>;
-            transform: unknown;
+        defer: (fn: import("elysia/types").AfterResponseHandler<{
+            params: {
+                collectionId: string;
+            };
+            query: {
+                revision?: string;
+            } & {
+                [key: string]: unknown;
+            };
             response: {
-                400: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                401: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                403: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                404: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                409: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                422: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                503: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                200: import("typebox").TObject<{
-                    revision: import("typebox").TInteger;
-                }>;
-            };
-            detail: {
-                operationId: string;
-                'x-action': string;
-                'x-exposure': string;
-                security: {
-                    bearerAuth: never[];
-                }[];
-                'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-            };
-        }, {}, "/v1/libraryPins/:collectionId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, import("elysia").DefaultSingleton & {
-            derive: {
-                readonly admission: import("../http/admission.ts").Admission;
-                readonly job: {
-                    deadline: number;
-                    signal: AbortSignal;
+                400: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
                 };
-                readonly actor: import("../request/access.ts").AccountActor | {
-                    kind: 'anonymous';
+                401: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
                 };
-                readonly session: {
-                    readonly components: import("../tokens/session.ts").SessionComponent[];
-                    record(component: import("../tokens/session.ts").SessionComponent): void;
+                403: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
                 };
-                readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-                readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+                404: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                409: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                422: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                503: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                200: {
+                    revision: number;
+                };
             };
-        } & {
-            derive: unknown;
+        }, {
+            decorator: {};
+            store: {};
+            derive: {};
         }>) => import("elysia/types").MaybePromise<void>;
         readonly path: string;
         route?: string;
@@ -5045,29 +5086,16 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
         store: {};
         body: unknown;
         query: {
-            revision: number;
+            [x: string]: unknown;
+            revision?: string;
         };
         params: {
             collectionId: string;
         };
-        headers: {
-            "idempotency-key": string;
-        };
+        headers: Record<string, string | undefined>;
         cookie: Record<string, import("elysia").Cookie<unknown>>;
-        readonly admission: import("../http/admission.ts").Admission;
-        readonly job: {
-            deadline: number;
-            signal: AbortSignal;
-        };
-        readonly actor: import("../request/access.ts").AccountActor | {
-            kind: 'anonymous';
-        };
-        readonly session: {
-            readonly components: import("../tokens/session.ts").SessionComponent[];
-            record(component: import("../tokens/session.ts").SessionComponent): void;
-        };
-        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    }, "cookie"> & {
+        cookie: undefined;
     }) => void;
     response: {
         400: import("typebox").TObject<{

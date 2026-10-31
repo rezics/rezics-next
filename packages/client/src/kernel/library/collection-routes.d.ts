@@ -440,7 +440,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             }[];
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -451,7 +451,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -462,7 +462,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -484,7 +484,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -524,7 +524,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 subject: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -535,7 +535,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -546,7 +546,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -557,7 +557,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -568,7 +568,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -590,7 +590,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -627,7 +627,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             redirected: string;
                             revision: number;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -638,7 +638,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -649,7 +649,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -660,7 +660,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -671,7 +671,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -693,7 +693,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -876,7 +876,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 to: string;
                             };
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -887,7 +887,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -907,9 +907,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -948,7 +952,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -959,7 +963,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -970,7 +974,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -981,7 +985,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -992,7 +996,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1014,7 +1018,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1058,7 +1062,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1069,7 +1073,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1080,7 +1084,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1091,7 +1095,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1102,7 +1106,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1124,7 +1128,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1164,7 +1168,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1175,7 +1179,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1186,7 +1190,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1197,7 +1201,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1208,7 +1212,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1230,7 +1234,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1273,7 +1277,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 candidate: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1284,7 +1288,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1295,7 +1299,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1306,7 +1310,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1328,7 +1332,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1368,7 +1372,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     candidate: string;
                                     deleted: boolean;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1379,7 +1383,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1390,7 +1394,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1401,7 +1405,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1423,7 +1427,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1465,7 +1469,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         candidate: string;
                                         deleted: boolean;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1476,7 +1480,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1487,7 +1491,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1498,7 +1502,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1520,7 +1524,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1570,7 +1574,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1581,7 +1585,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1592,7 +1596,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1603,7 +1607,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1614,7 +1618,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1636,7 +1640,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1686,7 +1690,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1697,7 +1701,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1708,7 +1712,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1719,7 +1723,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1730,7 +1734,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1752,7 +1756,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1798,7 +1802,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1809,7 +1813,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1820,7 +1824,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1831,7 +1835,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1842,7 +1846,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1864,7 +1868,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1914,7 +1918,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1925,7 +1929,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1936,7 +1940,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1947,7 +1951,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1958,7 +1962,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1980,7 +1984,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -2026,7 +2030,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -2037,7 +2041,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -2048,7 +2052,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -2059,7 +2063,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -2070,7 +2074,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -2092,7 +2096,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -2152,7 +2156,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 };
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2163,7 +2167,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2174,7 +2178,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2185,7 +2189,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2196,7 +2200,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2218,7 +2222,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2371,7 +2375,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 } | null;
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2382,7 +2386,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2393,7 +2397,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2413,9 +2417,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2505,7 +2513,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         }[];
                                     };
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2516,7 +2524,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2527,7 +2535,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2547,9 +2555,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     on: string;
                                     found?: unknown;
                                     property?: string;
-                                    expected?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2603,7 +2615,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 }[];
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2614,7 +2626,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2625,7 +2637,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2645,9 +2657,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2675,7 +2691,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     query: unknown;
                     headers: unknown;
                     response: {
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2772,7 +2788,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2783,7 +2799,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2794,7 +2810,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2814,9 +2830,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2854,7 +2874,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2865,7 +2885,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2876,7 +2896,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2887,7 +2907,22 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3074,7 +3109,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3085,7 +3120,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3096,7 +3131,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3116,9 +3151,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3304,7 +3343,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3315,7 +3354,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3326,7 +3365,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3346,9 +3385,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3385,7 +3428,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 candidate: string;
                                 disclosed: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3396,7 +3439,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3407,7 +3450,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3418,7 +3461,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3429,7 +3472,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3451,7 +3494,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3488,7 +3531,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 candidate: string;
                                 retracted: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3499,7 +3542,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3510,7 +3553,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3521,7 +3564,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3532,7 +3575,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3554,7 +3597,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3601,7 +3644,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3612,7 +3655,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3623,7 +3666,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3634,7 +3677,22 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3672,7 +3730,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         201: {
                             digest: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3683,7 +3741,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3694,7 +3752,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3716,7 +3774,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3750,7 +3808,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 digest: string;
                                 release: Record<string, any>;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3761,7 +3819,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3772,7 +3830,22 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3804,7 +3877,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             digest: string;
                             head: number;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3815,7 +3888,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3826,7 +3899,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3865,7 +3938,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     digest: string;
                                     head: number;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3876,7 +3949,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3887,7 +3960,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3898,7 +3971,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3909,7 +3982,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3931,7 +4004,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3974,7 +4047,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 201: {
                                     digest: string;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3985,7 +4058,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3996,7 +4069,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -4007,7 +4080,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -4029,7 +4102,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -4073,7 +4146,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                             digest: string;
                                             head: number;
                                         };
-                                        400: {
+                                        400: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -4084,7 +4157,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        401: {
+                                        401: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -4095,7 +4168,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        403: {
+                                        403: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -4106,7 +4179,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        404: {
+                                        404: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -4117,7 +4190,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        409: {
+                                        409: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -4139,7 +4212,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        503: {
+                                        503: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -4179,7 +4252,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 head: number;
                                 extension: Record<string, any> | null;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4190,7 +4263,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4201,7 +4274,22 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4265,7 +4353,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     generation: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4276,7 +4364,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4287,7 +4375,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4298,7 +4386,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4309,7 +4397,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4331,7 +4419,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4375,7 +4463,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 generation: string;
                             };
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4386,7 +4474,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4397,7 +4485,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4408,7 +4496,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4419,7 +4507,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4430,7 +4518,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        422: {
+                        422: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4441,7 +4529,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4522,7 +4610,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     itemCount: number;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4533,7 +4621,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4544,7 +4632,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4555,7 +4643,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4566,7 +4654,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4588,7 +4676,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4626,7 +4714,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             }[];
                             next: string | null;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4637,7 +4725,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4648,7 +4736,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4659,7 +4747,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4670,7 +4758,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4692,7 +4780,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -4905,7 +4993,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             membershipKind: "dynamic";
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4916,7 +5004,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4927,7 +5015,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4938,7 +5026,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    404: {
+                    404: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4949,7 +5037,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    409: {
+                    409: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -4971,7 +5059,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -5245,7 +5333,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         })[];
                         next: string | null;
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -5256,7 +5344,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -5267,7 +5355,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -5278,7 +5366,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    404: {
+                    404: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -5289,7 +5377,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    409: {
+                    409: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -5311,7 +5399,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -5467,7 +5555,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 })[];
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5478,7 +5566,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5489,7 +5577,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5500,7 +5588,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5511,7 +5599,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5533,7 +5621,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5687,7 +5775,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 membershipKind: "dynamic";
                             };
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5698,7 +5786,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5709,7 +5797,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5720,7 +5808,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5731,7 +5819,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5753,7 +5841,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5793,7 +5881,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     sourceGeneration: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5804,7 +5892,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5815,7 +5903,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5826,7 +5914,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5837,7 +5925,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5848,7 +5936,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            422: {
+                            422: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -5859,7 +5947,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6003,7 +6091,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     membershipKind: "dynamic";
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6014,7 +6102,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6025,7 +6113,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6036,7 +6124,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6047,7 +6135,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6069,7 +6157,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6215,7 +6303,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 membershipKind: "dynamic";
                             };
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6226,7 +6314,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6237,7 +6325,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6248,7 +6336,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6259,7 +6347,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6281,7 +6369,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6315,7 +6403,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     };
                     response: {
                         204: void;
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6326,7 +6414,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6337,7 +6425,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6348,7 +6436,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6359,7 +6447,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6381,7 +6469,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6523,7 +6611,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     membershipKind: "dynamic";
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6534,7 +6622,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6545,7 +6633,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6556,7 +6644,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6567,7 +6655,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6589,7 +6677,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6751,7 +6839,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             202: {
                                 preparing: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6762,7 +6850,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6773,7 +6861,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6784,7 +6872,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6795,7 +6883,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6817,7 +6905,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6870,7 +6958,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     addedAt: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6881,7 +6969,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6892,7 +6980,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6903,7 +6991,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6914,7 +7002,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6936,7 +7024,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -7023,7 +7111,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         revision: number;
                                     }[];
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7034,7 +7122,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7045,7 +7133,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7056,7 +7144,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7067,7 +7155,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7089,7 +7177,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7224,7 +7312,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         addedAt: string;
                                     }[];
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7235,7 +7323,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7246,7 +7334,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7257,7 +7345,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7268,7 +7356,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7290,7 +7378,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7336,7 +7424,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         addedAt: string;
                                     };
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7347,7 +7435,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7358,7 +7446,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7369,7 +7457,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7380,7 +7468,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7402,7 +7490,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7441,7 +7529,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             };
                             response: {
                                 204: void;
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7452,7 +7540,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7463,7 +7551,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7474,7 +7562,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7485,7 +7573,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7507,7 +7595,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -7555,7 +7643,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                             addedAt: string;
                                         };
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7566,7 +7654,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7577,7 +7665,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7588,7 +7676,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7599,7 +7687,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7621,7 +7709,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7669,7 +7757,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                             addedAt: string;
                                         };
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7680,7 +7768,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7691,7 +7779,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7702,7 +7790,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7713,7 +7801,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -7735,7 +7823,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;

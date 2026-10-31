@@ -327,7 +327,7 @@ function completeScriptsRoot(directory: string) {
 test('complete executable contract accepts actual dev scripts and genuine manifest-pinned Bun with real success and failure records', () => {
   const directory = temporaryDirectory();
   try {
-    const { root, executable, pin, artifact } = completeScriptsRoot(directory);
+    const { root, executable, artifact } = completeScriptsRoot(directory);
     expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(devFile('package.json'));
     const cli = spawnSync(
       process.execPath,

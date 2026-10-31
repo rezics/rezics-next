@@ -300,7 +300,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         next: string | null;
                         revision: number;
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -311,7 +311,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -322,7 +322,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -333,7 +333,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    404: {
+                    404: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -344,7 +344,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    409: {
+                    409: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -366,7 +366,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    429: {
+                    429: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -377,7 +377,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -438,7 +438,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         revision: number;
                         lastUsed: string;
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -449,7 +449,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -460,7 +460,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -471,7 +471,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    404: {
+                    404: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -482,7 +482,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    409: {
+                    409: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -504,7 +504,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    429: {
+                    429: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -515,7 +515,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -552,7 +552,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                             revision: number;
                             lastUsed: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -563,7 +563,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -574,7 +574,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -585,7 +585,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -596,7 +596,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -618,7 +618,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                             detail: unknown;
                             errors: unknown;
                         };
-                        429: {
+                        429: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -629,7 +629,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;

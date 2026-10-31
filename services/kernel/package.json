@@ -29,7 +29,7 @@
     "@rezics/filter": "workspace:*",
     "aws4fetch": "1.0.20",
     "canonicalize": "5.1.0",
-    "elysia": "2.0.0-rc.0",
+    "elysia": "2.0.0-rc.1",
     "exact-mirror": "1.2.6",
     "fast-xml-parser": "5.11.2",
     "fractional-indexing": "4.0.0",

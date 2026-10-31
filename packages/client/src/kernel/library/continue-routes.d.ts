@@ -197,7 +197,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             }[];
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -208,7 +208,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         detail: unknown;
                         errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -219,7 +219,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         detail: unknown;
                         errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -241,7 +241,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         detail: unknown;
                         errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -281,7 +281,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 subject: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -292,7 +292,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -303,7 +303,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -314,7 +314,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -325,7 +325,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            412: {
+                            412: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -347,7 +347,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -384,7 +384,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             redirected: string;
                             revision: number;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -395,7 +395,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -406,7 +406,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -417,7 +417,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -428,7 +428,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -450,7 +450,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -633,7 +633,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 to: string;
                             };
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -644,7 +644,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -664,9 +664,13 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -705,7 +709,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -716,7 +720,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -727,7 +731,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -738,7 +742,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -749,7 +753,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -771,7 +775,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -815,7 +819,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -826,7 +830,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -837,7 +841,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -848,7 +852,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -859,7 +863,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -881,7 +885,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -921,7 +925,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -932,7 +936,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -943,7 +947,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -954,7 +958,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -965,7 +969,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -987,7 +991,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1030,7 +1034,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 candidate: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1041,7 +1045,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1052,7 +1056,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1063,7 +1067,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1085,7 +1089,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1125,7 +1129,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     candidate: string;
                                     deleted: boolean;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1136,7 +1140,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1147,7 +1151,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1158,7 +1162,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1180,7 +1184,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -1222,7 +1226,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         candidate: string;
                                         deleted: boolean;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1233,7 +1237,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1244,7 +1248,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1255,7 +1259,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1277,7 +1281,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1327,7 +1331,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1338,7 +1342,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1349,7 +1353,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1360,7 +1364,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1371,7 +1375,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1393,7 +1397,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1443,7 +1447,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1454,7 +1458,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1465,7 +1469,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1476,7 +1480,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1487,7 +1491,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1509,7 +1513,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1555,7 +1559,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1566,7 +1570,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1577,7 +1581,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1588,7 +1592,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1599,7 +1603,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1621,7 +1625,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1671,7 +1675,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1682,7 +1686,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1693,7 +1697,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1704,7 +1708,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1715,7 +1719,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1737,7 +1741,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1783,7 +1787,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1794,7 +1798,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1805,7 +1809,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1816,7 +1820,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1827,7 +1831,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1849,7 +1853,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         detail: unknown;
                                         errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1909,7 +1913,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 };
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1920,7 +1924,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1931,7 +1935,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1942,7 +1946,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1953,7 +1957,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1975,7 +1979,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2128,7 +2132,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 } | null;
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2139,7 +2143,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2150,7 +2154,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2170,9 +2174,13 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2262,7 +2270,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         }[];
                                     };
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2273,7 +2281,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2284,7 +2292,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2304,9 +2312,13 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     on: string;
                                     found?: unknown;
                                     property?: string;
-                                    expected?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2360,7 +2372,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 }[];
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2371,7 +2383,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2382,7 +2394,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2402,9 +2414,13 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2432,7 +2448,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     query: unknown;
                     headers: unknown;
                     response: {
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2529,7 +2545,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2540,7 +2556,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2551,7 +2567,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2571,9 +2587,13 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2611,7 +2631,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2622,7 +2642,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2633,7 +2653,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2644,7 +2664,22 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2831,7 +2866,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2842,7 +2877,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2853,7 +2888,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2873,9 +2908,13 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3061,7 +3100,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3072,7 +3111,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3083,7 +3122,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3103,9 +3142,13 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3142,7 +3185,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 candidate: string;
                                 disclosed: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3153,7 +3196,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3164,7 +3207,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3175,7 +3218,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3186,7 +3229,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3208,7 +3251,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3245,7 +3288,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 candidate: string;
                                 retracted: true;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3256,7 +3299,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3267,7 +3310,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3278,7 +3321,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3289,7 +3332,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3311,7 +3354,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3358,7 +3401,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3369,7 +3412,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3380,7 +3423,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3391,7 +3434,22 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3429,7 +3487,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         201: {
                             digest: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3440,7 +3498,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3451,7 +3509,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3473,7 +3531,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3507,7 +3565,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 digest: string;
                                 release: Record<string, any>;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3518,7 +3576,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3529,7 +3587,22 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3561,7 +3634,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             digest: string;
                             head: number;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3572,7 +3645,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3583,7 +3656,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3622,7 +3695,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     digest: string;
                                     head: number;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3633,7 +3706,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3644,7 +3717,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3655,7 +3728,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3666,7 +3739,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3688,7 +3761,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3731,7 +3804,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 201: {
                                     digest: string;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3742,7 +3815,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3753,7 +3826,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3764,7 +3837,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3786,7 +3859,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     detail: unknown;
                                     errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -3830,7 +3903,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                             digest: string;
                                             head: number;
                                         };
-                                        400: {
+                                        400: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3841,7 +3914,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        401: {
+                                        401: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3852,7 +3925,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        403: {
+                                        403: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3863,7 +3936,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        404: {
+                                        404: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3874,7 +3947,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        409: {
+                                        409: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3896,7 +3969,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                             detail: unknown;
                                             errors: unknown;
                                         };
-                                        503: {
+                                        503: Response | {
                                             type: unknown;
                                             title: unknown;
                                             status: number;
@@ -3936,7 +4009,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 head: number;
                                 extension: Record<string, any> | null;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3947,7 +4020,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -3958,7 +4031,22 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                 detail: unknown;
                                 errors: unknown;
                             };
-                            503: {
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -4586,7 +4674,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         cursor: import("typebox").TOptional<import("typebox").TString>;
         view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
     }>;
-    transform: ({ request, set }: {
+    transform: ({ request, set }: Omit<{
         server: import("elysia").Server | null;
         redirect: import("elysia").redirect;
         set: {
@@ -4829,172 +4917,136 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                 errors: unknown;
             };
         }>;
-        defer: (fn: import("elysia/types").AfterResponseHandler<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
-            query: import("typebox").TObject<{
-                limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
-                cursor: import("typebox").TOptional<import("typebox").TString>;
-                view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
-            }>;
-            transform: unknown;
+        defer: (fn: import("elysia/types").AfterResponseHandler<{
+            params: {};
+            query: {
+                limit?: string;
+                cursor?: string;
+                view?: string;
+            } & {
+                [key: string]: unknown;
+            };
             response: {
-                200: import("typebox").TObject<{
-                    subjects: import("typebox").TArray<import("typebox").TObject<{
-                        subjectId: import("typebox").TString;
-                        state: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        lastActivityAt: import("typebox").TString;
-                        activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
-                            id: import("typebox").TString;
-                            subjectId: import("typebox").TString;
-                            versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
-                            unit: import("typebox").TString;
-                            total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            completedUnitCount: import("typebox").TInteger;
-                            state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
-                            revision: import("typebox").TInteger;
-                            startedAt: import("typebox").TString;
-                            completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>, import("typebox").TNull]>;
-                        subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                            id: import("typebox").TString;
-                            type: import("typebox").TString;
-                            types: import("typebox").TArray<import("typebox").TString>;
-                            label: import("typebox").TUnion<[import("typebox").TObject<{
-                                value: import("typebox").TString;
-                                language: import("typebox").TString;
-                            }>, import("typebox").TNull]>;
-                            creativeWork: import("typebox").TBoolean;
-                            cover: import("typebox").TUnion<[import("typebox").TObject<{
-                                media: import("typebox").TString;
-                                width: import("typebox").TInteger;
-                                height: import("typebox").TInteger;
-                                placeholder: import("typebox").TObject<{
-                                    thumbhash: import("typebox").TString;
-                                    color: import("typebox").TString;
-                                }>;
-                                variants: import("typebox").TArray<import("typebox").TObject<{
-                                    format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                                    width: import("typebox").TInteger;
-                                }>>;
-                                focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                                    x: import("typebox").TNumber;
-                                    y: import("typebox").TNumber;
-                                }>, import("typebox").TNull]>;
-                                credit: import("typebox").TObject<{
-                                    rightsHolder: import("typebox").TString;
-                                    via: import("typebox").TObject<{
-                                        name: import("typebox").TString;
-                                        url: import("typebox").TString;
-                                    }>;
-                                    license: import("typebox").TString;
-                                    obligations: import("typebox").TArray<import("typebox").TString>;
-                                }>;
-                            }>, import("typebox").TNull]>;
-                        }>, import("typebox").TNull]>>;
-                    }>>;
-                    next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                }>;
-                400: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                401: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                403: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                409: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-                503: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                    }>>>;
-                }>;
-            };
-            detail: {
-                operationId: string;
-                'x-action': string;
-                'x-exposure': string;
-                security: {
-                    bearerAuth: never[];
-                }[];
-            };
-        }, {}, "/v1/libraryContinue">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, import("elysia").DefaultSingleton & {
-            derive: {
-                readonly admission: import("../http/admission.ts").Admission;
-                readonly job: {
-                    deadline: number;
-                    signal: AbortSignal;
+                200: {
+                    subjects: {
+                        subjectId: string;
+                        state: string | null;
+                        lastActivityAt: string;
+                        activeProgressSession: {
+                            id: string;
+                            subjectId: string;
+                            versionSubjectId: string | null;
+                            mode: "completed_units" | "cursor_position" | "scalar_amount";
+                            unit: string;
+                            total: string | null;
+                            amount: string | null;
+                            locator: string | null;
+                            position: string | null;
+                            completedUnitCount: number;
+                            state: "abandoned" | "active" | "completed";
+                            revision: number;
+                            startedAt: string;
+                            completedAt: string | null;
+                        } | null;
+                        subject?: {
+                            id: string;
+                            type: string;
+                            types: string[];
+                            label: {
+                                value: string;
+                                language: string;
+                            } | null;
+                            creativeWork: boolean;
+                            cover: {
+                                media: string;
+                                width: number;
+                                height: number;
+                                placeholder: {
+                                    thumbhash: string;
+                                    color: string;
+                                };
+                                variants: {
+                                    format: "avif" | "webp";
+                                    width: number;
+                                }[];
+                                focalPoint: {
+                                    x: number;
+                                    y: number;
+                                } | null;
+                                credit: {
+                                    rightsHolder: string;
+                                    via: {
+                                        name: string;
+                                        url: string;
+                                    };
+                                    license: string;
+                                    obligations: string[];
+                                };
+                            } | null;
+                        } | null;
+                    }[];
+                    next: string | null;
                 };
-                readonly actor: import("../request/access.ts").AccountActor | {
-                    kind: 'anonymous';
+                400: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
                 };
-                readonly session: {
-                    readonly components: import("../tokens/session.ts").SessionComponent[];
-                    record(component: import("../tokens/session.ts").SessionComponent): void;
+                401: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
                 };
-                readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-                readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+                403: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                409: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                503: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
             };
-        } & {
-            derive: unknown;
+        }, {
+            decorator: {};
+            store: {};
+            derive: {};
         }>) => import("elysia/types").MaybePromise<void>;
         readonly path: string;
         route?: string;
@@ -5003,27 +5055,16 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         store: {};
         body: unknown;
         query: {
-            limit?: number;
+            [x: string]: unknown;
+            limit?: string;
             cursor?: string;
-            view?: "BASIC" | "FULL";
+            view?: string;
         };
         params: {};
         headers: Record<string, string | undefined>;
         cookie: Record<string, import("elysia").Cookie<unknown>>;
-        readonly admission: import("../http/admission.ts").Admission;
-        readonly job: {
-            deadline: number;
-            signal: AbortSignal;
-        };
-        readonly actor: import("../request/access.ts").AccountActor | {
-            kind: 'anonymous';
-        };
-        readonly session: {
-            readonly components: import("../tokens/session.ts").SessionComponent[];
-            record(component: import("../tokens/session.ts").SessionComponent): void;
-        };
-        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    }, "cookie"> & {
+        cookie: undefined;
     }) => void;
     response: {
         200: import("typebox").TObject<{
