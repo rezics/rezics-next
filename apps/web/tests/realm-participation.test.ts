@@ -1,11 +1,28 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { RealmParticipationView } from '../src/community/realm-participation';
-import { refreshRealmMembership } from '../src/community/realm-membership-queries';
+import {
+  realmMembershipQuery,
+  refreshRealmMembership,
+  type RealmViewer,
+} from '../src/community/realm-membership-queries';
 import { loadRealmMembership, requestRealmMembership } from '../src/community/space';
 import { readFollowRecord, writeFollowRecord } from '../src/library/follow-records';
+import * as start from '../.storybook/react-start';
+
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const sessionModule = await import('../src/session/query');
+let session: ReturnType<typeof sessionModule.useSession> = { state: 'signed-out', csrfToken: null, subject: null };
+mock.module('../src/session/query', () => ({ ...sessionModule, useSession: () => session }));
+const { RealmMembership } = await import('../src/community/realm-membership');
+const { BoardStartThread } = await import('../src/threads/board-community-actions');
+const { m } = await import('../src/paraglide/messages.js');
 
 const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
 const spaceId = '0192f3a0-6c1e-7b2a-9d4e-000000000101';
@@ -158,4 +175,133 @@ test('explicit Space unfollow survives visible leave and rejoin; membership neve
     expect(await readFollowRecord(client, spaceId, authorization)).toEqual({ state: 'ready', following: false });
   }
   expect(followWrites).toEqual(['DELETE']);
+});
+
+const publicRealm = { id: realmId, visibility: 'public' as const, viewer: null };
+const returnTo = '/zh-Hant/spaces/atlas?from=/boards/a+b&label=心%20#membership';
+
+test('A signed-out Join entry navigates to sign-in for both absent and earlier viewer-none snapshots', () => {
+  session = { state: 'signed-out', csrfToken: null, subject: null };
+  for (const viewer of [null, { state: 'none' as const, idempotencyKey }]) {
+    const realm = { ...publicRealm, viewer };
+    const html = renderToStaticMarkup(createElement(RealmMembership, { realm, returnTo }));
+    expect(html).toContain(`href="/auth/sign-in?return_to=${encodeURIComponent(returnTo)}"`);
+    expect(html).toContain(`>${m.realm_join()}</a>`);
+    expect(html).not.toContain('<button');
+    for (const admittedAction of [null, 'join', 'leave'] as const)
+      expect(renderToStaticMarkup(createElement(RealmMembership, { realm, returnTo, admittedAction }))).toBe('');
+    expect(
+      renderToStaticMarkup(createElement(RealmMembership, { realm, returnTo, admittedAction: 'sign-in' })),
+    ).toBe(html);
+    const protectedHtml = renderToStaticMarkup(
+      createElement(RealmMembership, { realm: { ...realm, visibility: 'protected' }, returnTo }),
+    );
+    expect(protectedHtml).toContain(m.realm_protected_admission());
+    expect(protectedHtml).not.toContain('/auth/sign-in');
+    expect(protectedHtml).not.toContain('<button');
+  }
+  for (const state of ['unknown', 'unavailable', 'signed-in'] as const) {
+    session = { state, csrfToken: 'csrf-without-subject', subject: null };
+    expect(renderToStaticMarkup(createElement(RealmMembership, { realm: publicRealm, returnTo }))).toBe('');
+  }
+});
+
+async function renderMembershipEntries(queries: QueryClient) {
+  const board = {
+    id: '0192f3a0-6c1e-7b2a-9d4e-000000000301',
+    realmId,
+    availability: 'available',
+    visibility: 'published',
+  } as Parameters<typeof BoardStartThread>[0]['board'];
+  const root = createRootRoute({
+    component: () =>
+      createElement(
+        'div',
+        null,
+        createElement(RealmMembership, { realm: publicRealm, returnTo }),
+        createElement(BoardStartThread, {
+          board,
+          realm: { ...publicRealm, title: 'Realm', state: 'active' },
+          returnTo,
+        }),
+      ),
+  });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  await router.load();
+  return renderToStaticMarkup(
+    createElement(QueryClientProvider, { client: queries }, createElement(RouterProvider, { router })),
+  );
+}
+
+test('current membership plus uncertain leave intent cannot carry across a known session-subject replacement', async () => {
+  const queries = new QueryClient();
+  const previous = realmMembershipQuery(realmId, 'previous-person');
+  const current = realmMembershipQuery(realmId, 'current-person');
+  try {
+    session = { state: 'signed-in', subject: 'previous-person', csrfToken: 'original-csrf' };
+    queries.setQueryData(previous.queryKey, { state: 'member', idempotencyKey });
+    const before = RealmMembership({ realm: publicRealm, returnTo });
+    expect(before).not.toBeNull();
+    expect(await renderMembershipEntries(queries)).toContain(`>${m.realm_leave()}</button>`);
+    session = { ...session, csrfToken: 'rotated-csrf' };
+    // The keyed subtree owns pending, refusal/recovery and the uncertain original leave action/key.
+    // Token rotation keeps that whole subtree; replacing the subject discards it.
+    expect(RealmMembership({ realm: publicRealm, returnTo })?.key).toBe(before?.key);
+    session = { ...session, subject: 'current-person' };
+    expect(RealmMembership({ realm: publicRealm, returnTo })?.key).not.toBe(before?.key);
+    const waiting = await renderMembershipEntries(queries);
+    expect(waiting).toContain(m.realm_membership_loading());
+    expect(waiting).not.toContain(`>${m.realm_leave()}</button>`);
+    expect(waiting).not.toContain(m.board_start_thread());
+    expect(waiting).not.toContain(m.realm_leave_retry_same());
+
+    let finishOldRead!: (viewer: RealmViewer) => void;
+    const oldRead = queries.fetchQuery({
+      ...previous,
+      queryFn: () =>
+        new Promise<RealmViewer>((resolve) => {
+          finishOldRead = resolve;
+        }),
+    });
+    queries.setQueryData(current.queryKey, { state: 'banned', idempotencyKey: 'current-key' });
+    finishOldRead({ state: 'member', idempotencyKey });
+    await oldRead;
+    const denied = await renderMembershipEntries(queries);
+    expect(denied).toContain(m.realm_banned());
+    expect(denied).not.toContain(`>${m.realm_leave()}</button>`);
+    expect(denied).not.toContain(m.board_start_thread());
+    expect(queries.getQueryData(current.queryKey)).toEqual({ state: 'banned', idempotencyKey: 'current-key' });
+    for (const state of ['unknown', 'unavailable', 'signed-in'] as const) {
+      session = { state, csrfToken: null, subject: null };
+      expect(await renderMembershipEntries(queries)).toBe('<div></div>');
+    }
+    expect(realmMembershipQuery(realmId, null).enabled).toBe(false);
+  } finally {
+    queries.clear();
+  }
+});
+
+test('a retired membership refresh ignores its late result and never starts another read', async () => {
+  const controller = new AbortController();
+  let finish!: (viewer: RealmViewer) => void;
+  const read = mock(
+    () =>
+      new Promise<RealmViewer>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const refresh = refreshRealmMembership(read, 'member', { signal: controller.signal, pause });
+  controller.abort();
+  finish({ state: 'member', idempotencyKey });
+  expect(await refresh).toEqual({ kind: 'cancelled' });
+  expect(read).toHaveBeenCalledTimes(1);
+  const delays: number[] = [];
+  expect(
+    await refreshRealmMembership(async () => ({ state: 'pending', idempotencyKey }), 'member', {
+      pause: async (delay) => {
+        delays.push(delay);
+      },
+    }),
+  ).toEqual({ kind: 'pending' });
+  expect(delays).toEqual([500, 1500, 3000]);
 });

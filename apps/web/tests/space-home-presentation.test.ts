@@ -116,7 +116,7 @@ async function render(page: SpacePageData, member: 'member' | 'banned' | null = 
   signedIn = member !== null;
   const queries = new QueryClient();
   if (page.realm && member)
-    queries.setQueryData(realmMembershipQuery(page.realm.id).queryKey, {
+    queries.setQueryData(realmMembershipQuery(page.realm.id, 'reader').queryKey, {
       state: member,
       idempotencyKey: crypto.randomUUID(),
     });

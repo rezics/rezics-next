@@ -4,10 +4,12 @@ import type { loadRealmMembership } from './space';
 
 export type RealmViewer = Awaited<ReturnType<typeof loadRealmMembership>>;
 
-export const realmMembershipQuery = (realmId: string) =>
+/** RealmMembership and BoardStartThread share standing only for the same known session subject. */
+export const realmMembershipQuery = (realmId: string, subject: string | null) =>
   queryOptions({
     ...personalRead,
-    queryKey: ['realm-membership', realmId],
+    enabled: personalRead.enabled && !!subject,
+    queryKey: ['realm-membership', realmId, subject],
     queryFn: async () => {
       const { readRealmMembership } = await import('./realm-membership-actions');
       return readRealmMembership({ data: { realmId } });

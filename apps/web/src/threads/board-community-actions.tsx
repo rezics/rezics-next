@@ -24,18 +24,20 @@ export function BoardStartThread({
   realm?: BoardRealm | undefined;
   returnTo: string;
 }) {
-  const { state: session } = useSession();
+  const { state: session, subject } = useSession();
   const available =
     board.availability === 'available' && board.visibility !== 'taken_down' && board.visibility !== 'draft';
   const membership = useQuery({
-    ...realmMembershipQuery(board.realmId ?? ''),
-    enabled: personalRead.enabled && available && session === 'signed-in' && !!realm && realm.state === 'active',
+    ...realmMembershipQuery(board.realmId ?? '', session === 'signed-in' ? (subject ?? null) : null),
+    enabled:
+      personalRead.enabled && available && session === 'signed-in' && !!subject && !!realm && realm.state === 'active',
   });
   if (!available) return null;
   // A hidden/unavailable Realm never becomes a Global board.
   if (board.realmId !== null && (!realm || realm.state !== 'active')) return null;
   if (session === 'unavailable' || session === 'unknown') return null;
   if (session === 'signed-out') return <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact />;
+  if (!subject) return null;
   // A cached earlier success cannot override a failed refresh.
   if (
     board.realmId !== null &&

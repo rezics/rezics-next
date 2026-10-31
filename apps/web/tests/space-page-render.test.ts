@@ -41,7 +41,7 @@ test('the genuine member Space home renders boards, publications and current con
   expect(await readSetup(kernel, 'Bearer member', page.space.id)).toMatchObject({ kind: 'failure' });
 
   const queries = new QueryClient();
-  queries.setQueryData(realmMembershipQuery(page.realm.id).queryKey, viewer);
+  queries.setQueryData(realmMembershipQuery(page.realm.id, 'story-viewer').queryKey, viewer);
   const root = createRootRoute({ component: () => createElement(SpacePage, { page }) });
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
   await router.load();

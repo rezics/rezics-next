@@ -3,7 +3,6 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
-import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import type { RealmHome } from './space';
 import { RealmParticipationView, type MembershipProblem, type MembershipRefreshState } from './realm-participation';
@@ -30,8 +29,9 @@ export function RealmMembership({
   memberLabel?: string;
   admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
 }) {
-  const { state: session, csrfToken } = useSession();
-  if (session !== 'signed-in') {
+  const { state: session, csrfToken, subject } = useSession();
+  if (session === 'unknown' || session === 'unavailable') return null;
+  if (session === 'signed-out') {
     if (admittedAction !== undefined && admittedAction !== 'sign-in') return null;
     if (realm.visibility === 'protected')
       return (
@@ -46,27 +46,23 @@ export function RealmMembership({
         data-member-state="none"
       >
         <div className="flex flex-wrap items-center gap-3">
-          {realm.viewer?.state === 'none' ? (
-            <Button type="button" size="lg" className="h-11 px-6 text-base">
-              {m.realm_join()}
-            </Button>
-          ) : (
-            <Button
-              size="lg"
-              className="h-11 px-6 text-base"
-              render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
-            >
-              {m.realm_join()}
-            </Button>
-          )}
+          <Button
+            size="lg"
+            className="h-11 px-6 text-base"
+            render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
+          >
+            {m.realm_join()}
+          </Button>
         </div>
       </section>
     );
   }
+  if (!subject) return null;
   return (
     <PersonalMembership
-      key={realm.id}
+      key={`${realm.id}:${subject}`}
       realm={realm}
+      subject={subject}
       csrfToken={csrfToken}
       memberLabel={memberLabel}
       admittedAction={admittedAction}
@@ -77,12 +73,14 @@ export function RealmMembership({
 
 function PersonalMembership({
   realm,
+  subject,
   csrfToken,
   spaceId,
   memberLabel,
   admittedAction,
 }: {
   realm: Pick<RealmHome, 'id' | 'visibility' | 'viewer'>;
+  subject: string;
   csrfToken: string | null;
   spaceId?: string;
   memberLabel?: string | undefined;
@@ -90,7 +88,7 @@ function PersonalMembership({
 }) {
   const client = useQueryClient();
   const router = useRouter();
-  const query = useQuery({ ...realmMembershipQuery(realm.id), enabled: personalRead.enabled });
+  const query = useQuery(realmMembershipQuery(realm.id, subject));
   const [pending, setPending] = useState<{ target?: 'member' | 'none'; cycle: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<MembershipProblem>(null);
@@ -99,7 +97,15 @@ function PersonalMembership({
   const [leaveCheck, setLeaveCheck] = useState<RealmLeaveCheck>(null);
   const inFlight = useRef(false);
   const attempt = useRef<{ action: 'join' | 'leave'; idempotencyKey: string } | null>(null);
+  const active = useRef(true);
   const viewer = query.data;
+
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (viewer?.state === 'pending' && !leaveRecovery) setPending((previous) => previous ?? { cycle: 0 });
@@ -111,7 +117,7 @@ function PersonalMembership({
     setRefresh('checking');
     void refreshRealmMembership(
       async () => {
-        const result = await client.fetchQuery(realmMembershipQuery(realm.id));
+        const result = await client.fetchQuery(realmMembershipQuery(realm.id, subject));
         return result;
       },
       pending.target,
@@ -130,16 +136,17 @@ function PersonalMembership({
       } else setRefresh(result.kind);
     });
     return () => controller.abort();
-  }, [pending, client, realm.id, router, spaceId]);
+  }, [pending, client, realm.id, subject, router, spaceId]);
 
   async function checkLeave() {
-    if (!leaveRecovery || inFlight.current || pending) return;
+    if (!active.current || !leaveRecovery || inFlight.current || pending) return;
     inFlight.current = true;
     setBusy(true);
     setLeaveCheck('checking');
     try {
       // This query reads both current membership and native participation admission.
       const current = await query.refetch();
+      if (!active.current) return;
       if (current.isError || !current.data) setLeaveCheck('unavailable');
       else if (realmLeaveReadResolves(leaveRecovery, current.data.state)) {
         await Promise.all([
@@ -147,20 +154,25 @@ function PersonalMembership({
           ...(spaceId ? [client.invalidateQueries({ queryKey: ['follow-state', spaceId] })] : []),
           router.invalidate(),
         ]);
+        if (!active.current) return;
         attempt.current = null;
         setLeaveRecovery(null);
         setLeaveCheck(null);
       } else setLeaveCheck('unchanged');
     } catch {
+      if (!active.current) return;
       setLeaveCheck('unavailable');
     } finally {
-      inFlight.current = false;
-      setBusy(false);
+      if (active.current) {
+        inFlight.current = false;
+        setBusy(false);
+      }
     }
   }
 
   async function change(action: 'join' | 'leave', retryLeave = false) {
     if (
+      !active.current ||
       !viewer ||
       !csrfToken ||
       inFlight.current ||
@@ -185,6 +197,7 @@ function PersonalMembership({
         data: { realmId: realm.id, ...input },
         headers: { 'X-CSRF-Token': csrfToken },
       });
+      if (!active.current) return;
       if (result.outcome === 'accepted') {
         setLeaveRecovery(null);
         setRefresh('checking');
@@ -192,11 +205,14 @@ function PersonalMembership({
       } else if (action === 'leave') setLeaveRecovery(classifyRealmLeaveFailure(result));
       else setProblem(result);
     } catch {
+      if (!active.current) return;
       if (action === 'leave') setLeaveRecovery(classifyRealmLeaveFailure({ outcome: 'refused' }));
       else setProblem({ outcome: 'refused' });
     } finally {
-      inFlight.current = false;
-      setBusy(false);
+      if (active.current) {
+        inFlight.current = false;
+        setBusy(false);
+      }
     }
   }
 
