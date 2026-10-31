@@ -338,11 +338,13 @@ export function SecurityPage({
   if (loadState === 'failure')
     return (
       <AuthPage heading={m.auth_security_heading()}>
-        <ErrorAlert>{loadMessage}</ErrorAlert>
-        <Button type="button" variant="outline" onClick={() => retryLoad.current?.()}>
-          {m.auth_inventory_reload()}
-        </Button>
-        <a href="/login">{m.auth_security_sign_in()}</a>
+        <div className="auth-login-form">
+          <ErrorAlert>{loadMessage}</ErrorAlert>
+          <Button type="button" variant="outline" onClick={() => retryLoad.current?.()}>
+            {m.auth_inventory_reload()}
+          </Button>
+          <a href="/login">{m.auth_security_sign_in()}</a>
+        </div>
       </AuthPage>
     );
 
