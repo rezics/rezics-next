@@ -1604,7 +1604,7 @@ test('authenticated logical reconciliation permits one fresh SAME-ID future capt
     const releasedRun = h.store.proofReservation(h.proof.id, 1);
     expect(releasedRun).toMatchObject({ binding: h.binding, status: 'released', observation: unknown,
       logicalRelease: { reason: expect.stringContaining('native custody remains independent') } });
-    const changedArgv = submittedProof(h, { proof: fresh.brief.proof,
+    const changedArgv = submittedProof(h, { proof: fresh.brief.proof!,
       acceptance: { ...fresh.brief.acceptance, command: [...fresh.brief.acceptance.command, '--changed'] } });
     expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: changedArgv.path }, h.actor))
       .toThrow('exact original acceptance');
