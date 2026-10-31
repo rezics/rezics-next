@@ -203,6 +203,135 @@ describe('Storybook catalogue', () => {
     await page.close();
   }, 120_000);
 
+  test('indexes every existing component-family state with one complete CSF and docs owner', () => {
+    const index = readIndex(resolve(output, 'index.json'));
+    const families = [
+      {
+        title: 'Pages/Library/Collection',
+        id: 'pages-library-collection',
+        file: 'library-collection.stories.tsx',
+        states: [
+          'signed-in',
+          'signed-out',
+          'public-item-list-export',
+          'public-item-list-export-owner-unavailable',
+          'public-item-list-export-incomplete',
+          'curator-public-many',
+          'grid-layout',
+          'reader-public-many',
+          'curator-private-empty',
+          'reader-private',
+          'curator-public-one-page',
+          'owner-menu',
+          'mixed-types',
+          'members-preparing',
+          'unavailable',
+          'error',
+          'another-reader',
+          'curator',
+          'private-curator',
+          'private-not-found',
+          'unknown-not-found',
+          'unlisted-visitor',
+          'public-visitor',
+          'empty',
+          'one-page',
+          'many-pages',
+          'notes-and-duplicates',
+          'deep-page',
+          'final-page',
+          'preparing',
+          'restart-after-epoch-change',
+        ],
+      },
+      {
+        title: 'Pages/Subjects/Subject',
+        id: 'pages-subjects-subject',
+        file: 'subject.stories.tsx',
+        states: [
+          'signed-in',
+          'signed-out',
+          'library-slot-menu-phone',
+          'library-slot-menu-desktop',
+          'overview-reactions-english-phone',
+          'overview-reactions-chinese-phone',
+          'cover-viewer-open',
+          'cover-viewer-interaction',
+          'hero-signed-in-spoilers-hidden',
+          'hero-signed-in-spoilers-shown',
+          'hero-signed-out-spoilers-hidden',
+          'hero-signed-out-spoilers-shown',
+          'global-score',
+          'realms-and-own-vote',
+          'below-threshold',
+          'imported-scores',
+          'own-vote-forbidden',
+          'count-unavailable',
+          'exposure-open',
+          'exposure-closed',
+          'undo-after-library-removal',
+          'undo-restored',
+          'restore-occupied',
+          'restore-stale',
+          'restore-expired',
+          'public-community',
+          'editions',
+          'editions-second-page',
+        ],
+      },
+      {
+        title: 'Pages/Discovery/Search',
+        id: 'pages-discovery-search',
+        file: 'search-rating.stories.tsx',
+        states: [
+          'signed-out',
+          'signed-in',
+          'typed',
+          'empty-query',
+          'no-results',
+          'facets',
+          'active-facet',
+          'top-rated',
+          'mixed-cards',
+          'mixed-unavailable',
+          'mixed-preparing',
+          'factual-unknown-kind',
+          'restart-required',
+          'continued-results',
+          'more-kind-metadata',
+        ],
+      },
+      {
+        title: 'Pages/Community/Thread',
+        id: 'pages-community-thread',
+        file: 'thread-media.stories.tsx',
+        states: [
+          'available',
+          'unavailable',
+          'overflow',
+          'image-failure',
+          'reply-media-unavailable',
+          'reply-media-unknown',
+          'thread',
+          'editor-mention',
+          'composer-submission',
+        ],
+      },
+    ];
+    for (const family of families) {
+      const entries = Object.values(index.entries).filter((entry) => entry.title === family.title);
+      expect(
+        entries
+          .filter((entry) => entry.type === 'story')
+          .map((entry) => entry.id)
+          .sort(),
+        family.title,
+      ).toEqual(family.states.map((state) => `${family.id}--${state}`).sort());
+      // Docs and every story must resolve to the same module, rather than the last of several competing metas.
+      for (const entry of entries) expect(entry.importPath, entry.id).toEndWith(`src/stories/${family.file}`);
+    }
+  });
+
   test('indexes every actual Collection editor state under its supplied canonical folder', () => {
     const index = readIndex(resolve(output, 'index.json'));
     const states = [

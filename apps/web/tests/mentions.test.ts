@@ -146,7 +146,15 @@ test('the real thread route displays mentions and the post composer submits ment
   const report = join(output, 'stories.json');
   try {
     const run = Bun.spawn(
-      ['bun', 'x', 'vitest', 'run', '--reporter=json', `--outputFile=${report}`, 'src/stories/mentions.stories.tsx'],
+      [
+        'bun',
+        'x',
+        'vitest',
+        'run',
+        '--reporter=json',
+        `--outputFile=${report}`,
+        'src/stories/thread-media.stories.tsx',
+      ],
       { cwd: app, stdout: 'pipe', stderr: 'pipe', env: { ...process.env, CI: '1' } },
     );
     const [stdout, stderr, code] = await Promise.all([
@@ -161,9 +169,15 @@ test('the real thread route displays mentions and the post composer submits ment
       assertions.flatMap((test: any) => test.failureMessages).join('\n') + stdout.slice(-1000) + stderr.slice(-1000),
     ).toBe(0);
     expect(assertions.map((test: any) => `${test.title}: ${test.status}`).sort()).toEqual([
+      'Available: passed',
       'Composer Submission: passed',
       'Editor Mention: passed',
+      'Image Failure: passed',
+      'Overflow: passed',
+      'Reply draft with unavailable images: passed',
+      'Reply draft with unknown image status: passed',
       'Thread: passed',
+      'Unavailable: passed',
     ]);
   } finally {
     rmSync(output, { recursive: true, force: true });

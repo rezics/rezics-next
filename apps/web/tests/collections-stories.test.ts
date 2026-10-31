@@ -5,7 +5,6 @@ import { join, resolve } from 'node:path';
 const root = resolve(import.meta.dir, '../../..');
 const map = readFileSync(join(root, 'docs/development/page-stories.md'), 'utf8');
 const collectionStories = [
-  'apps/web/src/stories/collection.stories.tsx',
   'apps/web/src/stories/library-collection.stories.tsx',
   'apps/web/src/stories/library-collections.stories.tsx',
 ];

@@ -18,7 +18,8 @@ import { ratingsFixtures } from '../kernel/fake/ratings';
 import { selectEntryUndoOutcome } from '../kernel/fake/library-entry-undo';
 import { IMPORTED_VN_SUBJECT_ID } from '../kernel/fake/ratings';
 import { storySubjects } from '../kernel/story-subjects';
-import { subjectHref } from '../subject/subject-href';
+import { subjectHref, subjectViewHref } from '../subject/subject-href';
+import { continuationSubject } from '../kernel/fake/view-continuation';
 import { Cover, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
 
@@ -457,4 +458,37 @@ export const RestoreExpired: Story = {
   name: 'Restore window expired',
   play: refusedSubjectRestore('expired'),
   render: () => <SubjectUndoStory outcome="expired" />,
+};
+
+export const PublicCommunity: Story = {
+  render: () => <PageStory visitor="Signed Out" path={pagePaths.subject} />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByRole('link', { name: 'A small book with lasting questions' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'What does the fox teach the prince?' })).toBeVisible();
+  },
+};
+
+const path = subjectViewHref(continuationSubject, 'en', 'editions').replace(/^\/en/, '');
+
+async function continuationReady(context: { canvasElement: HTMLElement }, later: boolean) {
+  await pageReady(context);
+  const canvas = within(context.canvasElement);
+  await expect(canvas.getByText(later ? 'Later edition 3' : 'First edition 24')).toBeVisible();
+  const next = context.canvasElement.querySelector('a[data-slot="next-page"]');
+  await expect(next).toHaveAttribute('href', expect.stringContaining('?cursor=continuation-next'));
+}
+
+export const Editions: Story = {
+  name: 'Editions, first page',
+  tags: ['!dev'],
+  play: (context) => continuationReady(context, false),
+  render: () => <PageStory visitor="Signed Out" path={path} />,
+};
+export const EditionsSecondPage: Story = {
+  name: 'Editions, next page',
+  tags: ['!dev'],
+  play: (context) => continuationReady(context, true),
+  render: () => <PageStory visitor="Signed Out" path={`${path}?cursor=continuation-next`} />,
 };

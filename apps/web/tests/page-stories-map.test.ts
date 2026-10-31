@@ -84,14 +84,14 @@ test('Collection editing, reordering, following and privacy keep their actual ow
     editing: 'library-collection-editor.stories.tsx#Details',
     reordering: 'library-collection-editor.stories.tsx#Reordering',
     following: 'library-collection-patterns.stories.tsx#FollowingEnabled',
-    private: 'collection.stories.tsx#PrivateCurator',
-    unlisted: 'collection.stories.tsx#UnlistedVisitor',
-    public: 'collection.stories.tsx#PublicVisitor',
-    curated: 'collection.stories.tsx#Curator',
-    'one page': 'collection.stories.tsx#OnePage',
-    'many pages': 'collection.stories.tsx#ManyPages',
-    notes: 'collection.stories.tsx#NotesAndDuplicates',
-    'duplicate occurrences': 'collection.stories.tsx#NotesAndDuplicates',
+    private: 'library-collection.stories.tsx#PrivateCurator',
+    unlisted: 'library-collection.stories.tsx#UnlistedVisitor',
+    public: 'library-collection.stories.tsx#PublicVisitor',
+    curated: 'library-collection.stories.tsx#Curator',
+    'one page': 'library-collection.stories.tsx#OnePage',
+    'many pages': 'library-collection.stories.tsx#ManyPages',
+    notes: 'library-collection.stories.tsx#NotesAndDuplicates',
+    'duplicate occurrences': 'library-collection.stories.tsx#NotesAndDuplicates',
   };
   for (const [state, target] of Object.entries(outcomes)) {
     const rows = cells.filter(
