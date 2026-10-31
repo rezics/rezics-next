@@ -2796,6 +2796,7 @@
   "managed_actions_denied": "Tus permisos actuales no permiten esta acción.",
   "managed_actions_unavailable": "Esta acción de gestión no está disponible actualmente.",
   "managed_actions_available": "Disponible",
+  "managed_actions_retry": "Volver a comprobar el acceso",
   "settings_reading_leave_title": "¿Salir de los ajustes de lectura?",
   "settings_reading_leave_description": "Se descartará tu borrador local de lectura. Una solicitud de guardado ya enviada podría completarse.",
   "settings_drafts_leave_title": "¿Salir de la edición de ajustes?",

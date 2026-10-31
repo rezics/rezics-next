@@ -2796,6 +2796,7 @@
   "managed_actions_denied": "Vos droits actuels ne permettent pas cette action.",
   "managed_actions_unavailable": "Cette action de gestion est actuellement indisponible.",
   "managed_actions_available": "Disponible",
+  "managed_actions_retry": "Revérifier l’accès",
   "settings_reading_leave_title": "Quitter les paramètres de lecture ?",
   "settings_reading_leave_description": "Votre brouillon local des paramètres de lecture sera supprimé. Un enregistrement déjà envoyé peut encore aboutir.",
   "settings_drafts_leave_title": "Quitter la modification des paramètres ?",

@@ -2796,6 +2796,7 @@
   "managed_actions_denied": "Deine aktuellen Rechte erlauben diese Aktion nicht.",
   "managed_actions_unavailable": "Diese Verwaltungsaktion ist derzeit nicht verfügbar.",
   "managed_actions_available": "Verfügbar",
+  "managed_actions_retry": "Zugriff erneut prüfen",
   "settings_reading_leave_title": "Leseeinstellungen verlassen?",
   "settings_reading_leave_description": "Dein lokaler Entwurf der Leseeinstellungen wird verworfen. Ein bereits gesendeter Speichervorgang kann noch abgeschlossen werden.",
   "settings_drafts_leave_title": "Bearbeitung der Einstellungen verlassen?",

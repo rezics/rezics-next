@@ -2796,6 +2796,7 @@
   "managed_actions_denied": "你目前的權限無法執行此操作。",
   "managed_actions_unavailable": "此管理操作目前無法使用。",
   "managed_actions_available": "可使用",
+  "managed_actions_retry": "重新檢查存取權限",
   "settings_reading_leave_title": "離開閱讀設定？",
   "settings_reading_leave_description": "本機的閱讀設定草稿將會捨棄。已送出的儲存請求仍可能完成。",
   "settings_drafts_leave_title": "離開設定編輯？",

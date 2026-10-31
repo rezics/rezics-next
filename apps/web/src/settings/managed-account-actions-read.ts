@@ -4,7 +4,10 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import * as v from 'valibot';
 import type { SessionEnv } from '../session/client';
 import { authManagementPageHref, type AuthManagementPagePath } from '../session/auth-page-routes';
+import { MediaProblem } from '../media/kernel';
 import { managedAccountsException, managedAccountsFailure } from './managed-accounts-read';
+import { detailFailure } from './managed-account-detail-read';
+import { preferenceRetryDeadline } from './preference-failure-retry';
 
 const id = v.pipe(v.string(), v.uuid());
 const selection = v.strictObject({ accountId: id, viewerId: id });
@@ -35,7 +38,7 @@ export type ManagedAccountActionsResult =
       viewerId: string;
       actions: Record<ManagedActionName, Availability>;
     }
-  | { state: 'denied' | 'unavailable'; status: number | null; code: string | null };
+  | { state: 'denied' | 'unavailable'; status: number | null; code: string | null; retryAfter?: string };
 export type ManagedAccountActionsIO = (target: ManagedAccountActionsSelection) => Promise<ManagedAccountActionsResult>;
 
 const response = v.strictObject({
@@ -50,13 +53,18 @@ const response = v.strictObject({
   ]),
 });
 
-function failure(status: number | null, body?: unknown): ManagedAccountActionsResult {
+function failure(
+  status: number | null,
+  body?: unknown,
+  headers?: HeadersInit,
+): Extract<ManagedAccountActionsResult, { state: 'denied' | 'unavailable' }> {
   const result = managedAccountsFailure(status, body);
-  return { state: result.kind, status: result.status, code: result.code };
+  const { retryAfter } = detailFailure(status, body, headers);
+  return { state: result.kind, status: result.status, code: result.code, ...(retryAfter ? { retryAfter } : {}) };
 }
 function exception(error: unknown): ManagedAccountActionsResult {
   const result = managedAccountsException(error);
-  return { state: result.kind, status: result.status, code: result.code };
+  return failure(result.status, { code: result.code }, error instanceof MediaProblem ? error.headers : undefined);
 }
 function unavailable(owner: string): Availability {
   return { state: 'unavailable', owner };
@@ -86,7 +94,7 @@ export async function loadManagedAccountActions(
       { resources: [{ type: 'access.account', id: target.accountId }] },
       { headers: { authorization, 'cache-control': 'no-store' }, fetch: { cache: 'no-store' } },
     );
-    if (result.error || result.status !== 200) return failure(result.status, result.error?.value);
+    if (result.error || result.status !== 200) return failure(result.status, result.error?.value, result.headers);
     // A hidden native resource is a denial, not an empty successful capability response.
     const hidden = v.safeParse(
       v.strictObject({
@@ -100,9 +108,10 @@ export async function loadManagedAccountActions(
       }),
       result.data,
     );
-    if (hidden.success) return { state: 'denied', status: result.status, code: 'not_found' };
+    if (hidden.success) return { ...failure(result.status, { code: 'not_found' }, result.headers), state: 'denied' };
     const parsed = v.safeParse(response, result.data);
-    if (!parsed.success || parsed.output.resources[0].id !== target.accountId) return failure(null);
+    if (!parsed.success || parsed.output.resources[0].id !== target.accountId)
+      return failure(result.status, undefined, result.headers);
     const actions = parsed.output.resources[0].viewerActions;
     // routes.ts account.update uses native profile authority: account:update or the current operator's
     // account:manage. Both must carry that exact installed operation on THIS native account resource.
@@ -162,15 +171,39 @@ export const readManagedAccountActions = createServerFn({ method: 'GET' })
     }
   });
 
-/** A mounted target owns one promise, including React effect reattachment. No polling or shared target cache. */
+type ActionsSnapshot = { result: ManagedAccountActionsResult | null; pending: boolean };
+
+/** Immutable viewer/target lifetime. Effect reattachment observes the current promise; only retry replaces failures. */
 export class ManagedAccountActionsRead {
-  private pending?: Promise<ManagedAccountActionsResult>;
+  private current?: Promise<ManagedAccountActionsResult>;
+  private value: ActionsSnapshot = { result: null, pending: false };
+  private retryAt = 0;
+  private listeners = new Set<() => void>();
   constructor(
     private readonly target: ManagedAccountActionsSelection,
     private readonly io: ManagedAccountActionsIO,
   ) {}
+  snapshot = () => this.value;
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+  private publish(value: ActionsSnapshot) {
+    this.value = value;
+    for (const listener of this.listeners) listener();
+  }
   load(): Promise<ManagedAccountActionsResult> {
-    return (this.pending ??= Promise.resolve()
+    return this.current ?? this.request();
+  }
+  retry(): Promise<ManagedAccountActionsResult> {
+    if (this.value.pending || this.value.result?.state !== 'unavailable' || Date.now() < this.retryAt)
+      return this.load();
+    return this.request();
+  }
+  private request(): Promise<ManagedAccountActionsResult> {
+    this.current = Promise.resolve()
       .then(() => this.io(this.target))
       .then((result) =>
         result.state === 'ready' &&
@@ -178,7 +211,14 @@ export class ManagedAccountActionsRead {
           ? failure(null)
           : result,
       )
-      .catch(exception));
+      .catch(exception)
+      .then((result) => {
+        this.retryAt = result.state === 'unavailable' ? preferenceRetryDeadline(result.retryAfter) : 0;
+        this.publish({ result, pending: false });
+        return result;
+      });
+    this.publish({ ...this.value, pending: true });
+    return this.current;
   }
 }
 

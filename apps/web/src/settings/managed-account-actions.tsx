@@ -1,16 +1,16 @@
-import { useEffect, useState } from 'react';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import { accountProfileHref } from '../accounts/profile-editor/page';
+import { usePreferenceRetry } from './preference-failure-retry';
 import {
   ManagedAccountActionsRead,
   managedAccountActionNames,
   readManagedAccountActions,
   type ManagedAccountActionsIO,
-  type ManagedAccountActionsResult,
   type ManagedAccountActionsTarget,
   type ManagedActionName,
 } from './managed-account-actions-read';
@@ -28,18 +28,20 @@ type ViewerProps = ManagedAccountActionsTarget & { viewerId: string; io?: Manage
 
 function TargetActions({ viewerId, io = nativeIO, ...target }: ViewerProps) {
   const [read] = useState(() => new ManagedAccountActionsRead({ accountId: target.accountId, viewerId }, io));
-  const [result, setResult] = useState<ManagedAccountActionsResult | null>(null);
+  const { result, pending } = useSyncExternalStore(read.subscribe, read.snapshot, read.snapshot);
+  const retryFailure = useMemo(
+    () =>
+      result?.state === 'unavailable'
+        ? { status: result.status, ...(result.retryAfter ? { retryAfter: result.retryAfter } : {}) }
+        : undefined,
+    [result],
+  );
+  const waiting = usePreferenceRetry(retryFailure);
   useEffect(() => {
-    let active = true;
-    void read.load().then((value) => {
-      if (active) setResult(value);
-    });
-    return () => {
-      active = false;
-    };
+    void read.load();
   }, [read]);
   return (
-    <Card data-slot="managed-account-actions" aria-busy={result === null}>
+    <Card data-slot="managed-account-actions" aria-busy={pending || result === null}>
       <CardHeader>
         <CardTitle>
           <h3>{m.managed_actions_title()}</h3>
@@ -84,13 +86,33 @@ function TargetActions({ viewerId, io = nativeIO, ...target }: ViewerProps) {
             })}
           </ul>
         ) : (
-          <p role="status" data-response-status={result?.status ?? ''} data-response-code={result?.code ?? ''}>
-            {result === null
-              ? m.managed_actions_loading()
-              : result.state === 'denied'
-                ? m.managed_actions_denied()
-                : m.managed_actions_unavailable()}
-          </p>
+          <div className="space-y-3">
+            <p
+              role="status"
+              data-response-status={result?.status ?? ''}
+              data-response-code={result?.code ?? ''}
+              data-retry-after={result?.retryAfter}
+            >
+              {pending || result === null
+                ? m.managed_actions_loading()
+                : result.state === 'denied'
+                  ? m.managed_actions_denied()
+                  : m.managed_actions_unavailable()}
+            </p>
+            {result?.state === 'unavailable' ? (
+              <>
+                {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending || waiting}
+                  onClick={() => void read.retry()}
+                >
+                  {m.managed_actions_retry()}
+                </Button>
+              </>
+            ) : null}
+          </div>
         )}
       </CardContent>
     </Card>

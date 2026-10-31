@@ -1,5 +1,6 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { MediaProblem } from '../src/media/kernel';
 import {
   LOCAL_authManagementPageHref,
   ManagedAccountActionsRead,
@@ -170,5 +171,136 @@ test('delivered Auth page deployment never substitutes for the missing exact nat
     expect(result.actions[name]).not.toHaveProperty('href');
     if (result.actions[name].state === 'unavailable')
       expect(result.actions[name].owner).not.toContain('session/auth-page-routes.ts');
+  }
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((finish) => {
+    resolve = finish;
+  });
+  return { promise, resolve };
+}
+
+test('Recover failed management actions without leaving Settings with current native response and viewer isolation contracts', async () => {
+  const ready = await loadManagedAccountActions(
+    transport(native([{ action: 'account:update', operations: ['account.update'] }])),
+    'Bearer viewer',
+    target,
+  );
+  const reply = deferred<ManagedAccountActionsResult>();
+  let calls = 0;
+  const read = new ManagedAccountActionsRead(target, async (selection) => {
+    expect(selection).toEqual(target);
+    if (++calls === 1) throw new Error('Transient read failure');
+    return reply.promise;
+  });
+  const first = read.load();
+  expect(await first).toEqual({ state: 'unavailable', status: null, code: null });
+  // Parent rendering and effect reattachment keep observing the failed read until a deliberate retry.
+  expect(read.load()).toBe(first);
+  expect(calls).toBe(1);
+  const retry = read.retry();
+  expect(read.snapshot().pending).toBe(true);
+  expect(read.retry()).toBe(retry);
+  expect(read.load()).toBe(retry);
+  await Promise.resolve();
+  expect(calls).toBe(2);
+  reply.resolve(ready);
+  expect(await retry).toEqual(ready);
+  expect(read.snapshot()).toEqual({ result: ready, pending: false });
+  expect(read.load()).toBe(retry);
+  expect(read.retry()).toBe(retry);
+  expect(calls).toBe(2);
+});
+
+test('repeated unavailable reads stay recoverable while a native denial never becomes a transient failure', async () => {
+  let calls = 0;
+  const read = new ManagedAccountActionsRead(target, async () => {
+    calls++;
+    throw new MediaProblem(
+      { type: 'https://kernel.test/problems/busy', title: 'Busy', status: 503, code: 'busy' },
+      { 'Retry-After': '0' },
+    );
+  });
+  const failure = { state: 'unavailable', status: 503, code: 'busy', retryAfter: '0' };
+  expect(await read.load()).toEqual(failure);
+  expect(await read.retry()).toEqual(failure);
+  expect(read.snapshot()).toEqual({ result: failure, pending: false });
+  await read.load();
+  expect(calls).toBe(2);
+  expect(await read.retry()).toEqual(failure);
+  expect(calls).toBe(3);
+
+  let deniedCalls = 0;
+  const denied = new ManagedAccountActionsRead(target, async () => {
+    deniedCalls++;
+    return { state: 'denied', status: 403, code: 'account_suspended' };
+  });
+  const refusal = denied.load();
+  expect(await refusal).toEqual({ state: 'denied', status: 403, code: 'account_suspended' });
+  expect(denied.retry()).toBe(refusal);
+  expect(deniedCalls).toBe(1);
+});
+
+test('native Retry-After survives the capability transport and expires without issuing an automatic request', async () => {
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async () =>
+      Response.json({ code: 'rate_limited' }, { status: 429, headers: { 'Retry-After': '2' } })) as typeof fetch,
+  });
+  const failure = await loadManagedAccountActions(client, 'Bearer viewer', target);
+  expect(failure).toEqual({ state: 'unavailable', status: 429, code: 'rate_limited', retryAfter: '2' });
+  const ready = await loadManagedAccountActions(transport(native([])), 'Bearer viewer', target);
+  for (const retryAfter of ['2', 'Sat, 31 Oct 2026 00:00:02 GMT']) {
+    let now = Date.parse('2026-10-31T00:00:00Z');
+    const clock = spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      let calls = 0;
+      const read = new ManagedAccountActionsRead(target, async () =>
+        ++calls === 1 ? { state: 'unavailable', status: 429, code: 'rate_limited', retryAfter } : ready,
+      );
+      const first = read.load();
+      await first;
+      expect(read.retry()).toBe(first);
+      now += 1_999;
+      expect(read.retry()).toBe(first);
+      expect(calls).toBe(1);
+      now++;
+      expect(read.load()).toBe(first);
+      expect(calls).toBe(1);
+      expect(await read.retry()).toEqual(ready);
+      expect(calls).toBe(2);
+    } finally {
+      clock.mockRestore();
+    }
+  }
+});
+
+test('late retries cannot publish into a new viewer, target or CSRF lifetime', async () => {
+  const ready = await loadManagedAccountActions(
+    transport(native([{ action: 'account:update', operations: ['account.update'] }])),
+    'Bearer viewer',
+    target,
+  );
+  for (const selection of [target, { ...target, viewerId: accountId }, { ...target, accountId: viewerId }]) {
+    const late = deferred<ManagedAccountActionsResult>();
+    let calls = 0;
+    const previous = new ManagedAccountActionsRead(target, async () =>
+      ++calls === 1 ? { state: 'unavailable', status: 503, code: 'dependency_unavailable' } : late.promise,
+    );
+    await previous.load();
+    const retry = previous.retry();
+    const current = new ManagedAccountActionsRead(selection, async () => ({
+      state: 'denied', status: 403, code: 'forbidden',
+    }));
+    expect(current.snapshot()).toEqual({ result: null, pending: false });
+    await current.load();
+    late.resolve(ready);
+    await retry;
+    expect(current.snapshot()).toEqual({
+      result: { state: 'denied', status: 403, code: 'forbidden' },
+      pending: false,
+    });
+    expect(calls).toBe(2);
   }
 });
