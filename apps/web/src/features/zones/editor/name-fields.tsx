@@ -1,6 +1,6 @@
 import { UI_LOCALES, zonePrimaryLanguage, type ZoneConfiguration, type ZoneLanguage } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../../paraglide/messages.js';
@@ -113,7 +113,6 @@ export function ZoneNameFields({
               ),
             )}
           </NativeSelect>
-          <FieldDescription>{m.zone_name_translation_help({}, options)}</FieldDescription>
         </Field>
       </details>
     </fieldset>
