@@ -147,11 +147,13 @@ export async function runWorkerCommand(
         );
       }
     } else if (command === 'retry') {
-      if (!arg) throw new Error('usage: retry <task> [--expected-attempt <n>] [--brief <file>] [--remove-after <task>]');
+      if (!arg) throw new Error('usage: retry <task> [--proof-start] [--expected-attempt <n>] [--brief <file>] [--remove-after <task>]');
       let brief: string | undefined;
       let expectedAttempt: number | undefined;
       const removeAfter: string[] = [];
-      for (let index = 1; index < argv.length; index += 2) {
+      let proofStart = false;
+      for (let index = 1; index < argv.length;) {
+        if (argv[index] === '--proof-start' && !proofStart) { proofStart = true; index++; continue; }
         const flag = argv[index], value = argv[index + 1];
         if (!value) throw new Error(`missing value for ${flag}`);
         if (flag === '--brief' && brief === undefined) brief = value;
@@ -159,9 +161,11 @@ export async function runWorkerCommand(
           expectedAttempt = Number(value);
         else if (flag === '--remove-after') removeAfter.push(value);
         else throw new Error(`invalid retry option: ${flag}`);
+        index += 2;
       }
-      if (expectedAttempt === 0) {
-        print(JSON.stringify(tasks.queueProofStart(arg, { expectedAttempt: 0, ...(brief ? { brief } : {}), removeAfter }, priorityActor)));
+      if (proofStart || expectedAttempt === 0) {
+        if (expectedAttempt === undefined) throw new Error('--proof-start requires --expected-attempt');
+        print(JSON.stringify(tasks.queueProofStart(arg, { expectedAttempt, ...(brief ? { brief } : {}), removeAfter }, priorityActor)));
       } else {
         if (removeAfter.length) throw new Error('--remove-after requires --expected-attempt 0');
         try {

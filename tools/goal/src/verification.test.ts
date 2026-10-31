@@ -1,5 +1,8 @@
 import { expect, test } from 'bun:test';
 import { parseProofMetadata } from './verification.ts';
+import { classifyHistoricalProof, type HistoricalProofReader } from './verification.ts';
+import { processIdentity } from './process.ts';
+import { hostname } from 'node:os';
 
 const metadata = () => ({
   journey: 'Publication journey',
@@ -1112,4 +1115,191 @@ test('exact retained local wrapper registration stays pending across host sweeps
   } finally {
     h.dispose();
   }
+});
+
+test('historical admission distinguishes retained live identities from gone, missing, remote and reused identities without claiming terminal cleanup', () => {
+  const check = { taskId: 'original', attempt: 28, checkId: crypto.randomUUID(), cwd: '/retained/original' };
+  const identity = processIdentity();
+  if (!identity) throw new Error('Current process identity unavailable');
+  const registration = {
+    version: 1, checkId: check.checkId, physicalRunId: crypto.randomUUID(),
+    ownership: { taskId: check.taskId, attempt: check.attempt },
+    runnerHost: hostname(), runnerIdentity: identity,
+  };
+  const reader: HistoricalProofReader = {
+    record() { throw new Error('Historical result absent'); },
+    history() { return undefined; },
+    registrations() { return [registration]; },
+    valid(_check, value) { return value === registration; },
+  };
+  const live = classifyHistoricalProof(check, reader);
+  expect(live.classification).toBe('live');
+  expect(live.processes).toEqual([{ identity, host: hostname(), live: true }]);
+  expect(live.cause).toContain(check.checkId);
+  expect(live.record).toBeNull();
+  expect(live.physical).toEqual([null]);
+  for (const runner of [
+    { ...registration, runnerIdentity: { ...identity, start: String(BigInt(identity.start) + 1n) } },
+    { ...registration, runnerHost: 'unobserved-remote-host' },
+    { ...registration, runnerIdentity: { pid: identity.pid } },
+  ]) {
+    const unknown = classifyHistoricalProof(check, {
+      ...reader, registrations() { return [runner]; }, valid() { return true; },
+    });
+    expect(unknown.classification).toBe('historical-unknown');
+    expect(unknown.cause).toMatch(/unknown|unresolved/);
+    expect(unknown).not.toHaveProperty('passed');
+    expect(unknown).not.toHaveProperty('terminalProof');
+  }
+  const foreign = classifyHistoricalProof(check, { ...reader, valid() { return false; } });
+  expect(foreign.classification).toBe('historical-unknown');
+  expect(foreign.processes).toEqual([]);
+});
+
+test('one hundred historical unknowns archive durably and allow exactly three new checks while current unknown reservations retain capacity', () => {
+  const h = registeredFixture();
+  let restarted: ReturnType<typeof openDb> | undefined;
+  try {
+    const old = h.store.createTask(brief(),
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+    const ref = h.store.nextAttempt({ taskId: old.id, attempt: 0 }, (n) => attempt(old.id, n, h.settings.stateDirectory));
+    const checks = Array.from({ length: 100 }, () => crypto.randomUUID());
+    h.store.updateAttempt(ref, (current) => {
+      current.checks = [...checks, 'bun test labelled-not-a-native-uuid'];
+      current.result = 'Retained historical unknown report';
+    });
+    h.store.close(ref, 'stopped');
+    const raw = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(old.id, 1);
+    const reservations = h.store.activeProofReservations();
+    const leasePath = join(h.settings.stateDirectory, 'retained-physical-lease.json');
+    writeFileSync(leasePath, '{"physical":"unresolved"}');
+    expect(h.store.historicalProofChecks()).toHaveLength(100);
+    const reader: HistoricalProofReader = {
+      record() { throw new Error('Retained historical result absent'); }, history() { return undefined; },
+      registrations() { return []; }, valid() { return false; },
+    };
+    for (const check of h.store.historicalProofChecks())
+      h.store.classifyHistoricalProof(check, classifyHistoricalProof(check, reader));
+    expect(h.store.historicalProofChecks()).toHaveLength(100);
+    expect(h.store.historicalProofSlots()).toEqual([]);
+    expect(h.store.activeProofReservations()).toEqual(reservations);
+    expect(h.store.events(old.id).filter((event) => event.kind === 'historical-proof-classified')).toHaveLength(100);
+    expect(h.store.events(old.id).some((event) => event.kind === 'historical-proof-terminal')).toBe(false);
+    expect(h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(old.id, 1)).toEqual(raw);
+    expect(h.store.task(old.id).proofAuthorization).toBeUndefined();
+    expect(h.store.task(old.id).proofRun).toBeUndefined();
+    expect(readFileSync(leasePath, 'utf8')).toBe('{"physical":"unresolved"}');
+    restarted = openDb(join(h.settings.stateDirectory, 'goal.sqlite'));
+    const store = new WorkerStore(restarted);
+    expect(store.historicalProofSlots()).toEqual([]);
+    expect(store.historicalProofChecks()).toHaveLength(100);
+    // The fixture already has the first new bound proof. Two further reservations fill cap3, including unknown custody.
+    for (let index = 0; index < 3; index++) {
+      const task = store.createTask(h.proofBrief,
+        { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+      store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
+        current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization;
+      });
+      const next = store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory));
+      const binding = newProofBinding(store.task(task.id), next.attempt);
+      const reservation = store.reserveProof(binding);
+      if (index < 2) {
+        expect(reservation?.status).toBe('reserved');
+        store.bindProof(binding, { status: 'unknown', cause: 'Current native custody unknown' });
+      } else expect(reservation).toBeNull();
+    }
+    expect(store.activeProofReservations()).toHaveLength(3);
+    expect(store.proofCapacityAvailable('fixture', 'next-proof')).toBe(false);
+    expect(store.proofCapacityReason('fixture', 'next-proof')).toContain('3 current reservations');
+    expect(store.events(old.id).some((event) => event.kind === 'historical-proof-terminal')).toBe(false);
+    expect(readFileSync(leasePath, 'utf8')).toBe('{"physical":"unresolved"}');
+  } finally {
+    restarted?.close();
+    h.dispose();
+  }
+});
+
+test('live historical runner occupies cap3 until its actual identity is gone and archival never releases a physical lease', () => {
+  const h = registeredFixture();
+  try {
+    const old = h.store.createTask(brief(),
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+    const ref = h.store.nextAttempt({ taskId: old.id, attempt: 0 }, (n) => attempt(old.id, n, h.settings.stateDirectory));
+    h.store.updateAttempt(ref, (current) => { current.checks = [crypto.randomUUID()]; });
+    const check = h.store.historicalProofChecks()[0]!;
+    const identity = processIdentity();
+    if (!identity) throw new Error('Current process identity unavailable');
+    const record = {
+      custodyVersion: 1, id: check.checkId, cwd: check.cwd, status: 'finished',
+      ownership: { taskId: old.id, attempt: 1 }, runnerHost: hostname(), runnerIdentity: identity,
+    };
+    const reader: HistoricalProofReader = {
+      record() { return record; }, history() { return undefined; }, registrations() { return []; }, valid() { return false; },
+    };
+    h.store.classifyHistoricalProof(check, classifyHistoricalProof(check, reader));
+    expect(h.store.historicalProofSlots()).toEqual([check]);
+    const task = h.store.createTask(h.proofBrief,
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+    h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => { current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization; });
+    const next = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory));
+    expect(h.store.reserveProof(newProofBinding(h.store.task(task.id), next.attempt))?.status).toBe('reserved');
+    expect(h.store.proofCapacityAvailable('fixture', 'another-proof')).toBe(false);
+    expect(h.store.proofCapacityReason('fixture', 'another-proof')).toContain(check.checkId);
+    expect(h.store.proofCapacityAvailable('fixture', old.id)).toBe(false);
+    // A mismatched start time denotes a gone/reused identity; no process is signalled or stopped by this case.
+    const gone = { ...record, runnerIdentity: { ...identity, start: String(BigInt(identity.start) + 1n) } };
+    h.store.classifyHistoricalProof(check, classifyHistoricalProof(check, { ...reader, record() { return gone; } }));
+    expect(h.store.historicalProofSlots()).toEqual([]);
+    expect(h.store.proofCapacityAvailable('fixture', 'another-proof')).toBe(true);
+    expect(h.store.attempt(ref).checks).toEqual([check.checkId]);
+    expect(h.store.events(old.id).some((event) => event.kind === 'historical-proof-terminal')).toBe(false);
+  } finally { h.dispose(); }
+});
+
+test('unreserved retained product generations refresh through authenticated public first-start once without changing historical attempts or pending intent', async () => {
+  const h = registeredFixture();
+  try {
+    const task = h.store.createTask({ ...brief(), kind: 'claim' },
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'claim');
+    let ref = { taskId: task.id, attempt: 0 };
+    for (let n = 0; n < 2; n++) ref = h.store.nextAttempt(ref, (number) => attempt(task.id, number, h.settings.stateDirectory));
+    h.store.updateAttempt(ref, (current) => { current.result = 'Historical product report'; current.session = 'original-session'; });
+    h.store.close(ref, 'stopped');
+    const raw = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? ORDER BY attempt').all(task.id);
+    const submitted = submittedProof(h);
+    h.tasks.queueRetry(task.id, { expectedAttempt: 2, brief: submitted.path }, h.actor);
+    const originalIntent = h.store.retryIntent(ref);
+    const originalRecord = h.store.record(ref);
+    writeFileSync(join(h.root, 'fresh-source'), 'fresh source');
+    git(h.root, ['add', 'fresh-source']);
+    git(h.root, ['commit', '-m', 'Advance integration for unreserved retained product proof']);
+    const sourceCommit = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
+    const fresh = submittedProof(h, { proof: { ...h.proofBrief.proof, sourceCommit } });
+    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 1, brief: fresh.path }, h.actor)).toThrow('stale');
+    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 2, brief: fresh.path }, null)).toThrow('authenticated');
+    const runtime = createRuntime({ tasks: h.tasks, db: h.store.db });
+    const output: string[] = [];
+    expect(await runWorkerCommand('retry', [task.id, '--proof-start', '--expected-attempt', '2', '--brief', fresh.path], {
+      runtime, env: { CODEX_THREAD_ID: h.actor.sessionId }, print: (value) => output.push(value),
+    })).toBe(0);
+    expect(JSON.parse(output[0]!)).toEqual({ taskId: task.id, attempt: 2, status: 'created' });
+    expect(h.store.task(task.id).brief.proof?.sourceCommit).toBe(sourceCommit);
+    expect(h.store.task(task.id).brief.acceptance.command).toEqual(submitted.brief.acceptance.command);
+    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    expect(h.store.retryIntent(ref)).toEqual(originalIntent);
+    expect(h.store.retryIntents().filter((intent) => intent.taskId === task.id)).toHaveLength(1);
+    expect(h.store.record(ref)).toEqual(originalRecord);
+    expect(h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? ORDER BY attempt').all(task.id)).toEqual(raw);
+    expect(h.store.proofReservation(task.id, 2)).toBeUndefined();
+    h.tasks.queueProofStart(task.id, { expectedAttempt: 2 }, h.actor);
+    expect(h.store.retryIntent(ref)).toEqual(originalIntent);
+    const next = h.store.nextAttempt(ref, (number) => attempt(task.id, number, h.settings.stateDirectory));
+    const binding = newProofBinding(h.store.task(task.id), next.attempt);
+    h.store.reserveProof(binding);
+    h.store.bindProof(binding, { status: 'unknown', cause: 'Bound current proof is uncertain' });
+    h.store.close(next, 'stopped');
+    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 3, brief: fresh.path }, h.actor)).toThrow('reserved proof source');
+    expect(h.store.proofReservation(task.id, 3)?.binding).toEqual(binding);
+  } finally { h.dispose(); }
 });

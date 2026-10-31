@@ -3,7 +3,7 @@ import {
   ProofUnavailableError,
   readReservationObservation,
   readProofObservation,
-  historicalProofTerminal,
+  refreshHistoricalProofAdmission,
 } from './verification.ts';
 import { taskCommits } from './workspace.ts';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -212,6 +212,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (task.currentAttempt !== ref.attempt) return;
       if (task.state === 'held') return;
       this.tasks.assertProofStart(task);
+      await this.tasks.refreshProofAdmission(task);
       if (task.brief.kind === 'verification' && !store.proofCapacityAvailable(task.brief.goal, task.id)) return;
       if (!['landing', 'ready', 'running', 'stopped'].includes(task.state)) {
         store.updateRetryIntent(ref, (value) => {
@@ -900,10 +901,7 @@ export class WorkerJob implements GateOutcomeSink {
     this.reportCancelledDependencies();
     // The same recovery sweep also observes detached custody after a model exit or cancellation.
     if (adoptRunning)
-      for (const check of store.historicalProofChecks()) {
-        const observation = await historicalProofTerminal(check);
-        if (observation.status === 'terminal') store.observeHistoricalProof(check, observation);
-      }
+      await refreshHistoricalProofAdmission(store, join(this.tasks.settings.stateDirectory, 'check-registry'));
     if (adoptRunning)
       for (const run of store.activeProofReservations()) {
         try {

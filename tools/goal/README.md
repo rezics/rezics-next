@@ -1054,9 +1054,15 @@ Both boundaries authenticate the live owner or configured operations manager and
 and intent together through the existing SQLite lifecycle under the task lease. A stopped current generation can
 register without using the ordinary stopped-attempt write fence. Its raw attempts, sessions and reports stay intact;
 its historical attempt classification never becomes a registered proof. Running owners, cancelled/integrated tasks
-and stale generations cannot convert. Source refresh is allowed only in a new authenticated registration at generation
-zero before any reservation or attempt. Once a source/token is reserved it cannot change, even after release. The host
-keeps the same generation-zero intent through capacity waits and recovery; unavailable custody never launches a model.
+and stale generations cannot convert. Source refresh requires a new authenticated registration before any proof
+reservation, native intent or proof worker start. An exited historical product/claim generation is eligible: its raw
+attempt, report, session, sequence and classification remain unchanged. For an already typed contract, refresh retains
+the exact journey, sourceTasks and acceptance argv and updates the one existing pending start intent atomically under
+the expected generation. Once a source/token is reserved it cannot change, even after release. Missing or uncertain
+prior proof-start classification refuses refresh. A retained legacy product record predating `taskKind` keeps that
+field absent; it is eligible when there is no proof observation, reservation or binding event. The host keeps the same intent through capacity waits and recovery;
+unavailable custody never launches a model. A stale capture refusal names the old/current commits and exact authorized
+`--proof-start --expected-attempt` refresh needed; it never runs a doomed stale check.
 
 The exact retained prefix `bun scripts/worker-check.ts --local -- bun test` supports provenance registration and full
 homogeneous ordered file unions. It remains explicitly unavailable for execution with the delivered 50a producer:
@@ -1088,9 +1094,19 @@ The existing WorkerStore SQLite write transaction admits at most three active pr
 by all controllers. Pending retries wait without a model through the existing retry-intent path. Model exit, waiting,
 crash, missing registration and unknown custody retain capacity. Only an owned terminal custody result, or explicit
 proven-never-started refusal, releases it. The wrapper's infrastructure rerun retains the same logical reservation.
-Historical unbound managed UUIDs are quarantined against proof capacity until their own terminal custody is known;
-their sessions and raw evidence remain intact, with no retroactive source/token/admission labels. Conservative
-quarantine also covers older product checks whose saved detached UUIDs cannot establish proof identity.
+Historical unbound managed UUIDs use admission policy B. Before a new proof start and during host recovery, the
+controller's trusted current reader reads their historical cwd as data; it never imports code from that old cwd.
+Retained v1 ownership, boot/start/group runner identity and the current native registry identify actually live local
+processes using `sameProcess`. Each live historical logical check occupies one of the three slots. Missing results,
+gone recorded processes, unavailable identities and unknown remote custody are durably archived in
+`historical-proof-classified` events as `historical-unknown`, with raw record/history/registration facts, actual process
+identity observations and reasons. They do not occupy the logical new-proof cap. Unclassified UUIDs wait for this
+receiving step; malformed labelled command strings are retained in the original attempt but are not native check IDs.
+Classification is re-observed before admission, including archived facts after restart. It does not emit a
+`historical-proof-terminal` event, turn an absent result into a pass, claim physical cleanup, delete history, release
+leases or change host/resource admission. Known remote resources remain the native owner's responsibility. The
+producer's resources callback precedes lease release and is never full cleanup evidence. Existing bound/current
+unknown reservations still occupy slots across waits and crashes; policy B changes only legacy logical classification.
 The adapter reads actual `readWorkerCheckRecord` and `readWorkerCheckHistory` exports; physical records and terminal
 custody proofs for every incarnation are retained with the immutable observation. It never writes native records.
 

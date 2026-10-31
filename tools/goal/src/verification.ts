@@ -213,7 +213,9 @@ export function parseProofMetadata(value: unknown): ProofMetadata {
 
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { hostname } from 'node:os';
+import { sameProcess, type ProcessIdentity } from './process.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -637,12 +639,132 @@ export async function readProofObservation(task: Task): Promise<ProofObservation
 }
 
 export type HistoricalProofCheck = { taskId: string; attempt: number; checkId: string; cwd: string };
+export const nativeCheckId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Only the logical cap classification changes. This observation never releases physical resources or proves a pass. */
+export type HistoricalProofAdmission = {
+  classification: 'live' | 'historical-unknown';
+  cause: string;
+  record: unknown;
+  physical: unknown[];
+  registrations: unknown[];
+  processes: { identity: ProcessIdentity; host: string; live: boolean | null }[];
+};
+export interface HistoricalProofReader extends Pick<ProofReader, 'record' | 'history'> {
+  registrations(check: HistoricalProofCheck): unknown[];
+  /** Uses native v1 ownership/runner/result-path validation, without retrofitting controllerProof. */
+  valid(check: HistoricalProofCheck, registration: unknown): boolean;
+}
+function runnerIdentity(value: unknown): ProcessIdentity | undefined {
+  if (!isObject(value) || !Number.isSafeInteger(value.pid) || Number(value.pid) < 1 ||
+      typeof value.start !== 'string' || !/^\d+$/.test(value.start) ||
+      typeof value.boot !== 'string' || !nativeCheckId.test(value.boot) ||
+      !Number.isSafeInteger(value.group) || Number(value.group) < 1) return;
+  return { pid: Number(value.pid), start: value.start, boot: value.boot, group: Number(value.group) };
+}
+/** Pure receiving classification; missing results/identities remain unknown, never terminal or physically cleaned. */
+export function classifyHistoricalProof(check: HistoricalProofCheck, reader: HistoricalProofReader): HistoricalProofAdmission {
+  const evidence: HistoricalProofAdmission = {
+    classification: 'historical-unknown', cause: 'Historical process identity/custody unavailable; physical resources unresolved',
+    record: null, physical: [], registrations: [], processes: [],
+  };
+  const errors: string[] = [];
+  const owned = (value: unknown) => isObject(value) && isObject(value.ownership) &&
+    value.ownership.taskId === check.taskId && value.ownership.attempt === check.attempt;
+  const inspect = (value: unknown) => {
+    if (!isObject(value) || !owned(value)) return;
+    const identity = runnerIdentity(value.runnerIdentity);
+    if (!identity || typeof value.runnerHost !== 'string') return;
+    const live = value.runnerHost === hostname() ? sameProcess(identity) : null;
+    evidence.processes.push({ identity, host: value.runnerHost, live });
+    if (live) evidence.classification = 'live';
+  };
+  try { evidence.record = reader.record(check.checkId, check.cwd); } catch (error) { errors.push(String(error)); }
+  try { evidence.registrations = reader.registrations(check); } catch (error) { errors.push(String(error)); }
+  const ids = new Set<string>();
+  const record = evidence.record;
+  if (isObject(record) && record.custodyVersion === 1 && record.id === check.checkId && record.cwd === check.cwd && owned(record)) {
+    inspect(record);
+    for (const id of [record.physicalRunId, record.waitForPhysicalRunId])
+      if (typeof id === 'string' && nativeCheckId.test(id)) ids.add(id);
+  }
+  for (const registration of evidence.registrations) {
+    try {
+      if (!reader.valid(check, registration)) continue;
+      inspect(registration);
+      if (isObject(registration) && typeof registration.physicalRunId === 'string') ids.add(registration.physicalRunId);
+    } catch (error) { errors.push(String(error)); }
+  }
+  for (const id of ids) {
+    try {
+      const run = reader.history(check.checkId, id, check.cwd);
+      evidence.physical.push(run ?? null);
+      if (isObject(run) && run.version === 1 && run.id === check.checkId && run.cwd === check.cwd && run.physicalRunId === id)
+        inspect(run);
+    } catch (error) { errors.push(String(error)); }
+  }
+  evidence.cause = evidence.classification === 'live'
+    ? `Live historical check ${check.checkId} (${check.taskId}/${check.attempt}) occupies one logical proof slot`
+    : evidence.processes.some((entry) => entry.live === false)
+      ? 'Retained historical runner identity is gone; result/physical cleanup remains unknown'
+      : 'Historical process identity/custody unavailable; physical resources unresolved';
+  if (errors.length) evidence.cause += `; ${errors.join('; ')}`;
+  return evidence;
+}
+/** Import the controller's trusted current reader, never code from a historical/deleted cwd. */
+async function loadHistoricalProofReader(registry: string): Promise<HistoricalProofReader> {
+  const wrapper = join(import.meta.dir, '../../../scripts/worker-check.ts');
+  const reader = await loadProofReader(wrapper);
+  const custody: unknown = await import(pathToFileURL(join(wrapper, '../check-custody.ts')).href);
+  if (!isObject(custody) || typeof custody.validRegistration !== 'function')
+    throw new Error('Native historical v1 registration validator unavailable');
+  const validRegistration = custody.validRegistration;
+  return {
+    ...reader,
+    registrations: (check) => {
+      try {
+        return readdirSync(registry).filter((name) => {
+          const physical = name.slice(check.checkId.length + 1, -5);
+          return name.startsWith(`${check.checkId}.`) && name.endsWith('.json') && nativeCheckId.test(physical);
+        }).map((name): unknown => {
+          try { return JSON.parse(readFileSync(join(registry, name), 'utf8')); }
+          catch (error) { return { unavailable: String(error), path: join(registry, name) }; }
+        });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        throw error;
+      }
+    },
+    valid: (check, registration) => {
+      if (!isObject(registration) || registration.checkId !== check.checkId ||
+          registration.resultPath !== join(check.cwd, '.temp/goal/checks/results', `${check.checkId}.json`) ||
+          !isObject(registration.ownership) || registration.ownership.taskId !== check.taskId ||
+          registration.ownership.attempt !== check.attempt || typeof registration.physicalRunId !== 'string' ||
+          !nativeCheckId.test(registration.physicalRunId)) return false;
+      return validRegistration(registration, {
+        version: 1, checkId: check.checkId, resultPath: registration.resultPath,
+        ownership: { taskId: check.taskId, attempt: check.attempt }, physicalRunId: registration.physicalRunId,
+        runnerHost: registration.runnerHost, runnerIdentity: registration.runnerIdentity,
+      }) === true;
+    },
+  };
+}
+/** Run before admission and during recovery; all original records and physical lease accounting stay untouched. */
+export async function refreshHistoricalProofAdmission(store: WorkerStore, registry: string, goal?: string): Promise<void> {
+  const checks = store.historicalProofChecks(goal);
+  if (!checks.length) return;
+  let reader: HistoricalProofReader;
+  try { reader = await loadHistoricalProofReader(registry); }
+  catch (error) {
+    throw new ProofUnavailableError(`Historical admission requires the trusted current native reader: ${String(error)}`);
+  }
+  for (const check of checks) store.classifyHistoricalProof(check, classifyHistoricalProof(check, reader));
+}
 /** Old unbound UUIDs can release quarantine through custody, but can never acquire source/token provenance. */
 export async function historicalProofTerminal(check: HistoricalProofCheck): Promise<ProofObservation> {
   const physical: unknown[] = [];
   let record: unknown;
   try {
-    const reader = await loadProofReader(join(check.cwd, 'scripts/worker-check.ts'));
+    const reader = await loadProofReader(join(import.meta.dir, '../../../scripts/worker-check.ts'));
     record = reader.record(check.checkId, check.cwd);
     if (
       !isObject(record) ||

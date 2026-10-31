@@ -1,8 +1,8 @@
-import { proofFingerprint } from './verification.ts';
+import { nativeCheckId, proofFingerprint } from './verification.ts';
 import type { Database } from 'bun:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { CheckResults, checkResultsMigration } from './check-results.ts';
-import { groupMembers } from './process.ts';
+import { groupMembers, sameProcess } from './process.ts';
 import { makeRecord, readMeasurement } from './records.ts';
 import { migrate } from './db.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -26,6 +26,7 @@ import type {
   ProofBindResult,
   ProofObservation,
   HistoricalProofCheck,
+  HistoricalProofAdmission,
 } from './verification.ts';
 
 export const workerMigrations = [
@@ -362,7 +363,7 @@ export class WorkerStore implements AttemptFence {
       .get() as { count: number };
     return row.count;
   }
-  /** Unbound detached checks remain quarantine only: never retrofit a token, source, or task kind. */
+  /** Retained unbound UUID evidence. Classification affects only logical admission, never physical custody. */
   historicalProofChecks(goal?: string): HistoricalProofCheck[] {
     return this.db
       .query(`SELECT a.task_id, a.attempt, a.body, t.body AS task FROM worker_attempts a JOIN worker_tasks t ON t.id=a.task_id
@@ -377,13 +378,34 @@ export class WorkerStore implements AttemptFence {
         return [...new Set(attempt.checks ?? [])]
           .filter(
             (checkId) =>
-              !this.db
+              nativeCheckId.test(checkId) && !this.db
                 .query(`SELECT 1 FROM worker_events
           WHERE task_id=? AND attempt=? AND kind='historical-proof-terminal' AND json_extract(body,'$.checkId')=?`)
                 .get(row.task_id, row.attempt, checkId),
           )
           .map((checkId) => ({ taskId: row.task_id, attempt: row.attempt, checkId, cwd: task.worktree }));
       });
+  }
+  classifyHistoricalProof(check: HistoricalProofCheck, admission: HistoricalProofAdmission): void {
+    this.db.transaction(() => {
+      if (!this.historicalProofChecks().some((entry) => isDeepStrictEqual(entry, check))) return;
+      const previous = this.db.query(`SELECT body FROM worker_events WHERE task_id=? AND attempt=?
+        AND kind='historical-proof-classified' AND json_extract(body,'$.checkId')=? ORDER BY sequence DESC LIMIT 1`)
+        .get(check.taskId, check.attempt, check.checkId) as { body: string } | null;
+      const body = { checkId: check.checkId, admission };
+      if (previous && isDeepStrictEqual(JSON.parse(previous.body), body)) return;
+      this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+        .run(check.taskId, check.attempt, 'historical-proof-classified', new Date().toISOString(), JSON.stringify(body));
+    }).immediate();
+  }
+  /** Unclassified facts wait for the trusted reader. Only explicitly archived historical unknowns leave the cap. */
+  historicalProofSlots(goal?: string): HistoricalProofCheck[] {
+    return this.historicalProofChecks(goal).filter((check) => {
+      const row = this.db.query(`SELECT body FROM worker_events WHERE task_id=? AND attempt=?
+        AND kind='historical-proof-classified' AND json_extract(body,'$.checkId')=? ORDER BY sequence DESC LIMIT 1`)
+        .get(check.taskId, check.attempt, check.checkId) as { body: string } | null;
+      return !row || JSON.parse(row.body).admission.classification !== 'historical-unknown';
+    });
   }
   observeHistoricalProof(check: HistoricalProofCheck, observation: ProofObservation): void {
     if (observation.status !== 'terminal' || observation.passed)
@@ -409,12 +431,19 @@ export class WorkerStore implements AttemptFence {
         "SELECT count(*) AS count, coalesce(max(task_id=?),0) AS own FROM worker_proof_reservations WHERE status != 'released' AND (goal=? OR task_id=?)",
       )
       .get(taskId, goal, taskId) as { count: number; own: number };
-    const historical = this.historicalProofChecks(goal);
+    const historical = this.historicalProofSlots(goal);
     return (
       row.count + historical.length < 3 &&
       row.own === 0 &&
-      !this.historicalProofChecks().some((check) => check.taskId === taskId)
+      !this.historicalProofSlots().some((check) => check.taskId === taskId)
     );
+  }
+  proofCapacityReason(goal: string, taskId: string): string {
+    const historical = this.historicalProofSlots().filter((check) => check.taskId === taskId ||
+      this.task(check.taskId).brief.goal === goal);
+    const current = this.activeProofReservations().filter((run) => run.binding.goal === goal || run.binding.taskId === taskId);
+    return `Proof cap 3 pending: ${current.length} current reservations (unknown custody retains its slot); ` +
+      `live or unclassified historical checks: ${historical.map((check) => `${check.checkId} (${check.taskId}/${check.attempt})`).join(', ') || 'none'}`;
   }
   /** The existing store write transaction owns admission across every controller and detached model exit. */
   reserveProof(binding: ProofBinding): ProofReservation | null {
@@ -439,8 +468,8 @@ export class WorkerStore implements AttemptFence {
         .map((row) => decode<ProofReservation>(row)!);
       if (
         active.some((run) => run.binding.taskId === binding.taskId) ||
-        active.length + this.historicalProofChecks(binding.goal).length >= 3 ||
-        this.historicalProofChecks().some((check) => check.taskId === binding.taskId)
+        active.length + this.historicalProofSlots(binding.goal).length >= 3 ||
+        this.historicalProofSlots().some((check) => check.taskId === binding.taskId)
       )
         return null;
       const run: ProofReservation = { binding: structuredClone(binding), status: 'reserved' };
@@ -876,8 +905,32 @@ export class WorkerStore implements AttemptFence {
         reservations.some(({ binding }) => binding.sourceCommit !== brief.proof?.sourceCommit ||
           !isDeepStrictEqual(binding.argv, brief.acceptance.command))))
       throw new Error('a reserved proof source and command may never be replaced');
-    if (task.brief.proof && task.brief.proof.sourceCommit !== brief.proof?.sourceCommit && ref.attempt !== 0)
-      throw new Error('proof source refresh requires a new authorized registration before any attempt');
+    if (task.brief.proof && task.brief.proof.sourceCommit !== brief.proof?.sourceCommit)
+      this.assertProofFirstStart(ref, brief);
+  }
+  /** Historical product attempts are not proof starts. Any bound or uncertain proof incarnation is immutable. */
+  assertProofFirstStart(ref: AttemptRef, brief: Brief): void {
+    const task = this.task(ref.taskId);
+    if (task.currentAttempt !== ref.attempt || !['ready', 'held', 'stopped'].includes(task.state))
+      throw new StaleAttemptError(ref, task.currentAttempt);
+    if (task.proofRun || this.db.query('SELECT 1 FROM worker_proof_reservations WHERE task_id=?').get(task.id) ||
+        this.db.query("SELECT 1 FROM worker_events WHERE task_id=? AND kind IN ('proof-reserved','proof-binding') LIMIT 1").get(task.id))
+      throw new Error('a reserved proof source and command may never be replaced');
+    if (ref.attempt > 0) {
+      const attempt = this.attempt(ref);
+      const record = this.record(ref);
+      if (!['stopped', 'exited'].includes(attempt.state) ||
+          [attempt.process, attempt.driver, ...attempt.auxiliaryProcesses].some((identity) => identity && sameProcess(identity)))
+        throw new StaleAttemptError(ref, task.currentAttempt);
+      // Legacy retained product records predate taskKind. Absence stays absent; do not relabel them from today's brief.
+      if (task.brief.kind === 'verification' && (!record || record.taskKind === 'verification' || record.proof))
+        throw new Error('first proof start requires retained product classification; proof start custody is uncertain');
+    }
+    if (task.brief.kind === 'verification' && task.brief.proof && !isDeepStrictEqual(
+      { ...task.brief.proof, sourceCommit: brief.proof?.sourceCommit }, brief.proof,
+    )) throw new Error('proof refresh must retain the exact original metadata');
+    if (task.brief.kind === 'verification' && !isDeepStrictEqual(task.brief.acceptance, brief.acceptance))
+      throw new Error('proof refresh must retain the exact original acceptance');
   }
   recordExplicitRetry(ref: AttemptRef, update: (task: Task) => void, options: RetryIntent['options']): void {
     this.db

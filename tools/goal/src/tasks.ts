@@ -9,6 +9,7 @@ import {
   newProofBinding,
   productionProofProducer,
   readProofObservation,
+  refreshHistoricalProofAdmission,
   type ProofProducer,
 } from './verification.ts';
 import { remoteCheckEnvironment } from './merge.ts';
@@ -512,7 +513,7 @@ export class WorkerTasks {
     if (!worker) throw new TaskHeldForDependenciesError();
     return worker;
   }
-  /** Authenticate and persist a SAME-ID never-started conversion; this method never launches anything. */
+  /** Authenticate a SAME-ID first proof start, retaining exited product attempts; never launches anything. */
   queueProofStart(
     taskId: string,
     options: ProofStartOptions,
@@ -523,12 +524,13 @@ export class WorkerTasks {
     try {
       const task = this.store.task(taskId);
       const ref = { taskId, attempt: options.expectedAttempt };
-      if (options.expectedAttempt !== 0 || task.currentAttempt !== 0)
+      if (!Number.isSafeInteger(options.expectedAttempt) || options.expectedAttempt < 0 || task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError(ref, task.currentAttempt);
       const submitted = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
       const nextBrief = submitted?.brief ?? task.brief;
       if (nextBrief.kind !== 'verification') throw new Error('first-start receiving requires a typed verification brief');
       this.store.assertProofRegistration(ref, nextBrief);
+      this.store.assertProofFirstStart(ref, nextBrief);
       const removed = task.brief.after.filter((id) => !nextBrief.after.includes(id));
       const approved = options.removeAfter ?? [];
       if (new Set(approved).size !== approved.length ||
@@ -548,6 +550,7 @@ export class WorkerTasks {
       }
       this.store.updateHeldRetryTask(ref, (current) => {
         this.store.assertProofRegistration(ref, nextBrief);
+        this.store.assertProofFirstStart(ref, nextBrief);
         const previousCritical = criticalPriority(current.brief, current.taskClass);
         current.brief = nextBrief;
         if (briefPath) current.briefPath = briefPath;
@@ -559,10 +562,12 @@ export class WorkerTasks {
       });
       briefPath = undefined; // The committed registration owns this immutable file.
       const unavailable = proofExecutionUnavailable(nextBrief.acceptance.command);
-      if (unavailable) return { taskId, attempt: 0, status: 'pending', reason: unavailable };
-      if (!this.dependenciesMet({ brief: nextBrief }) || !this.store.proofCapacityAvailable(nextBrief.goal, taskId))
-        return { taskId, attempt: 0, status: 'waiting', reason: 'Dependencies or owned proof capacity pending' };
-      return { taskId, attempt: 0, status: 'created' };
+      if (unavailable) return { taskId, attempt: ref.attempt, status: 'pending', reason: unavailable };
+      if (!this.dependenciesMet({ brief: nextBrief }))
+        return { taskId, attempt: ref.attempt, status: 'waiting', reason: 'Dependencies pending' };
+      if (!this.store.proofCapacityAvailable(nextBrief.goal, taskId))
+        return { taskId, attempt: ref.attempt, status: 'waiting', reason: this.store.proofCapacityReason(nextBrief.goal, taskId) };
+      return { taskId, attempt: ref.attempt, status: 'created' };
     } catch (error) {
       if (briefPath) rmSync(briefPath, { force: true });
       throw error;
@@ -905,12 +910,17 @@ export class WorkerTasks {
     if (task.brief.kind !== 'verification') return;
     if (!task.brief.proof || task.proofAuthorization?.fingerprint !== proofFingerprint(task.brief))
       throw new ProofUnavailableError('Proof pending/unavailable: authenticated registration required');
-    if (this.branchHead(this.settings.integrationBranch, false) !== task.brief.proof.sourceCommit)
-      throw new ProofUnavailableError('Proof pending/unavailable: integration source advanced; register a new captured source');
+    const head = this.branchHead(this.settings.integrationBranch, false);
+    if (head !== task.brief.proof.sourceCommit)
+      throw new ProofUnavailableError(`Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> before any reservation; bound proof sources cannot refresh`);
     const missing = preflightProof(this.settings.mainCheckout, task.brief);
     if (missing.length) throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
     const unavailable = proofExecutionUnavailable(task.brief.acceptance.command);
     if (unavailable) throw new ProofUnavailableError(unavailable);
+  }
+  async refreshProofAdmission(task: Task): Promise<void> {
+    if (task.brief.kind === 'verification')
+      await refreshHistoricalProofAdmission(this.store, join(this.settings.stateDirectory, 'check-registry'), task.brief.goal);
   }
   /** `leased` when the caller already holds the task's lease. */
   private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
@@ -921,6 +931,7 @@ export class WorkerTasks {
       if (current.brief.kind === 'verification' && nextBrief.kind !== 'verification')
         throw new Error('registered proof contracts cannot become product retries');
       this.assertProofStart({ ...current, brief: nextBrief });
+      await this.refreshProofAdmission({ ...current, brief: nextBrief });
     }
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
     const plan = leased ? undefined : this.retryPlan(taskId, options);
@@ -954,9 +965,12 @@ export class WorkerTasks {
       if (task.brief.kind === 'verification' && nextBrief.kind !== 'verification')
         throw new Error('registered proof contracts cannot become product retries');
       this.assertProofStart({ ...task, brief: nextBrief });
+      await this.refreshProofAdmission({ ...task, brief: nextBrief });
       if (nextBrief.kind === 'verification' && !this.store.proofCapacityAvailable(nextBrief.goal, task.id)) {
         this.store.saveRetryIntent({ taskId, attempt: task.currentAttempt }, {});
-        this.store.event({ taskId, attempt: task.currentAttempt }, 'proof-capacity-queued', { goal: nextBrief.goal });
+        this.store.event({ taskId, attempt: task.currentAttempt }, 'proof-capacity-queued', {
+          goal: nextBrief.goal, reason: this.store.proofCapacityReason(nextBrief.goal, task.id),
+        });
         throw new ProofCapacityQueuedError();
       }
       this.assertLocalAcceptanceCustody(task, nextBrief);
