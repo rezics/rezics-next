@@ -618,7 +618,10 @@ promotion completes; Goal completion still requires every scoped task to be merg
 Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
 cancelled worktrees one at a time, under idle I/O priority, after `/proc/pressure/io` reports `some avg10` at or below
 20 (hosts without that file do not wait); a retry recreates a missing worktree from its task branch and installs its
-dependencies before launch.
+dependencies before launch. A permission-denied removal records the offending path and owner when available and sends
+the task manager one durable notice for that path generation. The sweep continues with independent finished tasks; it
+does not retry the blocked path until its ownership, permissions or filesystem identity changes. Cleanup leaves shared
+dependency stores and symlink targets outside the worktree untouched.
 Declared paths never hold a task: tasks that declare the same file run side by side and resolve any overlap when they
 rebase. Only `after:` holds a task.
 

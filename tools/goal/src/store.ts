@@ -18,6 +18,7 @@ import type {
   PromotionRun,
   RetryIntent,
   Task,
+  WorktreeCleanupDisposition,
 } from './types.ts';
 import { recordFlow, ensureFlow } from './flow.ts';
 import type {
@@ -81,6 +82,11 @@ CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.stat
     module: 'worker',
     version: 6,
     sql: `CREATE INDEX worker_tasks_state ON worker_tasks(json_extract(body, '$.state'));`,
+  },
+  {
+    module: 'worker',
+    version: 7,
+    sql: `CREATE TABLE worker_worktree_cleanup (task_id TEXT PRIMARY KEY REFERENCES worker_tasks(id), body TEXT NOT NULL);`,
   },
   checkResultsMigration(),
   {
@@ -166,6 +172,28 @@ export class WorkerStore implements AttemptFence {
     if (!task) throw new Error(`unknown task: ${id}`);
     this.taskSnapshot.set(id, task);
     return structuredClone(task);
+  }
+  worktreeCleanup(taskId: string): WorktreeCleanupDisposition | undefined {
+    const row = this.db.query('SELECT body FROM worker_worktree_cleanup WHERE task_id=?').get(taskId);
+    return decode<WorktreeCleanupDisposition>(row);
+  }
+  /** Record a new filesystem generation once; repeated sweeps on the same generation stay suppressed. */
+  recordWorktreeCleanup(disposition: WorktreeCleanupDisposition): boolean {
+    return this.db
+      .transaction(() => {
+        const current = this.worktreeCleanup(disposition.taskId);
+        if (current?.generation === disposition.generation) return false;
+        this.db
+          .query(
+            'INSERT INTO worker_worktree_cleanup(task_id, body) VALUES (?, ?) ON CONFLICT(task_id) DO UPDATE SET body=excluded.body',
+          )
+          .run(disposition.taskId, JSON.stringify(disposition));
+        return true;
+      })
+      .immediate();
+  }
+  clearWorktreeCleanup(taskId: string): void {
+    this.db.query('DELETE FROM worker_worktree_cleanup WHERE task_id=?').run(taskId);
   }
   tasks(): Task[] {
     this.refreshSnapshot();
