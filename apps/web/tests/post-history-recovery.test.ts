@@ -86,17 +86,18 @@ async function componentBundle() {
             );
             build.onLoad({ filter: /.*/, namespace: 'history-boundary' }, ({ path }) => ({
               loader: 'js',
-              contents: path === '@tanstack/react-start/server'
-                ? `export * from ${JSON.stringify(join(app, '.storybook/react-start.ts'))};
+              contents:
+                path === '@tanstack/react-start/server'
+                  ? `export * from ${JSON.stringify(join(app, '.storybook/react-start.ts'))};
                    export const getRequest = () => new Request('https://site.test/en/thread', { headers:
                     window.historyViewer ? { cookie: '__Host-rezics_session=${'a'.repeat(43)}' } : {} });
                    export const setResponseHeader = () => {};`
-                : path === 'cloudflare:workers'
-                  ? `export const env = { AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test',
+                  : path === 'cloudflare:workers'
+                    ? `export const env = { AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test',
                       WEBSITE_SCOPES: 'openid', WEBSITE_CLIENT_ID: 'history-test', WEBSITE_CLIENT_KEY: '{}',
                       SESSIONS: { idFromName: id => id, get: () => ({ credential: async () => ({ status: 'active',
                         subject: window.historyViewer, accessToken: window.historyViewer, csrfToken: 'test' }) }) } };`
-                  : `import { createKernelClient } from ${JSON.stringify(Bun.resolveSync('@rezics/client', app))};
+                    : `import { createKernelClient } from ${JSON.stringify(Bun.resolveSync('@rezics/client', app))};
                      export const kernelClient = () => createKernelClient('https://kernel.test', { fetch: window.historyFetch });`,
             }));
           },
@@ -112,9 +113,12 @@ async function componentBundle() {
 async function mounted() {
   browser ??= await chromium.launch();
   const page = await browser.newPage();
-  await page.route('https://site.test/**', (route) => route.fulfill({
-    contentType: 'text/html', body: '<main id="app"></main>',
-  }));
+  await page.route('https://site.test/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<main id="app"></main>',
+    }),
+  );
   await page.goto('https://site.test/en/thread');
   await page.addScriptTag({ content: await componentBundle() });
   await mount(page);
@@ -131,7 +135,10 @@ async function pending(page: Page, count = 1) {
   await page.waitForFunction((count) => (window as unknown as Driver).pendingHistory.length === count, count);
 }
 async function finish(page: Page, body: unknown, status = 200) {
-  await page.evaluate(({ body, status }) => (window as unknown as Driver).finishHistory(body, status), { body, status });
+  await page.evaluate(({ body, status }) => (window as unknown as Driver).finishHistory(body, status), {
+    body,
+    status,
+  });
 }
 async function unavailable(page: Page) {
   await page.getByText(m.thread_history_unavailable(), { exact: true }).waitFor();
@@ -170,7 +177,9 @@ test('A failed immutable revision history read can be explicitly retried through
     await finish(page, { revisions: [first], next: cursor });
     await versions(page, 1);
     expect(
-      await page.getByRole('link', { name: m.thread_history_version({ number: '1' }), exact: true }).getAttribute('href'),
+      await page
+        .getByRole('link', { name: m.thread_history_version({ number: '1' }), exact: true })
+        .getAttribute('href'),
     ).toContain(`/posts/${first.id}/revisions/${first.revisionId}`);
     expect(await page.getByRole('region', { name: m.thread_history_heading() }).textContent()).toContain(first.licence);
     await page.getByRole('button', { name: m.thread_history_more() }).click();
@@ -203,7 +212,11 @@ test('A failed immutable revision history read can be explicitly retried through
 test('mounted post, viewer and read-authority changes discard disclosure, comparison, continuation and late results, including unmount', async () => {
   const page = await mounted();
   try {
-    const scored = { ...first, subjectIds: ['subject'], voteCitation: { questionId: 'question', units: 6000, revision: 1 } };
+    const scored = {
+      ...first,
+      subjectIds: ['subject'],
+      voteCitation: { questionId: 'question', units: 6000, revision: 1 },
+    };
     for (const change of [{ viewerId: 'another-viewer' }, { postId: second.revisionId }, { authority: 'two' }]) {
       await mount(page, { viewerId: first.authorId });
       await open(page);

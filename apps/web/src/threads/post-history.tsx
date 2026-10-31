@@ -124,7 +124,13 @@ function HistoryDisclosure({ postId, viewerId, review = false }: PostHistoryProp
               <p role="status" className="text-sm text-muted-foreground">
                 {m.thread_history_unavailable()}
               </p>
-              <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void load(failedCursor)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={loading}
+                onClick={() => void load(failedCursor)}
+              >
                 {m.exact_revision_retry()}
               </Button>
             </div>
