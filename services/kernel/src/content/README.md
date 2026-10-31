@@ -639,8 +639,11 @@ row, with parameter bytes plus the closed constant projection; no subject label,
 Metered cover verification requires the same genuine live `AuthoritativeTime` and `AccessWorkAccounting` that were
 forwarded to original subject preparation on the released pool. Each original producer must admit that preparation;
 missing producers, undefined bounds, missing time/accounting or unadmitted earlier preparation refuse before callback
-IO. The trusted `DownloadContext` can forward optional `time` and `work` to that released preparation and the final
-media check. Current ordinary callers provide neither, so they do not establish a supported metered Source path.
+IO. The trusted caller port is `MediaDependencies.downloadContext: DownloadContext` for `decideDownload`, or the
+existing `DownloadContext` argument for `authorizeMediaDerivative`: optional `time: AuthoritativeTime` and
+`work: AccessWorkAccounting` accompany the existing deadline and route key. They are forwarded to released
+preparation and the final media check. Current media-route and Collection presentation callers supply only the
+deadline/route key, so their metered cover variants remain unsupported.
 Initial/final media and independent tuple-fence snapshots remain at their original released homes and belong to their
 enclosing Source, outside these callback receipts. Unmetered queries, native checks and cache policy retain their
 existing behavior. This consumer does not establish cover, native or whole-source readiness.
