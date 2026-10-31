@@ -83,7 +83,7 @@ const subjectMessages: SubjectMessages = {
   documentSpoiler: 'Reveal spoiler',
   licence: 'Licence',
   source: 'Source',
-  spoilerShow: 'Show or hide spoilers',
+  spoilerShow: 'Show spoilers',
 };
 
 export { pageText };
@@ -96,6 +96,7 @@ type Options = {
   reader: Reader;
   frame: Frame;
   labels: ValueLabels;
+  overview?: boolean;
   headerActions?: ReactNode;
 };
 type SubjectRead = {
@@ -357,72 +358,79 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
       via={options.messages.coverVia}
       openLabel={m.subject_cover_open({ title }, { locale: options.locale as never })}
       closeLabel={m.subject_cover_close({}, { locale: options.locale as never })}
-      {...(options.frame.ratio ? { ratio: options.frame.ratio } : {})}
+      ratio={options.frame.ratio ?? '5:7'}
       {...(size === 'lg' ? { priority: true } : { decorative: true })}
     />
   );
   const facts = [options.frame.typeLabel, date].filter((fact): fact is string => !!fact);
   return (
-    <div data-slot="subject-header" className="min-w-0 space-y-4 in-data-[density=compact]:space-y-3">
-      <div className="flex min-w-0 gap-4 sm:gap-6">
-        <div className="shrink-0">
+    <div
+      id="subject-identity"
+      data-slot="subject-header"
+      className="min-w-0 space-y-4 in-data-[density=compact]:space-y-3"
+    >
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-3 sm:gap-x-6">
+        <div className="shrink-0 sm:row-span-2">
           <div className="sm:hidden">{cover('sm')}</div>
           <div className="hidden w-60 sm:block">{cover('lg')}</div>
         </div>
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:grid-rows-[min-content_auto]">
-          <div className="min-w-0 space-y-2 in-data-[density=compact]:space-y-1.5">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <h1
-                lang={label.lang}
-                className={`min-w-0 font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl in-data-[heading-scale=lg]:sm:text-5xl${label.text ? '' : ' text-muted-foreground'}`}
-              >
-                {title}
-              </h1>
-              {label.text && <LanguageTag lang={label.lang} locale={options.locale} />}
-            </div>
-            {quiet && (
-              <p lang={quiet.lang} className="font-serif text-lg text-muted-foreground">
-                {quiet.text}
-              </p>
-            )}
-            {facts.length > 0 && (
-              <p className="text-sm text-muted-foreground">
-                <MetaLine items={facts} />
-              </p>
-            )}
-            {creators.length > 0 && (
-              <p data-slot="subject-creators" className="text-sm font-medium">
-                {creators.map((creator, index) => (
-                  <span key={creator.id}>
-                    {index > 0 && ', '}
-                    {creator.node}
-                  </span>
-                ))}
-              </p>
-            )}
-            {aliases.length > 0 && (
-              <dl
-                data-slot="subject-aliases"
-                className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-x-4 gap-y-1 text-sm"
-              >
-                <dt className="font-semibold text-muted-foreground">{options.messages.aliases}</dt>
-                <dd className="min-w-0 break-words">
-                  <MetaLine
-                    items={aliases.map((alias, index) => {
-                      const text = pageText({ [aliasLanguage!]: alias }, options.locale);
-                      return (
-                        <span key={index} lang={text.lang}>
-                          {text.text}
-                        </span>
-                      );
-                    })}
-                  />
-                </dd>
-              </dl>
-            )}
+        <div data-slot="subject-identity" className="min-w-0 space-y-2 in-data-[density=compact]:space-y-1.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1
+              lang={label.lang}
+              className={`min-w-0 break-words font-sans text-2xl font-semibold tracking-tight text-balance sm:text-4xl in-data-[heading-scale=lg]:sm:text-5xl${label.text ? '' : ' text-muted-foreground'}`}
+            >
+              {title}
+            </h1>
+            {label.text && <LanguageTag lang={label.lang} locale={options.locale} />}
           </div>
+          {quiet && (
+            <p lang={quiet.lang} className="break-words text-base text-muted-foreground">
+              {quiet.text}
+            </p>
+          )}
+          {facts.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              <MetaLine items={facts} />
+            </p>
+          )}
+          {creators.length > 0 && (
+            <p data-slot="subject-creators" className="text-sm font-medium">
+              {creators.map((creator, index) => (
+                <span key={creator.id}>
+                  {index > 0 && ', '}
+                  {creator.node}
+                </span>
+              ))}
+            </p>
+          )}
+        </div>
+        <div
+          data-slot="subject-primary-actions"
+          className="col-span-full grid min-w-0 grid-cols-1 gap-3 sm:col-span-1 sm:col-start-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+        >
           {options.headerActions}
         </div>
+        {aliases.length > 0 && (
+          <dl
+            data-slot="subject-aliases"
+            className="col-span-full grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-x-4 gap-y-1 text-sm sm:col-start-2 sm:col-span-1"
+          >
+            <dt className="font-semibold text-muted-foreground">{options.messages.aliases}</dt>
+            <dd className="min-w-0 break-words">
+              <MetaLine
+                items={aliases.map((alias, index) => {
+                  const text = pageText({ [aliasLanguage!]: alias }, options.locale);
+                  return (
+                    <span key={index} lang={text.lang}>
+                      {text.text}
+                    </span>
+                  );
+                })}
+              />
+            </dd>
+          </dl>
+        )}
       </div>
       {options.subject === subject.id && (
         <SubjectPurchaseSlot context={{ subjectId: subject.id, subjectType: subject.type, locale: options.locale }} />
@@ -504,7 +512,7 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       });
     }
     const label = relatedLabel(property);
-    const values = chosen.flatMap((statement) => {
+    const values = (options.overview ? chosen.slice(0, 3) : chosen).flatMap((statement) => {
       // A value the page cannot present, such as a language with no name, stays out of the reading view.
       const value = presentable(statement);
       if (value === null) return [];
@@ -565,7 +573,13 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       );
       return [
         <dd key={statement.id} className="min-w-0 space-y-2 break-words sm:col-start-2">
-          {gated ? <SpoilerGate label={options.messages.spoilerShow}>{body}</SpoilerGate> : body}
+          {gated ? (
+            <SpoilerGate label={options.messages.spoilerShow} hideLabel={options.labels.spoilerHide}>
+              {body}
+            </SpoilerGate>
+          ) : (
+            body
+          )}
           <StatementCorrectionLink
             id={read.subject.id}
             title={pageText(read.subject.labels, options.locale).text}
@@ -625,10 +639,12 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
   );
   const tags = keywords.length ? (
     <>
-      {visibleKeywords.length ? tagList(visibleKeywords, 'subject-tags') : null}
+      {visibleKeywords.length
+        ? tagList(options.overview ? visibleKeywords.slice(0, 6) : visibleKeywords, 'subject-tags')
+        : null}
       {spoilerKeywords.length ? (
-        <SpoilerGate label={options.messages.spoilerShow}>
-          {tagList(spoilerKeywords, 'subject-spoiler-tags')}
+        <SpoilerGate label={options.messages.spoilerShow} hideLabel={options.labels.spoilerHide}>
+          {tagList(options.overview ? spoilerKeywords.slice(0, 6) : spoilerKeywords, 'subject-spoiler-tags')}
         </SpoilerGate>
       ) : null}
     </>
@@ -687,6 +703,7 @@ export function PageData({
   ratio,
   relations = {},
   headerActions,
+  readingView,
   children,
 }: {
   locale: string;
@@ -714,6 +731,8 @@ export function PageData({
   relations?: Record<string, RelationDefinition>;
   /** Subject-only actions placed alongside the title in its header. */
   headerActions?: ReactNode;
+  /** Only Overview bounds fact previews; Details retains every admitted value. */
+  readingView?: string;
   children?: ReactNode;
 }) {
   // Page documents have already passed the composition contract at the kernel boundary.
@@ -728,6 +747,7 @@ export function PageData({
   const resolved = { ...subjectMessages, ...messages };
   const labels: ValueLabels = {
     spoilerShow: resolved.spoilerShow,
+    spoilerHide: m.subject_spoiler_hide({}, { locale: locale as never }),
     documentSpoiler: resolved.documentSpoiler,
     cover: {
       withheld: resolved.coverWithheld,
@@ -744,6 +764,7 @@ export function PageData({
     reader,
     frame: { ...(typeLabel ? { typeLabel } : {}), ...(ratio ? { ratio } : {}) },
     labels,
+    overview: readingView === 'overview',
     ...(headerActions ? { headerActions } : {}),
   };
   const prepared = new Map<string, PreparedRead>();
@@ -801,7 +822,13 @@ export function PageData({
     firstStatements && nodesOfType(composition.content, 'Summary').length > 0
       ? {
           statements: firstStatements.id,
-          facts: statementList(aboutRead, firstStatements.props.properties, 'subject-facts'),
+          facts: statementList(
+            aboutRead,
+            options.overview && Array.isArray(firstStatements.props.properties)
+              ? firstStatements.props.properties.slice(0, 8)
+              : firstStatements.props.properties,
+            'subject-facts',
+          ),
           tags: aboutRead?.tags ?? null,
         }
       : undefined;

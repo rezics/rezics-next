@@ -13,7 +13,7 @@ export function ViewHeading({
 }) {
   return (
     <div data-slot="view-heading" className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-      <h1 className={cn('font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl', headingClassName)}>
+      <h1 className={cn('font-sans text-3xl font-semibold tracking-tight text-balance sm:text-4xl', headingClassName)}>
         {label}
       </h1>
       {count}

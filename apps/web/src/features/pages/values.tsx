@@ -5,7 +5,8 @@ import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { Eye } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
 import { foreignLanguageName } from '../../subject/language';
 
@@ -14,6 +15,7 @@ export const SPOILER_PROPERTY = 'rezics:spoilerLevel';
 /** The strings the value views need; the page supplies them in the reader's language. */
 export type ValueLabels = {
   spoilerShow: string;
+  spoilerHide?: string;
   documentSpoiler: string;
   cover: { withheld: string; reveal: string; credit: string; via: string };
 };
@@ -30,12 +32,21 @@ export function LanguageTag({ lang, locale }: { lang: string | null | undefined;
 }
 
 /** Content above the reader's spoiler level; the panel is not rendered until it is opened. */
-export function SpoilerGate({ label, children }: { label: string; children: ReactNode }) {
+export function SpoilerGate({
+  label,
+  hideLabel,
+  children,
+}: {
+  label: string;
+  hideLabel?: string | undefined;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
   return (
-    <Collapsible className="space-y-2">
+    <Collapsible open={open} onOpenChange={setOpen} className="space-y-2">
       <CollapsibleTrigger render={<Button variant="outline" size="sm" />}>
         <Eye aria-hidden="true" className="size-4" />
-        {label}
+        {open ? (hideLabel ?? m.subject_spoiler_hide()) : label}
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-2">{children}</CollapsibleContent>
     </Collapsible>

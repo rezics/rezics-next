@@ -961,7 +961,7 @@
   "subject_source": "Quelle",
   "subject_source_licence": "Lizenz",
   "subject_sources": "Quellen",
-  "subject_spoiler_show": "Spoiler ein- oder ausblenden",
+  "subject_spoiler_show": "Spoiler anzeigen",
   "subject_tags": "Schlagwörter",
   "subject_threads_empty": "Starte die erste Diskussion.",
   "subject_value_none": "Kein Wert",
@@ -3322,5 +3322,11 @@
   "search_subject_types": "Zusätzliche Eintragstypen",
   "search_subject_types_help": "Ergebnisse müssen einem der gewählten Typen oder dessen Untertypen entsprechen. Ist auch ein Eintragstyp festgelegt, gelten beide Bedingungen.",
   "search_existing_filter": "Weitere Bedingungen",
-  "search_close_filters": "Filter schließen"
+  "search_close_filters": "Filter schließen",
+  "subject_spoiler_hide": "Spoiler ausblenden",
+  "subject_summary_expand": "Mehr lesen",
+  "subject_summary_collapse": "Weniger anzeigen",
+  "subject_view_all": "Alle {label} ansehen",
+  "subject_view_continue": "Weitere {label}",
+  "subject_work": "Werk"
 }

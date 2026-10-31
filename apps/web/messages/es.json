@@ -961,7 +961,7 @@
   "subject_source": "Fuente",
   "subject_source_licence": "Licencia",
   "subject_sources": "Fuentes",
-  "subject_spoiler_show": "Mostrar u ocultar spoilers",
+  "subject_spoiler_show": "Mostrar spoilers",
   "subject_tags": "Etiquetas",
   "subject_threads_empty": "Inicia el primer debate.",
   "subject_value_none": "Sin valor",
@@ -3322,5 +3322,11 @@
   "search_subject_types": "Tipos de ficha adicionales",
   "search_subject_types_help": "Los resultados deben coincidir con alguno de los tipos elegidos o sus subtipos. Si también se especifica un tipo de ficha, se aplican ambas condiciones.",
   "search_existing_filter": "Otras condiciones",
-  "search_close_filters": "Cerrar filtros"
+  "search_close_filters": "Cerrar filtros",
+  "subject_spoiler_hide": "Ocultar spoilers",
+  "subject_summary_expand": "Leer más",
+  "subject_summary_collapse": "Mostrar menos",
+  "subject_view_all": "Ver todo: {label}",
+  "subject_view_continue": "Continuar: {label}",
+  "subject_work": "Obra"
 }

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { slug } from '@rezics/definitions/slug';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
@@ -141,15 +142,19 @@ async function viewHtml(overview: SubjectPageData, view: Parameters<typeof Subje
   const result = await client.pages.$read.post({ target: { subject: kokoro, view: view as never } });
   const page = result.data as unknown as SubjectPageData;
   return renderToString(
-    createElement(SubjectViewPage, {
-      page,
-      locale: 'en',
-      messages,
-      view,
-      frame: frameFor(overview, view),
-      label: labels.names[view],
-      renderJsonLd: false,
-    } as never),
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(SubjectViewPage, {
+        page,
+        locale: 'en',
+        messages,
+        view,
+        frame: frameFor(overview, view),
+        label: labels.names[view],
+        renderJsonLd: false,
+      } as never),
+    ),
   );
 }
 
@@ -177,7 +182,7 @@ test('every subject view URL renders the compact subject header: xs cover, title
     // No summary, reactions or library controls: those stay on the overview.
     expect(head).not.toContain('<button');
     // The view's own heading follows the frame, and the bare back link is gone.
-    expect(html.indexOf('data-slot="subject-header"')).toBeLessThan(html.search(/<h1[^>]*>/));
+    expect(html.indexOf('data-slot="subject-header"')).toBeLessThan(html.search(/<h[12][^>]*>/));
     expect(html.match(new RegExp(`<a[^>]*href="${overviewHref}"[^>]*>The Little Prince</a>`, 'g'))).toHaveLength(1);
   }
   expect(pages.at(-1)).toMatch(/<h1[^>]*>Relations<\/h1>/);

@@ -1,4 +1,5 @@
 import type { MemberPageTarget } from './member-list-query';
+import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import type { SelectedContext } from '@rezics/composition';
 import { useOperation } from '../../kernel/exposure';
 import { RatingsSection } from './subject-ratings-view';
@@ -20,7 +21,7 @@ import type { Related, Subject, Summary as SubjectCover } from '../../subject/ty
 import { subjectViewHref } from '../../subject/subject-href';
 import type { AccountProfile } from './account-read';
 import { CoverList } from './cover-list';
-import { listView } from './views';
+import { listView, readerViewLabel } from './views';
 import { RelationStream } from './relation-stream';
 import { qualifiedNotes, type QualifiedNote } from './qualified-relations';
 import { relationPreviewCount } from './subject-relations-preview';
@@ -96,6 +97,7 @@ const SUMMARY_PROPERTY = 'schema:abstract';
 export const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 export const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
+const anchorClass = 'scroll-mt-32';
 
 /** What a row of related subjects needs from its page; the full relations view supplies the same fields. */
 export type RowValue = Pick<
@@ -235,7 +237,7 @@ export function Preview({
   children: ReactNode;
 }) {
   return (
-    <section data-slot={slot} aria-labelledby={`${id}-title`} className={sectionClass}>
+    <section id={id} data-slot={slot} aria-labelledby={`${id}-title`} className={`${sectionClass} ${anchorClass}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 id={`${id}-title`} lang={titleLang} className={headingClass}>
@@ -254,7 +256,7 @@ export function Preview({
             aria-describedby={`${id}-title`}
             className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}
           >
-            {m.home_see_all({}, { locale: locale as never })}
+            {m.subject_view_all({ label: title }, { locale: locale as never })}
           </a>
         )}
       </div>
@@ -267,7 +269,13 @@ export function Preview({
 export function Failed({ slot, id, title, locale }: { slot: string; id: string; title: string; locale: string }) {
   const options = { locale: locale as never };
   return (
-    <section data-slot={slot} data-state="failed" aria-labelledby={`${id}-title`} className={sectionClass}>
+    <section
+      id={id}
+      data-slot={slot}
+      data-state="failed"
+      aria-labelledby={`${id}-title`}
+      className={`${sectionClass} ${anchorClass}`}
+    >
       <h2 id={`${id}-title`} className={headingClass}>
         {title}
       </h2>
@@ -457,7 +465,12 @@ function LinkSection(
   const { value, section } = state;
   const id = String(props.id);
   const definition = typeof props.property === 'string' ? value.relations[props.property] : undefined;
-  title = (forward ? definition?.forwardLabel : definition?.label) || title;
+  // A routed reader destination has a familiar name; property labels still qualify its rows.
+  title =
+    title ||
+    readerViewLabel(view, value.locale) ||
+    (forward ? definition?.forwardLabel : definition?.label) ||
+    value.unlabelled;
   if (props.paged === true)
     return (
       <RelationStream
@@ -527,7 +540,7 @@ export function RelationGroups(props: Record<string, unknown>) {
   if (nodes[0]!.id !== props.id) return null;
   const options = { locale: value.locale as never };
   const title = pageText(props.title, value.locale);
-  const heading = title.text || m.subject_relations({}, options);
+  const heading = nodes.length > 1 ? m.subject_relations({}, options) : title.text || m.subject_relations({}, options);
   const id = String(props.id);
   if (nodes.some((node) => node.props.paged === true))
     return (
@@ -594,7 +607,12 @@ export function RelationGroups(props: Record<string, unknown>) {
   });
   const total = sumCounts(totalParts);
   return (
-    <section data-slot="relation-groups" aria-labelledby={`${id}-title`} className={sectionClass}>
+    <section
+      id={id}
+      data-slot="relation-groups"
+      aria-labelledby={`${id}-title`}
+      className={`${sectionClass} ${anchorClass}`}
+    >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 id={`${id}-title`} lang={title.text ? title.lang : undefined} className={headingClass}>
           {heading}
@@ -657,7 +675,7 @@ export function RelationGroups(props: Record<string, unknown>) {
       {failed > 0 && (
         <p role="status" className="text-sm text-muted-foreground">
           {m.subject_section_failed({}, options)}{' '}
-          <a data-slot="retry" href="?" className={`${linkClass} ${linkColor} font-medium hover:underline`}>
+          <a data-slot="retry" href="" className={`${linkClass} ${linkColor} font-medium hover:underline`}>
             {m.subject_section_retry({}, options)}
           </a>
         </p>
@@ -718,18 +736,22 @@ export function CollectionList(props: Record<string, unknown>) {
   const collections = props.paged === true ? allCollections : allCollections.slice(0, limitOf(props));
   if (collections.length === 0) return null;
   const counted = isRecord(section.body.count) && typeof section.body.count.value === 'number';
-  const total = counted
-    ? Math.max((section.body.count as { value: number }).value, collections.length)
-    : collections.length;
+  const count = counted
+    ? countFromLinks(section.body.count as { value: number; exact: boolean }, collections.length)
+    : undefined;
+  const more =
+    typeof section.body.next === 'string' ||
+    allCollections.length > collections.length ||
+    hasMore(count, collections.length);
   const Link = value.link;
   return (
     <Preview
       slot="collection-list"
       id={id}
-      title={title.text}
+      title={title.text || m.subject_lists({}, { locale: value.locale as never })}
       titleLang={title.lang}
-      count={{ value: total, relation: 'exact' }}
-      more={props.paged !== true && hasMore({ value: total, relation: 'exact' }, collections.length)}
+      count={count}
+      more={props.paged !== true && more}
       href={viewHref(value, 'lists')}
       locale={value.locale}
     >
@@ -838,6 +860,88 @@ export function chosenSummary(subject: Subject, locale: string, filled?: unknown
   return selected.document ? { ...selected, document: selected.document } : undefined;
 }
 
+/** A bounded plain excerpt has no clipped links or spoiler text. The complete rich document stays intact. */
+function summaryExcerpt(document: DocumentSnapshot): { text: string; complete: boolean } {
+  let text = '';
+  let complete = true;
+  let paragraphs = 0;
+  function visit(node: DocumentNode): void {
+    if (text.length >= 420 || paragraphs > 2) {
+      complete = false;
+      return;
+    }
+    if (node.marks?.some((mark) => mark.type === 'spoiler')) {
+      complete = false;
+      return;
+    }
+    if (node.type === 'text') {
+      const content = node.text ?? '';
+      const remaining = 420 - text.length;
+      text += content.slice(0, remaining).replace(/[\uD800-\uDBFF]$/, '');
+      if (content.length > remaining) complete = false;
+      return;
+    }
+    if (node.type === 'paragraph') {
+      paragraphs += 1;
+      if (paragraphs > 2) {
+        complete = false;
+        return;
+      }
+      if (text) text += ' ';
+    } else if (node.type === 'hardBreak') text += ' ';
+    else if (node.type !== 'doc') {
+      complete = false;
+      return;
+    }
+    const children = node.content ?? [];
+    for (const [index, child] of children.entries()) {
+      visit(child);
+      if (text.length >= 420 || paragraphs > 2) {
+        if (index < children.length - 1) complete = false;
+        break;
+      }
+    }
+  }
+  visit(document.doc);
+  return { text: text.trim(), complete };
+}
+
+/** Native disclosure keeps the complete document readable without JavaScript. */
+function SummaryPassage({
+  document,
+  language,
+  value,
+}: {
+  document: DocumentSnapshot;
+  language: string;
+  value: OverviewValue;
+}) {
+  const excerpt = summaryExcerpt(document);
+  const body = (
+    <DocumentValue document={document} lang={language === value.locale ? undefined : language} labels={value.labels} />
+  );
+  if (excerpt.complete) return body;
+  const options = { locale: value.locale as never };
+  return (
+    <details data-slot="summary-disclosure" className="group space-y-3">
+      <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
+        {excerpt.text && (
+          <span lang={language} className="mb-2 block max-w-prose text-pretty leading-7 group-open:hidden">
+            {excerpt.text}…
+          </span>
+        )}
+        <span className="text-sm font-medium text-primary underline underline-offset-4 group-open:hidden">
+          {m.subject_summary_expand({}, options)}
+        </span>
+        <span className="hidden text-sm font-medium text-primary underline underline-offset-4 group-open:inline">
+          {m.subject_summary_collapse({}, options)}
+        </span>
+      </summary>
+      {body}
+    </details>
+  );
+}
+
 /**
  * About: the summary, or the description when there is no summary, then the key facts and the tags. A summary above
  * the reader's spoiler level waits behind a reveal.
@@ -864,23 +968,35 @@ export function Summary(props: Record<string, unknown>) {
   if (!chosen && !unavailable && !description?.text && !facts && !tags) return null;
   const body = chosen && (
     <div className="space-y-1">
-      <DocumentValue
+      <SummaryPassage
+        key={`${read.subject.id}/${value.locale}/${read.subject.context}/${chosen.statement.id}`}
         document={chosen.document}
-        lang={chosen.language === value.locale ? undefined : chosen.language}
-        labels={value.labels}
+        language={chosen.language}
+        value={value}
       />
       <LanguageTag lang={chosen.language} locale={value.locale} />
     </div>
   );
   return (
-    <section data-slot="subject-summary" aria-labelledby={`${id}-title`} className={sectionClass}>
+    <section
+      id={id}
+      data-slot="subject-summary"
+      aria-labelledby={`${id}-title`}
+      className={`${sectionClass} ${anchorClass}`}
+    >
       <h2 id={`${id}-title`} className={headingClass}>
         {title}
       </h2>
       {unavailable && <SubjectReadingState locale={value.locale} />}
       {chosen &&
         (spoilerLevel(chosen.statement) > value.reader.spoilerLevel ? (
-          <SpoilerGate label={value.spoilerShow}>{body}</SpoilerGate>
+          <SpoilerGate
+            key={`${read.subject.id}/${value.locale}/${read.subject.context}/${chosen.statement.id}/${value.reader.spoilerLevel}`}
+            label={value.spoilerShow}
+            hideLabel={value.labels.spoilerHide}
+          >
+            {body}
+          </SpoilerGate>
         ) : (
           body
         ))}
@@ -894,6 +1010,13 @@ export function Summary(props: Record<string, unknown>) {
       )}
       {facts}
       {tags}
+      {viewHref(value, 'details') && (
+        <p className="text-sm">
+          <a className={`${linkClass} ${linkColor}`} href={viewHref(value, 'details')!}>
+            {value.details}
+          </a>
+        </p>
+      )}
     </section>
   );
 }
@@ -902,13 +1025,22 @@ export function RatingSummary(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
   if (!value?.subject) return null;
   if (value.context?.population.kind === 'realm')
-    return <Failed slot="rating-summary" id={String(props.id)} title="Ratings" locale={value.locale} />;
+    return (
+      <Failed
+        slot="rating-summary"
+        id={String(props.id)}
+        title={m.subject_ratings({}, { locale: value.locale as never })}
+        locale={value.locale}
+      />
+    );
   return (
-    <RatingsSection
-      id={typeof props.id === 'string' ? props.id : 'ratings'}
-      subject={value.subject}
-      locale={value.locale}
-    />
+    <div id={String(props.id)} className={anchorClass}>
+      <RatingsSection
+        id={typeof props.id === 'string' ? props.id : 'ratings'}
+        subject={value.subject}
+        locale={value.locale}
+      />
+    </div>
   );
 }
 
@@ -925,18 +1057,20 @@ function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 're
   // A continued document deliberately leaves unrelated groups unrequested.
   if (section && !section.ok && section.status === 204) return <StreamLink value={value} view={view} node={node} />;
   return (
-    <SubjectCommunityRegion
-      id={node}
-      node={node}
-      kind={kind}
-      region={data?.region ?? composedCommunityRegion(section?.ok ? { status: 200, body: section.body } : undefined)}
-      authors={data?.authors ?? {}}
-      now={data?.now ?? new Date().toISOString()}
-      subject={{ id: subject, label: value.subjectLabel ?? value.unlabelled }}
-      locale={value.locale}
-      href={href}
-      paged={props.paged === true}
-    />
+    <div id={node} className={anchorClass}>
+      <SubjectCommunityRegion
+        id={node}
+        node={node}
+        kind={kind}
+        region={data?.region ?? composedCommunityRegion(section?.ok ? { status: 200, body: section.body } : undefined)}
+        authors={data?.authors ?? {}}
+        now={data?.now ?? new Date().toISOString()}
+        subject={{ id: subject, label: value.subjectLabel ?? value.unlabelled }}
+        locale={value.locale}
+        href={href}
+        paged={props.paged === true}
+      />
+    </div>
   );
 }
 
@@ -987,11 +1121,12 @@ export function SourcesSection({
   const details = viewHref(value, 'details');
   return (
     <section
+      id={id}
       data-slot="subject-sources"
-      aria-labelledby={id}
-      className={`${sectionClass} border-t border-border/60 pt-6`}
+      aria-labelledby={`${id}-title`}
+      className={`${sectionClass} border-t border-border/60 pt-6 ${anchorClass}`}
     >
-      <h2 id={id} className={headingClass}>
+      <h2 id={`${id}-title`} className={headingClass}>
         {value.sources}
       </h2>
       <ul className="space-y-1 text-sm break-words">
@@ -1072,15 +1207,16 @@ export function Sources(props: Record<string, unknown>) {
   const id = String(props.id);
   if (!section.ok || !section.sources)
     return <Failed slot="subject-sources" id={id} title={value.sources} locale={value.locale} />;
-  return <SourcesSection value={value} sources={section.sources} id={`${id}-title`} />;
+  return <SourcesSection value={value} sources={section.sources} id={id} />;
 }
 
 export function OutgoingRelations(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
+  const options = { locale: (value?.locale ?? 'en') as never };
   return LinkSection(
     props,
     'outgoing-relations',
-    m.subject_relations({}, { locale: (value?.locale ?? 'en') as never }),
+    props.property === 'schema:exampleOfWork' ? m.subject_work({}, options) : m.subject_relations({}, options),
     'relations',
     true,
   );

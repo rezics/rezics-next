@@ -961,7 +961,7 @@
   "subject_source": "來源",
   "subject_source_licence": "授權",
   "subject_sources": "來源",
-  "subject_spoiler_show": "顯示或隱藏劇透",
+  "subject_spoiler_show": "顯示劇透",
   "subject_tags": "標籤",
   "subject_threads_empty": "發起第一個討論。",
   "subject_value_none": "沒有值",
@@ -3322,5 +3322,11 @@
   "search_subject_types": "附加條目類型",
   "search_subject_types_help": "結果須符合任一所選類型或其子類型。如果另有限定條目類型，則兩項條件都須符合。",
   "search_existing_filter": "其他條件",
-  "search_close_filters": "關閉篩選"
+  "search_close_filters": "關閉篩選",
+  "subject_spoiler_hide": "隱藏劇透",
+  "subject_summary_expand": "展開簡介",
+  "subject_summary_collapse": "收起簡介",
+  "subject_view_all": "查看全部{label}",
+  "subject_view_continue": "繼續瀏覽{label}",
+  "subject_work": "作品"
 }

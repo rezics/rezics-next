@@ -13,6 +13,23 @@ import { countFromLinks, sumCounts, type Count } from '../count';
 import { bestRank, isRecord, type Stmt } from './shared';
 import { relationPreviewCount } from './subject-relations-preview';
 import type { SubjectCommunity } from './subject-community';
+import { m } from '../../paraglide/messages.js';
+
+/** A finite reading vocabulary, independent of the number of properties, kinds or populations. */
+export function readerViewLabel(view: string, locale: string): string {
+  const options = { locale: locale as never };
+  const names: Record<string, () => string> = {
+    editions: () => m.subject_editions({}, options),
+    contents: () => m.subject_contents({}, options),
+    characters: () => m.subject_characters({}, options),
+    appearances: () => m.subject_appearances({}, options),
+    credits: () => m.subject_credits({}, options),
+    works: () => m.subject_works({}, options),
+    relations: () => m.subject_relations({}, options),
+    lists: () => m.subject_lists({}, options),
+  };
+  return names[view]?.() ?? '';
+}
 
 /** One tab of a subject page: a view, and how many items its data has when that is known. */
 export type ViewTab = { view: View; count?: Count };
@@ -163,11 +180,15 @@ function previewCount(
     const items = Math.min(body.collections.length, previewLimit(node, read));
     return {
       items,
-      count: {
-        value:
-          typeof count?.value === 'number' ? Math.max(count.value, body.collections.length) : body.collections.length,
-        relation: 'exact',
-      },
+      more: typeof body.next === 'string' || body.collections.length > items,
+      ...(typeof count?.value === 'number'
+        ? {
+            count: {
+              value: count.value,
+              relation: count.exact === true ? ('exact' as const) : ('lower_bound' as const),
+            },
+          }
+        : {}),
     };
   }
   if (read.kind === 'subject' && isRecord(body.subject) && isRecord(body.subject.statements)) {
@@ -230,6 +251,7 @@ export function subjectTabs(page: {
       counted: number;
       fits: boolean;
       more: boolean;
+      unavailable: boolean;
     }
   >();
   const openReads = new Set<View>();
@@ -243,6 +265,7 @@ export function subjectTabs(page: {
       counted: 0,
       fits: true,
       more: false,
+      unavailable: false,
     };
     sum.previews += 1;
     const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
@@ -264,6 +287,9 @@ export function subjectTabs(page: {
     } else {
       sum.counts.push(undefined);
       sum.fits = false;
+      const status = key === undefined ? undefined : page.reads[key]?.status;
+      // Only an explicit dependency failure establishes an unavailable read; absent and concealed reads stay closed.
+      sum.unavailable ||= status !== undefined && status >= 500;
     }
     sums.set(view, sum);
   }
@@ -277,7 +303,7 @@ export function subjectTabs(page: {
     }
     if (ALWAYS.has(view) && !driven.has(view)) return [{ view }];
     const sum = sums.get(view);
-    if (!sum || (sum.items === 0 && !sum.more)) return [];
+    if (!sum || (sum.items === 0 && !sum.more && !sum.unavailable)) return [];
     if (!ALWAYS.has(view) && sum.fits && sum.previews === sum.counted) return [];
     const count = sumCounts(sum.counts);
     return [{ view, ...(count ? { count } : {}) }];

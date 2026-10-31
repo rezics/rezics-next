@@ -80,14 +80,8 @@ async function subjectReady(context: { canvasElement: HTMLElement }) {
   for (const cover of covers) await expect(cover).toHaveAttribute('data-state', 'placeholder');
 }
 
-const phone390 = {
-  viewports: {
-    phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-  },
-  defaultViewport: 'phone390',
-};
 export const SignedIn: Story = {
-  name: 'Member',
+  name: 'Signed in',
   play: subjectReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
@@ -98,8 +92,9 @@ export const SignedOut: Story = {
 };
 
 export const LibrarySlotMenuPhone: Story = {
-  name: 'Library Collection menu on phone',
-  parameters: { viewport: phone390 },
+  tags: ['!dev'],
+  name: 'Collection menu open, drawer',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async (context) => {
     await subjectReady(context);
     const canvas = within(context.canvasElement);
@@ -114,13 +109,9 @@ export const LibrarySlotMenuPhone: Story = {
 };
 
 export const LibrarySlotMenuDesktop: Story = {
-  name: 'Library Collection menu on desktop',
-  parameters: {
-    viewport: {
-      viewports: { desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } } },
-      defaultViewport: 'desktop1280',
-    },
-  },
+  tags: ['!dev'],
+  name: 'Collection menu open, popover',
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
   play: async (context) => {
     await subjectReady(context);
     const canvas = within(context.canvasElement);
@@ -132,17 +123,17 @@ export const LibrarySlotMenuDesktop: Story = {
 };
 
 export const OverviewReactionsEnglishPhone: Story = {
+  tags: ['!dev'],
   name: 'Overview / Full Reactions / English / Phone 390',
-  globals: { locale: 'en' },
-  parameters: { viewport: phone390 },
+  globals: { locale: 'en', viewport: { value: 'phone390', isRotated: false } },
   play: pageReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
 
 export const OverviewReactionsChinesePhone: Story = {
+  tags: ['!dev'],
   name: 'Overview / Full Reactions / Chinese / Phone 390',
-  globals: { locale: 'zh-Hans' },
-  parameters: { viewport: phone390 },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone390', isRotated: false } },
   play: pageReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
@@ -349,7 +340,7 @@ export const ImportedScores: Story = {
     return (
       <main className="mx-auto w-full max-w-5xl space-y-8 p-6">
         <header className="space-y-2">
-          <h1 className="font-serif text-3xl font-semibold tracking-tight">{label}</h1>
+          <h1 className="font-sans text-3xl font-semibold tracking-tight">{label}</h1>
           <p className="text-muted-foreground">Visual novel.</p>
         </header>
         <RatingsView

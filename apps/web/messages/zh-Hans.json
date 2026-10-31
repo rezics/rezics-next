@@ -962,7 +962,7 @@
   "subject_source": "来源",
   "subject_source_licence": "许可",
   "subject_sources": "来源",
-  "subject_spoiler_show": "显示或隐藏剧透",
+  "subject_spoiler_show": "显示剧透",
   "subject_tags": "标签",
   "subject_threads_empty": "发起第一个讨论。",
   "subject_value_none": "没有值",
@@ -3323,5 +3323,11 @@
   "search_subject_types": "附加条目类型",
   "search_subject_types_help": "结果须符合任一所选类型或其子类型。如果另有限定条目类型，则两项条件都须符合。",
   "search_existing_filter": "其他条件",
-  "search_close_filters": "关闭筛选"
+  "search_close_filters": "关闭筛选",
+  "subject_spoiler_hide": "隐藏剧透",
+  "subject_summary_expand": "展开简介",
+  "subject_summary_collapse": "收起简介",
+  "subject_view_all": "查看全部{label}",
+  "subject_view_continue": "继续浏览{label}",
+  "subject_work": "作品"
 }

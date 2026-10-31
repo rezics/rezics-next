@@ -18,7 +18,10 @@ test('subject hero facts use one two-column term/value list that contains long v
 
 test('spoiler control is an icon text button, outside subject values', async () => {
   const values = await source('values.tsx');
-  expect(values).toMatch(/<CollapsibleTrigger[^>]*>[\s\S]*<Eye[^>]*>[\s\S]*\{label\}[\s\S]*<\/CollapsibleTrigger>/);
+  expect(values).toMatch(
+    /<CollapsibleTrigger[^>]*>[\s\S]*<Eye[^>]*>[\s\S]*hideLabel[\s\S]*: label\}[\s\S]*<\/CollapsibleTrigger>/,
+  );
+  expect(values).toMatch(/<Collapsible open=\{open\} onOpenChange=\{setOpen\}/);
   expect(values).not.toMatch(/<dt[^>]*>[\s\S]*spoilerShow/);
 });
 
@@ -28,14 +31,16 @@ test('reactions and the subject menu share a top-right row; library actions are 
   expect(actions).toMatch(/data-slot="subject-library-actions"[\s\S]*?children/);
   expect(actions).toMatch(/className="[^"]*sm:col-start-2 sm:row-start-1"[^>]*data-slot="subject-header-actions"/);
   expect(actions).toMatch(/className="[^"]*sm:col-start-1 sm:row-start-2"[^>]*data-slot="subject-library-actions"/);
-  expect(data).toMatch(/grid min-w-0 flex-1 grid-cols-1[^\"]*sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
+  expect(data).toMatch(
+    /data-slot="subject-primary-actions"[\s\S]*?className="col-span-full grid min-w-0 grid-cols-1[^\"]*sm:grid-cols-\[minmax\(0,1fr\)_auto\]/,
+  );
   expect(data).toMatch(/\{options\.headerActions\}/);
 });
 
 test('overview sections share the shell heading and spacing classes', async () => {
   const overview = await source('overview.tsx');
   expect(overview.match(/className=\{headingClass\}/g)?.length).toBeGreaterThan(0);
-  expect(overview.match(/className=\{sectionClass\}/g)?.length).toBeGreaterThan(0);
+  expect(overview.match(/className=\{`\$\{sectionClass\}/g)?.length).toBeGreaterThan(0);
   expect(overview).toMatch(/sectionClass\s*=\s*['"]min-w-0 space-y-4/);
   expect(overview).not.toMatch(/sectionClass[^\n]*space-y-6/);
   expect(overview).toMatch(/className=\{`\$\{sectionClass\} border-t/);

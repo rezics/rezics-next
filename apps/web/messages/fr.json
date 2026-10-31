@@ -961,7 +961,7 @@
   "subject_source": "Source",
   "subject_source_licence": "Licence",
   "subject_sources": "Sources",
-  "subject_spoiler_show": "Afficher ou masquer les spoilers",
+  "subject_spoiler_show": "Afficher les révélations",
   "subject_tags": "Étiquettes",
   "subject_threads_empty": "Lancez la première discussion.",
   "subject_value_none": "Aucune valeur",
@@ -3322,5 +3322,11 @@
   "search_subject_types": "Types de fiches supplémentaires",
   "search_subject_types_help": "Les résultats doivent correspondre à l’un des types choisis ou à ses sous-types. Si un type de fiche est aussi défini, les deux conditions s’appliquent.",
   "search_existing_filter": "Autres conditions",
-  "search_close_filters": "Fermer les filtres"
+  "search_close_filters": "Fermer les filtres",
+  "subject_spoiler_hide": "Masquer les révélations",
+  "subject_summary_expand": "Lire la suite",
+  "subject_summary_collapse": "Réduire",
+  "subject_view_all": "Tout voir : {label}",
+  "subject_view_continue": "Suite : {label}",
+  "subject_work": "Œuvre"
 }

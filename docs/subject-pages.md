@@ -615,6 +615,11 @@ credits and one relation) most subjects show Overview, Reviews, Discussion, List
 the overview. A template may give a view the vertical's word (Contents is "Episodes" on an anime, "Volumes" on a
 manga). The tab bar stays in view under the top bar while the page scrolls. On narrow screens it scrolls
 horizontally with the active view in sight; it never wraps into several rows.
+The bar is navigation between URLs: ordinary links expose the current page with `aria-current`, and retain native
+keyboard and modified-click behaviour. A defined list whose read is unavailable stays reachable without an invented
+count; a concealed or closed read does not expose a tab. A full-view frame supplies one compact identity. A single
+paged list owns its own heading and continuation; the frame adds a page heading only for documents with several
+groups or without a list heading, and never repeats a list's continuation.
 
 ## Agents
 
@@ -651,14 +656,21 @@ other view. Sections a type does not support are left out; the rest keep this or
 1. **Identity and next action.** Cover; title in the reader's language with the original title quietly beside it;
    type and date; principal creators, linked; the headline score with its population and count; the reader's own
    status, progress and rating with one primary action (Continue, Start, Add). On phones the cover is a thumbnail
-   beside the title so this whole block fits the first viewport.
-   The header's top right holds the reaction cluster (like, love, laugh, insightful and sad, each with its count; a
+   beside the title. The primary action area follows that row at the full available width on phones: Library,
+   progress, copies, Follow and Contribute retain their owner controls and never compete with the thumbnail for a
+   narrow column. On larger screens the header's top right holds the reaction cluster (like, love, laugh, insightful and sad, each with its count; a
    subject has no upvote or downvote because its score is its rating) and an overflow menu that carries copy link
    and report. One reaction per reader; choosing another kind replaces it. Signed-out readers see the counts and a
    sign-in link.
 2. **About.** The summary (spoiler-safe by default), a short set of key facts chosen by the type's template, genres
    and the most-used tags, and content warnings.
    When a subject has no summary, About shows its short description instead, and the header never shows one.
+   Long summaries start with a plain excerpt of at most 420 characters and two paragraphs, excluding spoiler-marked
+   text. A native Read more / Show less disclosure preserves the complete rich document, links and inline spoiler
+   controls without clipping focusable content. An unavailable document keeps its actual unavailable state; a short
+   description may accompany it. The first eight template-selected fact groups show at most three values each, with
+   up to six ordinary tags and six spoiler-gated tags. Details remains complete, including all additional values,
+   qualifiers, references and tags, and About links to it. Spoiler buttons name their current Show / Hide action.
 3. **Parts.** For types with parts: the next part for this reader, then the ordered list preview.
 4. **Relations.** Related subjects grouped by relation group (order, derivation, world, membership), each with
    cover, title, relation label and date. Series order is shown as order, not as a list of links.
@@ -674,6 +686,11 @@ Every preview shows at most twelve items (fewer for reviews, threads and lists) 
 there are more. A subject with only a
 title still renders a complete page: the cover placeholder, the title, an empty-state invitation to add facts, and
 Discussion.
+
+Section anchors use their stable composition node IDs. Reader headings and full-view links use familiar localized
+view names, while relation labels still qualify the rows. Subject identity and page/view headings use Manrope;
+serif remains for document Work titles and cover placeholders. These bounds reuse the native aggregate and existing
+continuation URLs; Overview performs no extra reads or per-item hydration.
 
 ## Covers on pages
 

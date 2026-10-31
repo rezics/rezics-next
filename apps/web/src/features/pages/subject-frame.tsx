@@ -259,19 +259,19 @@ export function SubjectFrame({
           suitability={reader.suitability}
           decorative
           {...(coverLabels ? { labels: coverLabels } : {})}
-          {...(ratio ? { ratio } : {})}
+          ratio={ratio ?? '5:7'}
         />
         <div className="min-w-0 flex-1 space-y-0.5">
           <p className="flex flex-wrap items-baseline gap-x-3 break-words">
             <span
-              className={`${linkClass} ${frame.title.text ? linkColor : 'text-muted-foreground'} font-serif text-lg font-semibold`}
+              className={`${linkClass} ${frame.title.text ? linkColor : 'text-muted-foreground'} font-sans text-lg font-semibold`}
             >
               <Link href={contextHref(base, realm)} {...(frame.title.lang ? { lang: frame.title.lang } : {})}>
                 {title}
               </Link>
             </span>
             {frame.original && (
-              <span lang={frame.original.lang} className="font-serif text-sm text-muted-foreground">
+              <span lang={frame.original.lang} className="text-sm text-muted-foreground">
                 {frame.original.text}
               </span>
             )}
@@ -371,14 +371,44 @@ type SubjectViewPageProps = Omit<ComponentProps<typeof SubjectPage>, 'heading' |
 };
 
 export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: SubjectViewPageProps) {
+  // Full-page stream leaves already own their title and continuation. Multi-group documents still need a page title.
+  const streams: { type: string; props: Record<string, unknown> }[] = [];
+  function visit(nodes: readonly unknown[]) {
+    for (const node of nodes) {
+      if (!isRecord(node) || !isRecord(node.props)) continue;
+      if (
+        node.props.paged === true &&
+        [
+          'SubjectList',
+          'RelationGroups',
+          'OutgoingRelations',
+          'Appearances',
+          'Credits',
+          'ReviewList',
+          'ThreadList',
+        ].includes(String(node.type))
+      )
+        streams.push({ type: String(node.type), props: node.props });
+      for (const child of Object.values(node.props)) if (Array.isArray(child)) visit(child);
+    }
+  }
+  visit(page.page.document.content);
+  const ownHeading = streams.length === 1;
+  const ownContinuation = streams.length > 0;
   return (
     <div className="flex w-full min-w-0 flex-col gap-8">
       {frame}
-      <ViewHeadingActions label={label} actions={actions} />
-      <SubjectPage {...page} />
-      {nextHref ? (
+      {ownHeading ? (
+        actions ? (
+          <div className="flex flex-wrap items-center gap-2">{actions}</div>
+        ) : null
+      ) : (
+        <ViewHeadingActions label={label} actions={actions} />
+      )}
+      <SubjectPage {...page} framed />
+      {nextHref && !ownContinuation ? (
         <a data-slot="next-page" href={nextHref} className={buttonVariants({ variant: 'outline' })}>
-          {m.subject_relations_more({}, { locale: page.locale as never })}
+          {m.subject_view_continue({ label }, { locale: page.locale as never })}
         </a>
       ) : null}
     </div>

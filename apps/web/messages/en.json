@@ -1003,7 +1003,7 @@
   "subject_source": "Source",
   "subject_source_licence": "Licence",
   "subject_sources": "Sources",
-  "subject_spoiler_show": "Show or hide spoilers",
+  "subject_spoiler_show": "Show spoilers",
   "subject_tags": "Tags",
   "subject_threads_empty": "Start the first discussion.",
   "subject_value_none": "No value",
@@ -3674,5 +3674,11 @@
   "search_subject_types": "Additional subject types",
   "search_subject_types_help": "Match any selected type or its subtypes. If a subject type is also set, both conditions apply.",
   "search_existing_filter": "Other conditions",
-  "search_close_filters": "Close filters"
+  "search_close_filters": "Close filters",
+  "subject_spoiler_hide": "Hide spoilers",
+  "subject_summary_expand": "Read more",
+  "subject_summary_collapse": "Show less",
+  "subject_view_all": "See all {label}",
+  "subject_view_continue": "Continue {label}",
+  "subject_work": "Work"
 }

@@ -329,9 +329,11 @@ test('the host renders a tab bar of the views that have data in the documented o
     path(kokoro, 'The Little Prince'),
     ...['lists', 'details'].map((view) => path(kokoro, 'The Little Prince', view)),
   ]);
-  expect(bar.match(/role="tab"/g)).toHaveLength(3);
+  expect(bar.match(/<a /g)).toHaveLength(3);
+  expect(bar.match(/aria-current="page"/g)).toHaveLength(1);
+  expect(bar).not.toContain('role="tab"');
   expect(bar).toMatch(
-    /aria-selected="true"[^>]*href="[^"]*\/subjects\/[^"/]+\/[^"/]+"|href="[^"]*\/subjects\/[^"/]+\/[^"/]+"[^>]*aria-selected="true"/,
+    /aria-current="page"[^>]*href="[^"]*\/subjects\/[^"/]+\/[^"/]+"|href="[^"]*\/subjects\/[^"/]+\/[^"/]+"[^>]*aria-current="page"/,
   );
   expect(text(bar)).not.toContain('Editions 3');
   expect(text(bar)).toContain('Lists 9');

@@ -961,7 +961,7 @@
   "subject_source": "出典",
   "subject_source_licence": "ライセンス",
   "subject_sources": "出典",
-  "subject_spoiler_show": "ネタバレを表示・非表示",
+  "subject_spoiler_show": "ネタバレを表示",
   "subject_tags": "タグ",
   "subject_threads_empty": "最初のディスカッションを始めましょう。",
   "subject_value_none": "値なし",
@@ -3322,5 +3322,11 @@
   "search_subject_types": "項目の型の追加条件",
   "search_subject_types_help": "選んだいずれかの型またはその下位の型に一致する結果を表示します。項目の型も指定した場合は、両方の条件が適用されます。",
   "search_existing_filter": "その他の条件",
-  "search_close_filters": "絞り込みを閉じる"
+  "search_close_filters": "絞り込みを閉じる",
+  "subject_spoiler_hide": "ネタバレを隠す",
+  "subject_summary_expand": "紹介をもっと読む",
+  "subject_summary_collapse": "紹介を折りたたむ",
+  "subject_view_all": "{label}をすべて見る",
+  "subject_view_continue": "{label}の続きを見る",
+  "subject_work": "作品"
 }

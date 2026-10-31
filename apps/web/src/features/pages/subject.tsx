@@ -53,6 +53,12 @@ import { candidateContext } from '../../subject/candidates';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+function FramedIdentity() {
+  return null;
+}
+const pageComponents = { ...layoutComponents, ...dataComponents };
+const framedComponents = { ...pageComponents, SubjectHeader: FramedIdentity, AccountIdentity: FramedIdentity };
+
 export type SubjectPageData = {
   /** The subject the page is for; an agent page always has one, a route page none. */
   subject: string | null;
@@ -358,10 +364,13 @@ export function SubjectPage({
   operator,
   curation,
   subjectLabel,
+  framed = false,
 }: {
   page: SubjectPageData;
   /** The current frame's label for list-only documents that do not repeat the subject read. */
   subjectLabel?: string;
+  /** The containing view already renders the subject's identity. */
+  framed?: boolean;
   locale: string;
   messages: PageMessages;
   link?: ComponentProps<typeof PageData>['link'];
@@ -516,6 +525,7 @@ export function SubjectPage({
       <PageHost actions={page.account ? renderedActions : null} afterHeader={header ? afterHeader : null}>
         <PageData
           locale={locale}
+          readingView={view}
           subject={page.subject}
           listTarget={
             page.account
@@ -566,7 +576,7 @@ export function SubjectPage({
                     {heading.title}
                   </a>
                 </p>
-                <h1 className="font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+                <h1 className="font-sans text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
                   {heading.label}
                 </h1>
               </header>
@@ -591,7 +601,7 @@ export function SubjectPage({
               <CompositionRender
                 document={page.document}
                 definitions={pageDefinitions}
-                components={{ ...layoutComponents, ...dataComponents }}
+                components={framed ? framedComponents : pageComponents}
                 root={PageRoot}
               />
             </SubjectCommunityContext.Provider>
