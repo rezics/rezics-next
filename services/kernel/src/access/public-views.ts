@@ -27,7 +27,14 @@ export async function readPublicViews(
   }
   for (const [partition, { routes, ids }] of groups) {
     const rows = await viewsRead.run(client, { partition, routes, account_ids: ids });
-    for (const row of rows) results.set(row.accountId, row.publicViews as PublicViews);
+    for (const row of rows) {
+      const flags = row.publicViews as Partial<PublicViews> | null;
+      results.set(row.accountId, {
+        posts: flags?.posts === true,
+        reviews: flags?.reviews === true,
+        collections: flags?.collections === true,
+      });
+    }
   }
   return results;
 }

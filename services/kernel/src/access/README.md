@@ -2205,8 +2205,10 @@ original immutable capture. Current writer witnesses and later repair ACKs canno
 after a changed head. Root/order/read definition, whole owner-domain closure and actual physical incarnation
 remain the Source owner's independent obligations; kernel ownership epoch is not restore activation.
 
-`account-canonical-targets.ts` exports `PublicAccountCanonicalTarget` with only
-`{accountId, accountKind: 'actor' | 'organization', handle: string | null, canonicalPath: string | null}` and
+`account-canonical-targets.ts` exports `PublicAccountCanonicalView = 'overview' | 'posts' | 'reviews' | 'collections'`
+and `PublicAccountCanonicalTarget` with
+`{accountId, accountKind: 'actor' | 'organization', handle: string | null, canonicalPath: string | null,
+views: readonly PublicAccountCanonicalView[]}` and
 `readPublicAccountCanonicalTargets(deps: SummaryReaderDependencies, subjectIds)` returning a map with explicit
 nulls. It validates and deduplicates at most 100 full routed input keys before I/O, groups native pointer and
 Account reads by home, and always hydrates through the actual anonymous Account discovery summary reader.
@@ -2226,6 +2228,22 @@ active claim supplies `/@${encodeURIComponent(handle)}`. A handleless identity h
 readonly facts, with no writer, disclosure-policy, catalogue-identity or operator-identity substitution.
 Native Account and exact-claim reads also require current active partition homes; missing, fenced or moved
 homes retain typed unavailability instead of supplying absent rows or apparently missing claims.
+
+A navigable target includes `overview` for its proven canonical root and only enabled native activity names from
+`readPublicViews`. Handleless targets have no view names. Flags share each initial/final native Account and claim
+snapshot and are compared directly, independently of discovery revision; a change withholds the candidate.
+No Subject template, Realm or agent-feed view is inferred. These are current presentation opt-ins, never permission
+to read Content/Library items, whole-query excluded/order/restore authority or future permission. Native anonymous
+routes, formulas, exposure metadata and final list readers remain authoritative; consumers intersect template views
+with this list and call the same original batch for final revalidation.
+
+- Touches: at most 100 exact Subject pointers and Account bindings per observation, reciprocal links and at most
+  200 identity mapping keys in batches of 100; native flags add one full-key statement per Account home to each
+  initial/final binding snapshot. Anonymous summary hydration remains bounded by the existing reader.
+- Bound: existing input and hydration bounds remain unchanged; flags add O(ids) rows, O(partitions among ids)
+  statements and O(ids log N) indexed work, with no per-account HTTP or leaf-list reads.
+- Growth check: the existing `test/access/growth-account-public-views.test.ts` native flag bound applies;
+  `test/access/account-canonical-targets.test.ts` covers bounded input and current view admission.
 
 ### Public activity view port
 

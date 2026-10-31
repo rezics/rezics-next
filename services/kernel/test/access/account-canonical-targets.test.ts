@@ -87,12 +87,14 @@ test('actual bounded anonymous canonical Account targets require reciprocal nati
     accountKind: 'actor',
     handle,
     canonicalPath: `/@${encodeURIComponent(handle)}`,
+    views: ['overview', 'posts', 'reviews', 'collections'],
   });
   expect(targets.get(handleless.subjectId)).toEqual({
     accountId: handleless.accountId,
     accountKind: 'actor',
     handle: null,
     canonicalPath: null,
+    views: [],
   });
   expect(targets.get(unrelated)).toBeNull();
 
@@ -111,6 +113,7 @@ test('actual bounded anonymous canonical Account targets require reciprocal nati
       accountKind: 'actor',
       handle: null,
       canonicalPath: null,
+      views: [],
     });
   }
   await f.pool.query(
@@ -182,6 +185,66 @@ test('released foreign hydration uses anonymous Access and rechecks the native A
   };
   expect((await readPublicAccountCanonicalTargets(reader, [target.subjectId])).get(target.subjectId)).toBeNull();
   expect(checked).toBe(true);
+});
+
+test('Current native Account activity-view admission is batched with canonical targets without Subject template inference', async () => {
+  const named = await linked(uniqueHandle());
+  const handleless = await linked(null);
+  const flags = { posts: true, reviews: true, collections: true };
+  for (const view of ['posts', 'reviews', 'collections'] as const) {
+    flags[view] = false;
+    await f.pool.query(
+      'UPDATE access.account SET public_views=public_views || $3::jsonb WHERE route=$1 AND account_id=$2',
+      [routeOf(named.accountId), named.accountId, JSON.stringify({ [view]: false })],
+    );
+    const targets = await readPublicAccountCanonicalTargets(deps(), [named.subjectId, handleless.subjectId]);
+    expect(targets.get(named.subjectId)?.views).toEqual([
+      'overview',
+      ...(['posts', 'reviews', 'collections'] as const).filter((name) => flags[name]),
+    ]);
+    // The same Subject type and native defaults never give a handleless identity navigation.
+    expect(targets.get(handleless.subjectId)?.views).toEqual([]);
+  }
+  await f.pool.query(
+    'UPDATE access.account SET public_views=public_views || $3::jsonb WHERE route=$1 AND account_id=$2',
+    [routeOf(named.accountId), named.accountId, JSON.stringify({ reviews: true })],
+  );
+  expect((await readPublicAccountCanonicalTargets(deps(), [named.subjectId])).get(named.subjectId)?.views).toEqual([
+    'overview',
+    'reviews',
+  ]);
+});
+
+test('native view changes during released foreign hydration withhold the candidate until a fresh observation', async () => {
+  for (const enabled of [false, true]) {
+    const target = await linked(uniqueHandle());
+    await f.pool.query(
+      'UPDATE access.account SET public_views=public_views || $3::jsonb WHERE route=$1 AND account_id=$2',
+      [routeOf(target.accountId), target.accountId, JSON.stringify({ posts: !enabled })],
+    );
+    const reader = deps();
+    let changed = false;
+    reader.access = {
+      ...f.access,
+      async authorize(client, actor, action, resource, evidence, time) {
+        expect(actor.kind).toBe('anonymous');
+        const allowed = await f.access.authorize(client, actor, action, resource, evidence, time);
+        if (!changed) {
+          changed = true;
+          await f.pool.query(
+            'UPDATE access.account SET public_views=public_views || $3::jsonb WHERE route=$1 AND account_id=$2',
+            [routeOf(target.accountId), target.accountId, JSON.stringify({ posts: enabled })],
+          );
+        }
+        return allowed;
+      },
+    };
+    expect((await readPublicAccountCanonicalTargets(reader, [target.subjectId])).get(target.subjectId)).toBeNull();
+    expect(changed).toBe(true);
+    expect((await readPublicAccountCanonicalTargets(deps(), [target.subjectId])).get(target.subjectId)?.views).toEqual(
+      enabled ? ['overview', 'posts', 'reviews', 'collections'] : ['overview', 'reviews', 'collections'],
+    );
+  }
 });
 
 test('the entire input bound, routed keys and trusted route key are validated before I/O', async () => {

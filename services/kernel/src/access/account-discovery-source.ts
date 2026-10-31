@@ -199,10 +199,16 @@ export async function readAccountDiscoveryWitness(pool: Pool, partitions: readon
 /** Source bindings for the index writer. An unconsumed exact claim is never
  * certified for publication: redrive its native intent, then resnapshot.
  */
-export async function readAccountDiscoveryBindings(pool: Pool, partition: number, ids: readonly string[]) {
+export async function readAccountDiscoveryBindings(
+  pool: Pool,
+  partition: number,
+  ids: readonly string[],
+  snapshotClient?: PoolClient,
+) {
   partitionKey(partition);
   const requested = keys(ids, partition);
-  return withReadTransaction(pool, async (client) => {
+  // Canonical targets collect presentation flags in this same native snapshot.
+  const read = async (client: PoolClient) => {
     const rows = await accounts(client, requested);
     const found = await claims(client, rows);
     const dependencies = rows.flatMap((row) => {
@@ -243,7 +249,8 @@ export async function readAccountDiscoveryBindings(pool: Pool, partition: number
         ];
       }),
     );
-  });
+  };
+  return snapshotClient ? read(snapshotClient) : withReadTransaction(pool, read);
 }
 
 function summary(

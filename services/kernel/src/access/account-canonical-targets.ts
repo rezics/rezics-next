@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { readAccountDiscoveryBindings, readAccountDiscoverySummaries } from './account-discovery-source.ts';
+import { readPublicViews, type PublicViews } from './public-views.ts';
 import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -20,7 +21,7 @@ export type PublicAccountCanonicalTarget = {
 
 type Pointer = { subjectId: string; accountId: string; receiptId: string };
 type Binding = Awaited<ReturnType<typeof readAccountDiscoveryBindings>> extends Map<string, infer T> ? T : never;
-type Proven = { pointer: Pointer; binding: Binding; epochs: readonly bigint[] };
+type Proven = { pointer: Pointer; binding: Binding; views: PublicViews; epochs: readonly bigint[] };
 type AccountSummary = NonNullable<
   Awaited<ReturnType<typeof readAccountDiscoverySummaries>> extends Map<string, infer T> ? T : never
 >;
@@ -73,10 +74,15 @@ async function pointers(pool: Pool, ids: readonly string[], deadline: number) {
 async function observe(deps: SummaryReaderDependencies, ids: readonly string[]) {
   const pages = await pointers(deps.pool, ids, deps.deadline);
   const bindings = new Map<string, Binding>();
+  const views = new Map<string, PublicViews>();
   for (const [home, group] of homes([...new Set([...pages.values()].map((page) => page.accountId))])) {
     requireAccessDeadline(deps.deadline);
-    const found = await readAccountDiscoveryBindings(deps.pool, home, group);
-    for (const [id, binding] of found) bindings.set(id, binding);
+    await withReadTransaction(deps.pool, async (client) => {
+      const found = await readAccountDiscoveryBindings(deps.pool, home, group, client);
+      const flags = await readPublicViews(client, group);
+      for (const [id, binding] of found) bindings.set(id, binding);
+      for (const [id, flagsForAccount] of flags) views.set(id, flagsForAccount);
+    });
   }
   const reciprocal = [...pages.values()].filter((page) => {
     const binding = bindings.get(page.accountId);
@@ -130,6 +136,7 @@ async function observe(deps: SummaryReaderDependencies, ids: readonly string[]) 
     result.set(page.subjectId, {
       pointer: page,
       binding: bindings.get(page.accountId)!,
+      views: views.get(page.accountId)!,
       epochs: [mapping.epoch, target.epoch],
     });
   }
@@ -146,6 +153,10 @@ function unchanged(before: Proven, after: Proven) {
     before.binding.claim?.route === after.binding.claim?.route &&
     before.binding.claim?.revision === after.binding.claim?.revision &&
     before.binding.consumedClaimRevision === after.binding.consumedClaimRevision &&
+    // Presentation changes do not have to advance discovery_revision.
+    before.views.posts === after.views.posts &&
+    before.views.reviews === after.views.reviews &&
+    before.views.collections === after.views.collections &&
     before.epochs.every((epoch, index) => epoch === after.epochs[index])
   );
 }
@@ -184,7 +195,9 @@ export async function readPublicAccountCanonicalTargets(
       accountKind: summary.accountKind,
       handle,
       canonicalPath: handle ? `/@${encodeURIComponent(handle)}` : null,
-      views: handle ? ['overview'] : [],
+      views: handle
+        ? ['overview', ...(['posts', 'reviews', 'collections'] as const).filter((view) => after.views[view])]
+        : [],
     });
   }
   requireAccessDeadline(deps.deadline);
