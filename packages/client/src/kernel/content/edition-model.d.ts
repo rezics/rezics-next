@@ -28,6 +28,7 @@ export type ContentEditionView = Readonly<{
     editionId: string;
     editionRevision: string;
     state: 'draft' | 'published' | 'withdrawn';
+    identity?: EditionIdentity;
     targetSubjectId: string;
     creatorAccountId: string;
     revisionId: string;
@@ -40,4 +41,17 @@ export type ContentEditionRevisionView = Readonly<{
     sha256: string;
     licence: string;
     body: DocumentSnapshot;
+}>;
+/** Display metadata is independently authorized; it never changes an immutable binding. */
+export type EditionSubjectIdentity = Readonly<{
+    id: string;
+    kind: 'available' | 'missing' | 'withheld';
+    label: Readonly<{
+        value: string;
+        language: string;
+    }> | null;
+}>;
+export type EditionIdentity = Readonly<{
+    subject: EditionSubjectIdentity;
+    revisionCreatedAt: string | null;
 }>;

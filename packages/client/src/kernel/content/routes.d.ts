@@ -7054,7 +7054,9 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             cursor?: string;
                             limit?: string | number;
                         };
-                        headers: unknown;
+                        headers: {
+                            'rezics-edition-identity'?: "true";
+                        };
                         response: {
                             200: {
                                 editions: unknown[];
@@ -7600,10 +7602,23 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         id: string;
                     };
                     query: unknown;
-                    headers: unknown;
+                    headers: {
+                        'rezics-edition-identity'?: "true";
+                    };
                     response: {
                         200: {
                             editionId: string;
+                            identity?: {
+                                subject: {
+                                    id: string;
+                                    kind: "available" | "missing" | "withheld";
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                };
+                                revisionCreatedAt: string | null;
+                            };
                             editionRevision: string;
                             state: "draft" | "published" | "withdrawn";
                             targetSubjectId: string;
@@ -9642,7 +9657,9 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 id: string;
                                 revisionId: string;
                             };
-                            query: unknown;
+                            query: {
+                                editionIdentity?: "true";
+                            };
                             headers: unknown;
                             response: {
                                 200: {
@@ -9658,6 +9675,20 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                             readonly sad?: number;
                                             readonly upvote?: number;
                                         };
+                                    };
+                                    editionIdentity?: {
+                                        postId: string;
+                                        revisionId: string;
+                                        sha256: string;
+                                        revisionCreatedAt: string | null;
+                                        subjects: {
+                                            id: string;
+                                            kind: "available" | "missing" | "withheld";
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                        }[];
                                     };
                                 };
                                 400: Response | {
