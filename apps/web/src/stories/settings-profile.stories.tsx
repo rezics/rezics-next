@@ -55,10 +55,11 @@ export const Unavailable: Story = {
 };
 
 const rawDiagnostic = 'raw-profile-diagnostic bearer=secret-token subject:write settings_profile_network_error';
+type RecoveryRead = ReturnType<typeof Promise.withResolvers<boolean>>;
 const recoveryTraffic: {
   writes: { path: string; body: unknown; key: string | null }[];
   reads: Request[];
-  nextRead?: ReturnType<typeof Promise.withResolvers<boolean>> | undefined;
+  nextRead?: RecoveryRead | undefined;
 } = { writes: [], reads: [] };
 
 export const SharedRecovery: Story = {
@@ -69,7 +70,7 @@ export const SharedRecovery: Story = {
     recoveryTraffic.reads = [];
     recoveryTraffic.nextRead = undefined;
     const original = globalThis.fetch;
-    let heldRead: typeof recoveryTraffic.nextRead;
+    let heldRead: RecoveryRead | undefined;
     globalThis.fetch = (async (input, init) => {
       const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
       if (url.origin !== 'http://kernel.local') return original(input, init);

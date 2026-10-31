@@ -19,7 +19,7 @@ import { usePreferenceRetry } from './preference-failure-retry';
 
 function profileError(scope: ProfileScope, failure: ProfileEditorState['failure']) {
   const activity = scope === 'views';
-  if (failure?.code === 'platform_closed' || failure?.status === 410)
+  if (failure?.status === 403 && failure.code === 'platform_closed')
     return activity ? m.settings_public_activity_closed() : m.settings_profile_save_closed();
   if (failure?.status === 400 || failure?.status === 422)
     return activity ? m.settings_public_activity_invalid() : m.settings_profile_invalid_error();
@@ -74,7 +74,7 @@ export function ProfileFeedback({
           <AlertDescription>
             <p>
               {unavailable
-                ? state.failure?.code === 'platform_closed' || state.failure?.status === 410
+                ? state.failure?.status === 403 && state.failure.code === 'platform_closed'
                   ? m.settings_profile_read_closed()
                   : denied
                     ? m.settings_profile_read_denied()
