@@ -123,7 +123,7 @@ test('a pen name or collective name is an agent with its own page and credits', 
     expect((await read(pen.id)).id).toBe(pen.id);
     const credits = await page(`/v1/subjects/${pen.id}/links?property=schema%3Aauthor`);
     expect(credits.links.map((row: any) => row.subject)).toEqual([work.id]);
-    expect(credits.count).toEqual({ value: 1, exact: true });
+    expect(credits).not.toHaveProperty('count');
     expect((await page(`/v1/subjects/${target}/links?property=schema%3Aauthor`)).links).toEqual([]);
   }
 });
@@ -149,7 +149,7 @@ test('a sourced pen-name link is a public fact like any relation', async () => {
   expect(adoption.status, JSON.stringify(adoption.body)).toBe(200);
   await catchUp(pen.id);
   expect(subjectIds(await read(pen.id))).toEqual([proposal.body.candidate]);
-  expect((await page(relations(pen.id))).count).toEqual({ value: 1, exact: true });
+  expect(await page(relations(pen.id))).not.toHaveProperty('count');
   expect((await page(inverse())).links.map((row: any) => row.statement)).toContain(proposal.body.candidate);
 });
 
@@ -167,7 +167,7 @@ test('an unsourced pen-name link is accepted only from the people behind it and 
   for (const as of ['person', 'moderator'] as const) {
     expect(subjectIds(await read(pen.id, as))).toEqual([own.body.candidate]);
     expect((await page(candidates(pen.id), as)).candidates.map((row: any) => row.id)).toEqual([own.body.candidate]);
-    expect((await page(relations(pen.id), as)).count).toEqual({ value: 1, exact: true });
+    expect(await page(relations(pen.id), as)).not.toHaveProperty('count');
     expect((await page(inverse(), as)).links.map((row: any) => row.statement)).toContain(own.body.candidate);
   }
   expect((await call('POST', `/v1/statements/${own.body.candidate}/disclose`, 'editor')).status).toBe(403);
@@ -181,11 +181,11 @@ test('a private pen-name link appears in no view, page, count or graph read unti
   const contextId = context.body.context.id;
   for (const as of [undefined, 'editor'] as const) {
     expect(subjectIds(await read(pen.id, as))).toEqual([]);
-    expect((await read(pen.id, as)).relationCounts[property]).toBe(0);
+    expect((await read(pen.id, as)).relationCounts).not.toHaveProperty(property);
     expect(subjectIds(await read(pen.id, as, contextId))).toEqual([]);
     expect((await page(candidates(pen.id), as)).candidates).toEqual([]);
     expect((await page(relations(pen.id), as)).relations).toEqual([]);
-    expect((await page(relations(pen.id), as)).count).toEqual({ value: 0, exact: true });
+    expect(await page(relations(pen.id), as)).not.toHaveProperty('count');
     expect((await page(inverse(), as)).links.map((row: any) => row.statement)).not.toContain(candidate);
     expect((await page(`/v1/subjects/${target}/links`, as)).links.map((row: any) => row.statement)).not.toContain(
       candidate,
@@ -204,10 +204,10 @@ test('a private pen-name link appears in no view, page, count or graph read unti
   await catchUp(pen.id);
   for (const as of [undefined, 'editor'] as const) {
     expect(subjectIds(await read(pen.id, as))).toEqual([candidate]);
-    expect((await read(pen.id, as)).relationCounts[property]).toBe(1);
+    expect((await read(pen.id, as)).relationCounts).not.toHaveProperty(property);
     expect(subjectIds(await read(pen.id, as, contextId))).toEqual([candidate]);
     expect((await page(candidates(pen.id), as)).candidates.map((row: any) => row.id)).toEqual([candidate]);
-    expect((await page(relations(pen.id), as)).count).toEqual({ value: 1, exact: true });
+    expect(await page(relations(pen.id), as)).not.toHaveProperty('count');
     expect((await page(inverse(), as)).links.map((row: any) => row.statement)).toContain(candidate);
   }
   const disclosure = await admin.connect();

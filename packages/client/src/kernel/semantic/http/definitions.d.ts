@@ -2453,7 +2453,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

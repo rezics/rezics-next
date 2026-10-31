@@ -2455,7 +2455,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

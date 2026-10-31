@@ -11,6 +11,7 @@ import readVisibility from './read-visibility.sql';
 import readGraphExpansions from './read-graph-expansions.sql';
 import readTypes from './read-item-types.sql';
 import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
+import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const EDGE_LIMIT = 500;
@@ -28,7 +29,7 @@ type TruncatedExpansion = {
   node: string;
   property: string;
   direction: EdgeDirection;
-  count: number;
+  count?: number;
   cursor: string;
 };
 
@@ -44,7 +45,6 @@ type ExpansionRow = {
   node: string;
   property: string;
   direction: EdgeDirection;
-  count: string | number;
   page_rows: { other: string | null; statement: string; orderKey: string }[] | null;
   fetched_count: number;
   available_before: number | null;
@@ -231,15 +231,13 @@ export async function listSubjectGraph(
         const rows = Array.isArray(row.page_rows) ? row.page_rows : [];
         const pageCapacity = Math.max(0, Math.min(options.limit, row.available_before ?? 0, row.fetched_count));
         const selected = rows.slice(0, pageCapacity);
-        const count = Number(row.count);
-        if (count > selected.length) {
+        if (row.fetched_count > selected.length) {
           const last = selected.at(-1);
           const after = last ? [last.orderKey, last.other ?? NIL_UUID, last.statement] : ['', NIL_UUID, NIL_UUID];
           truncated.push({
             node: row.node,
             property: row.property,
             direction: row.direction,
-            count,
             cursor: linkCursor(ring, options.languages, row, after),
           });
         }
@@ -266,9 +264,26 @@ export async function listSubjectGraph(
       frontier = [...discovered].filter((id) => visibleNodes.has(id) && !previouslyVisible.has(id));
     }
 
+    const currentRelations = await currentRelationFacts(
+      client,
+      options.routeKey,
+      edges.map((edge) => ({
+        subject: edge.from,
+        property: edge.property,
+        candidate: edge.statement,
+        target: edge.to,
+        value: 'value' as const,
+        requireRelation: true,
+      })),
+    );
+    const currentEdges = edges.filter((edge) =>
+      currentRelations.has(
+        currentRelationKey({ subject: edge.from, property: edge.property, candidate: edge.statement }),
+      ),
+    );
     return {
       ids: [...visibleNodes],
-      edges,
+      edges: currentEdges,
       truncated,
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
     };
@@ -291,7 +306,7 @@ export async function listSubjectGraph(
     );
     for (const [id, summary] of filled) summaries.set(id, summary);
   }
-  const disclosedEdges = graph.edges.filter((edge) => summaries.get(edge.from) && summaries.get(edge.to));
+  const disclosedEdges = graph.edges.filter((edge) => Boolean(summaries.get(edge.from) && summaries.get(edge.to)));
   const neighbours = new Map<string, string[]>();
   for (const edge of disclosedEdges) {
     for (const [from, to] of [

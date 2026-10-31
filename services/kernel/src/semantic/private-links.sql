@@ -52,5 +52,4 @@ selected AS MATERIALIZED (
            CASE WHEN input.inbound THEN selected.subject_id ELSE selected.target_id END, selected.candidate_id
   LIMIT (SELECT page_limit FROM input)
 )
-SELECT (SELECT count(*)::text FROM selected) AS total,
-       COALESCE((SELECT jsonb_agg(to_jsonb(page)) FROM page), '[]'::jsonb) AS entries;
+SELECT COALESCE((SELECT jsonb_agg(to_jsonb(page)) FROM page), '[]'::jsonb) AS entries;

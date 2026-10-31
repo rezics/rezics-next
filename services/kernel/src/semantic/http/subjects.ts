@@ -365,7 +365,7 @@ const graphResponse = t.Object(
           node: t.String({ format: 'uuid' }),
           property: t.String(),
           direction: t.Union([t.Literal('out'), t.Literal('in')]),
-          count: t.Integer({ minimum: 0 }),
+          count: t.Optional(t.Integer({ minimum: 0 })),
           cursor: t.String(),
         },
         { additionalProperties: false },

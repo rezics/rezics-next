@@ -420,24 +420,24 @@ test('The descriptive fact cap still refuses the 513th label', async () => {
   ).rejects.toMatchObject({ name: 'SubjectInputError' });
 });
 
-test('The subject read returns a bounded preview and an exact count for each relation property', async () => {
+test('The subject read returns a bounded preview without unproved public relation counts', async () => {
   const answer = await call('GET', `/v1/subjects/${work}`);
   expect(answer.subject.statements['ex:appearance']).toHaveLength(12);
   expect(answer.subject.statements['wdt:P725']).toHaveLength(12);
   expect(answer.subject.statements['ex:unknown']).toHaveLength(12);
-  expect(answer.subject.relationCounts).toEqual({ 'ex:appearance': 3_000, 'wdt:P725': 3_000, 'ex:unknown': 203 });
+  expect(answer.subject.relationCounts).toEqual({});
 });
 
-test('A forward relation page orders, filters, counts and continues across all relations', async () => {
+test('A forward relation page orders, filters and continues across all relations without unproved counts', async () => {
   const appearance = await pageAll('ex:appearance');
-  expect(appearance.count).toEqual({ value: 3_000, exact: true });
+  expect(appearance).not.toHaveProperty('count');
   expect(appearance.relations.map((entry) => entry.statement.id)).toEqual(appearanceIds);
   const filtered = await pageAll('ex:appearance', role);
-  expect(filtered.count).toEqual({ value: 3_000, exact: true });
+  expect(filtered).not.toHaveProperty('count');
   expect(filtered.relations.map((entry) => entry.statement.id)).toEqual(appearanceIds);
 
   const voices = await pageAll('wdt:P725');
-  expect(voices.count).toEqual({ value: 3_000, exact: true });
+  expect(voices).not.toHaveProperty('count');
   expect(voices.relations.map((entry) => entry.target)).toEqual([people[0], people[0], ...people.slice(2)]);
   expect(voices.relations.map((entry) => entry.statement.id).toSorted()).toEqual(voiceIds.toSorted());
 
@@ -446,11 +446,11 @@ test('A forward relation page orders, filters, counts and continues across all r
     `/v1/subjects/${work}/relations?property=ex%3Aappearance&filter=${role}&type=ex%3APerson&limit=25`,
   );
   expect(typed.relations).toHaveLength(25);
-  expect(typed.count).toEqual({ value: 1_000, exact: false });
+  expect(typed).not.toHaveProperty('count');
   expect(typed.next).not.toBeNull();
 
   const unknown = await pageAll('ex:unknown');
-  expect(unknown.count).toEqual({ value: 203, exact: true });
+  expect(unknown).not.toHaveProperty('count');
   expect(unknown.relations).toHaveLength(203);
   expect(unknown.relations[0]?.target).toBe(people[0]);
   expect(unknown.relations.slice(1).filter((entry) => entry.external !== null)).toHaveLength(200);

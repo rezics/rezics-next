@@ -210,7 +210,7 @@ async function operation(database: GrowthDatabase) {
     ),
   );
   expect(page.links).toEqual([]);
-  expect(page.count).toEqual({ value: 0, exact: true });
+  expect(page).not.toHaveProperty('count');
 }
 
 test('public inverse rows stay flat with 64, 512 and 4096 private pen-name links', async () => {

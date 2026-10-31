@@ -2455,7 +2455,7 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

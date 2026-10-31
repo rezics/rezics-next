@@ -128,6 +128,7 @@ beforeAll(async () => {
     editor,
   ]);
   for (const action of actions) await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'gate:definition_publication');
   const published = await call('POST', '/v1/definitions/releases', { release });
   await call('POST', `/v1/definitions/releases/${published.digest}:activate`, { expected_head: null });
 });
@@ -163,7 +164,7 @@ test('the Global graph excludes community-only forward and inverse relations and
         node: entry.node,
         property: entry.property,
         direction: entry.direction,
-        count: page.count,
+        hasCount: Object.hasOwn(page, 'count'),
         statements: (entry.direction === 'out'
           ? page.relations.map((row: any) => row.statement.id)
           : page.links.map((row: any) => row.statement)
@@ -187,9 +188,12 @@ test('the Global graph excludes community-only forward and inverse relations and
   const baseline = [];
   for (const { depth, direction, limit } of cases) baseline.push(await snapshot(depth, direction, limit));
   expect(baseline[0]!.truncated).toEqual(
-    expect.arrayContaining([expect.objectContaining({ node: anchor, direction: 'out', count: 2 })]),
+    expect.arrayContaining([expect.objectContaining({ node: anchor, direction: 'out' })]),
   );
-  expect(baseline[2]!.truncated).toEqual([expect.objectContaining({ node: anchor, direction: 'in', count: 2 })]);
+  expect(baseline[2]!.truncated).toEqual([expect.objectContaining({ node: anchor, direction: 'in' })]);
+  for (const result of baseline) for (const entry of result.truncated) expect(entry).not.toHaveProperty('count');
+  for (const result of baseline)
+    for (const continuation of result.continuations) expect(continuation.hasCount).toBe(false);
   expect(baseline[7]!.edges).toContainEqual(expect.objectContaining({ from: first, to: leaf }));
   expect(baseline[9]!.edges).toContainEqual(expect.objectContaining({ from: ancestor, to: source }));
 
@@ -230,10 +234,10 @@ test('the Global graph excludes community-only forward and inverse relations and
   await drain();
   // Assert the production projections exist and the Context pages differ from Global.
   const localOut = await call('GET', `/v1/subjects/${anchor}/relations?property=ex:follows&context=${context}`);
-  expect(localOut.count).toEqual({ value: 5, exact: true });
+  expect(localOut).not.toHaveProperty('count');
   expect(localOut.relations.map((row: any) => row.target)).toEqual(expect.arrayContaining(locals));
   const localIn = await call('GET', `/v1/subjects/${anchor}/links?property=ex:follows&context=${context}`);
-  expect(localIn.count).toEqual({ value: 5, exact: true });
+  expect(localIn).not.toHaveProperty('count');
   expect(localIn.links.map((row: any) => row.subject)).toEqual(expect.arrayContaining(locals));
   for (const [index, { depth, direction, limit }] of cases.entries()) {
     expect(await snapshot(depth, direction, limit)).toEqual(baseline[index]!);

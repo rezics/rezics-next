@@ -10,6 +10,10 @@ import { partitionOf } from '../route/route.ts';
 
 const FIELD_GROUPS = new Set<ImportedFieldGroup>(['facts', 'summary', 'cover']);
 
+/** Account-agent provenance is a current native identity, not an imported source tuple. */
+export type AgentSelfSource = Readonly<{ kind: 'agent'; subject: string }>;
+export type CandidateSource = Source | AgentSelfSource;
+
 /** A source tuple is taken down. The command must not read its receipt or write. */
 export class SourceFencedError extends Error {
   constructor() {
@@ -160,9 +164,10 @@ export async function enforceSourceFence(
   if (plan.cache.get(key) === true) throw new SourceFencedError();
 }
 
-function usable(source: Source | null): source is Source {
+function usable(source: CandidateSource | null): source is Source {
   return (
     source !== null &&
+    'field_group' in source &&
     FIELD_GROUPS.has(source.field_group) &&
     typeof source.source === 'string' &&
     typeof source.external_id === 'string'
@@ -173,7 +178,7 @@ function usable(source: Source | null): source is Source {
 export async function fencedIds(
   client: Pick<PoolClient, 'query'>,
   routeKey: Uint8Array,
-  rows: readonly { id: string; source: Source | null }[],
+  rows: readonly { id: string; source: CandidateSource | null }[],
 ): Promise<Set<string>> {
   const tuples: SourceFenceTuple[] = [];
   const owners = new Map<string, string[]>();
@@ -220,8 +225,8 @@ type ProvenanceRow = { route: number; subject_id: string; candidate_id: string }
 export async function candidateSources(
   client: Pick<PoolClient, 'query'>,
   entries: readonly ProvenanceRow[],
-): Promise<Map<string, Source | null>> {
-  const sources = new Map<string, Source | null>();
+): Promise<Map<string, CandidateSource | null>> {
+  const sources = new Map<string, CandidateSource | null>();
   if (entries.length > 256) throw new TypeError('A source fence read accepts at most 256 ids');
   if (entries.length === 0) return sources;
   const parameters = {
@@ -230,11 +235,15 @@ export async function candidateSources(
     candidates: entries.map((entry) => entry.candidate_id),
     max_bytes: 2147483647,
   };
-  const result = await client.query<(typeof provenance)['~reylo']['element']>(
+  const result = await client.query<{
+    subject_id: string;
+    id: string;
+    source: CandidateSource | null;
+  }>(
     provenance.sql,
     provenance.params.map((name) => parameters[name as keyof typeof parameters]),
   );
-  for (const row of result.rows) sources.set(`${row.subject_id}\n${row.id}`, row.source as Source | null);
+  for (const row of result.rows) sources.set(`${row.subject_id}\n${row.id}`, row.source);
   return sources;
 }
 

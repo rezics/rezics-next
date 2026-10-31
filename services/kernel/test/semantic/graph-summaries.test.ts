@@ -329,7 +329,8 @@ test('undisclosed graph nodes disclose no summary or attached edges', async () =
   denied.delete(unreadable);
   const restored = await get(graphPath(book, ['rezics:sameSetting'], 5));
   expect(restored.nodes.map((node: { id: string }) => node.id)).toContain(unreadable);
-  expect(restored.truncated).toEqual([expect.objectContaining({ node: unreadable, count: 8 })]);
+  expect(restored.truncated).toEqual([expect.objectContaining({ node: unreadable, cursor: expect.any(String) })]);
+  expect(restored.truncated[0]).not.toHaveProperty('count');
 });
 
 test('bounded graph summary filling preserves the shared 256 ID limit', async () => {

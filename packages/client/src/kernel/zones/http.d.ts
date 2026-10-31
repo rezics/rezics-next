@@ -2459,7 +2459,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

@@ -173,9 +173,9 @@ export async function privateLinks(
     after?: readonly unknown[] | undefined;
     limit: number;
   },
-): Promise<{ entries: PrivateLink[]; total: number }> {
+): Promise<{ entries: PrivateLink[] }> {
   const reader = readers.getStore();
-  if (!reader || reader === PUBLIC_READER) return { entries: [], total: 0 };
+  if (!reader || reader === PUBLIC_READER) return { entries: [] };
   const row = await readPrivateLinks.run(client, {
     subject_id: input.subject,
     inbound: input.inbound ?? false,
@@ -188,7 +188,7 @@ export async function privateLinks(
     after_statement: String(input.after?.[2] ?? NIL),
     page_limit: input.limit,
   });
-  return { entries: (row?.entries ?? []) as PrivateLink[], total: Number(row?.total ?? 0) };
+  return { entries: (row?.entries ?? []) as PrivateLink[] };
 }
 
 type DisclosureSlot = { subject_id: string; property: string; slot_id: string };

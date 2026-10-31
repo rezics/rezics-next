@@ -2450,7 +2450,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

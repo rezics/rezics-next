@@ -2469,7 +2469,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

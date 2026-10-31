@@ -166,10 +166,10 @@ test("a recipe holds more ingredients than one slot's selection limit", async ()
   const subject = await structuredRecipe();
   const read = await call('GET', `/v1/subjects/${subject.id}`);
   expect(read.status).toBe(200);
-  expect(read.body.subject.relationCounts['wdt:P186']).toBe(40);
+  expect(read.body.subject.relationCounts).toEqual({});
   expect(read.body.subject.statements['wdt:P186']).toHaveLength(12);
   const page = await call('GET', `/v1/subjects/${subject.id}/relations?property=wdt%3AP186&limit=100`);
-  expect(page.body.count).toEqual({ value: 40, exact: true });
+  expect(page.body).not.toHaveProperty('count');
   expect(new Set(page.body.relations.map((entry: any) => entry.target)).size).toBe(40);
 });
 

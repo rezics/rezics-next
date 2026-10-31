@@ -156,12 +156,19 @@ test('a created book is anchored by its idempotency key and reads back as a Wiki
         .length,
     ]),
   );
+  const reconstructed = resolve(subject.id, facts, 'bf:Instance', dataTypes, {
+    revision: 1,
+    release: bundledDigest,
+    context: GLOBAL_CONTEXT,
+    relationCounts,
+  });
+  expect(reconstructed.relationCounts).toEqual(relationCounts);
   expect(subject).toEqual(
     resolve(subject.id, facts, 'bf:Instance', dataTypes, {
       revision: 1,
       release: bundledDigest,
       context: GLOBAL_CONTEXT,
-      relationCounts,
+      relationCounts: {},
     }),
   );
   expect(subject.labels).toEqual(book.labels);

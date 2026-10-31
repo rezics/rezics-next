@@ -2465,7 +2465,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

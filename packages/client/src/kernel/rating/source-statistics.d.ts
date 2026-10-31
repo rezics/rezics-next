@@ -2526,7 +2526,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

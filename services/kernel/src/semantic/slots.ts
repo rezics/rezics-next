@@ -163,20 +163,29 @@ async function globalSlotView(
   return [...selected, ...rows.map((row) => candidateFact(property, row, 'deprecated'))];
 }
 
-async function omitHidden(tx: CommandTransaction, subject: string, facts: FactRow[]): Promise<FactRow[]> {
-  const ids = facts.flatMap((fact) =>
-    fact.kind === 'statement' && fact.statement_id !== null ? [fact.statement_id] : [],
-  );
-  if (ids.length === 0) return facts;
-  const hidden = await readHiddenCandidates.run(tx, {
-    route: routeOf(subject)!,
-    subject_id: subject,
-    candidate_ids: ids,
+export async function hiddenCandidateKeys(
+  tx: CommandTransaction,
+  entries: readonly { route: number; subject_id: string; candidate_id: string }[],
+): Promise<Set<string>> {
+  if (entries.length === 0) return new Set();
+  const hidden = (await readHiddenCandidates.run(tx, {
+    candidates: entries,
     ...(await statementAudience(tx)),
-  });
-  if (hidden.length === 0) return facts;
-  const gone = new Set(hidden.map((row) => row.candidate_id));
-  return facts.filter((fact) => fact.statement_id === null || !gone.has(fact.statement_id));
+  })) as { subject_id: string; candidate_id: string }[];
+  return new Set(hidden.map((row) => `${row.subject_id}\n${row.candidate_id}`));
+}
+
+async function omitHidden(tx: CommandTransaction, subject: string, facts: FactRow[]): Promise<FactRow[]> {
+  const route = routeOf(subject)!;
+  const entries = facts.flatMap((fact) =>
+    fact.kind === 'statement' && fact.statement_id !== null
+      ? [{ route, subject_id: subject, candidate_id: fact.statement_id }]
+      : [],
+  );
+  if (entries.length === 0) return facts;
+  const gone = await hiddenCandidateKeys(tx, entries);
+  if (gone.size === 0) return facts;
+  return facts.filter((fact) => fact.statement_id === null || !gone.has(`${subject}\n${fact.statement_id}`));
 }
 
 async function readSlotView(

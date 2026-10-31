@@ -634,10 +634,10 @@ async function operation(database: GrowthDatabase, scale: number) {
   });
   if (subject.subject.statements['schema:author']?.length !== PREVIEW)
     throw new Error(`Expected a 12 statement preview at ${scale}`);
-  if (subject.subject.relationCounts['schema:author'] !== scale)
-    throw new Error(`Expected ${scale} relation count, got ${subject.subject.relationCounts['schema:author']}`);
-  if (page.relations.length !== PAGE_SIZE || page.count.value !== scale || !page.count.exact)
-    throw new Error(`Expected a 25 statement middle page at ${scale}`);
+  if (Object.hasOwn(subject.subject.relationCounts, 'schema:author'))
+    throw new Error('An unproved relation count was included in the subject response');
+  if (page.relations.length !== PAGE_SIZE || Object.hasOwn(page, 'count'))
+    throw new Error(`Expected a 25 statement middle page without an unproved count at ${scale}`);
   expect(subject.subject.labels).toEqual({ en: 'Relation growth anchor' });
   expect(subject.subject.statements['schema:author']!.map((entry) => entry.value)).toEqual(
     people.slice(0, PREVIEW).map((content) => ({ type: 'value', content })),

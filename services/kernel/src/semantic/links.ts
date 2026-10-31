@@ -4,6 +4,7 @@ import currentRelations from './current-relations-read.sql';
 import { fenceKey, sourceTuple, readAnchoredFences } from './fences.ts';
 import { semanticCopyRoles } from './erasure-producer.ts';
 import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
+import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import type { Release } from '@rezics/definitions';
@@ -17,8 +18,6 @@ import { slotView } from './slots.ts';
 import { contextSnapshot } from './context.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 import { matchesTarget } from './targets.ts';
-import readInboundLinkCount from './read-inbound-link-count.sql';
-import countInboundLinkTypes from './count-inbound-link-types.sql';
 import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand } from '../command/command.ts';
@@ -53,8 +52,6 @@ import readVisibility from './read-visibility.sql';
 import upsertInboundLinks from './upsert-inbound-links.sql';
 import upsertOutboundLinks from './upsert-outbound-links.sql';
 import listOutboundLinksByProperty from './list-outbound-links-by-property.sql';
-import readOutboundLinkCount from './read-outbound-link-count.sql';
-import countOutboundLinkTypes from './count-outbound-link-types.sql';
 import listOutboundKeyReemit from './list-outbound-key-reemit.sql';
 import listInboundKeyReemit from './list-inbound-key-reemit.sql';
 import readOutboundForTargetReemit from './read-outbound-for-target-reemit.sql';
@@ -972,6 +969,24 @@ function statementItems(statement: Statement): string[] {
   );
 }
 
+function externalRelationValue(statement: Statement): string | null {
+  const value = statement.qualifiers.find(
+    (qualifier) =>
+      qualifier.property.id === 'schema:sameAs' &&
+      qualifier.value.type === 'value' &&
+      typeof qualifier.value.content === 'string' &&
+      /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/.test(qualifier.value.content),
+  )?.value;
+  return value?.type === 'value' && typeof value.content === 'string' ? value.content : null;
+}
+
+function localRelationTarget(statement: Statement): string | null {
+  const value = statement.value;
+  return value.type === 'value' && typeof value.content === 'string' && routeOf(value.content) !== null
+    ? value.content
+    : null;
+}
+
 /** A concealed related value is omitted together with its label; it never becomes a readable raw id. */
 export function disclosedRelationStatement(
   statement: Statement,
@@ -1049,7 +1064,9 @@ export async function listSubjectLinks(
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
     throw new RangeError('Invalid links page limit');
   const context = options.context ?? GLOBAL_CONTEXT;
-  if (context !== GLOBAL_CONTEXT && !(await contextSnapshot(pool, context))) throw new SubjectNotFoundError();
+  const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
+  if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
+  const defaults = contextRecord?.defaults ?? {};
   const languages = options.languages ?? languageRanges(null, options.language);
   const binding = {
     operation: 'subject.links',
@@ -1062,7 +1079,7 @@ export async function listSubjectLinks(
       language: languages.join(',') || null,
     },
   };
-  const release = options.type ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
+  const release = options.type || options.filter ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
   const matches = (type: string) => !options.type || (!!release && matchesTarget(release, type, [options.type]));
   let cursor: { epoch: number; after: CursorKey[] } | null = null;
   if (options.cursor !== undefined) {
@@ -1154,38 +1171,34 @@ export async function listSubjectLinks(
           links.push({ subject: row.subject, property: row.property, statement: row.statement, type: row.type });
         if (links.length === options.limit) break;
       }
-      const last = rows[examined - 1];
-      let count: { value: number; exact: boolean } | undefined;
-      if (options.property !== null) {
-        const total = await readInboundLinkCount.run(client, {
-          context_id: context,
-          route,
-          subject_id: options.subject,
-          property: options.property,
-          filter_value: options.filter ?? NIL_UUID,
-        });
-        const value = Number(total?.value ?? 0) + privatePage.total;
-        if (!options.type) count = { value, exact: true };
-        else {
-          const sample = await countInboundLinkTypes.run(client, {
-            context_id: context,
-            route,
-            subject_id: options.subject,
-            property: options.property,
-            filter_value: options.filter ?? NIL_UUID,
-          });
-          count = {
-            value:
-              sample.filter((row) => matches(row.type)).length +
-              privatePage.entries.filter((row) => matches(row.source_type)).length,
-            exact: value <= 1000 && privatePage.total <= privatePage.entries.length,
+      const current = await currentRelationFacts(
+        client,
+        options.routeKey,
+        links.map((link) => {
+          const relationFilter = release?.properties[link.property]?.relation?.filter;
+          return {
+            subject: link.subject,
+            property: link.property,
+            candidate: link.statement,
+            target: options.subject,
+            value: 'value' as const,
+            context,
+            defaults,
+            ...(options.filter === undefined ? {} : { filter: options.filter }),
+            ...(relationFilter === undefined
+              ? {}
+              : { filterProperties: Array.isArray(relationFilter) ? relationFilter : [relationFilter] }),
+            requireRelation: true,
           };
-        }
-      }
+        }),
+      );
+      const currentLinks = links.filter((link) =>
+        current.has(currentRelationKey({ subject: link.subject, property: link.property, candidate: link.statement })),
+      );
+      const last = rows[examined - 1];
       return {
         page: {
-          links,
-          ...(count ? { count } : {}),
+          links: currentLinks,
           freshness: {
             consistency: 'eventual',
             target_seconds: FRESHNESS_TARGET_SECONDS,
@@ -1229,7 +1242,10 @@ export async function listSubjectLinks(
   const page = snapshot.page;
   const statements = await currentRelationStatements(pool, page.links, context, options.routeKey, deadline);
   const includeLabels = options.includeLabels ?? options.property !== null;
-  const summaryRelease = includeLabels ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
+  const summaryRelease =
+    includeLabels || options.type || options.authorizeSummary
+      ? (options.release ?? (await activeRelease(pool))?.release)
+      : undefined;
   const summaries = summaryRelease
     ? await readSubjectSummaries(
         {
@@ -1250,6 +1266,19 @@ export async function listSubjectLinks(
   const links = page.links.flatMap((link): SubjectLink[] => {
     const current = statements.get(`${link.subject}/${link.statement}`);
     if (!current) return [];
+    if (
+      current.value.type !== 'value' ||
+      current.value.content !== options.subject ||
+      (options.filter &&
+        !current.qualifiers.some(
+          (snak) => snak.value.type === 'value' && snak.value.content === options.filter,
+        ))
+    )
+      return [];
+    const summary = summaries.get(link.subject) ?? null;
+    if (options.authorizeSummary && !summary) return [];
+    const type = summary?.type ?? link.type;
+    if (options.type && !matches(type ?? '')) return [];
     if (!includeLabels) return [{ subject: link.subject, property: link.property, statement: link.statement }];
     const assertion = options.authorizeSummary ? disclosedRelationStatement(current, summaries) : current;
     if (
@@ -1264,9 +1293,6 @@ export async function listSubjectLinks(
         return summary ? [[id, summary]] : [];
       }),
     );
-    const summary = summaries.get(link.subject) ?? null;
-    if (options.authorizeSummary && !summary) return [];
-    const type = summary?.type ?? link.type;
     return [
       {
         ...link,
@@ -1277,15 +1303,7 @@ export async function listSubjectLinks(
       },
     ];
   });
-  const { count, ...rest } = page;
-  const provedCount =
-    !options.filter &&
-    !options.cursor &&
-    !page.next &&
-    links.length === page.links.length &&
-    count?.exact &&
-    count.value === links.length;
-  return { ...rest, links, ...((!options.authorizeSummary || provedCount) && count ? { count } : {}) };
+  return { ...page, links };
 }
 
 export type SubjectRelation = {
@@ -1336,18 +1354,6 @@ type SubjectRelationsOptions = {
   caughtUp?: boolean;
 };
 
-// Internal readers retain the skeleton count. Public callers supply summary authorization and
-// receive a count only when the current bounded page proves the whole counted set.
-export function listSubjectRelations(
-  pool: Pool,
-  ring: KeyRing,
-  options: SubjectRelationsOptions & { authorizeSummary?: never },
-): Promise<SubjectRelationsPage & { count: { value: number; exact: boolean } }>;
-export function listSubjectRelations(
-  pool: Pool,
-  ring: KeyRing,
-  options: SubjectRelationsOptions,
-): Promise<SubjectRelationsPage>;
 /** Forward relation page over the holder-local projection, with current statements filled only for this page. */
 export async function listSubjectRelations(
   pool: Pool,
@@ -1361,6 +1367,7 @@ export async function listSubjectRelations(
   const context = options.context ?? GLOBAL_CONTEXT;
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
+  const defaults = contextRecord?.defaults ?? {};
   const languages = options.languages ?? languageRanges(null, options.language);
   const binding = {
     operation: 'subject.relations',
@@ -1387,9 +1394,7 @@ export async function listSubjectRelations(
     options.caughtUp === undefined && options.prepareAuthorization
       ? await options.prepareAuthorization()
       : options.authorize;
-  const page = await withReadTransaction<SubjectRelationsPage & { count: { value: number; exact: boolean } }>(
-    pool,
-    async (client) => {
+  const page = await withReadTransaction<SubjectRelationsPage>(pool, async (client) => {
       const partition = await readPartition(client, partitionOf(route));
       const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
         visibility: string;
@@ -1455,42 +1460,63 @@ export async function listSubjectRelations(
           selected.push(row);
         if (selected.length === options.limit) break;
       }
-      const total = await readOutboundLinkCount.run(client, {
-        context_id: context,
-        route,
-        subject_id: options.subject,
-        property: options.property,
-        filter_value: options.filter ?? NIL_UUID,
-      });
-      const totalValue = Number(total?.value ?? 0) + privatePage.total;
-      let count = { value: totalValue, exact: true };
-      if (options.type) {
-        const sample = (await countOutboundLinkTypes.run(client, {
-          context_id: context,
-          route,
-          subject_id: options.subject,
+      const filterProperties = options.release.properties[options.property]?.relation?.filter;
+      const current = await currentRelationFacts(
+        client,
+        options.routeKey,
+        selected.map((row) => ({
+          subject: options.subject,
           property: options.property,
-          filter_value: options.filter ?? NIL_UUID,
-        })) as { type: string }[];
-        count = {
-          value:
-            sample.filter((row) => row.type !== '' && matchesTarget(options.release, row.type, [options.type!]))
-              .length +
-            privatePage.entries.filter((row) => matchesTarget(options.release, row.target_type, [options.type!]))
-              .length,
-          exact: totalValue <= 1000 && privatePage.total <= privatePage.entries.length,
-        };
+          candidate: row.statement,
+          target: row.target,
+          external: row.external,
+          value: row.value,
+          context,
+          defaults,
+          slot: row.slot,
+          ...(options.filter === undefined ? {} : { filter: options.filter }),
+          ...(filterProperties === undefined
+            ? {}
+            : { filterProperties: Array.isArray(filterProperties) ? filterProperties : [filterProperties] }),
+          requireRelation: true,
+        })),
+      );
+      const holder = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+        type?: string;
+      } | null;
+      const relations: SubjectRelation[] = [];
+      const releases = new Map<string, Release>();
+      for (const row of selected) {
+        const fact = current.get(currentRelationKey({
+          subject: options.subject,
+          property: options.property,
+          candidate: row.statement,
+        }));
+        if (!fact) continue;
+        const digest = fact.fact_release ?? options.release.digest;
+        let release = releases.get(digest);
+        if (!release) {
+          release =
+            digest === options.release.digest ? options.release : (await readRelease(client, digest)) ?? undefined;
+          if (!release) continue;
+          releases.set(digest, release);
+        }
+        const statement = resolveItem(options.subject, [fact], holder?.type ?? '', factDataTypes(release, [fact]), {
+          revision: fact.fact_revision ?? 1,
+          release: digest,
+          context,
+        }).statements[options.property]?.[0];
+        if (!statement) continue;
+        relations.push({
+          statement,
+          target: row.target,
+          external: row.external,
+          ...(row.target === null ? {} : { type: row.type }),
+        });
       }
-      const relations: SubjectRelation[] = selected.map((row) => ({
-        statement: { id: row.statement } as Statement,
-        target: row.target,
-        external: row.external,
-        ...(row.target ? { type: row.type } : {}),
-      }));
       const last = visibleRows[examined - 1];
       return {
         relations,
-        count,
         freshness: {
           consistency: 'eventual',
           target_seconds: FRESHNESS_TARGET_SECONDS,
@@ -1505,8 +1531,7 @@ export async function listSubjectRelations(
             : null,
         component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
       };
-    },
-  );
+    });
   const statements = await currentRelationStatements(
     pool,
     page.relations.map((entry) => ({
@@ -1518,6 +1543,23 @@ export async function listSubjectRelations(
     options.routeKey,
     deadline,
   );
+  const currentRelations = page.relations.flatMap((entry): SubjectRelation[] => {
+    const statement = statements.get(`${options.subject}/${entry.statement.id}`);
+    if (!statement || statement.property.id !== options.property) return [];
+    if (
+      options.filter &&
+      !statement.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter)
+    )
+      return [];
+    return [
+      {
+        ...entry,
+        statement,
+        target: localRelationTarget(statement),
+        external: externalRelationValue(statement),
+      },
+    ];
+  });
   const summaries = await readSubjectSummaries(
     {
       client: { query: pool.query.bind(pool) },
@@ -1529,18 +1571,16 @@ export async function listSubjectRelations(
     },
     [
       ...new Set([
-        ...page.relations.flatMap((entry) => (entry.target ? [entry.target] : [])),
-        ...[...statements.values()].flatMap(statementItems),
+        ...currentRelations.flatMap((entry) => (entry.target ? [entry.target] : [])),
+        ...currentRelations.flatMap((entry) => statementItems(entry.statement)),
       ]),
     ].slice(0, 256),
     { languages },
   );
   requireAccessDeadline(deadline);
   const relations: SubjectRelation[] = [];
-  for (const raw of page.relations) {
-    const current = statements.get(`${options.subject}/${raw.statement.id}`);
-    if (!current) continue;
-    const statement = options.authorizeSummary ? disclosedRelationStatement(current, summaries) : current;
+  for (const raw of currentRelations) {
+    const statement = options.authorizeSummary ? disclosedRelationStatement(raw.statement, summaries) : raw.statement;
     if (
       !statement ||
       (options.filter &&
@@ -1561,6 +1601,7 @@ export async function listSubjectRelations(
     const summary = summaries.get(entry.target) ?? null;
     if (options.authorizeSummary && !summary) continue;
     const type = summary?.type ?? entry.type;
+    if (options.type && !matchesTarget(options.release, type ?? '', [options.type])) continue;
     relations.push({
       ...entry,
       ...(type ? { type } : {}),
@@ -1568,17 +1609,5 @@ export async function listSubjectRelations(
       summary,
     });
   }
-  const { count, ...rest } = page;
-  const provedCount =
-    !options.filter &&
-    !options.cursor &&
-    !page.next &&
-    relations.length === page.relations.length &&
-    count.exact &&
-    count.value === relations.length;
-  return {
-    ...rest,
-    relations,
-    ...(!options.authorizeSummary || provedCount ? { count } : {}),
-  };
+  return { ...page, relations };
 }

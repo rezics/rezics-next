@@ -2456,7 +2456,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

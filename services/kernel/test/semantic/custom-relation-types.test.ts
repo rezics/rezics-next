@@ -280,7 +280,7 @@ test("a Context's custom relation type pages, filters and counts like a bundled 
   expect(first.status).toBe(200);
   expect(first.body.relations.map((row: any) => row.target)).toEqual([pupils[0], pupils[1]]);
   expect(first.body.relations.map((row: any) => row.statement.id)).toEqual([statements.pupil, statements.second]);
-  expect(first.body.count).toEqual({ value: 3, exact: true });
+  expect(first.body).not.toHaveProperty('count');
   const second = await relations(mentor, mentorOf, realm, `&limit=2&cursor=${encodeURIComponent(first.body.next)}`);
   expect(second.body.relations.map((row: any) => row.target)).toEqual([faction]);
   expect(second.body.next).toBeNull();
@@ -294,7 +294,7 @@ test("a Context's custom relation type pages, filters and counts like a bundled 
 
   const inbound = await links(pupils[0]!, mentorOf, realm);
   expect(inbound.body.links.map((row: any) => [row.subject, row.statement])).toEqual([[mentor, statements.pupil]]);
-  expect(inbound.body.count).toEqual({ value: 1, exact: true });
+  expect(inbound.body).not.toHaveProperty('count');
   expect((await links(faction, mentorOf, realm, '&type=ex:Character')).body.links).toHaveLength(1);
   expect((await links(faction, mentorOf, realm, '&type=ex:Faction')).body.links).toEqual([]);
 
@@ -304,11 +304,8 @@ test("a Context's custom relation type pages, filters and counts like a bundled 
     statements.second,
     statements.faction,
   ]);
-  expect(preview.relationCounts).toEqual({ [mentorOf]: 3, [rivalOf]: 0 });
-  expect((await call('GET', `/v1/subjects/${pupils[0]}?context=${realm}`)).subject.relationCounts).toEqual({
-    [mentorOf]: 0,
-    [rivalOf]: 1,
-  });
+  expect(preview.relationCounts).toEqual({});
+  expect((await call('GET', `/v1/subjects/${pupils[0]}?context=${realm}`)).subject.relationCounts).toEqual({});
 });
 
 test('a Context without an extension reads the active release unchanged', async () => {
@@ -353,8 +350,8 @@ test("a community Context's custom relation type shows in Global only after Glob
   const empty = await relations(mentor, mentorOf, null);
   expect(empty.status).toBe(200);
   expect(empty.body.relations).toEqual([]);
-  expect(empty.body.count).toEqual({ value: 0, exact: true });
-  expect((await call('GET', `/v1/subjects/${mentor}`)).subject.relationCounts).toEqual({ [mentorOf]: 0 });
+  expect(empty.body).not.toHaveProperty('count');
+  expect((await call('GET', `/v1/subjects/${mentor}`)).subject.relationCounts).toEqual({});
   expect((await relations(pupils[0]!, rivalOf, null)).status).toBe(400);
 
   for (const [candidate, target] of [
@@ -377,10 +374,10 @@ test("a community Context's custom relation type shows in Global only after Glob
   await drain();
   const adoptedPage = await relations(mentor, mentorOf, null);
   expect(adoptedPage.body.relations.map((row: any) => row.target)).toEqual([pupils[0], pupils[1]]);
-  expect(adoptedPage.body.count).toEqual({ value: 2, exact: true });
-  expect((await links(pupils[0]!, mentorOf, null)).body.count).toEqual({ value: 1, exact: true });
+  expect(adoptedPage.body).not.toHaveProperty('count');
+  expect((await links(pupils[0]!, mentorOf, null)).body).not.toHaveProperty('count');
   // The Realm still shows its own third statement.
-  expect((await relations(mentor, mentorOf, realm)).body.count).toEqual({ value: 3, exact: true });
+  expect((await relations(mentor, mentorOf, realm)).body).not.toHaveProperty('count');
 });
 
 test('a custom relation type without a meaning, domain or range is refused', async () => {
@@ -537,7 +534,7 @@ test("a Context's term resolution reads a bounded number of rows however many te
     },
     async operation(db) {
       const read = await readSubject(db.pool, holder, async () => true, growing, new Uint8Array(32).fill(50));
-      expect(read!.subject.relationCounts).toEqual({ [used]: 0 });
+      expect(read!.subject.relationCounts).toEqual({});
     },
   });
   expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);

@@ -235,7 +235,7 @@ afterAll(async () => {
 test('inverse and forward relation pages return the shared display summary and omit unreadable subjects', async () => {
   const inverse = await request(`/v1/subjects/${book.id}/links?property=schema%3AexampleOfWork`);
   expect(inverse.response.status).toBe(200);
-  expect(inverse.body.count).toEqual({ value: 2, exact: true });
+  expect(inverse.body).not.toHaveProperty('count');
   expect(inverse.body.links).toEqual([
     {
       subject: instance.id,
@@ -249,7 +249,7 @@ test('inverse and forward relation pages return the shared display summary and o
 
   const forward = await request(`/v1/subjects/${instance.id}/relations?property=schema%3AexampleOfWork`);
   expect(forward.response.status).toBe(200);
-  expect(forward.body.count).toEqual({ value: 1, exact: true });
+  expect(forward.body).not.toHaveProperty('count');
   expect(forward.body.relations).toHaveLength(1);
   expect(forward.body.relations[0]).toMatchObject({
     target: book.id,
@@ -261,7 +261,7 @@ test('inverse and forward relation pages return the shared display summary and o
   expect(inverse.body.links.some((link: any) => link.subject === unreadableInstance.id)).toBe(false);
   const unreadable = await request(`/v1/subjects/${unreadableForward.id}/relations?property=schema%3AexampleOfWork`);
   expect(unreadable.response.status).toBe(200);
-  expect(unreadable.body.count).toEqual({ value: 1, exact: true });
+  expect(unreadable.body).not.toHaveProperty('count');
   expect(unreadable.body.relations).toEqual([]);
   const authorizedIds = new Set(access.readChecks.map((check) => check.resource.id));
   expect(authorizedIds).toContain(instance.id);

@@ -120,7 +120,7 @@ test("a work's story arcs page in order with their part ranges", async () => {
   let cursor: string | null = null;
   do {
     const page = await forward('rezics:storyArc', `&limit=1${cursor ? `&cursor=${cursor}` : ''}`);
-    expect(page.count).toEqual({ value: 3, exact: true });
+    expect(page).not.toHaveProperty('count');
     found.push(...page.relations);
     cursor = page.next;
   } while (cursor);
@@ -144,7 +144,7 @@ test("a work's characters filter by story arc and by role", async () => {
   ] as const) {
     const page = await forward('schema:character', filter ? `&filter=${filter}` : '');
     expect(page.relations.map((entry: any) => entry.target)).toEqual(expected);
-    expect(page.count).toEqual({ value: expected.length, exact: true });
+    expect(page).not.toHaveProperty('count');
     expect(page.next).toBeNull();
   }
 });
@@ -156,7 +156,7 @@ test('a story arc is a subject that links back to its work', async () => {
     expect(page.links.map((link: any) => ({ subject: link.subject, type: link.type, label: link.label }))).toEqual([
       { subject: work, type: 'schema:TVSeries', label: 'A 24-episode series' },
     ]);
-    expect(page.count).toEqual({ value: 1, exact: true });
+    expect(page).not.toHaveProperty('count');
     expect(page.next).toBeNull();
   }
 });
@@ -176,9 +176,9 @@ test('a relation filter admits two qualifiers', async () => {
     const query = filter ? `&filter=${filter}` : '';
     const page = await call('GET', `/v1/subjects/${creditWork}/relations?property=wdt%3AP725${query}`);
     expect(page.relations.map((entry: any) => entry.target)).toEqual([actor]);
-    expect(page.count).toEqual({ value: 1, exact: true });
+    expect(page).not.toHaveProperty('count');
     const inverse = await call('GET', `/v1/subjects/${actor}/links?property=wdt%3AP725${query}`);
     expect(inverse.links.map((link: any) => link.subject)).toEqual([creditWork]);
-    expect(inverse.count).toEqual({ value: 1, exact: true });
+    expect(inverse).not.toHaveProperty('count');
   }
 });

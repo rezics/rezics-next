@@ -169,6 +169,7 @@ beforeAll(async () => {
     editor,
   ]);
   for (const action of actions) await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'gate:definition_publication');
   const published = await call('POST', '/v1/definitions/releases', { release });
   expect(published.digest).toBe(digest);
   await call('POST', `/v1/definitions/releases/${digest}:activate`, { expected_head: null });
@@ -243,20 +244,19 @@ test("a community Context's relation pages show its accepted, replaced and suppr
   expect(preview.resolution).toEqual({ 'ex:appearance': 'suppressed' });
 });
 
-test("a Context's relation counts are exact", async () => {
-  for (const property of ['ex:appearance', 'ex:credit'])
-    expect((await forward(property)).count).toEqual({ value: 1, exact: true });
-  expect((await inverse(people[0]!, 'ex:appearance')).count).toEqual({ value: 0, exact: true });
-  expect((await inverse(people[2]!, 'ex:appearance')).count).toEqual({ value: 1, exact: true });
-  expect((await inverse(people[1]!, 'ex:credit')).count).toEqual({ value: 1, exact: true });
+test("a Context's unproved relation counts are omitted", async () => {
+  for (const property of ['ex:appearance', 'ex:credit']) expect(await forward(property)).not.toHaveProperty('count');
+  expect(await inverse(people[0]!, 'ex:appearance')).not.toHaveProperty('count');
+  expect(await inverse(people[2]!, 'ex:appearance')).not.toHaveProperty('count');
+  expect(await inverse(people[1]!, 'ex:credit')).not.toHaveProperty('count');
   const preview = (await call('GET', `/v1/subjects/${work}?context=${context}`)).subject;
-  expect(preview.relationCounts).toEqual({ 'ex:appearance': 1, 'ex:credit': 1, 'ex:elsewhere': 0 });
+  expect(preview.relationCounts).toEqual({});
 });
 
 test("Global pages never show a community Context's relation changes", async () => {
   expect((await forward('ex:appearance', false)).relations.map((row: any) => row.statement.id)).toEqual([appearance]);
   expect((await forward('ex:credit', false)).relations.map((row: any) => row.statement.id)).toEqual([oldCredit]);
-  expect((await inverse(people[0]!, 'ex:appearance', false)).count).toEqual({ value: 1, exact: true });
+  expect(await inverse(people[0]!, 'ex:appearance', false)).not.toHaveProperty('count');
   expect((await inverse(people[2]!, 'ex:appearance', false)).links).toEqual([]);
   expect((await inverse(people[1]!, 'ex:credit', false)).links.map((row: any) => row.statement)).toEqual([oldCredit]);
   const preview = (await call('GET', `/v1/subjects/${work}`)).subject;
@@ -383,7 +383,7 @@ test('Context paging and inheritance remain correct when Global adopts a local r
   const path = `/v1/subjects/${subject}/relations?property=ex:appearance&context=${context}&limit=1`;
   const first = await call('GET', path);
   expect(first.relations.map((row: any) => row.target)).toEqual([people[2]]);
-  expect(first.count).toEqual({ value: 2, exact: true });
+  expect(first).not.toHaveProperty('count');
   expect(typeof first.next).toBe('string');
   const second = await call('GET', `${path}&cursor=${encodeURIComponent(first.next)}`);
   expect(second.relations.map((row: any) => row.target)).toEqual([people[1]]);
@@ -391,28 +391,27 @@ test('Context paging and inheritance remain correct when Global adopts a local r
   await decide(GLOBAL_CONTEXT);
   await select(GLOBAL_CONTEXT, people[2]!, 'replace');
   await drain();
-  expect((await call('GET', path)).count).toEqual({ value: 2, exact: true });
+  expect(await call('GET', path)).not.toHaveProperty('count');
   await select(context, people[2]!, 'inherit', local.adoption.head);
   await select(context, people[0]!, 'inherit', suppressed.adoption.head);
   await drain();
   const inherited = await call('GET', path.replace('&limit=1', '&limit=10'));
   expect(inherited.relations.map((row: any) => row.target)).toEqual([people[0], people[2], people[1]]);
-  expect(inherited.count).toEqual({ value: 3, exact: true });
+  expect(inherited).not.toHaveProperty('count');
 }, 60_000);
 
 test('Context rows survive holder visibility changes and target redirects', async () => {
-  const previous = (await inverse(people[2]!, 'ex:appearance')).count.value;
   await call('POST', `/v1/subjects/${work}:hide`, { reason: 'Projection test' });
   await drain();
-  expect((await inverse(people[2]!, 'ex:appearance')).count).toEqual({ value: previous - 1, exact: true });
+  expect(await inverse(people[2]!, 'ex:appearance')).not.toHaveProperty('count');
   await call('POST', `/v1/subjects/${work}:restore`, { reason: 'Projection test' });
   await drain();
   expect((await forward('ex:appearance')).relations.map((row: any) => row.statement.id)).toEqual([newAppearance]);
-  expect((await inverse(people[2]!, 'ex:appearance')).count).toEqual({ value: previous, exact: true });
+  expect(await inverse(people[2]!, 'ex:appearance')).not.toHaveProperty('count');
   await call('POST', `/v1/subjects/${work}/candidates/${newCredit}:hide`, { reason: 'Projection test' });
   await drain();
-  expect((await inverse(people[1]!, 'ex:credit')).count).toEqual({ value: 0, exact: true });
-  expect((await forward('ex:credit')).count).toEqual({ value: 0, exact: true });
+  expect(await inverse(people[1]!, 'ex:credit')).not.toHaveProperty('count');
+  expect(await forward('ex:credit')).not.toHaveProperty('count');
   await call('POST', `/v1/subjects/${work}/candidates/${newCredit}:restore`, { reason: 'Projection test' });
   await drain();
   expect((await forward('ex:credit')).relations.map((row: any) => row.statement.id)).toEqual([newCredit]);
@@ -463,8 +462,8 @@ test('a Context preview includes each projected statement once when a slot selec
   await drain();
   const page = await call('GET', `/v1/subjects/${subject}/relations?property=ex:appearance&context=${context}`);
   expect(page.relations.map((row: any) => row.statement.id)).toEqual(selected);
-  expect(page.count).toEqual({ value: 2, exact: true });
+  expect(page).not.toHaveProperty('count');
   const preview = (await call('GET', `/v1/subjects/${subject}?context=${context}`)).subject;
   expect(preview.statements['ex:appearance'].map((row: any) => row.id)).toEqual(selected);
-  expect(preview.relationCounts).toEqual({ 'ex:appearance': 2, 'ex:credit': 0, 'ex:elsewhere': 0 });
+  expect(preview.relationCounts).toEqual({});
 }, 60_000);

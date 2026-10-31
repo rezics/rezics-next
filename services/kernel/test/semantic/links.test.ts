@@ -281,20 +281,17 @@ test('links are filtered by property and paged in declared order', async () => {
   const first = await links(soseki.id, 'editor', '?property=schema%3Aauthor&limit=2');
   expect(first).toEqual({
     links: authored.slice(0, 2),
-    count: { value: 3, exact: true },
     freshness: fresh(true),
     next: expect.any(String),
   });
   const cursor = encodeURIComponent(first.next);
   expect(await links(soseki.id, 'editor', `?property=schema%3Aauthor&limit=2&cursor=${cursor}`)).toEqual({
     links: authored.slice(2),
-    count: { value: 3, exact: true },
     freshness: fresh(true),
     next: null,
   });
   expect(await links(soseki.id, 'editor', '?property=schema%3Atranslator')).toEqual({
     links: [translation],
-    count: { value: 1, exact: true },
     freshness: fresh(true),
     next: null,
   });

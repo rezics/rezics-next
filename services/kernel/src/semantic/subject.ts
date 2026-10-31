@@ -19,6 +19,7 @@ import { SubjectRedirectError } from './merges.ts';
 import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
+import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 import {
   currentCommand,
   DEFAULT_REQUEST_DEADLINE_MS,
@@ -32,7 +33,12 @@ import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
-import { fencedIds, readAnchoredFences } from './fences.ts';
+import {
+  fencedIds,
+  readAnchoredFences,
+  type AgentSelfSource as CandidateAgentSelfSource,
+  type CandidateSource,
+} from './fences.ts';
 import { checkMediaObject } from '../content/cover-reference.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { factDataTypes, isRelationProperty, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
@@ -69,7 +75,6 @@ import {
   accountAgentsForSubjects,
 } from './agents.ts';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
-import readOutboundLinkCount from './read-outbound-link-count.sql';
 import { waitForSubjectLinks } from './link-freshness.ts';
 import { identityEpochStore } from './identity-epoch-store.ts';
 import { initializeRevisionAuthorship, revisionResource } from './authorship.ts';
@@ -101,7 +106,7 @@ export class SubjectAccessDeniedError extends Error {
 
 export type SubjectComponent = { partition: number; epoch: number; position: bigint };
 export type CreateSubjectResult = { subject: Item; component: SubjectComponent; replayed: boolean };
-export type AgentSelfSource = { kind: 'agent'; subject: string };
+export type AgentSelfSource = CandidateAgentSelfSource;
 
 export async function createSubject(
   pool: Pool,
@@ -415,7 +420,7 @@ function currentTerms(facts: FactRow[]): FactRow[] {
   return [...live.values()];
 }
 
-type SupportedFact = { fact: FactRow; source: Source | null };
+type SupportedFact = { fact: FactRow; source: CandidateSource | null };
 
 /** Exact immutable revision locators for the final terms and selected statements only. */
 async function supportedFacts(
@@ -430,10 +435,18 @@ async function supportedFacts(
       route: routeOf(subject)!,
       subject_id: subject,
       revisions,
-    })) as { revision: number; source: Source | null }[] | { revision: number; source: Source | null } | null,
+    })) as
+      | { revision: number; source: CandidateSource | null }[]
+      | { revision: number; source: CandidateSource | null }
+      | null,
   );
   const sources = new Map(rows.map((row) => [row.revision, row.source]));
-  const supported = facts.map((fact) => ({ fact, source: sources.get(fact.fact_revision!) ?? null }));
+  const supported = facts.flatMap((fact) => {
+    const revision = fact.fact_revision;
+    return revision === null || revision === undefined || !sources.has(revision)
+      ? []
+      : [{ fact, source: sources.get(revision) ?? null }];
+  });
   const gone = routeKey
     ? await fencedIds(
         client,
@@ -606,14 +619,14 @@ export async function readSubject(
                 after_target: NIL_UUID,
                 after_statement: NIL_UUID,
                 page_limit: 13,
-              })) as { slot: string; statement: string; target: string | null; order_key: string }[];
-              const count = await readOutboundLinkCount.run(client, {
-                context_id: context,
-                route,
-                subject_id: subjectId,
-                property,
-                filter_value: NIL_UUID,
-              });
+              })) as {
+                slot: string;
+                statement: string;
+                target: string | null;
+                external: string | null;
+                value: 'value' | 'somevalue' | 'novalue';
+                order_key: string;
+              }[];
               // Resolution describes omitted Global slots too. Keep that diagnostic at
               // the same bounded Global preview it used before Context projection rows.
               if (context !== GLOBAL_CONTEXT) {
@@ -634,11 +647,12 @@ export async function readSubject(
                 }
               }
               const privatePage = await privateLinks(client, { subject: subjectId, property, limit: 13 });
-              relationCounts[property] = Number(count?.value ?? 0) + privatePage.total;
               const privatePreview = privatePage.entries.map((row) => ({
                 slot: row.slot_id,
                 statement: row.candidate_id,
                 target: row.target_id,
+                external: null,
+                value: 'value' as const,
                 order_key: row.order_key,
               }));
               const combined = [...preview, ...privatePreview].sort((a, b) =>
@@ -646,17 +660,42 @@ export async function readSubject(
                   ? -1
                   : a.order_key > b.order_key
                     ? 1
-                    : a.target! < b.target!
+                    : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
                       ? -1
-                      : a.target! > b.target!
+                      : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
                         ? 1
                         : a.statement.localeCompare(b.statement),
               );
-              for (const entry of combined.slice(0, 12)) {
-                const view = await slotView(client, subjectId, property, context, defaults, entry.slot);
-                const fact = view.facts.find((row) => row.statement_id === entry.statement);
+              const selected = combined.slice(0, 12);
+              const filterProperties = release.properties[property]?.relation?.filter;
+              const current = await currentRelationFacts(
+                client,
+                routeKey,
+                selected.map((entry) => ({
+                  subject: subjectId,
+                  property,
+                  candidate: entry.statement,
+                  target: entry.target,
+                  external: entry.external,
+                  value: entry.value,
+                  context,
+                  defaults,
+                  slot: entry.slot,
+                  ...(filterProperties === undefined
+                    ? {}
+                    : { filterProperties: Array.isArray(filterProperties) ? filterProperties : [filterProperties] }),
+                  requireRelation: true,
+                })),
+              );
+              for (const entry of selected) {
+                const fact = current.get(
+                  currentRelationKey({ subject: subjectId, property, candidate: entry.statement }),
+                );
                 if (fact) statementFacts.push(fact);
-                if (view.resolution) resolution[property] = view.resolution;
+                else {
+                  const view = await slotView(client, subjectId, property, context, defaults, entry.slot);
+                  if (view.resolution) resolution[property] = view.resolution;
+                }
               }
             }
           }
@@ -746,7 +785,9 @@ export async function readSubject(
     subject.sourceRecords = await readSourceRecords(
       pool,
       routeKey,
-      proof.flatMap((row) => (row.source && typeof row.source.source === 'string' ? [row.source] : [])),
+      proof.flatMap((row) =>
+        row.source && 'source' in row.source && typeof row.source.source === 'string' ? [row.source] : [],
+      ),
     );
   const summary = active
     ? ((

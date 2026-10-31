@@ -2455,7 +2455,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };
@@ -6672,7 +6672,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

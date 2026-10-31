@@ -9,39 +9,13 @@ requests AS MATERIALIZED (
   FROM jsonb_to_recordset(:requests::jsonb)
     AS requested(ordinal integer, node text, route integer, property text, direction text)
 ),
-counted AS MATERIALIZED (
-  SELECT request.*,
-         COALESCE(outbound.value, inbound.value, 0)::bigint AS relation_count
-  FROM requests AS request
-  CROSS JOIN input
-  LEFT JOIN LATERAL (
-    SELECT value FROM semantic.outbound_link_count
-    WHERE request.direction = 'out'
-      AND context_id = '00000000-0000-8000-8000-000000000000'::uuid
-      AND route >= input.partition_no * 16 AND route < (input.partition_no + 1) * 16
-      AND route = request.route AND subject_id = request.node_id
-      AND property = request.property
-      AND filter_value = '00000000-0000-0000-0000-000000000000'::uuid
-    LIMIT 1 OFFSET 0
-  ) AS outbound ON true
-  LEFT JOIN LATERAL (
-    SELECT value FROM semantic.inbound_link_count
-    WHERE request.direction = 'in'
-      AND context_id = '00000000-0000-8000-8000-000000000000'::uuid
-      AND route >= input.partition_no * 16 AND route < (input.partition_no + 1) * 16
-      AND route = request.route AND subject_id = request.node_id
-      AND property = request.property
-      AND filter_value = '00000000-0000-0000-0000-000000000000'::uuid
-    LIMIT 1 OFFSET 0
-  ) AS inbound ON true
-),
 walk AS (
   SELECT request.ordinal,
          0::integer AS emitted_before,
          LEAST(input.page_size, input.edge_budget, page.fetched_count)::integer AS emitted_after,
          page.rows,
          page.fetched_count
-  FROM counted AS request
+  FROM requests AS request
   CROSS JOIN input
   CROSS JOIN LATERAL (
     SELECT COALESCE(
@@ -101,7 +75,7 @@ walk AS (
          page.rows,
          page.fetched_count
   FROM walk
-  JOIN counted AS request ON request.ordinal = walk.ordinal + 1
+  JOIN requests AS request ON request.ordinal = walk.ordinal + 1
   CROSS JOIN input
   CROSS JOIN LATERAL (
     SELECT COALESCE(
@@ -155,7 +129,6 @@ SELECT request.ordinal,
        request.node_id::text AS node,
        request.property,
        request.direction,
-       request.relation_count::text AS count,
        walk.rows AS page_rows,
        COALESCE(walk.fetched_count, 0)::integer AS fetched_count,
        CASE WHEN walk.ordinal IS NULL THEN NULL
@@ -165,7 +138,7 @@ SELECT request.ordinal,
        COALESCE(walk.emitted_after, 0)::integer AS emitted_after,
        COALESCE(MAX(walk.emitted_after) OVER (), 0)::integer AS used,
        partition.epoch
-FROM counted AS request
+FROM requests AS request
 CROSS JOIN input
 JOIN core.partition AS partition ON partition.partition_no = input.partition_no
 LEFT JOIN walk ON walk.ordinal = request.ordinal

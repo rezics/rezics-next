@@ -169,7 +169,10 @@ test('a read returns the subject, its session token and the labels of its proper
   const read = await call('GET', `/v1/subjects/${id}`, { session: created.response.headers.get(SESSION_HEADER)! });
   expect(read.response.status).toBe(200);
   expect(read.response.headers.get('etag')).toBe('"1"');
-  expect(read.body.subject).toEqual(created.body.subject);
+  expect(read.body.subject).toEqual({
+    ...created.body.subject,
+    statements: { 'schema:author': [created.body.subject.statements['schema:author'][0]] },
+  });
   expect(read.body.account).toBeNull();
   expect(read.body.related).toEqual({
     'schema:author': { labels: bundledRelease.properties['schema:author']!.labels },
@@ -184,7 +187,10 @@ test('a read returns the subject, its session token and the labels of its proper
   expect(decodeSession(tokens, 'anonymous', read.response.headers.get(SESSION_HEADER)!)).toHaveLength(1);
   expect(
     realAccess.readChecks.filter(({ action }) => action === 'subject:read').map(({ resource }) => resource.id),
-  ).toEqual(expect.arrayContaining([id, soseki, secret]));
+  ).toEqual(expect.arrayContaining([id, soseki]));
+  expect(
+    realAccess.readChecks.filter(({ action }) => action === 'subject:read').map(({ resource }) => resource.id),
+  ).not.toContain(secret);
 });
 
 test('a malformed, missing or unreadable subject is the same 404', async () => {

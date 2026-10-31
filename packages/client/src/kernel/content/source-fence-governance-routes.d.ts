@@ -2447,7 +2447,7 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

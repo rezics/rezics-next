@@ -4,16 +4,24 @@ import pg from 'pg';
 import { releaseDigest, valueSchema, type DataType, type Release } from '@rezics/definitions';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { listSubjectGraph } from '../../src/semantic/graph.ts';
-import { slotId } from '../../src/semantic/slots.ts';
+import { itemFacts } from '../../src/semantic/item.ts';
+import { labelOrderKey } from '../../src/semantic/link-keys.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { createRealAccess } from './real-access.ts';
-import { capture, checkGrowth, openGrowthDatabase, type Capture, type GrowthDatabase } from '../support/growth.ts';
+import {
+  capture,
+  checkGrowth,
+  openGrowthDatabase,
+  type Capture,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 import {
   assertUnforcedIndexes,
   logGrowthSeeding,
@@ -32,6 +40,9 @@ const access = await createRealAccess(admin, { editor }, [
   'gate:definition_publication',
   'subject:create',
   'subject:read',
+  'statement:propose',
+  'context:accept',
+  'context:adopt',
 ]);
 const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(71)]]) };
 const routeKey = new Uint8Array(32).fill(72);
@@ -109,6 +120,176 @@ let growth: GrowthDatabase;
 const coveringCaptures: { scale: number; raw: Capture }[] = [];
 let growthAnchor = '';
 let growthTarget = '';
+const growthTargets: string[] = [];
+const growthTransactions: string[][] = [];
+const NIL = '00000000-0000-0000-0000-000000000000';
+
+// Match writeProposal's native revision-derived identity, checked against a real command below.
+const proposalId = (ordinal: number) =>
+  derivedId('3c62c392-7c55-4fda-bf16-13b4853e7598', `${growthAnchor}\n${2 + ordinal * 3}`, routeOf(growthAnchor)!);
+const growthLabel = (ordinal: number) =>
+  ordinal === 0 ? 'Growth target' : `Growth target ${String(ordinal).padStart(4, '0')}`;
+const growthStatement = (target: string) => ({
+  ...statement('ex:follows', target),
+  references: [{ parts: [statement('schema:inLanguage', 'en')] }],
+});
+
+function growthRelationRows(ordinal: number): ReturnType<NonNullable<Population['rows']>> {
+  const route = routeOf(growthAnchor)!;
+  const target = growthTargets[ordinal]!;
+  const targetRoute = routeOf(target)!;
+  const [created, proposed, accepted, adopted, projected] = growthTransactions[ordinal]!;
+  const revision = 2 + ordinal * 3;
+  const fact = itemFacts(
+    growthAnchor,
+    { labels: { en: 'Growth anchor' }, statements: { 'ex:follows': [growthStatement(target)] } },
+    'ex:Work',
+    release,
+  ).find((row) => row.kind === 'statement')!;
+  const candidate = proposalId(ordinal);
+  const targetFacts = itemFacts(target, { labels: { en: growthLabel(ordinal) } }, 'ex:Work', release);
+  const identity = { route, subject_id: growthAnchor };
+  const selection = {
+    ...identity,
+    context_id: GLOBAL_CONTEXT,
+    candidate_id: candidate,
+    head: 1,
+    verdict: 'accept',
+    revision: revision + 1,
+  };
+  return {
+    'semantic.subject': [
+      {
+        route: targetRoute,
+        subject_id: target,
+        type: 'ex:Work',
+        recorded_transaction_id: created,
+        current_facts: targetFacts.length,
+        current_release: digest,
+      },
+    ],
+    'semantic.revision': [
+      {
+        route: targetRoute,
+        subject_id: target,
+        revision: 1,
+        kind: 'create',
+        release: digest,
+        recorded_transaction_id: created,
+        source: null,
+      },
+      ...(['propose', 'accept', 'adopt'] as const).map((kind, step) => ({
+        ...identity,
+        revision: revision + step,
+        kind,
+        release: digest,
+        recorded_transaction_id: [proposed, accepted, adopted][step],
+        source: null,
+      })),
+    ],
+    'semantic.fact': [
+      ...targetFacts.map((row) => ({
+        ...row,
+        route: targetRoute,
+        subject_id: target,
+        recorded_transaction_id: created,
+        release: null,
+        relation: false,
+      })),
+      {
+        ...identity,
+        slot_id: fact.slot_id,
+        log_seq: 33,
+        operation: 'expand',
+        kind: 'statement',
+        language: null,
+        property: 'ex:follows',
+        statement_id: null,
+        body: {},
+        recorded_transaction_id: proposed,
+        release: null,
+        relation: true,
+      },
+    ],
+    'semantic.candidate': [
+      {
+        ...identity,
+        candidate_id: candidate,
+        slot_id: fact.slot_id,
+        property: 'ex:follows',
+        rank: 'normal',
+        statement: fact.body,
+        release: digest,
+        relation: true,
+        revision,
+        origin: 'proposal',
+        view_order: 0,
+      },
+    ],
+    'semantic.acceptance': [selection],
+    'semantic.acceptance_current': [{ ...selection, slot_id: fact.slot_id }],
+    'semantic.adoption': [
+      {
+        ...identity,
+        slot_id: fact.slot_id,
+        context_id: GLOBAL_CONTEXT,
+        head: 1,
+        mode: 'replace',
+        selection: [{ candidate, rank: 'normal' }],
+        revision: revision + 2,
+      },
+    ],
+    'semantic.outbound_link': [
+      {
+        ...identity,
+        context_id: GLOBAL_CONTEXT,
+        property: 'ex:follows',
+        filter_value: NIL,
+        order_key: labelOrderKey({ en: growthLabel(ordinal) }),
+        target_subject_id: target,
+        statement_id: candidate,
+        slot_id: fact.slot_id,
+        relation: true,
+        source_type: 'ex:Work',
+        source_order_key: labelOrderKey({ en: 'Growth anchor' }),
+        outbound_order: 'name',
+        source_revision: revision + 2,
+        target_revision: 0,
+        target_type: 'ex:Work',
+        external: null,
+        value: 'value',
+        present: true,
+        recorded_transaction_id: projected,
+      },
+    ],
+    'semantic.inbound_link': [
+      {
+        route: targetRoute,
+        subject_id: target,
+        context_id: GLOBAL_CONTEXT,
+        property: 'ex:follows',
+        filter_value: NIL,
+        source_subject_id: growthAnchor,
+        statement_id: candidate,
+        source_revision: revision + 2,
+        source_type: 'ex:Work',
+        order_key: labelOrderKey({ en: 'Growth anchor' }),
+        present: true,
+        recorded_transaction_id: projected,
+      },
+    ],
+    'semantic.inbound_link_count': [
+      {
+        route: targetRoute,
+        subject_id: target,
+        context_id: GLOBAL_CONTEXT,
+        property: 'ex:follows',
+        filter_value: NIL,
+        value: 1,
+      },
+    ],
+  };
+}
 const createdIds = new Set<string>();
 const sessions: Record<string, string> = {};
 
@@ -214,6 +395,62 @@ beforeAll(async () => {
       authorize: async () => true,
     });
   }
+  // One real native create/propose/accept/adopt cycle anchors the bulk fixture's schema and semantics.
+  for (const action of ['statement:propose', 'context:accept', 'context:adopt'])
+    await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  const proposal = await call('POST', `/v1/subjects/${growthAnchor}/candidates`, {
+    statement: growthStatement(growthTarget),
+  });
+  expect(proposal.candidate).toBe(proposalId(0));
+  await call('POST', `/v1/subjects/${growthAnchor}/candidates/${proposal.candidate}:accept`, {
+    context: GLOBAL_CONTEXT,
+    expected_head: null,
+  });
+  await call('POST', `/v1/subjects/${growthAnchor}:adopt`, {
+    context: GLOBAL_CONTEXT,
+    property: 'ex:follows',
+    target: growthTarget,
+    mode: 'replace',
+    expected_head: null,
+    selection: [{ candidate: proposal.candidate, rank: 'normal' }],
+  });
+  await catchUp([growthAnchor, growthTarget]);
+  const transactions = await growth.admin.query(
+    'SELECT recorded_transaction_id FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision',
+    [route, growthAnchor],
+  );
+  const targetTransaction = await growth.admin.query(
+    'SELECT recorded_transaction_id FROM semantic.revision WHERE route=$1 AND subject_id=$2 AND revision=1',
+    [route + 1, growthTarget],
+  );
+  growthTargets.push(growthTarget);
+  growthTransactions.push([
+    targetTransaction.rows[0].recorded_transaction_id,
+    ...transactions.rows.slice(1).map((row) => row.recorded_transaction_id),
+    randomUUID(),
+  ]);
+  // Compare every bulk-written authority/projection field to the command-created control.
+  // Projection transaction IDs belong to the relay command, independently of the source transaction.
+  for (const [table, rows] of Object.entries(growthRelationRows(0))) {
+    for (const row of rows) {
+      const expected = { ...row };
+      if (table === 'semantic.outbound_link' || table === 'semantic.inbound_link')
+        delete expected.recorded_transaction_id;
+      const native = await growth.admin.query(
+        `SELECT count(*)::int AS matches FROM ${table} AS native WHERE native.route=$1 AND native.subject_id=$2 AND to_jsonb(native) @> $3::jsonb`,
+        [row.route, row.subject_id, JSON.stringify(expected)],
+      );
+      expect(native.rows[0].matches, `${table}: ${JSON.stringify(expected)}`).toBe(1);
+    }
+  }
+  const control = await call('GET', graphPath(growthAnchor, ['ex:follows'], 'out', 2));
+  expect(
+    control.edges.map((edge: { from: string; to: string; statement: string }) => [edge.from, edge.to, edge.statement]),
+  ).toEqual([[growthAnchor, growthTarget, proposal.candidate]]);
+  for (let ordinal = 1; ordinal < 4096; ordinal++) {
+    growthTargets.push(newId(route + 1));
+    growthTransactions.push(Array.from({ length: 5 }, () => randomUUID()));
+  }
 });
 
 afterAll(async () => {
@@ -283,7 +520,13 @@ test('a graph read returns the anchored neighbourhood for explicit properties to
     (entry: { node: string; property: string; direction: string }) =>
       entry.node === workA.id && entry.property === 'ex:follows' && entry.direction === 'out',
   );
-  expect(forward).toMatchObject({ count: 3 });
+  expect(forward).not.toHaveProperty('count');
+  expect(forward).toMatchObject({
+    node: workA.id,
+    property: 'ex:follows',
+    direction: 'out',
+    cursor: expect.any(String),
+  });
   const forwardPage = await request(
     'GET',
     `/v1/subjects/${workA.id}/relations?property=ex%3Afollows&cursor=${encodeURIComponent(forward.cursor)}`,
@@ -302,7 +545,13 @@ test('a graph read returns the anchored neighbourhood for explicit properties to
     (entry: { node: string; property: string; direction: string }) =>
       entry.node === workA.id && entry.property === 'ex:basedOn' && entry.direction === 'in',
   );
-  expect(inverse).toMatchObject({ count: 2 });
+  expect(inverse).not.toHaveProperty('count');
+  expect(inverse).toMatchObject({
+    node: workA.id,
+    property: 'ex:basedOn',
+    direction: 'in',
+    cursor: expect.any(String),
+  });
   const inversePage = await request(
     'GET',
     `/v1/subjects/${workA.id}/links?property=ex%3AbasedOn&cursor=${encodeURIComponent(inverse.cursor)}`,
@@ -406,9 +655,10 @@ test('a graph read costs the same whatever the size of the graph beyond its boun
         node: growthAnchor,
         property: 'ex:follows',
         direction: 'out',
-        count: expect.any(Number),
+        cursor: expect.any(String),
       }),
     ]);
+    expect(graph.truncated[0]).not.toHaveProperty('count');
     expect(graph.nodes).toContainEqual({
       id: growthTarget,
       type: 'ex:Work',
@@ -431,18 +681,23 @@ test('a graph read costs the same whatever the size of the graph beyond its boun
     repetitions: 3,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (_database: GrowthDatabase, scale: number, previous: number) => {
-      if (scale > previous)
-        await growth.admin.query(
-          `INSERT INTO semantic.outbound_link(
-             route,subject_id,property,filter_value,order_key,target_subject_id,statement_id,slot_id,
-             relation,source_type,source_order_key,outbound_order,source_revision,source_security_revision,
-             target_revision,target_type,external,value,present,recorded_transaction_id
-           )
-           SELECT $1,$2,'ex:follows','00000000-0000-0000-0000-000000000000',lpad(n::text,8,'0'),$3,
-                  md5(n::text)::uuid,$4,true,'ex:Work','','name',1,0,1,'ex:Work',NULL,'value',true,gen_random_uuid()
-           FROM generate_series($5::integer + 1,$6::integer) AS n`,
-          [anchorRoute, growthAnchor, growthTarget, slotId(growthAnchor, 'ex:follows'), previous, scale],
-        );
+      // Every degree member has a distinct real target slot and a native proposal/selection history.
+      await seedSemanticPopulation(
+        { pool: growth.pool, admin: growth.admin },
+        {
+          name: 'graph-current-relations',
+          hotPartition: partitionOf(anchorRoute),
+          hotShare: 1,
+          rows: ({ ordinal }) => growthRelationRows(ordinal),
+          async finish(admin, range) {
+            await admin.query('UPDATE semantic.partition_subjects SET visible=visible+$2 WHERE partition_no=$1', [
+              partitionOf(targetRoute),
+              range.to - range.from,
+            ]);
+          },
+        },
+        { from: Math.max(1, previous), to: scale },
+      );
       await growth.admin.query(
         `INSERT INTO semantic.outbound_link_count(route,subject_id,property,filter_value,value)
          VALUES ($1,$2,'ex:follows','00000000-0000-0000-0000-000000000000',$3)
@@ -474,7 +729,6 @@ test('graph and summary covering reads use unforced indexed access as their popu
         'semantic.fact': ['fact_label', 'fact_terms'],
         'semantic.outbound_link': 'outbound_link_present',
         'semantic.inbound_link': 'inbound_link_present',
-        'semantic.outbound_link_count': 'outbound_link_count_pkey',
       });
     } catch (error) {
       failures.push(error);

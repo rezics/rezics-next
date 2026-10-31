@@ -210851,7 +210851,6 @@
                           "node",
                           "property",
                           "direction",
-                          "count",
                           "cursor"
                         ],
                         "type": "object"

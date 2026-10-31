@@ -125,7 +125,7 @@ test('consent statements can be retracted before or after disclosure and cannot 
     await catchUp(pen.id);
     for (const as of [undefined, 'person', 'moderator'] as const) {
       expect(subjectIds(await read(pen.id, as))).toEqual([]);
-      expect((await page(relations(pen.id), as)).count).toEqual({ value: 0, exact: true });
+      expect(await page(relations(pen.id), as)).not.toHaveProperty('count');
       expect((await page(inverse(), as)).links.map((row: any) => row.statement)).not.toContain(candidate);
     }
     const client = await admin.connect();
@@ -148,7 +148,7 @@ test('private consent preserves public facts and a sourced replacement publishes
   const own = await proposed(pen.id, 'person');
   expect(own.status).toBe(201);
   expect(subjectIds(await read(pen.id))).toEqual([original]);
-  expect((await page(relations(pen.id))).count).toEqual({ value: 1, exact: true });
+  expect(await page(relations(pen.id))).not.toHaveProperty('count');
   const replacement = await proposed(pen.id, 'editor', true);
   expect(replacement.status).toBe(201);
   const decision = await call(
@@ -173,7 +173,7 @@ test('private consent preserves public facts and a sourced replacement publishes
   expect(adoption.status, JSON.stringify(adoption.body)).toBe(200);
   await catchUp(pen.id);
   expect(subjectIds(await read(pen.id))).toEqual([replacement.body.candidate]);
-  expect((await page(relations(pen.id))).count).toEqual({ value: 1, exact: true });
+  expect(await page(relations(pen.id))).not.toHaveProperty('count');
   expect((await page(inverse())).links.map((row: any) => row.statement)).toContain(replacement.body.candidate);
 });
 
@@ -196,17 +196,17 @@ test('disclosure and retraction preserve a Context suppression in relation pages
   await catchUp(pen.id);
   expect(subjectIds(await read(pen.id))).toEqual([candidate]);
   expect(subjectIds(await read(pen.id, undefined, contextId))).toEqual([]);
-  expect((await read(pen.id, undefined, contextId)).relationCounts[property]).toBe(0);
+  expect((await read(pen.id, undefined, contextId)).relationCounts).not.toHaveProperty(property);
   const forward = await page(`${relations(pen.id)}&context=${contextId}`);
   expect(forward.relations).toEqual([]);
-  expect(forward.count).toEqual({ value: 0, exact: true });
+  expect(forward).not.toHaveProperty('count');
   expect((await page(`${inverse()}&context=${contextId}`)).links.map((row: any) => row.statement)).not.toContain(
     candidate,
   );
   expect((await call('POST', `/v1/statements/${candidate}/retract`, 'person')).status).toBe(200);
   await catchUp(pen.id);
-  expect((await page(relations(pen.id))).count).toEqual({ value: 0, exact: true });
-  expect((await page(`${relations(pen.id)}&context=${contextId}`)).count).toEqual({ value: 0, exact: true });
+  expect(await page(relations(pen.id))).not.toHaveProperty('count');
+  expect(await page(`${relations(pen.id)}&context=${contextId}`)).not.toHaveProperty('count');
   expect((await page(`${inverse()}&context=${contextId}`)).links.map((row: any) => row.statement)).not.toContain(
     candidate,
   );

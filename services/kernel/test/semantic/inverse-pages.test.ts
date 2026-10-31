@@ -126,6 +126,7 @@ let roleB: string;
 beforeAll(async () => {
   for (const action of ['definitions:publish', 'definitions:activate', 'subject:create'])
     await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'gate:definition_publication');
   const published = await call('POST', '/v1/definitions/releases', { release });
   await call('POST', `/v1/definitions/releases/${published.digest}:activate`, { expected_head: null });
   anchor = await create('Anchor', {}, 'ex:Person');
@@ -168,7 +169,7 @@ test("an inverse page is ordered by the property's declared key and continues wh
     let cursor: string | null = null;
     do {
       const result = await page(target, `ex:${order}`, `&limit=1${cursor ? `&cursor=${cursor}` : ''}`);
-      expect(result.count).toEqual({ value: 4, exact: true });
+      expect(result).not.toHaveProperty('count');
       expect(result.links[0].type).toBe('ex:Work');
       expect(typeof result.links[0].label).toBe('string');
       found.push(...result.links.map((link: any) => link.subject));
@@ -189,12 +190,12 @@ test('an inverse page filters by the declared qualifier and by holder type', asy
   for (let i = 0; i < 12; i++) await create(`C${i}`, { 'ex:name': [statement('ex:name', target)] }, 'ex:Person');
   const last = await create('Z', { 'ex:name': [statement('ex:name', target)] }, 'ex:Novel');
   await catchUp();
-  expect((await page(target, 'ex:name')).count).toEqual({ value: 15, exact: true });
+  expect(await page(target, 'ex:name')).not.toHaveProperty('count');
   expect((await page(target, 'ex:name', `&filter=${roleA}`)).links.map((link: any) => link.subject)).toEqual([first]);
-  expect((await page(target, 'ex:name', `&filter=${roleB}`)).count).toEqual({ value: 2, exact: true });
+  expect(await page(target, 'ex:name', `&filter=${roleB}`)).not.toHaveProperty('count');
   const filtered = await page(target, 'ex:name', '&type=ex%3AWork&limit=2');
   expect(filtered.links.map((link: any) => link.subject)).toEqual([first, expect.any(String)]);
-  expect(filtered.count).toEqual({ value: 3, exact: true });
+  expect(filtered).not.toHaveProperty('count');
   const sparse = await page(target, 'ex:name', '&type=ex%3ANovel&limit=2');
   expect(sparse.links.map((link: any) => link.subject)).toEqual([first]);
   expect(sparse.next).not.toBeNull();
@@ -208,7 +209,7 @@ test('an inverse page filters by the declared qualifier and by holder type', asy
   expect(rest).toEqual([last]);
 });
 
-test('an inverse page counts exactly, or at least under a type filter', async () => {
+test('an inverse page omits stored totals outside its bounded current proof', async () => {
   const source = await create('Count holder', { 'ex:name': [statement('ex:name', anchor)] }, 'ex:Novel');
   await catchUp();
   const route = routeOf(anchor)!;
@@ -222,8 +223,8 @@ test('an inverse page counts exactly, or at least under a type filter', async ()
     ON CONFLICT(route,subject_id,property,filter_value) DO UPDATE SET value=1001`,
     [route, anchor],
   );
-  expect((await page(anchor, 'ex:name')).count).toEqual({ value: 1001, exact: true });
-  expect((await page(anchor, 'ex:name', '&type=ex%3AWork')).count).toEqual({ value: 1000, exact: false });
+  expect(await page(anchor, 'ex:name')).not.toHaveProperty('count');
+  expect(await page(anchor, 'ex:name', '&type=ex%3AWork')).not.toHaveProperty('count');
 });
 
 test("an inverse page follows a holder's label change once the projection catches up", async () => {

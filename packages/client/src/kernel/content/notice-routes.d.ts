@@ -2455,7 +2455,7 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

@@ -2454,7 +2454,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };
