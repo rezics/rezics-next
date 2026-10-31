@@ -44,16 +44,19 @@ async function readParties(config: NativeSource, request: LifecycleRequest) {
   )
     throw new WorkflowApprovalDeniedError();
   if (account.operatorAccountId !== null) return { kind: 'unavailable', reason: 'opening-provenance' } as const;
-  const assignment = await within(request.deadline, () =>
-    withConnection(config.pool, (client) =>
-      readAssignment(
-        deadlineClient(client, request.deadline),
-        actor.requestedBy,
-        actor.accountId,
-        accessClock(config.access),
-      ),
-    ),
-  );
+  const assignment =
+    actor.requestedBy === null
+      ? ({ kind: 'none' } as const)
+      : await within(request.deadline, () =>
+          withConnection(config.pool, (client) =>
+            readAssignment(
+              deadlineClient(client, request.deadline),
+              actor.requestedBy,
+              actor.accountId,
+              accessClock(config.access),
+            ),
+          ),
+        );
   if (assignment.kind === 'unresolved') throw new WorkflowApprovalDeniedError();
   requireAccessDeadline(request.deadline);
   if (accessClock(config.access)().getTime() >= Date.parse(binding.expiresAt)) throw new WorkflowApprovalDeniedError();
@@ -125,8 +128,9 @@ export async function readNativeCopyActors(
   const result = await readParties(config, request);
   if (result.kind !== 'available') throw new WorkflowApprovalUnavailableError();
   const { actorAccountId, actingHumanId, principalAccountId } = result.context;
-  const roles: CopyActor[] = [{ accountId: actorAccountId, role: 'initiator' }];
+  const roles: CopyActor[] = [];
   if (actingHumanId) roles.push({ accountId: actingHumanId, role: 'human' });
+  roles.push({ accountId: actorAccountId, role: 'initiator' });
   if (principalAccountId) roles.push({ accountId: principalAccountId, role: 'delegate' });
   return roles;
 }

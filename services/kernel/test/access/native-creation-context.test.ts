@@ -106,8 +106,8 @@ test('Project actual native approved creation party context', async () => {
   expect(Object.isFrozen(context)).toBe(true);
   expect(Object.isFrozen(context.operation)).toBe(true);
   expect(await f.bindings.workflowPorts.copyActors!(resolved)).toEqual([
-    { accountId: c.human.accountId, role: 'initiator' },
     { accountId: c.human.accountId, role: 'human' },
+    { accountId: c.human.accountId, role: 'initiator' },
     { accountId: c.principal.accountId, role: 'delegate' },
   ]);
   expect(await f.bindings.workflowPorts.readNativeCreationContext!(c.input)).toEqual({ kind: 'available', context });

@@ -1,5 +1,5 @@
 import type { CredentialFloorBinding as CredentialEffectBinding } from '@rezics/auth-contract';
-import type { AccountOperation as ContractAccountOperation, WorkflowResponsibility } from '@rezics/auth-contract';
+import type { AccountOperation as ContractAccountOperation, NativeCreationContext, WorkflowResponsibility } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
 import { type KeyRing } from '../tokens/seal.ts';
@@ -60,6 +60,9 @@ export type WorkflowApprovalBinding = Readonly<{
      * name, and keep the native command's complete input digest on every retry. */
     commandKeyPrefix: string;
 }>;
+type CreationSource = Pick<NativeCreationContext, 'approvalReference' | 'operation' | 'operatorAccountId'>;
+/** Same native resolution as workflowApprovalBinding, with no business payload. */
+export declare function workflowApprovalCreationSource(request: LifecycleRequest, pool: Pool): Readonly<CreationSource> | undefined;
 /** Return only durable binding metadata; never serialize the resolved context. */
 export declare function workflowApprovalBinding(request: LifecycleRequest): WorkflowApprovalBinding | undefined;
 export declare class WorkflowApprovalUnavailableError extends Error {
