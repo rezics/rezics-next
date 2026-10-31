@@ -1,15 +1,26 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Suspense } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { CollectionFilterFeedback, CollectionFilters } from '../library/collection-filters';
+import { CollectionFilterFeedback } from '../library/collection-filters';
+import { CollectionPage } from '../library/collection-page';
 import { collectionPageQuery } from '../library/collection-queries';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 import { collectionFilterStoryId } from '../kernel/fake/collection-filters';
 
-const meta = { title: 'Patterns/Library/Collection filters' } satisfies Meta;
+const meta = {
+  title: 'Patterns/Library/Collection filters',
+  parameters: {
+    docs: {
+      description: {
+        component:
+          'The public Collection composition and its supplied bounded facets. Review these same states with phone390/desktop1280 viewport, locale and theme globals. The combined state uses long presentation labels and a long upper bound; data remains the existing illustrative Collection fixture, not native scope evidence.',
+      },
+    },
+  },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -24,7 +35,7 @@ const states = {
   combined: {
     'f.schema:keywords': harem,
     'l.schema:keywords': 'Harem',
-    'r.schema:wordCount': '1000001,',
+    'r.schema:wordCount': '1000001,999999999999999',
   },
   noMatch: {
     'f.schema:keywords': '00000000-0000-4000-8000-000000000999',
@@ -37,26 +48,39 @@ const states = {
 } satisfies Record<string, Record<string, string>>;
 
 function FilterRegion({ search }: { search: Record<string, string> }) {
-  const { data } = useSuspenseQuery(collectionPageQuery(id, undefined, 'anonymous', search));
+  const client = useQueryClient();
+  const options = collectionPageQuery(id, undefined, 'anonymous', search);
+  const { data } = useSuspenseQuery(options);
   if (!data.filterProperties || !data.filterParams)
     throw new Error('Collection filters are not enabled in the Storybook runtime.');
+  if ('preparing' in data) throw new Error('This story requires the public curated Collection composition.');
+  const page =
+    search === states.combined
+      ? {
+          ...data,
+          filterProperties: data.filterProperties.map((property) => ({
+            ...property,
+            label: `${property.label} — ${
+              property.datatype === 'quantity'
+                ? 'the complete work, including every published volume'
+                : 'catalogue concepts associated with the complete work'
+            }`,
+          })),
+        }
+      : data;
   return (
-    <section className="w-full max-w-3xl space-y-4 p-4 text-foreground">
-      <CollectionFilters
-        id={data.id}
-        type={data.filterType ?? 'schema:Book'}
-        properties={data.filterProperties}
-        params={data.filterParams}
-      />
-      <CollectionFilterFeedback
-        id={data.id}
-        {...(data.filter ? { filter: data.filter } : {})}
-        {...(data.filterIgnored ? { ignored: data.filterIgnored } : {})}
-        {...(data.filterStatus ? { status: data.filterStatus } : {})}
-        {...(data.filterType ? { filterType: data.filterType } : {})}
-        empty={data.members.length === 0}
-        unavailable={'unavailable' in data && data.unavailable}
-        emptyLabel={m.library_collection_empty()}
+    <section className="min-w-0 space-y-4 p-4 text-foreground">
+      <code className="block break-all text-xs">{`${path}?${new URLSearchParams(search)}`}</code>
+      <CollectionPage
+        page={page}
+        queryKey={options.queryKey}
+        cursor={undefined}
+        search={search}
+        refreshPage={async () => {
+          const next = await client.fetchQuery(options);
+          if ('preparing' in next) throw new Error('Expected a curated Collection.');
+          return next;
+        }}
       />
     </section>
   );
@@ -64,7 +88,7 @@ function FilterRegion({ search }: { search: Record<string, string> }) {
 
 function render(search: Record<string, string>) {
   return (
-    <PatternStory path={path}>
+    <PatternStory path={`${path}?${new URLSearchParams(search)}`}>
       <Suspense fallback={null}>
         <FilterRegion search={search} />
       </Suspense>
@@ -75,14 +99,9 @@ function render(search: Record<string, string>) {
 async function regionReady(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.click(await canvas.findByRole('button', { name: m.collection_filters() }));
-  if (window.innerWidth < 1024) {
-    const dialog = await within(document.body).findByRole('dialog');
-    await expect(dialog).toBeVisible();
-    return { canvas, fields: within(dialog) };
-  }
-  const menu = await within(document.body).findByRole('menu');
-  await expect(menu).toBeVisible();
-  return { canvas, fields: within(menu) };
+  const dialog = await within(document.body).findByRole('dialog', { name: m.collection_filters() });
+  await expect(dialog).toBeVisible();
+  return { canvas, fields: within(dialog) };
 }
 
 async function selectedState(

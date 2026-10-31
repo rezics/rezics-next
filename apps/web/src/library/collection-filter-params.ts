@@ -121,8 +121,12 @@ export function collectionFilterAddress(
   ranges: CollectionFilterParams['ranges'],
   selectedLabels: Record<string, string> = {},
   type?: string,
+  context?: URLSearchParams,
 ): string {
-  const params = new URLSearchParams();
+  const params = new URLSearchParams(context);
+  // A changed predicate starts a new members page, retaining the route's display context.
+  for (const key of [...params.keys()])
+    if (key === 'cursor' || key === 'type' || /^[frl]\./.test(key)) params.delete(key);
   if (type) params.set('type', type);
   for (const [property, values] of Object.entries(selected))
     for (const value of values) params.append(`f.${property}`, value);

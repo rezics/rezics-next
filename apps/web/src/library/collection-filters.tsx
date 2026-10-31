@@ -1,11 +1,14 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useRouterState } from '@tanstack/react-router';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { CollectionFilterParams } from './collection-filter-params';
 import type { SuggestionResult } from '../search/suggestions';
 import type { FilterDocument } from '@rezics/filter';
 import { collectionFilterAddress } from './collection-filter-params';
-import { Menu } from '@rezics/ui/menu';
+import { BottomSheet } from '@rezics/ui/bottom-sheet';
+import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
   Combobox,
@@ -86,69 +89,102 @@ export function CollectionFilters({
   params: CollectionFilterParams;
 }) {
   const locale = getLocale();
+  const search = useRouterState({ select: (state) => state.location.searchStr });
+  const mobile = useIsMobile();
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const surfaceId = useId();
+  const clearAddress = collectionFilterAddress(locale, id, {}, {}, {}, type, new URLSearchParams(search));
+  function changeOpen(next: boolean) {
+    setOpen(next);
+    if (!next) requestAnimationFrame(() => trigger.current?.focus());
+  }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const params = new URLSearchParams();
-    const type = String(form.get('type') ?? '').trim();
-    if (type) params.set('type', type);
+    const address = new URL(clearAddress, window.location.href);
+    const params = address.searchParams;
     form.forEach((value, key) => {
-      if (key.startsWith('f.') || (key.startsWith('l.') && String(value))) params.append(key, String(value));
+      if ((key.startsWith('f.') || key.startsWith('l.')) && String(value)) params.append(key, String(value));
     });
     for (const property of properties.filter((item) => item.datatype === 'quantity')) {
       const from = String(form.get(`range.from.${property.id}`) ?? '').trim();
       const to = String(form.get(`range.to.${property.id}`) ?? '').trim();
       if (from || to) params.set(`r.${property.id}`, `${from},${to}`);
     }
-    const query = params.toString();
-    window.location.assign(`/${locale}/collections/${encodeURIComponent(id)}${query ? `?${query}` : ''}`);
+    changeOpen(false);
+    window.location.assign(`${address.pathname}${address.search}`);
   }
   if (properties.length === 0) return null;
+  const form = open ? (
+    <form
+      onSubmit={submit}
+      method="get"
+      action={`/${locale}/collections/${encodeURIComponent(id)}`}
+      className="min-w-0"
+    >
+      <FilterFields type={type} properties={properties} params={params} clearAddress={clearAddress} />
+    </form>
+  ) : null;
   return (
     <section className="min-w-0">
-      <Menu
-        title={m.collection_filters()}
-        trigger={
-          <Button type="button" aria-label={m.collection_filters()} variant="outline" size="icon">
-            <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
-          </Button>
-        }
-        entries={[]}
-        content={
-          <form
-            onSubmit={submit}
-            method="get"
-            action={`/${locale}/collections/${encodeURIComponent(id)}`}
-            className="max-h-[70vh] min-w-0 overflow-y-auto p-4 sm:w-[min(32rem,calc(100vw-2rem))]"
+      <Button
+        ref={trigger}
+        type="button"
+        aria-label={m.collection_filters()}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? surfaceId : undefined}
+        variant="outline"
+        size="icon"
+        className="min-h-11 min-w-11"
+        onClick={() => changeOpen(true)}
+      >
+        <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
+      </Button>
+      {mobile ? (
+        <BottomSheet open={open} onOpenChange={changeOpen} title={m.collection_filters()}>
+          <div id={surfaceId}>{form}</div>
+        </BottomSheet>
+      ) : (
+        <Dialog open={open} onOpenChange={changeOpen}>
+          <DialogContent
+            id={surfaceId}
+            finalFocus={trigger}
+            showCloseButton={false}
+            className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto sm:max-w-lg"
           >
-            <FilterFields id={id} type={type} locale={locale} properties={properties} params={params} />
-          </form>
-        }
-      />
+            <DialogHeader className="flex-row items-center justify-between gap-4">
+              <DialogTitle className="min-w-0 break-words">{m.collection_filters()}</DialogTitle>
+              <DialogClose render={<Button type="button" variant="ghost" className="min-h-11" />}>
+                {m.library_collection_cancel()}
+              </DialogClose>
+            </DialogHeader>
+            {form}
+          </DialogContent>
+        </Dialog>
+      )}
     </section>
   );
 }
 
 function FilterFields({
-  id,
   type,
-  locale,
   properties,
   params,
+  clearAddress,
 }: {
-  id: string;
   type: string;
-  locale: string;
   properties: CollectionFilterProperty[];
   params: CollectionFilterParams;
+  clearAddress: string;
 }) {
   return (
     <>
       <input type="hidden" name="type" value={type} />
-      <h2 className="mb-4 font-medium">{m.collection_filters()}</h2>
       {properties.map((property) => (
         <fieldset key={property.id} className="mb-4 min-w-0 space-y-2">
-          <legend className="text-sm font-medium">
+          <legend className="max-w-full break-words text-sm font-medium">
             {property.label}
             {property.unit ? ` (${property.unit})` : ''}
           </legend>
@@ -163,7 +199,7 @@ function FilterFields({
               <label className="min-w-0 text-sm">
                 {m.collection_filter_from()}
                 <input
-                  className="block w-full min-w-0 rounded-md border border-border bg-background px-2 py-2"
+                  className="block min-h-11 w-full min-w-0 rounded-md border border-border bg-background px-2 py-2"
                   type="number"
                   name={`range.from.${property.id}`}
                   defaultValue={params.ranges[property.id]?.from ?? ''}
@@ -172,7 +208,7 @@ function FilterFields({
               <label className="min-w-0 text-sm">
                 {m.collection_filter_to()}
                 <input
-                  className="block w-full min-w-0 rounded-md border border-border bg-background px-2 py-2"
+                  className="block min-h-11 w-full min-w-0 rounded-md border border-border bg-background px-2 py-2"
                   type="number"
                   name={`range.to.${property.id}`}
                   defaultValue={params.ranges[property.id]?.to ?? ''}
@@ -180,16 +216,16 @@ function FilterFields({
               </label>
             </div>
           )}
+          {params.selected[property.id]?.slice(1).map((value) => (
+            <input key={value} type="hidden" name={`f.${property.id}`} value={value} />
+          ))}
         </fieldset>
       ))}
-      <div className="sticky bottom-0 flex flex-wrap gap-2 bg-background py-3 lg:static">
-        <button className="min-h-10 rounded-lg bg-primary px-4 text-primary-foreground" type="submit">
+      <div className="sticky bottom-0 flex flex-wrap gap-2 bg-popover py-3">
+        <button className="min-h-11 rounded-lg bg-primary px-4 text-primary-foreground" type="submit">
           {m.collection_filter_apply()}
         </button>
-        <a
-          className="inline-flex min-h-10 items-center rounded-lg border border-border px-4"
-          href={collectionFilterAddress(locale, id, {}, {}, {}, type)}
-        >
+        <a className="inline-flex min-h-11 items-center rounded-lg border border-border px-4" href={clearAddress}>
           {m.collection_filter_clear()}
         </a>
       </div>
@@ -207,8 +243,12 @@ function ConceptSuggestion(props: ConceptSuggestionProps) {
   if (!props.property.targets?.length)
     return (
       <>
+        {props.selected ? <input type="hidden" name={`f.${props.property.id}`} value={props.selected} /> : null}
+        {props.selectedLabel ? (
+          <input type="hidden" name={`l.${props.property.id}`} value={props.selectedLabel} />
+        ) : null}
         <input
-          className="w-full min-w-0"
+          className="min-h-11 w-full min-w-0"
           aria-label={props.property.label}
           disabled
           placeholder={m.collection_filter_concept()}
@@ -349,7 +389,7 @@ function TargetedConceptSuggestion({
           aria-label={property.label}
           autoComplete="off"
           placeholder={m.collection_filter_concept()}
-          className="w-full min-w-0"
+          className="min-h-11 w-full min-w-0 [&_input]:min-h-11"
           showTrigger={false}
         />
         <ComboboxContent aria-busy={phase === 'searching'}>
@@ -364,8 +404,8 @@ function TargetedConceptSuggestion({
           </ComboboxEmpty>
           <ComboboxList aria-label={property.label} tabIndex={choices.length ? 0 : -1}>
             {(item: ConceptChoice) => (
-              <ComboboxItem key={item.id} value={item} className="items-start">
-                <span className="min-w-0 flex-1" lang={item.lang}>
+              <ComboboxItem key={item.id} value={item} className="min-h-11 items-start">
+                <span className="min-w-0 flex-1 break-words" lang={item.lang}>
                   {item.label}
                 </span>
                 {item.typeLabel ? (
@@ -378,7 +418,7 @@ function TargetedConceptSuggestion({
           </ComboboxList>
         </ComboboxContent>
       </Combobox>
-      <input type="hidden" name={`l.${property.id}`} value={choice?.label ?? ''} />
+      <input type="hidden" name={`l.${property.id}`} value={value ? (choice?.label ?? selectedLabel ?? '') : ''} />
       <input type="hidden" name={`f.${property.id}`} value={value} />
       {phase === 'searching' ? <p role="status">{m.collection_filter_searching()}</p> : null}
       {phase === 'failed' ? <p role="status">{m.search_suggestions_failed()}</p> : null}
