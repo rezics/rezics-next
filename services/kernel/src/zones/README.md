@@ -8,28 +8,41 @@ of the source-dependent page runtime; it does not introduce another Source inter
 and separate preparation response. `page-runtime.ts` currently executes static configured documents only.
 Source-dependent execution remains behind native `zone_sources` admission and returns retryable readiness.
 
-## Missing executable handoffs
+## Available owner handoffs
 
-The following are source observations, not failed acceptance results. No native acceptance was run for this
-inventory. Export presence alone must not be treated as an available runtime.
+`../search/service.ts` registers its real pool, client, prefix, Source, release reader and clock through
+`registerSearchScopeRuntime`. `../search/service-scope.ts` uses that registration in
+`createSearchScopeForService(service, options)`; only an unregistered service fails construction. Its returned
+`../search/scope-source.ts` adapter implements `prepare`, `prefix`, `evaluate`, `sourcePrefix` and `ordinalPrefix`.
+Preparation preserves the supplied saved filter and release digest. Evaluation uses the native shared Scope
+interpreter, current owner evidence and work receipts. These operations still require real underlying readiness;
+registration does not make a Source with `metadata_missing` ready.
 
-| Required owner handoff                       | Actual import and implementation                                                                                                                                                                                                                                                     | Integration consequence                                                                                                                                              |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Commerce canonical Collection producer       | `../library/collection-source.ts`: `createCollectionSource({pool, access, clock?})` exports `prepare`, `prefix`, `containsSubject` and `readRawStoredPrefix`. Every method throws `ProblemError('dependency_unavailable')`.                                                          | There is no executable curated, built-in, published or frozen source to compose. An empty replacement would incorrectly prove absence.                               |
-| Same-service Search scope factory            | `../search/service-scope.ts`: `createSearchScopeForService(service, options)` always throws `ProblemError('index_not_ready')`, including after registration. `registerSearchScopeRuntime` has no production caller.                                                                  | Passing the existing kernel Search service cannot execute a saved scope. Constructing another Search client or scope engine in Zones would bypass the owner handoff. |
-| Admitted indexed scope execution             | `../search/scope-source.ts`: `createSearchScopeSource` exposes `prepare`, `prefix` and `evaluate`; all execution ends in readiness. Prefix requests contain only `afterSubject`, `quota` and `budget`, with no name/count ordering or retained ordered-result operation.             | These declarations cannot execute the required common name/count union or retain its ordered preparation. Zones cannot infer a new owner API from these types.       |
-| Complete public projection and query privacy | `../semantic/public-filter-source-contract.ts` declares types for a future `../semantic/public-filter-source.ts` export `publicFilterSource`, including `readPublicFilterProjectionPage`, `readPrivacyReductionHeads` and `readPrivacyReductionPage`. That runtime module is absent. | Current returned-subject checks cannot prove safe NOT, excluded candidates or ordering. The contract types are not a Source binding.                                 |
-| Existing durable preparation                 | `../library/members-preparation.ts`: `createMembersPreparation` exposes `reserve`, `touch` and `admitStep`; each throws an explicit unimplemented error. Its admitted definition supports only `sort: 'id'`.                                                                         | No real retained name/count preparation can be bound through this export. A cursor alone supplies neither work nor eventual completion.                              |
+`../library/collection-source.ts` implements `prepare`, `prefix`, `containsSubject`, `readRawStoredPrefix` and
+`readRawOrdinalPrefix` over native Collection authority, canonical storage, identity and original/terminal Access.
+`../library/canonical-source-store.ts` implements its canonical state, seek and group reads. In particular,
+`containsSubject` can return `not_proven` with a bounded `CollectionAliasProgress`; this is not absence.
+Raw stored prefixes and curated occurrence ordinals do not supply canonical name/count ordering.
 
-The Commerce raw/canonical storage helpers in `../library/canonical-source-store.ts` also throw
-`dependency_unavailable`; they are not a substitute producer. The older identity-home sweep and alias recovery
-prescriptions in those scaffolds are explicitly superseded by the current owner documents. Implementing them in
-Zones would conflict with the current source-scoped identity and bounded indexed-list requirements.
+## Remaining executable handoffs
 
-The missing dependency is executable owner behavior and its ordered/preparation binding, rather than a missing
-Zone transport schema. Once supplied, default kernel composition must pass the actual Search service, Commerce
-producer, native Actor/time/deadline and existing work client through that binding. Zone grants never supply source
-or subject authority. Static page execution must remain independent of these dependencies.
+These are source observations, not failed native acceptance results. The following closed declarations do not
+provide the ordered/preparation contract required by common Zone TypeLists:
+
+| Required handoff                     | Actual owner export                                                                                                                                                                                                                                                                                                                       | Missing capability                                                                                                                                                                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Name/count ordered source input      | `../search/service-scope-order.ts` exports `SearchScopeOrder` with only `kind: 'id'` and `kind: 'ordinal'`. `scope-source.ts` `prefix` hardcodes `sort: 'id'`; `ordinalPrefix` consumes curated native ordinal keys.                                                                                                                      | No callable Scope operation accepts common TypeList `name` or `collections` order with covered input, current evidence and native work accounting. Public Search supports those sorts, but its complete result page is not this port. |
+| Retained ordered union preparation   | `../library/members-preparation.ts` exports `PreparationDefinition` with `sort: 'id' \| 'ordinal'`; `createMembersPreparation` methods `reserve`, `touch` and `admitStep` throw `dependency_unavailable`. `../search/scope-preparation.ts` retains individual native Scope capture; `scope-source.ts` retains curated ordinal processing. | None declares a retained name/count result over a Zone's original saved scopes and mounted Collections. Existing capture and ordinal storage are not a Zone union preparation binding.                                                |
+| Unfinished canonical discovery group | `collection-source.ts` `prefix` throws `dependency_unavailable` when its internal `containsSubject` returns `not_proven`. Its prefix result contains only settled candidates, coverage and exhaustion.                                                                                                                                    | The prefix caller cannot obtain the discovered unfinished subject and its actual alias progress to retain the boundary before that group. `containsSubject` offers resumable progress only once the subject is known.                 |
+
+The consumer needs the actual owner's callable ordered/preparation declarations and implementation, including
+covered range, resumable unfinished group, current basis and native work receipts. No replacement API is declared
+here. Sorting an ID page, forwarding a whole public Search page, retaining an allow vector or inventing another
+worker/Source would not supply this handoff.
+
+Default kernel composition must eventually pass the same actual Search service, native Collection producer,
+Actor/time/deadline and existing work client through those owner ports. Zone ownership, exposure and configured
+source IDs never supply source or subject authority. Static execution remains independent of these dependencies.
 
 ## Available cursor owner
 
@@ -41,7 +54,12 @@ work advances; unavailable execution must keep the standard 503 without a replac
 
 ## Verification boundary
 
-The existing native `user-site`, `membership-contract`, `page-continuation-contract` and `static-page-runtime`
-suites remain unchanged. Their post-integration command is the acceptance authority. This inventory establishes
-no dynamic runtime, useful-page, growth, native persona, worker replay or privacy pass. No external reference
-implementation is named by the Zone runtime contracts.
+The existing native `user-site`, `membership-contract` and `page-continuation-contract` assertions remain unchanged.
+An additional `static-page-runtime` case uses the same released discovery world with native Search and the real
+Library population's public curated Collection. It rereads the current Collection header after occurrence writes,
+retains the duplicate Book occurrence, opens only `zone_sources` through the existing governor setup API and
+requires common TypeList name/count results, direct union membership and current source removal. A 202 is followed
+to completion; readiness never counts as a successful page. Default fixture openings are unchanged.
+
+Native acceptance remains for integration. This inventory establishes no dynamic runtime, useful-page, growth,
+worker replay or privacy pass. No external reference implementation is named by the Zone runtime contracts.

@@ -40,6 +40,7 @@ export const releasedDiscoveryFeatures = Object.freeze([
   'reading_progress',
   'search',
   'search_advanced',
+  'zone_sources',
 ] as const);
 export type ReleasedDiscoveryFeature = (typeof releasedDiscoveryFeatures)[number];
 

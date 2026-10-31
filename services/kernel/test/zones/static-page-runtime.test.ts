@@ -1,11 +1,20 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { UI_LOCALES } from '@rezics/composition';
+import {
+  planReads,
+  platformRegistry,
+  UI_LOCALES,
+  type CompositionDocument,
+  type MemberSource,
+} from '@rezics/composition';
 import { Compile } from 'typebox/compile';
 import { activeProfile } from '../../src/presentation/profiles.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { ZonePageResponseSchema } from '../../src/zones/contract.ts';
+import { ZonePageReadProgressSchema } from '../../src/zones/page-continuation.ts';
+import { createReleasedLibraryPopulation } from '../library/support/released-library-population.ts';
+import { discoveryKey } from '../support/released-discovery.ts';
 import { createBody, page, problem, resourceFixture, type Persona, type ResourceFixture } from './resource-fixture.ts';
 
 let f: ResourceFixture;
@@ -279,4 +288,146 @@ test('static Zone reads preserve withheld route concealment and fresh authorizat
   const deleted = await f.call('owner', 'DELETE', path(zone.id), undefined, f.conditional(revision));
   expect(deleted.status).toBe(200);
   for (const who of ['anonymous', 'owner', 'editor'] as const) expect((await read(zone.id, who)).status).toBe(404);
+}, 180_000);
+
+test('The one mounted Zone source runtime composes actual saved catalogue and common Collection owners with current membership and retained ordered progress rather than unconditional admitted semantic_not_ready', async () => {
+  const population = await createReleasedLibraryPopulation({ version: 1, search: 'native' });
+  try {
+    const fixture = population.base;
+    const sources = await population.sources();
+    const source = sources.sources.find(({ source }) => source.visibility === 'public')!;
+    const memberSource: MemberSource = { kind: 'collection', id: source.source.id };
+    // Occurrence commands advanced the header after CREATE; keep the native population and its duplicate.
+    const current = await population.request('alice', 'GET', `/v1/collections/${memberSource.id}`);
+    expect(current.status, JSON.stringify(current.body)).toBe(200);
+    expect(current.body.collection.revision).toBeGreaterThan(source.source.revision);
+    const books = await fixture.books();
+    const recipes = await fixture.recipes();
+    const book = books.subjects['B-long'].id;
+    const recipe = recipes.subjects['R-quick'].id;
+    expect(source.occurrences.filter(({ member }) => member.subjectId === book)).toHaveLength(2);
+
+    const document: CompositionDocument = {
+      root: { props: {} },
+      content: [
+        ...(['name', 'collections'] as const).map((sort) => ({
+          type: 'TypeList',
+          props: { id: sort, title: { en: sort }, types: ['schema:Book'], sort, limit: 24 },
+        })),
+        { type: 'Members', props: { id: 'mounted', title: { en: 'Mounted source' }, source: memberSource, limit: 24 } },
+      ],
+    };
+    const configuration = createBody().configuration;
+    // Keep every saved scope from the released starter, including overlaps and the historical predicate.
+    const scopes = [...configuration.scope];
+    configuration.pages = [
+      { route: '', document },
+      { route: 'about', document: page('Source-independent route') },
+    ];
+    await fixture.grant('editor', ['zone:create'], GLOBAL_CONTEXT);
+    const created = await population.request(
+      'editor',
+      'POST',
+      '/v1/zones',
+      {
+        configuration,
+        mounts: [memberSource.id],
+        visibility: 'private',
+      },
+      discoveryKey(),
+    );
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const zone = created.body.zone as { id: string; revision: string };
+    const published = await population.request(
+      'editor',
+      'POST',
+      `${path(zone.id)}:publish`,
+      { visibility: 'public' },
+      { ...discoveryKey(), 'if-match': `"${zone.revision}"` },
+    );
+    expect(published.status, JSON.stringify(published.body)).toBe(200);
+    let revision = published.body.zone.revision as string;
+
+    const request = (target: { route: string } | { subject: string }, cursor?: string) =>
+      population.request(
+        'anonymous',
+        'POST',
+        `${path(zone.id)}:readPage${cursor === undefined ? '' : `?${new URLSearchParams({ cursor })}`}`,
+        { target, languages: ['en'] },
+      );
+    // The same real governor opens exposure only after the ordinary closed-gate outcome is observed.
+    const closed = await request({ route: '' });
+    expect(closed.status, JSON.stringify(closed.body)).toBe(403);
+    expect(closed.body.code).toBe('platform_closed');
+    await fixture.setup.openFeatures(['zone_sources']);
+
+    const resolve = async (target: { route: string } | { subject: string }, cursor?: string) => {
+      let answer = await request(target, cursor);
+      const seen = new Set<string>();
+      while (answer.status === 202) {
+        expect(Compile(ZonePageReadProgressSchema).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
+        expect(answer.headers.get('cache-control')).toBe('private, no-store');
+        expect(seen.has(answer.body.next)).toBe(false);
+        seen.add(answer.body.next);
+        answer = await request(target, answer.body.next);
+      }
+      return answer;
+    };
+    const answer = await resolve({ route: '' }, 'unusable');
+    const result = complete(answer);
+    expect(result.document).toEqual(document);
+    expect(result.zone.revision).toBe(revision);
+    const plan = planReads(platformRegistry, document, { subject: null });
+    for (const sort of ['name', 'collections'] as const) {
+      // Compare the native owner's actual ordering; never derive it from sorted UUID hits.
+      const control = await population.request('anonymous', 'POST', '/v1/subjects:search', {
+        filter: { type: { in: ['schema:Book'] } },
+        sort,
+        limit: 24,
+        languages: ['en'],
+      });
+      expect(control.status, JSON.stringify(control.body)).toBe(200);
+      expect(control.body.next).toBeNull();
+      const read = result.reads[plan.nodes[sort]!];
+      expect(read.status).toBe(200);
+      const ids = read.body.subjects.map(({ id }: { id: string }) => id);
+      expect(ids).toEqual(control.body.subjects.map(({ id }: { id: string }) => id));
+      expect(ids.filter((id: string) => id === book)).toHaveLength(1);
+      expect(read.body.next).toBeNull();
+    }
+    expect(result.reads[plan.nodes.mounted!].status).toBe(200);
+    expect((await resolve({ subject: recipe })).body.subject).toBe(recipe);
+    expect(complete(await resolve({ subject: book })).subject).toBe(book);
+    expect(JSON.stringify(result)).not.toContain('Second occurrence with a distinct note');
+
+    // Remove the actual mounted source while preserving all original catalogue scopes.
+    const saved = await population.request(
+      'editor',
+      'PUT',
+      `${path(zone.id)}/configuration`,
+      { configuration, mounts: [] },
+      { ...discoveryKey(), 'if-match': `"${revision}"` },
+    );
+    expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+    revision = saved.body.zone.revision;
+    expect(configuration.scope).toEqual(scopes);
+    const excluded = await resolve({ subject: recipe });
+    expect(excluded.status, JSON.stringify(excluded.body)).toBe(404);
+    expect(complete(await resolve({ subject: book })).subject).toBe(book);
+
+    configuration.scope = [];
+    const empty = await population.request(
+      'editor',
+      'PUT',
+      `${path(zone.id)}/configuration`,
+      { configuration, mounts: [] },
+      { ...discoveryKey(), 'if-match': `"${revision}"` },
+    );
+    expect(empty.status, JSON.stringify(empty.body)).toBe(200);
+    expect((await resolve({ subject: book })).status).toBe(404);
+    expect(complete(await resolve({ route: 'about' })).document).toEqual(configuration.pages[1]!.document);
+    expect(population.calls.some((call) => call.response === current)).toBe(true);
+  } finally {
+    await population.close();
+  }
 }, 180_000);
