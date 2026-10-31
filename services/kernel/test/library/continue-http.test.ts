@@ -7,6 +7,23 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createReleasedDiscoveryFixture, discoveryKey } from '../support/released-discovery.ts';
 import { createReleasedLibraryPopulation } from './support/released-library-population.ts';
 
+type Summary = {
+  id: string;
+  type: string;
+  types: string[];
+  label: { value: string; language: string } | null;
+  creativeWork: boolean;
+  cover: unknown;
+};
+type ContinueRow = {
+  subjectId: string;
+  state: string | null;
+  lastActivityAt: string;
+  activeProgressSession: unknown;
+  subject?: Summary | null;
+};
+type ContinuePage = { subjects: ContinueRow[]; next: string | null };
+
 function queryText(value: unknown): string | null {
   if (typeof value === 'string') return value;
   if (typeof value === 'object' && value !== null && 'text' in value && typeof value.text === 'string')
@@ -48,7 +65,10 @@ function observePool(connectionString: string, statements: string[]): Pool {
 
 function status(response: HttpResponse, expected: number, code?: string) {
   expect(response.status, JSON.stringify(response.body)).toBe(expected);
-  if (code !== undefined) expect(response.body.code).toBe(code);
+  if (code !== undefined) expect((response.body as Record<string, unknown>).code).toBe(code);
+}
+function page(response: HttpResponse): ContinuePage {
+  return response.body as ContinuePage;
 }
 
 test('Continue FULL preserves the unavailable result when the current native Source is absent', async () => {
@@ -61,7 +81,9 @@ test('Continue FULL preserves the unavailable result when the current native Sou
 
     const response = await world.request('alice', 'GET', '/v1/libraryContinue?view=FULL');
     expect(response.status).toBe(503);
-    expect(['dependency_unavailable', 'semantic_not_ready']).toContain(response.body.code);
+    expect(['dependency_unavailable', 'semantic_not_ready']).toContain(
+      (response.body as Record<string, unknown>).code,
+    );
     expect(response.body).not.toHaveProperty('subjects');
     expect(response.body).not.toHaveProperty('next');
   } finally {
@@ -99,8 +121,9 @@ test(
         f.request('alice', 'GET', `/v1/libraryContinue?limit=1${suffix}`, undefined, headers);
       const basic = await request();
       status(basic, 200);
+      const basicPage = page(basic);
       expect(Object.keys(basic.body).sort()).toEqual(['next', 'subjects']);
-      expect(Object.keys(basic.body.subjects[0]!).sort()).toEqual([
+      expect(Object.keys(basicPage.subjects[0]!).sort()).toEqual([
         'activeProgressSession',
         'lastActivityAt',
         'state',
@@ -111,34 +134,38 @@ test(
 
       const explicitlyBasic = await request('&view=BASIC');
       status(explicitlyBasic, 200);
-      expect(explicitlyBasic.body.subjects).toEqual(basic.body.subjects);
-      expect(explicitlyBasic.body.subjects[0]).not.toHaveProperty('subject');
+      const explicitlyBasicPage = page(explicitlyBasic);
+      expect(explicitlyBasicPage.subjects).toEqual(basicPage.subjects);
+      expect(explicitlyBasicPage.subjects[0]).not.toHaveProperty('subject');
 
       statements.length = 0;
       const full = await request('&view=FULL', { 'accept-language': 'en' });
       status(full, 200);
-      const first = full.body.subjects[0];
-      expect(first.subject.id).toBe(first.subjectId);
-      expect(first.subject.type).toBe(type);
-      expect(first.subject.label.value).toContain('Continue FULL');
-      expect(Object.keys(first.subject).sort()).toEqual(['cover', 'creativeWork', 'id', 'label', 'type', 'types']);
+      const fullPage = page(full);
+      const first = fullPage.subjects[0]!;
+      const firstSummary = first.subject!;
+      expect(firstSummary.id).toBe(first.subjectId);
+      expect(firstSummary.type).toBe(type);
+      expect(firstSummary.label?.value).toContain('Continue FULL');
+      expect(Object.keys(firstSummary).sort()).toEqual(['cover', 'creativeWork', 'id', 'label', 'type', 'types']);
       expect(full.headers.get('cache-control')).toContain('private');
       expect(full.headers.get('cache-control')).toContain('no-store');
       expect(statements.filter((statement) => statement === readSummaries.sql)).toHaveLength(
         new Set([partitionOf(routeOf(first.subjectId)!)]).size,
       );
 
-      const next = basic.body.next;
-      expect(typeof next).toBe('string');
+      const next = basicPage.next;
+      if (typeof next !== 'string') throw new Error('Two active subjects require a next cursor at limit 1');
       statements.length = 0;
       const secondPage = await request(`&view=FULL&cursor=${encodeURIComponent(next)}`);
       status(secondPage, 200);
-      expect(secondPage.body.subjects).toHaveLength(1);
-      expect(secondPage.body.subjects[0].subject.id).toBe(secondPage.body.subjects[0].subjectId);
-      expect(secondPage.body.subjects[0].subjectId).not.toBe(first.subjectId);
+      const resumed = page(secondPage);
+      expect(resumed.subjects).toHaveLength(1);
+      expect(resumed.subjects[0]!.subject!.id).toBe(resumed.subjects[0]!.subjectId);
+      expect(resumed.subjects[0]!.subjectId).not.toBe(first.subjectId);
 
       const secondHomes = new Set(
-        secondPage.body.subjects.map((row: { subjectId: string }) => partitionOf(routeOf(row.subjectId)!)),
+        resumed.subjects.map((row) => partitionOf(routeOf(row.subjectId)!)),
       );
       expect(statements.filter((statement) => statement === readSummaries.sql)).toHaveLength(secondHomes.size);
 

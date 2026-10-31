@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { Value } from 'typebox';
+import Value from 'typebox';
 import { continuePageSchema } from '../../src/library/continue-routes.ts';
 
 const page = {
