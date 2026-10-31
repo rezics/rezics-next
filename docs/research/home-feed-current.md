@@ -22,8 +22,9 @@ before a mixed activity feed is briefed.
 The immediate corrections do not depend on adopting feeds: remove the tagline, apply the settled portrait
 default consistently, make the shared search shell work, keep useful native Continue separate from public
 discovery, and stop presenting recordings or dependency-injected modules as proof of default runtime assembly.
-There is also a less visible upper-bound defect: home type naming can load and normalize the entire definitions
-release even when the response contains only a few dozen subjects.
+There are also less visible upper-bound gaps: the current release admits only 1,024 types, home type naming
+loads a whole release, and mixed discovery still does vocabulary-wide work despite returning paged kind choices.
+Simply raising the release ceiling to 200,000 would expose these costs rather than satisfy the requirement.
 
 ## Baseline, method and limits
 
@@ -74,6 +75,7 @@ consumer from a useful, ready default deployment. “Test evidence” identifies
 | Return to active work | Library/Continue contract | `library/continue-reads.ts`, `continue-query.ts`: account fences, canonical source, bounded rounds, final rechecks | Mounted `GET /v1/libraryContinue`, `library_continue.list`; usefulness still depends on source readiness | Native adapter with six-item limit; ready, empty, preparing and unavailable states | Kernel Continue read/HTTP/user-case files and web adapter/journey files exist; not executed here |
 | Native following activity feed | Explicitly deferred, no current feed owner | Follow edges and counts are not an activity pipeline | No equivalent current home-feed route identified in the inspected route/consumer chain | No Following mixed stream on `/` | Legacy tests and a mixed search test cannot establish this capability |
 | Mixed catalogue discovery | Search discovery contract, separate from social feed | `search/discovery-service.ts` and mixed owner hydration exist | `subjects:search` accepts `discovery-v1`; optional handler absent from inspected default server construction | Search request builder and discovery consumers exist | Mixed-discovery, registry, consumer, generation and user-case files exist; default useful native binding remains a separate obligation |
+| 200,000-kind catalogue | Settled design stress case; not current release capacity | `packages/definitions/src/portable.ts` caps types at 1,024 and release bytes at 4 MiB; discovery registers every released type plus account | Current validation/registry rejects a release beyond its cap | Bounded eight-kind metadata output does not make vocabulary-wide execution bounded | Source evidence of the ceiling and loops, not a measured 200,000-kind deployment |
 | Discover communities | Realm discovery contract | Current disclosure-aware popularity/trending projection and bounded candidate work | `GET /v1/realms/discovery` | Realm discovery/search surfaces, not a mixed home feed | Community native/source tests and web discovery tests exist; no execution claim |
 | Follow subjects, Collections, Spaces | Attention edges; not membership or access | Native personal follow operations and count health/fences | Mounted follows and private outgoing/target count routes in `library/personal-routes.ts` | Follow controls and private count page source exist | Native count outcome/growth and web private-count tests exist; not notification or activity delivery proof |
 | Subject community sections | Global/selected Realm discussion and review reads | Composition registry has real ThreadList/ReviewList read callbacks | Presentation reads support Realm selectors and node continuation | Configurable subject/community sections | Historical status report claiming these callbacks absent is stale; this does not make them a home feed |
@@ -136,7 +138,7 @@ history. Each correction belongs in an owning contract before implementation bey
 | Finding / defect class | Exact evidence | Cause indicated by evidence | User impact | Owner seam and correction |
 | --- | --- | --- | --- | --- |
 | H1: Product outcome replaced by fixture shape | `platform.json` home Heading and four TypeLists; `apps/web/tests/home-heading.test.ts` expects the six-node shape and localized home heading | The test asserts the composition chosen by implementation rather than the user's discovery/return job | Tagline is preserved; four arbitrary verticals appear to define the whole product | Web + composition: remove tagline under settled authority, preserve an accessible page name, test useful outcomes instead of treating a fixed row census as product acceptance |
-| H2: Vocabulary-wide cold work on a bounded page | `home-queries.ts` calls `nameSubjectTypes`; `apps/web/src/subject/definitions.ts` loads an entire immutable release and normalizes `Object.entries(value.types)` | Small response sizes were mistaken for small dependency work; immutable caching hides the cold path | A 48-item page can pay transport/parsing/normalization proportional to 200,000 kinds; retained release maps have no explicit eviction | Definitions + web: provide a bounded requested-key display projection or server-supplied released labels; bound cached release generations/bytes; preserve digest/locale semantics |
+| H2: Vocabulary-wide cold work on a bounded page | `home-queries.ts` calls `nameSubjectTypes`; `apps/web/src/subject/definitions.ts` loads an entire immutable release and normalizes `Object.entries(value.types)` | Small response sizes were mistaken for small dependency work; immutable caching hides the cold path | A 48-item page pays O(K) release work, currently capped at 1,024 types/4 MiB; raising that ceiling alone makes the cold dependency grow with all kinds. Retained release maps have no explicit eviction | Definitions + web: provide a bounded requested-key display projection or server-supplied released labels; bound cached release generations/bytes; preserve digest/locale semantics |
 | H3: Module completeness confused with runtime completeness | Optional discovery route and native discovery implementation versus default `server.ts` without its handler | Unit assembly can inject a dependency that the production composition root omits | A polished mixed search/home consumer can hit unavailable instead of useful results | Search + kernel composition + web: trace a real default-runtime useful page and lifecycle readiness before exposing the surface; never synthesize an empty success |
 | H4: Deferred scope presented as completed ambition | `docs/scope.md` Feeds/Recommendations rows versus the requested Reddit/X home | The public scope and product ambition are not represented as separate delivery milestones | Users cannot follow activity through home despite working follow buttons | Scope owner + future feed owner: explicitly adopt a later mixed-feed slice or retain honest catalogue home wording; do not silently assign a missing ranking backend to web |
 | H5: Defaults remain family-specific | `packages/ui/src/components/cover-model.ts` uses music/other 1:1, recipe 4:3 and person 3:4 alongside work/game 5:7; release presentation can override | Existing variety is protected without a cross-kind default assertion | Mixed cards lack a stable default rhythm; new/unknown kinds get square defaults | UI + definitions + presentation: one portrait default for every kind; keep per-image landscape containment, released override semantics made consistent with the settled default |
@@ -144,6 +146,7 @@ history. Each correction belongs in an owning contract before implementation bey
 | H7: Stale evidence labels | Home story describes Continue as awaiting binding although the adapter exists; design-status-search says some read callbacks absent though registry now contains them | Reports, story labels and composition-root readiness are not reconciled | Managers may commission duplicate work or mistake source existence for completed journeys | Owning modules + web: reconcile status with revisioned evidence; show ready, preparing and unavailable stories separately; retain honest native-binding limitations |
 | H8: Context multiplicity treated as display multiplicity | Legacy-final `work-page/ratings.tsx` maps all other question contexts; current upper-bound requirement forbids one block per Context | Ordinary-size fixtures do not exercise the choice cardinality | Twenty or hundreds of populations/questions become a wall rather than a useful rating | Rating + presentation: explicit selected population/question, bounded summary, searchable paged picker; never average all memberships into one purported consensus |
 | H9: Test quantity hides outcome gaps | Home heading/card/recording sources described below; kernel home test still expects SearchBox while current JSON has personal slot | Snapshots and local contracts can be internally tidy but stale or irrelevant to the adopted user job | Large suites coexist with unfinished delivery and contradictory status | Web + presentation + owning API: map each accepted journey to source, real API wiring and visual/interaction evidence; keep recordings but stop counting them as native proof |
+| H10: A release-size ceiling substitutes for a scalable kind query | `definitions/src/portable.ts`, `definitions/src/index.ts`; `search/discovery-registry.ts`, `discovery-service.ts`, `discovery-filter.ts`, `discovery-current.ts` | Whole-release registry operations are tolerable under the launch cap; output pagination was not carried through metadata, query construction and current-hit dispatch | 200,000 types are not currently admissible; merely lifting the cap adds request-wide hashing/sorting, huge kind terms and per-kind candidate filtering | Definitions + search: adopt a scalable versioned vocabulary/index contract; precompute release metadata/digests, page ordered kind keys, dispatch by kinds actually present, and preserve registered-producer eligibility without sending the full vocabulary on every query |
 
 For H6, source does not establish computed centring or reproduce the screenshot. The blue ring is not inherently
 an accessibility defect: removing all visible focus would create one. Correct the settled visual treatment while
@@ -382,18 +385,46 @@ These are source-derived counts and proposed ceilings, not measured latency, mem
 | Quantity | Naive failure | Current evidence / recommended bound |
 | --- | --- | --- |
 | 300 Spaces | One 20-item request each produces 6,000 candidate slots and 300 owner admissions before selection | One selected scope or derived attention inventory; fixed lane count, paged Space lookup, batch current access |
-| 200,000 kinds | Twelve items per kind means 2.4 million slots and 200,000 list queries | Current home has four lists/48 slots, not this loop; future mixed selection is independent of kind count. Fix the real cold full-release metadata dependency |
+| 200,000 kinds | Twelve items per kind means 2.4 million slots and 200,000 list queries | Current home has four lists/48 slots, not this loop; current release permits only 1,024 types. A scalable vocabulary contract must replace whole-release hot-path work before the ceiling can grow |
 | Thousands of follows | Enumerate follows and open a source cursor for each on every request | Indexed viewer attention inventory or a fixed set of prepared projections; follow mutation/backfill runs as bounded durable work |
 | Twenty cards with 300 populations | Up to 6,000 rating lookups/blocks if every population is attached | One selected population with batch summaries and a separate paged population picker |
 | Million-item Collection | Download/sort all items or repeatedly rescan rejected members to fill 20 cards | Owner source cursor, indexed anchors and retained bounded preparation; explicit sparse/progress result when ready evidence is missing |
 | Long scroll | Retain every page/card and replay all reads after a mutation | Bounded client page retention with restored scroll/focus and resumable cursor; archive/navigation route for older history |
-| Release changes | Retain every whole definitions release and normalize all 200,000 types on a cold request | Requested-key metadata path, versioned cache with byte/generation eviction, no vocabulary enumeration in the home hot path |
+| Release changes | Normalize all K types on a cold request and retain whole releases across digests; this grows if the current cap is raised | Requested-key metadata path, versioned cache with byte/generation eviction, no vocabulary enumeration in the home hot path |
 
 Current composition caps are useful but insufficient physical proof: `packages/composition/src/reads.ts` sets
 16 read descriptors and 128 output-cost slots; presentation also bounds document structure and dispatch
 concurrency. Four lists of twelve fit comfortably, and Continue is a separate private operation. Those limits
 do not bound OpenSearch examined candidates, PostgreSQL rows, hidden-item rejection, definition bytes or all
 dependent owner work. Do not multiply a 128-slot budget by each node or each retry.
+
+### The 200,000-kind requirement is not satisfied by the present registry
+
+`packages/definitions/src/portable.ts` sets `RELEASE_LIMITS.types = 1024`, properties 4,096, Contexts 256 and
+release size 4 MiB. `packages/definitions/src/index.ts` enforces these limits, and
+`services/kernel/src/search/discovery-registry.ts` rejects a catalogue over the type ceiling. Its catalogue
+kind registrations are released types plus the reserved account kind. Thus a 200,000-catalogue-kind scenario
+is currently beyond admission, not an already-supported case hidden by a small fixture.
+
+The useful eight-kind response limit in `discovery-request.ts` does not solve execution growth:
+
+- `discovery-service.ts` hashes metadata/domains for every registry entry on each execution, then sorts and
+  filters all entries to obtain the next kind page: O(K) serialization and O(K log K) sort work.
+- `discovery-filter.ts` constructs a `terms.kind` array from every registered kind even for the mixed
+  population; base-type expansion also walks the registry. At 200,000 types plus account, a straightforward
+  ceiling increase would produce 200,001 terms. [OpenSearch's current terms documentation](https://docs.opensearch.org/latest/query-dsl/term/terms/)
+  specifies a default maximum of 65,536 terms. This is a conditional engine-admission failure under defaults,
+  not an observed request failure or a claim that deployed settings were inspected.
+- `discovery-current.ts` batches native subject reads, which is good, but then iterates all registry entries
+  and filters the semantic candidates for each kind. The local CPU work is O(K×B) in the worst case even though
+  native hydration is shared. With K=200,000 and B=200, that loop can make about 40 million kind comparisons.
+
+Precompute immutable registry digests and ordered metadata at publication; retrieve a bounded key range rather
+than sorting K entries for each eight-choice page. Group current candidates by their actual kind and use direct
+registry lookup. Registered-producer eligibility must remain authoritative: replacing a vocabulary terms array
+needs a generation-bound producer/index contract, not an unrestricted match-all. Do not merely raise limits or
+split one vocabulary-wide terms query into several equally unbounded hot-path queries. These are owner design
+changes needed to meet the settled stress case, not a request to reopen the upper-bound requirement.
 
 Source-dependent Zones already illustrate a shared ledger rather than unlimited per-source pages.
 `services/kernel/src/zones/membership.ts` combines collection work, structural keys and ordered work: its
@@ -521,7 +552,7 @@ state/lifecycle and multiple owners. No feeds are activated by this report.
 | --- | --- | --- | --- |
 | P0: reconcile scope and evidence | Small; scope owner + web/search/library | First: distinguish current catalogue home, partial native implementations and future mixed activity | Revisioned matrix and adopted scope/owner decision; stale labels corrected without declaring native success |
 | P0: repair settled shared presentation | Medium; web/UI/definitions | No feed dependency; tagline, all-kind portrait defaults, landscape containment, shared header/scope/panel | Cross-surface real interaction/visual evidence, including an unknown kind and overflow cases; keyboard focus retained |
-| P0: make current return/discovery path truthful and bounded | Medium; library/search/definitions + runtime composition | Reuse current Continue adapter; default native discovery readiness and bounded metadata are separate prerequisites | Useful native cases plus empty/preparing/revocation cases; cold metadata/physical-work bounds, not just 48 outputs |
+| P0: make current return/discovery path truthful and bounded | Medium; library/search/definitions + runtime composition | Reuse current Continue adapter; default native discovery readiness and bounded metadata are separate prerequisites. Scalable vocabulary design must precede any 200,000-type ceiling increase | Useful native cases plus empty/preparing/revocation cases; cold metadata, kind-query and physical-work bounds, not just 48 outputs |
 | P1: a complete first-scope catalogue/curation home | Medium; web + composition + admitted source owners | Uses only permitted source reads and genuinely available curated Collections; no social-feed claim | Signed-out/in journeys, sensible section absence, one shell, useful native data, no fake ratings or unavailable wall |
 | P1: adopt and implement mixed activity delivery if promoted into scope | Large; newly named feed owner + accounts/content/library/search/web | Needs publication/eligibility rules, cursor/cost/lifecycle design, source ports and scope adoption before UI | Bounded candidate inventory, fanout/backfill/erasure, default-runtime ready cases and private disclosure negatives at upper bounds |
 | P2: one special home end to end | Medium/large by data gaps; Realm/Zone + graph/source owners | Start with one vertical and complete one task, then vary definitions/configuration; source-dependent Zone remains gated until ready | Book edition/read or anime next-episode or game-compatible-release task, with provenance/progress/spoiler negatives; then cross-vertical reuse proof |
