@@ -3850,5 +3850,8 @@
   "curation_leave": "離開並捨棄本機修改",
   "search_kind_navigation_selected": "已選結果類型：{kinds}",
   "search_kind_navigation_more": "在篩選中選擇更多結果類型。",
-  "search_kind_navigation_all": "全部"
+  "search_kind_navigation_all": "全部",
+  "subject_cast": "演出人員",
+  "subject_section_more": "更多{label}",
+  "subject_credit_part": "適用篇章"
 }

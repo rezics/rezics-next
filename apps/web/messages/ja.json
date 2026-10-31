@@ -3850,5 +3850,8 @@
   "curation_leave": "ローカルの変更を破棄して離れる",
   "search_kind_navigation_selected": "選択中の結果の種類：{kinds}",
   "search_kind_navigation_more": "フィルターで他の結果の種類も選べます。",
-  "search_kind_navigation_all": "すべて"
+  "search_kind_navigation_all": "すべて",
+  "subject_cast": "キャスト",
+  "subject_section_more": "{label}をもっと見る",
+  "subject_credit_part": "対象の部分"
 }

@@ -162,11 +162,13 @@ function StreamLink({
   view,
   node,
   cursor,
+  title,
 }: {
   value: OverviewValue;
   view: string;
   node: string;
   cursor?: string;
+  title?: string;
 }) {
   const base = viewHref(value, view);
   if (!base) return null;
@@ -178,7 +180,7 @@ function StreamLink({
       href={`${base}${base.includes('?') ? '&' : '?'}${query}`}
     >
       {cursor
-        ? m.subject_relations_more({}, { locale: value.locale as never })
+        ? m.subject_section_more({ label: title || readerViewLabel(view, value.locale) || m.subject_relations({}, { locale: value.locale as never }) }, { locale: value.locale as never })
         : m.subject_relation_restart({}, { locale: value.locale as never })}
     </a>
   );
@@ -323,7 +325,12 @@ export function holderItems(
             ...(typeof link.type === 'string' ? { type: link.type } : {}),
             ...(typeof link.property === 'string' ? { property: link.property } : {}),
             ...(typeof link.date === 'string' ? { date: link.date } : {}),
-            statement: typeof link.statement === 'string' ? link.statement : undefined,
+            statement:
+              typeof link.statement === 'string'
+                ? link.statement
+                : isRecord(link.assertion) && typeof link.assertion.id === 'string'
+                  ? link.assertion.id
+                  : undefined,
             notes: [],
             ...(isRecord(link.assertion) && Array.isArray(link.assertion.qualifiers)
               ? { qualified: qualifiedNotes(link.assertion as unknown as Stmt, link.related, locale) }
@@ -467,6 +474,7 @@ function LinkSection(
   const definition = typeof props.property === 'string' ? value.relations[props.property] : undefined;
   // A routed reader destination has a familiar name; property labels still qualify its rows.
   title =
+    (forward ? definition?.forwardReaderLabel : definition?.readerLabel) ||
     title ||
     readerViewLabel(view, value.locale) ||
     (forward ? definition?.forwardLabel : definition?.label) ||
@@ -510,7 +518,7 @@ function LinkSection(
       )}
       <CoverList items={listed.items} value={value} label={text.text || title} preview={props.paged !== true} />
       {props.paged === true && section.ok && typeof section.body.next === 'string' && (
-        <StreamLink value={value} view={view} node={id} cursor={section.body.next} />
+        <StreamLink value={value} view={view} node={id} cursor={section.body.next} title={text.text || title} />
       )}
     </Preview>
   );
@@ -548,7 +556,7 @@ export function RelationGroups(props: Record<string, unknown>) {
         {nodes.map((node) => {
           const section = value.sections.get(node.id);
           const property = String(node.props.property ?? '');
-          const title = value.relations[property]?.label || heading;
+          const title = pageText(node.props.title, value.locale).text || value.relations[property]?.readerLabel || value.relations[property]?.label || heading;
           return (
             <RelationStream
               key={node.id}
@@ -592,7 +600,7 @@ export function RelationGroups(props: Record<string, unknown>) {
     if (listed.items.length > 0)
       entries.push({
         property,
-        label: definition?.label ?? '',
+        label: pageText(node.props.title, value.locale).text || definition?.readerLabel || definition?.label || '',
         group,
         items: listed.items,
         more: listed.more,

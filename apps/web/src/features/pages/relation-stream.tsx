@@ -168,7 +168,7 @@ function StreamState({
           aria-disabled={pending}
           className={buttonVariants({ variant: 'outline' })}
         >
-          {error ? m.subject_section_retry({}, options) : m.subject_relations_more({}, options)}
+          {error ? m.subject_section_retry({}, options) : m.subject_section_more({ label: title }, options)}
         </a>
       )}
       {(error || !section.ok) && base && (

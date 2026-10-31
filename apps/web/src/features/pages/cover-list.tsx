@@ -113,12 +113,16 @@ export function CoverList({
         key={`${item.id}-${index}`}
         item={item}
         value={value}
-        credit={credits}
+        credit={(item.qualified?.length ?? 0) > 0}
         {...(listPresentationFor ? { listPresentationFor } : {})}
         {...(facts ? { facts } : {})}
       />
     );
-    return credits ? <ListRow key={`${item.id}-${index}`}>{card}</ListRow> : card;
+    return credits ? (
+      <ListRow key={`${item.id}-${index}`}>
+        <div data-statement={item.statement}>{card}</div>
+      </ListRow>
+    ) : card;
   });
   if (credits) {
     return (

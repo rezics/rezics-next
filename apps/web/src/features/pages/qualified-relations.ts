@@ -14,6 +14,7 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
     'wdt:P3831': m.subject_credit_role({}, options),
     'wdt:P453': m.subject_credit_character({}, options),
     'schema:character': m.subject_credit_character({}, options),
+    'wdt:P518': m.subject_credit_part({}, options),
   };
   return statement.qualifiers.flatMap((snak): QualifiedNote[] => {
     if (snak.value.type !== 'value' || !Object.hasOwn(labels, snak.property.id)) return [];

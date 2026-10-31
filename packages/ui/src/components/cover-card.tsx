@@ -56,6 +56,8 @@ export interface CoverCardProps {
   status?: { label: string; href?: string };
   badge?: ReactNode;
   meta?: ReactNode;
+  /** Essential statement metadata: a wrapping credit row with a compact cover and independent links. */
+  essentialCredit?: ReactNode;
   selectable?: boolean;
   selected?: boolean;
   onSelectedChange?: (selected: boolean, event: MouseEvent<HTMLButtonElement>) => void;
@@ -83,6 +85,7 @@ export function CoverCard({
   status,
   badge,
   meta,
+  essentialCredit,
   selectable = false,
   selected = false,
   onSelectedChange,
@@ -96,6 +99,21 @@ export function CoverCard({
   const small = density === 'small';
   const listPresentation = listPresentationForCover(cover.subject, cover.listPresentation);
   const Link = link ?? 'a';
+  const credit = essentialCredit != null;
+  const titleClass = credit
+    ? 'text-base leading-snug font-semibold wrap-anywhere'
+    : 'line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere';
+  const image = (
+    <Cover
+      {...cover}
+      size="fill"
+      {...(listPresentation ? { listPresentation } : {})}
+      {...(ratio ? { ratio } : {})}
+      decorative
+      frameClassName="bg-transparent ring-0"
+      className="w-full [&_button:not(.absolute)]:relative [&_button]:z-10"
+    />
+  );
   const actions =
     menu != null || menuEntries != null || menuTrigger != null ? (
       <span data-slot="cover-card-actions" className="relative z-10 flex shrink-0 items-center">
@@ -123,17 +141,13 @@ export function CoverCard({
     <article
       onPointerDown={onPointerDown}
       data-slot="cover-card"
-      className="group relative flex h-full min-w-0 flex-col text-foreground focus-within:ring-2 focus-within:ring-ring"
+      className={`group relative flex min-w-0 text-foreground focus-within:ring-2 focus-within:ring-ring ${credit ? 'items-start gap-4' : 'h-full flex-col'}`}
     >
-      <Cover
-        {...cover}
-        size="fill"
-        {...(listPresentation ? { listPresentation } : {})}
-        {...(ratio ? { ratio } : {})}
-        decorative
-        frameClassName="bg-transparent ring-0"
-        className="w-full [&_button:not(.absolute)]:relative [&_button]:z-10"
-      />
+      {credit ? (
+        <div className={listPresentation?.imageAspect === 'landscape' ? 'w-32 shrink-0 sm:w-48' : 'w-[72px] shrink-0 sm:w-24'}>
+          {image}
+        </div>
+      ) : image}
       {selectable ? (
         <button
           type="button"
@@ -167,11 +181,11 @@ export function CoverCard({
         </>
       )}
       {badge != null && <div className="pointer-events-none absolute top-2 right-2 z-10">{badge}</div>}
-      <div data-slot="cover-card-text" className="flex min-w-0 flex-1 flex-col gap-1 p-2">
+      <div data-slot="cover-card-text" className={`flex min-w-0 flex-1 flex-col ${credit ? 'gap-2' : 'gap-1 p-2'}`}>
         {selectable ? (
           <span
             data-slot="cover-card-title"
-            className="line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere"
+            className={titleClass}
             lang={titleLang}
           >
             {title}
@@ -180,7 +194,7 @@ export function CoverCard({
           <div
             data-slot="cover-card-title"
             lang={titleLang}
-            className="line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere"
+            className={titleClass}
           >
             {title}
           </div>
@@ -192,7 +206,7 @@ export function CoverCard({
             title={small ? title : undefined}
             onClick={onClick}
             data-slot="cover-card-title"
-            className="line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere outline-none after:absolute after:inset-0 after:z-[1] after:content-['']"
+            className={`${titleClass} outline-none ${credit ? 'underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring' : "after:absolute after:inset-0 after:z-[1] after:content-['']"}`}
           >
             {title}
           </Link>
@@ -203,6 +217,11 @@ export function CoverCard({
             className="line-clamp-1 text-center text-[11px] leading-4 text-muted-foreground"
           >
             {meta ?? secondary}
+          </div>
+        )}
+        {credit && (
+          <div data-slot="cover-card-essential-credit" className="min-w-0 text-sm leading-6 wrap-anywhere">
+            {essentialCredit}
           </div>
         )}
         {status != null && (

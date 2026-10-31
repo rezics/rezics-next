@@ -3851,5 +3851,8 @@
   "curation_leave": "离开并丢弃本地修改",
   "search_kind_navigation_selected": "已选结果类型：{kinds}",
   "search_kind_navigation_more": "在筛选中选择更多结果类型。",
-  "search_kind_navigation_all": "全部"
+  "search_kind_navigation_all": "全部",
+  "subject_cast": "演出人员",
+  "subject_section_more": "更多{label}",
+  "subject_credit_part": "适用篇章"
 }

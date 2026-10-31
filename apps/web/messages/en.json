@@ -3853,5 +3853,8 @@
   "library_selected_labels_partial": "Each item is assigned separately. Successful assignments remain saved; items not attempted have not been sent.",
   "library_selected_labels_unknown": "This assignment may have applied. Retry this exact assignment before changing this item. Retrying sends no other items.",
   "library_selected_labels_retry": "Retry exact assignment",
-  "library_selected_labels_retry_title": "Retry assigning “{name}” to {title}"
+  "library_selected_labels_retry_title": "Retry assigning “{name}” to {title}",
+  "subject_cast": "Cast",
+  "subject_section_more": "More: {label}",
+  "subject_credit_part": "Applies to part"
 }

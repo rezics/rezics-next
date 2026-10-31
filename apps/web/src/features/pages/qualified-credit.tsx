@@ -1,4 +1,5 @@
-import { Cover, type CoverProps } from '@rezics/ui/cover';
+import type { CoverProps } from '@rezics/ui/cover';
+import { CoverCard } from '@rezics/ui/cover-card';
 import type { ReactNode } from 'react';
 import { relationTargetHref } from './edition-work';
 import type { RowValue } from './overview';
@@ -24,23 +25,13 @@ export function QualifiedCredit({
   value: RowValue;
 }) {
   return (
-    <div className="flex min-w-0 items-start gap-4">
-      <div
-        className={
-          cover.listPresentation?.imageAspect === 'landscape' ? 'w-32 shrink-0 sm:w-48' : 'w-[72px] shrink-0 sm:w-24'
-        }
-      >
-        <Cover {...cover} size="fill" decorative {...(value.ratio ? { ratio: value.ratio } : {})} />
-      </div>
-      <div className="min-w-0 flex-1 space-y-2 wrap-anywhere">
-        <value.link
-          href={href}
-          lang={titleLang}
-          className="text-base leading-snug font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-        >
-          {title}
-        </value.link>
-        {(notes.length > 0 || qualified.length > 0) && (
+    <CoverCard
+      title={title}
+      {...(titleLang ? { titleLang } : {})}
+      href={href}
+      link={value.link}
+      cover={{ ...cover, ...(value.ratio ? { ratio: value.ratio } : {}) }}
+      essentialCredit={
           <ul className="space-y-1 text-sm leading-6">
             {notes.map((note, index) => (
               <li key={`note-${index}`}>{note}</li>
@@ -67,8 +58,7 @@ export function QualifiedCredit({
               </li>
             ))}
           </ul>
-        )}
-      </div>
-    </div>
+      }
+    />
   );
 }

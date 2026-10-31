@@ -3850,5 +3850,8 @@
   "curation_leave": "Salir y descartar los cambios locales",
   "search_kind_navigation_selected": "Tipos de resultado seleccionados: {kinds}",
   "search_kind_navigation_more": "Elige más tipos de resultado en Filtros.",
-  "search_kind_navigation_all": "Todos"
+  "search_kind_navigation_all": "Todos",
+  "subject_cast": "Reparto",
+  "subject_section_more": "Más: {label}",
+  "subject_credit_part": "Parte correspondiente"
 }

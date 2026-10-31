@@ -3850,5 +3850,8 @@
   "curation_leave": "Verlassen und lokale Änderungen verwerfen",
   "search_kind_navigation_selected": "Ausgewählte Ergebnisarten: {kinds}",
   "search_kind_navigation_more": "Weitere Ergebnisarten unter „Filter“ auswählen.",
-  "search_kind_navigation_all": "Alle"
+  "search_kind_navigation_all": "Alle",
+  "subject_cast": "Besetzung",
+  "subject_section_more": "Mehr: {label}",
+  "subject_credit_part": "Gilt für Teil"
 }
