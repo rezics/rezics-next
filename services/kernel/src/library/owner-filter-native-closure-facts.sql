@@ -5,6 +5,13 @@ WITH input AS NOT MATERIALIZED (
 )
 SELECT raw.driver, raw.fact_id::text AS "factId", raw.label_id::text AS "labelId"
 FROM input i CROSS JOIN LATERAL (
+  -- An unidentified live assignment is missing native fact coverage, never label absence under NOT.
+  (SELECT 0 AS driver, a.label_id AS fact_id, a.label_id
+   FROM library.label_assignment a
+   WHERE a.route=i.route AND a.account_id=i.account_id AND a.subject_id=i.subject_id
+     AND a.deleted_at IS NULL AND (a.slot_no IS NULL OR a.assignment_id IS NULL)
+   ORDER BY a.label_id LIMIT 1)
+  UNION ALL
   (SELECT 1 AS driver, e.subject_id AS fact_id, NULL::uuid AS label_id
    FROM library.entry e
    WHERE e.route=i.route AND e.account_id=i.account_id AND e.subject_id=i.subject_id

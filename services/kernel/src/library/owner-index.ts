@@ -6,6 +6,7 @@ import { decodeLibraryProfilePin } from './profile-pin.ts';
 import type { LibraryProfilePin } from './profile.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import nativeFacts from './collection-source-native-facts.sql';
+import labelOriginals from './owner-index-native-label-originals.sql';
 
 type Client = Pick<PoolClient, 'query'>;
 export type OwnerNativeFactDriver = 'entry' | 'label' | 'session' | 'copy';
@@ -26,14 +27,17 @@ export async function readOwnerNativeFactPage(
   if (!['entry', 'label', 'session', 'copy'].includes(driver)) throw new TypeError('Invalid owner fact driver');
   if (after && (after.driver !== driver || routeOf(after.storedSubjectId) === null || routeOf(after.factId) === null))
     throw new TypeError('Invalid owner fact continuation');
-  const rows = await nativeFacts.run(client, {
+  const input = {
     route: key(accountId)[0],
     account_id: accountId,
     driver,
     after_subject: after?.storedSubjectId ?? null,
     after_fact: after?.factId ?? null,
     limit,
-  });
+  };
+  // The native assignment PK includes legacy/unreserved and retained excluded originals too. Its label
+  // key is structural coverage only; the filter later reads current full-key label truth independently.
+  const rows = driver === 'label' ? await labelOriginals.run(client, input) : await nativeFacts.run(client, input);
   const keys = rows.map((row): CanonicalRawKey => ({ driver, ...row }));
   return { rows: keys.map((key) => ({ key })), after: keys.at(-1) ?? after, exhausted: keys.length < limit };
 }
