@@ -544,7 +544,25 @@ test('a stale cohort generation cannot be hidden by collective green', async () 
     await expect(batchTrain(h, async command => {
       if (isFullControlPlaneSuite(command) && !moved) {
         moved = true;
-        h.store.updateTask({ taskId: tasks[1]!.id, attempt: 1 }, task => { task.currentAttempt = 2; });
+        const member = manifest.members[1]!;
+        const retained = h.store.attempt(member);
+        h.store.nextAttempt(member, attempt => ({
+          ...retained,
+          attempt,
+          state: 'pending',
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+          process: null,
+          driver: null,
+          auxiliaryProcesses: [],
+          session: null,
+          logPath: join(h.settings.stateDirectory, 'runs', member.taskId, `${attempt}.jsonl`),
+          evidencePath: join(h.settings.stateDirectory, 'evidence', member.taskId, String(attempt)),
+          before: null,
+          after: null,
+          exitCode: null,
+          result: '',
+        }));
       }
       return { passed: true, output: '', timedOut: false };
     }).releaseControlPlaneBatch(manifest)).rejects.toThrow('stale');
