@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { searchWorkerOwnership } from './support/runner-slot.ts';
 import { randomUUID } from 'node:crypto';
-import { MessageChannel, type MessagePort } from 'node:worker_threads';
 import { createOutcomeRpc, createOutcomeWorkerClock, type OutcomeRpcTransport } from './support/outcome-rpc.ts';
 
 test('explicit kernelPool refuses child ownership before invoking the pool capability', () => {
@@ -84,25 +83,24 @@ test('instrumentation keeps the supplied clock function and rejects child replic
   expect(calls).toBe(1);
 });
 
-function portTransport(port: MessagePort): OutcomeRpcTransport {
-  return {
-    send: (packet) => port.postMessage(JSON.stringify(packet)),
-    subscribe(message, failure) {
-      const receive = (event: MessageEvent) => message(JSON.parse(event.data));
-      const failed = () => failure(new Error('Clock message could not be deserialized'));
-      port.addEventListener('message', receive);
-      port.addEventListener('messageerror', failed);
-      port.start();
+function clockTransports(): OutcomeRpcTransport[] {
+  const receive: ((packet: unknown) => void)[] = [() => {}, () => {}];
+  return [0, 1].map((side) => ({
+    send(packet) {
+      const wire: unknown = JSON.parse(JSON.stringify(packet));
+      queueMicrotask(() => receive[1 - side]!(wire));
+    },
+    subscribe(message) {
+      receive[side] = message;
       return () => {
-        port.removeEventListener('message', receive);
-        port.removeEventListener('messageerror', failed);
+        receive[side] = () => {};
       };
     },
-  };
+  }));
 }
 
 test('clock RPC waits for a matching response and refuses pending or later updates after custody loss', async () => {
-  const { port1, port2 } = new MessageChannel();
+  const [parentTransport, childTransport] = clockTransports();
   const clock = createOutcomeWorkerClock();
   const lifecycle = randomUUID();
   const instant = Date.UTC(2025, 0, 1);
@@ -115,13 +113,13 @@ test('clock RPC waits for a matching response and refuses pending or later updat
   const received = new Promise<void>((resolve) => {
     reached = resolve;
   });
-  const parent = createOutcomeRpc(portTransport(port1), {
+  const parent = createOutcomeRpc(parentTransport!, {
     timeoutMs: 1000,
     onRequest() {
       throw new Error('Unexpected child request');
     },
   });
-  const child = createOutcomeRpc(portTransport(port2), {
+  const child = createOutcomeRpc(childTransport!, {
     async onRequest(method, params) {
       expect(method).toBe('clock');
       const result = clock.change(params);
@@ -156,7 +154,5 @@ test('clock RPC waits for a matching response and refuses pending or later updat
     release();
     parent.close();
     child.close();
-    port1.close();
-    port2.close();
   }
 });
