@@ -30,11 +30,11 @@ export type AgentIdentityRetirementResult =
   | Readonly<{ state: 'pending'; gap: string }>
   | Readonly<{ state: 'verified'; gap: null; custodyId: string; workflowId: string }>;
 
-/** Pinned SDK ownership checks protect executing writers, but no supported API installs
- * a permanent per-ID fence against resume/restart/enqueue after deduplication deletion. */
+/** The SDK producer supplies technical closure. Semantic durable source discharge remains
+ * a separate prerequisite; no SDK receipt can authorize retirement of a live consumer. */
 export const AGENT_IDENTITY_SDK_RETIREMENT = Object.freeze({
   sdkVersion: '5.4.6-preview',
-  futureWriters: 'pending-native-fence',
+  futureWriters: 'native-sdk-fence-requires-source-transfer',
   gap: AGENT_IDENTITY_SDK_FENCE_CONSUMER.gap,
 } as const);
 
@@ -123,7 +123,7 @@ export async function verifyAgentIdentityRetirementStage(
 
 /** Receiver-local preconditions only. Never inspect a foreign source while holding this
  * transaction. Source retirement and SDK writer closure will each need durable native proof;
- * the pinned producer supplies neither, so no owner_ready/retired transition is authorized. */
+ * the durable source transfer is still unavailable, so owner_ready/retired stays closed. */
 export async function agentIdentityRetirementReadiness(
   tx: CommandTransaction,
   artifact: HistoryArtifact,

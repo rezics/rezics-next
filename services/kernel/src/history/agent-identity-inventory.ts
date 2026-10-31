@@ -31,7 +31,7 @@ export const AGENT_IDENTITY_INVENTORY = Object.freeze({
   conversionCoverage: 'native-receipt-outbox/v1',
   maxCopies: 3,
   nativeFutureWriters: 'closed-at-original-commit',
-  sdkFutureWriters: 'pending-native-fence',
+  sdkFutureWriters: 'native-sdk-fence-requires-source-transfer',
 } as const);
 export type AgentIdentityOriginal = Readonly<{
   key: AgentIdentitySourceKey;
@@ -480,9 +480,9 @@ export async function verifyAgentIdentityInventory(
       return pending('agent-identity-sdk-retirement-reference-mismatch');
     const verified = await verifyAgentIdentityRetirementStage(tx, sdkStage);
     if (verified.state === 'pending') return { state: 'pending', native: 'verified', gap: verified.gap };
-    // A portable verified result alone cannot close the inventory: no durable native SDK
-    // fence/receiving locator exists in the pinned SDK. All original copies stay required.
+    // A source verifier alone cannot close the inventory. Independent current SDK native
+    // receipt, physical receiving closure and durable source transfer remain mandatory.
   }
-  // No discovery/absence/status flag can certify the missing actual SDK native fence.
+  // A discovery/absence/status flag cannot establish native SDK or source transfer custody.
   return { state: 'pending', native: 'verified', gap: sdkGap };
 }

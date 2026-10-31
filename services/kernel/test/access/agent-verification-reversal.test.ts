@@ -1724,3 +1724,117 @@ test('Compose genuine SDK permanent fence into identity receiving retirement', a
     await client.close();
   }
 }, 60_000);
+
+test('A copied SDK fence cannot discharge a retained original identity consumer', async () => {
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const {
+    enqueueAgentIdentityReversal,
+    readAgentIdentityRetirementStage,
+    readAgentIdentitySDKReceivingBinding,
+    readAgentIdentitySDKFence,
+    retireAgentIdentitySDKWork,
+  } = await import('../../src/history/agent-identity-work.ts');
+  const { account, token } = await verified();
+  const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
+  expect(released.response.status).toBe(200);
+  const decision = released.body.reversal as AgentVerificationReversal;
+  await finish(decision);
+  const receipt = { kind: 'account-agent.unverify' as const, account: account.id, receipt: decision.receiptId };
+  const source = await loadAccountIdentitySource(pool, receipt);
+  const job = await probeAccountIdentityPublication(pool, receipt);
+  const client = await createWorkClient(databaseUrl, pool);
+  try {
+    await client.registerQueue('workflows', {});
+    expect(await enqueueAgentIdentityReversal(pool, client, decision)).toBe('admitted');
+    const native = (
+      await pool.query('SELECT * FROM core.agent_identity_work WHERE workflow_id=$1', [source.workflowId])
+    ).rows[0];
+    const input = (
+      await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [source.workflowId])
+    ).rows[0].inputs;
+    const erased = (
+      await pool.query(
+        'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
+        [accountRoute, account.id],
+      )
+    ).rows[0];
+    const barrier = { accountId: account.id, accountRoute, version: erased.version, at: erased.at };
+    const binding = (
+      await runCommand(pool, { partition: 0 }, async (tx) =>
+        noEffect(
+          await readAgentIdentitySDKReceivingBinding(
+            tx,
+            {
+              partition: 0,
+              locator: { artifactType: 'durable-work/v1', workId: native.custody_id },
+              accounts: native.accounts,
+            },
+            barrier,
+          ),
+        ),
+      )
+    ).value;
+    if (binding.state !== 'observed') throw new Error('Expected original receiving binding');
+    // A portable receipt with another restore generation is refused before native SDK I/O.
+    // No guessed Semantic terminal locator or public verifier result is introduced.
+    expect(
+      await readAgentIdentitySDKFence(
+        pool,
+        client,
+        {
+          binding: binding.binding,
+          sourceGeneration: '0',
+          fence: { workflowID: source.workflowId, generation: '2', closureID: randomUUID(), closedAt: Date.now() },
+        },
+        { deadline: Date.now() + 10_000 },
+      ),
+    ).toEqual({
+      state: 'pending',
+      gap: 'identity-sdk-retirement-source-fence-changed',
+    });
+    const stage = await readAgentIdentityRetirementStage(
+      pool,
+      {
+        receipt,
+        job,
+        barrier,
+        erasedRole: 'subject',
+        source: {
+          partition: source.partition,
+          epoch: source.epoch,
+          position: source.position,
+          transactionId: source.transactionId,
+        },
+        sourceDigest: source.digest,
+      },
+      { deadline: Date.now() + 10_000 },
+    );
+    if (!stage) throw new Error('Expected native source staging');
+    expect(await retireAgentIdentitySDKWork(pool, client, stage, { deadline: Date.now() + 10_000 })).toEqual({
+      state: 'pending',
+      gap: 'identity-source-consumer-custody-pending',
+    });
+    expect(
+      (
+        await pool.query('SELECT sdk_retirement_receipt FROM core.agent_identity_work WHERE custody_id=$1', [
+          native.custody_id,
+        ])
+      ).rows[0].sdk_retirement_receipt,
+    ).toBeNull();
+    expect(
+      (await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [source.workflowId])).rows[0]
+        .inputs,
+    ).toBe(input);
+    expect((await client.getWorkflow(source.workflowId))?.status).toBe('ENQUEUED');
+    expect(
+      (
+        await pool.query(
+          'SELECT state,owner_ready,absence_verified FROM core.history_work WHERE partition_no=0 AND work_id=$1',
+          [native.custody_id],
+        )
+      ).rows[0],
+    ).toEqual({ state: 'pending', owner_ready: false, absence_verified: false });
+  } finally {
+    await client.close();
+  }
+}, 60_000);

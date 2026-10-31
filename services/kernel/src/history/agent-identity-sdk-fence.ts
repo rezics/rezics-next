@@ -1,4 +1,5 @@
 import canonicalize from 'canonicalize';
+import { existsSync } from 'node:fs';
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
@@ -9,18 +10,16 @@ import { encodeLocator } from './locator.ts';
 import { historyDeadline, lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
 
-/** Consumer binding vocabulary, not an SDK capability declaration. The producer has not
- * supplied a supported native API or durable receipt literal in the installed SDK. */
+/** Published producer vocabulary. Availability is checked on the genuine runtime client;
+ * a source declaration does not prove migration coverage or grant source discharge. */
 export const AGENT_IDENTITY_SDK_FENCE_CONSUMER = Object.freeze({
   binding: 'access.agent-identity.sdk-retirement/v1',
-  nativeAPI: null,
-  nativeReceipt: null,
-  gap: 'identity-sdk-permanent-late-writer-fence-unavailable',
+  nativeAPI: ['retireWorkflow', 'getWorkflowWriterFence'],
+  nativeReceipt: ['workflowID', 'generation', 'closureID', 'closedAt'],
+  gap: 'identity-source-terminal-transfer-unavailable',
 } as const);
 
-/** Exact first-consumer request binding. This is portable metadata, never cleanup proof.
- * A native receipt must bind this whole value plus the verified source generation and
- * durable Semantic terminal/technical-undo transfer locator. Neither is inferred here. */
+/** Exact receiving request binding. This is metadata, never cleanup permission. */
 export type AgentIdentitySDKReceivingBinding = Readonly<{
   kind: typeof AGENT_IDENTITY_SDK_FENCE_CONSUMER.binding;
   custodyId: string;
@@ -107,28 +106,146 @@ export async function readAgentIdentitySDKReceivingBinding(
   };
 }
 
-/** This is the Kernel consumer entry point on the configured, genuine WorkClient.
- * Source verification happens first and releases its checkout before the receiver command.
- * No optional method name, local SDK SQL, status or cancellation substitutes for the missing
- * producer API. Until its literal and durable receipt exist this port cannot retire anything. */
+/** Type-only adapter for the original producer module while producer-first integration is
+ * pending. These are exactly its published types, not another SDK extension or runtime shim.
+ * Once integrated, the original wrapper is loaded and receives this actual WorkClient. */
+type WorkflowWriterFence = Readonly<{
+  workflowID: string;
+  generation: string;
+  closureID: string;
+  closedAt: number;
+}>;
+type SdkRetirementClient = {
+  retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
+  getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
+};
+type SdkRetirementModule = {
+  retireSdkWorkflowWriters(id: string, sdk: SdkRetirementClient): Promise<WorkflowWriterFence>;
+  readSdkWorkflowRetirement(id: string, sdk: SdkRetirementClient): Promise<WorkflowWriterFence | null>;
+};
+
+/** First supported consumer receipt binding for Source and original-row minimization.
+ * `fence` is the UNMODIFIED SDK receipt. The surrounding binding is Kernel metadata;
+ * it supplies no Semantic terminal/undo locator and confers no cleanup authority. */
+export type AgentIdentitySDKRetirementReceipt = Readonly<{
+  binding: AgentIdentitySDKReceivingBinding;
+  sourceGeneration: string;
+  fence: WorkflowWriterFence;
+}>;
+export type AgentIdentitySDKFenceObservation =
+  | Pending
+  | Readonly<{ state: 'observed'; receipt: AgentIdentitySDKRetirementReceipt }>;
+
+function nativeClient(client: WorkClient): client is WorkClient & SdkRetirementClient {
+  return (
+    client instanceof DBOSClient &&
+    client.applicationName === WORK_APPLICATION &&
+    'retireWorkflow' in client &&
+    typeof client.retireWorkflow === 'function' &&
+    'getWorkflowWriterFence' in client &&
+    typeof client.getWorkflowWriterFence === 'function'
+  );
+}
+
+async function nativeModule(): Promise<SdkRetirementModule | null> {
+  // Resolve only the original producer path. Do not recreate its wrappers when absent, and
+  // do not catch a broken installed module as if it were an unsupported SDK.
+  const path = new URL('../work/sdk-retirement-fence.ts', import.meta.url);
+  if (!existsSync(path)) return null;
+  const module: SdkRetirementModule = await import(path.href);
+  return typeof module.retireSdkWorkflowWriters === 'function' && typeof module.readSdkWorkflowRetirement === 'function'
+    ? module
+    : null;
+}
+
+function validFence(fence: WorkflowWriterFence | null, workflowId: string): fence is WorkflowWriterFence {
+  return (
+    fence !== null &&
+    Object.keys(fence).sort().join(',') === 'closedAt,closureID,generation,workflowID' &&
+    fence.workflowID === workflowId &&
+    fence.generation === '2' &&
+    typeof fence.closureID === 'string' &&
+    /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(fence.closureID) &&
+    Number.isSafeInteger(fence.closedAt) &&
+    fence.closedAt > 0
+  );
+}
+
+async function receivingBinding(
+  pool: Pool,
+  binding: AgentIdentitySDKReceivingBinding,
+  context: HistoryReceivingContext,
+): Promise<AgentIdentitySDKReceivingObservation> {
+  historyDeadline(context, 0);
+  return (
+    await runCommand(pool, { partition: 0, deadline: context.deadline }, async (tx) =>
+      noEffect(
+        await readAgentIdentitySDKReceivingBinding(
+          tx,
+          {
+            partition: 0,
+            locator: { artifactType: 'durable-work/v1', workId: binding.custodyId },
+            accounts: binding.source.accounts,
+          },
+          binding.barrier,
+        ),
+      ),
+    )
+  ).value;
+}
+
+/** Independently reread a previously bound receipt through the real SDK. This observation is
+ * also required AFTER supported deletion. No source/receiver checkout spans the SDK call.
+ * Receipt shape/equality proves neither writer guard installation nor source/root authority. */
+export async function readAgentIdentitySDKFence(
+  pool: Pool,
+  client: WorkClient,
+  receipt: AgentIdentitySDKRetirementReceipt,
+  context: HistoryReceivingContext,
+): Promise<AgentIdentitySDKFenceObservation> {
+  const fixed = structuredClone(receipt);
+  if (fixed.sourceGeneration !== fixed.binding.receiver.generation)
+    return pending('identity-sdk-retirement-source-fence-changed');
+  if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
+  const sdk = await nativeModule();
+  if (!sdk) return pending('identity-sdk-native-wrapper-unavailable');
+  const before = await receivingBinding(pool, fixed.binding, context);
+  if (before.state === 'pending') return before;
+  if (!same(before.binding, fixed.binding)) return pending('identity-sdk-retirement-receiving-binding-changed');
+  historyDeadline(context, 0);
+  const fence = await sdk.readSdkWorkflowRetirement(fixed.binding.workflowId, client);
+  if (!validFence(fence, fixed.binding.workflowId) || !same(fence, fixed.fence))
+    return pending('identity-sdk-native-receipt-changed');
+  const after = await receivingBinding(pool, fixed.binding, context);
+  if (after.state === 'pending') return after;
+  if (!same(after.binding, fixed.binding)) return pending('identity-sdk-retirement-receiving-binding-changed');
+  return { state: 'observed', receipt: { ...fixed, fence } };
+}
+
+/** Source verification releases its home before receiver admission or SDK retirement.
+ * The source verifier currently refuses until its owning durable terminal/undo transfer is
+ * delivered. Neither the public boolean, an SDK receipt nor this entry point bypasses it. */
 export async function retireAgentIdentitySDKWork(
   pool: Pool,
   client: WorkClient,
   stage: AgentIdentityRetirementStage,
   context: HistoryReceivingContext,
-): Promise<Pending> {
+): Promise<AgentIdentitySDKFenceObservation> {
   const fixed: AgentIdentityRetirementStage = {
     reference: structuredClone(stage.reference),
     handoff: structuredClone(stage.handoff),
     consumer: stage.consumer,
   };
-  historyDeadline(context, fixed.reference.source.partition);
   const { verifyAgentIdentityRetirementStage } = await import('./agent-identity-retirement.ts');
-  const source = (
-    await runCommand(pool, { partition: fixed.reference.source.partition, deadline: context.deadline }, async (tx) =>
-      noEffect(await verifyAgentIdentityRetirementStage(tx, fixed)),
-    )
-  ).value;
+  const sourceCheck = async () => {
+    historyDeadline(context, fixed.reference.source.partition);
+    return (
+      await runCommand(pool, { partition: fixed.reference.source.partition, deadline: context.deadline }, async (tx) =>
+        noEffect(await verifyAgentIdentityRetirementStage(tx, fixed)),
+      )
+    ).value;
+  };
+  const source = await sourceCheck();
   if (source.state === 'pending') return source;
   historyDeadline(context, 0);
   const receiver = (
@@ -150,11 +267,56 @@ export async function retireAgentIdentitySDKWork(
   if (
     source.custodyId !== receiver.binding.custodyId ||
     source.workflowId !== receiver.binding.workflowId ||
-    !same(receiver.binding.source, fixed.handoff.source)
+    !same(receiver.binding.source, fixed.handoff.source) ||
+    receiver.binding.receiver.generation !== fixed.handoff.generation
   )
     return pending('identity-sdk-retirement-source-fence-changed');
-  if (!(client instanceof DBOSClient) || client.applicationName !== WORK_APPLICATION)
-    return pending('identity-sdk-native-client-unavailable');
+  if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
+  const sdk = await nativeModule();
+  if (!sdk) return pending('identity-sdk-native-wrapper-unavailable');
   historyDeadline(context, 0);
-  return pending(AGENT_IDENTITY_SDK_FENCE_CONSUMER.gap);
+  const fence = await sdk.retireSdkWorkflowWriters(receiver.binding.workflowId, client);
+  if (!validFence(fence, receiver.binding.workflowId)) return pending('identity-sdk-native-receipt-invalid');
+  const receipt = {
+    binding: receiver.binding,
+    sourceGeneration: fixed.handoff.generation,
+    fence,
+  };
+  const observed = await readAgentIdentitySDKFence(pool, client, receipt, context);
+  if (observed.state === 'pending') return observed;
+  // Recheck the source on a released checkout. Persistence below captures only SDK evidence;
+  // it cannot transition history_work or the source's future_writer_state to closed.
+  const currentSource = await sourceCheck();
+  if (currentSource.state === 'pending') return currentSource;
+  if (!same(currentSource, source)) return pending('identity-sdk-retirement-source-fence-changed');
+  return (
+    await runCommand(pool, { partition: 0, deadline: context.deadline }, async (tx) => {
+      const current = await readAgentIdentitySDKReceivingBinding(
+        tx,
+        {
+          partition: 0,
+          locator: { artifactType: 'durable-work/v1', workId: receipt.binding.custodyId },
+          accounts: receipt.binding.source.accounts,
+        },
+        receipt.binding.barrier,
+      );
+      if (current.state === 'pending') return noEffect(current);
+      if (!same(current.binding, receipt.binding))
+        return noEffect(pending('identity-sdk-retirement-receiving-binding-changed'));
+      const row = (
+        await tx.query<{ sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null }>(
+          'SELECT sdk_retirement_receipt FROM core.agent_identity_work WHERE custody_id=$1 FOR UPDATE',
+          [receipt.binding.custodyId],
+        )
+      ).rows[0];
+      if (!row || (row.sdk_retirement_receipt && !same(row.sdk_retirement_receipt, receipt)))
+        return noEffect(pending('identity-sdk-native-receipt-changed'));
+      if (!row.sdk_retirement_receipt)
+        await tx.query('UPDATE core.agent_identity_work SET sdk_retirement_receipt=$2 WHERE custody_id=$1', [
+          receipt.binding.custodyId,
+          receipt,
+        ]);
+      return noEffect(observed);
+    })
+  ).value;
 }

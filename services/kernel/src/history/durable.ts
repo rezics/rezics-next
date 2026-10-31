@@ -6,6 +6,10 @@ import type { WorkClient } from '../work/client.ts';
 import { decodeLocator } from './locator.ts';
 import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
 import { AGENT_IDENTITY_SDK_RETIREMENT } from './agent-identity-retirement.ts';
+import { readAgentIdentitySDKFence, type AgentIdentitySDKRetirementReceipt } from './agent-identity-sdk-fence.ts';
+import canonicalize from 'canonicalize';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
+import { deadlineFor } from '../request/deadline.ts';
 
 /** Historical executions without captured native SDK creation keep this exact unresolved gap.
  * New executions use agent-identity-work's transactional mapping and two-stage source handoff.
@@ -84,6 +88,100 @@ async function inspect(pool: Pool, workId: string): Promise<{ empty: boolean; bo
   });
 }
 
+/** SDK technical closure never retires the consumer. Only already-retired native receiving
+ * custody can enter physical deletion. The durable source-transfer guard currently keeps
+ * that transition closed. All original byte/row budgets and eight physical probes apply. */
+async function minimizeIdentitySDKWork(
+  pool: Pool,
+  client: WorkClient,
+  job: { partition_no: number; account_route: number; account_id: string },
+  custodyId: string,
+  locator: Buffer,
+  barrier: HistoryBarrier,
+): Promise<string | null> {
+  const saved = await withConnection(
+    pool,
+    async (tx) =>
+      (
+        await tx.query<{
+          sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null;
+          state: string;
+          owner_ready: boolean;
+          request: unknown;
+          scope: unknown;
+        }>(
+          `SELECT m.sdk_retirement_receipt,w.state,w.owner_ready,w.request,w.scope
+     FROM core.agent_identity_work m JOIN core.history_work w
+       ON w.partition_no=0 AND w.work_id=m.custody_id AND w.owner='access.agent-identity'
+         AND w.request_digest=m.request_digest WHERE m.custody_id=$1`,
+          [custodyId],
+        )
+      ).rows[0],
+  );
+  if (
+    !saved?.sdk_retirement_receipt ||
+    saved.state !== 'retired' ||
+    !saved.owner_ready ||
+    saved.request !== null ||
+    saved.scope !== null
+  )
+    return AGENT_IDENTITY_SDK_RETIREMENT.gap;
+  const receipt = saved.sdk_retirement_receipt;
+  if (canonicalize(receipt.binding.barrier) !== canonicalize(barrier)) return 'identity-sdk-retirement-barrier-changed';
+  // This path runs under the existing caller deadline, including SDK and physical probes.
+  const context = { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) };
+  if (job.partition_no !== 0) return 'identity-sdk-receiving-home-mismatch';
+  const before = await readAgentIdentitySDKFence(pool, client, receipt, context);
+  if (before.state === 'pending') return before.gap;
+  const physical = await inspect(pool, receipt.binding.workflowId);
+  if (!physical.bounded) return 'work-execution-budget-uncovered';
+  // Supported deletion only. No status check, cancellation or forced deletion of descendants.
+  await client.deleteWorkflows([receipt.binding.workflowId], false);
+  const after = await readAgentIdentitySDKFence(pool, client, receipt, context);
+  if (after.state === 'pending') return after.gap;
+  if (!(await inspect(pool, receipt.binding.workflowId)).empty) return 'work-physical-copy-remains';
+  return withConnection(pool, async (tx) => {
+    await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+    try {
+      if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
+      const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
+      const current = await resolveAgentIdentitySDKWork(tx, custodyId);
+      if (!current || current.gap) {
+        await tx.query('COMMIT');
+        return current?.gap ?? 'identity-sdk-native-binding-unavailable';
+      }
+      const bound = (
+        await tx.query(
+          `SELECT 1 FROM core.agent_identity_work m JOIN core.history_work w
+         ON w.partition_no=0 AND w.work_id=m.custody_id AND w.request_digest=m.request_digest
+         WHERE m.custody_id=$1 AND m.sdk_retirement_receipt=$2 AND w.owner='access.agent-identity'
+           AND w.state='retired' AND w.owner_ready AND w.request IS NULL AND w.scope IS NULL
+         FOR UPDATE OF m,w`,
+          [custodyId, receipt],
+        )
+      ).rows[0];
+      if (!bound) {
+        await tx.query('COMMIT');
+        return 'identity-sdk-retirement-receiving-binding-changed';
+      }
+      await sealHistoryAccount(tx, 0, job.account_route, job.account_id);
+      await tx.query('UPDATE core.history_work SET absence_verified=true WHERE partition_no=0 AND work_id=$1', [
+        custodyId,
+      ]);
+      await tx.query(
+        `UPDATE core.history_locator SET state='minimized',proof_barrier=$3
+         WHERE partition_no=0 AND account_route=$1 AND account_id=$3 AND artifact_type='durable-work/v1' AND locator=$2`,
+        [job.account_route, locator, job.account_id],
+      );
+      await tx.query('COMMIT');
+      return null;
+    } catch (error) {
+      await tx.query('ROLLBACK');
+      throw error;
+    }
+  });
+}
+
 /** Retirement commits before any SDK call. All connections are released between native/SDK
  * phases. An absent status is never enough; a permanent retirement plus all exact probes is. */
 export async function minimizeHistoryWork(
@@ -100,10 +198,7 @@ export async function minimizeHistoryWork(
   const mapping = await withConnection(pool, (tx) => resolveAgentIdentitySDKWork(tx, key.workId));
   const sdkWorkId = mapping?.workflowId ?? key.workId;
   if (mapping?.gap) return mapping.gap;
-  // This SDK has no permanent per-ID native writer fence. Cancellation invalidates a
-  // current executor token but resume/restart can acquire a new one; deletion removes
-  // SDK deduplication. Never cancel a live consumer or certify absence through that race.
-  if (mapping) return AGENT_IDENTITY_SDK_RETIREMENT.gap;
+  if (mapping) return minimizeIdentitySDKWork(pool, client, job, key.workId, locator, barrier);
   const prepared = await withConnection(pool, async (tx): Promise<string | null> => {
     await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
     try {

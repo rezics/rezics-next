@@ -658,51 +658,59 @@ foreign reads while held. Null/false Semantic evidence remains `identity-source-
 public true result alone cannot replace a durable terminal/technical-undo transfer locator. The currently retained
 Semantic receipt grants no retirement, SDK closure, root-copy closure or Source discharge.
 
-The installed `@dbos-inc/dbos-sdk` 5.4.6-preview implementation and the indexed read-only
-`search-worker-outcome-harness/dbos-transact-ts` source were read at `client`, `system_database`, `dbos` and
-`dbos-executor`. Output and step transactions check executing ownership tokens; cancellation clears the current token,
-but does not join already-running JavaScript. Supported resume/restart can acquire a fresh token. Supported deletion
-removes status/deduplication plus the non-FK input/output/operation rows, and does not install a permanent workflow-ID
-tombstone. External enqueue/message writers do not consult native Accounts custody. The unsupported primitive is
-an atomic, permanent per-workflow retirement fence covering enqueue, resume/restart, running step/output/event/history
-and message writers across deletion. No public supported API composes such a fence with the native transaction.
-`AGENT_IDENTITY_SDK_RETIREMENT` therefore reports `identity-sdk-permanent-late-writer-fence-unavailable`, never CLOSED.
-Existing physical family inspection and all its limits remain intact for supported retirement; a cancellation return
-or a post-delete empty probe cannot establish quiescence for mapped identity work.
+The native SDK producer publishes `WorkflowWriterFence` exactly as
+`Readonly<{ workflowID: string; generation: string; closureID: string; closedAt: number }>`, with
+`retireWorkflow(workflowID)` and `getWorkflowWriterFence(workflowID)`. Its original Kernel wrapper is
+`work/sdk-retirement-fence.ts`: `retireSdkWorkflowWriters(actualWorkflowId, sdk)` and
+`readSdkWorkflowRetirement(actualWorkflowId, sdk)`. The consumer passes the configured real `WorkClient`, never the
+wrapper's default static SDK. Until normal producer-first integration provides both that module and the real client's
+methods, the consumer refuses native I/O. Its temporary type-only adapter repeats exactly this published interface;
+it supplies no implementation, alternate method, SDK SQL or new receipt domain.
 
-The receiver owner now validates current native mapping, full exact physical role union, generation and restore fences.
-Its readiness remains pending for that unsupported SDK primitive. Core independently rejects identity work becoming
-ready/retired/absence-verified through a flag, binding replacement or deletion: no durable source transfer and native
-SDK-fence locator exists to authorize that transition. Original enqueue and cached replay check permanent native
-retirement before rebuilding source payload, retaining refusal after SDK deduplication disappears. These are native
-preconditions only; they leave live obligations and bytes intact and do not introduce another runtime or Source owner.
+The SDK producer owns installation and current coverage of its permanent native writer guards, including enqueue,
+resume/restart, old owner-token writers, parent/fork lineage, output/step/event/history, notification and stream writes.
+Its fence survives supported deletion and SDK deduplication loss. The indexed read-only
+`search-worker-outcome-harness/dbos-transact-ts` source at `client`, `system_database`, `dbos` and `dbos-executor`
+remains the baseline reference for supported deletion and ownership-token behavior. The new producer patch was read
+for its fence migration, writer/lineage guards, owner-token serialization and receipt APIs. Source code and a receipt's
+shape alone do not establish current installed coverage. Missing native coverage remains unsupported; a technical
+fence never supplies consumer, Source or Account-root cleanup authority.
 
 `history/agent-identity-sdk-fence.ts` defines the Kernel consumer entry point
-`retireAgentIdentitySDKWork(pool, client, stage, context)` on the real configured `WorkClient`. It first runs
-`verifyAgentIdentityRetirementStage` in the original source home and releases that command before entering the SDK
-receiving home. Retained or missing Semantic evidence stops the attempt before SDK retirement. Even a future true
-Semantic verifier result still stops in the source verifier until Semantic supplies its durable terminal/technical-undo
-transfer literal and body; the public boolean cannot stand in for that transfer.
+`retireAgentIdentitySDKWork(pool, client, stage, context)`. It first verifies the original source home and releases
+that command before entering the receiver or SDK. Retained or missing Semantic evidence stops before SDK retirement.
+Even a public true verifier result stops until Semantic supplies its durable terminal/technical-undo transfer literal
+and body. This prerequisite remains `identity-source-terminal-transfer-unavailable`; it is not an SDK API gap.
 
-The first consumer's receiving binding is `access.agent-identity.sdk-retirement/v1`:
+The receiving binding is `access.agent-identity.sdk-retirement/v1`:
 `{ kind, custodyId, workflowId, requestDigest, source, receiver: { partition: 0, epoch, generation, writerVersion: 1 },
-barrier }`. Here `source` is the entire original `AgentIdentityWorkSource`, including its source key, native tuple,
-digest, release and complete account-role union. `readAgentIdentitySDKReceivingBinding(tx, artifact, barrier)` reads
-this metadata under the receiving home's current mapping, history-work, restore/generation, role and barrier locks.
-Its `observed` result is deliberately not a receipt or cleanup capability. It rejects another home, a foreign UUID,
-changed roles or a changed barrier independently of source staging. The receiving binding must ultimately be bound
-to the independently verified source generation and Semantic's durable transfer, and to the native SDK receipt and
-current native writer/restore generation. The native producer owns those receipt coordinates and its supported API;
-the consumer does not invent their names, tables or columns.
+barrier }`. `source` is the entire original `AgentIdentityWorkSource`, including its source key, tuple, digest, release
+and complete role union. `readAgentIdentitySDKReceivingBinding(tx, artifact, barrier)` locks current mapping,
+history-work, restore/generation, roles and barrier in the receiving home. It independently rejects another home,
+foreign UUID, changed roles and a changed barrier. Its `observed` result grants no cleanup authority.
 
-The installed SDK's `DBOSClient` declaration and indexed reference implementation expose no permanent-retirement API
-or durable fence receipt. `AGENT_IDENTITY_SDK_FENCE_CONSUMER.nativeAPI` and `.nativeReceipt` therefore remain explicitly
-null. No optional-method cast or local substitute is installed. The existing Core SQL guards remain closed: no
-receiving retirement, `future_writer_state` transition, physical deletion or inventory verification is authorized by
-this request binding. The added “Compose genuine SDK permanent fence into identity receiving retirement” native case
-covers exact receiving binding, independent barrier/role/home checks and retained-source refusal on the real client;
-it cannot prove a positive native fence until the producer supplies that interface. Its execution remains deferred
-to integration with the existing acceptance suite.
+The exact first consumer receipt binding for Source and original-row minimization is
+`AgentIdentitySDKRetirementReceipt = { binding, sourceGeneration, fence }`. `fence` is the unmodified original SDK
+receipt, with generation exactly `"2"`. After genuine source discharge and independent receiver admission, the consumer
+calls the original retirement wrapper, rereads the native receipt and requires identical workflow ID, generation,
+closure ID and closure time. It rechecks source and receiver on released checkouts before capturing this immutable
+metadata in `core.agent_identity_work.sdk_retirement_receipt`. The capture cannot settle `history_work` or
+`agent_identity_sdk_obligation.future_writer_state`, minimize source bytes, or replace Semantic's missing durable
+transfer locator. Core's existing retirement and obligation guards remain closed until that producer is delivered.
+
+`readAgentIdentitySDKFence` independently rereads the actual SDK through the original wrapper and rechecks the current
+receiving binding before and after that call. It returns only an observation. Caller fields, cached receipt shape,
+workflow status, a public boolean and affected-row counts cannot establish closure. The physical minimizer accepts
+only already-retired, owner-ready native custody with that exact bound receipt, uses supported deletion without live
+cancellation, probes all original physical tables within their unchanged limits, and requires the same native receipt
+after deletion. It never enters this path for a live obligation. Missing source transfer, native coverage or physical
+closure keeps both inventory APIs pending, even when independent receipt/outbox copies have closed.
+
+Original enqueue and cached replay check the permanent receiving custody before rebuilding source payload. Captured
+native retirement also refuses late delivery while cleanup remains pending. The SDK's own permanent fence guards
+external enqueue/restart/redrive after deduplication loss. The original native acceptance assertions remain intact;
+execution is deferred until integration. Source registration and local typing establish neither native completion
+nor Source/main/participant completion.
 
 The existing DBOS workflows redrive source/admission/publication with durable sleep outside steps, preserving their
 original ids and receipts through retryable failures. Page writes, approval completion, reversal page removal and
@@ -3499,7 +3507,7 @@ role and event-consumer enrollment hooks take that same lock and advance the gen
 recording/mapping owner supplies the separate future-writer closure. Until then verification may return
 `native: 'verified'` but remains pending. Missing old receiving creation still reports
 `agent-identity-sdk-recording-port-unavailable`; released inventory reads distinguish mapped native binding/restore/
-creation gaps and the unsupported permanent SDK fence. The optional retirement stage passed to
+creation gaps and the still-missing durable source terminal transfer. The optional retirement stage passed to
 `verifyAgentIdentityInventory` is checked only after every original native receiving and physical proof, in the SAME
 source transaction; it cannot substitute for any copy or upgrade retained consumer evidence to a CLOSED inventory.
 Native physical minimizers may act on a sealed native association subject to their independent owner readiness;
