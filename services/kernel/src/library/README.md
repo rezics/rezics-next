@@ -129,9 +129,18 @@ Current implementation evidence is narrower than the capability:
   owner-fact, account, Source and scoped identity checks include excluded and nonmatching originals. Missing groups,
   full bounded windows and changed evidence remain unproved; no successful empty closure is returned.
   Private saved collections use the existing whole private raw drivers and custody capture rather than rejecting
-  their null built-in kind. This does not supply `requireCollectionRuleExecution`'s missing saved-rule admission body,
-  a private working Source for publication replay after public activation, or complete independent private-support
-  originals for a state-only Source. Those cases remain unavailable. The Semantic scope/public-capture
+  their null built-in kind. State Sources now prepare all independent native entry/label/session/copy ranges in the
+  existing canonical generation, through `owner-index.ts:readOwnerNativeFactPage`. Its label range uses the actual
+  assignment primary key, including retained and unidentified originals; no assignment witness is manufactured.
+  The generation's committed `originalCoverage: 'owner-facts-v1'` distinguishes this population from older entry-only
+  generations. Closure consumes the same bounded canonical group continuation, then current full-key private facts;
+  the existing matcher chooses native state sequence before testing accepted profile/set/state. Unidentified live
+  labels, incomplete groups, changed owner/source/scoped fences and denied originals remain unproved under NOT.
+  The original per-call raw/physical allowances and retained preparation authority are unchanged. No request-time
+  owner/alias scan, public/Everything permission or new positive receipt supplies coverage. The native cases in
+  `test/library/owner-filter-native-closure.test.ts` await controller-owned execution; typing is not journey proof.
+  This does not supply `requireCollectionRuleExecution`'s missing saved-rule admission body or a private working
+  Source for publication replay after public activation. Those cases remain unavailable. The Semantic scope/public-capture
   modules retain their own producer qualifications. Complete native population,
   current disclosure, retained preparation/default worker integration and physical bounds still require the
   real producer bodies and combined native verification; source typing does not certify those outcomes.
