@@ -5,6 +5,7 @@ import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity
 import { type IndexAction, type SubjectDocument } from './document.ts';
 import { type OpenSearch } from './opensearch.ts';
 import { type SubjectListingSource, type SubjectSource } from './source.ts';
+import { type DiscoveryProjection, type DiscoveryRepairEffect } from './account-discovery.ts';
 /** Durable native evidence retained by the existing writer, never supplied by Source callers. */
 export type SearchRepairWriterReceipt = Readonly<{
     locator: string;
@@ -19,6 +20,25 @@ export type SearchRepairWriterReceipt = Readonly<{
     completion: IdentityNativeReceipt;
     native: unknown;
 }>;
+/** The mixed writer retains its actual tagged actions and both allocation identities. */
+export type DiscoveryRepairWriterReceipt = Readonly<{
+    writer: 'discovery';
+    locator: string;
+    subject: string;
+    partition: number;
+    epoch: number;
+    incarnation: string;
+    allocation: string;
+    writeAlias: string;
+    consumer: string;
+    sourcePosition: bigint;
+    effects: readonly DiscoveryRepairEffect[];
+    enrollment: IdentityNativeReceipt;
+    completion: IdentityNativeReceipt;
+}>;
+export type PublicFilterRepairWriterReceipt = SearchRepairWriterReceipt | DiscoveryRepairWriterReceipt;
+export declare function isDiscoveryRepairWriterReceipt(receipt: PublicFilterRepairWriterReceipt): receipt is DiscoveryRepairWriterReceipt;
+export declare const repairWriterPosition: (receipt: PublicFilterRepairWriterReceipt) => bigint;
 export declare const decodeSearchRepairWriterReceipt: (value: string) => SearchRepairWriterReceipt;
 /** Search-visible keyed readback; absence alone never recovers an uncertain delete. */
 export declare function readSearchRepairWinner(search: OpenSearch, index: string, action: IndexAction): Promise<unknown>;
@@ -26,6 +46,25 @@ export declare function readSearchRepairWinner(search: OpenSearch, index: string
 export declare function validateSearchRepairWriterEvidence(index: string, receipt: SearchRepairWriterReceipt): void;
 /** Recheck retained evidence and lock the actual existing writer through the reader boundary. */
 export declare function verifySearchRepairWriterReceipt(db: Pick<Pool, 'query'>, search: OpenSearch, index: string, receipt: SearchRepairWriterReceipt): Promise<void>;
+/** Dispatch by original physical family; no mixed receipt is accepted by the Subject verifier. */
+export declare function validatePublicFilterRepairWriterEvidence(index: string, receipt: PublicFilterRepairWriterReceipt): void;
+export declare function readPublicFilterRepairPhysicalTarget(db: Pick<Pool, 'query'>, search: OpenSearch, index: string): Promise<Readonly<{
+    incarnation: string;
+    writeAlias: string;
+}>>;
+export declare function verifyPublicFilterRepairWriterReceipt(db: Pick<Pool, 'query'>, search: OpenSearch, index: string, receipt: PublicFilterRepairWriterReceipt): Promise<void>;
+/** Uses the existing native writer enrollment, dispatch and settlement rows, with the actual
+ * mixed projection as the only body/version producer. An interrupted attempt replays its retained actions;
+ * no copy flag, current ACK or engine conflict is a repair receipt.
+ */
+export declare function createDiscoveryRepairWriter(options: {
+    pool: Pool;
+    search: OpenSearch;
+    consumer: string;
+    projection: DiscoveryProjection;
+}): {
+    repair(subject: string, obligation: bigint, locator: string, context: PublicFilterConsumerContext): Promise<DiscoveryRepairWriterReceipt>;
+};
 export declare const SEARCH_IDENTITY_WRITER_CHUNK = 100;
 /** A locator only. All adoption reads retained native rows under the current home owner. */
 export type SearchWriterBarrierLocator = Readonly<{

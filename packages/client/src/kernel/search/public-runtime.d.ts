@@ -2,11 +2,12 @@ import type { RetainedSearchContinuation } from './cursor.ts';
 import type { SearchHit } from './query.ts';
 import { type RetainedUsefulPage } from './useful-page.ts';
 import type { Pool } from 'pg';
+import type { DiscoveryRegistry } from './discovery.ts';
 import { type SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import { type PublicSuggestionOperations } from './public-suggestion.ts';
-import type { PublicFilterConsumerCapture, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterConsumerJob, PublicFilterConsumerOperations, PublicFilterQueriedObservation, PublicSuggestionCaptureInput } from './public-filter-consumer-contract.ts';
+import type { PublicFilterConsumerCapture, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterConsumerJob, PublicFilterConsumerOperations, PublicDiscoveryConsumerOperations, PublicFilterQueriedObservation, PublicSuggestionCaptureInput } from './public-filter-consumer-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
 export type DefaultPublicFilterRuntimeConfig = Readonly<{
     pool: Pool;
@@ -21,6 +22,8 @@ export type BoundPublicRequest = Readonly<{
     capture: PublicFilterConsumerCapture;
 }>;
 export type DefaultPublicFilterRuntime = Readonly<{
+    /** Pins the active mixed physical allocation; retained roots must still address that allocation. */
+    openDiscovery(registry: DiscoveryRegistry, digest: string, context: PublicFilterConsumerContext, queried?: PublicFilterQueriedObservation): Promise<PublicDiscoveryConsumerOperations>;
     publication: SearchGenerationPublication;
     preparePublication(generation: number, context: PublicFilterConsumerContext): ReturnType<SearchGenerationPublication['prepare']>;
     bindRequest(request: Readonly<{

@@ -1023,6 +1023,25 @@ declare const productEventTypes: {
         transactionId: Type.TString;
         at: Type.TString;
     }>;
+    readonly 'com.rezics.community.member-locator.projected.v1': Type.TObject<{
+        accountId: Type.TString;
+        realmId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.member-locator.settled.v1': Type.TObject<{
+        accountId: Type.TString;
+        realmId: Type.TString;
+        transactionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.memberships-erased.v1': Type.TObject<{
+        accountId: Type.TString;
+        realmId: Type.TString;
+        at: Type.TString;
+        transactionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.member-locators.erased.v1': Type.TObject<{
+        accountId: Type.TString;
+        realmIds: Type.TArray<Type.TString>;
+    }>;
     readonly 'com.rezics.community.realm.board-scheme.v1': Type.TObject<{
         realmId: Type.TString;
         revisionId: Type.TString;

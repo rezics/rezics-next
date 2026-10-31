@@ -53,8 +53,8 @@ Mixed repair dispatch uses `createDiscoveryProjection` for both native owner fam
 removal. Its receipt is distinct from a Subject writer receipt: custody rechecks the actual allocation incarnation,
 engine UUID, tagged actions, exact-version native responses, refresh-visible winners and retained native
 writer enrollment/settlement. It uses the existing writer custody rows and Source repair-step/receipt verifiers;
-`discovery_copy.settled` never supplies repair closure. Interrupted dispatch replays through the same mixed writer
-with current own-home Source versions. The keyed copy window is at most 100; no population or kind census supplies
+`discovery_copy.settled` never supplies repair closure. Native own-home Source actions are retained before dispatch;
+interrupted dispatch replays those exact actions through the same mixed writer. The keyed copy window is at most 100; no population or kind census supplies
 repair targets.
 
 Native Source projection and reduction proof remains a prerequisite. The current `publicFilterSource` export in
@@ -63,12 +63,6 @@ readiness from its projection-page and reduction readers. Default wiring preserv
 `index_not_ready` with `retry-after`; current returned-row hydration cannot certify the missing population proof.
 The focused default-server regression requires a positive native response and is deferred in minimal verification
 mode. Workspace typing does not establish native readiness.
-
-Mixed native repair also remains unfinished: `public-filter-consumer.ts` currently dispatches retained repair
-items through the Subject-only `createSearchWriterGuard`, and custody verifies Subject writer receipts.
-`createDiscoveryProjection` is the existing mixed writer, but its copy settlement is not a native repair receipt.
-The default durable delivery now resolves mixed jobs and their registry; it does not turn that writer's local
-settlement into Source or custody proof. A positive default discovery response is not established by this wiring.
 
 Run `bun run search rebuild` from this workspace to build the next subject generation and switch the alias to it.
 Set `DATABASE_URL`, `OPENSEARCH_URL`, and the deployment's `KERNEL_ROUTE_KEY` (canonical unpadded base64url encoding

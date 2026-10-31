@@ -303,6 +303,7 @@ export async function readDiscoveryWriterPhysicalTarget(pool: Pick<Pool, 'query'
 export type DiscoveryRepairEffect = Readonly<{
   key: DiscoveryKey;
   action: DiscoveryIndexAction;
+  winner: unknown;
   evidence: Readonly<{ kind: 'bulk'; bulk: unknown }> | Readonly<{ kind: 'recovered'; refresh: unknown }>;
 }>;
 
@@ -319,11 +320,16 @@ export async function readDiscoveryRepairWinner(search: OpenSearch, index: strin
     },
     { query: { allow_partial_search_results: false } },
   );
-  assertCompleteSearch(response.body);
-  const body = response.body;
+  if (response.status !== 200) throw new Error('Native discovery repair winner is unavailable');
+  validateDiscoveryRepairWinner(index, action, response.body);
+  return response.body;
+}
+
+/** The original search-visible winner remains part of the retained native repair provenance. */
+export function validateDiscoveryRepairWinner(index: string, action: DiscoveryIndexAction, body: unknown) {
+  assertCompleteSearch(body);
   const hits = record(body) && record(body.hits) ? body.hits.hits : undefined;
   if (
-    response.status !== 200 ||
     !Array.isArray(hits) ||
     (action.op === 'delete'
       ? hits.length !== 0
@@ -335,7 +341,6 @@ export async function readDiscoveryRepairWinner(search: OpenSearch, index: strin
         !isDeepStrictEqual(hits[0]._source, action.document))
   )
     throw new Error('Native discovery repair winner changed or is not visible');
-  return response.body;
 }
 
 /** Session custody spans the external effect, but no database transaction/row lock does. */
@@ -435,158 +440,156 @@ export function createDiscoveryProjection(options: {
   const accounts = registry.get('account');
   if (accounts.owner !== 'accounts') throw new TypeError('Account source is required');
   const subject = registry.entries.find((entry) => entry.owner === 'semantic');
-  async function projectNative(
+  async function prepareChunk(
     partition: number,
-    input: readonly DiscoveryKey[],
-    atLeast = 0n,
-    repair = false,
-    capture = false,
-  ): Promise<DiscoveryRepairEffect[]> {
+    owner: DiscoveryKey['owner'],
+    chunk: readonly DiscoveryKey[],
+    atLeast: bigint,
+  ): Promise<DiscoveryIndexAction[]> {
+    const ids = [...new Set(chunk.map(({ id }) => id))];
+    let actions: DiscoveryIndexAction[];
+    if (owner === 'accounts') {
+      const snapshot = validateAccountSnapshot(await accounts.source.read(partition, ids), partition, ids, atLeast);
+      const bindings = await readAccountDiscoveryBindings(pool, partition, ids);
+      for (const row of snapshot.accounts) {
+        const binding = bindings.get(row.id);
+        if (!binding || binding.revision !== row.revision || (row.handle !== null && binding.claim === null))
+          throw new Error('Account discovery revision moved; retry');
+        if (binding.claim && binding.consumedClaimRevision < binding.claim.revision) {
+          await redriveAccountDiscovery({ pool }, partitionOf(binding.claim.route));
+          throw new Error('Account claim consumption advanced; resnapshot before projection');
+        }
+      }
+      actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk, undefined, 'mixed-public-v1');
+      for (const key of chunk)
+        if (!(await locateAccount(pool, target, key))) {
+          await eraseDiscoveryAccount(pool, search, registry, key.id);
+          actions = actions.filter((action) => action.id !== discoveryDocumentId(registry, key));
+        }
+    } else {
+      if (!subject || subject.owner !== 'semantic') throw new Error('Subject source is required');
+      const snapshot = await subject.source.read(partition, ids);
+      validateObservation(snapshot, partition, ids, atLeast, true);
+      const counts = await listing.read(
+        partition,
+        snapshot.subjects.filter((row) => row.visibility === 'visible' && row.redirect === null).map(({ id }) => id),
+      );
+      const kinds = new Map(chunk.map((key) => [key.id, key.kind]));
+      const keyedSnapshot = {
+        ...snapshot,
+        subjects: snapshot.subjects.filter((row) => kinds.get(row.id) === row.type),
+      };
+      actions = discoveryDocumentActions(
+        registry,
+        { owner, snapshot: keyedSnapshot },
+        chunk,
+        counts,
+        'mixed-public-v1',
+      );
+    }
+    // Both owner families use the same native ICU normalizer and normalized512/missing-last rule.
+    return prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);
+  }
+  async function applyActions(actions: readonly DiscoveryIndexAction[], repair: boolean, capture: boolean) {
     const effects: DiscoveryRepairEffect[] = [];
+    await withDiscoveryTarget(pool, search, target, async (client, index) => {
+      const pending: DiscoveryIndexAction[] = [];
+      for (const action of actions) {
+        const key = parseDiscoveryDocumentId(registry, action.id),
+          values = [key.route, key.id, target.prefix, target.generation, key.kind];
+        // Erasure can commit after source/locator reads; session custody excludes its physical purge.
+        if (key.owner === 'accounts' && (await readErasureStatus(client, key.id)))
+          throw new Error('Account erasure requires physical cleanup');
+        const {
+          rows: [old],
+        } = await client.query<{ position: string; revision: string; settled: boolean; deleted: boolean }>(
+          'SELECT position::text,revision::text,settled,deleted FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',
+          values,
+        );
+        const revision =
+          action.op === 'index' && action.document.owner === 'accounts' ? BigInt(action.document.revision) : 0n;
+        if (old && revision > 0n && BigInt(old.revision) > revision)
+          throw new Error('Account native revision rewound; new incarnation required');
+        if (old?.deleted && BigInt(old.position) === action.version && action.op === 'index')
+          throw new Error('Discovery native position cannot resurrect its keyed deletion');
+        if (
+          old &&
+          (BigInt(old.position) > action.version || (BigInt(old.position) === action.version && old.settled && !repair))
+        )
+          if (capture) throw new Error('Discovery repair Source version is behind its permanent copy high water');
+          else continue;
+        await client.query(
+          `INSERT INTO search.discovery_copy(route,source_id,prefix,generation,kind,position,revision,deleted,settled)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false) ON CONFLICT(route,source_id,prefix,generation,kind)
+          DO UPDATE SET position=EXCLUDED.position,revision=GREATEST(search.discovery_copy.revision,EXCLUDED.revision),deleted=EXCLUDED.deleted,settled=false`,
+          [...values, action.version.toString(), revision.toString(), action.op === 'delete'],
+        );
+        pending.push(action);
+      }
+      let bulk: unknown;
+      const transport: OpenSearch = capture
+        ? {
+            ...search,
+            async bulkRaw<T>(body: string, options?: Parameters<NonNullable<OpenSearch['bulkRaw']>>[1]) {
+              if (!search.bulkRaw) throw new TypeError('Discovery requires the native exact-version transport');
+              const response = await search.bulkRaw<T>(body, options);
+              bulk = response;
+              return response;
+            },
+          }
+        : search;
+      await writeDiscoveryActions(transport, registry, index, pending);
+      if (capture) {
+        if (!record(bulk) || !Array.isArray(bulk.items) || bulk.items.length !== pending.length)
+          throw new Error('Discovery repair has no exact native response');
+        for (const [offset, action] of pending.entries()) {
+          const item = bulk.items[offset];
+          const result = record(item) ? item[action.op] : undefined;
+          let evidence: DiscoveryRepairEffect['evidence'];
+          if (record(result) && result.status === 409 && action.op === 'index') {
+            // The original mixed writer verified the identical winner. Retain fresh visibility
+            // and recheck the whole keyed body; the conflict itself never certifies settlement.
+            const refresh = await search.request('POST', `/${index}/_refresh`);
+            validateRefreshResponse(refresh.status, refresh.body);
+            evidence = { kind: 'recovered', refresh: refresh.body };
+          } else {
+            const response = { errors: false, items: [item] };
+            validateDiscoveryWriteReceipt(response, index, [action]);
+            evidence = { kind: 'bulk', bulk: response };
+          }
+          const winner = await readDiscoveryRepairWinner(search, index, action);
+          effects.push({ key: parseDiscoveryDocumentId(registry, action.id), action, evidence, winner });
+        }
+      }
+      for (const action of pending) {
+        const key = parseDiscoveryDocumentId(registry, action.id);
+        await client.query(
+          `UPDATE search.discovery_copy SET settled=true WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5 AND position=$6`,
+          [key.route, key.id, target.prefix, target.generation, key.kind, action.version.toString()],
+        );
+      }
+    });
+    return effects;
+  }
+  async function project(partition: number, input: readonly DiscoveryKey[], atLeast = 0n, repair = false) {
     const unique = new Map(
-      input.map((key) => {
-        const checked = registry.key(key);
-        return [discoveryDocumentId(registry, checked), checked];
+      input.map((input) => {
+        const key = registry.key(input);
+        if (discoveryPartition(key.id) !== partition) throw new RangeError('Foreign discovery key');
+        return [discoveryDocumentId(registry, key), key];
       }),
     );
     const keys = [...unique.values()];
-    if (keys.some((key) => discoveryPartition(key.id) !== partition)) throw new RangeError('Foreign discovery key');
     for (const owner of ['semantic', 'accounts'] as const) {
       const owned = keys.filter((key) => key.owner === owner);
       const limit = owner === 'accounts' ? 100 : 256;
       for (let offset = 0; offset < owned.length; offset += limit) {
-        const chunk = owned.slice(offset, offset + limit),
-          ids = chunk.map(({ id }) => id);
-        let actions: DiscoveryIndexAction[];
-        if (owner === 'accounts') {
-          const snapshot = validateAccountSnapshot(await accounts.source.read(partition, ids), partition, ids, atLeast);
-          const bindings = await readAccountDiscoveryBindings(pool, partition, ids);
-          for (const row of snapshot.accounts) {
-            const binding = bindings.get(row.id);
-            if (!binding || binding.revision !== row.revision || (row.handle !== null && binding.claim === null))
-              throw new Error('Account discovery revision moved; retry');
-            if (binding.claim && binding.consumedClaimRevision < binding.claim.revision) {
-              await redriveAccountDiscovery({ pool }, partitionOf(binding.claim.route));
-              throw new Error('Account claim consumption advanced; resnapshot before projection');
-            }
-          }
-          actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk, undefined, 'mixed-public-v1');
-          for (const key of chunk)
-            if (!(await locateAccount(pool, target, key))) {
-              await eraseDiscoveryAccount(pool, search, registry, key.id);
-              actions = actions.filter((action) => action.id !== discoveryDocumentId(registry, key));
-            }
-        } else {
-          if (!subject || subject.owner !== 'semantic') throw new Error('Subject source is required');
-          const snapshot = await subject.source.read(partition, ids);
-          validateObservation(snapshot, partition, ids, atLeast, true);
-          const counts = await listing.read(
-            partition,
-            snapshot.subjects
-              .filter((row) => row.visibility === 'visible' && row.redirect === null)
-              .map(({ id }) => id),
-          );
-          const kinds = new Map(chunk.map((key) => [key.id, key.kind]));
-          const keyedSnapshot = {
-            ...snapshot,
-            subjects: snapshot.subjects.filter((row) => kinds.get(row.id) === row.type),
-          };
-          actions = discoveryDocumentActions(
-            registry,
-            { owner, snapshot: keyedSnapshot },
-            chunk,
-            counts,
-            'mixed-public-v1',
-          );
-        }
-        // Both owner families use the same native ICU normalizer and normalized512/missing-last rule.
-        actions = await prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);
-        await withDiscoveryTarget(pool, search, target, async (client, index) => {
-          const pending: DiscoveryIndexAction[] = [];
-          for (const action of actions) {
-            const key = parseDiscoveryDocumentId(registry, action.id),
-              values = [key.route, key.id, target.prefix, target.generation, key.kind];
-            // Erasure can commit after source/locator reads; session custody excludes its physical purge.
-            if (key.owner === 'accounts' && (await readErasureStatus(client, key.id)))
-              throw new Error('Account erasure requires physical cleanup');
-            const {
-              rows: [old],
-            } = await client.query<{ position: string; revision: string; settled: boolean; deleted: boolean }>(
-              'SELECT position::text,revision::text,settled,deleted FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',
-              values,
-            );
-            const revision =
-              action.op === 'index' && action.document.owner === 'accounts' ? BigInt(action.document.revision) : 0n;
-            if (old && revision > 0n && BigInt(old.revision) > revision)
-              throw new Error('Account native revision rewound; new incarnation required');
-            if (old?.deleted && BigInt(old.position) === action.version && action.op === 'index')
-              throw new Error('Discovery native position cannot resurrect its keyed deletion');
-            if (
-              old &&
-              (BigInt(old.position) > action.version ||
-                (BigInt(old.position) === action.version && old.settled && !repair))
-            )
-              if (capture) throw new Error('Discovery repair Source version is behind its permanent copy high water');
-              else continue;
-            await client.query(
-              `INSERT INTO search.discovery_copy(route,source_id,prefix,generation,kind,position,revision,deleted,settled)
-              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false) ON CONFLICT(route,source_id,prefix,generation,kind)
-              DO UPDATE SET position=EXCLUDED.position,revision=GREATEST(search.discovery_copy.revision,EXCLUDED.revision),deleted=EXCLUDED.deleted,settled=false`,
-              [...values, action.version.toString(), revision.toString(), action.op === 'delete'],
-            );
-            pending.push(action);
-          }
-          let bulk: unknown;
-          const transport: OpenSearch = capture
-            ? {
-                ...search,
-                async bulkRaw<T>(body: string, options?: Parameters<NonNullable<OpenSearch['bulkRaw']>>[1]) {
-                  if (!search.bulkRaw) throw new TypeError('Discovery requires the native exact-version transport');
-                  const response = await search.bulkRaw<T>(body, options);
-                  bulk = response;
-                  return response;
-                },
-              }
-            : search;
-          await writeDiscoveryActions(transport, registry, index, pending);
-          if (capture) {
-            if (!record(bulk) || !Array.isArray(bulk.items) || bulk.items.length !== pending.length)
-              throw new Error('Discovery repair has no exact native response');
-            for (const [offset, action] of pending.entries()) {
-              const item = bulk.items[offset];
-              const result = record(item) ? item[action.op] : undefined;
-              let evidence: DiscoveryRepairEffect['evidence'];
-              if (record(result) && result.status === 409 && action.op === 'index') {
-                // The original mixed writer verified the identical winner. Retain fresh visibility
-                // and recheck the whole keyed body; the conflict itself never certifies settlement.
-                const refresh = await search.request('POST', `/${index}/_refresh`);
-                validateRefreshResponse(refresh.status, refresh.body);
-                evidence = { kind: 'recovered', refresh: refresh.body };
-              } else {
-                const response = { errors: false, items: [item] };
-                validateDiscoveryWriteReceipt(response, index, [action]);
-                evidence = { kind: 'bulk', bulk: response };
-              }
-              await readDiscoveryRepairWinner(search, index, action);
-              effects.push({ key: parseDiscoveryDocumentId(registry, action.id), action, evidence });
-            }
-          }
-          for (const action of pending) {
-            const key = parseDiscoveryDocumentId(registry, action.id);
-            await client.query(
-              `UPDATE search.discovery_copy SET settled=true WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5 AND position=$6`,
-              [key.route, key.id, target.prefix, target.generation, key.kind, action.version.toString()],
-            );
-          }
-        });
+        const actions = await prepareChunk(partition, owner, owned.slice(offset, offset + limit), atLeast);
+        await applyActions(actions, repair, false);
       }
     }
-    return effects;
   }
-  async function project(partition: number, input: readonly DiscoveryKey[], atLeast = 0n, repair = false) {
-    await projectNative(partition, input, atLeast, repair);
-  }
-  async function repairActions(id: string, obligation: bigint): Promise<DiscoveryRepairEffect[]> {
+  async function prepareRepair(id: string, obligation: bigint): Promise<DiscoveryIndexAction[]> {
     const route = routeOf(id);
     if (route === null) throw new TypeError('Invalid discovery repair anchor');
     const partition = discoveryPartition(id);
@@ -618,9 +621,19 @@ export function createDiscoveryProjection(options: {
     if (snapshot.accounts.length)
       selected.set('account', registry.key({ owner: 'accounts', kind: 'account', route, id }));
     if (!selected.size) throw new Error('Native repair anchor has no owner key or retained physical copy');
-    return projectNative(partition, [...selected.values()], obligation, true, true);
+    if (selected.size > 100) throw new Error('Discovery repair exceeds its bounded keyed action window');
+    const actions: DiscoveryIndexAction[] = [];
+    // A native row has one current kind. Each retained old kind is a separate keyed delete,
+    // never an invented second native row or a registry-wide kind traversal.
+    for (const key of selected.values()) actions.push(...(await prepareChunk(partition, key.owner, [key], obligation)));
+    if (actions.length !== selected.size) throw new Error('Native repair could not retain every keyed action');
+    return actions;
   }
-  return { project, repairActions, registry, target, listing };
+  async function applyRepair(actions: readonly DiscoveryIndexAction[]) {
+    if (actions.length < 1 || actions.length > 100) throw new RangeError('Invalid retained mixed repair window');
+    return applyActions(actions, true, true);
+  }
+  return { project, prepareRepair, applyRepair, registry, target, listing };
 }
 
 /** Terminal work is located from Search's own copy inventory, never inferred from a missing source. */

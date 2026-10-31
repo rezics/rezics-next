@@ -33,9 +33,11 @@ import { writeIndexActions, validateRefreshResponse, validateIndexWriteReceipt }
 import {
   readDiscoveryWriterPhysicalTarget,
   readDiscoveryRepairWinner,
+  validateDiscoveryRepairWinner,
   type DiscoveryProjection,
   type DiscoveryRepairEffect,
 } from './account-discovery.ts';
+import type { DiscoveryIndexAction } from './discovery.ts';
 import { discoveryIndexName } from './indices.ts';
 import { validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { assertCompleteSearch } from './complete-search.ts';
@@ -223,7 +225,7 @@ async function verifyRetainedRepairWriter(
     fail();
   const writer = (
     await db.query(
-      `SELECT writer_token,dispatch_state,closed_job,repair_locator,repair_receipt,
+      `SELECT writer_token,dispatch_state,closed_job,repair_locator,repair_receipt,repair_action,
     owner_epoch,incarnation,source_position,visible_position,visible_transaction_id,
     settled_position,settled_transaction_id,writer_transaction_id,writer_position
     FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 FOR SHARE`,
@@ -240,6 +242,12 @@ async function verifyRetainedRepairWriter(
     writer.repair_locator !== receipt.locator ||
     !writer.repair_receipt ||
     !isDeepStrictEqual(JSON.parse(writer.repair_receipt, repairReviver), receipt) ||
+    (isDiscoveryRepairWriterReceipt(receipt) &&
+      (!writer.repair_action ||
+        !isDeepStrictEqual(
+          JSON.parse(writer.repair_action, repairReviver),
+          receipt.effects.map(({ action }) => action),
+        ))) ||
     BigInt(writer.source_position ?? -1) !== repairWriterPosition(receipt) ||
     writer.writer_transaction_id !== receipt.enrollment.transactionId ||
     BigInt(writer.writer_position ?? -1) !== receipt.enrollment.position ||
@@ -287,7 +295,7 @@ export function validatePublicFilterRepairWriterEvidence(index: string, receipt:
     throw unavailable('Mixed repair receipt changed');
   const seen = new Set<string>();
   let floor: bigint | undefined;
-  for (const { key, action, evidence } of receipt.effects) {
+  for (const { key, action, evidence, winner } of receipt.effects) {
     if (
       key.id !== receipt.subject ||
       subjectPartition(key.id) !== receipt.partition ||
@@ -295,7 +303,8 @@ export function validatePublicFilterRepairWriterEvidence(index: string, receipt:
       (key.owner === 'accounts' ? key.kind !== 'account' : key.owner !== 'semantic' || key.kind === 'account') ||
       action.id !== `discovery-v1:${encodeURIComponent(key.kind)}:${key.id}` ||
       seen.has(action.id) ||
-      action.version < 1n ||
+      action.version < receipt.enrollment.position ||
+      action.version >= receipt.completion.position ||
       action.version > 9223372036854775807n
     )
       throw unavailable('Mixed repair keyed Source action changed');
@@ -304,6 +313,7 @@ export function validatePublicFilterRepairWriterEvidence(index: string, receipt:
     if (evidence.kind === 'bulk') validateDiscoveryWriteReceipt(evidence.bulk, index, [action]);
     else if (evidence.kind === 'recovered' && action.op === 'index') validateRefreshResponse(200, evidence.refresh);
     else throw unavailable('Mixed repair has no native dispatch receipt');
+    validateDiscoveryRepairWinner(index, action, winner);
   }
   if (floor !== receipt.sourcePosition) throw unavailable('Mixed repair Source version changed');
 }
@@ -332,7 +342,7 @@ export async function verifyPublicFilterRepairWriterReceipt(
 }
 
 /** Uses the existing native writer enrollment, dispatch and settlement rows, with the actual
- * mixed projection as the only body/version producer. An interrupted attempt replays that writer;
+ * mixed projection as the only body/version producer. An interrupted attempt replays its retained actions;
  * no copy flag, current ACK or engine conflict is a repair receipt.
  */
 export function createDiscoveryRepairWriter(options: {
@@ -383,6 +393,7 @@ export function createDiscoveryRepairWriter(options: {
       type Row = {
         repair_locator: string | null;
         repair_receipt: string | null;
+        repair_action: string | null;
         writer_token: string | null;
         writer_transaction_id: string;
         writer_position: string;
@@ -394,7 +405,7 @@ export function createDiscoveryRepairWriter(options: {
       const read = async () =>
         (
           await pool.query<Row>(
-            `SELECT repair_locator,repair_receipt,writer_token,writer_transaction_id,writer_position,owner_epoch,
+            `SELECT repair_locator,repair_receipt,repair_action,writer_token,writer_transaction_id,writer_position,owner_epoch,
          incarnation,dispatch_state,closed_job FROM search.identity_writer
          WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
             [partition, index, subject],
@@ -438,9 +449,34 @@ export function createDiscoveryRepairWriter(options: {
         if (!isDiscoveryRepairWriterReceipt(receipt)) throw unavailable('Mixed repair retained a different writer');
         return receipt;
       }
-      if (!row.writer_token || !['enrolled', 'dispatched'].includes(row.dispatch_state))
+      if (!row.repair_action && row.dispatch_state === 'enrolled' && row.writer_token) {
+        const token = row.writer_token;
+        const epoch = row.owner_epoch;
+        const actions = await projection.prepareRepair(subject, obligation);
+        const body = repairEncode(actions);
+        if (Buffer.byteLength(body) > 1048576) throw unavailable('Mixed repair actions exceed native custody');
+        await runCommand(pool, commandOptions, async (tx, command) => {
+          const receipt = await native(tx, command.transactionId);
+          if (receipt.epoch !== epoch) throw unavailable('Mixed repair home moved during preparation');
+          await gate(tx, receipt, physical);
+          const saved = await tx.query(
+            `UPDATE search.identity_writer SET repair_action=$5
+            WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 AND writer_token=$4
+            AND dispatch_state='enrolled' AND repair_locator=$6 AND repair_action IS NULL RETURNING original_id`,
+            [partition, index, subject, token, body, locator],
+          );
+          // A concurrent prepare of this same retained locator may already have won. Use ONLY that
+          // immutable native action array, never the losing callback's current Source result.
+          return saved.rowCount === 1 ? { value: null, events: changed() } : noEffect(null);
+        });
+        row = await read();
+      }
+      if (!row || row.repair_locator !== locator || row.closed_job || row.incarnation !== physical.incarnation)
+        throw unavailable('Mixed retained actions changed before dispatch');
+      if (!row.repair_action || !row.writer_token || !['enrolled', 'dispatched'].includes(row.dispatch_state))
         throw unavailable('Mixed repair dispatch custody is unavailable');
       const token = row.writer_token;
+      const dispatchState = row.dispatch_state;
       const enrollment: IdentityNativeReceipt = {
         partition,
         epoch: row.owner_epoch,
@@ -451,7 +487,7 @@ export function createDiscoveryRepairWriter(options: {
         const dispatch = await native(tx, context.transactionId);
         if (dispatch.epoch !== enrollment.epoch) throw unavailable('Mixed repair home moved');
         await gate(tx, dispatch, physical);
-        if (row.dispatch_state === 'enrolled') {
+        if (dispatchState === 'enrolled') {
           const dispatched = await tx.query(dispatchSql.sql, [
             partition,
             index,
@@ -472,7 +508,8 @@ export function createDiscoveryRepairWriter(options: {
         }
         return { value: null, events: changed() };
       });
-      const effects = await projection.repairActions(subject, obligation);
+      const actions: DiscoveryIndexAction[] = JSON.parse(row.repair_action, repairReviver);
+      const effects = await projection.applyRepair(actions);
       if (!effects.length) throw unavailable('Mixed repair produced no native action');
       const sourcePosition = effects.reduce(
         (floor, effect) => (effect.action.version < floor ? effect.action.version : floor),

@@ -181408,6 +181408,64 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "consentIdentity": {
+                                    "properties": {
+                                      "subject": {
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "labels": {
+                                            "patternProperties": {
+                                              "^.*$": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "type": "object"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "labels"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
+                                      "target": {
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "labels": {
+                                            "patternProperties": {
+                                              "^.*$": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "type": "object"
+                                          },
+                                          "redirect": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "labels"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "subject",
+                                      "target"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "decision": {
                                     "anyOf": [
                                       {
@@ -203755,6 +203813,64 @@
                           {
                             "additionalProperties": false,
                             "properties": {
+                              "consentIdentity": {
+                                "properties": {
+                                  "subject": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "labels": {
+                                        "patternProperties": {
+                                          "^.*$": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "labels"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "target": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "labels": {
+                                        "patternProperties": {
+                                          "^.*$": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "redirect": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "labels"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "subject",
+                                  "target"
+                                ],
+                                "type": "object"
+                              },
                               "decision": {
                                 "anyOf": [
                                   {
@@ -204406,7 +204522,10 @@
             "headers": {
               "cache-control": {
                 "schema": {
-                  "const": "no-cache",
+                  "enum": [
+                    "no-cache",
+                    "private, no-store"
+                  ],
                   "type": "string"
                 }
               }
