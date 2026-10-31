@@ -10,6 +10,10 @@ test('a reader chooses personal Library table columns on the actual page and ret
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: 'https://site.test/library', width: 1280, height: 900 });
+  const canonical = window.document.createElement('link');
+  canonical.rel = 'canonical';
+  canonical.href = 'https://site.test/en/library';
+  window.document.head.append(canonical);
   const globals = {
     window,
     document: window.document,
@@ -199,6 +203,7 @@ test('a reader chooses personal Library table columns on the actual page and ret
     const initialQuery = new URL(reads()[0]!.url).search;
     expect(new URLSearchParams(initialQuery).get('cursor')).toBe('native-current');
     expect(new URLSearchParams(initialQuery).has('columns')).toBe(false);
+    const initialRequests = requests.length;
     const picker = await openPicker();
     expect(picker.querySelectorAll('[role="checkbox"]')).toHaveLength(7);
     const titleLabel = Array.from(picker.querySelectorAll('label')).find(
@@ -214,6 +219,7 @@ test('a reader chooses personal Library table columns on the actual page and ret
     expect(search().get('cursor')).toBe('native-current');
     expect(headers()).toEqual([m.library_column_title(), m.library_column_status()]);
     expect(reads()).toHaveLength(1);
+    expect(requests).toHaveLength(initialRequests);
     const action = button(m.library_entry_actions({ title: 'A private library entry' }), table());
     await click(action);
     expect(window.document.querySelector('[role="menu"]')!.textContent).toContain(m.library_menu_status());
@@ -234,6 +240,7 @@ test('a reader chooses personal Library table columns on the actual page and ret
     expect(headers()).toEqual([m.library_column_title(), m.library_column_status()]);
     expect(reads()).toHaveLength(2);
     expect(new URL(reads()[1]!.url).search).toBe(initialQuery);
+    const reloadedRequests = requests.length;
     await click(button(m.library_layout_list()));
     expect(host.querySelector('table')).toBeNull();
     expect(button(m.library_columns())).toBeUndefined();
@@ -244,6 +251,7 @@ test('a reader chooses personal Library table columns on the actual page and ret
     expect(search().get('cursor')).toBe('native-current');
     expect(headers()).toEqual([m.library_column_title(), m.library_column_status()]);
     expect(reads()).toHaveLength(2);
+    expect(requests).toHaveLength(reloadedRequests);
     // Column changes keep selection on these same loaded rows and send no mutation.
     await click(button(m.library_selection_page()));
     expect(host.textContent).toContain(m.library_selection_count({ count: 1 }));
@@ -254,6 +262,7 @@ test('a reader chooses personal Library table columns on the actual page and ret
     await click(button(m.library_selection_clear()));
     expect(headers()).toEqual([m.library_column_title(), m.library_column_actions()]);
     expect(button(m.library_entry_actions({ title: 'A private library entry' }), table())).toBeDefined();
+    expect(requests).toHaveLength(reloadedRequests);
     const titleOnly = router.state.location.href;
     await toggle('finished');
     await close();
