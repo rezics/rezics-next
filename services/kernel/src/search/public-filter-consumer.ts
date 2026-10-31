@@ -1,3 +1,4 @@
+import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import repairSave from './public-filter-custody-repair-save.sql';
 import repairCurrent from './public-filter-custody-repair-current.sql';
 import repairEffectSave from './public-filter-custody-repair-effect-save.sql';
@@ -517,9 +518,7 @@ import {
   encodePublicFilterNativeState as encodeNative,
   decodePublicFilterNativeState as decodeNative,
   readPublicFilterRepairSettlement,
-  PublicFilterCustodyError,
   withPublicFilterRepairAllowance,
-  verifyPublicFilterRepairSourcePage,
 } from './public-filter-custody.ts';
 import type { RetainedRepairSettlement, RetainedRepairPage, RetainedSourceRepair } from './public-filter-custody-contract.ts';
 import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
@@ -871,7 +870,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   }
   function failure(error: unknown, m: Meter): PublicFilterConsumerUnavailable {
     if (error instanceof ConsumerFailure) return m.unavailable(error.reason);
-    if (error instanceof PublicFilterCustodyError)
+    if (error instanceof PublicFilterRepairSourceError)
       return m.unavailable(error.reason === 'deadline' ? 'deadline' : 'source_pending');
     if (error instanceof SearchUnavailableError) return m.unavailable('dependency_unavailable');
     throw error;

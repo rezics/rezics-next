@@ -1,6 +1,5 @@
-import '../../src/semantic/public-filter-source-binding.ts';
 import { expect, test } from 'bun:test';
-import { verifyPublicFilterRepairSourcePage } from '../../src/search/public-filter-custody.ts';
+import { verifyPublicFilterRepairSourcePage } from '../../src/search/public-filter-custody-source.ts';
 import type {
   NativeSourceRepairLocator,
   NativeSourceRepairStepRead,
@@ -30,8 +29,14 @@ const request: NativeSourceRepairStepRead = {
   predecessor: 'prior-step',
   queried: {
     snapshot: { kind: 'pit', observation: '0:old-observation', pit: 'old-pit' },
-    consumer: { physicalTarget: 'subjects-g1', incarnation: 'original-uuid', consumerGeneration: 'generation',
-      projectionGeneration: 'projection', meaningDigest: 'meaning', readDefinition: 'definition' },
+    consumer: {
+      physicalTarget: 'subjects-g1',
+      incarnation: 'original-uuid',
+      consumerGeneration: 'generation',
+      projectionGeneration: 'projection',
+      meaningDigest: 'meaning',
+      readDefinition: 'definition',
+    },
   },
 };
 const locator = (digest: string): NativeSourceRepairLocator => ({
@@ -41,12 +46,31 @@ const locator = (digest: string): NativeSourceRepairLocator => ({
   locatorDigest: digest,
 });
 const repair = (digest: string): RetainedSourceRepair => {
-  const source = { subject: 'subject', terminal: 'subject', partition: 1, epoch: 1, position: 9n,
-    revision: 1, securityRevision: 'revision', currentRelease: 'meaning' };
-  return { kind: 'foreign', locator: { subject: 'subject', slot: 'slot', candidate: digest, property: 'schema:author', dependencies: [] },
-    source, projection: { status: 'complete', source, records: [], repairLocators: [],
-      frontier: { build: 'original-build', generation: 1n, continuation: 'original-page' }, requiredHeads: [], cost },
-    receipt: locator(digest) };
+  const source = {
+    subject: 'subject',
+    terminal: 'subject',
+    partition: 1,
+    epoch: 1,
+    position: 9n,
+    revision: 1,
+    securityRevision: 'revision',
+    currentRelease: 'meaning',
+  };
+  return {
+    kind: 'foreign',
+    locator: { subject: 'subject', slot: 'slot', candidate: digest, property: 'schema:author', dependencies: [] },
+    source,
+    projection: {
+      status: 'complete',
+      source,
+      records: [],
+      repairLocators: [],
+      frontier: { build: 'original-build', generation: 1n, continuation: 'original-page' },
+      requiredHeads: [],
+      cost,
+    },
+    receipt: locator(digest),
+  };
 };
 const page = (repairs: readonly RetainedSourceRepair[] = []): RetainedRepairPage => ({
   sourceStep: 'native-step',
@@ -57,8 +81,12 @@ const page = (repairs: readonly RetainedSourceRepair[] = []): RetainedRepairPage
 });
 function port(expected: RetainedRepairPage, trace: string[] = []): PublicFilterRepairSourceBinding {
   return {
-    async resolve() { return { status: 'unavailable', reason: 'owner_unavailable', cost }; },
-    async join() { return { status: 'unavailable', reason: 'owner_unavailable', cost }; },
+    async resolve() {
+      return { status: 'unavailable', reason: 'owner_unavailable', cost };
+    },
+    async join() {
+      return { status: 'unavailable', reason: 'owner_unavailable', cost };
+    },
     async readRepairStep(input) {
       trace.push('step');
       expect(input).toEqual(request);
