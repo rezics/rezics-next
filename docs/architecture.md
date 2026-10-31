@@ -10,6 +10,11 @@ Every operation addresses a bounded neighbourhood. State its anchors, examined k
 cost. Bound reads, writes, authorization, validation, projections and cleanup. A response limit does not bound a scan,
 sort, join, history walk or dependency fanout.
 
+The bound applies to the rows a design reads through its own keys, fanout and expansion limits. Physical work the
+database engine does for multiversion visibility, such as skipping versions from concurrent uncommitted transactions or
+versions not yet vacuumed, belongs to the engine and its maintenance. Do not build product-level budgets or custom
+primitives to meter it; use ordinary indexed SQL and keep the engine's maintenance healthy.
+
 Large jobs make bounded, resumable progress. Their total work may follow their finite input; individual steps may
 not discover work through unrestricted scans or recomputation.
 
