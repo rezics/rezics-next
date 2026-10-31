@@ -96,6 +96,12 @@ export declare function recordCompletion(tx: CommandTransaction, located: {
     continuationId: string;
     receiptId: string;
 }>;
+/** Native local consumer, deliberately not an Auth completion or an erasure ACK.
+ * Its input is an exact discovered root id. Nothing here copies the root into
+ * DBOS, renews an approval, or infers consumption from authorization records.
+ * Existing business commands execute under their ORIGINAL committed keys.
+ */
+export declare function continueErasureDeletion(pool: Pool, continuationId: string, clock?: () => Date): Promise<void>;
 export type CommittedContinuations = {
     /** Trusted kernel recovery port. Each iteration commits one bounded page. */
     continueCommitted(reference: string): Promise<void>;

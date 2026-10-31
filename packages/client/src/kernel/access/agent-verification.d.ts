@@ -18,7 +18,7 @@ export type AgentVerificationRequest = {
     id: string;
     accountId: string;
     accountKind: 'actor' | 'organization';
-    requestedBy: string;
+    requestedBy: string | null;
     catalogueSubjectId: string;
     statement: string;
     links: AccountVerificationLink[];
@@ -41,7 +41,7 @@ type VerificationRow = {
     id: string;
     accountId: string;
     accountKind: 'actor' | 'organization';
-    requestedBy: string;
+    requestedBy: string | null;
     catalogueSubjectId: string;
     statement: string;
     links: unknown;

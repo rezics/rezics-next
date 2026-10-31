@@ -9,6 +9,16 @@ import { type Access, type AccessClient, type Actor, type AccountAuthorityKind }
  * public floor are separate: a private resource may still have an explicit grant. */
 export type ViewerActionResource = Readonly<{
     readAction: string;
+    /** Native owner may prepare foreign anchors before the target connection is held. */
+    prepare?(input: {
+        pool: Pool;
+        access: Access;
+        actor: Actor;
+        ids: readonly string[];
+        deadline: number;
+    }): Promise<ViewerActionResource>;
+    /** Additional native state/target constraints; missing action keys preserve the mounted catalogue. */
+    actionAvailability?(client: AccessClient, ids: readonly string[], actor: Actor, time: import('../command/command.ts').AuthoritativeTime): Promise<Readonly<Record<string, Readonly<Record<string, boolean>>>>>;
     read(client: AccessClient, ids: readonly string[], at: string, time?: AuthoritativeTime): Promise<Readonly<Record<string, boolean>>>;
 }>;
 export type ViewerActionResources = ReadonlyMap<string, ViewerActionResource>;

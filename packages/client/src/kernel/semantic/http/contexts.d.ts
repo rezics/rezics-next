@@ -1,3 +1,4 @@
+import type { KeyRing } from '../../tokens/seal.ts';
 import type { definitionRoutes } from './definitions.ts';
 import { type AccountActor, type Resource } from '../../request/access.ts';
 import type { Access } from '../../request/access.ts';
@@ -6,6 +7,7 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
     routeKey: Uint8Array;
     access: () => Access;
     clock: () => Date;
+    tokens: KeyRing;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
@@ -3869,6 +3871,165 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                                 digest: string | null;
                                 head: number;
                                 extension: Record<string, any> | null;
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        contexts: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    query?: string;
+                    limit?: number;
+                    cursor?: string;
+                    deleted?: boolean;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        contexts: {
+                            id: string;
+                            kind: "community" | "global";
+                            labels: Record<string, string>;
+                            state: "active" | "deleted";
+                            deletedAt: string | null;
+                            purgeAfter: string | null;
+                        }[];
+                        next: string | null;
+                    };
+                    400: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: string;
+                    };
+                    503: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        contexts: {
+            ":id": {
+                lifecycle: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                context: {
+                                    id: string;
+                                    kind: "community" | "global";
+                                    labels: Record<string, string>;
+                                    state: "active" | "deleted";
+                                    deletedAt: string | null;
+                                    purgeAfter: string | null;
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;

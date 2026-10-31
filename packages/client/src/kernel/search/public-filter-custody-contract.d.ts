@@ -1,7 +1,7 @@
 import type { PublicCanonicalCaptureInput, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 import type { PrivacyReductionStart, PublicFilterConsumer, PublicFilterCost, PublicFilterDependencyKey, PublicFilterProjectionMeaning } from '../semantic/public-filter-source-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
-import type { PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
+import type { PublicFilterSourceBinding, PublicFilterBindingFailure, PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
 export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> = Readonly<{
     source: Readonly<{
@@ -87,14 +87,56 @@ export type PublicFilterRepairSettlementResult = CustodyFailure | Readonly<{
     settlement: NativePublicFilterRepairSettlement;
     cost: CustodyCost;
 }>;
-/** Internal native storage shapes. Source's in-process receipt is deliberately never persisted as authority. */
+/** Temporary structural consumer declarations until the selected Source-owner ABI is integrated.
+ * Item ABI: 6ef6b75cf35e66a2fa14b6ad9d32559d1c832a97; step ABI: the adopted owner continuation.
+ * These locate owner records only. They never construct or deserialize Source authority.
+ */
+export type NativeSourceRepairLocator = Readonly<{
+    bootstrap: string;
+    execution: string;
+    step: string;
+    locatorDigest: string;
+}>;
+export type NativeSourceRepairRead = Readonly<{
+    receipt: NativeSourceRepairLocator;
+    queried: PublicFilterQueriedObservation;
+    execution: string;
+}>;
+export type NativeSourceRepairVerification = Readonly<{
+    status: 'verified';
+    repair: PublicSourceRepair;
+    cost: PublicFilterCost;
+}> | PublicFilterBindingFailure;
+export type NativeSourceRepairStepRead = Readonly<{
+    bootstrap: string;
+    queried: PublicFilterQueriedObservation;
+    execution: string;
+    predecessor: string | null;
+}>;
+export type NativeSourceRepairStepVerification = Readonly<{
+    status: 'verified';
+    step: string;
+    predecessor: string | null;
+    frontier: string | null;
+    complete: boolean;
+    receipts: readonly NativeSourceRepairLocator[];
+    cost: PublicFilterCost;
+}> | PublicFilterBindingFailure;
+export type PublicFilterRepairSourceBinding = PublicFilterSourceBinding & Readonly<{
+    readRepairStep?(request: NativeSourceRepairStepRead, context: PublicFilterConsumerContext): Promise<NativeSourceRepairStepVerification>;
+    readRepairReceipt?(request: NativeSourceRepairRead, context: PublicFilterConsumerContext): Promise<NativeSourceRepairVerification>;
+}>;
+export type RetainedSourceRepair = Omit<PublicSourceRepair, 'receipt'> & Readonly<{
+    receipt: NativeSourceRepairLocator;
+}>;
+/** Internal native storage shapes. Only data fields of the Source locator are persisted. */
 export type RetainedRepairPage = Readonly<{
     /** Actual owner-native step locator, including the final step whose public frontier is null. */
     sourceStep: string;
     predecessor: string | null;
     frontier: string | null;
     complete: boolean;
-    repairs: readonly Omit<PublicSourceRepair, 'receipt'>[];
+    repairs: readonly RetainedSourceRepair[];
 }>;
 export type RetainedRepairSettlement = Readonly<{
     id: string;

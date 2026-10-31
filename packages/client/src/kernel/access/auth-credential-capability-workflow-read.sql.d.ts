@@ -22,6 +22,12 @@ export type Row = {
         transaction_id: string;
         consumed_at: string | null;
         consumed_transaction_id: string | null;
+        erasure_subject_id: string | null;
+        erasure_operator_id: string | null;
+        erasure_member_id: string | null;
+        erasure_previous_operator_id: string | null;
+        erasure_previous_subject_id: string | null;
+        erasure_principal_id: string | null;
     };
     route: number;
     approvalId: string;
@@ -109,6 +115,12 @@ declare const query: Query<{
         transaction_id: string;
         consumed_at: string | null;
         consumed_transaction_id: string | null;
+        erasure_subject_id: string | null;
+        erasure_operator_id: string | null;
+        erasure_member_id: string | null;
+        erasure_previous_operator_id: string | null;
+        erasure_previous_subject_id: string | null;
+        erasure_principal_id: string | null;
     };
     route: number;
     approvalId: string;
