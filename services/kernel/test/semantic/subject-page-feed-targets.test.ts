@@ -12,6 +12,7 @@ import { createSubject } from '../../src/semantic/subject.ts';
 import {
   readPublicSubjectPageCandidates,
   preparePublicSubjectPageCandidates,
+  type PublicSubjectPageCandidate,
 } from '../../src/semantic/subject-page-navigation.ts';
 import type { SummaryReaderDependencies } from '../../src/semantic/summaries.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -196,7 +197,7 @@ test('Native subject feed Account destinations contain only both template-offere
       'UPDATE access.account SET public_views=public_views || $3::jsonb WHERE route=$1 AND account_id=$2',
       [routeOf(target.accountId), target.accountId, JSON.stringify(flags)],
     );
-    const expected = {
+    const expected: PublicSubjectPageCandidate = {
       id: target.subjectId,
       target: { family: 'account', accountId: target.accountId, canonicalPath: `/@${handle}` },
       views,
