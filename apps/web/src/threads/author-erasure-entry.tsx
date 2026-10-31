@@ -75,16 +75,14 @@ export function AuthorErasureEntry({
   }
   const allowed = admission.kind === 'current' && admission.mayErase;
   const unavailable = admission.kind === 'unavailable';
-  const retrying =
-    result?.kind === 'uncertain' &&
-    !!request.current &&
-    intentScope.current?.threadId === threadId &&
-    intentScope.current.viewerId === viewerId;
+  const matchingIntent = intentScope.current?.threadId === threadId && intentScope.current.viewerId === viewerId;
+  const retrying = result?.kind === 'uncertain' && !!request.current && matchingIntent;
+  const canSubmit = (allowed || retrying) && (!request.current || matchingIntent);
   const accepted = result?.kind === 'accepted';
   const stopped = result && result.kind !== 'uncertain' && result.kind !== 'accepted';
 
   async function submit() {
-    if ((!allowed && !retrying) || !confirmed || busy.current || accepted || stopped) return;
+    if (!canSubmit || !confirmed || busy.current || accepted || stopped) return;
     busy.current = true;
     setPending(true);
     if (!request.current) {
@@ -151,7 +149,7 @@ export function AuthorErasureEntry({
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="destructive"
-                  disabled={(!allowed && !retrying) || !confirmed || pending || !!stopped}
+                  disabled={!canSubmit || !confirmed || pending || !!stopped}
                   onClick={submit}
                 >
                   {pending

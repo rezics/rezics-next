@@ -17,6 +17,8 @@ export type RealmDisclosureScope = {
     associationCheck?: Promise<boolean>;
     accessCheck?: Promise<boolean>;
 };
+/** Server-owned work between initial and final disclosure, without changing the published reader port. */
+export declare function withThreadReadAdmission<T>(beforeFinal: () => Promise<void>, read: () => Promise<T>): Promise<T>;
 /** Share one containing-Realm proof across the thread and post checks in a disclosure. */
 export declare function currentRealmDisclosureScope(): RealmDisclosureScope | undefined;
 /** One exact command replay. GET reads stay outside this scope, so owner roles
@@ -94,6 +96,9 @@ type Row = {
 export declare class ContentNotFoundError extends Error {
     constructor();
 }
+/** All pool preparation happens outside this boundary. A failed rollback evicts
+ * the connection rather than returning an open transaction to the pool. */
+export declare function snapshot<T>(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, id: string, context: Pick<ReadContext, 'deadline'>, work: (client: AccessClient) => Promise<T>): Promise<Anchored<T>>;
 type BoardDisclosureFinal = Readonly<{
     boardAnchor: AnchoredPosition;
     parentAllowed: boolean;

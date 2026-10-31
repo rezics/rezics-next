@@ -8281,6 +8281,10 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             epoch: number;
                             position: string;
                         } | null;
+                        authorErasure?: {
+                            authorId: string;
+                            mayErase: boolean;
+                        };
                     };
                     400: {
                         type: unknown;
@@ -8444,6 +8448,10 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 epoch: number;
                                 position: string;
                             } | null;
+                            authorErasure?: {
+                                authorId: string;
+                                mayErase: boolean;
+                            };
                         };
                         400: {
                             type: unknown;
