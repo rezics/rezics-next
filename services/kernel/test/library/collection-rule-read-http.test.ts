@@ -66,14 +66,27 @@ test('GET admits every private leaf even in a true OR, and conceals foreign, abs
     expect((await f.send('GET', `/v1/collections/${id}/rule`)).status).toBe(404);
 }, 120_000);
 
-test('source unavailability stays explicit and invalid leaves under NOT still reach native grammar admission', async () => {
+test('admitted private definition creation is independent of result readiness and retains native grammar admission', async () => {
   const base = { membershipKind: 'dynamic', title: 'Draft', visibility: 'private' };
-  const unavailable = await f.send('POST', '/v1/collections', {
+  const created = await f.send('POST', '/v1/collections', {
     ...base,
     rule: { filter: { owner: { presence: true } }, sort: 'id' },
   });
-  expect(unavailable.status).toBe(503);
-  expect(await unavailable.json()).toMatchObject({ code: 'dependency_unavailable' });
+  expect(created.status).toBe(201);
+  const { collection } = await created.json();
+  expect(collection).toMatchObject({
+    membershipKind: 'dynamic',
+    title: base.title,
+    visibility: 'private',
+    curatorAccountId: f.runtime.identity.ordinary.accountId,
+    revision: 1,
+  });
+  expect(routeOf(collection.id)).toBe(routeOf(f.runtime.identity.ordinary.accountId));
+  for (const field of [
+    'filter', 'rule', 'pins', 'releaseDigest', 'sourceGeneration',
+    'memberCount', 'orderEpoch', 'createdAt', 'updatedAt', 'builtinKind',
+  ])
+    expect(collection).not.toHaveProperty(field);
   const invalid = await f.send('POST', '/v1/collections', {
     ...base,
     rule: { filter: { not: { owner: { unknown: true } } } },
