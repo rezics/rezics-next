@@ -195,6 +195,7 @@ export function PageEditor({
     <CorrectionContext.Provider value={correction}>
     <Puck
       config={config}
+      onAction={(action) => { if (correction && action.type === 'setUi') console.log('correction action', action.ui); }}
       data={data}
       dictionary={presentationEditorDictionary()}
       onPublish={(edited) => handlePublish(edited as PageEditorData)}
