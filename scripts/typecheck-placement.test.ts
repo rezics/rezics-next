@@ -161,28 +161,32 @@ test.each([false, true])('explicit local opt-out preserves the compiler emission
 });
 
 test('Kernel compiler placement returns only its genuinely required bounded outputs and never recursively declares an unbounded disposable Reylo cache; native status, required generated outputs and all existing return validation limits stay truthful', async () => {
-  const modes: { args: string[]; command: string[]; returns: string[] }[] = [
-    { args: [], command: [], returns: [] },
-    { args: ['--emit-client=false'], command: [], returns: [] },
+  const modes: { args: string[]; command: string[]; keepsFiles: boolean; returns: string[] | undefined }[] = [
+    { args: [], command: [], keepsFiles: false, returns: [] },
+    { args: ['--emit-client=false'], command: [], keepsFiles: false, returns: [] },
     {
       args: ['--emit-client'],
       command: ['--emit-client'],
-      returns: ['packages/client/src/kernel'],
+      keepsFiles: true,
+      returns: undefined,
     },
     {
       args: ['--emit-schema=core'],
       command: ['--emit-schema=core'],
+      keepsFiles: true,
       returns: ['services/kernel/db/schema.sql'],
     },
     {
       args: ['--emit-schema=semantic'],
       command: ['--emit-schema=semantic'],
+      keepsFiles: true,
       returns: ['services/kernel/db/semantic/schema.sql'],
     },
     {
       args: ['--emit-schema=semantic', '--emit-client'],
       command: ['--emit-client', '--emit-schema=semantic'],
-      returns: ['services/kernel/db/semantic/schema.sql', 'packages/client/src/kernel'],
+      keepsFiles: true,
+      returns: undefined,
     },
   ];
   // An external project's analyses may be retained inputs. Preserve its local-only
@@ -205,7 +209,7 @@ test('Kernel compiler placement returns only its genuinely required bounded outp
               placements++;
               expect(receivedEnv).toBe(env);
               expect(run.command).toEqual(['bun', 'scripts/typecheck.ts', ...mode.command]);
-              expect(run.keepsFiles).toBe(true);
+              expect(run.keepsFiles).toBe(project.REYLO_CONFIG?.startsWith('/external/') ? true : mode.keepsFiles);
               expect(run.returns).toEqual(
                 project.REYLO_CONFIG?.startsWith('/external/') ? undefined : mode.returns,
               );
