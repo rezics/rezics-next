@@ -181,7 +181,8 @@ function iriCompositionProof(source: string): boolean {
   );
 }
 
-const checkerPath = import.meta.resolve('recheck/lib/browser.js');
+// The VM evaluates the CommonJS browser bundle; the public import condition selects ESM.
+const checkerPath = new URL('./lib/browser.js', import.meta.resolve('recheck/package.json')).href;
 // The pinned browser checker implements Scala.js nanoTime with performance.now.
 // Keep the counter and all checkpoint callbacks in the checker's own realm:
 // no host clock is patched, and crossing realms cannot add work per checkpoint.

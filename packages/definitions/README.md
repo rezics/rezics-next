@@ -96,7 +96,7 @@ facets, relation metadata and cover ratios, datatype-specific members, fixed val
 schemas, context defaults, saved filters, and regular-expression safety. A facet is an item, a time, a quantity, or
 a code: a `string` whose release definition has a `pattern`. Pattern checks use
 one shared structural admission policy, a bounded IRI composition proof, and
-recheck 4.5.0's in-process synchronous entry point in an isolated VM context.
+recheck 4.6.2's in-process synchronous entry point in an isolated VM context.
 The pinned browser checker's `performance.now`
 is a private counter, with a budget of 8,192 native cancellation checkpoints
 per expression; it never reads or patches the host clock. This also bounds DFA

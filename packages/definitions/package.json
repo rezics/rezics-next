@@ -26,10 +26,10 @@
     "typecheck": "bun check --no-script -p tsconfig.json"
   },
   "dependencies": {
-    "@neverblink/linkml": "0.17.1",
+    "@neverblink/linkml": "0.17.2",
     "@noble/hashes": "2.4.0",
     "canonicalize": "5.1.0",
-    "recheck": "4.5.0",
+    "recheck": "4.6.2",
     "typebox": "1.4.3",
     "@rezics/document": "workspace:*",
     "@rezics/filter": "workspace:*",

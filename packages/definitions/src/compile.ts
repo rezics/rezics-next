@@ -403,17 +403,22 @@ export async function compileCatalogue(input: {
     add(location, 'invalid', 'Expected a CURIE with a declared prefix');
     return undefined;
   };
-  type Term = { name: string; value: Node; location: Location; key: string };
+  type Term = { name: string; value: Node; source: Node; location: Location; key: string };
   const terms = (collection: 'classes' | 'slots', values: Node): Term[] => {
     const uri = collection === 'classes' ? 'class_uri' : 'slot_uri';
     const entries = Object.entries(values)
       .map(([name, value]) => {
         const node = object(value);
+        const file = fileFor(node.from_schema);
+        // LinkML may emit an expanded URI when a local prefix is absent from the
+        // merged output. Release keys retain the explicit source CURIE.
+        const source = object(object(parsed[file]![collection])[name]);
         return {
           name,
           value: node,
-          location: { file: fileFor(node.from_schema), pointer: at(`/${collection}`, name) },
-          key: node[uri] as string,
+          source,
+          location: { file, pointer: at(`/${collection}`, name) },
+          key: source[uri] as string,
         };
       })
       .sort((a, b) => compare(a.location.file, b.location.file) || compare(a.location.pointer, b.location.pointer));
@@ -512,9 +517,10 @@ export async function compileCatalogue(input: {
     return found;
   };
   const mappings = (term: Term) => {
-    const result = unique(names(term.value.exact_mappings));
-    for (const mapping of result)
-      expand(mapping, { ...term.location, pointer: at(term.location.pointer, 'exact_mappings') });
+    const location = { ...term.location, pointer: at(term.location.pointer, 'exact_mappings') };
+    const authored = new Map(names(term.source.exact_mappings).map((curie) => [expand(curie, location), curie]));
+    const result = unique(names(term.value.exact_mappings).map((mapping) => authored.get(mapping) ?? mapping));
+    for (const mapping of result) expand(mapping, location);
     return result;
   };
   const facetOrigins = new Map<string, Map<string, { name: string; location: Location }>>();

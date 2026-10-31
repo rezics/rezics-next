@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:a8bd9adbfdd1f6daed5c406cbc6d2dabb6bc1b5b443cf8ae3680af8441e4395c",
+  "digest": "sha256:77ff1bcbcb9aab2d788fb176c53e64872162985285f6e4f49d5d1a8f5391ec8d",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -2071,7 +2071,7 @@
       "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
     "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.0" },
-    "generator": { "name": "@neverblink/linkml", "version": "0.17.1" },
+    "generator": { "name": "@neverblink/linkml", "version": "0.17.2" },
     "properties": {
       "wdt:P31": {
         "iri": "http://www.wikidata.org/prop/direct/P31",

@@ -14,7 +14,7 @@ import {
 test('copied native validation and dependency counters preserve full outputs on all independent shapes', async () => {
   const report = await constructionEvidence();
   expect(report.versions.typebox).toBe('1.4.3');
-  expect(report.versions.recheck).toBe('4.5.0');
+  expect(report.versions.recheck).toBe('4.6.2');
   expect(report.versions.canonicalize).toBe('5.1.0');
   for (const entry of Object.values(report.sources)) {
     expect(entry.original).toMatch(/^[a-f0-9]{64}$/);

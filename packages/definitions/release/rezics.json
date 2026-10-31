@@ -6,7 +6,7 @@
   },
   "generator": {
     "name": "@neverblink/linkml",
-    "version": "0.17.1"
+    "version": "0.17.2"
   },
   "prefixes": {
     "rezics": "https://rezics.com/vocab/",

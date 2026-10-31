@@ -512,8 +512,8 @@ async function probe(): Promise<Evidence> {
     }
     const patternPath = join(root, 'packages/definitions/src/pattern-safety.ts');
     let pattern = read(patternPath).replace(
-      "import.meta.resolve('recheck/lib/browser.js')",
-      JSON.stringify(new URL(`file://${Bun.resolveSync('recheck/lib/browser.js', dirname(patternPath))}`).href),
+      "import.meta.resolve('recheck/package.json')",
+      JSON.stringify(new URL(`file://${Bun.resolveSync('recheck/package.json', dirname(patternPath))}`).href),
     );
     pattern = replaceOnce(
       pattern,
