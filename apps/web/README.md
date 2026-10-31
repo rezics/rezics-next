@@ -2177,12 +2177,13 @@ fixtures; these stories do not claim visual, browser or native completion.
   labels, optional original language and meaningful change time in one anonymous, no-store request of at most 1,000
   source items. It reuses the reader's label fallback and canonical view paths, retains source order/ids and sparse
   continuation, and flushes expanded view families within the existing 3,000-family packing bound. Account overview
-  and admitted catalogue views use the current native `canonicalPath` unchanged. The native target proves a current
-  canonical overview root and declares no agents-feed ownership exclusion; Web does not suppress that family.
-  Account posts/reviews/collections still refuse projection: Semantic's offered template views do not supply the
-  current Account `publicViews` admission that the public reader requires. Missing/invalid targets or views also
-  fail replacement. No per-row discovery, permission evaluator or fallback subject identity is added. This source
-  binding and focused fixtures do not establish native, whole-feed, visual or promoted-main acceptance.
+  and admitted posts/reviews/collections use the current native `canonicalPath` unchanged. The native target proves
+  a current canonical overview root and declares no agents-feed ownership exclusion; Web does not suppress that family.
+  Semantic intersects template views with the original native Account batch's admitted names and rereads that batch
+  before its final metadata guards. Web validates the closed four-name Account contract without evaluating flags.
+  Explicit empty views retain raw source progress with no URL family; missing/invalid targets or views fail
+  replacement. No per-row discovery, permission evaluator or fallback subject identity is added. This source
+  binding and focused fixtures do not establish native, whole-feed, privacy, cost, visual or promoted-main acceptance.
 
 ## Collection browse and editor
 

@@ -339,15 +339,15 @@ or unavailable fails the export and preserves the previous inventory; it never b
 The default Subject adapter binds delivered native targets/views to the canonical reader's label fallback and
 locale/view path helpers, preserving raw ids, source order and native cursors even across empty continuation pages.
 Community destination/standalone adapters are also bound. Missing or invalid required Subject targets/views refuse
-replacement; ready empty pages succeed. Account overview and admitted catalogue views use the native current
+replacement; ready empty pages and explicit empty view sets retain progress without inventing families.
+Account overview and admitted posts/reviews/collections use the native current
 Account path. Native reciprocal verification and the exact current handle claim establish that overview root;
-the DTO declares no agents-feed ownership exclusion. One precise boundary remains unavailable: Account
-posts/reviews/collections require the current `publicViews` choice applied by the public Account reader; Semantic's
-template-derived `views` do not supply that admission. Semantic and Accounts must supply batched admission,
-filtering and final revalidation before those families can export. Web neither guesses eligibility nor hydrates
-identities or metadata per row. Original
-meaningful times are reused when valid and otherwise omitted. This binding does not certify native, whole-feed,
-visual or promoted-main acceptance.
+the DTO declares no agents-feed ownership exclusion. The original native Account batch supplies current admitted
+views; Semantic intersects them with offered templates, rereads Account identity/path/views and finishes its
+original metadata guards afterward. Web validates those four wire names and consumes the intersection through
+the same canonical helpers, without evaluating admission flags or hydrating identities or metadata per row.
+Original meaningful times are reused when valid and otherwise omitted. This binding does not certify native,
+whole-feed, privacy, cost, visual or promoted-main acceptance.
 These boundaries adopt the research's owner-defined public set and separate export stage, consistent with its
 [Open Library](https://github.com/internetarchive/openlibrary/blob/37e446827465be2febad416de1bc18753b66997d/scripts/sitemaps/sitemap.py),
 [Discourse](https://github.com/discourse/discourse/blob/589325e2b8466178ee83acac9ec411de555a0093/app/models/sitemap.rb)

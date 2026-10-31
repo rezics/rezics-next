@@ -197,7 +197,7 @@ test('the existing default subject sitemap adapter consumes actual owner canonic
     // Native route order can advance while UUID lexical order decreases.
     ...entry({ en: 'Not a handle' }, undefined, '2026-10-29T00:00:00.123Z', '00000000-0000-7000-8000-66c100000001'),
     target: { family: 'account', accountId: id, canonicalPath: '/@Current_Handle-' },
-    views: ['overview', 'works', 'details'],
+    views: ['overview', 'posts', 'reviews', 'collections'],
   };
   pages = [{ subjectPages: [subject, account], next: 'native-next' }];
   requests.length = 0;
@@ -211,22 +211,25 @@ test('the existing default subject sitemap adapter consumes actual owner canonic
     account.id,
     account.id,
     account.id,
+    account.id,
   ]);
   const keys = page.items.map((item) => feed.key!(item));
-  expect(new Set(keys).size).toBe(6);
+  expect(new Set(keys).size).toBe(7);
   expect(keys).toEqual([...keys].sort());
   expect(page.items.map((item) => feed.family(item)?.paths.en ?? null)).toEqual([
     expected(subject).en,
     `${expected(subject).en}/editions`,
     `${expected(subject).en}/details`,
     '/en/@Current_Handle-',
-    '/en/@Current_Handle-/works',
-    '/en/@Current_Handle-/details',
+    '/en/@Current_Handle-/posts',
+    '/en/@Current_Handle-/reviews',
+    '/en/@Current_Handle-/collections',
   ]);
   for (const locale of sitemapLocales) {
     expect(page.items[1]!.family?.paths[locale]).toBe(`${expected(subject)[locale]}/editions`);
     expect(page.items[3]!.family?.paths[locale]).toBe(`/${locale}/@Current_Handle-`);
-    expect(page.items[4]!.family?.paths[locale]).toBe(`/${locale}/@Current_Handle-/works`);
+    for (const [index, view] of ['posts', 'reviews', 'collections'].entries())
+      expect(page.items[index + 4]!.family?.paths[locale]).toBe(`/${locale}/@Current_Handle-/${view}`);
   }
   expect(page.items[3]!.family?.lastmod).toBe(account.lastModified);
   expect(page.items[4]!.family?.lastmod).toBe(account.lastModified);
@@ -239,4 +242,40 @@ test('the existing default subject sitemap adapter consumes actual owner canonic
     items: [{ id: account.id, key: keys[3], family: page.items[3]!.family }],
     next: 'continue',
   });
+});
+
+test('explicit empty native views retain raw source progress through short and empty continuations without URL families', async () => {
+  const account: Entry = {
+    ...entry({ en: 'Labels do not admit overview' }),
+    target: { family: 'account', accountId: id.replace(/0$/u, '9'), canonicalPath: '/@CurrentHandle' },
+    views: [],
+  };
+  const subject = { ...entry({}, undefined, undefined, id.replace(/0$/u, '1')), views: [] };
+  const final: Entry = { ...account, id: id.replace(/0$/u, '2'), views: ['collections'] };
+  pages = [
+    { subjectPages: [account, subject], next: 'after-known-empty' },
+    { subjectPages: [], next: 'after-empty-window' },
+    { subjectPages: [final], next: null },
+  ];
+  requests.length = 0;
+  const empty = await feed.read(null);
+  expect(empty.next).toBe('after-known-empty');
+  expect(empty.items.map(({ id }) => id)).toEqual([account.id, subject.id]);
+  expect(empty.items.map((item) => feed.family(item))).toEqual([null, null]);
+  expect(empty.items.map((item) => feed.key!(item))).toEqual([
+    `${account.id.slice(24, 28)}${account.id}:empty`,
+    `${subject.id.slice(24, 28)}${subject.id}:empty`,
+  ]);
+  expect(await feed.read(empty.next)).toEqual({ items: [], next: 'after-empty-window' });
+  const resumed = await feed.read('after-empty-window');
+  expect(resumed.next).toBeNull();
+  expect(resumed.items).toHaveLength(1);
+  expect(resumed.items[0]!.id).toBe(final.id);
+  expect(feed.family(resumed.items[0]!)?.paths.en).toBe('/en/@CurrentHandle/collections');
+  expect(feed.family(resumed.items[0]!)?.lastmod).toBeUndefined();
+  expect(requests).toEqual([
+    { cursor: null, limit: 1000, fetch: { cache: 'no-store' } },
+    { cursor: 'after-known-empty', limit: 1000, fetch: { cache: 'no-store' } },
+    { cursor: 'after-empty-window', limit: 1000, fetch: { cache: 'no-store' } },
+  ]);
 });

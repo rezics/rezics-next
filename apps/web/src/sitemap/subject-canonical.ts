@@ -57,28 +57,30 @@ export function subjectCanonicalPage(page: SubjectSitemapPage): CanonicalSitemap
     const views = item.views;
     if (
       !Array.isArray(views) ||
-      views.length === 0 ||
       !views.every(
         (view, index) =>
-          isView(view) && (index === 0 || viewOrder.indexOf(views[index - 1]!) < viewOrder.indexOf(view)),
+          isView(view) &&
+          // The native Account batch admits only these names; this validates its wire contract.
+          (target.family !== 'account' ||
+            view === 'overview' ||
+            view === 'posts' ||
+            view === 'reviews' ||
+            view === 'collections') &&
+          (index === 0 || viewOrder.indexOf(views[index - 1]!) < viewOrder.indexOf(view)),
       )
     )
       return unavailable('current native offered views in canonical constructor order');
-    // loadPublicAccountJourney also requires Account publicViews for these activity routes. Semantic's
-    // definedViews supplies template availability only; neither labels nor the current handle proves this fact.
-    if (
-      target.family === 'account' &&
-      views.some((view) => view === 'posts' || view === 'reviews' || view === 'collections')
-    )
-      return unavailable(
-        'current Account public-view admission for posts/reviews/collections; native target/views supply template availability only',
-      );
     if (
       !Array.isArray(item.labels) ||
       !item.labels.every((label) => label && typeof label.language === 'string' && typeof label.value === 'string') ||
       !(item.originalLanguage === undefined || typeof item.originalLanguage === 'string')
     )
       return unavailable('native public labels and optional original language');
+    if (views.length === 0) {
+      // A known-empty native intersection still advances the original source identity and cursor.
+      items.push({ id: item.id, key: `${sourceKey}:empty`, family: null });
+      continue;
+    }
     const labels = Object.fromEntries(item.labels.map(({ language, value }) => [language, value]));
     const paths =
       target.family === 'account'
@@ -102,7 +104,7 @@ export function subjectCanonicalPage(page: SubjectSitemapPage): CanonicalSitemap
       items.push({
         id: item.id,
         key: `${sourceKey}:${String(viewOrder.indexOf(view)).padStart(2, '0')}`,
-        // The native Account target proves its overview root; it declares no agents-feed ownership veto.
+        // Native Account views already intersect template availability with current owner admission.
         family: sitemapFamilyFromPagePaths(subjectViewPaths(paths, view), lastModified),
       });
     }

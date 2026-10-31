@@ -51,6 +51,9 @@ test('canonical reader paths reach sitemap and HTML unchanged across sparse lang
     subjectViewPaths(subjectPaths, 'details'),
     paths('/@CurrentHandle'),
     paths('/@CurrentHandle/works'),
+    paths('/@CurrentHandle/posts'),
+    paths('/@CurrentHandle/reviews'),
+    paths('/@CurrentHandle/collections'),
   ]) {
     const family = sitemapFamilyFromPagePaths(pagePaths);
     expect(sitemapPagePaths(family.paths)).toEqual(pagePaths);
@@ -159,10 +162,18 @@ test('missing or invalid required native targets and views refuse projection ins
     { ...item, target: { family: 'subject', subjectId: id.replace(/0$/u, '1') } },
     { ...item, target: { family: 'unknown' } },
     { ...item, views: undefined },
-    { ...item, views: [] },
+    { ...item, views: null },
+    { ...item, views: 'overview' },
     { ...item, views: ['overview', 'overview'] },
     { ...item, views: ['details', 'overview'] },
     { ...item, views: ['overview', 'editor'] },
+    ...['works', 'details'].map((view) => ({
+      ...item,
+      target: { family: 'account', accountId: id, canonicalPath: '/@CurrentHandle' },
+      views: ['overview', view],
+    })),
+    { ...item, target: { family: 'account', accountId: 'not-an-account', canonicalPath: '/@CurrentHandle' } },
+    { ...item, target: { family: 'account', accountId: id, canonicalPath: null } },
     ...[
       '',
       '/@',
@@ -198,22 +209,53 @@ test('missing or invalid required native targets and views refuse projection ins
     expect(() => subjectCanonicalPage({ subjectPages, next: null })).toThrow('source order');
 });
 
-test('Account activity views require native public-view admission while other delivered families remain available', () => {
-  for (const view of ['posts', 'reviews', 'collections']) {
+test('existing default sitemap canonical projection consumes actual native admitted Account views while retaining canonical overview raw source identity sparse cursor explicit missing-data failure and current native authority without extra IO', async () => {
+  calls.length = 0;
+  const admitted = [
+    ['overview', 'posts', 'reviews', 'collections'],
+    ['overview'],
+    ['posts'],
+    ['reviews'],
+    ['collections'],
+    ['posts', 'collections'],
+  ];
+  let allKeys: string[] = [];
+  for (const views of admitted) {
     const item: SubjectPage['subjectPages'][number] = {
       id,
-      labels: [],
-      target: { family: 'account', accountId: id, canonicalPath: '/@CurrentHandle' },
-      views: ['overview', view],
+      labels: [{ language: 'fr', value: 'Never a handle or permission' }],
+      target: { family: 'account', accountId: id.replace(/0$/u, '1'), canonicalPath: '/@CurrentHandle' },
+      views,
+      lastModified,
     };
-    expect(() => subjectCanonicalPage({ subjectPages: [item], next: null })).toThrow(
-      'current Account public-view admission',
-    );
+    subjects = { subjectPages: [item], next: 'native-next' };
+    const feed = createSubjectFeed();
+    const page = await feed.read('native-current');
+    expect(page.next).toBe('native-next');
+    expect(page.items.map(({ id }) => id)).toEqual(views.map(() => item.id));
+    expect(page.items).toHaveLength(views.length);
+    const keys = page.items.map((entry) => feed.key!(entry));
+    if (views.length === 4) allKeys = keys;
+    expect(keys).toEqual(views.map((view) => allKeys[admitted[0]!.indexOf(view)]!));
+    for (const [index, view] of views.entries()) {
+      const family = feed.family(page.items[index]!)!;
+      const canonical = paths(`/@CurrentHandle${view === 'overview' ? '' : `/${view}`}`);
+      expect(family).toEqual(sitemapFamilyFromPagePaths(canonical, lastModified));
+      const xml = familyXml('https://public.example', family.paths, family.lastmod);
+      expect(xml.urls).toHaveLength(8);
+      for (const locale of locales) {
+        const links = pageLinks('https://public.example', locale, '/', canonical);
+        expect(xml.urls).toContain(links[0]!.href);
+      }
+    }
     const ordinary = { ...item, target: { family: 'subject' as const, subjectId: id } };
-    expect(subjectCanonicalPage({ subjectPages: [ordinary], next: null }).items[1]!.family?.paths.en).toEndWith(
-      `/${view}`,
-    );
+    const ordinaryItems = subjectCanonicalPage({ subjectPages: [ordinary], next: null }).items;
+    expect(ordinaryItems).toHaveLength(views.length);
+    for (const [index, view] of views.entries())
+      if (view !== 'overview') expect(ordinaryItems[index]!.family?.paths.en).toEndWith(`/${view}`);
   }
+  expect(allKeys).toEqual(['00', '08', '09', '12'].map((suffix) => `${id.slice(24, 28)}${id}:${suffix}`));
+  expect(calls).toEqual(admitted.map(() => ({ name: 'subjects', query: { cursor: 'native-current', limit: 1_000 } })));
 });
 
 test('projection injection cannot drop reorder or replace native source identities or change a continuation', async () => {
