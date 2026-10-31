@@ -850,16 +850,47 @@ export class WorkerStore implements AttemptFence {
       })
       .immediate();
   }
+  /** Save the old contract's real classification before a supported proof conversion, never source/token facts. */
+  private retainProofPredecessor(before: Task, after: Task): void {
+    if (!before.currentAttempt || before.brief.kind === 'verification' || after.brief.kind !== 'verification') return;
+    const ref = { taskId: before.id, attempt: before.currentAttempt };
+    if (!this.record(ref)) {
+      const attempt = this.attempt(ref);
+      this.saveRecord(makeRecord(before, attempt, readMeasurement(attempt), 'stopped'));
+    }
+  }
+  /** Called inside the lifecycle transaction as well as before writing a submitted brief. */
+  assertProofRegistration(ref: AttemptRef, brief: Brief): void {
+    const task = this.task(ref.taskId);
+    if (task.currentAttempt !== ref.attempt || !['ready', 'held', 'stopped'].includes(task.state))
+      throw new StaleAttemptError(ref, task.currentAttempt);
+    if (ref.attempt > 0) {
+      const attempt = this.attempt(ref);
+      if (!['stopped', 'exited'].includes(attempt.state)) throw new StaleAttemptError(ref, task.currentAttempt);
+    }
+    if (task.brief.goal !== brief.goal || task.brief.manager !== brief.manager)
+      throw new Error('a reshaped brief must keep the same goal and manager');
+    const reserved = this.db.query('SELECT 1 FROM worker_proof_reservations WHERE task_id=? LIMIT 1').get(task.id);
+    if (reserved && proofFingerprint(task.brief) !== proofFingerprint(brief))
+      throw new Error('a reserved proof source and command may never be replaced');
+    if (task.brief.proof && task.brief.proof.sourceCommit !== brief.proof?.sourceCommit && ref.attempt !== 0)
+      throw new Error('proof source refresh requires a new authorized registration before any attempt');
+  }
   recordExplicitRetry(ref: AttemptRef, update: (task: Task) => void, options: RetryIntent['options']): void {
     this.db
       .transaction(() => {
         const task = this.task(ref.taskId);
         if (
           task.currentAttempt !== ref.attempt ||
+          ['cancelled', 'integrated', 'merged', 'verified'].includes(task.state) ||
           (ref.attempt > 0 && ['superseded', 'cancelled'].includes(this.attempt(ref).state))
         )
           throw new StaleAttemptError(ref, task.currentAttempt);
+        const before = structuredClone(task);
         update(task);
+        this.retainProofPredecessor(before, task);
+        if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt)
+          throw new Error('task identity cannot be updated');
         this.saveTask(task);
         const existing = this.retryIntent(ref);
         if (existing?.status === 'pending') throw new Error('a retry is already pending');
@@ -1079,7 +1110,9 @@ export class WorkerStore implements AttemptFence {
           attempt.endedAt ??= new Date().toISOString();
           this.saveAttempt(attempt);
         }
+        const before = structuredClone(task);
         update(task);
+        this.retainProofPredecessor(before, task);
         if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt)
           throw new Error('task identity cannot be updated');
         this.saveTask(task);
@@ -1179,6 +1212,8 @@ export class WorkerStore implements AttemptFence {
           previous?.outcome ?? 'superseded',
         );
         if (previous) {
+          record.taskKind = previous.taskKind;
+          record.taskClass = previous.taskClass;
           record.diffLines = previous.diffLines;
           record.changedFiles = previous.changedFiles;
           record.hostMs = previous.hostMs;

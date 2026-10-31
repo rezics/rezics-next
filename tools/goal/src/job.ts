@@ -1,5 +1,6 @@
 import {
   ProofCapacityQueuedError,
+  ProofUnavailableError,
   readReservationObservation,
   readProofObservation,
   historicalProofTerminal,
@@ -210,6 +211,7 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (task.currentAttempt !== ref.attempt) return;
       if (task.state === 'held') return;
+      this.tasks.assertProofStart(task);
       if (task.brief.kind === 'verification' && !store.proofCapacityAvailable(task.brief.goal, task.id)) return;
       if (!['landing', 'ready', 'running', 'stopped'].includes(task.state)) {
         store.updateRetryIntent(ref, (value) => {
@@ -248,7 +250,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (worker) await this.follow(worker);
     } catch (error) {
       // Another process holds the task: the intent stays pending for the next sweep.
-      if (error instanceof LeaseHeldError || error instanceof ProofCapacityQueuedError) return;
+      if (error instanceof LeaseHeldError || error instanceof ProofCapacityQueuedError || error instanceof ProofUnavailableError) return;
       if (error instanceof TaskHeldForDependenciesError || error instanceof StaleAttemptError) {
         store.updateRetryIntent(ref, (value) => {
           value.status = 'started';
@@ -262,6 +264,12 @@ export class WorkerJob implements GateOutcomeSink {
     }
   }
   resumePendingRetries(): void {
+    // Dispatch may crash after accepting READY0 but before calling start. The same durable intent owns recovery.
+    for (const task of this.tasks.store.activeTasks()) {
+      if (task.currentAttempt === 0 && ['ready', 'held'].includes(task.state) &&
+          task.brief.kind === 'verification' && task.proofAuthorization)
+        this.tasks.store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
+    }
     for (const intent of this.tasks.store.retryIntents().filter((value) => value.status === 'pending'))
       this.track(this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt }));
   }
@@ -971,6 +979,7 @@ export class WorkerJob implements GateOutcomeSink {
       : tasks.filter(
           (t) =>
             t.state === 'ready' &&
+            t.brief.kind !== 'verification' &&
             t.brief.after.length &&
             this.tasks.dependenciesMet(t, tasks) &&
             // A ready task with a pending retry intent is a retry, started from the intent.

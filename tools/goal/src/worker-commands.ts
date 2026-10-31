@@ -147,13 +147,29 @@ export async function runWorkerCommand(
         );
       }
     } else if (command === 'retry') {
-      if (!arg || (argv.length !== 1 && !(argv.length === 3 && argv[1] === '--brief' && argv[2])))
-        throw new Error('usage: retry <task> [--brief <file>]');
-      try {
-        tasks.queueRetry(arg, argv.length === 3 ? { brief: argv[2]! } : {}, priorityActor);
-      } catch (error) {
-        if (!(error instanceof BriefContractUnchangedError)) throw error;
-        print(error.message);
+      if (!arg) throw new Error('usage: retry <task> [--expected-attempt <n>] [--brief <file>] [--remove-after <task>]');
+      let brief: string | undefined;
+      let expectedAttempt: number | undefined;
+      const removeAfter: string[] = [];
+      for (let index = 1; index < argv.length; index += 2) {
+        const flag = argv[index], value = argv[index + 1];
+        if (!value) throw new Error(`missing value for ${flag}`);
+        if (flag === '--brief' && brief === undefined) brief = value;
+        else if (flag === '--expected-attempt' && expectedAttempt === undefined && /^(0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value)))
+          expectedAttempt = Number(value);
+        else if (flag === '--remove-after') removeAfter.push(value);
+        else throw new Error(`invalid retry option: ${flag}`);
+      }
+      if (expectedAttempt === 0) {
+        print(JSON.stringify(tasks.queueProofStart(arg, { expectedAttempt: 0, ...(brief ? { brief } : {}), removeAfter }, priorityActor)));
+      } else {
+        if (removeAfter.length) throw new Error('--remove-after requires --expected-attempt 0');
+        try {
+          tasks.queueRetry(arg, { ...(brief ? { brief } : {}), ...(expectedAttempt === undefined ? {} : { expectedAttempt }) }, priorityActor);
+        } catch (error) {
+          if (!(error instanceof BriefContractUnchangedError)) throw error;
+          print(error.message);
+        }
       }
     } else if (command === 'priority') {
       if (argv[0] === 'grant') {

@@ -756,3 +756,291 @@ test('delivered proof provider boundaries consume the bound invocation and never
     directory.close();
   }
 });
+
+import { dirname } from 'node:path';
+import { WorkerTasks } from './tasks.ts';
+import { parseBrief, readRiskOwnership } from './briefs.ts';
+import { reading } from './test-support.ts';
+import { proofExecutionUnavailable, ProofUnavailableError } from './verification.ts';
+import { createRuntime } from './config.ts';
+import { runWorkerCommand } from './worker-commands.ts';
+import type { Brief } from './types.ts';
+
+/** Submit through the real local brief parser, rather than assigning a proof permit to a task. */
+function submittedProof(h: ReturnType<typeof registeredFixture>, changes: Partial<Brief> = {}) {
+  const value = {
+    goal: h.proofBrief.goal,
+    manager: h.proofBrief.manager,
+    kind: 'verification',
+    proof: h.proofBrief.proof,
+    riskAreas: [],
+    acceptance: h.proofBrief.acceptance,
+    criticalPath: false,
+    waiting: [],
+    after: [],
+    ...changes,
+  };
+  const markdown = `---\n${JSON.stringify(value, null, 2)}\n---\nObserve the exact original; source and tests are read-only.\n`;
+  const path = join(h.settings.stateDirectory, `proof-${crypto.randomUUID()}.md`);
+  writeFileSync(path, markdown);
+  return { path, brief: parseBrief(markdown, readRiskOwnership(h.settings.riskAreasFile)) };
+}
+
+test('Exact whole original Auth workspace check and complete homogeneous helper-plus-test file union authorize without relaxing root/gate prohibition', () => {
+  const h = registeredFixture();
+  try {
+    const prefix = ['bun', 'run', '--cwd', 'services/kernel', 'check'];
+    const identity = ['test/imports/identity-fixture.ts', 'test/imports/identity-driver.ts', 'test/imports/identity-outcomes.test.ts'];
+    const growth = ['test/imports/growth-fixture.ts', 'test/imports/growth-driver.ts', 'test/imports/growth-sqlite-capture.ts', 'test/imports/growth-outcomes.test.ts', identity[2]!];
+    for (const file of [...identity, ...growth]) {
+      const path = join(h.root, 'services/kernel', file);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, 'export {};\n');
+    }
+    git(h.root, ['add', 'services/kernel']);
+    git(h.root, ['commit', '-m', 'Fixture original helper and test inputs']);
+    const sourceCommit = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
+    const original = (command: string[]) => {
+      const task = h.store.createTask({ ...brief(), acceptance: { ...brief().acceptance, command } },
+        { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: sourceCommit }, 'implementation');
+      h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
+        current.state = 'integrated';
+        current.integratedCommit = sourceCommit;
+      });
+      return task.id;
+    };
+    const auth = ['bun', 'run', '--cwd', 'services/auth', 'check'];
+    const authTask = original(auth);
+    const whole = submittedProof(h, { proof: { ...h.proofBrief.proof, sourceTasks: [authTask], sourceCommit }, acceptance: { ...h.proofBrief.acceptance, command: auth } }).brief;
+    expect(authorizeProof(h.store, h.root, whole, h.actor, 'operations', 'dev').originals).toEqual([
+      { taskId: authTask, commit: sourceCommit, argv: auth },
+    ]);
+    expect(() => authorizeProof(h.store, h.root, { ...whole, proof: { ...whole.proof!, sourceTasks: [h.source.id] } }, h.actor, 'operations', 'dev')).toThrow('every whole original');
+    expect(() => authorizeProof(h.store, h.root, { ...whole, acceptance: { ...whole.acceptance, command: [...auth, 'test/short.test.ts'] } }, h.actor, 'operations', 'dev')).toThrow('every whole original');
+    const kernel = ['bun', 'run', '--cwd', 'services/kernel', 'check'];
+    expect(authorizeProof(h.store, h.root, { ...whole, proof: { ...whole.proof!, sourceTasks: [original(kernel)] }, acceptance: { ...whole.acceptance, command: kernel } }, h.actor, 'operations', 'dev').originals[0]?.argv).toEqual(kernel);
+    for (const env of [[], ['env', '-u', 'KERNEL_CHECK_REMOTE']]) {
+      const a = [...env, ...prefix, ...identity], b = [...env, ...prefix, ...growth];
+      const command = [...env, ...prefix, ...new Set([...identity, ...growth])];
+      const proof = { ...whole, proof: { ...whole.proof!, sourceTasks: [original(a), original(b)] }, acceptance: { ...whole.acceptance, command } };
+      expect(authorizeProof(h.store, h.root, proof, h.actor, 'operations', 'dev').originals.map((entry) => entry.argv)).toEqual([a, b]);
+      expect(preflightProof(h.root, proof)).toEqual([]);
+      expect(originalCommandMatches([...env, ...prefix, ...command.slice(env.length + prefix.length + 1)], [a, b])).toBe(false);
+      expect(originalCommandMatches([...env, ...prefix, ...identity, ...growth], [a, b])).toBe(false);
+      expect(originalCommandMatches(command, [a, ['env', 'CI=1', ...prefix, ...growth]])).toBe(false);
+      expect(originalCommandMatches(command, [a, [...env, ...prefix, '--timeout', '30000', ...growth]])).toBe(false);
+      expect(preflightProof(h.root, { ...proof, acceptance: { ...proof.acceptance, command: [...command, 'test/imports/missing-helper.ts'] } })).toEqual(['test/imports/missing-helper.ts']);
+    }
+    for (const command of [
+      ['bun', 'run', 'check'], ['bun', 'test'], ['bun', 'run', 'gate857', 'fixture.test.ts'],
+      ['sh', '-c', 'bun test fixture.test.ts'], ['bun', 'test', '--preload', 'fixture.test.ts'],
+      ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'scripts/worker-check.ts', '--', 'bun', 'test', 'fixture.test.ts'],
+    ]) {
+      const proof = { ...whole, proof: { ...whole.proof!, sourceTasks: [original(command)] }, acceptance: { ...whole.acceptance, command } };
+      expect(() => authorizeProof(h.store, h.root, proof, h.actor, 'operations', 'dev')).toThrow('broad root or gate');
+    }
+    const local = ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test'];
+    const a = [...local, 'fixture.test.ts'], b = [...local, 'other.test.ts'];
+    const union = [...a, 'other.test.ts'];
+    const wrapped = { ...whole, proof: { ...whole.proof!, sourceTasks: [original(a), original(b)] }, acceptance: { ...whole.acceptance, command: union } };
+    expect(authorizeProof(h.store, h.root, wrapped, h.actor, 'operations', 'dev').originals.map((entry) => entry.argv)).toEqual([a, b]);
+    expect(originalCommandMatches(['bun', 'test', 'fixture.test.ts', 'other.test.ts'], [a, b])).toBe(false);
+    expect(proofExecutionUnavailable(union)).toContain('ONE logical invocation');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('stopped same-generation and never-started held proof conversion persists authentic registration/start once without fabricated source/token', async () => {
+  const h = registeredFixture();
+  try {
+    const legacy = h.store.createTask({ ...brief(), kind: 'claim' },
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'claim');
+    let ref = { taskId: legacy.id, attempt: 0 };
+    for (let n = 1; n <= 28; n++) ref = h.store.nextAttempt(ref, (number) => attempt(legacy.id, number, h.settings.stateDirectory));
+    h.store.updateAttempt(ref, (current) => {
+      current.result = 'Original failed report, not a registered proof';
+      current.session = 'retained-original-session';
+    });
+    h.store.close(ref, 'stopped');
+    const raw = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(legacy.id, 28);
+    const submitted = submittedProof(h);
+    expect(() => h.tasks.queueRetry(legacy.id, { brief: submitted.path, expectedAttempt: 27 }, h.actor)).toThrow('stale');
+    expect(h.store.task(legacy.id).brief.kind).toBe('claim');
+    expect(h.store.task(legacy.id).proofAuthorization).toBeUndefined();
+    h.tasks.queueRetry(legacy.id, { brief: submitted.path, expectedAttempt: 28 }, h.actor);
+    const registered = h.store.task(legacy.id);
+    expect(registered.currentAttempt).toBe(28);
+    expect(registered.brief.kind).toBe('verification');
+    expect(registered.proofAuthorization).toMatchObject({ manager: h.actor.id, sessionId: h.actor.sessionId, sourceTree: h.binding.sourceTree });
+    expect(registered.proofRun).toBeUndefined();
+    expect(h.store.proofReservation(legacy.id, 28)).toBeUndefined();
+    expect(h.store.retryIntent(ref)?.status).toBe('pending');
+    expect(h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(legacy.id, 28)).toEqual(raw);
+    expect(h.store.record(ref)?.taskKind).toBe('claim');
+    expect(h.store.record(ref)?.proof).toBeUndefined();
+    expect(() => h.tasks.queueRetry(legacy.id, { expectedAttempt: 28 }, h.actor)).toThrow('already pending');
+
+    const lane = h.store.createTask(brief(), { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+    const future = { ...h.proofBrief.proof, sourceCommit: 'b'.repeat(40) };
+    const held = h.store.createTask({ ...brief(), kind: 'claim', proof: future, after: [lane.id] },
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'claim');
+    const before = h.store.task(held.id);
+    expect(() => h.tasks.queueProofStart(held.id, { expectedAttempt: 0, brief: submitted.path }, h.actor)).toThrow('removeAfter');
+    expect(h.store.task(held.id)).toEqual(before);
+    expect(() => h.tasks.queueProofStart(held.id, { expectedAttempt: 0, brief: submitted.path, removeAfter: [lane.id] }, { id: 'foreign', sessionId: 'foreign' })).toThrow('authenticated');
+    expect(h.store.task(held.id)).toEqual(before);
+    const runtime = createRuntime({ tasks: h.tasks, db: h.store.db });
+    const output: string[] = [];
+    expect(await runWorkerCommand('retry', [held.id, '--expected-attempt', '0', '--brief', submitted.path, '--remove-after', lane.id], {
+      runtime, env: { CODEX_THREAD_ID: h.actor.sessionId }, print: (value) => output.push(value),
+    })).toBe(0);
+    expect(JSON.parse(output[0]!)).toEqual({ taskId: held.id, attempt: 0, status: 'created' });
+    const converted = h.store.task(held.id);
+    expect(converted.state).toBe('ready');
+    expect(converted.currentAttempt).toBe(0);
+    expect(converted.brief.proof).toEqual(submitted.brief.proof);
+    expect(converted.brief.after).toEqual([]);
+    expect(converted.proofAuthorization?.sessionId).toBe(h.actor.sessionId);
+    expect(converted.proofRun).toBeUndefined();
+    expect(h.store.attempts(held.id)).toEqual([]);
+    h.tasks.queueProofStart(held.id, { expectedAttempt: 0 }, h.actor);
+    expect(h.store.retryIntents().filter((intent) => intent.taskId === held.id)).toHaveLength(1);
+    expect(h.store.retryIntent({ taskId: held.id, attempt: 0 })?.status).toBe('pending');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('registered READY0 recovery uses normal first start once across controllers, with no metadata resubmission or duplicate binding', async () => {
+  const h = registeredFixture();
+  const db = openDb(join(h.settings.stateDirectory, 'goal.sqlite'));
+  try {
+    const submitted = submittedProof(h);
+    const ready = h.store.createTask(submitted.brief,
+      { briefPath: submitted.path, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+    h.store.updateTask({ taskId: ready.id, attempt: 0 }, (current) => {
+      current.proofAuthorization = authorizeProof(h.store, h.root, submitted.brief, h.actor, 'operations', 'dev');
+    });
+    // Simulate dispatch dying after accepting READY0 but before recording or launching its start.
+    expect(h.store.retryIntent({ taskId: ready.id, attempt: 0 })).toBeUndefined();
+    let binds = 0, launches = 0;
+    const second = new WorkerStore(db);
+    const tasks = new WorkerTasks(h.settings, second, (pool) => reading(pool), async (store, task, next) => {
+      launches++;
+      expect(task.proofRun?.status).toBe('bound');
+      mkdirSync(dirname(next.logPath), { recursive: true });
+      writeFileSync(next.logPath, JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ status: 'success', summary: 'Original fixture terminal evidence', blocker: null, checks: [], approaches: [] }) } }) + '\n');
+      store.updateTask(next, (current) => { current.state = 'running'; });
+      const saved = store.updateAttempt(next, (current) => { current.state = 'running'; current.session = 'proof-session'; });
+      return { attempt: saved, exited: Promise.resolve({ code: 0, signal: null }) };
+    }, { async bind(binding) {
+      binds++;
+      const { record, physical } = records(binding);
+      const checks = join(h.root, '.temp/goal/checks');
+      mkdirSync(join(checks, 'results'), { recursive: true });
+      mkdirSync(join(checks, 'history', binding.checkId), { recursive: true });
+      writeFileSync(join(checks, 'results', `${binding.checkId}.json`), JSON.stringify(record));
+      writeFileSync(join(checks, 'history', binding.checkId, `${record.physicalRunId}.json`), JSON.stringify(physical));
+      return { status: 'bound', binding };
+    } });
+    const job = new WorkerJob(tasks, { enqueue() { throw new Error('proof must never land'); } }, { deliver() {} });
+    job.resumePendingRetries();
+    job.resumePendingRetries();
+    await job.drain();
+    expect(binds).toBe(1);
+    expect(launches).toBe(1);
+    expect(second.task(ready.id).state).toBe('verified');
+    expect(second.attempts(ready.id)).toHaveLength(1);
+    expect(second.retryIntent({ taskId: ready.id, attempt: 0 })).toMatchObject({ status: 'started', nextAttempt: 1 });
+    const retained = second.proofReservation(ready.id, 1)!;
+    expect(retained.binding).toMatchObject({ sourceCommit: h.binding.sourceCommit, sourceTree: h.binding.sourceTree, argv: submitted.brief.acceptance.command });
+    expect(retained.binding.reservationToken).toMatch(/^[0-9a-f-]{36}$/);
+    await job.start(ready.id, { expectedAttempt: 0 });
+    job.resumePendingRetries();
+    await job.drain();
+    expect(binds).toBe(1);
+    expect(launches).toBe(1);
+  } finally {
+    db.close();
+    h.dispose();
+  }
+});
+
+test('first-start cap waits and old captures keep one durable intent; only authenticated unreserved generation zero can refresh', async () => {
+  const h = registeredFixture();
+  try {
+    for (let n = 0; n < 2; n++) {
+      const submitted = submittedProof(h);
+      const task = h.store.createTask(submitted.brief, { briefPath: submitted.path, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+      h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => { current.proofAuthorization = authorizeProof(h.store, h.root, submitted.brief, h.actor, 'operations', 'dev'); });
+      const ref = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number) => attempt(task.id, number, h.settings.stateDirectory));
+      const binding = newProofBinding(h.store.task(task.id), ref.attempt);
+      h.store.reserveProof(binding);
+      h.store.bindProof(binding, { status: 'unknown', cause: 'Actual custody unresolved' });
+    }
+    const submitted = submittedProof(h);
+    const task = h.store.createTask({ ...brief(), kind: 'claim' }, { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'claim');
+    expect(h.tasks.queueProofStart(task.id, { expectedAttempt: 0, brief: submitted.path }, h.actor).status).toBe('waiting');
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    job.resumePendingRetries();
+    await job.drain();
+    expect(h.store.attempts(task.id)).toEqual([]);
+    expect(h.store.proofReservation(task.id, 0)).toBeUndefined();
+    writeFileSync(join(h.root, 'later-source'), 'fresh capture');
+    git(h.root, ['add', 'later-source']);
+    git(h.root, ['commit', '-m', 'Advance integration fixture']);
+    const sourceCommit = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
+    await expect(job.start(task.id, { expectedAttempt: 0 })).rejects.toThrow('integration source advanced');
+    job.resumePendingRetries();
+    await job.drain();
+    expect(h.store.task(task.id).brief.proof?.sourceCommit).toBe(h.binding.sourceCommit);
+    expect(h.store.attempts(task.id)).toEqual([]);
+    const fresh = submittedProof(h, { proof: { ...h.proofBrief.proof, sourceCommit } });
+    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 0, brief: fresh.path }, { ...h.actor, sessionId: 'stale-session' })).toThrow('live authenticated');
+    h.settings.integration.operationsManager = 'operations';
+    const operations = { id: 'operations', sessionId: 'operations-session' };
+    h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(operations.id, JSON.stringify({ status: 'running', threadId: operations.sessionId }));
+    expect(h.tasks.queueProofStart(task.id, { expectedAttempt: 0, brief: fresh.path }, operations).status).toBe('waiting');
+    expect(h.store.task(task.id).brief.proof?.sourceCommit).toBe(sourceCommit);
+    expect(h.store.retryIntents().filter((intent) => intent.taskId === task.id)).toHaveLength(1);
+    h.store.close(h.current, 'stopped');
+    expect(() => h.tasks.queueRetry(h.proof.id, { expectedAttempt: 1, brief: fresh.path }, h.actor)).toThrow('reserved proof source');
+    expect(h.store.proofReservation(h.proof.id, 1)?.binding).toEqual(h.binding);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('first-start receiving refuses missing helpers and stale, cancelled, integrated or running-owner conversions before native execution', () => {
+  const h = registeredFixture();
+  try {
+    const submitted = submittedProof(h);
+    const make = () => h.store.createTask({ ...brief(), kind: 'claim' }, { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'claim');
+    for (const state of ['cancelled', 'integrated'] as const) {
+      const task = make();
+      h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => { current.state = state; });
+      expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 0, brief: submitted.path }, h.actor)).toThrow('stale');
+      expect(h.store.retryIntent({ taskId: task.id, attempt: 0 })).toBeUndefined();
+      expect(h.store.task(task.id).brief.kind).toBe('claim');
+    }
+    const running = make();
+    const ref = h.store.nextAttempt({ taskId: running.id, attempt: 0 }, (number) => attempt(running.id, number, h.settings.stateDirectory));
+    h.store.updateTask(ref, (current) => { current.state = 'running'; });
+    expect(() => h.tasks.queueRetry(running.id, { brief: submitted.path, expectedAttempt: 1 }, h.actor)).toThrow('stale');
+    expect(() => h.tasks.queueProofStart(running.id, { expectedAttempt: 0, brief: submitted.path }, h.actor)).toThrow('stale');
+    expect(h.store.task(running.id).proofAuthorization).toBeUndefined();
+    const command = ['bun', 'run', '--cwd', 'services/kernel', 'check', 'missing-helper.ts', 'fixture.test.ts'];
+    h.store.updateTask({ taskId: h.source.id, attempt: 0 }, (current) => { current.brief.acceptance.command = command; });
+    const missing = submittedProof(h, { acceptance: { ...h.proofBrief.acceptance, command } });
+    const task = make();
+    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 0, brief: missing.path }, h.actor)).toThrow(ProofUnavailableError);
+    expect(h.store.task(task.id).brief.kind).toBe('claim');
+    expect(h.store.attempts(task.id)).toEqual([]);
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 0 })).toBeUndefined();
+  } finally {
+    h.dispose();
+  }
+});

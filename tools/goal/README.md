@@ -985,7 +985,8 @@ command into a pass.
 `kind: verification` is an ordinary Codex worker on the implementation route. It is a read-only proof record,
 separate from a source task: it needs no declared source paths, source estimate, edit, commit, receipt or landing.
 The authenticated owning manager, or `integration.operationsManager` when configured locally, registers it through
-normal dispatch or continues an existing stopped proof task through `retry --brief`. A verification brief cannot
+normal dispatch, converts an existing stopped task through `retry --brief`, or registers the first start of a
+never-started task through `retry --expected-attempt 0`. A verification brief cannot
 choose critical priority, frozen inputs, product paths, a different target or a local placement override.
 
 For example, write `.temp/goal/original-proof.md` with the following front matter and a read-only journey description.
@@ -1014,13 +1015,52 @@ Observe the original journey on the captured source. Source and tests are read-o
 
 From that authenticated manager session, register with
 `bun tools/goal/src/cli.ts dispatch .temp/goal/original-proof.md`, or continue the same stopped task with
-`bun tools/goal/src/cli.ts retry <existing-proof-task> --brief .temp/goal/original-proof.md`.
+`bun tools/goal/src/cli.ts retry <existing-proof-task> --expected-attempt <current-generation> --brief .temp/goal/original-proof.md`.
 Neither command reopens any integrated source original. All originals must belong to this Goal and owner and be
 integrated or merged ancestors of the captured commit. A group retains every whole identical original argv, or the
 ordered deduplicated union of explicit Bun test files or Kernel/Auth `bun run --cwd <service> check` files
-with identical raw prefixes, including cwd/env arguments. Mixed bare and `env -u` groups stay separate.
+with identical raw prefixes, including cwd/env arguments. Service file lists include every helper before, between and
+after tests, starting at the first input. Exact whole original Auth/Kernel workspace checks require their same-Goal
+integrated original provenance; they need no invented explicit test list. Mixed bare and `env -u` groups stay separate.
 Shortened selections, changed flags and broad root/gate campaigns are refused. Explicit command files must exist in
 the captured Git tree before native execution can be granted. Advancing integration invalidates that capture.
+
+
+For a never-started held task, submit the typed brief on the SAME task id:
+
+```sh
+bun tools/goal/src/cli.ts retry <task> --expected-attempt 0 --brief .temp/goal/original-proof.md --remove-after <obsolete-lane>
+```
+
+Repeat `--remove-after` for each obsolete dependency removed by the submitted brief, and omit it when none is removed.
+The approved list must match exactly: conversion never implicitly drops an old dependency. Other dependency edges
+remain effective. A typed READY0 contract already accepted with a valid capture needs no resubmission: normal
+`WorkerJob.start(taskId, { expectedAttempt: 0 })` starts it once; the host also recovers dispatches that died before
+that first start.
+
+The public receiving method is `WorkerTasks.queueProofStart(taskId, options, actor)`, where `ProofStartOptions` is
+`{ expectedAttempt: 0; brief?: string; removeAfter?: string[] }`. It returns `ProofStartRegistration` with
+`{ taskId, attempt: 0, status: 'created' | 'waiting' | 'pending', reason?: string }`. `created` means the normal durable
+start intent was saved and is eligible; `waiting` means dependencies or owned proof capacity defer it; `pending` names
+an unavailable native invocation port. These are registration outcomes, without a worker/check id or a model launch.
+Missing inputs, stale generations, invalid captures, unauthenticated owners and invalid transitions are refused before
+execution. No `queueRetry` at generation zero or duplicate task is needed.
+
+Both boundaries authenticate the live owner or configured operations manager and persist authorization, typed contract
+and intent together through the existing SQLite lifecycle under the task lease. A stopped current generation can
+register without using the ordinary stopped-attempt write fence. Its raw attempts, sessions and reports stay intact;
+its historical attempt classification never becomes a registered proof. Running owners, cancelled/integrated tasks
+and stale generations cannot convert. Source refresh is allowed only in a new authenticated registration at generation
+zero before any reservation or attempt. Once a source/token is reserved it cannot change, even after release. The host
+keeps the same generation-zero intent through capacity waits and recovery; unavailable custody never launches a model.
+
+The exact retained prefix `bun scripts/worker-check.ts --local -- bun test` supports provenance registration and full
+homogeneous ordered file unions. It remains explicitly unavailable for execution with the delivered 50a producer:
+`startControllerWorkerCheck` currently treats that raw argv as a child command, which would create a second check.
+The required producer port must bind that exact original wrapped argv to ONE logical native invocation, preserving
+wrapper flags, token, source and result identity. Until that port is delivered, the receiving result is `pending` and
+the host leaves its intent pending before any attempt/reservation/native execution. Goal neither strips the wrapper
+nor guesses a native capability. Additional/nested wrappers and arbitrary shell/flags are prohibited.
 
 `verification.ts` exports `ProofProducer.bind(ProofBinding): Promise<ProofBindResult>`,
 `productionProofProducer`, `nativeProofBinding`, and `receiveProofStart`. `ProofBinding` version 1 carries the

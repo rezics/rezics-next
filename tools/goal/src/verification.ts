@@ -132,6 +132,8 @@ export function productionProofProducer(store: WorkerStore, registry: string, en
             throw new Error('Native proof publication requires its exact active SQLite reservation');
         };
         admitted();
+        const unavailable = proofExecutionUnavailable(binding.argv);
+        if (unavailable) return { status: 'unavailable', cause: unavailable };
         if (
           spawnSync('git', ['merge-base', '--is-ancestor', PROOF_PRODUCER_COMMIT, binding.sourceCommit], {
             cwd: binding.cwd,
@@ -251,37 +253,57 @@ export function proofFingerprint(brief: Brief): string {
 function same(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
-/** Explicit Bun test or service check files, preserving the complete raw env/cwd prefix. */
-function fileCommand(argv: string[]): { prefix: string[]; files: string[] } | undefined {
-  const first = argv.findIndex((word) => /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(word));
-  if (first < 0) return;
-  const prefix = argv.slice(0, first);
+/** Keep env and wrapper argv as provenance; never normalize an invocation for the native producer. */
+function commandOffset(argv: string[]): number {
   let index = 0;
-  if (prefix[index] === 'env') {
+  if (argv[index] === 'env') {
     index++;
-    while (index < prefix.length) {
-      if (prefix[index] === '-u' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(prefix[index + 1] ?? '')) index += 2;
-      else if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(prefix[index] ?? '')) index++;
+    while (index < argv.length) {
+      if (argv[index] === '-u' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(argv[index + 1] ?? '')) index += 2;
+      else if (/^[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9_./:-]*$/.test(argv[index] ?? '')) index++;
       else break;
     }
   }
-  const command = prefix.slice(index);
-  const bunTest =
-    command[0] === 'bun' &&
-    (command[1] === 'test' ||
-      (command[1] === '--cwd' && command[3] === 'test') ||
-      (command[1]?.startsWith('--cwd=') && command[2] === 'test'));
-  if (
-    !bunTest &&
-    !same(command, ['bun', 'run', '--cwd', 'services/kernel', 'check']) &&
-    !same(command, ['bun', 'run', '--cwd', 'services/auth', 'check'])
-  )
-    return;
-  const files = argv.slice(first);
-  if (!files.every((word) => /^[A-Za-z0-9_./-]+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(word))) return;
-  return { prefix: argv.slice(0, first), files };
+  return index;
 }
+function wholeWorkspaceCommand(argv: string[]): boolean {
+  const command = argv.slice(commandOffset(argv));
+  return ['services/kernel', 'services/auth'].some((cwd) => same(command, ['bun', 'run', '--cwd', cwd, 'check']));
+}
+const explicitFile = /^[A-Za-z0-9_./-]+\.[cm]?[jt]sx?$/;
+/** Explicit service helpers and tests form one ordered file list, starting at the FIRST input. */
+function fileCommand(argv: string[]): { prefix: string[]; files: string[] } | undefined {
+  const offset = commandOffset(argv);
+  let index = offset;
+  // This exact retained prefix can be registered, but the delivered native port cannot execute it safely.
+  if (same(argv.slice(index, index + 6), ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test']))
+    index += 6;
+  else if (
+    ['services/kernel', 'services/auth'].some((cwd) =>
+      same(argv.slice(index, index + 5), ['bun', 'run', '--cwd', cwd, 'check']),
+    )
+  ) index += 5;
+  else {
+    if (argv[index++] !== 'bun') return;
+    if (argv[index] === '--cwd' && argv[index + 1]) index += 2;
+    else if (argv[index]?.startsWith('--cwd=')) index++;
+    if (argv[index++] !== 'test') return;
+    // Supported Bun test options remain part of the identical raw prefix, including their values.
+    while (argv[index] === '--timeout' && /^\d+$/.test(argv[index + 1] ?? '')) index += 2;
+  }
+  const files = argv.slice(index);
+  if (!files.length || !files.every((word) => explicitFile.test(word))) return;
+  if (!files.some((word) => /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(word))) return;
+  return { prefix: argv.slice(0, index), files };
+}
+/** The 50a producer treats this argv as a child command and would mint a nested, second logical check. */
+export function proofExecutionUnavailable(argv: string[]): string | undefined {
+  if (argv.some((word) => /(?:^|\/)worker-check\.[cm]?[jt]s$/.test(word)))
+    return 'Native producer port required: startControllerWorkerCheck must bind the exact original bun scripts/worker-check.ts --local -- bun test argv to ONE logical invocation without stripping its wrapper or starting a second check';
+}
+export class ProofUnavailableError extends Error {}
 export function originalCommandMatches(command: string[], originals: string[][]): boolean {
+  if (!originals.length) return false;
   if (originals.every((argv) => same(argv, command))) return true;
   const parts = originals.map(fileCommand);
   if (parts.some((part) => !part)) return false;
@@ -695,9 +717,6 @@ export class ProofCapacityQueuedError extends Error {
 }
 
 function originalCommandHasInputs(argv: string[]): boolean {
-  const text = argv.join(' ');
-  return (
-    !/(?:^|[\s/])(?:gate(?:857)?|root-check|remote-check)(?:\.[cm]?[jt]s)?(?:\s|$)/i.test(text) &&
-    /(?:\.(?:test|spec)\.[cm]?[jt]sx?|[\w/-]+\.(?:ts|js|sh))(?:[\s'"]|$)/.test(text)
-  );
+  if (/(?:^|[\s/])(?:gate(?:857)?|root-check|remote-check)(?:\.[cm]?[jt]s)?(?:\s|$)/i.test(argv.join(' '))) return false;
+  return wholeWorkspaceCommand(argv) || fileCommand(argv) !== undefined;
 }
