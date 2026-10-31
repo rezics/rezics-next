@@ -120,9 +120,14 @@ test('Record progress with title unit and explicit total semantics', async () =>
   mock.module('../src/session/request', () => ({
     prepareSession: async () => {},
     viewerCredential: () => 'Bearer recording-owner',
+    sessionSubject: () => 'owner',
+    requestCsrfToken: () => 'recording-csrf',
   }));
-  mock.module('../src/kernel/client', () => ({ kernelClient: () => client, requestLocale: () => 'en' }));
+  const kernel = await import('../src/kernel/client');
+  mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => client, requestLocale: () => 'en' }));
+  const definitions = await import('../src/subject/definitions');
   mock.module('../src/subject/definitions', () => ({
+    ...definitions,
     readRelease: async () => release,
     nameSubjectTypes: async () => {},
   }));
