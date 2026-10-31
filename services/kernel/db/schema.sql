@@ -1948,6 +1948,13 @@ CREATE UNIQUE INDEX agent_identity_reversal_original ON core.receipt USING btree
 
 
 --
+-- Name: agent_identity_reversal_terminal_receipt; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX agent_identity_reversal_terminal_receipt ON core.receipt USING btree (partition_no, transaction_id) WHERE (command_kind = 'access.agent-verification.reversed'::text);
+
+
+--
 -- Name: consumer_checkpoint_consumer_idx; Type: INDEX; Schema: core; Owner: -
 --
 
