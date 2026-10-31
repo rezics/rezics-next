@@ -6,7 +6,7 @@ import canonicalize from 'canonicalize';
 import { isDeepStrictEqual } from 'node:util';
 import { admitGroup } from '../access/gates/admission.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError, PROBLEMS } from '../http/problem.ts';
 import { createBuiltinRuntime } from '../library/builtin-runtime.ts';
 import { activeProfile } from '../presentation/profiles.ts';
 import { semanticPageView } from '../presentation/semantic-page.ts';
@@ -27,7 +27,7 @@ import { advanceZoneUnion, initialUnionPosition, revalidateZoneUnion, type ZoneU
 import { zonePageWork, type ZonePagePosition } from './page-work.ts';
 
 /** The sole mounted composition. Static routes need neither exposure nor owner-source construction. */
-export async function readZonePage(
+async function composeZonePage(
   dependencies: ZoneSourceDependencies & { tokens: KeyRing },
   input: {
     actor: Actor; id: string; body: ZonePageRequest; request: Request;
@@ -186,6 +186,17 @@ export async function readZonePage(
   const summaries = await readSubjectSummaries({ ...dependencies, actor: input.actor, deadline: input.deadline }, ids, languages ? { languages } : {});
   for (const read of prepared) {
     const descriptor = plan.reads[read.key]!;
+    if (read.position.rows.some(row => !summaries.get(row.id))) {
+      // A retained locator can cease to be readable. Only the native current verdict can repair it;
+      // missing summary evidence itself says nothing about membership or exhaustion.
+      work.select(read.key, descriptor.kind === 'search' ? descriptor.body.sort : 'id', readCost(descriptor));
+      const prior = zoneDigest(read.position);
+      if (!(await revalidateZoneUnion(read.membership, read.position)) && zoneDigest(read.position) !== prior) {
+        position.reads[read.key] = read.position;
+        return { status: 202, value: { next: await preparation.progress(position) }, component: selected.component, components };
+      }
+      return zoneUnavailable();
+    }
     const rows = read.position.rows.map(row => {
       const summary = summaries.get(row.id);
       if (!summary) return zoneUnavailable();
@@ -250,6 +261,22 @@ export async function readZonePage(
     ...(subject ? { subject } : {}), ...(views ? { views: [...views] } : {}),
   };
   return { value, status: 200, component: selected.component, components };
+}
+
+/** Preserve native failure reasons while giving every native 503 the page transport's retry profile. */
+export async function readZonePage(...args: Parameters<typeof composeZonePage>): ReturnType<typeof composeZonePage> {
+  try {
+    return await composeZonePage(...args);
+  } catch (error) {
+    if (!(error instanceof ProblemError) || PROBLEMS[error.code].status !== 503) throw error;
+    throw new ProblemError(error.code, {
+      ...(error.detail === undefined ? {} : { detail: error.detail }),
+      ...(error.errors === undefined ? {} : { errors: error.errors }),
+      ...(error.extensions === undefined ? {} : { extensions: error.extensions }),
+      ...(error.effectStatus === undefined ? {} : { effectStatus: error.effectStatus }),
+      headers: { 'retry-after': '1', ...error.headers, 'cache-control': 'private, no-store' },
+    });
+  }
 }
 
 // Retain the original internal import while every route uses the one composition.

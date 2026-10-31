@@ -33,7 +33,7 @@ export async function zonePageWork(
   const decoded = input.cursor ? await decodeListCursor(deps.tokens, binding, input.cursor, deps.clock(), { profile: 'search' }) : null;
   input.work.select('control', 'id', 1);
   // Exact PK reads/writes; nativeRows charges plan bounds, including conflict/Zone-head points.
-  const retained = await input.work.bounded({ statements: 1, nativePoints: 1, nativeRows: 1, bytes: 525312 },
+  const retained = await input.work.bounded({ statements: 1, nativePoints: 1, nativeRows: 1, bytes: 1049600 },
     () => read.run(deps.pool, key));
   const usable = decoded?.ok && decoded.epoch === 1 && decoded.after.length === 3 &&
     decoded.after[0] === input.basis && retained?.request === request && retained.basis === input.basis &&
@@ -46,7 +46,7 @@ export async function zonePageWork(
     async progress(next: ZonePagePosition) {
       if (zoneDigest(next) === zoneDigest(position)) return zoneUnavailable();
       input.work.select('control', 'id', 1);
-      const [stored] = await input.work.bounded({ statements: 1, nativePoints: 2, nativeRows: 3, bytes: 525312 }, () => save.run(deps.pool, {
+      const [stored] = await input.work.bounded({ statements: 1, nativePoints: 2, nativeRows: 3, bytes: 1049600 }, () => save.run(deps.pool, {
         ...key, request, basis: input.basis, generation,
         expected: revision ?? '0', position: next,
       }));

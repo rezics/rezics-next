@@ -9,7 +9,7 @@ CREATE TABLE zones.page_preparation (
   basis text COLLATE "C" NOT NULL CHECK (basis ~ '^[0-9a-f]{64}$'),
   generation uuid NOT NULL,
   revision bigint NOT NULL CHECK (revision > 0),
-  position jsonb NOT NULL CHECK (octet_length(position::text) <= 524288),
+  position jsonb NOT NULL CHECK (octet_length(position::text) <= 1048576),
   PRIMARY KEY (route, zone_id, viewer, slot),
   FOREIGN KEY (route, zone_id) REFERENCES zones.zone (route, zone_id) ON DELETE CASCADE
 );

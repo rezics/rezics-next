@@ -25,14 +25,16 @@ and its real typed tuples. No public Search result page, UUID post-sort or local
 
 `union.ts` discovers every source through a common covered watermark, merges only that settled range and tests
 current OR membership. One unfinished canonical group retains its actual owner progress before the frontier;
-independent native true can settle OR within the completely discovered range. MemberSource is an essential
+independent native true can settle OR within the completely discovered range. Partial discovery retains only
+the next source ordinal, bounded merged keys and common minimum coverage, so a small page can finish discovering
+all 32 sources across bounded requests without an owner-cursor vector. MemberSource is an essential
 conjunct of the Zone union. Locators for complete reads survive a later read's preparation. Before disclosure,
 positive witnesses and current Zone/profile/source authority are checked again. No permission or truth vector is
 retained. Native Collection evidence hints stay request-local and are checked again by that owner.
 
 `page-work.ts` stores disposable bounded page locators in `zones.page_preparation`, not another Zone configuration
 or membership table. Thirty-two keyed slots per Zone/viewer bound simultaneous retained requests; each row has
-a 524,288-byte ceiling (including all 128 full native name tuples). Source/configuration/lifecycle changes remove those rows in the Zone transaction; eviction
+a 1,048,576-byte ceiling (including full native tuples for 128 output slots and bounded discovery). Source/configuration/lifecycle changes remove those rows in the Zone transaction; eviction
 and unusable cursors restart ordinary authorization. Accounts alone supplies encryption and the existing search
 profile: eight keys, 4,864 unpadded base64url characters, fifteen minutes for every viewer. Stable route, viewer,
 Zone and body bind AAD; mutable basis, generation and retained revision are encrypted position keys. Owner cursors,

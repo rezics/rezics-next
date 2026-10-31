@@ -119,6 +119,7 @@ export class ZoneWork extends CollectionSourceLedger {
     else if (read) for (const axis of scopeWorkAxes) this.ordered = { ...this.ordered, [axis]: this.ordered[axis] + receipt.used[axis] };
     if (read) for (const axis of scopeWorkAxes) read.used = { ...read.used, [axis]: read.used[axis] + receipt.used[axis] };
   }
+  orderedAvailable(): boolean { return (this.reads.get(this.selected)?.engine ?? 0) <= 4; }
   orderedCost(engineSearches: number): void {
     const read = this.reads.get(this.selected);
     if (!read || !Number.isSafeInteger(engineSearches) || engineSearches < 0 || read.engine + engineSearches > 6) return zoneUnavailable();
@@ -228,7 +229,8 @@ export async function createZoneMembership(
   }
   async function evaluate(prepared: PreparedSearchScope, id: string, pending?: ZonePending): Promise<ZoneVerdict> {
     const native = search(), r = work.allowance().remaining;
-    if (r.candidateKeys < 1) return { value: 'not_proven' };
+    if ([r.candidateKeys, r.nativePoints, r.witnessKeys, r.nativeRows, r.bytes, r.emptySeeks].some(value => value < 1))
+      return { value: 'not_proven' };
     const result = await native.evaluate(prepared, [id], {
       rawKeys: r.candidateKeys,
       native: { points: r.nativePoints, witnesses: r.witnessKeys, rows: r.nativeRows, bytes: r.bytes, emptySeeks: r.emptySeeks },
@@ -330,6 +332,7 @@ export async function createZoneMembership(
   const basis = zoneDigest({ sources: input.sources, streams: streams.map(stream => stream.basis), order, filter: input.filter ?? null, collection: input.collection ?? null });
   return {
     streams, basis, order,
+    prefixAvailable: () => order === 'id' || work.orderedAvailable(),
     /** Unknown sources can be bypassed only by an actual current true source. No cached truth vector. */
     async contains(id: string, pending?: ZonePending, preferred?: number): Promise<ZoneVerdict> {
       let unresolved: ZonePending | undefined;

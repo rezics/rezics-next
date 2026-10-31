@@ -24,6 +24,20 @@ CREATE SCHEMA zones;
 
 
 --
+-- Name: clear_page_preparation(); Type: FUNCTION; Schema: zones; Owner: -
+--
+
+CREATE FUNCTION zones.clear_page_preparation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ DELETE FROM zones.page_preparation WHERE route=NEW.route AND zone_id=NEW.zone_id;
+ RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: record_purge_generation(); Type: FUNCTION; Schema: zones; Owner: -
 --
 
@@ -41,6 +55,30 @@ END; $$;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: page_preparation; Type: TABLE; Schema: zones; Owner: -
+--
+
+CREATE TABLE zones.page_preparation (
+    route integer NOT NULL,
+    zone_id uuid NOT NULL,
+    viewer text NOT NULL COLLATE pg_catalog."C",
+    slot smallint NOT NULL,
+    request text NOT NULL COLLATE pg_catalog."C",
+    basis text NOT NULL COLLATE pg_catalog."C",
+    generation uuid NOT NULL,
+    revision bigint NOT NULL,
+    "position" jsonb NOT NULL,
+    CONSTRAINT page_preparation_basis_check CHECK ((basis ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT page_preparation_position_check CHECK ((octet_length(("position")::text) <= 524288)),
+    CONSTRAINT page_preparation_request_check CHECK ((request ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT page_preparation_revision_check CHECK ((revision > 0)),
+    CONSTRAINT page_preparation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT page_preparation_slot_check CHECK (((slot >= 0) AND (slot <= 31))),
+    CONSTRAINT page_preparation_viewer_check CHECK ((viewer ~ '^[0-9a-f]{64}$'::text))
+);
+
 
 --
 -- Name: zone; Type: TABLE; Schema: zones; Owner: -
@@ -83,6 +121,14 @@ CREATE TABLE zones.zone (
 
 
 --
+-- Name: page_preparation page_preparation_pkey; Type: CONSTRAINT; Schema: zones; Owner: -
+--
+
+ALTER TABLE ONLY zones.page_preparation
+    ADD CONSTRAINT page_preparation_pkey PRIMARY KEY (route, zone_id, viewer, slot);
+
+
+--
 -- Name: zone zone_pkey; Type: CONSTRAINT; Schema: zones; Owner: -
 --
 
@@ -119,6 +165,13 @@ CREATE CONSTRAINT TRIGGER zone_erasure_capture AFTER INSERT OR UPDATE ON zones.z
 
 
 --
+-- Name: zone zone_page_preparation_invalidation; Type: TRIGGER; Schema: zones; Owner: -
+--
+
+CREATE TRIGGER zone_page_preparation_invalidation AFTER UPDATE OF revision, lifecycle_revision, state, owner_id, configuration, mounts, release_digest, withholding ON zones.zone FOR EACH ROW EXECUTE FUNCTION zones.clear_page_preparation();
+
+
+--
 -- Name: zone zone_record_purge_commit; Type: TRIGGER; Schema: zones; Owner: -
 --
 
@@ -151,6 +204,14 @@ CREATE CONSTRAINT TRIGGER zone_record_purge_writer AFTER INSERT OR UPDATE ON zon
 --
 
 CREATE TRIGGER zone_record_retention AFTER INSERT OR UPDATE OF state, deleted_at ON zones.zone FOR EACH ROW EXECUTE FUNCTION semantic.capture_record_retention();
+
+
+--
+-- Name: page_preparation page_preparation_route_zone_id_fkey; Type: FK CONSTRAINT; Schema: zones; Owner: -
+--
+
+ALTER TABLE ONLY zones.page_preparation
+    ADD CONSTRAINT page_preparation_route_zone_id_fkey FOREIGN KEY (route, zone_id) REFERENCES zones.zone(route, zone_id) ON DELETE CASCADE;
 
 
 --
