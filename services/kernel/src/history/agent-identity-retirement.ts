@@ -13,7 +13,7 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { agentIdentityWorkSourceKey, type AgentIdentityWorkSource } from './agent-identity-source.ts';
-import { encodeLocator } from './locator.ts';
+import { AGENT_IDENTITY_SDK_FENCE_CONSUMER, readAgentIdentitySDKReceivingBinding } from './agent-identity-sdk-fence.ts';
 import { historyDeadline, lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
 import type { HistoryArtifact, HistoryBarrier, HistoryReadiness } from './registry.ts';
 import sourceSelect from './agent-identity-retirement-source.sql';
@@ -35,7 +35,7 @@ export type AgentIdentityRetirementResult =
 export const AGENT_IDENTITY_SDK_RETIREMENT = Object.freeze({
   sdkVersion: '5.4.6-preview',
   futureWriters: 'pending-native-fence',
-  gap: 'identity-sdk-permanent-late-writer-fence-unavailable',
+  gap: AGENT_IDENTITY_SDK_FENCE_CONSUMER.gap,
 } as const);
 
 const pending = (gap: string): AgentIdentityRetirementResult => ({ state: 'pending', gap });
@@ -127,40 +127,13 @@ export async function verifyAgentIdentityRetirementStage(
 export async function agentIdentityRetirementReadiness(
   tx: CommandTransaction,
   artifact: HistoryArtifact,
-  _barrier: HistoryBarrier,
+  barrier: HistoryBarrier,
 ): Promise<HistoryReadiness> {
-  if (artifact.partition !== 0 || artifact.locator.artifactType !== 'durable-work/v1')
-    return { ready: false, gap: 'identity-sdk-receiving-home-mismatch' };
-  const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
-  const mapping = await resolveAgentIdentitySDKWork(tx, artifact.locator.workId);
-  if (!mapping || mapping.gap) return { ready: false, gap: mapping?.gap ?? 'identity-sdk-native-binding-unavailable' };
-  const roles = (
-    await tx.query(
-      `SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
-       WHERE partition_no=0 AND artifact_type='durable-work/v1' AND locator=$1
-       ORDER BY account_route,account_id LIMIT 65 FOR SHARE`,
-      [Buffer.from(encodeLocator(artifact.locator))],
-    )
-  ).rows;
-  const native = (
-    await tx.query('SELECT accounts FROM core.agent_identity_work WHERE custody_id=$1 FOR SHARE', [
-      artifact.locator.workId,
-    ])
-  ).rows[0];
-  const references = roles.map((entry) => ({
-    accountRoute: entry.account_route,
-    accountId: entry.account_id,
-    roles: entry.roles,
-  }));
-  if (
-    !roles.length ||
-    roles.length > 64 ||
-    roles.some((entry) => entry.minimizer_version !== 1) ||
-    !same(native?.accounts, references) ||
-    !same(artifact.accounts, references)
-  )
-    return { ready: false, gap: 'identity-sdk-retirement-role-scope-changed' };
-  return { ready: false, gap: AGENT_IDENTITY_SDK_RETIREMENT.gap };
+  const receiving = await readAgentIdentitySDKReceivingBinding(tx, artifact, barrier);
+  return {
+    ready: false,
+    gap: receiving.state === 'pending' ? receiving.gap : AGENT_IDENTITY_SDK_RETIREMENT.gap,
+  };
 }
 
 /** Released SDK receiving observation for inventory presentation. It cannot be used in the

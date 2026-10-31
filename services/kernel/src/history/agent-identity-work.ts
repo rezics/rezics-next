@@ -25,6 +25,13 @@ import {
 
 export const AGENT_IDENTITY_WORK_OWNER = 'access.agent-identity';
 export {
+  AGENT_IDENTITY_SDK_FENCE_CONSUMER,
+  readAgentIdentitySDKReceivingBinding,
+  retireAgentIdentitySDKWork,
+  type AgentIdentitySDKReceivingBinding,
+  type AgentIdentitySDKReceivingObservation,
+} from './agent-identity-sdk-fence.ts';
+export {
   AGENT_IDENTITY_SDK_RETIREMENT,
   agentIdentityRetirementReadiness,
   readAgentIdentityRetirementStage,
