@@ -1473,3 +1473,118 @@ No measurement, cardinality or existing Book/anime/filter profile changes follow
 explicit Importer operator tool; it contains citations and explicit metadata
 rights, not native IDs or publication authority. Released data and both web
 definition recordings are generated through the normal release/record scripts.
+
+## Versioned catalogue distribution
+
+`Release1` remains an immutable, complete, bounded release. The separate catalogue
+command distributes any finite number of those releases and exact-Type Kind declarations
+through a content-addressed directory. It never raises the Release1 limits, compiles
+input code, fetches URIs or activates native configuration.
+
+Author a local JSON manifest, for example:
+
+```json
+{
+  "releases": ["releases/books.json", "releases/music.json"],
+  "declarations": ["kinds/featured-book.json"],
+  "compatibility": "all"
+}
+```
+
+`releases` is a required nonempty array of explicit immutable Release1 JSON file paths.
+`declarations` is an optional array of explicit Kind JSON paths. Paths are relative to
+the manifest (absolute local paths also work). `compatibility` is optional: omit it
+for no generated declarations, use `"all"` for one declaration per released Type,
+or supply exact `[{"releaseDigest":"sha256:<64 lowercase hex>","typeId":"schema:Book"}]`
+pins to select Types. Each generated declaration uses the Type ID, labels and optional
+descriptions, `eligible: true`, precedence zero and that exact Type for condition and
+presentation. Repeated typed directory keys reject, including overlapping generated
+and explicit Kind IDs. With shared Types in several releases, select one exact release
+pin per compatibility Kind instead of `"all"`.
+
+```sh
+bun run --cwd packages/definitions catalogue build --input .temp/inputs.json --output .temp/catalogue
+bun run --cwd packages/definitions catalogue verify --root .temp/catalogue/root.json
+bun run --cwd packages/definitions catalogue lookup --root .temp/catalogue/root.json --id schema:Book
+```
+
+Build prints one `KindCataloguePin`. Verify prints that pin and complete reachable
+node/release/declaration counts. Lookup prints either a `found` result retaining the
+canonical catalogue pin, declaration digest/body and exact condition/presentation
+Type descriptors, or `not-found`. Exit status is zero on success, two for a missing
+Kind ID, and one with a useful stderr diagnostic for invalid input, incomplete closure,
+corruption or I/O failure. A missing Kind differs from missing addressed bytes.
+
+The output is `root.json` (one closed pinned root) and `objects/<64 lowercase hex>.json`
+(canonical UTF-8 objects addressed by `sha256:<hex>`). The addressed catalogue/2 root
+contains only `format`, `kindSpec`, `reduction` and `directoryDigest`. Directory nodes
+use the catalogue-node/1 schema: ordered, disjoint branch ranges or typed leaf entries.
+Leaf keys are `declaration:<exact Kind ID>` and `release:<full sha256 digest>`; comparison
+is exact JavaScript string order, never locale order or case folding. Root, pin, Kind
+and node versions are closed; duplicate JSON object names, escaped duplicate names,
+accessors, unknown fields and noncanonical stored bytes reject. Author files may use
+ordinary JSON whitespace/key ordering: their admitted canonical content sets identity.
+
+Build order does not affect identity. Sorted entries are packed greedily into nodes
+with at most 256 members AND 256 KiB canonical bytes. Branch levels repeat until a
+single directory root remains; there is no total Kind, Release or node count limit.
+Existing object paths are reused only after exact byte comparison. Writes use fsynced
+staging files and atomic links without overwriting object paths. The visible root is
+atomically renamed only after full verification and object durability. An interrupted
+build can leave unreachable objects or `.pending` files, but cannot expose a partial
+root or replace a previous complete root with an incomplete one. Concurrent complete
+builders can each publish a complete root; this offline pointer is not a native head CAS.
+
+Verification checks every reachable node and artifact, exact child range coverage,
+ordering, cycles/repeated subtrees, duplicate typed keys, release/declaration identities,
+closed versions, original Release validation and all exact condition/presentation/profile
+closure. Repeated release catalogue ID/version must retain identical content. Shared
+Type, property and profile IDs across member releases must have identical complete
+bodies; conflicting identities reject rather than choosing a winner. Historical
+Release1 artifacts use the original validator and digests, including historical
+construction compatibility, without applying new-publication-only construction caps.
+
+`@rezics/definitions` and the server `@rezics/definitions/catalogue` entry expose
+`buildCatalogue`, `verifyCatalogue`, `lookupCatalogueKind`, `compatibilityKind` and
+`readCatalogueArtifact`. Builders accept an inert `CatalogueArtifactStore` with
+`read(digest)`/`put(digest, bytes)`; lookup and verification accept only an inert
+`CatalogueArtifactReader.read(digest)` returning bytes or `undefined`. These are byte
+storage interfaces, not permission, Source evidence, network or capability callbacks.
+`@rezics/definitions/catalogue/files` supplies the explicit local file adapter and
+atomic root publication/read helpers. The browser root and browser `/catalogue` entry
+expose only portable types, canonical-byte/digest helpers and closed data parsers;
+they import no filesystem, native release checker, VM or release compiler.
+
+Selected lookup descends addressed nodes to the exact declaration, then separately
+addresses the accepting Release for each exact Type pin. It reads at most two complete
+bounded original releases, retaining their original digest and full body. Presentation
+includes the exact Type's inert `listPresentation`, and either its exact same-release
+profile and existing `LibraryProfilePin` ABI or `null` (unknown). Missing references
+reject; absence never fabricates a legacy/no-profile pin. Condition Type, presentation
+Type and an item's actual Type remain distinct. Exact-Type membership means equality
+to the current admitted canonical item's actual Type ID; its subject release need not
+match the vocabulary pin. Subtypes, labels and `FilterDocument.type.in` expansion do
+not implement this test. This package performs no native item admission or voting.
+
+Schemas ship at `/schema/kind.json`, `/schema/catalogue.json` and
+`/schema/catalogue-node.json`. `parseKindDeclaration` uses the **original** shared
+FilterDocument parser for generic inert document data and retains its complete
+32-leaf/depth-4/or-16/in-64/qualifier-4 bounds. Public stored meaning excludes owner,
+Discovery/Resource and unexpanded saved leaves. Generic filter catalogue construction
+always rejects, including when `auto.eligible` is false: the actual native predicate
+producer has not been composed. `CATALOGUE_CONDITION_OPERATORS`, `KIND_FORMAT` and
+`KIND_REDUCTION` expose the exact offline construction inventory implemented by
+`requireConstructibleKind`: Kind/1 exact-type only. Parser success and this inventory
+do not attest native readiness, native Source authority or consumer currentness.
+
+### Build and verify cost
+
+- Touches: only explicitly supplied local inputs and their reachable content-addressed objects; each Release retains its original admission bounds, each declaration is at most 64 KiB with 256 vocabulary references, and each directory node is at most 256 entries/256 KiB.
+- Bound: finite authoring work proportional to actual artifact bytes plus sorting N typed keys, O(B + N log N) with a fixed at-most-256-member packing factor. Build/verify retain O(B + N) working data, and perform bounded artifact/node operations. They have no total population cap. File reads check regular-file size and bound reading before decoding. Verification is exhaustive authoring work, never a per-request registry build.
+- Growth check: the authored `test/catalogue-artifacts.test.ts` compiles three real bounded shards containing 1,152 distinct Types, retains a historical v1 release, and exercises the actual package build/verify/lookup commands, reproducibility, atomic-root refusal and representative version/digest/closure/identity corruption. This regression has not been executed as native or growth evidence.
+
+### Exact lookup cost
+
+- Touches: one pinned root, bounded addressed directory paths, one selected declaration and at most two exact complete Release/profile closures. Missing IDs read only their addressed directory path. No unrelated declaration or Release artifact is read, hashed or sorted.
+- Bound: O(H * 256 KiB + selected bounded artifacts), with H the directory height. For 200,000 Kinds and 196 bounded Release members, keys of at most 256 UTF-8 bytes fit count-based packing: 200,196 entries need 783 leaves, four parent nodes and one directory root, totaling 788 nodes and height three. Selected lookup needs at most three such paths (declaration and two releases); one shared release uses two paths. Longer keys reduce per-node occupancy within the same byte bound, without a total-node ceiling. This is a source-level derivation, not a benchmark or runtime/native proof.
+- Growth check: the same authored journey selects the noninitial `scale:T1151`, records reader requests, bounds path reads and refuses reads of unrelated releases. Native indexed lookup, activation, authority, config/currentness fencing, automatic voting, consumer integration and original whole-Goal acceptance remain the native owners' obligations.

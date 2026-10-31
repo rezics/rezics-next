@@ -371,3 +371,5 @@ export function validateRelease(value: unknown): ReleaseViolation[] {
     return result();
   }
 }
+
+export * from './catalogue-artifacts.ts';

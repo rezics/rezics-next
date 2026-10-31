@@ -3,6 +3,8 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import canonicalize from 'canonicalize';
 import type { Release } from './portable.ts';
 
+// portable also exports closed Kind/catalogue data parsers and digest helpers.
+// Catalogue artifact construction, exhaustive verification, lookup admission and files stay on the server entry.
 export * from './portable.ts';
 
 // Publication admission/validation and catalogue compilation are server operations.

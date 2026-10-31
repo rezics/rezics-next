@@ -1,3 +1,4 @@
+export * from './catalogue.ts';
 import type { FilterDocument } from '@rezics/filter';
 import schema from '../schema/release.json';
 import type { LibraryProfile, LibraryProfileReference } from './library-profile.ts';
