@@ -4,8 +4,9 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
-import type { ModerationTarget } from './reports-page';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import type { ResolvedReportTarget as ModerationTarget } from './reports-read';
+import { enrichModerationTargets } from './target-context';
 
 export const MODERATION_APPEALS_PAGE_SIZE = 20;
 export type Appeal = {
@@ -120,7 +121,7 @@ type Client = {
   };
   posts: (params: { id: string }) => { get: (options?: unknown) => Promise<ReadResult> };
 };
-const auth = (authorization: string) => ({ headers: { authorization } });
+const auth = (authorization: string) => ({ headers: { authorization }, fetch: { cache: 'no-store' as const } });
 
 export const loadModerationAppeals = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
@@ -143,7 +144,8 @@ export const loadModerationAppeals = createServerFn({ method: 'GET' })
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
     if (!authorization) throw notFound();
-    const client = kernelClient() as unknown as Client;
+    const nativeClient = kernelClient();
+    const client = nativeClient as unknown as Client;
     const headers = auth(authorization);
     const page = await readModerationAppeals(
       {
@@ -176,5 +178,6 @@ export const loadModerationAppeals = createServerFn({ method: 'GET' })
         return result.error ? null : ((result.data as ModerationTarget['value'] | undefined) ?? null);
       },
     });
-    return { ...page, targets };
+    const enriched = await enrichModerationTargets(nativeClient, targets, [], [], authorization, sessionSubject(request) ?? '');
+    return { ...page, targets: enriched.targets };
   });

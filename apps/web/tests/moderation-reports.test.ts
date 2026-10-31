@@ -365,3 +365,135 @@ test('the report page retains board context and native continuation when its aut
   expect(markup).not.toContain('sealed+native/cursor==');
   expect(markup).not.toContain('<textarea');
 });
+
+test('Default report review preserves authorized rich reported and current evidence with current context links while withheld and erased targets disclose no document or media', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { readModerationReportPage } = await import('../src/moderation/reports-read');
+  const { selected, later, current } = await import('../src/stories/exact-revision/fixture');
+  const { moderationEvidence } = await import('../src/moderation/target-context');
+  const { exactRevisionHref } = await import('../src/threads/exact-revision-href');
+  const { threadLocation } = await import('../src/threads/thread-href');
+  const { getLocale } = await import('../src/paraglide/runtime.js');
+  const { m } = await import('../src/paraglide/messages.js');
+  const mediaId = id(500);
+  const rich: typeof selected = {
+    ...selected,
+    mediaIds: [mediaId, id(501)],
+    body: {
+      ...selected.body,
+      doc: { type: 'doc', content: [
+        { type: 'paragraph', attrs: { id: 'evidence-paragraph' }, content: [
+          { type: 'text', text: 'Original evidence ', marks: [{ type: 'bold' }] },
+          { type: 'text', text: 'source link', marks: [{ type: 'link', attrs: { href: 'https://example.com/source' } }] },
+          { type: 'text', text: 'concealed ending', marks: [{ type: 'spoiler' }] },
+        ] },
+        { type: 'bulletList', attrs: { id: 'evidence-list' }, content: [
+          { type: 'listItem', attrs: { id: 'evidence-list-item' }, content: [{ type: 'paragraph', attrs: { id: 'evidence-list-paragraph' }, content: [{ type: 'text', text: 'A list item' }] }] },
+        ] },
+        { type: 'blockquote', attrs: { id: 'evidence-quote' }, content: [
+          { type: 'paragraph', attrs: { id: 'evidence-quote-paragraph' }, content: [{ type: 'text', text: 'A quoted passage' }] },
+        ] },
+        { type: 'codeBlock', attrs: { id: 'evidence-code', language: 'ts' }, content: [{ type: 'text', text: 'const evidence = true;' }] },
+        { type: 'image', attrs: { id: 'evidence-image', src: mediaId, alt: 'Evidence illustration' } },
+        { type: 'image', attrs: { id: 'undeclared-image', src: id(502), alt: 'Undeclared illustration' } },
+      ] },
+    },
+  };
+  const head: typeof selected = { ...later, authorId: id(91), mediaIds: [mediaId], body: {
+    ...later.body, doc: { type: 'doc', content: [
+      { type: 'paragraph', attrs: { id: 'current-paragraph' }, content: [{ type: 'text', text: 'Current admitted evidence' }] },
+      { type: 'image', attrs: { id: 'current-image', src: mediaId, alt: 'Current illustration' } },
+    ] },
+  } };
+  const reports = [
+    { ...report(1, { kind: 'post', id: selected.id }), revisionId: selected.revisionId },
+    { ...report(2, { kind: 'post', id: selected.id }), revisionId: selected.revisionId },
+    ...(['withheld', 'erased'] as const).map((_, index) => ({
+      ...report(index + 3, { kind: 'post' as const, id: id(510 + index) }), revisionId: id(520 + index),
+    })),
+  ];
+  const calls: Request[] = [];
+  const mediaInputs: string[][] = [];
+  let context: 'available' | 'denied' | 'foreign' = 'available';
+  const client = createKernelClient('https://kernel.test', {
+    fetch: Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      calls.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === `/v1/boards/${selected.boardId}/reports`)
+        return Response.json({ reports, next: 'sealed+native/cursor==' });
+      if (url.pathname === `/v1/posts/${selected.id}`) return Response.json({ post: head });
+      if (url.pathname === `/v1/posts/${selected.id}/revisions/${selected.revisionId}`) return Response.json({ post: rich });
+      for (const [index, availability] of (['withheld', 'erased'] as const).entries()) {
+        if (url.pathname === `/v1/posts/${id(510 + index)}` || url.pathname === `/v1/posts/${id(510 + index)}/revisions/${id(520 + index)}`)
+          return Response.json({ post: {
+            ...rich, id: id(510 + index), revisionId: id(520 + index), threadId: id(530 + index),
+            authorId: id(540 + index), availability, removed: true,
+            // Poisoned extras must never be serialized, rendered, or used for enrichment.
+            body: { ...rich.body, doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'HIDDEN BODY' }] }] } },
+            mediaIds: [id(550 + index)],
+          } });
+      }
+      if (url.pathname === `/v1/threads/${selected.threadId}`) {
+        if (context === 'denied') return Response.json({ code: 'not_found' }, { status: 404 });
+        return Response.json({ thread: { ...current.thread, id: context === 'foreign' ? id(999) : selected.threadId, firstPost: head } });
+      }
+      if (url.pathname === `/v1/boards/${selected.boardId}`)
+        return Response.json({ board: { id: selected.boardId, availability: 'available', title: 'Current community board' } });
+      if (url.pathname === '/v1/accounts') return Response.json({ accounts: [
+        { id: selected.authorId, kind: 'person', state: 'active', handle: 'original-author', displayName: 'Original author' },
+        { id: head.authorId, kind: 'person', state: 'active', handle: 'current-author', displayName: 'Current author' },
+      ] });
+      if (url.pathname === '/v1/media/presentations') {
+        mediaInputs.push((await request.json() as { ids: string[] }).ids);
+        return Response.json({ images: [{
+          id: mediaId, containerId: selected.threadId, digest: 'a'.repeat(64), width: 640, height: 480,
+          variants: [{ format: 'webp', width: 640, height: 480 }], placeholder: null, focalPoint: null, credit: null,
+        }] });
+      }
+      throw new Error(`Unexpected native request ${request.method} ${url.pathname}`);
+    }, { preconnect() {} }),
+  });
+  const read = () => readModerationReportPage(client, { boardId: selected.boardId, cursor: 'native/cursor==' }, 'Bearer moderator', id(900));
+  const page = await read();
+  const markup = renderToStaticMarkup(createElement(ModerationReportsView, page));
+  expect(page.next).toBe('sealed+native/cursor==');
+  const queue = calls.find(call => new URL(call.url).pathname.endsWith('/reports'))!;
+  expect(new URL(queue.url).searchParams.get('limit')).toBe('20');
+  expect(new URL(queue.url).searchParams.get('cursor')).toBe('native/cursor==');
+  for (const path of [`/v1/posts/${selected.id}`, `/v1/posts/${selected.id}/revisions/${selected.revisionId}`, `/v1/threads/${selected.threadId}`, `/v1/boards/${selected.boardId}`, '/v1/accounts', '/v1/media/presentations'])
+    expect(calls.filter(call => new URL(call.url).pathname === path)).toHaveLength(1);
+  expect(calls.every(call => call.headers.get('authorization') === 'Bearer moderator')).toBe(true);
+  expect(mediaInputs).toEqual([[mediaId]]);
+  const identities = new URL(calls.find(call => new URL(call.url).pathname === '/v1/accounts')!.url).searchParams.get('ids')!.split(',');
+  expect(identities.sort()).toEqual([selected.authorId, head.authorId].sort());
+  const revision = moderationEvidence(page.revisions[0]!.value)!;
+  expect(revision.post?.body).toEqual(rich.body);
+  expect(revision.post?.licence).toBe(selected.licence);
+  expect(revision.post?.createdAt).toBe(selected.createdAt);
+  expect(revision.documentMedia.kind === 'ready' && revision.documentMedia.images instanceof Map).toBe(true);
+  for (const text of ['Original evidence', 'Current admitted evidence', 'Original author', 'Current author', 'Current community board', current.thread.title!, 'Evidence illustration', '<ul', '<blockquote', '<pre', '<code', 'const evidence = true;', 'data-slot="withheld"', 'data-slot="tombstone"'])
+    expect(markup).toContain(text);
+  expect(markup).toContain('<strong>Original evidence ');
+  expect(markup).toContain('href="https://example.com/source"');
+  expect(markup).toContain(m.thread_reveal_spoiler());
+  expect(markup).toContain(`href="${threadLocation(getLocale(), current.thread)}#post-${selected.id}"`);
+  expect(markup).toContain(`href="${exactRevisionHref({ postId: selected.id, revisionId: selected.revisionId }, getLocale())}"`);
+  expect(markup).toContain(`/media/${mediaId}`);
+  expect(markup).not.toContain('<iframe');
+  expect(markup).not.toContain('HIDDEN BODY');
+  for (const hiddenId of [id(530), id(531), id(540), id(541), id(550), id(551)]) {
+    expect(JSON.stringify(page)).not.toContain(hiddenId);
+    expect(markup).not.toContain(hiddenId);
+    expect(calls.some(call => call.url.includes(hiddenId))).toBe(false);
+  }
+  // Optional current context is a separate authority; denial and foreign identity keep admitted revisions readable.
+  for (context of ['denied', 'foreign'] as const) {
+    const withoutContext = renderToStaticMarkup(createElement(ModerationReportsView, await read()));
+    expect(withoutContext).toContain('Original evidence');
+    expect(withoutContext).toContain('Original author');
+    expect(withoutContext).not.toContain(current.thread.title!);
+    expect(withoutContext).not.toContain('#post-');
+    expect(withoutContext).not.toContain('Current community board');
+  }
+});

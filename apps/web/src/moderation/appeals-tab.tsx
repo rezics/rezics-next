@@ -1,8 +1,10 @@
+import { useSession } from '../session/query';
+import { moderationEvidence } from './target-context';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { AppealResolution } from './appeal-resolution';
 import { appealTarget, type Appeal } from './appeals-read';
-import { moderationTargetContent, type ModerationTarget } from './reports-page';
+import { moderationTargetContent, type ModerationTarget } from './target-content';
 
 export function ModerationAppealsView({
   appeals,
@@ -23,6 +25,11 @@ export function ModerationAppealsView({
   viewerId?: string;
   canResolve?: (appeal: Appeal) => boolean;
 }) {
+  const session = useSession();
+  const evidence = targets.map(target => moderationEvidence(target.value));
+  if (session.state !== 'unknown' && evidence.some(item => item &&
+    (session.state !== 'signed-in' || session.subject !== item.viewerId)))
+    return <p role="status">{m.moderation_target_unavailable()}</p>;
   const filters = [
     threadId ? `thread=${encodeURIComponent(threadId)}` : '',
     postId ? `post=${encodeURIComponent(postId)}` : '',
@@ -85,12 +92,11 @@ function AppealCard({
           <span className="font-medium">{m.moderation_appeal_decision_label()}:</span> {appeal.decision.statement}
         </p>
         {identity ? (
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium">{m.moderation_appeal_target_label()}:</span> {identity.kind}{' '}
-            <code>{identity.id}</code>
+          <p className="text-xs text-muted-foreground">
+            <span>{m.moderation_appeal_target_label()}:</span> {identity.kind} <code>{identity.id}</code>
           </p>
         ) : null}
-        <blockquote className="border-l-2 pl-3">{moderationTargetContent(target)}</blockquote>
+        <blockquote className="min-w-0 border-l-2 pl-3">{moderationTargetContent(target)}</blockquote>
       </section>
       <p className="whitespace-pre-wrap">
         <span className="font-medium">{m.moderation_appeal_reason_label()}:</span> {appeal.statement}

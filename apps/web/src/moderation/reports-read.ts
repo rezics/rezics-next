@@ -1,3 +1,4 @@
+import type { KernelClient } from '@rezics/client';
 import type { DocumentSnapshot } from '@rezics/document';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -5,7 +6,9 @@ import { notFound } from '@tanstack/react-router';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+
+import { enrichModerationTargets, type ModerationEvidence } from './target-context';
 
 export const MODERATION_REPORTS_PAGE_SIZE = 20;
 export type Report = {
@@ -35,6 +38,7 @@ export type ReportTargetValue =
   | number
   | boolean
   | DocumentSnapshot
+  | ModerationEvidence
   | readonly ReportTargetValue[]
   | { readonly [key: string]: ReportTargetValue | undefined };
 export type ResolvedReportTarget = { key: string; kind: Report['target']['kind']; value: ReportTargetValue | null };
@@ -115,7 +119,7 @@ type Client = {
     get: (options?: unknown) => Promise<{ data?: unknown; error?: unknown }>;
   };
 };
-const auth = (authorization: string) => ({ headers: { authorization } });
+const auth = (authorization: string) => ({ headers: { authorization }, fetch: { cache: 'no-store' as const } });
 
 export const loadModerationReports = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
@@ -141,55 +145,66 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
       await prepareSession(request, env as Partial<SessionEnv>);
       const authorization = viewerCredential(request);
       if (!authorization) throw notFound();
-      const client = kernelClient() as unknown as Client;
-      const headers = auth(authorization);
-      const page = await readModerationReports(
-        {
-          boardReports: async (id, cursor) => {
-            const result = await client.boards({ id }).reports.get({
-              ...headers,
-              query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-            });
-            if (result.error || !result.data) throw notFound();
-            return result.data as ReportPage;
-          },
-          threadReports: async (id, cursor) => {
-            const result = await client.threads({ id }).reports.get({
-              ...headers,
-              query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-            });
-            if (result.error || !result.data) throw notFound();
-            return result.data as ReportPage;
-          },
-          postReports: async (id, cursor) => {
-            const result = await client.posts({ id }).reports.get({
-              ...headers,
-              query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-            });
-            if (result.error || !result.data) throw notFound();
-            return result.data as ReportPage;
-          },
-        },
-        data,
-      );
-      const targets = await resolveReportTargets(page.reports, {
-        post: async (id) => {
-          const result = await client.posts({ id }).get(headers);
-          return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
-        },
-        thread: async (id) => {
-          const result = await client.threads({ id }).get(headers);
-          return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
-        },
-        board: async (id) => {
-          const result = await client.boards({ id }).get(headers);
-          return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
-        },
-      });
-      const revisions = await resolveReportedRevisions(page.reports, async (postId, revisionId) => {
-        const result = await kernelClient().posts({ id: postId }).revisions({ revisionId }).get(headers);
-        return result.error ? null : (result.data ?? null);
-      });
-      return { ...page, targets, revisions };
+      return readModerationReportPage(kernelClient(), data, authorization, sessionSubject(request) ?? '');
     },
   );
+
+/** Default native composition, also used by the focused transport-to-render regression. */
+export async function readModerationReportPage(
+  nativeClient: KernelClient,
+  data: { boardId: string; threadId?: string; postId?: string; cursor?: string },
+  authorization: string,
+  viewerId: string,
+) {
+  const client = nativeClient as unknown as Client;
+  const headers = auth(authorization);
+  const page = await readModerationReports(
+    {
+      boardReports: async (id, cursor) => {
+        const result = await client.boards({ id }).reports.get({
+          ...headers,
+          query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+        });
+        if (result.error || !result.data) throw notFound();
+        return result.data as ReportPage;
+      },
+      threadReports: async (id, cursor) => {
+        const result = await client.threads({ id }).reports.get({
+          ...headers,
+          query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+        });
+        if (result.error || !result.data) throw notFound();
+        return result.data as ReportPage;
+      },
+      postReports: async (id, cursor) => {
+        const result = await client.posts({ id }).reports.get({
+          ...headers,
+          query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+        });
+        if (result.error || !result.data) throw notFound();
+        return result.data as ReportPage;
+      },
+    },
+    data,
+  );
+  const targets = await resolveReportTargets(page.reports, {
+    post: async (id) => {
+      const result = await client.posts({ id }).get(headers);
+      return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
+    },
+    thread: async (id) => {
+      const result = await client.threads({ id }).get(headers);
+      return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
+    },
+    board: async (id) => {
+      const result = await client.boards({ id }).get(headers);
+      return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
+    },
+  });
+  const revisions = await resolveReportedRevisions(page.reports, async (postId, revisionId) => {
+    const result = await nativeClient.posts({ id: postId }).revisions({ revisionId }).get(headers);
+    return result.error ? null : (result.data ?? null);
+  });
+  const enriched = await enrichModerationTargets(nativeClient, targets, revisions, page.reports, authorization, viewerId);
+  return { ...page, ...enriched };
+}

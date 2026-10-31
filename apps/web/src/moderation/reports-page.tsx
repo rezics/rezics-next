@@ -1,3 +1,5 @@
+import { useSession } from '../session/query';
+import { moderationEvidence } from './target-context';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { actionOnReport } from './actions';
@@ -6,7 +8,7 @@ import type { Report, ReportedRevision, ResolvedReportTarget } from './reports-r
 import { localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 
-export { moderationTargetContent } from '../stories/patterns/board-report-queue/target-content';
+export { moderationTargetContent } from './target-content';
 export type ModerationTarget = ResolvedReportTarget;
 
 const submitReportAction: ReportQueueAction = async (data) => {
@@ -42,6 +44,11 @@ export function ModerationReportsView({
   onNext?: (cursor: string) => void;
   onAction?: ReportQueueAction;
 }) {
+  const session = useSession();
+  const evidence = [...targets, ...revisions].map(target => moderationEvidence(target.value));
+  if (session.state !== 'unknown' && evidence.some(item => item &&
+    (session.state !== 'signed-in' || session.subject !== item.viewerId)))
+    return <p role="status">{m.moderation_target_unavailable()}</p>;
   const filters = [
     threadId ? `thread=${encodeURIComponent(threadId)}` : '',
     postId ? `post=${encodeURIComponent(postId)}` : '',

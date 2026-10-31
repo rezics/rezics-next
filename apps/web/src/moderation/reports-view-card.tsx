@@ -11,7 +11,7 @@ import { reportDecisionReason } from './actions';
 import { createReportReviewAction, type ReportReviewResult } from './reports-view-action';
 import type { Report, ReportTargetValue, ResolvedReportTarget } from './reports-read';
 import type { ReportQueueAction } from '../stories/patterns/board-report-queue/board-report-queue';
-import { moderationTargetContent } from '../stories/patterns/board-report-queue/target-content';
+import { moderationTargetContent } from './target-content';
 
 type Confirmation = { action: 'dismiss' } | { action: 'take-down'; reason: string };
 const date = (value: string) =>
@@ -189,22 +189,22 @@ export function ReportReviewCard({
             ) : null}
           </dl>
         </section>
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid min-w-0 gap-6">
           <section aria-labelledby={`${id}-revision`} className="min-w-0 space-y-2">
             <h3 id={`${id}-revision`} className="text-sm font-semibold">
               {m.moderation_reported_revision_label()}
             </h3>
-            <blockquote className="whitespace-pre-wrap break-words border-l-2 pl-3 text-sm leading-relaxed">
-              {moderationTargetContent({ key: report.id, kind: 'post', value: revision })}
-            </blockquote>
+            <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">
+              {moderationTargetContent({ key: `post:${report.target.id}`, kind: 'post', value: revision })}
+            </div>
           </section>
           <section aria-labelledby={`${id}-current`} className="min-w-0 space-y-2">
             <h3 id={`${id}-current`} className="text-sm font-semibold">
               {m.moderation_current_target_label()}
             </h3>
-            <blockquote className="whitespace-pre-wrap break-words border-l-2 pl-3 text-sm leading-relaxed">
+            <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">
               {moderationTargetContent(target)}
-            </blockquote>
+            </div>
           </section>
         </div>
         <div className="border-t pt-4">
