@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { InboxPageView } from '../inbox/inbox-page';
-import { readInboxPage, type InboxPage } from '../inbox/inbox-read';
+import { InboxPageView, InboxRows } from '../inbox/inbox-page';
+import { readInboxPage, type InboxPage, type ResolvedInboxPage } from '../inbox/inbox-read';
 import { UnreadBadgeView } from '../inbox/unread-badge';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -15,7 +15,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The real Inbox component with controlled page IO for pagination recovery. Reuses the existing mixed native-shaped fixture through readInboxPage; no second notice fixture or native proof. Review the same IDs with phone390/desktop1280, locale and theme globals.',
+          'The real Inbox components with controlled page IO for pagination recovery and an illustrative long-content DTO for wrapping review. Recovery states reuse the existing mixed native-shaped fixture through readInboxPage. No native proof is claimed. Review the same IDs with phone390/desktop1280, locale and theme globals.',
       },
     },
   },
@@ -129,6 +129,79 @@ export const NativeRows: Story = {
     await expect(list.getAllByRole('link')[0]).toHaveFocus();
   },
 };
+
+// Illustrative current resolved DTO only: no session, transport, new fixture world or native recording.
+const illustrativeLongContent: ResolvedInboxPage = {
+  items: [
+    {
+      id: 'illustrative-long-token',
+      kind: 'reply',
+      actorId: 'illustrative-author',
+      actorName: 'IllustrativePublicNameWithoutSpaces'.repeat(2),
+      unread: true,
+      createdAt: '2026-10-29T10:00:00.000Z',
+      text: `https://example.invalid/${'LongUnbrokenInboxToken'.repeat(12)}`,
+      href: '/threads/illustrative-long-token',
+      unavailable: false,
+    },
+    {
+      id: 'illustrative-cjk',
+      kind: 'mention',
+      actorId: 'illustrative-cjk-author',
+      actorName: 'Illustrative CJK reader',
+      unread: false,
+      createdAt: '2026-10-28T10:00:00.000Z',
+      text: '這是一段用於檢查收件匣換行的示例文字。これは受信トレイの折り返しを確認するための例文です。'.repeat(3),
+      href: '/threads/illustrative-cjk',
+      unavailable: false,
+    },
+    {
+      id: 'illustrative-long-paragraph',
+      kind: 'reply',
+      actorId: 'illustrative-reader',
+      actorName: 'Illustrative reader with a long public name containing ordinary spaces',
+      unread: false,
+      createdAt: '2026-10-27T10:00:00.000Z',
+      text: 'An illustrative reply keeps its complete explanation visible as the notice grows across several lines. Each sentence should remain easy to read on a phone and on a wider screen, with the author, notification kind and date following the complete message.',
+      href: '/threads/illustrative-long-paragraph',
+      unavailable: false,
+    },
+  ],
+  next: null,
+};
+
+export const LongContent: Story = {
+  render: () => (
+    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
+      <InboxRows page={illustrativeLongContent} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const list = within(await within(canvasElement).findByRole('list'));
+    const rows = list.getAllByRole('listitem');
+    await expect(rows).toHaveLength(illustrativeLongContent.items.length);
+    for (const [index, row] of rows.entries()) {
+      const item = illustrativeLongContent.items[index]!;
+      const text = row.querySelector('p')!;
+      const byline = row.querySelector('[data-notice-byline]')!;
+      await expect(text.textContent).toBe(item.text);
+      await expect(byline).toHaveTextContent(item.actorName!);
+      for (const block of [text, byline.parentElement!]) {
+        await expect(block.scrollWidth).toBeLessThanOrEqual(block.clientWidth);
+      }
+      const link = within(row).getByRole('link');
+      await expect(link).toHaveAttribute('href', item.href);
+      await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      await expect(link.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+      await userEvent.tab();
+      await expect(link).toHaveFocus();
+    }
+    const viewport = canvasElement.ownerDocument.documentElement;
+    await expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.clientWidth);
+  },
+};
+
 export const Empty: Story = {
   render: () => <Example fixture="empty" />,
   play: async ({ canvasElement }) => {

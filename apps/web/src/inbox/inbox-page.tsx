@@ -78,7 +78,7 @@ export function InboxRows({
               )}
               {href ? <ListRowLink href={href}>{[text, actor, kind, readState, date].join('. ')}</ListRowLink> : null}
               {/* Linked rows announce the same content once through the stretched primary link. */}
-              <div aria-hidden={href ? true : undefined} className="min-w-0 flex-1">
+              <div aria-hidden={href ? true : undefined} className="min-w-0 flex-1 wrap-anywhere">
                 <p className={item.unavailable ? 'text-sm text-muted-foreground' : 'text-sm leading-6'}>{text}</p>
                 {!href ? <span className="sr-only">{readState}</span> : null}
                 <span className="mt-1 block text-xs text-muted-foreground">
