@@ -587,7 +587,11 @@ function validateProofOwner(binding: ControllerProofBindingV1): void {
 /** Derive execution without changing the saved original or interpreting shell text. */
 export function controllerProofExecutionArgv(binding: ControllerProofBindingV1): string[] {
   const { argv } = validateControllerProofBinding(binding);
-  if (!argv.some((arg) => /(?:^|[/\\\s"'=])worker-check\.ts(?:$|[/\\\s"';])/.test(arg))) return [...argv];
+  const namedWrapper = argv.some((arg) => /(?:^|[/\\\s"'=])worker-check\.ts(?:$|[/\\\s"';])/.test(arg));
+  const aliasedWrapper = argv[0] === 'bun' && argv[1] !== 'test' && argv.some((arg, index) =>
+    index >= 2 && arg === '--local' && argv[index + 1] === '--' &&
+    argv[index + 2] === 'bun' && argv[index + 3] === 'test');
+  if (!namedWrapper && !aliasedWrapper) return [...argv];
   const prefix = ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test'];
   const files = argv.slice(prefix.length);
   if (
@@ -608,11 +612,12 @@ function validateProofExecutionSource(binding: ControllerProofBindingV1): void {
   const execution = controllerProofExecutionArgv(binding);
   if (JSON.stringify(execution) === JSON.stringify(binding.argv)) return;
   // The pure derivation recognizes syntax; execution additionally requires the canonical captured files.
+  const tracked = new Map(proofGit(binding.cwd, ['ls-tree', '-rz', '--full-tree', binding.sourceTree])
+    .split('\0').filter(Boolean).map((entry) => [entry.slice(entry.indexOf('\t') + 1), entry]));
   for (const path of ['scripts/worker-check.ts', ...execution.slice(4)]) {
-    const entry = proofGit(binding.cwd, ['ls-tree', binding.sourceTree, '--', path]);
     const file = join(binding.cwd, path);
     if (
-      !/^100(?:644|755) blob [0-9a-f]+\t/.test(entry) ||
+      !/^100(?:644|755) blob [0-9a-f]+\t/.test(tracked.get(path) ?? '') ||
       !lstatSync(file).isFile() ||
       realpathSync(file) !== file
     ) {
@@ -655,10 +660,14 @@ function validateProofRecord(record: CheckRecord): ControllerProofState | undefi
       state.physical.length !== 2 ||
       state.physical[1]?.physicalRunId !== record.physicalRunId ||
       state.physical[0]?.physicalRunId !== predecessor?.physicalRunId ||
-      !predecessor || predecessor.status !== 'finished' || !predecessor.exitCode ||
+      !predecessor ||
+      predecessor.status !== 'finished' ||
+      !predecessor.exitCode ||
       !sameControllerProofBinding(predecessor.controllerProof, binding) ||
       JSON.stringify(record.physicalArgv) !== JSON.stringify(controllerOverloadArgv({ ...record, log: predecessor.log }))
-    ) throw new Error('worker-check: controller proof physical argv is not an admitted original rerun');
+    ) {
+      throw new Error('worker-check: controller proof physical argv is not an admitted original rerun');
+    }
   }
   validateProofSource(binding);
   validateProofExecutionSource(binding);
@@ -811,7 +820,8 @@ export async function startControllerWorkerCheck(value: ControllerProofBindingV1
           current.runnerHost &&
           readyReceipt(binding.cwd, binding.checkId, current.physicalRunId!)?.status === 'failed' &&
           validControllerProofRegistration(
-            readJsonFile(join(registry, `${binding.checkId}.${current.physicalRunId}.json`)), binding,
+            readJsonFile(join(registry, `${binding.checkId}.${current.physicalRunId}.json`)),
+            binding,
           )
         ) {
           const cleanup = await stopWorkerCheck(binding.checkId, binding.cwd, {
@@ -822,9 +832,12 @@ export async function startControllerWorkerCheck(value: ControllerProofBindingV1
           });
           if (
             (cleanup.disposition === 'stopped' || cleanup.disposition === 'already-terminal') &&
-            cleanup.localTerminal && cleanup.resultTerminal &&
+            cleanup.localTerminal &&
+            cleanup.resultTerminal &&
             (cleanup.remoteTerminal === null || cleanup.remoteTerminal === true)
-          ) return { version: 1, outcome: 'started', binding, resultPath: recordPath(binding.cwd, binding.checkId) };
+          ) {
+            return { version: 1, outcome: 'started', binding, resultPath: recordPath(binding.cwd, binding.checkId) };
+          }
         }
       } catch {
         // Intent, raw setup failure and uncertain custody remain retained below.
@@ -3450,7 +3463,8 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
   const physicalRunId = physicalArgument ?? initial.physicalRunId;
   if (!isPhysicalRunId(physicalRunId))
     throw new Error('worker-check: detached check has no valid physical run identity');
-  const executionArgv = initial.physicalArgv ??
+  const executionArgv =
+    initial.physicalArgv ??
     (initial.controllerProof ? controllerProofExecutionArgv(initial.controllerProof) : initial.argv);
   if (
     !Array.isArray(executionArgv) ||
@@ -3589,9 +3603,9 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
     const code = error instanceof CheckCancelled || checkCancelled(root, id) ? 125 : 1;
     await finish(code);
     if (error instanceof CheckSetupFailure) {
-      if (record.controllerProof) writeReadyReceipt(root, id, physicalRunId, {
-        status: 'failed', physicalRunId, error: error.message,
-      });
+      if (record.controllerProof) {
+        writeReadyReceipt(root, id, physicalRunId, { status: 'failed', physicalRunId, error: error.message });
+      }
       return code;
     }
     if (error instanceof CheckCancelled) return 125;

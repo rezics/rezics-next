@@ -2935,6 +2935,8 @@ test('controller proof execution derivation admits only the selected saved wrapp
     ['bun', 'run', ...binding.argv.slice(1)],
     ['env', ...binding.argv],
     ['sh', '-c', binding.argv.join(' ')],
+    ['bun', 'alias.ts', ...binding.argv.slice(2)],
+    ['bun', '"scripts/worker-check.ts"', ...binding.argv.slice(2)],
     ['bun', 'scripts/worker-check.ts', '--', 'bun', 'test', 'tests/once.test.ts'],
     ['bun', 'scripts/worker-check.ts', '--local', '--returns', 'out', '--', 'bun', 'test', 'tests/once.test.ts'],
     ['bun', 'scripts/worker-check.ts', '--local', 'bun', 'test', 'tests/once.test.ts'],

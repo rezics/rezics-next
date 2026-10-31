@@ -445,7 +445,9 @@ export function detachedGroupTerminal(identity: RunnerIdentity, procRoot = '/pro
     if (
       identity.group !== identity.pid ||
       readFileSync(join(procRoot, 'sys/kernel/random/boot_id'), 'utf8').trim() !== identity.boot
-    ) return false;
+    ) {
+      return false;
+    }
     for (const name of readdirSync(procRoot)) {
       if (!/^\d+$/.test(name)) continue;
       let stat: string;
