@@ -224,10 +224,15 @@ test('positive community journeys share the page and current Realm source withou
   participationStatus = 403;
   expect(await read()).toEqual({ kind: 'ready', snapshot: source, admission: 'denied' });
   expect(
-    await readRealmClaim(client, new Request('https://site.example/'), {}, {
-      realmId: source.realmId,
-      credentialMode: 'anonymous',
-    }),
+    await readRealmClaim(
+      client,
+      new Request('https://site.example/'),
+      {},
+      {
+        realmId: source.realmId,
+        credentialMode: 'anonymous',
+      },
+    ),
   ).toEqual({ kind: 'ready', snapshot: source, admission: 'signed-out' });
   const foreign = new Request('https://site.example/', { headers: { authorization } });
   expect(await readRealmClaim(client, foreign, {}, { realmId: source.realmId, credentialMode: 'session' })).toEqual({
