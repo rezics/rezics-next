@@ -454,9 +454,10 @@ export function SubjectPage({
               locale={locale}
             />
           )}
-          {read.subject.type === 'schema:MusicAlbum' && (page.context?.id ?? read.subject.context) === candidateContext && (
-            <AlbumProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
-          )}
+          {read.subject.type === 'schema:MusicAlbum' &&
+            (page.context?.id ?? read.subject.context) === candidateContext && (
+              <AlbumProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+            )}
           {read.subject.type === 'schema:Recipe' && (
             <RecipeEditorEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           )}
