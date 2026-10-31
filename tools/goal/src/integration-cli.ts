@@ -53,10 +53,12 @@ export type IntegrationRuntime = {
   codeIsCurrent?(): boolean;
   recoverOrphans?(options?: { adoptRunning?: boolean }): Promise<void>;
   deliverReminders?(): number;
+  /** Periodic, bounded scan of current worker ownership that may wake an under-width Goal manager. */
+  sweepWidth?(): Promise<void>;
   /** One promotion step; returns at once when a promotion holds the lease or nothing changed. */
   promote?(): Promise<void>;
   verify?(): Promise<void>;
-  evaluateFlow?(): void;
+  evaluateFlow?(): void | Promise<void>;
   dispatchDailyStepAudit?(): void;
   db: Database;
   mainCheckout: string;
@@ -466,11 +468,12 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     const reviewFlow = () => {
       if (Date.now() - lastFlowReview >= 3_600_000) {
         lastFlowReview = Date.now();
-        try {
-          runtime.evaluateFlow?.();
-        } catch (error) {
-          console.error(error);
-        }
+        if (runtime.evaluateFlow)
+          setImmediate(() => {
+            void Promise.resolve()
+              .then(() => runtime.evaluateFlow!())
+              .catch((error) => console.error('flow review failed:', error));
+          });
       }
       try {
         runtime.dispatchDailyStepAudit?.();
@@ -516,9 +519,25 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         console.error(error);
       }
     };
+    let widthSweepRunning = false;
+    const scheduleWidthSweep = () => {
+      if (!runtime.sweepWidth || widthSweepRunning) return;
+      setImmediate(() => {
+        if (widthSweepRunning) return;
+        widthSweepRunning = true;
+        void Promise.resolve()
+          .then(() => runtime.sweepWidth!())
+          .catch((error) => console.error('width sweep failed:', error))
+          .finally(() => {
+            widthSweepRunning = false;
+          });
+      });
+    };
+    scheduleWidthSweep();
     recoveryTimer = startOrphanRecoveryTimer(recoverOrphans, 60_000, () => {
       remind();
       reviewFlow();
+      scheduleWidthSweep();
       promote();
       verify();
       reap();

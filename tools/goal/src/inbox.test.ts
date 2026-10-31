@@ -77,3 +77,30 @@ test('wait with a settle window returns a burst of events at once, after the win
     expect(events.map(event => event.event.summary)).toEqual(['First', 'Second']);
   } finally { s.close(); }
 });
+
+test('width is a durable wakeable system event that is delivered only to its manager', async () => {
+  const s = setup();
+  try {
+    s.inbox.deliver({
+      managerId: 'goal-manager',
+      kind: 'width',
+      summary: 'Width is low; recover, reshape, or dispatch real work.',
+    });
+    expect(s.inbox.pending('goal-manager')).toHaveLength(1);
+    expect(s.inbox.pending('other-manager')).toHaveLength(0);
+
+    const reopenedDb = openDb(join(s.path, 'state.sqlite'));
+    try {
+      const reopened = new SqliteManagerInbox(reopenedDb, s.path);
+      const events = await reopened.wait('goal-manager');
+      expect(events).toHaveLength(1);
+      expect(events[0]?.event).toMatchObject({ managerId: 'goal-manager', kind: 'width' });
+      expect(reopened.pending('goal-manager')).toHaveLength(0);
+      expect(reopened.read('goal-manager')).toHaveLength(1);
+    } finally {
+      reopenedDb.close();
+    }
+  } finally {
+    s.close();
+  }
+});
