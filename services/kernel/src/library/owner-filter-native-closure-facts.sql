@@ -23,4 +23,4 @@ FROM input i CROSS JOIN LATERAL (
    ORDER BY c.copy_id LIMIT i.batch_limit)
 ) raw
 ORDER BY raw.driver, raw.fact_id
-LIMIT :limit;
+LIMIT (SELECT batch_limit FROM input);

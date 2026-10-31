@@ -21,7 +21,8 @@ import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { scopeAllowance, zeroScopeWork } from '../search/scope-execution.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
-import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
+import type { IdentityScopeLibraryIdentity, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
+import { freeze } from '../semantic/definitions.ts';
 import {
   nativeSourceFence,
   type CanonicalAllowance,
@@ -39,7 +40,6 @@ import { prepareNativeCollectionMemberAuthority, readNativeCollectionMemberAdmis
 import type { OwnerFilterReadBinding } from './owner-filter-plan.ts';
 import scopeQuery from './owner-filter-native-binding-scope.sql';
 import activeQuery from '../semantic/definitions-active.sql';
-import type { NativeSourceIdentity } from './native-source-custody.ts';
 import ownerFenceQuery from './owner-filter-native-binding-fence.sql';
 
 type Dependencies = {
@@ -238,6 +238,12 @@ export async function revalidateNativeOwnerFilter(
     throw ownerFilterUnavailable();
   const { dependencies, admission, metadata, attempt } = saved;
   const { actor, at, deadline } = binding.input;
+  if (admission.releaseDigest !== null) {
+    const [active] = await withConnection(dependencies.pool, (client) =>
+      ownerFilterQuery<{ digest: string }>(deadlineClient(client, deadline), work, activeQuery,
+        { route: 0 }, { nativeRows: 4, bytes: 256 }));
+    if (active?.digest !== admission.releaseDigest) throw ownerFilterUnavailable();
+  }
   if (attempt) {
     commandAttemptDeadline(attempt);
     await ownerFilterBounded(
@@ -349,7 +355,7 @@ export async function bindNativeOwnerFilterRead(
       createCollectionSource(dependencies).prepare({ actor, at, deadline, collectionId, allowance }),
     );
     const [row] = await withConnection(dependencies.pool, (client) => ownerFilterQuery<{
-      identity: NativeSourceIdentity;
+      identity: IdentityScopeLibraryIdentity;
       captureId: string | null;
       revision: string | null;
     }>(deadlineClient(client, deadline), work, scopeQuery, {
@@ -386,6 +392,7 @@ export async function bindNativeOwnerFilterRead(
       ...binding,
       input: { ...binding.input, allowance: ownerFilterAllowance(work) },
     };
+    freeze(result);
     bindings.set(result, bindings.get(binding)!);
     retained = true;
     return { status: 'bound', binding: result } as const;

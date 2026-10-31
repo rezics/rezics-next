@@ -1,6 +1,7 @@
 import { type FilterDocument, type OwnerLeaf } from '@rezics/filter';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
+import { type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
 import { type KernelClock } from '../clock.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import type { RelationFacetMatch } from '../search/source.ts';
@@ -109,6 +110,16 @@ type Dependencies = {
     access: Access;
     clock?: KernelClock;
 };
+/** Exact native grammar/family admission, not a permission verdict or a serializable capability.
+ * Consumers must repeat ordinary current authority and Source/identity fences at their actual T.
+ */
+export declare function readNativeCollectionMemberAdmission(admission: CollectionMemberAdmission): Readonly<{
+    actor: Actor;
+    pool: Pool;
+    deadline: number;
+}> | undefined;
+/** Repeat the admitted expanded families at the actual caller time, including every negative branch. */
+export declare function prepareNativeCollectionMemberAuthority(deps: Dependencies, viewer: Actor, admission: CollectionMemberAdmission, at: AuthoritativeTime, deadline: number, attempt?: CommandAttempt): Promise<import("../request/access.ts").AccessCheck[]>;
 /** Shared grammar/release admission only. The returned AST certifies neither execution nor disclosure. */
 export declare function admitCollectionMemberQuery(deps: Dependencies, viewer: Actor, options: CollectionMemberQuery, deadline: number): Promise<CollectionMemberAdmission>;
 /**

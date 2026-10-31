@@ -6,7 +6,7 @@ import type { Access, Actor } from '../request/access.ts';
 import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
-import { type ScopeWorkContext } from '../search/scope-work-context.ts';
+import type { ScopeWorkContext } from '../search/scope-work-context.ts';
 /** Shared caller-ledger dimensions. These types allocate no budget and implement no ledger. */
 export interface WorkDimensions {
     readonly candidateKeys: number;
@@ -83,7 +83,9 @@ export interface CollectionSourceObservation {
     readonly basis: CollectionSourceBasis;
 }
 declare const preparedSource: unique symbol;
-/** Not an allow capability. EVERY operation reauthorizes actor/source/required subject anchors currently. */
+/** Not an allow capability. Ordinary operations reauthorize actor/source/required subject anchors;
+ * mechanical work operations freshly admit the exact native episode and current Source instead.
+ */
 export interface PreparedCollectionSource {
     readonly [preparedSource]: true;
     readonly observation: CollectionSourceObservation;
@@ -145,7 +147,9 @@ interface MembershipResultBase {
 }
 export type CollectionSubjectMembership = MembershipResultBase & ({
     readonly result: true;
-    /** Current native membership AND all required original/terminal subject Access; revalidate before disclosure. */
+    /** Ordinary reads include current original/terminal subject Access. Work results prove structural
+     * membership only; the final ordinary reader must reauthorize both anchors before disclosure.
+     */
     readonly positiveEvidence: CollectionSourceEvidence;
 } | {
     readonly result: false;
@@ -168,7 +172,7 @@ export type CollectionSourceCall = CollectionSourceContext & {
 };
 export type ContainsCollectionSubject = CollectionSourceCall & {
     readonly subjectId: string;
-    /** Same group/source basis only. Current source, original and terminal authorization is always repeated. */
+    /** Same group/source basis only. Source admission is repeated; ordinary reads also repeat both Subject guards. */
     readonly progress?: CollectionAliasProgress;
     /**
      * Optional previously observed witness key. The owner validates its subject/source/basis binding and treats it

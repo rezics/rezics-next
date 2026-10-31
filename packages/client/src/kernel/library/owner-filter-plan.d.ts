@@ -41,19 +41,17 @@ export type OwnerFilterReadBinding = Readonly<{
     }>;
     scope: IdentityScopeObservation;
 }>;
-/** Owned unavailable adapter for the common native read's existing T/reservation/scoped capture handoff.
- * A command consumer passes its actual attempt; the producer must bind that exact T and partition instead of
- * minting a read T. It must be replaced by the actual Source composition, not a Date, new budget or synthetic scope.
+/** Bind the current native Source and scoped capture at the caller's actual authoritative time.
+ * Commands retain their executor time and partition; Search transfers its existing reservation and read time.
  */
-export declare function bindOwnerFilterRead(_dependencies: Omit<Dependencies, 'tokens'>, _actor: Actor, _collectionId: string, _admission: CollectionMemberAdmission, _deadline: number, _attempt?: CommandAttempt): Promise<Unavailable | Readonly<{
+export declare function bindOwnerFilterRead(dependencies: Omit<Dependencies, 'tokens'>, actor: Actor, collectionId: string, admission: CollectionMemberAdmission, deadline: number, attempt?: CommandAttempt): Promise<Unavailable | Readonly<{
     status: 'bound';
     binding: OwnerFilterReadBinding;
 }>>;
-/** The unavailable complete-original adapter is deliberately separate from candidate enumeration.
- * CollectionSource supplies candidates and current membership; neither implies complete private absence.
- * No positive native facts, empty closure, profile meaning or readiness is fabricated here.
+/** Complete native original/fact closure, independently of positive candidate enumeration.
+ * Missing coverage never supplies private absence, even underneath a negative filter branch.
  */
-export declare function readOwnerFilterCandidateClosure(_binding: OwnerFilterReadBinding, _source: PreparedCollectionSource, _subjectId: string, _work: NativeCollectionWork): Promise<Unavailable | Readonly<{
+export declare function readOwnerFilterCandidateClosure(binding: OwnerFilterReadBinding, source: PreparedCollectionSource, subjectId: string, work: NativeCollectionWork): Promise<Unavailable | Readonly<{
     status: 'complete';
     closure: OwnerFilterCandidateClosure;
 }>>;

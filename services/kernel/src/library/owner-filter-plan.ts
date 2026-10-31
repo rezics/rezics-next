@@ -16,7 +16,7 @@ import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
-import { bindNativeOwnerFilterRead, releaseNativeOwnerFilterRead } from './owner-filter-native-binding.ts';
+import { bindNativeOwnerFilterRead, releaseNativeOwnerFilterRead, revalidateNativeOwnerFilter } from './owner-filter-native-binding.ts';
 import { readNativeOwnerFilterClosure } from './owner-filter-native-closure.ts';
 import { createMembersPreparation } from './members-preparation.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
@@ -364,7 +364,7 @@ export async function readBoundOwnerFilterPage(
   const revalidate = async () => {
     const final = await work.compose((allowance) => source.prepare({ ...input, allowance }));
     if (!compatible(current.observation, final.source.observation)) throw new ProblemError('stale_cursor');
-    await revalidateScope(deps, binding, work);
+    await revalidateNativeOwnerFilter(binding, work);
   };
   await revalidate();
   let disclosed = members;
