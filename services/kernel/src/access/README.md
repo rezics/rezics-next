@@ -658,6 +658,14 @@ foreign reads while held. Null/false Semantic evidence remains `identity-source-
 public true result alone cannot replace a durable terminal/technical-undo transfer locator. The currently retained
 Semantic receipt grants no retirement, SDK closure, root-copy closure or Source discharge.
 
+The current default maintenance path is `shared-history-work.ts` → `advanceSharedHistory` →
+`minimizeHistoryWork`. Its mapped Agent identity branch enters `minimizeIdentitySDKWork`; it does not call
+`readAgentIdentityRetirementStage`. The exported staging port alone therefore does not establish default consumer
+maintenance. A funded integration must enter staging after releasing the selected native receiving checkout,
+carry the original Source-owned live work context through Source reads and final verification, and retain the
+existing terminal-transfer gap. The present Source module exports only deadline-based custody read and verify
+ports; it has no maintenance-frame export. Neither a deadline nor saved work counters supplies live funding.
+
 The native SDK producer publishes `WorkflowWriterFence` exactly as
 `Readonly<{ workflowID: string; generation: string; closureID: string; closedAt: number }>`, with
 `retireWorkflow(workflowID)` and `getWorkflowWriterFence(workflowID)`. Its original Kernel wrapper is
