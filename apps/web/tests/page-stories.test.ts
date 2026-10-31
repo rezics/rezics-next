@@ -255,6 +255,185 @@ afterAll(async () => {
   rmSync(temporary, { recursive: true, force: true });
 });
 
+test(
+  'ordinary supported internal page links and search navigation stay in the actual PageStory memory router',
+  async () => {
+    const origin = await sharedStorybook();
+    const index = (await (await fetch(`${origin}/index.json`)).json()) as { entries: Record<string, StoryIndexEntry> };
+    const collectionsId = 'pages-library-collections--phone-selector-open';
+    const searchId = 'pages-discovery-search--mixed-cards';
+    for (const id of [collectionsId, searchId]) expect(index.entries[id]?.type, id).toBe('story');
+    const collection = await Bun.file(join(recorded, 'library-collection.json')).json();
+    const listed = await Bun.file(join(recorded, 'library-collections.json')).json();
+    for (const [locale, width] of [
+      ['en', 1280],
+      ['zh-Hant', 390],
+    ] as const) {
+      const own = (await Bun.file(join(app, `messages/${locale}.json`)).json()) as Record<string, string>;
+      const context = await (
+        await sharedBrowser()
+      ).newContext({ viewport: { width, height: 860 }, reducedMotion: 'reduce' });
+      try {
+        const page = await context.newPage();
+        await watchStoryReports(page);
+        const current = () =>
+          page.evaluate(
+            () =>
+              (
+                globalThis as typeof globalThis & {
+                  __rezicsStoryContext?: { visitor: string; url: string };
+                }
+              ).__rezicsStoryContext,
+          );
+        const open = async (id: string) => {
+          await page.goto(storyUrl(origin, id, locale), { waitUntil: 'networkidle' });
+          await page.locator('html[data-hydrated]').waitFor();
+          await page.waitForFunction(
+            (storyId) =>
+              (
+                window as Window & {
+                  __rezicsStoryFinishes?: { storyId?: string }[];
+                }
+              ).__rezicsStoryFinishes?.some((report) => report.storyId === storyId),
+            id,
+          );
+        };
+        await open(collectionsId);
+        const frameUrl = page.url();
+        const selector = page.getByRole(width === 390 ? 'link' : 'menuitem', {
+          name: collection.collection.title,
+          exact: true,
+        });
+        const href = await selector.getAttribute('href');
+        expect(href).toBe(`/${locale}/collections/${collection.collection.id}`);
+        await selector.click();
+        await page.getByRole('heading', { level: 1, name: collection.collection.title, exact: true }).waitFor();
+        expect(await current()).toEqual({ visitor: 'Signed In', url: href });
+        expect(await page.getByRole('main').count()).toBe(1);
+        expect(page.url()).toBe(frameUrl);
+        await page.evaluate(() => history.back());
+        await page.waitForFunction(
+          (url) =>
+            (
+              globalThis as typeof globalThis & {
+                __rezicsStoryContext?: { url: string };
+              }
+            ).__rezicsStoryContext?.url === url,
+          `/${locale}/library`,
+        );
+        await page.evaluate(() => history.forward());
+        await page.getByRole('heading', { level: 1, name: collection.collection.title, exact: true }).waitFor();
+        expect(await current()).toEqual({ visitor: 'Signed In', url: href });
+
+        // The list also names a private Collection with no detail recording. Keep its exact URL and real denial.
+        await page.evaluate(() => history.back());
+        await page.waitForFunction(
+          (url) =>
+            (
+              globalThis as typeof globalThis & {
+                __rezicsStoryContext?: { url: string };
+              }
+            ).__rezicsStoryContext?.url === url,
+          `/${locale}/library`,
+        );
+        await page.getByRole('button', { name: own.library_nav_selector, exact: true }).click();
+        const unavailable = listed.collections[0];
+        await page.getByRole(width === 390 ? 'link' : 'menuitem', { name: unavailable.title, exact: true }).click();
+        await page
+          .getByRole('note')
+          .filter({ hasText: `/${locale}/collections/${unavailable.id}` })
+          .waitFor();
+        expect(await page.getByRole('heading', { level: 1, name: unavailable.title, exact: true }).count()).toBe(0);
+        expect(page.url()).toBe(frameUrl);
+
+        await open(searchId);
+        if (width === 390) await page.getByRole('button', { name: own.search_label, exact: true }).click();
+        const query = page.getByRole('combobox', { name: own.search_label, exact: true });
+        await query.fill('Mira');
+        await query.press('Enter');
+        await page.getByText('Mira Reading Room', { exact: true }).waitFor();
+        const searchFrameUrl = page.url();
+        await page.locator('#search-sort').selectOption('rating');
+        await page.waitForFunction(
+          (url) =>
+            (
+              globalThis as typeof globalThis & {
+                __rezicsStoryContext?: { url: string };
+              }
+            ).__rezicsStoryContext?.url === url,
+          `/${locale}/search?sort=rating&q=Mira`,
+        );
+        expect(await current()).toEqual({ visitor: 'Signed Out', url: `/${locale}/search?sort=rating&q=Mira` });
+        expect(await page.locator('#search-sort').inputValue()).toBe('rating');
+        expect(await page.locator('[data-slot="discovery-results"] > li').count()).toBe(4);
+        expect(await page.getByRole('main').count()).toBe(1);
+        expect(page.url()).toBe(searchFrameUrl);
+
+        await page.locator('#search-sort').evaluate((select) => (select as HTMLSelectElement).form!.requestSubmit());
+        await page.waitForFunction(
+          (url) =>
+            (
+              globalThis as typeof globalThis & {
+                __rezicsStoryContext?: { url: string };
+              }
+            ).__rezicsStoryContext?.url === url,
+          `/${locale}/search?q=Mira`,
+        );
+        await page.locator('#search-sort').selectOption('rating');
+        await page.waitForFunction(
+          (url) =>
+            (
+              globalThis as typeof globalThis & {
+                __rezicsStoryContext?: { url: string };
+              }
+            ).__rezicsStoryContext?.url === url,
+          `/${locale}/search?sort=rating&q=Mira`,
+        );
+
+        // Observe cancellation after the preview listener, then cancel native behavior in the test itself.
+        const native = await page.evaluate((path) => {
+          const cases = [
+            { href: `https://example.com${path}` },
+            { href: path, download: '' },
+            { href: path, target: '_blank' },
+            { href: path, ctrlKey: true },
+            { href: path, metaKey: true },
+            { href: path, shiftKey: true },
+            { href: path, altKey: true },
+            { href: path, button: 1 },
+            { href: '/iframe.html' },
+            { href: '/en/cards/00000000-0000-4000-8000-000000000000' },
+          ];
+          return cases.map((item) => {
+            const anchor = document.createElement('a');
+            anchor.href = item.href;
+            if ('download' in item) anchor.setAttribute('download', item.download!);
+            if ('target' in item) anchor.target = item.target!;
+            document.body.append(anchor);
+            let intercepted = false;
+            document.addEventListener(
+              'click',
+              (event) => {
+                intercepted = event.defaultPrevented;
+                event.preventDefault();
+              },
+              { once: true },
+            );
+            anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...item }));
+            anchor.remove();
+            return intercepted;
+          });
+        }, `/${locale}/search?q=Mira`);
+        expect(native).toEqual(Array(10).fill(false));
+        expect(await current()).toEqual({ visitor: 'Signed Out', url: `/${locale}/search?sort=rating&q=Mira` });
+      } finally {
+        await context.close();
+      }
+    }
+  },
+  timeout,
+);
+
 // Change to test(...) when web has recorded page and shell stories running through the Storybook vitest addon.
 test(
   'every page story renders from recorded kernel responses and passes as an accessible browser test',

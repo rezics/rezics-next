@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { StoryObj } from '@storybook/react-vite';
 import { anonymousReadMode, type ReadCredentialMode } from '../kernel/credential';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import '../../.storybook/route-root';
 import { routeTree } from '../routeTree.gen';
 import { setStoryRequestContext } from '../../.storybook/react-start';
@@ -48,6 +48,7 @@ import libraryProgressSessionRecording from '../kernel/recorded/library-progress
 import libraryProgressSessionsRecording from '../kernel/recorded/library-progress-sessions.json';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
+import { bindPreviewNavigation } from './preview-navigation';
 
 const missingSubjectId = '00000000-0000-4000-8000-000000000000';
 
@@ -147,9 +148,10 @@ export function PageStory({
   labelsFixture?: Parameters<typeof selectLabelStory>[0];
 }) {
   const entry = localizedEntry(path);
+  const [limitation, setLimitation] = useState<string>();
   selectRatingsFixture(ratingsFixture);
-  setStoryRequestContext({ visitor, url: entry });
   const { router, queryClient } = useMemo(() => {
+    setStoryRequestContext({ visitor, url: entry });
     resetLabelAssignmentStory();
     if (!labelsFixture) setLabelCatalogueStory(false);
     if (labelsFixture) selectLabelStory(labelsFixture);
@@ -167,11 +169,23 @@ export function PageStory({
     });
     void router.load();
     return { router, queryClient };
-  }, [entry, labelsFixture]);
+  }, [entry, labelsFixture, visitor, credentialMode]);
+  useLayoutEffect(
+    () =>
+      bindPreviewNavigation({
+        router,
+        document,
+        deLocalizeUrl,
+        onLocation: (url) => setStoryRequestContext({ visitor, url }),
+        onLimitation: setLimitation,
+      }),
+    [router, visitor],
+  );
   return (
     <RatingsPreviewContext.Provider value={ratings}>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
+        {limitation && <aside role="note">{limitation}</aside>}
       </QueryClientProvider>
     </RatingsPreviewContext.Provider>
   );
