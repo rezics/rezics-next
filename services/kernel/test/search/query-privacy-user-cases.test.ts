@@ -1371,7 +1371,9 @@ for (const surface of ownerSurfaces) {
           expect(rows.map(({ id }) => id)).toEqual(selected.slice(page * 2, page * 2 + 2));
           for (const row of rows) {
             expect(row.type).toBe(input.type);
-            expect(row.labels).toEqual({ en: labels.get(row.id) });
+            const label = labels.get(row.id);
+            assert(label !== undefined);
+            expect(row.labels).toEqual({ en: label });
           }
           found.push(...rows.map(({ id }) => id));
           expect(new Set(found).size).toBe(found.length);
