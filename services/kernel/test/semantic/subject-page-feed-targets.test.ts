@@ -215,7 +215,9 @@ test('Native subject feed Account destinations contain only both template-offere
     );
     expect((await prepared.finish()).get(target.subjectId)).toBeNull();
     const views = enabled ? ['overview', 'posts', 'reviews', 'collections'] : ['overview', 'reviews', 'collections'];
-    expect((await readPublicSubjectPageCandidates(deps(), [target.subjectId])).get(target.subjectId)?.views).toEqual(views);
+    expect((await readPublicSubjectPageCandidates(deps(), [target.subjectId])).get(target.subjectId)?.views).toEqual(
+      views,
+    );
     expect((await feed()).subjectPages.find((entry) => entry.id === target.subjectId)?.views).toEqual(views);
   }
 }, 120_000);
