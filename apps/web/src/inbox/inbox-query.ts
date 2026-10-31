@@ -69,7 +69,7 @@ export async function markInboxViewerSeen(
 ) {
   const result = await forInboxViewer(viewer, () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }));
   if ('failure' in result) throw new InboxSeenError(result.failure);
-  if (!result.signedIn) throw new Error('Signed out');
+  if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
   await Promise.all([
     client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),
     client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) }),

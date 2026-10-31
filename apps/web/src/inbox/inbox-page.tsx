@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ListRow, ListRowLink } from '@rezics/ui/list-row';
@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Flag, Gavel, MessageCircleReply } from 'lucide-react';
 import { inboxPageQuery, inboxViewerQueryKey, markInboxViewerSeen, type InboxPageLoader } from './inbox-query';
 import { useInboxViewer, type InboxViewer } from './inbox-viewer';
-import { InboxEntryState } from './inbox-entry-state';
+import { InboxEntryState, retryInboxSession } from './inbox-entry-state';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
@@ -24,6 +24,15 @@ import { inboxSeenFailure, type InboxSeenAttempt, type NativeInboxFailure, type 
 function kindLabel(item: ResolvedInboxPage['items'][number]) {
   if (item.reportId || item.kind === 'moderation_decision') return m.inbox_kind_moderation();
   return item.kind === 'mention' ? m.inbox_kind_mention() : m.inbox_kind_reply();
+}
+
+function accessRefused(failure: NativeInboxFailure | undefined) {
+  return (
+    failure?.status === 401 ||
+    failure?.status === 403 ||
+    failure?.code === 'unauthorized' ||
+    failure?.code === 'forbidden'
+  );
 }
 
 export function InboxRows({
@@ -150,7 +159,10 @@ export function ViewerInboxPage({
   const marking = useRef(false);
   const active = useRef(false);
   const [seenFailure, setSeenFailure] = useState<NativeInboxFailure>();
-  const [seenRetry, setSeenRetry] = useState(0);
+  const [markingPending, setMarkingPending] = useState(false);
+  const accessPending = useRef(false);
+  const [checkingAccess, setCheckingAccess] = useState(false);
+  const [accessCheck, setAccessCheck] = useState<'checked' | 'unavailable'>();
   const pageQuery = useQuery(inboxPageQuery(viewer, cursor, loadPage));
   const received = receiveInboxPage(pagination, pageQuery.data, pageQuery.isError);
   // Reconcile in this render so a native denial cannot commit even one frame of retained rows.
@@ -161,6 +173,11 @@ export function ViewerInboxPage({
   const waiting = usePreferenceRetry(operationState?.failure);
   const seenWaiting = usePreferenceRetry(seenFailure);
   const pageSignedOut = pageQuery.data !== undefined && !pageQuery.data.signedIn;
+  const seenNeedsAccess = seenFailure?.code === 'platform_closed' || accessRefused(seenFailure);
+  // A successful page read only establishes read access; the separate marker retry can still be refused.
+  const offerSeenRetry =
+    seenFailure?.code !== 'platform_closed' &&
+    (accessRefused(seenFailure) ? accessCheck === 'checked' && page !== null : seenFailure?.retryable !== false);
 
   useEffect(() => {
     active.current = true;
@@ -168,6 +185,29 @@ export function ViewerInboxPage({
       active.current = false;
     };
   }, []);
+
+  const sendSeenAttempt = useCallback(
+    async (attempt: InboxSeenAttempt) => {
+      if (!csrfToken || marking.current || !viewer.isCurrent()) return;
+      marking.current = true;
+      setMarkingPending(true);
+      try {
+        await markInboxViewerSeen(queryClient, viewer, attempt, csrfToken);
+        if (!active.current || !viewer.isCurrent()) return;
+        marked.current = attempt.through;
+        seenAttempt.current = null;
+        setSeenFailure(undefined);
+      } catch (error: unknown) {
+        if (active.current && viewer.isCurrent()) setSeenFailure(inboxSeenFailure(error).failure);
+      } finally {
+        if (active.current && viewer.isCurrent()) {
+          marking.current = false;
+          setMarkingPending(false);
+        }
+      }
+    },
+    [queryClient, viewer, csrfToken],
+  );
 
   useEffect(() => {
     if (
@@ -184,21 +224,37 @@ export function ViewerInboxPage({
       if (!newest?.unread) return;
       seenAttempt.current = { through: newest.id, idempotencyKey: crypto.randomUUID() };
     }
-    const attempt = seenAttempt.current;
-    marking.current = true;
-    void markInboxViewerSeen(queryClient, viewer, attempt, csrfToken)
-      .then(() => {
-        if (!active.current || !viewer.isCurrent()) return;
-        marked.current = attempt.through;
-        seenAttempt.current = null;
-      })
-      .catch((error: unknown) => {
-        if (active.current && viewer.isCurrent()) setSeenFailure(inboxSeenFailure(error).failure);
-      })
-      .finally(() => {
-        if (active.current && viewer.isCurrent()) marking.current = false;
-      });
-  }, [cursor, page?.items, queryClient, viewer, csrfToken, seenRetry, seenFailure]);
+    void sendSeenAttempt(seenAttempt.current);
+  }, [cursor, page?.items, viewer, csrfToken, seenFailure, sendSeenAttempt]);
+
+  const checkAccess = async () => {
+    if (
+      accessPending.current ||
+      marking.current ||
+      pageQuery.isFetching ||
+      waiting ||
+      seenWaiting ||
+      !viewer.isCurrent()
+    )
+      return;
+    accessPending.current = true;
+    setCheckingAccess(true);
+    setAccessCheck(undefined);
+    try {
+      // Session freshness alone grants nothing. The unchanged viewer must pass the same bounded page read.
+      await retryInboxSession(queryClient);
+      if (!active.current || !viewer.isCurrent()) return;
+      const result = await pageQuery.refetch({ cancelRefetch: false });
+      if (active.current && viewer.isCurrent()) setAccessCheck(result.isError ? 'unavailable' : 'checked');
+    } catch {
+      if (active.current && viewer.isCurrent()) setAccessCheck('unavailable');
+    } finally {
+      if (active.current && viewer.isCurrent()) {
+        accessPending.current = false;
+        setCheckingAccess(false);
+      }
+    }
+  };
 
   const loadMore = () => {
     if (pageQuery.isFetching || !page?.next) return;
@@ -228,20 +284,24 @@ export function ViewerInboxPage({
           ? m.inbox_closed()
           : operationState?.state === 'preparing'
             ? m.inbox_preparing()
-            : m.inbox_unavailable()}
+            : accessRefused(operationState?.failure)
+              ? m.inbox_read_denied()
+              : m.inbox_unavailable()}
       </p>
       {cursor !== undefined && readable?.items.length ? (
         <p className="mt-2 text-sm text-muted-foreground">{m.inbox_page_retry_hint()}</p>
       ) : null}
       {waiting ? <p className="mt-2 text-sm text-muted-foreground">{m.settings_retry_wait()}</p> : null}
       <div className="mt-4 flex flex-wrap gap-3">
-        <Button
-          variant="outline"
-          onClick={() => void pageQuery.refetch({ cancelRefetch: false })}
-          disabled={pageQuery.isFetching || waiting}
-        >
-          {m.inbox_retry()}
-        </Button>
+        {!seenNeedsAccess ? (
+          <Button
+            variant="outline"
+            onClick={() => void pageQuery.refetch({ cancelRefetch: false })}
+            disabled={pageQuery.isFetching || waiting}
+          >
+            {m.inbox_retry()}
+          </Button>
+        ) : null}
         {cursor !== undefined ? (
           <Button variant="outline" onClick={startAtFirstPage} disabled={pageQuery.isFetching || waiting}>
             {m.inbox_start_first_page()}
@@ -260,35 +320,78 @@ export function ViewerInboxPage({
           data-response-status={seenFailure.status ?? ''}
           data-response-code={seenFailure.code ?? ''}
           data-retry-after={seenFailure.retryAfter}
+          aria-busy={checkingAccess || markingPending}
           className="mt-4 space-y-2"
         >
           <p>{m.inbox_seen_unavailable()}</p>
           {seenFailure.code === 'platform_closed' ? (
             <p>{m.inbox_seen_closed()}</p>
-          ) : seenFailure.status === 401 ||
-            seenFailure.status === 403 ||
-            seenFailure.code === 'unauthorized' ||
-            seenFailure.code === 'forbidden' ? (
+          ) : accessRefused(seenFailure) ? (
             <p>{m.inbox_seen_denied()}</p>
           ) : seenFailure.status === 429 ? (
             <p>{m.inbox_seen_rate_limited()}</p>
-          ) : null}
+          ) : (
+            <p>{m.inbox_seen_unknown()}</p>
+          )}
+          <p>{m.inbox_seen_readable()}</p>
           {seenWaiting ? <p>{m.settings_retry_wait()}</p> : null}
-          <Button
-            variant="outline"
-            disabled={seenWaiting || marking.current || !csrfToken || !viewer.isCurrent()}
-            onClick={() => {
-              if (seenWaiting || marking.current || !csrfToken || !viewer.isCurrent()) return;
-              setSeenFailure(undefined);
-              setSeenRetry((value) => value + 1);
-            }}
-          >
-            {m.inbox_retry()}
-          </Button>
+          <div className="flex flex-wrap items-start gap-3">
+            <Button
+              variant="outline"
+              className="h-auto min-h-10 max-w-full whitespace-normal py-2"
+              disabled={
+                seenWaiting ||
+                waiting ||
+                checkingAccess ||
+                markingPending ||
+                pageQuery.isFetching ||
+                !viewer.isCurrent()
+              }
+              onClick={() => void checkAccess()}
+            >
+              {m.inbox_check_access()}
+            </Button>
+            {offerSeenRetry ? (
+              <fieldset className="min-w-0 max-w-full space-y-2">
+                <legend className={seenNeedsAccess ? 'sr-only' : 'text-sm text-muted-foreground'}>
+                  {m.inbox_seen_retry()}
+                </legend>
+                <Button
+                  variant="outline"
+                  className="h-auto min-h-10 max-w-full whitespace-normal py-2"
+                  disabled={
+                    seenWaiting || waiting || markingPending || checkingAccess || !csrfToken || !viewer.isCurrent()
+                  }
+                  onClick={() => {
+                    if (seenWaiting || waiting || accessPending.current || !seenAttempt.current) return;
+                    setAccessCheck(undefined);
+                    void sendSeenAttempt(seenAttempt.current);
+                  }}
+                >
+                  {seenNeedsAccess ? m.inbox_seen_retry() : m.inbox_retry()}
+                </Button>
+              </fieldset>
+            ) : null}
+          </div>
+          {accessCheck ? (
+            <p>{accessCheck === 'checked' ? m.inbox_seen_access_checked() : m.inbox_seen_access_unavailable()}</p>
+          ) : null}
         </section>
       ) : null}
       {pageSignedOut ? (
-        <p className="mt-6 text-muted-foreground">{m.inbox_sign_in()}</p>
+        <div className="mt-6 space-y-3">
+          <p className="text-muted-foreground">{m.inbox_read_denied()}</p>
+          {!seenFailure ? (
+            <Button
+              variant="outline"
+              className="h-auto min-h-10 max-w-full whitespace-normal py-2"
+              disabled={checkingAccess || waiting || seenWaiting}
+              onClick={() => void checkAccess()}
+            >
+              {m.inbox_check_access()}
+            </Button>
+          ) : null}
+        </div>
       ) : pageQuery.isPending && !readable ? (
         <p className="mt-6 text-muted-foreground">{m.inbox_loading()}</p>
       ) : (

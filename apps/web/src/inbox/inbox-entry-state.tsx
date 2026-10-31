@@ -12,6 +12,18 @@ export function retryInboxSession(client: QueryClient) {
   return client.fetchQuery({ ...sessionQuery, staleTime: 0 });
 }
 
+function inboxReturnDestination(value: string): string {
+  if (!value.startsWith('/') || value.startsWith('//') || /[\\\u0000-\u001f\u007f]/.test(value)) return '/inbox';
+  try {
+    const origin = 'https://inbox.invalid';
+    const target = new URL(value, origin);
+    const path = target.pathname + target.search + target.hash;
+    return target.origin === origin && !path.startsWith('//') ? path : '/inbox';
+  } catch {
+    return '/inbox';
+  }
+}
+
 /** Only mounted without a current viewer; this component never reads private Inbox data. */
 export function InboxEntryState({
   state,
@@ -29,7 +41,7 @@ export function InboxEntryState({
   if (entry === 'signed-out')
     return (
       <div className="mt-6">
-        <SignInPrompt returnTo={location.publicHref} label={m.inbox_sign_in()} compact />
+        <SignInPrompt returnTo={inboxReturnDestination(location.publicHref)} label={m.inbox_sign_in()} compact />
       </div>
     );
   if (entry === 'loading' && !retrying)

@@ -8,7 +8,10 @@ import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
-import { inboxReadRecoveryStory, inboxSeenRecoveryStory } from '../kernel/fake/notifications';
+import { inboxReadRecoveryStory, inboxSeenAccessStory, inboxSeenRecoveryStory } from '../kernel/fake/notifications';
+import { env } from '../../.storybook/cloudflare-workers';
+import { setStoryRequestContext } from '../../.storybook/react-start';
+import { getLocale } from '../paraglide/runtime.js';
 
 const meta = { title: 'Pages/Account/Inbox', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -412,5 +415,117 @@ export const SeenViewerBecomesUnknown: Story = {
     await expect(main.queryByText(m.inbox_seen_unavailable())).toBeNull();
     await expect(main.queryByRole('button', { name: m.inbox_retry() })).toBeNull();
     await expect(inboxSeenRecoveryStory.commands).toHaveLength(1);
+  },
+};
+
+export const SeenDeniedAccessRecovery: Story = {
+  name: 'Default Inbox denied mark-seen recovery checks current access without replaying the mutation and preserves the exact unresolved marker for deliberate retry',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Default Inbox route and PageStory with the existing illustrative session RPC and fake native-response transport. Covers access reads, original marker retry, native Retry-After and signed-out retirement. Source regression only; native, browser and visual verification remain with integration.',
+      },
+    },
+  },
+  beforeEach: () => {
+    inboxSeenRecoveryStory.commands = [];
+    inboxSeenAccessStory.pageReads = 0;
+    inboxSeenAccessStory.sessionReads = 0;
+    const sessions = env.SESSIONS as unknown as { get(id: unknown): { signedIn(): Promise<unknown> } };
+    const original = sessions.get;
+    sessions.get = (id) => {
+      const existing = original.call(sessions, id);
+      return {
+        ...existing,
+        signedIn: () => {
+          inboxSeenAccessStory.sessionReads++;
+          return existing.signedIn();
+        },
+      };
+    };
+    return () => {
+      sessions.get = original;
+    };
+  },
+  render: () => <InboxStory fixture="seen-access-recovery" />,
+  play: async ({ canvasElement }) => {
+    const main = within(await inboxMain(canvasElement));
+    const status = (await main.findByText(m.inbox_seen_denied())).closest('section')!;
+    await expect(status).toHaveAttribute('data-response-status', '403');
+    await expect(status).toHaveAttribute('data-response-code', 'forbidden');
+    await expect(status).toHaveAttribute('data-retry-after', '2');
+    await within(status).findByText(m.inbox_seen_unavailable());
+    await within(status).findByText(m.inbox_seen_readable());
+    await expect(main.queryByText(m.inbox_empty())).toBeNull();
+    const rows = await main.findByRole('list', { name: m.inbox_heading() });
+    await expect(within(rows).getAllByRole('link')[0]).toHaveAttribute('href', recordedPostHref);
+    await expect(rows.querySelector('[data-unread="true"]')).not.toBeNull();
+    await expect(inboxSeenRecoveryStory.commands).toHaveLength(1);
+    const original = inboxSeenRecoveryStory.commands[0]!;
+    await expect(original.through).toBe('01a17a3b-0884-721b-91ef-d7ffd7bb5801');
+    await expect(JSON.parse(original.key!)).toMatch(/^[0-9a-f-]{36}$/i);
+    const sessionReads = inboxSeenAccessStory.sessionReads;
+    const access = within(status).getByRole('button', { name: m.inbox_check_access() });
+    await expect(access).toBeDisabled();
+    access.click();
+    await expect(inboxSeenAccessStory.pageReads).toBe(1);
+    await expect(inboxSeenAccessStory.sessionReads).toBe(sessionReads);
+    await waitFor(() => expect(access).toBeEnabled(), { timeout: 5000 });
+    await expect(inboxSeenRecoveryStory.commands).toEqual([original]);
+    await expect(inboxSeenAccessStory.pageReads).toBe(1);
+    await expect(inboxSeenAccessStory.sessionReads).toBe(sessionReads);
+
+    // A current native read denial retires rows; refreshing a session does not grant permission or mark seen.
+    await userEvent.click(access);
+    await main.findByText(m.inbox_read_denied());
+    await waitFor(() => expect(access).toBeEnabled());
+    await expect(inboxSeenAccessStory.sessionReads).toBe(sessionReads + 1);
+    await expect(inboxSeenAccessStory.pageReads).toBe(2);
+    await expect(inboxSeenRecoveryStory.commands).toEqual([original]);
+    await expect(main.queryByRole('list', { name: m.inbox_heading() })).toBeNull();
+    await expect(main.queryByText(m.inbox_empty())).toBeNull();
+    await expect(status).toHaveAttribute('data-response-code', 'forbidden');
+    await expect(within(status).queryByRole('button', { name: m.inbox_seen_retry() })).toBeNull();
+    await within(status).findByText(m.inbox_seen_access_checked());
+
+    // A readable current page still leaves the failed marker unresolved, with a separate deliberate action.
+    await userEvent.click(access);
+    await main.findByRole('list', { name: m.inbox_heading() });
+    const markerRetry = await within(status).findByRole('button', { name: m.inbox_seen_retry() });
+    await expect(inboxSeenAccessStory.sessionReads).toBe(sessionReads + 2);
+    await expect(inboxSeenAccessStory.pageReads).toBe(3);
+    await expect(inboxSeenRecoveryStory.commands).toEqual([original]);
+    await expect(status).toHaveAttribute('data-response-code', 'forbidden');
+    await within(status).findByText(m.inbox_seen_denied());
+    await userEvent.click(markerRetry);
+    await within(status).findByText(m.inbox_seen_rate_limited());
+    await expect(inboxSeenRecoveryStory.commands).toEqual([original, original]);
+    await expect(inboxSeenAccessStory.pageReads).toBe(3);
+    await expect(access).toBeDisabled();
+    const retry = within(status).getByRole('button', { name: m.inbox_retry() });
+    await expect(retry).toBeDisabled();
+    access.click();
+    retry.click();
+    await expect(inboxSeenRecoveryStory.commands).toEqual([original, original]);
+    await waitFor(() => expect(access).toBeEnabled(), { timeout: 5000 });
+    await expect(retry).toBeEnabled();
+    await expect(inboxSeenAccessStory.pageReads).toBe(3);
+    await expect(inboxSeenAccessStory.sessionReads).toBe(sessionReads + 2);
+    await expect(inboxSeenRecoveryStory.commands).toEqual([original, original]);
+
+    // Exercise the real viewer boundary through the installed session query, without a replacement view.
+    const path = `/${getLocale()}/inbox?fixture=seen-access-recovery`;
+    setStoryRequestContext({ visitor: 'Signed Out', url: path });
+    await userEvent.click(access);
+    const signIn = await main.findByRole('link', { name: m.inbox_sign_in() });
+    await expect(signIn).toHaveAttribute('href', `/auth/sign-in?return_to=${encodeURIComponent(path)}`);
+    await expect(main.queryByRole('list', { name: m.inbox_heading() })).toBeNull();
+    await expect(main.queryByText(m.inbox_seen_unavailable())).toBeNull();
+    await expect(main.queryByRole('button', { name: m.inbox_retry() })).toBeNull();
+    await expect(main.queryByText(m.inbox_empty())).toBeNull();
+    await expect(inboxSeenAccessStory.pageReads).toBe(3);
+    await expect(inboxSeenRecoveryStory.commands).toEqual([original, original]);
   },
 };

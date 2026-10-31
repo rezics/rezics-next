@@ -115,6 +115,7 @@ const fixtures = {
 
 export const inboxReadRecoveryStory = { reads: 0 };
 export const inboxSeenRecoveryStory = { commands: [] as { through: unknown; key: string | null }[] };
+export const inboxSeenAccessStory = { pageReads: 0, sessionReads: 0 };
 
 const list: FakeRoute = {
   method: 'GET',
@@ -128,6 +129,16 @@ const list: FakeRoute = {
         : (recordings['notifications-count'] ?? { status: 200, count: 0, capped: false });
     }
     const fixture = url.searchParams.get('fixture') ?? storyFixture(request);
+    if (fixture === 'seen-access-recovery') {
+      inboxSeenAccessStory.pageReads++;
+      if (inboxSeenAccessStory.pageReads === 2)
+        return { status: 403, code: 'forbidden', retryable: false, request_id: 'story-inbox-read-denied' };
+      return {
+        status: 200,
+        items: inboxSeenAccessStory.pageReads === 1 ? fixtures.mixed : [fixtures.many[0], ...fixtures.mixed],
+        next: null,
+      };
+    }
     if (fixture?.startsWith('seen-'))
       return url.searchParams.has('cursor')
         ? { status: 200, items: fixtures.unavailable, next: null }
@@ -225,6 +236,14 @@ const seen: FakeRoute = {
     if (!fixture?.startsWith('seen-')) return { status: 204 };
     const body = (await request.json()) as { through?: unknown };
     inboxSeenRecoveryStory.commands.push({ through: body.through, key: request.headers.get('idempotency-key') });
+    if (fixture === 'seen-access-recovery')
+      return {
+        status: inboxSeenRecoveryStory.commands.length === 1 ? 403 : 429,
+        code: inboxSeenRecoveryStory.commands.length === 1 ? 'forbidden' : 'rate_limited',
+        retryable: inboxSeenRecoveryStory.commands.length !== 1,
+        headers: { 'Retry-After': '2' },
+        request_id: 'story-inbox-seen-access',
+      };
     if (fixture === 'seen-wait' && inboxSeenRecoveryStory.commands.length > 1) return { status: 204 };
     const status = fixture === 'seen-wait' ? 429 : fixture === 'seen-closed' || fixture === 'seen-denied' ? 403 : 503;
     const code =
