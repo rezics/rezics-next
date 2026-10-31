@@ -57,6 +57,8 @@ function live(tx: CommandTransaction, receipt: AccountReceipt): boolean {
   const route = routeOf(receipt.account);
   return (
     route !== null &&
+    (receipt.kind === 'account-agent.verify' || receipt.kind === 'account-agent.unverify') &&
+    /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(receipt.receipt) &&
     currentCommand(tx).partition === partitionOf(route) &&
     currentCommand(tx).basis === null &&
     currentCommandResources(tx).deadline > Date.now()
@@ -164,6 +166,11 @@ export async function readAccountIdentityTechnicalSource(
 }
 
 async function decodeTechnicalSource(tx: CommandTransaction, receipt: AccountReceipt, row: Receiver) {
+  if (row.current_write_state !== 'active' || row.receiving_epoch !== row.current_epoch ||
+    String(row.domain_generation) !== row.current_domain ||
+    (BigInt(row.current_position) < BigInt(row.receiving_position) &&
+      !(row.same_transaction && row.receiving_transaction_id === currentCommand(tx).transactionId &&
+        BigInt(row.receiving_position) === BigInt(row.current_position) + 1n))) return null;
   const intent = technicalIntent(row.intent as IdentityIntent, receipt);
   if (!intent) return null;
   const input = Object.freeze({ intent: Object.freeze(intent), receipt: Object.freeze({ ...receipt }) });
