@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessClient, type AccountActor } from '../request/access.ts';
+import { accessCheck, type Access, type AccessClient, type AccountActor, type AccessCheck } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { AccountManagementPage, ManagedAuthOperationId } from './account-management.ts';
 import { readAccount, readOrganizationRole, type Account } from './account-data.ts';
@@ -170,7 +170,7 @@ export async function readManagedAuthActions(
         return evidence;
       },
     });
-    const checks = [];
+    const checks: AccessCheck[] = [];
     // All foreign preparation completes with no source connection held.
     for (const entry of before.entries) {
       checks.push(await accessCheck(access, actor, entry.action, entry.resource, { pool: deps.pool, deadline, time }));

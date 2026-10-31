@@ -340,7 +340,7 @@ test('Managed Account detail exposes only exact current native Auth workflow ent
       {
         operationId: 'auth.account.rename',
         action: 'account:update',
-        resource: { route: routeOf(c.human.accountId), id: c.human.accountId },
+        resource: { route: routeOf(c.human.accountId)!, id: c.human.accountId },
       },
     ],
   });
@@ -351,12 +351,12 @@ test('Managed Account detail exposes only exact current native Auth workflow ent
       {
         operationId: 'auth.organization.membership',
         action: 'organization:membership',
-        resource: { route: routeOf(c.organizationId), id: c.organizationId },
+        resource: { route: routeOf(c.organizationId)!, id: c.organizationId },
       },
       {
         operationId: 'auth.organization.delete',
         action: 'account:delete',
-        resource: { route: routeOf(c.organizationId), id: c.organizationId },
+        resource: { route: routeOf(c.organizationId)!, id: c.organizationId },
       },
     ],
   });
@@ -367,7 +367,7 @@ test('Managed Account detail exposes only exact current native Auth workflow ent
       {
         operationId: 'auth.operator.transfer',
         action: 'account:manage',
-        resource: { route: routeOf(c.human.accountId), id: c.human.accountId },
+        resource: { route: routeOf(c.human.accountId)!, id: c.human.accountId },
       },
     ],
   });
@@ -391,7 +391,7 @@ test('Managed Account detail exposes only exact current native Auth workflow ent
         operationId: 'auth.operator.transfer',
         action: 'account:manage',
         resource: {
-          route: routeOf(c.organizationId),
+          route: routeOf(c.organizationId)!,
           id: c.organizationId,
         },
       },

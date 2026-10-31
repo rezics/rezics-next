@@ -101,12 +101,7 @@ export const accountManagementSchema = t.Object(
   closed,
 );
 export type ManagedAccountsPage = Static<typeof managedAccountsSchema>;
-type ManagedAuthActions = Static<typeof managedAuthActions>;
-export type AccountManagementPage = Omit<Static<typeof accountManagementSchema>, 'authActions'> & {
-  authActions?:
-    | { state: 'ready'; operations: readonly Extract<ManagedAuthActions, { state: 'ready' }>['operations'][number][] }
-    | { state: 'unavailable' };
-};
+export type AccountManagementPage = Static<typeof accountManagementSchema>;
 type Identity = Static<typeof identity>;
 type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: () => Date };
 export type ManagementQuery = { organizationsCursor?: string; membersCursor?: string; operatorsCursor?: string };
