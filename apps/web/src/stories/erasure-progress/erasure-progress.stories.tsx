@@ -1,17 +1,62 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, within } from 'storybook/test';
 import { ErasureProgressView } from '../../accounts/erasure-progress/view';
 import type { ErasureStatus, Page } from '../../accounts/erasure-progress/data';
+import { m } from '../../paraglide/messages.js';
+import { AppShell } from '../../shell/shell';
+import { PatternStory } from '../page';
 
 const meta = {
   title: 'Pages/Account/Erasure progress',
   component: ErasureProgressView,
   parameters: {
-    layout: 'padded',
+    layout: 'fullscreen',
     docs: {
       description: {
         component: 'Illustrative consumer states only. These stories provide no native erasure or participant proof.',
       },
     },
+  },
+  render: (args) => (
+    <PatternStory
+      visitor={args.page.status === 'signed-out' ? 'Signed Out' : 'Signed In'}
+      path={`/platform/accounts/${value.accountId}/erasure`}
+    >
+      <AppShell>
+        <ErasureProgressView {...args} />
+      </AppShell>
+    </PatternStory>
+  ),
+  play: async ({ canvasElement, args, step }) => {
+    await step(
+      'Erasure progress page stories expose one main without turning illustrative complete or missing participant evidence into native erasure proof',
+      async () => {
+        const canvas = within(canvasElement);
+        const main = within(await canvas.findByRole('main'));
+        await expect(canvas.getAllByRole('main')).toHaveLength(1);
+        await expect(main.getByRole('heading', { level: 1, name: m.erasure_title() })).toBeVisible();
+        if (args.page.status !== 'ready') {
+          await expect(main.getByRole('status')).toBeVisible();
+          return;
+        }
+        const { state, pendingParticipants } = args.page.value;
+        const heading = {
+          pending: m.erasure_pending,
+          'retention-outstanding': m.erasure_retention,
+          complete: m.erasure_complete,
+        }[state]();
+        await expect(main.getByRole('heading', { level: 2, name: heading })).toBeVisible();
+        if (state === 'complete') {
+          await expect(main.getByText(m.erasure_complete_help())).toBeVisible();
+        } else {
+          await expect(main.queryByRole('heading', { level: 2, name: m.erasure_complete() })).not.toBeInTheDocument();
+          if (state === 'pending' && pendingParticipants.length === 0) {
+            await expect(main.getByText(m.erasure_no_pending_names())).toBeVisible();
+            await expect(main.getByText(m.erasure_pending_help())).toBeVisible();
+          }
+        }
+      },
+    );
   },
 } satisfies Meta<typeof ErasureProgressView>;
 export default meta;
