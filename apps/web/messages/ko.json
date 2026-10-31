@@ -2559,7 +2559,7 @@
   "changes_adopted_detail": "컨텍스트 선택이 기록되었습니다. 현재 내용에서 지금 볼 수 있는 정보를 확인하세요.",
   "changes_empty_page": "이 페이지에는 볼 수 있는 버전이 없습니다. 다음 페이지를 확인하세요.",
   "board_community_about": "게시판 소개",
-  "board_community_global": "이 게시판은 전역 컨텍스트에 있습니다. 게시에는 현재 계정의 권한이 사용되며 가입할 Realm이 없습니다.",
+  "board_community_global": "이 게시판은 Realm에 속하지 않으므로 Realm에 가입할 필요가 없습니다. ‘새 스레드 시작’이나 로그인 옵션이 표시되면 해당 옵션으로 진행하세요.",
   "board_community_source_unavailable": "커뮤니티 정보를 사용할 수 없습니다.",
   "board_community_protected": "보호된 게시판",
   "board_community_protected_help": "게시판을 읽을 수 있어도 글을 쓸 권한이 있는 것은 아닙니다.",

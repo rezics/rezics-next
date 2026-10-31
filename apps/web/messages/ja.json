@@ -2559,7 +2559,7 @@
   "changes_adopted_detail": "コンテキストの選択が記録されました。現在の表示で閲覧可能な内容を確認してください。",
   "changes_empty_page": "このページには閲覧できる版がありません。次のページを確認できます。",
   "board_community_about": "このボードについて",
-  "board_community_global": "このボードはグローバルコンテキストにあります。投稿には現在のアカウントの権限が使われ、Realmへの参加はありません。",
+  "board_community_global": "このボードはどのRealmにも属していないため、Realmに参加する必要はありません。「新しいスレッドを作成」またはログインの選択肢が表示されていれば、そこから進んでください。",
   "board_community_source_unavailable": "コミュニティ情報を取得できません。",
   "board_community_protected": "保護されたボード",
   "board_community_protected_help": "このボードを閲覧できても、投稿の権限があるとは限りません。",

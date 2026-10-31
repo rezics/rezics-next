@@ -2559,7 +2559,7 @@
   "changes_adopted_detail": "已記錄上下文的選用。請開啟目前內容，查看現在可讀的資訊。",
   "changes_empty_page": "本頁沒有可讀的修訂版本，可以繼續查看下一頁。",
   "board_community_about": "關於此討論板",
-  "board_community_global": "此討論板位於全域上下文中。發文使用目前帳戶的權限，無需加入領域。",
+  "board_community_global": "此討論板不屬於任何領域，因此無需加入領域。若畫面上顯示「建立新討論串」或登入選項，請使用該選項繼續。",
   "board_community_source_unavailable": "社群資訊暫時無法使用。",
   "board_community_protected": "受保護的討論板",
   "board_community_protected_help": "能夠閱讀此討論板並不代表有權發文。",

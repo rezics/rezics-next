@@ -2559,7 +2559,7 @@
   "changes_adopted_detail": "Se registró una selección de contexto. Abre la lectura actual para ver lo disponible ahora.",
   "changes_empty_page": "No hay revisiones visibles en esta página. Continúa a la siguiente.",
   "board_community_about": "Acerca de este foro",
-  "board_community_global": "Este foro pertenece al contexto global. Las publicaciones usan los permisos actuales de la cuenta; no hay membresía de Realm.",
+  "board_community_global": "Este foro no forma parte de ningún Realm, así que no necesitas unirte a uno. Si ves «Crear un hilo» o una opción para iniciar sesión, úsala para continuar.",
   "board_community_source_unavailable": "La información de la comunidad no está disponible.",
   "board_community_protected": "Foro protegido",
   "board_community_protected_help": "Poder leer este foro no concede permiso para publicar.",

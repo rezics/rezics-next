@@ -2560,7 +2560,7 @@
   "changes_adopted_detail": "已记录上下文的选用。请打开当前内容，查看目前可读的信息。",
   "changes_empty_page": "本页没有可读的修订版本，可以继续查看下一页。",
   "board_community_about": "关于此讨论板",
-  "board_community_global": "此讨论板位于全局上下文中。发帖使用当前账户的权限，无需加入领域。",
+  "board_community_global": "此讨论板不属于任何领域，因此无需加入领域。如果页面显示“创建新讨论串”或登录选项，请通过相应选项继续。",
   "board_community_source_unavailable": "社区信息暂不可用。",
   "board_community_protected": "受保护的讨论板",
   "board_community_protected_help": "能够阅读此讨论板并不代表有权发帖。",

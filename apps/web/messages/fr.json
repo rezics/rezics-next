@@ -2559,7 +2559,7 @@
   "changes_adopted_detail": "Une sélection de contexte a été enregistrée. Ouvrez la lecture actuelle pour voir ce qui est disponible maintenant.",
   "changes_empty_page": "Aucune révision visible sur cette page. Passez à la suivante.",
   "board_community_about": "À propos de ce forum",
-  "board_community_global": "Ce forum appartient au contexte global. La publication utilise les droits actuels du compte ; il n’y a pas d’adhésion à un Realm.",
+  "board_community_global": "Ce forum ne fait partie d’aucun Realm, vous n’avez donc pas à en rejoindre un. Si l’option « Créer une discussion » ou une option de connexion s’affiche, utilisez-la pour continuer.",
   "board_community_source_unavailable": "Les informations de la communauté sont indisponibles.",
   "board_community_protected": "Forum protégé",
   "board_community_protected_help": "Pouvoir lire ce forum ne donne pas le droit d’y publier.",

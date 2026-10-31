@@ -2548,7 +2548,7 @@
   "changes_adopted_detail": "A Context selection was recorded. Open the current reading to see what is available now.",
   "changes_empty_page": "No visible revisions on this page. Continue to check the next page.",
   "board_community_about": "About this board",
-  "board_community_global": "This board is in Global Context. Posting uses the current account’s authority; there is no Realm membership to join.",
+  "board_community_global": "This board isn’t part of a Realm, so you don’t need to join one. If you see “Start a new thread” or a sign-in option, use it to continue.",
   "board_community_source_unavailable": "Community information is unavailable.",
   "board_community_protected": "Protected board",
   "board_community_protected_help": "Reading this board does not grant permission to post.",

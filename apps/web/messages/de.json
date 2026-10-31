@@ -2559,7 +2559,7 @@
   "changes_adopted_detail": "Eine Kontextauswahl wurde aufgezeichnet. Öffne die aktuelle Ansicht, um die jetzt verfügbaren Daten zu sehen.",
   "changes_empty_page": "Auf dieser Seite sind keine Revisionen sichtbar. Prüfe die nächste Seite.",
   "board_community_about": "Über dieses Board",
-  "board_community_global": "Dieses Board gehört zum globalen Kontext. Beiträge verwenden die aktuellen Kontorechte; es gibt keine Realm-Mitgliedschaft.",
+  "board_community_global": "Dieses Board gehört zu keinem Realm. Du musst daher keinem Realm beitreten. Wenn du „Neuen Thread starten“ oder eine Anmeldeoption siehst, kannst du darüber fortfahren.",
   "board_community_source_unavailable": "Community-Informationen sind nicht verfügbar.",
   "board_community_protected": "Geschütztes Board",
   "board_community_protected_help": "Lesezugriff auf dieses Board erteilt keine Schreibrechte.",
