@@ -4,16 +4,26 @@ import { CollectionPublicationPageView } from '../library/collection-publication
 import { publicationExample, publicationRefusal } from '../kernel/fake/collection-publication';
 import type { PublicationInput } from '../library/collection-publication';
 import { m } from '../paraglide/messages.js';
+import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
 const meta = {
   title: 'Pages/Library/Collection publication',
+  decorators: [
+    (Story) => (
+      <PatternStory visitor="Signed In" path={`/collections/${publicationExample.address.id}/publish`}>
+        <AppShell>
+          <Story />
+        </AppShell>
+      </PatternStory>
+    ),
+  ],
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
         component:
-          'Consumer selection/refusal examples using recorded subject summaries. No positive publication provider. Ordinary 390/1280 Web review, native publication and promoted-main proof remain pending.',
+          'Illustrative selection/refusal examples in the existing app shell using recorded subject summaries and supplied page props. No positive publication provider. Ordinary 390/1280 Web review, native publication and promoted-main proof remain pending.',
       },
     },
   },
@@ -22,17 +32,19 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const example = (reason: Parameters<typeof publicationRefusal>[0]) => (
-  <PatternStory visitor="Signed In">
-    <CollectionPublicationPageView
-      page={publicationExample}
-      submit={async () => publicationRefusal(reason)}
-      onReload={() => {}}
-    />
-  </PatternStory>
+  <CollectionPublicationPageView
+    page={publicationExample}
+    submit={async () => publicationRefusal(reason)}
+    onReload={() => {}}
+  />
 );
 
+async function publicationCanvas(canvasElement: HTMLElement) {
+  return within(await within(canvasElement).findByRole('main'));
+}
+
 async function chooseAndConfirm(canvasElement: HTMLElement) {
-  const canvas = within(canvasElement);
+  const canvas = await publicationCanvas(canvasElement);
   const checkboxes = canvas.getAllByRole('checkbox');
   await userEvent.click(checkboxes[0]!);
   await userEvent.click(checkboxes[checkboxes.length - 1]!);
@@ -42,7 +54,7 @@ async function chooseAndConfirm(canvasElement: HTMLElement) {
 export const SelectedEmpty: Story = {
   render: () => example('unavailable'),
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await publicationCanvas(canvasElement);
     const publish = canvas.getByRole('button', { name: m.library_publication_publish() });
     await expect(publish).toBeDisabled();
     await userEvent.click(canvas.getByRole('checkbox', { name: m.library_publication_confirm_empty() }));
@@ -82,15 +94,13 @@ export const Stale: Story = {
 
 export const SourceUnavailable: Story = {
   render: () => (
-    <PatternStory visitor="Signed In">
-      <CollectionPublicationPageView
-        page={{ ...publicationExample, source: { state: 'unavailable' } }}
-        submit={async () => publicationRefusal('unavailable')}
-      />
-    </PatternStory>
+    <CollectionPublicationPageView
+      page={{ ...publicationExample, source: { state: 'unavailable' } }}
+      submit={async () => publicationRefusal('unavailable')}
+    />
   ),
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await publicationCanvas(canvasElement);
     await expect(canvas.getByRole('alert')).toHaveTextContent(m.library_publication_unavailable());
     await expect(canvas.queryByRole('checkbox')).toBeNull();
     await expect(canvas.queryByText(m.library_publication_count({ count: '0' }))).toBeNull();
@@ -102,16 +112,14 @@ export const Retry: Story = {
   render: () => {
     let previous: PublicationInput | undefined;
     return (
-      <PatternStory visitor="Signed In">
-        <CollectionPublicationPageView
-          page={publicationExample}
-          submit={async (input) => {
-            if (previous) await expect(input).toEqual(previous);
-            previous = input;
-            return publicationRefusal('unknown');
-          }}
-        />
-      </PatternStory>
+      <CollectionPublicationPageView
+        page={publicationExample}
+        submit={async (input) => {
+          if (previous) await expect(input).toEqual(previous);
+          previous = input;
+          return publicationRefusal('unknown');
+        }}
+      />
     );
   },
   play: async ({ canvasElement }) => {
