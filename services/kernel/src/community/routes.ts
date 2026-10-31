@@ -1,6 +1,7 @@
 import { listRealmDiscovery } from './discovery.ts';
 import { requestRealmClaim } from './realm-continuity.ts';
 import { readOwnRealmClaim } from './realm-claim-status.ts';
+import { listRealmClaimRequests } from './realm-claim-review.ts';
 import { exactRealmPresentationImage } from '../content/realm-media.ts';
 import { approveRealmClaim } from '../access/realm-claim.ts';
 import { realmClaimApprovalResponseSchema } from './schemas.ts';
@@ -118,6 +119,23 @@ const space = t.Object(
   },
   closed,
 );
+const claimReviewResponse = t.Object({
+  claimRequests: t.Array(t.Object({
+    realmId: id,
+    requestId: id,
+    claimantAccountId: id,
+    state: t.Literal('pending'),
+    orphanedAt: instant,
+    claimEligibleAt: instant,
+    requestedAt: instant,
+  }, closed), { maxItems: 20 }),
+  next: t.Union([t.String(), t.Null()]),
+}, closed);
+const claimReviewQuery = t.Object({
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
+  cursor: t.Optional(t.String({ maxLength: 4096 })),
+}, closed);
+
 const spaceResponse = t.Object({ space }, closed);
 const spaceHomeResponse = t.Object({ space, community: t.Union([CommunityPresentationSchema, t.Null()]) }, closed);
 const voteWeight = t.Unsafe<1 | -1>(t.Integer({ enum: [1, -1] }));
@@ -1255,6 +1273,32 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         }
         set.status = 204;
       },
+    )
+    .get(
+      '/v1/realms/:realmId/claimRequests',
+      {
+        params: realmParams,
+        query: claimReviewQuery,
+        response: {
+          200: strict(claimReviewResponse),
+          ...readFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
+        },
+        detail: {
+          operationId: 'realm.claim_requests',
+          'x-exposure': 'public',
+          'x-action': 'realm:approve_claim',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, query, actor, admission, job }) =>
+        admission.run('normal', job, async () => {
+          const result = await listRealmClaimRequests(realmDependencies(), actor, { realmId, ...query }, {
+            deadline: job.deadline,
+          });
+          return { claimRequests: [...result.claimRequests], next: result.next };
+        }),
     )
     .post(
       '/v1/realms/:realmId/claimRequests',

@@ -926,3 +926,32 @@ remains pending; only real source-row removal, whenever committed by its owner, 
 | Read native Realm member count        | The native partition ownership key and exact `(route, realm_id)` source control in the caller's home snapshot.        | Two point rows/statements; logarithmic indexed blocks, independent of members and history.                                                                                                                | Later existing native growth harness; focused outcomes in `test/community/member-count.test.ts`.            |
 | Maintain count with native membership | The exact source control and actual changed source row; first installation probes indexed open/unkeyed/end endpoints. | Constant work per actual row change; logarithmic indexed blocks. No account journal or separate command.                                                                                                  | Existing membership/transition harness at integration; no allowance changes.                                |
 | Initialize existing counts            | Fifty raw Realm inventory keys, or fifty raw unkeyed/open source keys from one control and its finite cut.            | Fixed fifty inputs per segment; indexed keysets, finite native progress and one home per command. Closed history is never paged. Total work follows installed current keys and subsequent source changes. | Later existing native growth harness; restart/live-change outcome in `test/community/member-count.test.ts`. |
+## Pending Realm claim review
+
+`GET /v1/realms/:realmId/claimRequests` exposes the native `RealmClaimReviewPage` from
+`realm-claim-review.ts`: `{claimRequests:[{realmId,requestId,claimantAccountId,state:'pending',orphanedAt,
+claimEligibleAt,requestedAt}],next:string|null}`. This public-mounted operational read requires ordinary current
+`realm:approve_claim` directly on Global with the actual actor, before Realm source checkout and again at final
+disclosure. Realm management, moderator standing and Global reach do not substitute for that action. Denied,
+unrelated and missing sources use the same `not_found` policy. No member, profile, email, body, Realm text, count
+or authority is returned. Accounts' existing approval command remains the sole grant/approval producer; this read
+never locks a claim for approval, changes state or grants ownership.
+
+Only an active, currently orphaned Realm whose original 720-hour deadline has arrived is available. Pending
+requests must match that exact orphan episode and have been requested between its original eligibility instant
+and current authoritative time. Released initial and final snapshots retain the exact native head, lifecycle,
+public-source epoch, original orphan deadline and request identity. Restore, approval, re-orphaning, removal or
+changed source binding before final disclosure withholds the old source. Access is freshly prepared outside source
+checkout and evaluated again in the final snapshot; revoked platform permission cannot disclose the page.
+
+Limit is 1–100 (default 20); at most `min(limit,20)` pending keys are examined, including ineligible rows. One
+partial-index seek orders by request ID within `(route,realm,orphanedAt)`; there is no refill, count, history walk
+or all-Realm discovery. The signed native cursor binds the viewer/client/delegator, Realm, normalized limit,
+partition epoch, original orphan episode, lifecycle/public-source epochs and last examined request ID. A full
+examined page may return continuation even when its successor is empty. The selected dependency interface has no
+key-ring port, so the native signer uses a process-lifetime random key; a process restart requires restarting the
+listing. Invalid/expired tokens use `invalid_cursor`; a changed available source epoch uses `stale_cursor`.
+
+| Operation | Touches | Bound | Growth check |
+| --- | --- | --- | --- |
+| List pending Realm claims | Two ordinary exact Global Access evaluations; initial/final native Realm/head and partition point reads; one pending episode index seek and at most 20 exact request revalidations. | At most `min(limit,20)` examined candidates and final full-key reads; fixed snapshots/statements plus bounded Access; logarithmic index seeks independent of unrelated Realms and historical episodes. | Focused `test/community/realm-claim-review.test.ts` asserts the candidate cap and exact pending index shape. Native growth execution is deferred to integration. |

@@ -1569,3 +1569,7 @@ END;
 $$;
 CREATE TRIGGER realm_member_count_no_truncate BEFORE TRUNCATE ON community.realm_member
 FOR EACH STATEMENT EXECUTE FUNCTION community.guard_realm_member_count_truncate();
+
+CREATE INDEX realm_claim_request_pending_review
+  ON community.realm_claim_request (route, realm_id, orphaned_at, request_id)
+  INCLUDE (account_id, requested_at) WHERE state = 'pending';
