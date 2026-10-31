@@ -172,7 +172,7 @@ export async function installNativeRoleCoverage(pool: Pool): Promise<void> {
       await client.query('UPDATE auth_native_role_deployment SET store_index=$1 WHERE singleton', [
         nativeRoleStores.length,
       ]);
-      await client.query(`UPDATE auth_copy_coverage SET native_covered=NOT EXISTS(
+      await client.query(`UPDATE auth_copy_coverage SET native_covered=${nativePhaseExtensions.some((phase) => phase.kind === 'unavailable') ? 'false' : 'true'} AND NOT EXISTS(
         SELECT 1 FROM auth_native_role_unknown LIMIT 1) WHERE singleton AND version=1`);
     }
   });
@@ -207,7 +207,7 @@ export async function reconcileNativeRoleCoveragePage(pool: Pool): Promise<numbe
     if (!rows.length) {
       await client.query('UPDATE auth_native_role_deployment SET store_index=store_index+1 WHERE singleton');
       if (state.store_index + 1 === nativeRoleStores.length)
-        await client.query(`UPDATE auth_copy_coverage SET native_covered=NOT EXISTS(
+        await client.query(`UPDATE auth_copy_coverage SET native_covered=${nativePhaseExtensions.some((phase) => phase.kind === 'unavailable') ? 'false' : 'true'} AND NOT EXISTS(
           SELECT 1 FROM auth_native_role_unknown LIMIT 1) WHERE singleton AND version=1`);
     }
     return rows.length || 1;

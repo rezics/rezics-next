@@ -54,5 +54,19 @@ CREATE TRIGGER auth_native_phase_producer_guard BEFORE INSERT OR UPDATE OR DELET
 CREATE TRIGGER auth_native_phase_producer_guard BEFORE INSERT OR UPDATE OR DELETE ON auth_workflow_request
   FOR EACH ROW EXECUTE FUNCTION auth_native_phase_producer_guard();
 
+-- Old proof publishers read this existing authority, not the new phase marker.
+-- Invalidate their carried deployment EOF atomically with activation. A queued
+-- old reconciliation page cannot restore it after this cut.
+UPDATE auth_copy_coverage SET native_covered=false WHERE singleton;
+CREATE FUNCTION auth_native_phase_coverage_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.native_covered AND current_setting('auth.native_phase_producer',true) IS DISTINCT FROM '2' THEN
+    RAISE EXCEPTION 'Auth native phase producer version refused' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER auth_native_phase_coverage_guard BEFORE INSERT OR UPDATE ON auth_copy_coverage
+  FOR EACH ROW EXECUTE FUNCTION auth_native_phase_coverage_guard();
+
 -- migrate:down
 -- Forward only: saved phase meaning and the producer cut cannot be forgotten.
