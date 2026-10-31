@@ -401,9 +401,7 @@ export function EditionPublication({
           aria-label={m.edition_publication_published_heading()}
           role="status"
         >
-          <h2 className="text-lg font-semibold">
-            {m.edition_publication_published_heading()}
-          </h2>
+          <h2 className="text-lg font-semibold">{m.edition_publication_published_heading()}</h2>
           <p className="text-sm">{m.edition_publication_published_help()}</p>
           <p className="font-mono text-sm">{edition.editionId}</p>
           <div className="flex flex-wrap items-center gap-3">
