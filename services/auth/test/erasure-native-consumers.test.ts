@@ -267,9 +267,10 @@ test('Consume genuine original lifecycle result for terminal Auth continuation',
           .rowCount,
     );
     const proof = (
-      await f.pool.query("SELECT binding,result FROM auth_native_consumer_proof WHERE store='registration' AND key=$1", [
-        stage.registration_id,
-      ])
+      await f.pool.query(
+        "SELECT binding,result FROM auth_native_consumer_proof WHERE store='registration' AND key=$1",
+        [stage.registration_id],
+      )
     ).rows[0]!;
     expect(proof.binding.slice(0, 4)).toEqual([
       stage.registration_id,
@@ -374,9 +375,10 @@ test('terminal activation consumption preserves the exact original native outcom
           .rowCount,
     );
     const proof = (
-      await f.pool.query("SELECT binding,result FROM auth_native_consumer_proof WHERE store='registration' AND key=$1", [
-        stage.registration_id,
-      ])
+      await f.pool.query(
+        "SELECT binding,result FROM auth_native_consumer_proof WHERE store='registration' AND key=$1",
+        [stage.registration_id],
+      )
     ).rows[0]!;
     expect(proof.binding[2]).toBe(request.operationKey);
     expect(proof.result).toEqual({ outcome: 'activated', sourceResult: receipt.response });
@@ -427,9 +429,7 @@ test('a lost activation reply is replayed with its original key, unavailable evi
   if (!readOriginal) throw new Error('Missing installed original lifecycle result reader');
   f.bindings.workflowPorts.provisioningEvidence = async () => null;
   f.bindings.workflowPorts.readOriginalLifecycleResult = async (input) =>
-    input.kind === 'activation' && input.source.registrationId === stage.registration_id
-      ? null
-      : readOriginal(input);
+    input.kind === 'activation' && input.source.registrationId === stage.registration_id ? null : readOriginal(input);
   const deletion = f.delete(person);
   try {
     await eventually(
@@ -725,7 +725,14 @@ test('real recovery establishment survives a lost committed source reply and obt
     kind: 'recovery',
     accountId: subject.accountId,
     operationKey: createHash('sha256')
-      .update(JSON.stringify(['access-recovery-completion-v1', witness.account_id, witness.receipt_id, witness.establishment_id]))
+      .update(
+        JSON.stringify([
+          'access-recovery-completion-v1',
+          witness.account_id,
+          witness.receipt_id,
+          witness.establishment_id,
+        ]),
+      )
       .digest('hex'),
     source: { establishmentReference: reference },
   });
@@ -774,8 +781,8 @@ test('real recovery establishment survives a lost committed source reply and obt
       expect((await f.delete(recovered)).status).toBe(200);
       await eventually(
         async () =>
-          (await f.pool.query('SELECT pending_code FROM auth_erasure WHERE account_id=$1', [subject.accountId]))
-            .rows[0]?.pending_code === 'native-release',
+          (await f.pool.query('SELECT pending_code FROM auth_erasure WHERE account_id=$1', [subject.accountId])).rows[0]
+            ?.pending_code === 'native-release',
       );
       expect((await ports.readAccount(subject.accountId))!).toMatchObject({ state: 'deleted', fenced: true });
       expect(

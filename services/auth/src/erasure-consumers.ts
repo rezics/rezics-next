@@ -413,8 +413,7 @@ async function continueRecovery(
   // A deleted account or a completed (unfenced) source cannot replace a missing
   // original result. Unknown/expired sources remain pending in that authority.
   const current = await runtime.access.readAccount(row.account_id);
-  if (!current || current.accountId !== row.account_id || current.state !== 'active' || !current.fenced)
-    return false;
+  if (!current || current.accountId !== row.account_id || current.state !== 'active' || !current.fenced) return false;
   if (!runtime.completeRecovery) return false;
   await runtime.completeRecovery(reference);
   await recordRecoveryCompletion(pool, reference);
@@ -459,7 +458,9 @@ export async function continueNativeConsumer(
           [locator.key],
         )
       ).rows[0];
-      return row?.erasure_stage_id ? await continueRegistration(pool, obligationId, row.erasure_stage_id, runtime) : false;
+      return row?.erasure_stage_id
+        ? await continueRegistration(pool, obligationId, row.erasure_stage_id, runtime)
+        : false;
     }
     if (locator.store === 'auth_client_reduction_progress')
       return await runtime.auth.internal.continueNativeClientReduction(
