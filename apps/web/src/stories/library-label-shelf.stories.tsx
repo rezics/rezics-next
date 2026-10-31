@@ -51,8 +51,20 @@ async function shelfReady(context: { canvasElement: HTMLElement }, count: number
 
 export const ThreeWorks: Story = {
   name: 'Three works',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => <LabelShelfStory count={3} />,
-  play: (context) => shelfReady(context, 3, 'Reading list'),
+  play: async (context) => {
+    await shelfReady(context, 3, 'Reading list');
+    const trigger = within(context.canvasElement).getByRole('button', {
+      name: m.library_entry_actions({ title: m.library_subject_unavailable() }),
+    });
+    const tile = context.canvasElement.querySelector('[data-slot="tombstone"]')!.parentElement!;
+    const bounds = tile.getBoundingClientRect();
+    const actions = trigger.getBoundingClientRect();
+    await expect(actions.left).toBeGreaterThanOrEqual(bounds.left);
+    await expect(actions.right).toBeLessThanOrEqual(bounds.right);
+    await expect(bounds.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+  },
 };
 
 export const FortyWorks: Story = {

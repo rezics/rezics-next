@@ -21,7 +21,7 @@ import {
 import { Button } from '@rezics/ui/shadcn/button';
 import { useNavigate } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
@@ -398,6 +398,7 @@ function LabelAssignmentRemoveForm({
   csrfToken: string | null;
 }) {
   const admitted = useOperation('library_label.unassign');
+  const labelNameId = useId();
   if (!admitted) return null;
   return (
     <form method="post" action={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(entry.labelId)}`}>
@@ -408,10 +409,19 @@ function LabelAssignmentRemoveForm({
       <input type="hidden" name="idempotencyKey" value={entry.removeKey} />
       <input type="hidden" name="revision" value={entry.revision} />
       <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-      <Button type="submit" variant="outline" size="sm" aria-label={m.library_label_shelf_remove()}>
+      <Button
+        type="submit"
+        variant="outline"
+        size="sm"
+        className="h-auto min-h-11 max-w-full whitespace-normal"
+        aria-label={m.library_label_shelf_remove()}
+        aria-describedby={labelNameId}
+      >
         {m.library_label_shelf_remove()}
       </Button>
-      <span className="sr-only">{labelName}</span>
+      <span id={labelNameId} className="sr-only">
+        {labelName}
+      </span>
     </form>
   );
 }
@@ -443,9 +453,35 @@ export function LabelShelfEntries({
         {entries.map((entry) => {
           if (!entry.subject)
             return (
-              <div key={entry.id} className="min-w-0 space-y-2">
+              <div key={entry.id} className="min-w-0">
                 <Tombstone shape="card" />
-                <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />
+                {removeAdmitted ? (
+                  <div className="flex min-w-0 justify-end">
+                    <ItemMenu
+                      title={m.library_entry_actions({ title: title(entry) })}
+                      backLabel={m.library_menu_back()}
+                      trigger={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="shrink-0 pointer-coarse:size-11"
+                          aria-label={m.library_entry_actions({ title: title(entry) })}
+                        >
+                          <EllipsisIcon aria-hidden="true" />
+                        </Button>
+                      }
+                      content={
+                        <LabelAssignmentRemoveForm
+                          entry={entry}
+                          labelName={label.name}
+                          locale={locale}
+                          csrfToken={csrfToken}
+                        />
+                      }
+                    />
+                  </div>
+                ) : null}
               </div>
             );
           const progress = labelEntryProgress(entry, locale);
