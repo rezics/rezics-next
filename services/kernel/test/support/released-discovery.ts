@@ -214,6 +214,7 @@ export async function createReleasedDiscoveryFixture(
     freeze() {
       requireOpen();
       frozenAt ??= systemClock().getTime();
+      native?.onClockChange(new Date(frozenAt));
       return kernelClock();
     },
     advanceBy(milliseconds) {
@@ -225,10 +226,19 @@ export async function createReleasedDiscoveryFixture(
       if (!Number.isSafeInteger(next) || next > 8_640_000_000_000_000)
         throw new Error('Released discovery clock overflow');
       frozenAt = next;
+      native?.onClockChange(new Date(next));
       return kernelClock();
     },
   };
   const native = options.search === 'native' ? releasedDiscoveryRuntime(options.kernelPool) : undefined;
+  let nativeStart: Promise<void> | undefined;
+  const flushNativeClock = async () => {
+    // Setup sends precede start(); join the actual lifecycle only after it exists.
+    if (nativeStart) {
+      await nativeStart;
+      await native!.flushClock();
+    }
+  };
   const driver = await createSemanticDriver(
     (config) =>
       createKernel({
@@ -269,7 +279,8 @@ export async function createReleasedDiscoveryFixture(
       driver.fixtures.person('discovery-unscoped', { scopes: [] }),
     ]);
     const personas = { alice, bob, outsider, unscoped };
-    const request: ReleasedDiscoveryFixture['request'] = (persona, method, path, body, headers) => {
+    const request: ReleasedDiscoveryFixture['request'] = async (persona, method, path, body, headers) => {
+      await flushNativeClock();
       if (persona === 'alice' || persona === 'bob' || persona === 'outsider' || persona === 'unscoped')
         return driver.fixtures.send(personas[persona], method, path, body, headers);
       if (method === 'DELETE') throw new Error('Semantic persona transport does not expose DELETE');
@@ -441,6 +452,7 @@ export async function createReleasedDiscoveryFixture(
             const url = new URL(req.url);
             const method = req.method as 'GET' | 'POST' | 'PUT' | 'DELETE';
             const bytes = await req.text();
+            await flushNativeClock();
             const response = await driver.fixtures.send(
               account,
               method,
@@ -505,8 +517,9 @@ export async function createReleasedDiscoveryFixture(
         const account = await driver.fixtures.scopeVariant(personas[persona], scopes);
         return Object.freeze({
           accountId: account.accountId,
-          request: (method, path, body, headers) => {
+          request: async (method, path, body, headers) => {
             requireOpen();
+            await flushNativeClock();
             return driver.fixtures.send(account, method, path, body, headers);
           },
         } satisfies DiscoveryScopedTransport);
@@ -707,10 +720,12 @@ export async function createReleasedDiscoveryFixture(
         return driver.close();
       },
     };
-    if (native)
-      await native.start(driver.fixtures.runtime, (path, body) =>
+    if (native) {
+      nativeStart = native.start(driver.fixtures.runtime, (path, body) =>
         request('anonymous', body === undefined ? 'GET' : 'POST', path, body),
       );
+      await nativeStart;
+    }
     return fixture;
   } catch (error) {
     try {

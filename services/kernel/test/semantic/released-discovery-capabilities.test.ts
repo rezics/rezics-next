@@ -299,3 +299,60 @@ test('The existing single native discovery world forwards its actual installed A
   expect(Number.isFinite(native.clock.now().getTime())).toBe(true);
   await expect(native.signIn('alice')).rejects.toThrow('closed');
 }, 180_000);
+
+test('The existing discovery clock forwards each explicit instant to the actual native child and drains that queue before dependent Kernel requests without changing the default clock or fixture world', async () => {
+  const native = await createReleasedDiscoveryFixture({ version: 1, search: 'native' });
+  try {
+    const search = native.search!;
+    expect(search.workerKind).toBe('owned-child');
+    const clock = native.clock;
+    const prefix = search.indexPrefix;
+    const alice = { ...native.personas.alice };
+    const before = Date.now();
+    const initial = await search.workerStats();
+    expect(initial.clockInstant).toBeGreaterThanOrEqual(before);
+    expect(initial.clockInstant).toBeLessThanOrEqual(Date.now());
+    expect(() => clock.advanceBy(0)).toThrow('frozen');
+
+    const subject = await native.createSubject('schema:Book', 'Shared child clock transport control');
+    const scoped = await native.scoped('alice', ['subject:read', 'definitions:read']);
+    const importer = await native.reviewedCatalogueOperator('alice');
+    const frozen = clock.freeze();
+    const at = frozen.getTime();
+    const first = search.workerStats();
+    frozen.setTime(0);
+    const advanced = clock.advanceBy(1);
+    const second = search.workerStats();
+    advanced.setTime(0);
+    expect(clock.freeze().getTime()).toBe(at + 1);
+    const repeated = search.workerStats();
+    expect(clock.advanceBy(0).getTime()).toBe(at + 1);
+    const unchanged = search.workerStats();
+    status(await native.request('anonymous', 'GET', '/v1/definitions/active'), 200);
+    expect((await first).clockInstant).toBe(at);
+    expect((await second).clockInstant).toBe(at + 1);
+    expect((await repeated).clockInstant).toBe(at + 1);
+    expect((await unchanged).clockInstant).toBe(at + 1);
+
+    clock.advanceBy(1);
+    status(await native.request('alice', 'GET', '/v1/definitions/active'), 200);
+    expect((await search.workerStats()).clockInstant).toBe(at + 2);
+    clock.advanceBy(1);
+    status(await scoped.request('GET', '/v1/definitions/active'), 200);
+    expect((await search.workerStats()).clockInstant).toBe(at + 3);
+    clock.advanceBy(1);
+    expect((await importer.readReviewedSubject(subject.id)).subject.id).toBe(subject.id);
+    expect((await search.workerStats()).clockInstant).toBe(at + 4);
+
+    for (const invalid of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])
+      expect(() => clock.advanceBy(invalid)).toThrow('safe integer');
+    expect(() => clock.advanceBy(Number.MAX_SAFE_INTEGER)).toThrow('overflow');
+    expect(clock.now().getTime()).toBe(at + 4);
+    expect((await search.workerStats()).clockInstant).toBe(at + 4);
+    expect(native.clock).toBe(clock);
+    expect(search.indexPrefix).toBe(prefix);
+    expect(native.personas.alice).toEqual(alice);
+  } finally {
+    await native.close();
+  }
+}, 180_000);
