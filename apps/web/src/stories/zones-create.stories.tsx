@@ -53,7 +53,28 @@ const meta = {
 } satisfies Meta<typeof CreateStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const ChooseStarter: Story = {};
+export const ChooseStarter: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('combobox', { name: m.zones_create_starter() });
+    const openNavigation = canvas.queryByRole('button', { name: m.shell_open_navigation() });
+    if (openNavigation) await userEvent.click(openNavigation);
+    const shell = within(canvasElement.ownerDocument.body);
+    const createHref = `/${getLocale()}/my/zones/new`;
+    for (const link of await shell.findAllByRole('link', { name: m.zones_owner_create() })) {
+      await expect(link).toHaveAttribute('href', createHref);
+      await expect(link).toHaveAttribute('aria-current', 'page');
+    }
+    for (const link of await shell.findAllByRole('link', { name: m.zones_owner_title() })) {
+      await expect(link).toHaveAttribute('href', `/${getLocale()}/my/zones`);
+      await expect(link).not.toHaveAttribute('aria-current');
+    }
+    for (const link of shell.getAllByRole('link', { current: 'page' })) {
+      await expect(link).toHaveAttribute('href', createHref);
+    }
+    if (openNavigation) await userEvent.keyboard('{Escape}');
+  },
+};
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const SignedOut: Story = { args: { scenario: 'signed-out' } };
 async function submit(canvasElement: HTMLElement) {

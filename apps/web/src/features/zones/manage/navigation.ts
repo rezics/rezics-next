@@ -11,7 +11,7 @@ export const zonesNavigation: readonly NavigationContribution[] = [
     label: ({ locale }) => m.zones_owner_title({}, { locale }),
     href: '/my/zones',
     signedIn: true,
-    match: 'prefix',
+    match: 'exact',
   },
   {
     id: 'semantic.create-zone',
