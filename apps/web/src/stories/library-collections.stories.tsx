@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { completePendingCollectionCreate, setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 import { m } from '../paraglide/messages.js';
@@ -40,9 +40,12 @@ async function openPinManager(canvasElement: HTMLElement) {
 }
 
 async function selectResponsiveMenuAction(label: string) {
-  const sheet = document.querySelector('[data-slot="drawer-content"]');
-  if (sheet) await userEvent.click(within(sheet as HTMLElement).getByRole('button', { name: label }));
-  else await userEvent.click(within(document.body).getByRole('menuitem', { name: label }));
+  const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+  const menu = await within(document.body).findByRole(
+    sheet ? 'dialog' : 'menu',
+    sheet ? { name: m.library_pin_actions() } : undefined,
+  );
+  await userEvent.click(await within(menu).findByRole(sheet ? 'button' : 'menuitem', { name: label }));
 }
 
 function collectionCard(main: HTMLElement, title: string): HTMLElement {
@@ -344,7 +347,9 @@ export const CollectionsUnavailablePin: Story = {
     expect(within(row).queryByRole('link')).toBeNull();
     await userEvent.click(within(row).getByRole('button', { name: m.library_pin_actions() }));
     await selectResponsiveMenuAction(m.library_pin_unpin());
-    await expect(within(main).queryByRole('heading', { name: m.library_pin_pinned_section() })).toBeNull();
+    await waitFor(() =>
+      expect(within(main).queryByRole('heading', { name: m.library_pin_pinned_section() })).toBeNull(),
+    );
   },
 };
 

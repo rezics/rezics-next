@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { m } from '../src/paraglide/messages.js';
@@ -6,12 +7,108 @@ import { builtinCollectionDestinations } from '../src/library/builtin-collection
 import { LibraryNavigation } from '../src/library/library-nav';
 import { libraryPinsListExposed, loadLibraryNavigation, readLibraryPins } from '../src/library/pins-read';
 import { deleteLibraryPin, putLibraryPin } from '../src/library/pins-actions';
+import { operationIsAdmitted } from '../src/kernel/exposure';
 
 const collection = (id: string, title: string, builtinKind?: 'everything' | 'liked' | 'state') => ({
   id,
   title,
   membershipKind: builtinKind ? ('dynamic' as const) : ('curated' as const),
   ...(builtinKind ? { builtinKind } : {}),
+});
+
+test('Native personal-library admission and exact OpenAPI pin capability together expose only supported own pin controls including removal of unavailable targets', async () => {
+  for (const operation of ['library_pin.list', 'library_pin.put', 'library_pin.delete'] as const) {
+    expect(operationIsAdmitted(operation, ['personal_library'])).toBe(true);
+    for (const groups of [undefined, [], ['collections'], [operation]])
+      expect(operationIsAdmitted(operation, groups)).toBe(false);
+  }
+  for (const operation of ['library_label.list', 'library_continue.list', 'library_entry.restore'] as const)
+    expect(operationIsAdmitted(operation, ['personal_library'])).toBe(false);
+
+  const list = { get: { operationId: 'library_pin.list' } };
+  const put = { operationId: 'library_pin.put' };
+  const remove = { operationId: 'library_pin.delete' };
+  const retained = { collectionId: 'retained-unavailable', target: null };
+  const cases = [
+    { item: { put, delete: remove }, canUpdate: true, canRemove: true },
+    { item: { put }, canUpdate: true, canRemove: false },
+    { item: { delete: remove }, canUpdate: false, canRemove: true },
+    { item: {}, canUpdate: false, canRemove: false },
+    { item: { post: put, patch: remove }, canUpdate: false, canRemove: false },
+    { item: { put: remove, delete: put }, canUpdate: false, canRemove: false },
+    {
+      item: { put: { operationId: 'collection.update' }, delete: { operationId: 'collection.delete' } },
+      canUpdate: false,
+      canRemove: false,
+    },
+  ];
+  for (const { item, canUpdate, canRemove } of cases) {
+    const calls: string[] = [];
+    let revision = 7;
+    let pins = [retained];
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        const url = new URL(request.url);
+        calls.push(`${request.method} ${url.pathname}`);
+        expect(request.headers.get('authorization')).toBe('Bearer viewer');
+        if (request.method === 'GET' && url.pathname === '/v1/openapi.json')
+          return Response.json({ paths: { '/v1/libraryPins': list, '/v1/libraryPins/{collectionId}': item } });
+        if (request.method === 'GET' && url.pathname === '/v1/libraryPins')
+          return Response.json({ pins, revision, next: null });
+        if (request.method === 'DELETE' && url.pathname === '/v1/libraryPins/retained-unavailable') {
+          expect(url.searchParams.get('revision')).toBe('7');
+          expect(request.headers.get('idempotency-key')).toBe(JSON.stringify('remove-retained'));
+          pins = [];
+          return Response.json({ revision: ++revision });
+        }
+        throw new Error(`Unexpected pin request: ${request.method} ${url.pathname}`);
+      }) as typeof fetch,
+    });
+    const read = await readLibraryPins(client, 'Bearer viewer', 100);
+    expect(read).toEqual({ state: 'loaded', pins: [retained], revision: 7, next: null, canUpdate, canRemove });
+    expect(calls).toEqual(['GET /v1/openapi.json', 'GET /v1/libraryPins']);
+    const html = renderToStaticMarkup(
+      createElement(LibraryNavigation, { current: 'collections', pins: read, collections: [] }),
+    );
+    expect(html).toContain(m.library_pin_unavailable());
+    expect(html).not.toContain('href="/en/collections/retained-unavailable"');
+    if (canRemove) {
+      expect(await deleteLibraryPin(client, 'Bearer viewer', retained.collectionId, 7, 'remove-retained')).toEqual({
+        ok: true,
+        revision: 8,
+      });
+      expect(await readLibraryPins(client, 'Bearer viewer', 100)).toMatchObject({
+        state: 'loaded',
+        pins: [],
+        revision: 8,
+      });
+      expect(calls).toEqual([
+        'GET /v1/openapi.json',
+        'GET /v1/libraryPins',
+        'DELETE /v1/libraryPins/retained-unavailable',
+        'GET /v1/openapi.json',
+        'GET /v1/libraryPins',
+      ]);
+    }
+  }
+
+  for (const paths of [
+    {},
+    { '/v1/libraryPins': { post: { operationId: 'library_pin.list' } } },
+    { '/v1/libraryPins': { get: { operationId: 'collection.list' } } },
+  ]) {
+    const calls: string[] = [];
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        calls.push(new URL(request.url).pathname);
+        return Response.json({ paths });
+      }) as typeof fetch,
+    });
+    expect(await readLibraryPins(client, 'Bearer viewer', 100)).toEqual({ state: 'closed' });
+    expect(calls).toEqual(['/v1/openapi.json']);
+  }
 });
 
 test('the navigation exposes only actual Everything and Liked records beside tracked entries', () => {

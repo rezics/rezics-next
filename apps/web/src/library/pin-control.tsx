@@ -26,8 +26,8 @@ export function usePinControlActions({ collectionId, pins, mode }: PinControlInp
   notice: string;
   pending: boolean;
 } {
-  const canPut = useOperation('library_pin.put') && pins.state === 'loaded' && pins.canUpdate !== false;
-  const canRemove = useOperation('library_pin.delete') && pins.state === 'loaded' && pins.canRemove !== false;
+  const canPut = useOperation('library_pin.put') && pins.state === 'loaded' && pins.canUpdate === true;
+  const canRemove = useOperation('library_pin.delete') && pins.state === 'loaded' && pins.canRemove === true;
   const loadedPins = pins.state === 'loaded' ? pins : null;
   const { csrfToken } = useSession();
   const router = useRouter();
