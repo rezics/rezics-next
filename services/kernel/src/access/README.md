@@ -3345,7 +3345,10 @@ lineage. A native lineage handoff remains the source owner's responsibility.
 
 `test/access/auth-erasure-live.test.ts` covers cut/arm/append races, retry, page bounds,
 continued tail after EOF, source lineage changes, partition independence, transaction
-rollback and precise unknown-floor pending. These ports supply Source enrollment only.
+rollback and precise unknown-floor pending. The additional
+`test/access/auth-erasure-live-binding.test.ts` covers conflicting cross-partition receiver
+composition, atomic refusal, immutable composition capture and absence of an uncomposed
+live capability. These ports supply Source enrollment only.
 Auth owns its database, consumed checkpoints, maintenance and gate. External receiving,
 backup/tail custody, replay/restore admission and final erasure ACK remain unproven by
 this subscription and require their existing owning evidence.
