@@ -2250,11 +2250,56 @@ completion means known native work drained; complete inventory/local-copy proof
 still requires the coverage authority. Known copy retirement proceeds even while
 unknown coverage or proof publication is pending. Default recovery needs neither
 the original caller nor final participant acknowledgement. Consent retains its
-original 310-second cutoff. Older obligations revisit the same native phases once;
-their old completion markers cannot publish all-role proof before that recovery.
+original 310-second cutoff. Version-zero role coverage keeps its existing historical
+recovery. Later phase inventories preserve completed old phases instead of
+restarting them; older completion markers cannot publish all-role proof.
 Raw client/contact metadata, foreign committed-result
 recovery, external sinks and universal shared history retain the separate gaps
 and owner contracts above; this deployment does not claim a terminal Auth ACK.
+
+### Native phase inventory upgrade
+
+`erasure-role-upgrade.ts` freezes the deployed inventory: phase 0 owns client
+traversal, subject phases 1–75 have literal store/role identities, 76–78 drain
+key assertions, public keys and counters, and 79–87 drain original request roles.
+Its 22 client subphases retain their original raw keys and ordering. Phase 88
+was the old native EOF. The closed adapter maps every old cursor identically,
+including an in-flight client and raw boundary; old EOF now starts appended
+coverage. Unknown versions, out-of-inventory phases and oversized boundaries
+refuse. `native_phase_version` versions interpretation, not custody evidence.
+
+One ordinary native page upgrades its obligation and checkpoints its actual work
+in the same transaction. No account list or bulk cursor rewrite is needed. The
+permanent obligation retains applicability, barrier/T, source handoff, committed
+user deletion and the original consent deadline. A completed old obligation is
+scheduled only for missing inventory; neither its completed phases nor its
+original tail timestamps are reset. Restore replay uses the same literal phase
+interpretation and independently checks that its current tail finished.
+
+The migration drains native writers and installs database-enforced page/producer
+version guards. The Auth-owned pool tags each new lease with both the original
+role-producer version and the phase-producer version and resets both on release.
+An old lease in another pool/process remains refused after activation. Deployment
+EOF, an empty native table and an older `native_completed_at` cannot supply a
+current native or shared-copy completion proof.
+
+This revision has the original stage/provisioning creator, operator, initiator
+and delegate columns and the original request roles. It has no producer-owned
+full creation/request role exports or migrations. The appended source adapters
+therefore report `native-creation-roles-unavailable` and
+`native-request-roles-unavailable`. They add no proposed party columns, infer no
+parties from current relationships and certify no readiness. Integration must
+bind these closed source adapters to the producers' actual original exports;
+column presence alone cannot open them. Current mapped phases still drain their
+exact native roles, preserving living subjects' credentials on foreign creator
+erasure. Missing full-source custody keeps completion pending. Shared SDK,
+external/provider and Source consumer closure remain independent.
+
+Native role seeks project bounded raw locators only, take the same client locks,
+and reserve guard/child/checkpoint work within the 48-key/64-KiB page. Nested
+consumer stores admit one locator; ordinary pages shrink with their declared
+child/client guard seeks. Oversized counter locators also stay pending. No
+payload search, owner-population walk or enlarged nested page is introduced.
 
 ### Native shared-copy custody and proof publication
 

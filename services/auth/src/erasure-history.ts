@@ -1,6 +1,8 @@
 import type { AuthErasureBarrier, AuthErasureSource, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { nativePhaseComplete } from './erasure-role-upgrade.ts';
+import { nativeRoleCoverageComplete } from './erasure-coverage.ts';
 import { copyTransaction, completeCopy, eraseCopy } from './erasure-copy.ts';
 
 type Progress = {
@@ -16,6 +18,8 @@ type Progress = {
   copies_published_at: Date | null;
   native_completed_at: Date | null;
   native_role_version: number;
+  native_phase_version: number;
+  phase: number;
   consent_completed_at: Date | null;
 };
 const unavailable = () => new Error('Auth erasure proof binding unavailable');
@@ -63,7 +67,7 @@ export async function erasureHistoryPage(database: Pool, id: string, restoreGene
   if (restoreGeneration) {
     const replay = (
       await database.query(
-        `SELECT 1 FROM auth_restore_replay WHERE generation=$1 AND obligation_id=$2
+        `SELECT 1 FROM auth_restore_replay WHERE generation=$1 AND obligation_id=$2 AND phase=90
        AND native_completed_at IS NOT NULL AND consent_completed_at IS NOT NULL`,
         [restoreGeneration, id],
       )
@@ -95,7 +99,13 @@ export async function erasureHistoryPage(database: Pool, id: string, restoreGene
       'SELECT 1 FROM auth_copy_coverage WHERE singleton AND version=1 AND covered AND native_covered',
     )
   ).rowCount;
-  if (!covered || row.native_role_version !== 1) return false;
+  if (
+    !covered ||
+    row.native_role_version !== 1 ||
+    !nativePhaseComplete(row) ||
+    !(await nativeRoleCoverageComplete(database))
+  )
+    return false;
   if (restoreGeneration) {
     await database.query(
       `UPDATE auth_restore_replay SET copies_completed_at=COALESCE(copies_completed_at,clock_timestamp()),
@@ -142,6 +152,8 @@ export async function publishErasureProofs(database: Pool, ports: TrustedAccessP
     row.copies_completed_at &&
     !row.copies_published_at &&
     row.native_role_version === 1 &&
+    nativePhaseComplete(row) &&
+    (await nativeRoleCoverageComplete(database)) &&
     row.native_completed_at &&
     row.consent_completed_at &&
     row.source_discharged_at &&

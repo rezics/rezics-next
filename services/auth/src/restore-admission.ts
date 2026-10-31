@@ -480,7 +480,7 @@ export async function replayRestoredAuthPage(
   await bindInventory(database, inventory);
   const row = (
     await database.query(
-      'SELECT native_completed_at,consent_completed_at FROM auth_restore_replay WHERE generation=$1 AND obligation_id=$2',
+      'SELECT phase,native_completed_at,consent_completed_at FROM auth_restore_replay WHERE generation=$1 AND obligation_id=$2',
       [restored.generation, id],
     )
   ).rows[0];
@@ -523,7 +523,7 @@ export async function replayRestoredAuthPage(
     return { pending: 'native-replay-pending' };
   }
   if (await reconcileNativeRoleCoveragePage(database)) return { pending: 'native-replay-pending' };
-  if (!row.native_completed_at || !row.consent_completed_at) {
+  if (row.phase !== 90 || !row.native_completed_at || !row.consent_completed_at) {
     const page = await nativeErasurePage(database, id, runtime, restored.generation);
     return { pending: page.code === 'native-source' ? 'source-consumer-pending' : 'native-replay-pending' };
   }

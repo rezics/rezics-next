@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { nativePhaseExtensions } from './erasure-role-upgrade.ts';
 import { copyTransaction } from './erasure-copy.ts';
 
 export const NATIVE_ROLE_VERSION = 1;
@@ -100,7 +101,9 @@ export function installNativeRoleProducer(pool: Pool): void {
     const client = await connect();
     const release = client.release.bind(client);
     try {
-      await client.query("SELECT set_config('auth.native_role_producer','1',false)");
+      await client.query(
+        "SELECT set_config('auth.native_role_producer','1',false),set_config('auth.native_phase_producer','2',false)",
+      );
     } catch (error) {
       release(error as Error);
       throw error;
@@ -113,7 +116,7 @@ export function installNativeRoleProducer(pool: Pool): void {
             if (released) return;
             released = true;
             if (error) return release(error);
-            return client.query('RESET auth.native_role_producer').then(
+            return client.query('RESET auth.native_role_producer; RESET auth.native_phase_producer').then(
               () => release(),
               (failure: Error) => release(failure),
             );
@@ -213,7 +216,10 @@ export async function reconcileNativeRoleCoveragePage(pool: Pool): Promise<numbe
 
 /** Complete deployment coverage is necessary only for a coverage claim. Known
  * role cleanup keeps making progress even when a historical store is unknown. */
-export async function nativeRoleCoverageComplete(client: PoolClient): Promise<boolean> {
+export async function nativeRoleCoverageComplete(client: Pick<PoolClient, 'query'>): Promise<boolean> {
+  // Original deployment reconciliation remains useful, but cannot cover a
+  // producer whose full original party export is absent from this inventory.
+  if (nativePhaseExtensions.some((phase) => phase.kind === 'unavailable')) return false;
   return Boolean(
     (
       await client.query(`SELECT 1 FROM auth_copy_coverage
@@ -222,7 +228,7 @@ export async function nativeRoleCoverageComplete(client: PoolClient): Promise<bo
   );
 }
 
-export async function nativeRoleDeploymentComplete(client: PoolClient): Promise<boolean> {
+export async function nativeRoleDeploymentComplete(client: Pick<PoolClient, 'query'>): Promise<boolean> {
   return Boolean(
     (
       await client.query(
