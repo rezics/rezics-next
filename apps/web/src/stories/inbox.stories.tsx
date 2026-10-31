@@ -18,8 +18,7 @@ async function rowsReady({ canvasElement }: { canvasElement: HTMLElement }) {
   await within(canvasElement).findByRole('list');
 }
 
-const recordedPostHref =
-  '/threads/01a17a3b-0884-721b-91ef-d7ffd7bb58f1#post-01a17a3b-0884-721b-91ef-d7ffd7bb58f2';
+const recordedPostHref = '/threads/01a17a3b-0884-721b-91ef-d7ffd7bb58f1#post-01a17a3b-0884-721b-91ef-d7ffd7bb58f2';
 
 async function readablePostAnchor({ canvasElement }: { canvasElement: HTMLElement }) {
   const list = within(await within(canvasElement).findByRole('list', { name: m.inbox_heading() }));

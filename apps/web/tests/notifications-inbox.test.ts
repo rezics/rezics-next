@@ -242,10 +242,7 @@ test('missing, wrong-thread and erased native posts stay unavailable within one 
 
     expect(page.items[0]?.unavailable, target.name).toBe(true);
     expect(page.items[0]?.href, target.name).toBeUndefined();
-    expect(requests, target.name).toEqual([
-      'GET /v1/accounts/reporter-1/notifications',
-      'GET /v1/posts/guarded-post',
-    ]);
+    expect(requests, target.name).toEqual(['GET /v1/accounts/reporter-1/notifications', 'GET /v1/posts/guarded-post']);
   }
 });
 
