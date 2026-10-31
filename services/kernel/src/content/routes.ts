@@ -1,4 +1,5 @@
 import { readAuthorErasureAdmission, type AuthorErasureAdmission } from './author-erasure-admission.ts';
+import { readEditionSourceIdentity } from './edition-reads.ts';
 import { editionRoutes } from './edition-routes.ts';
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
@@ -86,6 +87,7 @@ import {
   RevisionPageResponseSchema,
   PostInputSchema,
   PostResponseSchema,
+  EditionSourceIdentitySchema,
   ReactionInputSchema,
   ReactionResponseSchema,
   SubjectOwnReactionResponseSchema,
@@ -901,7 +903,19 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/posts/:id/revisions/:revisionId',
       {
         params: t.Object({ id: t.String(), revisionId: t.String() }, { additionalProperties: false }),
-        response: { 200: withHeaders(postResponse, sessionHeader), ...readFailures },
+        query: t.Object({ editionIdentity: t.Optional(t.Literal('true')) }, { additionalProperties: false }),
+        response: {
+          200: withHeaders(
+            strictContentSchema(
+              t.Object(
+                { ...PostResponseSchema.properties, editionIdentity: t.Optional(EditionSourceIdentitySchema) },
+                { additionalProperties: false },
+              ),
+            ),
+            { ...sessionHeader, 'cache-control': t.Optional(t.String()) },
+          ),
+          ...readFailures,
+        },
         detail: {
           operationId: 'post.revision',
           'x-exposure': 'public',
@@ -909,12 +923,21 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           security: readSecurity,
         },
       },
-      async ({ params: { id, revisionId }, actor, admission, job, session }) =>
+      async ({ params: { id, revisionId }, query, actor, admission, job, session, set }) =>
         contentOperation(() =>
           admission.run('normal', job, async () => {
             const context = { actor, deadline: job.deadline };
             const post = await exactPost(await containingThread(id, context), id, context, revisionId);
             session.record(sessionComponent(post.anchor));
+            if (query.editionIdentity === 'true') {
+              set.headers['cache-control'] = 'private, no-store';
+              const editionIdentity = await readEditionSourceIdentity(
+                dependencies,
+                { postId: id, revisionId },
+                context,
+              );
+              return { post: post.value, editionIdentity };
+            }
             return { post: post.value };
           }),
         ),

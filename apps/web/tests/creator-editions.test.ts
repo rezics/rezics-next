@@ -201,7 +201,7 @@ test('retry rechecks the same page and drops earlier actionable metadata when cu
 });
 
 test('A creator recognizes a bounded edition list item by authorized document or subject title revision date and state selects its recognizable target and confirms that same exact edition revision before publication while hidden metadata and uncertain original command custody remain protected', async () => {
-  const { publicationFixture, subjectId, editionId, creatorId, revisionId } =
+  const { publicationFixture, subjectId, editionId, creatorId, postId, revisionId } =
     await import('../src/stories/patterns/edition-publication/edition-publication-fixtures');
   const { EditionPublicationController } = await import('../src/content-editions/edition-create');
   const { EditionPublication } = await import('../src/content-editions/edition-create-view');
@@ -309,5 +309,5 @@ test('A creator recognizes a bounded edition list item by authorized document or
   expect(lost.controller.snapshot().edition?.state).toBe('published');
   expect(lost.controller.snapshot().edition?.revisionId).toBe(revisionId);
   // Candidate labels arrive in one native batch, never one subject request per option/card.
-  expect(fixture.calls.filter((call) => call.path === '/v1/contentEditions/sourceIdentity')).toHaveLength(2);
+  expect(fixture.calls.filter((call) => call.path === `/v1/posts/${postId}/revisions/${revisionId}`)).toHaveLength(4);
 });

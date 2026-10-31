@@ -166,10 +166,12 @@ async function revisionDates(
           if (
             group.some(
               (pin) =>
-                pin.revisionId === row.id && pin.sha256 === row.sha256!.toString('hex') && pin.licence === row.licence,
+                pin.revisionId === row.id &&
+                pin.sha256 === Buffer.from(row.sha256!).toString('hex') &&
+                pin.licence === row.licence,
             )
           )
-            dates.set(row.id, row.created_at.toISOString());
+            dates.set(row.id, new Date(row.created_at).toISOString());
         }
       }
       return dates;

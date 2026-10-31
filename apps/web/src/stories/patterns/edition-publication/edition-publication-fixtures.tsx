@@ -108,14 +108,20 @@ export async function publicationFixture(state: PublicationExampleState) {
       calls.push(call);
       if (request.headers.get('authorization') !== 'Bearer story-creator')
         return Response.json({ code: 'forbidden' }, { status: 403 });
-      if (path === `/v1/posts/${postId}/revisions/${revisionId}`) return Response.json({ post: revision });
-      if (path === '/v1/contentEditions/sourceIdentity')
+      if (path === `/v1/posts/${postId}/revisions/${revisionId}`)
         return Response.json({
-          postId,
-          revisionId,
-          sha256,
-          revisionCreatedAt: editionIdentity().revisionCreatedAt,
-          subjects: [subjectIdentity],
+          post: revision,
+          ...(new URL(request.url).searchParams.get('editionIdentity') === 'true'
+            ? {
+                editionIdentity: {
+                  postId,
+                  revisionId,
+                  sha256,
+                  revisionCreatedAt: editionIdentity().revisionCreatedAt,
+                  subjects: [subjectIdentity],
+                },
+              }
+            : {}),
         });
       if (path === `/v1/accounts/${creatorId}/editions`)
         return Response.json({

@@ -92,8 +92,12 @@ export async function readEditionCreateSource(
   includeMedia = true,
 ): Promise<EditionSourceRead> {
   const auth = { headers: { authorization }, fetch: { redirect: 'manual' as const, cache: 'no-store' as const } };
+  const sourceRead = { ...auth, query: { editionIdentity: 'true' as const } };
   try {
-    const exact = await client.posts({ id: identity.postId }).revisions({ revisionId: identity.revisionId }).get(auth);
+    const exact = await client
+      .posts({ id: identity.postId })
+      .revisions({ revisionId: identity.revisionId })
+      .get(sourceRead);
     if (exact.error || !exact.data) return failure(exact.status);
     const revision = exact.data.post;
     if (
@@ -124,31 +128,14 @@ export async function readEditionCreateSource(
       )
     )
       return { kind: 'refused', status: 403 };
-    // A single bounded native composition supplies all original subject choices and the exact revision date.
-    let recognition = null;
-    try {
-      const response = await client.contentEditions.sourceIdentity.get({
-        ...auth,
-        query: identity,
-      });
-      const parsed = response.status === 200 && !response.error ? parseEditionSourceRecognition(response.data) : null;
-      if (
-        parsed &&
-        parsed.postId === identity.postId &&
-        parsed.revisionId === identity.revisionId &&
-        parsed.sha256 === revision.sha256 &&
-        parsed.subjects.length === revision.subjectIds.length &&
-        parsed.subjects.every((subject) => revision.subjectIds.includes(subject.id))
-      )
-        recognition = parsed;
-    } catch {
-      /* Recognition stays explicitly unavailable; source bytes confer no subject disclosure. */
-    }
     const media: EditionPreviewMedia = includeMedia
       ? await previewMedia(client, authorization, revision)
       : { kind: 'unavailable' };
     // Exact GET owns the live Context/ancestor authority; never reconstruct it from a board or identity.
-    const final = await client.posts({ id: identity.postId }).revisions({ revisionId: identity.revisionId }).get(auth);
+    const final = await client
+      .posts({ id: identity.postId })
+      .revisions({ revisionId: identity.revisionId })
+      .get(sourceRead);
     if (final.error || !final.data) return failure(final.status);
     const current = final.data.post;
     if (
@@ -166,6 +153,17 @@ export async function readEditionCreateSource(
       (await editionDocumentDigest(current.body)) !== revision.sha256
     )
       return { kind: 'conflict', status: 412 };
+    // The existing exact read carries one bounded native label/date composition for all choices.
+    const parsed = parseEditionSourceRecognition(final.data.editionIdentity);
+    const recognition =
+      parsed &&
+      parsed.postId === identity.postId &&
+      parsed.revisionId === identity.revisionId &&
+      parsed.sha256 === revision.sha256 &&
+      parsed.subjects.length === revision.subjectIds.length &&
+      parsed.subjects.every((subject) => revision.subjectIds.includes(subject.id))
+        ? parsed
+        : null;
     return {
       kind: 'source',
       source: {
