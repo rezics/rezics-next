@@ -52,11 +52,13 @@ export const AccountIdentityAndSafety: Story = {
         // The same bounded current-account discovery envelope as the native rename fixtures.
         if (JSON.stringify(body) === JSON.stringify({ resources: [{ type: 'access.account', id: accountId }] }))
           return Response.json({
-            resources: [{
-              type: 'access.account',
-              id: accountId,
-              viewerActions: [{ action: 'account:update', operations: ['account.update'] }],
-            }],
+            resources: [
+              {
+                type: 'access.account',
+                id: accountId,
+                viewerActions: [{ action: 'account:update', operations: ['account.update'] }],
+              },
+            ],
           });
       }
       if (url.pathname === `/v1/accounts/${accountId}/profile` && request.method === 'GET') {
@@ -112,7 +114,9 @@ export const AccountIdentityAndSafety: Story = {
         await expect(identityStyle.whiteSpace).toBe('normal');
         await expect(parseFloat(identityStyle.fontSize)).toBeGreaterThanOrEqual(16);
         await expect(identity.getBoundingClientRect().width).toBeCloseTo(continuation.getBoundingClientRect().width, 0);
-        await expect(identity.getBoundingClientRect().bottom).toBeLessThanOrEqual(continuation.getBoundingClientRect().top);
+        await expect(identity.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          continuation.getBoundingClientRect().top,
+        );
         const details = account.getByText(m.settings_account_reference_details()).closest('details')!;
         await expect(details).not.toHaveAttribute('open');
         const reference = account.getByText(m.settings_account_rename_identity({ account: accountId }));
@@ -142,10 +146,12 @@ export const AccountIdentityAndSafety: Story = {
           [security, m.settings_account_safety_text()],
           [signOut, m.settings_account_sign_out_text()],
           [deletion, m.settings_account_delete_text()],
-        ] as const) await expect(action).toHaveAccessibleDescription(description);
+        ] as const)
+          await expect(action).toHaveAccessibleDescription(description);
         await expect(account.getByText(m.settings_account_rename_policy())).toBeVisible();
         await expect(account.getByText(m.settings_account_rename_confirmation())).toBeVisible();
-        const currentReads = () => calls.filter(({ path }) => path.endsWith('/profile') || path === '/v1/viewerActions');
+        const currentReads = () =>
+          calls.filter(({ path }) => path.endsWith('/profile') || path === '/v1/viewerActions');
         await expect(currentReads()).toHaveLength(2);
         await expect(currentReads().find(({ path }) => path === '/v1/viewerActions')?.body).toEqual({
           resources: [{ type: 'access.account', id: accountId }],
