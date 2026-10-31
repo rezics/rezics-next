@@ -4,6 +4,16 @@ The immutable definition catalogue release format stored by the kernel. This pac
 exports the release types, the JSON Schema 2020-12 document at
 `@rezics/definitions/schema/release.json`, and pure validation and digest functions.
 
+The root export's `browser` condition provides release types, constants, `valueSchema`
+and the synchronous `releaseDigest`, with the same canonical UTF-8 SHA-256 identity as
+the native entry. The `/bundled` browser export provides the compiled `bundledRelease`
+and `bundledDigest` without reading source files. `/validate`, `/bulk`, `/media-import`
+and `/slug` also support browser use. Publication validation/admission (`validateRelease`,
+`releaseAdmission`, `publicationLimits`, `PUBLICATION_LIMITS`), `/compile`, `/extension`
+and `bundledSources` remain native operations; they are not exposed by the browser
+root or bundled entry. Browser publication callers use the ordinary Definitions API
+so the native validator retains its isolated checker and exact analysis limits.
+
 The joint contract lives in [Collection presentation and editor](../../docs/collection-presentation.md).
 This package delivers its optional Type list-presentation data through the compiler, release schema,
 bundled catalogue and both normal definitions recordings. Collection runtime and Web rendering have separate owners.

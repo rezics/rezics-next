@@ -163,6 +163,7 @@
       "name": "@rezics/definitions",
       "dependencies": {
         "@neverblink/linkml": "0.17.1",
+        "@noble/hashes": "2.4.0",
         "@rezics/document": "workspace:*",
         "@rezics/filter": "workspace:*",
         "canonicalize": "5.1.0",

@@ -1,7 +1,7 @@
 import { checkDocument, serializeDocument } from '@rezics/document';
 import spdxLicenseIds from 'spdx-license-ids';
 import { Type, type Static } from 'typebox';
-import { valueSchema, type Release } from './index.ts';
+import { valueSchema, type Release } from './portable.ts';
 import { checkSubjectInput, checkSubjectStructure, checkStatementInput, type Violation } from './validate.ts';
 export type { Violation } from './validate.ts';
 

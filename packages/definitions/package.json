@@ -4,11 +4,17 @@
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
-    ".": "./src/index.ts",
+    ".": {
+      "browser": "./src/browser.ts",
+      "default": "./src/index.ts"
+    },
     "./schema/release.json": "./schema/release.json",
     "./extension": "./src/extension.ts",
     "./compile": "./src/compile.ts",
-    "./bundled": "./src/bundled.ts",
+    "./bundled": {
+      "browser": "./src/bundled-browser.ts",
+      "default": "./src/bundled.ts"
+    },
     "./validate": "./src/validate.ts",
     "./bulk": "./src/bulk.ts",
     "./media-import": "./src/media-import.ts",
@@ -21,6 +27,7 @@
   },
   "dependencies": {
     "@neverblink/linkml": "0.17.1",
+    "@noble/hashes": "2.4.0",
     "canonicalize": "5.1.0",
     "recheck": "4.5.0",
     "typebox": "1.4.3",
