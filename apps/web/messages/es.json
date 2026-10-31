@@ -1231,6 +1231,8 @@
   "settings_verification_uncertain_withdraw": "El resultado de la retirada original es incierto. Reintenta la operación original o consulta el estado actual. Tu borrador se conserva.",
   "settings_verification_retry_original": "Reintentar operación original",
   "settings_verification_read_current": "Consultar estado actual",
+  "settings_verification_read_empty": "No se devolvió ninguna solicitud de verificación actual.",
+  "settings_verification_read_error": "Respuesta a la consulta del estado ({status}): {message}",
   "settings_verification_draft_preserved": "Se ha consultado el estado actual. Tu borrador se conserva; revísalo antes de enviar una nueva solicitud.",
   "settings_verification_original": "Operación original",
   "settings_verification_command_error": "Respuesta de la operación ({status}): {message}",

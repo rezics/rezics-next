@@ -17,6 +17,7 @@ import type { NativePreferenceFailure, SettingsPage } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
 import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
+import { observeVerificationRead, verificationQueryKey } from './verification-recovery';
 import { useOperation } from '../kernel/exposure';
 import { AccountSafetyCard, AccountSafetySection } from './account-safety';
 import { ManagedAccountsSection } from './managed-accounts';
@@ -147,16 +148,21 @@ function SettingsSections({
   const collectionsAdmitted = useOperation('account.collections');
   const verificationAdmitted = useOperation('agent_verification.request');
   const { state: sessionState, subject: verificationAccountId } = useSession();
+  const queryClient = useQueryClient();
   // Observe the same admission and verification reads as the sections, without adding requests.
   const exposure = useQuery({ ...exposureQuery, enabled: false });
-  const verification = useQuery({
-    queryKey: ['settings', 'verification', verificationAccountId ?? null],
-    enabled: false,
-  });
-  const showVerification = verificationAdmitted && verification.error?.message !== 'rezics-platform-closed';
+  const observeVerification = useCallback(
+    (changed: () => void) => observeVerificationRead(queryClient, verificationAccountId, changed),
+    [queryClient, verificationAccountId],
+  );
+  const verification = useSyncExternalStore(
+    observeVerification,
+    () => (verificationAccountId ? queryClient.getQueryState(verificationQueryKey(verificationAccountId)) : undefined),
+    serverSessionRead,
+  );
+  const showVerification = verificationAdmitted && verification?.error?.message !== 'rezics-platform-closed';
   const location = useLocation();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const [version, setVersion] = useState('preferences' in page ? page.preferences.version : 0);
   const active = useRef(true);
   useLayoutEffect(() => {

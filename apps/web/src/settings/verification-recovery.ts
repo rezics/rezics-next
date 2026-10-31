@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import {
   VerificationReadError,
   type AgentVerificationRequest,
@@ -22,6 +23,7 @@ export type VerificationRecoveryState = {
   current: VerificationSnapshot | null;
   attempt: VerificationAttempt | null;
   phase: 'loading' | 'idle' | 'sending' | 'reading' | 'uncertain' | 'refused' | 'review' | 'unavailable';
+  readStatus: 'idle' | 'reading' | 'success' | 'error';
   failure?: VerificationFailure | undefined;
   /** Captured once per failure, shared by the IO guards and the controls' passive timer. */
   retryAt: number;
@@ -34,6 +36,19 @@ export type VerificationRecoveryIO = {
 
 export function verificationQueryKey(accountId: string | null | undefined) {
   return ['settings', 'verification', accountId ?? null] as const;
+}
+
+/** Observe only this viewer's installed read; never create a query or replace its producer's options. */
+export function observeVerificationRead(
+  client: QueryClient,
+  accountId: string | null | undefined,
+  changed: () => void,
+) {
+  const key = verificationQueryKey(accountId);
+  return client.getQueryCache().subscribe(({ query }) => {
+    if (accountId && query.queryKey.length === key.length && query.queryKey.every((part, index) => part === key[index]))
+      changed();
+  });
 }
 export function canRequestVerification(current: VerificationSnapshot | null): boolean {
   const request = current?.verificationRequest;
@@ -52,7 +67,13 @@ function frozen<T extends object>(value: T): T {
 
 /** One viewer, one immutable unresolved command, and one explicit read per action. No persistence or polling. */
 export class VerificationRecovery {
-  private state: VerificationRecoveryState = { current: null, attempt: null, phase: 'loading', retryAt: 0 };
+  private state: VerificationRecoveryState = {
+    current: null,
+    attempt: null,
+    phase: 'loading',
+    readStatus: 'idle',
+    retryAt: 0,
+  };
   private listeners = new Set<() => void>();
   private epoch = 0;
   private active = true;
@@ -69,7 +90,7 @@ export class VerificationRecovery {
   };
   activate() {
     this.active = true;
-    if (this.busy()) this.update({ phase: this.state.attempt ? 'uncertain' : 'loading' });
+    if (this.busy()) this.update({ phase: this.state.attempt ? 'uncertain' : 'loading', readStatus: 'idle' });
   }
   deactivate() {
     this.active = false;
@@ -119,7 +140,7 @@ export class VerificationRecovery {
     const attempt = this.state.attempt;
     if (!attempt) return;
     const epoch = this.epoch;
-    this.update({ phase: 'sending', current: null, failure: undefined, retryAt: 0 });
+    this.update({ phase: 'sending', readStatus: 'idle', current: null, failure: undefined, retryAt: 0 });
     let result: VerificationCommandResult;
     try {
       result =
@@ -173,7 +194,7 @@ export class VerificationRecovery {
     await this.readCurrent(this.epoch);
   }
   private async readCurrent(epoch: number) {
-    this.update({ phase: 'reading', current: null, failure: undefined, retryAt: 0 });
+    this.update({ phase: 'reading', readStatus: 'reading', current: null, failure: undefined, retryAt: 0 });
     let current: VerificationSnapshot;
     try {
       current = await this.io.read(this.accountId);
@@ -192,6 +213,7 @@ export class VerificationRecovery {
       if (this.live(epoch))
         this.update({
           phase: this.state.attempt ? 'uncertain' : 'unavailable',
+          readStatus: 'error',
           failure,
           retryAt: preferenceRetryDeadline(failure?.retryAfter),
         });
@@ -209,6 +231,7 @@ export class VerificationRecovery {
         : attempt.receipt && request.id === attempt.receipt.id && this.matchesInput(request, attempt.input));
     this.update({
       current,
+      readStatus: 'success',
       attempt: resolved ? null : attempt,
       phase: attempt ? (resolved ? 'review' : 'uncertain') : 'idle',
     });

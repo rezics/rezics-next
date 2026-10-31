@@ -1231,6 +1231,8 @@
   "settings_verification_uncertain_withdraw": "Das Ergebnis der ursprünglichen Rücknahme ist unklar. Wiederhole den ursprünglichen Vorgang oder lade den aktuellen Status. Dein Entwurf bleibt erhalten.",
   "settings_verification_retry_original": "Ursprünglichen Vorgang wiederholen",
   "settings_verification_read_current": "Aktuellen Status laden",
+  "settings_verification_read_empty": "Es wurde kein aktueller Verifizierungsantrag zurückgegeben.",
+  "settings_verification_read_error": "Antwort auf die Statusabfrage ({status}): {message}",
   "settings_verification_draft_preserved": "Der aktuelle Status wurde geladen. Dein Entwurf bleibt erhalten. Prüfe ihn, bevor du eine neue Anfrage sendest.",
   "settings_verification_original": "Ursprünglicher Vorgang",
   "settings_verification_command_error": "Antwort auf den Vorgang ({status}): {message}",

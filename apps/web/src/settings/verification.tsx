@@ -194,10 +194,30 @@ export function VerificationCard({
         <CardDescription>{m.settings_verification_intro()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <VerificationState verification={verification} subjectTitle={subjectTitle} />
-        {state.phase === 'loading' || state.phase === 'reading' ? <p>{m.settings_verification_loading()}</p> : null}
+        <div role="status" aria-live="polite" aria-atomic="true">
+          {state.phase === 'loading' || state.readStatus === 'reading' ? (
+            <p>{m.settings_verification_loading()}</p>
+          ) : state.readStatus === 'success' && !verification ? (
+            <p>{m.settings_verification_read_empty()}</p>
+          ) : (
+            <VerificationState verification={verification} subjectTitle={subjectTitle} />
+          )}
+        </div>
         {state.phase === 'sending' ? <p role="status">{m.settings_saving()}</p> : null}
-        {state.phase === 'unavailable' ? <p role="alert">{m.settings_verification_load_failed()}</p> : null}
+        {state.readStatus === 'error' ? (
+          <p
+            role="alert"
+            data-response-status={state.failure?.status}
+            data-response-code={state.failure?.code}
+            data-request-id={state.failure?.requestId}
+            data-retry-after={state.failure?.retryAfter}
+          >
+            {m.settings_verification_load_failed()}{' '}
+            {state.failure
+              ? m.settings_verification_read_error({ status: state.failure.status, message: state.failure.message })
+              : null}
+          </p>
+        ) : null}
         {canRequest || hasDraft || state.attempt?.kind === 'request' ? (
           <form
             ref={form}
@@ -325,7 +345,7 @@ export function VerificationCard({
           </Alert>
         ) : null}
         {state.phase === 'review' ? <p role="status">{m.settings_verification_draft_preserved()}</p> : null}
-        {state.failure ? (
+        {state.failure && state.readStatus !== 'error' ? (
           <p role="alert">
             {m.settings_verification_command_error({
               status: state.failure.status,

@@ -1314,6 +1314,8 @@
   "settings_verification_uncertain_withdraw": "The original withdrawal is unresolved. Retry the original command or read current status. Your draft is kept.",
   "settings_verification_retry_original": "Retry original",
   "settings_verification_read_current": "Read current status",
+  "settings_verification_read_empty": "No current verification request was returned.",
+  "settings_verification_read_error": "Status read response ({status}): {message}",
   "settings_verification_draft_preserved": "Current status has been read. Your draft is kept; review it before sending a new request.",
   "settings_verification_original": "Original command",
   "settings_verification_command_error": "Command response ({status}): {message}",

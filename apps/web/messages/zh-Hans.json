@@ -1232,6 +1232,8 @@
   "settings_verification_uncertain_withdraw": "原撤回操作的结果仍不确定。请重试原操作或读取当前状态。草稿已保留。",
   "settings_verification_retry_original": "重试原操作",
   "settings_verification_read_current": "读取当前状态",
+  "settings_verification_read_empty": "未返回当前的认证申请。",
+  "settings_verification_read_error": "状态读取响应（{status}）：{message}",
   "settings_verification_draft_preserved": "已读取当前状态。草稿已保留，请在提交新申请前检查内容。",
   "settings_verification_original": "原操作",
   "settings_verification_command_error": "操作响应（{status}）：{message}",
