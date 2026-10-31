@@ -13,7 +13,7 @@ export async function logPreviewJourney({ canvasElement }: { canvasElement: HTML
   const summary = note.querySelector('summary')!;
   const fullText = note.querySelector('p')!;
   const preview = summary.querySelector<HTMLElement>('[aria-hidden="true"]')!;
-  const link = within(first).getByRole('link', { name: /.+/ });
+  const link = await within(first).findByRole('link', { name: /.+/ });
   const destination = link.getAttribute('href')!;
   const selectedId = decodeURIComponent(destination.split('/').at(-1)!);
   const reads = myLogsStoryActivity();
