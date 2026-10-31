@@ -46,7 +46,16 @@ export async function readReading(
   try {
     const page = await io.read();
     if (!page.signedIn) return { ok: false, reason: 'forbidden' };
-    if (!('preferences' in page)) return { ok: false, reason: page.state, failure: page.failure };
+    if (!('preferences' in page)) {
+      const { failure } = page;
+      const reason =
+        failure.code === 'platform_closed' || page.state === 'closed'
+          ? 'closed'
+          : failure.status === 401 || failure.status === 403
+            ? 'forbidden'
+            : 'unavailable';
+      return { ok: false, reason, failure };
+    }
     const { preferences } = page;
     // Another preference card can confirm a newer version while this GET is in flight.
     if (!validReading(preferences, typeof minimumVersion === 'function' ? minimumVersion() : minimumVersion))
@@ -59,7 +68,7 @@ export async function readReading(
 
 export type ReadingAttemptResult =
   | { kind: 'confirmed'; preferences: ReadingPreferences; receipt: ReadingPreferences }
-  | { kind: 'uncertain'; reason: string; failure?: NativePreferenceFailure }
+  | { kind: 'uncertain'; reason: string; failure?: NativePreferenceFailure; operation?: 'read' }
   | { kind: 'rejected'; reason: string; failure?: NativePreferenceFailure };
 
 /** Retry the immutable original input. A replay receipt is historical, so recovery also requires a current GET. */
@@ -95,7 +104,12 @@ export async function sendReading(
   if (!recovering && currentVersion() <= receipt.version) return { kind: 'confirmed', preferences: receipt, receipt };
   const current = await readReading(io, () => Math.max(receipt.version, currentVersion()));
   if (!current.ok)
-    return { kind: 'uncertain', reason: current.reason, ...(current.failure ? { failure: current.failure } : {}) };
+    return {
+      kind: 'uncertain',
+      operation: 'read',
+      reason: current.reason,
+      ...(current.failure ? { failure: current.failure } : {}),
+    };
   if (current.preferences.version === receipt.version && !sameReading(current.preferences, receipt))
     return { kind: 'uncertain', reason: 'unavailable' };
   return { kind: 'confirmed', preferences: current.preferences, receipt };

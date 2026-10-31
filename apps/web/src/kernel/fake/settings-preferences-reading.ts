@@ -1,6 +1,11 @@
 import type { FakeRoute } from '../fake-modules';
 import recording from '../recorded/settings-preferences.json';
-import { parsePreferenceChange, type PreferenceChange, type ReadingPreferences } from '../../settings/preferences';
+import {
+  parsePreferenceChange,
+  type PreferenceChange,
+  type ReadingPreferences,
+  type SettingsPage,
+} from '../../settings/preferences';
 import type { ReadingIO } from '../../settings/reading-preferences';
 
 export type ReadingScenario = 'default' | 'delayed' | 'lost' | 'conflict' | 'unavailable' | 'closed' | 'denied';
@@ -13,6 +18,7 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
   const receipts = new Map<string, { input: string; preferences: ReadingPreferences }>();
   const calls: Readonly<PreferenceChange>[] = [];
   let reads = 0;
+  let nextRead: { result: SettingsPage; ready: Promise<void> } | undefined;
   let release = () => {};
   const delay = new Promise<void>((resolve) => {
     release = resolve;
@@ -49,6 +55,12 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
     },
     async read() {
       reads++;
+      if (nextRead) {
+        const held = nextRead;
+        nextRead = undefined;
+        await held.ready;
+        return held.result;
+      }
       if (scenario === 'unavailable')
         return {
           signedIn: true,
@@ -72,6 +84,16 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
     calls,
     release,
     reads: () => reads,
+    holdNextRead(result: SettingsPage) {
+      let finish = () => {};
+      nextRead = {
+        result,
+        ready: new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      };
+      return finish;
+    },
     current: () => ({ ...current, notifications: { ...notifications } }),
     concurrent: (values: Partial<Pick<ReadingPreferences, 'spoilerLevel' | 'suitability'>> = {}) => {
       current = { ...current, ...values, version: current.version + 1 };
@@ -81,7 +103,7 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
 }
 
 const fixtures = new WeakMap<object, ReturnType<typeof readingFixture>>();
-function pageFixture() {
+export function readingPageFixture() {
   const context = (globalThis as typeof globalThis & { __rezicsStoryContext?: { url?: string } }).__rezicsStoryContext;
   if (!context) return;
   const scenario = new URL(context.url ?? '/', 'https://rezics.local').searchParams.get('reading-state');
@@ -106,23 +128,37 @@ export const routes: FakeRoute[] = [
     method: 'GET',
     path: /^\/v1\/accounts\/[^/]+\/preferences$/,
     story: async () => {
-      const fixture = pageFixture();
+      const fixture = readingPageFixture();
       if (!fixture) return;
       const result = await fixture.io.read();
       if ('preferences' in result)
         return { status: 200, ...result.preferences, notifications: result.notifications, shelf: {} };
-      if (result.signedIn && 'failure' in result)
-        return { status: result.failure.status ?? 503, code: result.failure.code };
+      if (result.signedIn && 'failure' in result) {
+        const { failure } = result;
+        return {
+          status: failure.status ?? 503,
+          code: failure.code,
+          retryable: failure.retryable,
+          request_id: failure.requestId,
+          ...(failure.retryAfter ? { headers: { 'retry-after': failure.retryAfter } } : {}),
+        };
+      }
     },
   },
   {
     method: 'PATCH',
     path: /^\/v1\/accounts\/[^/]+\/preferences$/,
     story: async ({ request }) => {
-      const fixture = pageFixture();
+      const fixture = readingPageFixture();
       if (!fixture) return;
       const body: object = await request.json();
-      const input = parsePreferenceChange({ ...body, idempotencyKey: request.headers.get('idempotency-key') });
+      let key: unknown;
+      try {
+        key = JSON.parse(request.headers.get('idempotency-key') ?? 'null');
+      } catch {
+        return { status: 400, code: 'invalid_request' };
+      }
+      const input = parsePreferenceChange({ ...body, idempotencyKey: key });
       if (!input) return;
       const result = await fixture.io.save(input);
       return result.ok

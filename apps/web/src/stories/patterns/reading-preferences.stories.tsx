@@ -134,7 +134,8 @@ export const ReadbackUnavailable: Story = {
   play: async ({ canvasElement }) => {
     const view = await change(canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.settings_reading_retry_original() }));
-    await view.findByText(m.settings_reading_uncertain_title());
+    await view.findByText(m.settings_reading_read_unavailable_title());
+    await view.findByText(m.settings_reading_uncertain_text());
     await expect(view.queryByText(m.settings_saved())).toBeNull();
     await expect(view.queryByRole('button', { name: m.settings_reading_save_draft() })).toBeNull();
   },
@@ -145,7 +146,7 @@ export const Closed: Story = {
     const view = await change(canvasElement);
     await view.findByText(m.settings_closed_title());
     await userEvent.click(view.getByRole('button', { name: m.settings_reload() }));
-    await view.findByText(m.settings_closed_title());
+    await view.findByText(m.settings_reading_read_closed_title());
     await expect(view.queryByText(m.settings_saved())).toBeNull();
   },
 };

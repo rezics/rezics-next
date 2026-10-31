@@ -44,6 +44,8 @@ type ReadingState = {
   draft: ReadingValues;
   pending: Readonly<PreferenceChange> | null;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'reloading' | 'review' | 'failed';
+  knownCurrent: boolean;
+  failureOrigin?: 'read' | undefined;
   reason?: string | undefined;
   failure?: NativePreferenceFailure | undefined;
 };
@@ -69,6 +71,7 @@ export function ReadingCard({
     draft: initial,
     pending: null,
     phase: 'idle',
+    knownCurrent: true,
   }));
   const current = useRef(state);
   const isCurrent = useReadingNavigationCurrent();
@@ -102,7 +105,7 @@ export function ReadingCard({
     const input = current.current.pending;
     const mounted = lifetime.current;
     if (!input || !mounted || !isCurrent()) return;
-    update({ phase: 'saving', reason: undefined, failure: undefined });
+    update({ phase: 'saving', reason: undefined, failure: undefined, failureOrigin: undefined, knownCurrent: false });
     const result = await sendReading(transport, input, recovering, () => sharedVersion.current);
     if (lifetime.current !== mounted || !isCurrent()) return;
     if (result.kind !== 'confirmed') {
@@ -111,20 +114,33 @@ export function ReadingCard({
         phase: result.kind === 'uncertain' ? 'uncertain' : result.reason === 'conflict' ? 'conflict' : 'failed',
         reason: result.reason,
         failure: result.failure,
+        failureOrigin: result.kind === 'uncertain' ? result.operation : undefined,
       });
       return;
     }
     const { preferences, receipt } = result;
     // Controls always keep the latest draft, including edits made while saving or resolving a response.
     const matches = sameReading(current.current.draft, preferences) && preferences.version === receipt.version;
-    update({ known: preferences, pending: null, phase: matches ? 'saved' : 'review', failure: undefined });
+    update({
+      known: preferences,
+      knownCurrent: true,
+      pending: null,
+      phase: matches ? 'saved' : 'review',
+      failure: undefined,
+    });
     onVersionChange(Math.max(sharedVersion.current, preferences.version));
   }
   async function submit() {
     if (!isCurrent() || !hydrated || !csrfToken || current.current.pending || current.current.phase === 'reloading')
       return;
     if (sharedVersion.current > current.current.known.version) {
-      update({ phase: 'conflict' });
+      update({
+        phase: 'conflict',
+        knownCurrent: false,
+        failureOrigin: undefined,
+        reason: undefined,
+        failure: undefined,
+      });
       return;
     }
     const input = readingMutation(current.current.known, current.current.draft);
@@ -153,7 +169,13 @@ export function ReadingCard({
     )
       return;
     const revision = draftRevision.current;
-    update({ phase: 'reloading', failure: undefined });
+    update({
+      phase: 'reloading',
+      knownCurrent: false,
+      reason: undefined,
+      failure: undefined,
+      failureOrigin: undefined,
+    });
     const result = await readReading(transport, () => Math.max(current.current.known.version, sharedVersion.current));
     if (lifetime.current !== mounted || !isCurrent()) return;
     if (!result.ok) {
@@ -161,6 +183,7 @@ export function ReadingCard({
         phase: current.current.pending ? 'uncertain' : 'failed',
         reason: result.reason,
         failure: result.failure,
+        failureOrigin: 'read',
       });
       return;
     }
@@ -169,10 +192,12 @@ export function ReadingCard({
     const preserve = keepDraft || current.current.pending !== null || draftRevision.current !== revision;
     update({
       known: result.preferences,
+      knownCurrent: true,
       ...(preserve ? {} : { draft: result.preferences }),
       phase: current.current.pending ? 'uncertain' : preserve ? 'review' : 'idle',
       reason: undefined,
       failure: undefined,
+      failureOrigin: undefined,
     });
     onVersionChange(Math.max(sharedVersion.current, result.preferences.version));
   }
@@ -181,20 +206,38 @@ export function ReadingCard({
     await send(true);
   }
   const uncertain = state.pending !== null && state.phase !== 'saving';
+  const readLoading = state.phase === 'reloading';
+  const readFailed = state.failureOrigin === 'read';
   const recovery = uncertain || ['conflict', 'review', 'failed', 'reloading'].includes(state.phase);
-  const title = uncertain
-    ? m.settings_reading_uncertain_title()
-    : state.phase === 'review'
-      ? m.settings_reading_review_title()
-      : state.reason === 'closed'
-        ? m.settings_closed_title()
-        : state.reason === 'preparing'
-          ? m.settings_preparing_title()
-          : state.reason === 'unavailable'
-            ? m.settings_unavailable_title()
-            : state.phase === 'failed'
-              ? m.settings_failed_title()
-              : m.settings_conflict_title();
+  const readTitle =
+    state.reason === 'closed'
+      ? m.settings_reading_read_closed_title()
+      : state.reason === 'forbidden'
+        ? m.settings_reading_read_denied_title()
+        : m.settings_reading_read_unavailable_title();
+  const readText =
+    state.reason === 'closed'
+      ? m.settings_reading_read_closed_text()
+      : state.reason === 'forbidden'
+        ? m.settings_reading_read_denied_text()
+        : m.settings_reading_read_unavailable_text();
+  const title = readLoading
+    ? m.settings_reading_loading()
+    : readFailed
+      ? readTitle
+      : uncertain
+        ? m.settings_reading_uncertain_title()
+        : state.phase === 'review'
+          ? m.settings_reading_review_title()
+          : state.reason === 'closed'
+            ? m.settings_closed_title()
+            : state.reason === 'preparing'
+              ? m.settings_preparing_title()
+              : state.reason === 'unavailable'
+                ? m.settings_unavailable_title()
+                : state.phase === 'failed'
+                  ? m.settings_failed_title()
+                  : m.settings_conflict_title();
   return (
     <Card>
       <CardHeader>
@@ -255,6 +298,7 @@ export function ReadingCard({
         </div>
         {recovery ? (
           <Alert
+            role={readLoading ? 'status' : 'alert'}
             data-response-status={state.failure?.status ?? ''}
             data-response-code={state.failure?.code ?? ''}
             data-retry-after={state.failure?.retryAfter}
@@ -262,26 +306,33 @@ export function ReadingCard({
             <AlertTitle>{title}</AlertTitle>
             <AlertDescription className="flex flex-col gap-3">
               <p>
-                {uncertain
-                  ? m.settings_reading_uncertain_text()
-                  : state.phase === 'review'
-                    ? m.settings_reading_review_text()
-                    : state.reason === 'closed'
-                      ? m.settings_closed_text()
-                      : state.reason === 'preparing'
-                        ? m.settings_preparing_text()
-                        : state.reason === 'unavailable'
-                          ? m.settings_unavailable_text()
-                          : state.phase === 'failed'
-                            ? m.settings_failed_text()
-                            : m.settings_conflict_text()}
+                {readLoading
+                  ? m.settings_reading_loading_text()
+                  : readFailed
+                    ? readText
+                    : uncertain
+                      ? m.settings_reading_uncertain_text()
+                      : state.phase === 'review'
+                        ? m.settings_reading_review_text()
+                        : state.reason === 'closed'
+                          ? m.settings_closed_text()
+                          : state.reason === 'preparing'
+                            ? m.settings_preparing_text()
+                            : state.reason === 'unavailable'
+                              ? m.settings_unavailable_text()
+                              : state.phase === 'failed'
+                                ? m.settings_failed_text()
+                                : m.settings_conflict_text()}
               </p>
-              {uncertain && state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
-              {uncertain && state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
-              {uncertain && state.reason === 'unavailable' ? <p>{m.settings_unavailable_text()}</p> : null}
+              {uncertain && (readLoading || readFailed) ? <p>{m.settings_reading_uncertain_text()}</p> : null}
+              {uncertain && !readFailed && state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
+              {uncertain && !readFailed && state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
+              {uncertain && !readFailed && state.reason === 'unavailable' ? (
+                <p>{m.settings_unavailable_text()}</p>
+              ) : null}
               {waiting ? <p>{m.settings_retry_wait()}</p> : null}
               <p>
-                {m.settings_reading_current({
+                {(state.knownCurrent ? m.settings_reading_current : m.settings_reading_known)({
                   spoilers: levels[state.known.spoilerLevel]!.title(),
                   images: state.known.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
                 })}
