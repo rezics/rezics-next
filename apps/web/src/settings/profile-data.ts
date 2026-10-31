@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { settingsCommandKeyHeader } from './command-headers';
 import {
   createEditableProfileSource,
   EditableProfileReadError,
@@ -123,7 +124,7 @@ export async function saveProfileRecord(
   if (after.links.length > 5) throw new Error('At most five links are allowed');
   const body = profileChanges(before, after);
   if (!Object.keys(body).length) return { ok: true, profile: before };
-  const headers = { authorization, 'idempotency-key': idempotencyKey };
+  const headers = { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) };
   const result = await client.accounts({ accountId }).patch(body, { headers });
   if (!result.error && result.data) return { ok: true, profile: after };
   const errorBody = result.error?.value;

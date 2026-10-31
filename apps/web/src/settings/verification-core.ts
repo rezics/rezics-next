@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import { validateVerificationDraft } from './verification-validation';
+import { settingsCommandKeyHeader } from './command-headers';
 
 export type VerificationInput = {
   subject: string;
@@ -121,12 +122,14 @@ export async function requestVerification(
 ): Promise<VerificationCommandResult> {
   if (validateVerificationDraft(input).length)
     return { ok: false, status: 0, message: m.settings_verification_validation(), outcome: 'refused' };
-  const result = await client
-    .accounts({ accountId })
-    .$requestVerification.post(
-      { subject: input.subject, statement: input.statement, links: input.links },
-      { headers: { authorization, 'idempotency-key': input.idempotencyKey } as { 'idempotency-key': string } },
-    );
+  const result = await client.accounts({ accountId }).$requestVerification.post(
+    { subject: input.subject, statement: input.statement, links: input.links },
+    {
+      headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey) } as {
+        'idempotency-key': string;
+      },
+    },
+  );
   if (result.status === 201 && validRequest(result.data?.verificationRequest, accountId))
     return { ok: true, verificationRequest: result.data!.verificationRequest };
   return { ok: false, ...nativeFailure(result) };
@@ -141,7 +144,9 @@ export async function withdrawVerification(
   const result = await client.accounts({ accountId }).$withdrawVerification.post(
     {},
     {
-      headers: { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string },
+      headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) } as {
+        'idempotency-key': string;
+      },
     },
   );
   if (result.status === 200 && validRequest(result.data?.verificationRequest, accountId))

@@ -371,7 +371,7 @@ test(
         body: { expectedVersion: 3, notifications: { reply: false } },
         contentType: 'application/merge-patch+json',
       });
-      expect(patches()[0]!.key).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(patches()[0]!.key).toMatch(/^"[0-9a-f-]{36}"$/i);
       expect(stored.notifications).toEqual({ reply: false, mention: true });
 
       await group.getByRole('button', { name: 'Restore defaults' }).click();

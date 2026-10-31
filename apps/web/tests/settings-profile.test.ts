@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { idempotencyKeyOf } from '../../../services/kernel/src/http/request.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
@@ -135,9 +136,34 @@ test('profile save sends only changed fields and an idempotency key, then return
       method: 'PATCH',
       url: '/v1/accounts/alice',
       body: { displayName: 'Alice A.' },
-      key: '123e4567-e89b-42d3-a456-426614174000',
+      key: '"123e4567-e89b-42d3-a456-426614174000"',
     },
   ]);
+});
+
+test('profile HTTP serialization preserves the semantic key and original patch on explicit retry', async () => {
+  for (const idempotencyKey of ['123e4567-e89b-42d3-a456-426614174000', '  command "quoted" \\ path  ', '123']) {
+    const before = structuredClone(recoveryProfile);
+    const after = Object.freeze({ ...before, biography: '  Original e\u0301\nwords  ' });
+    const original = structuredClone({ before, after, idempotencyKey });
+    const { client, calls } = clientFor((request) => {
+      expect(request.headers.get('authorization')).toBe('Bearer page-token');
+      return Response.json({ code: 'dependency_unavailable', detail: 'Original native detail' }, { status: 503 });
+    });
+    for (const attempt of [1, 2]) {
+      expect(
+        await saveProfileRecord(client, 'Bearer page-token', before.accountId, before, after, idempotencyKey),
+      ).toMatchObject({ ok: false, status: 503, message: 'Original native detail' });
+      expect(calls).toHaveLength(attempt);
+      const sent = calls[attempt - 1]!;
+      expect(sent.method).toBe('PATCH');
+      expect(sent.url).toBe(`/v1/accounts/${before.accountId}`);
+      expect(idempotencyKeyOf(sent.key)).toBe(idempotencyKey);
+      expect(sent.body).toEqual({ biography: '  Original e\u0301\nwords  ' });
+      expect({ before, after, idempotencyKey }).toEqual(original);
+    }
+    expect(calls[1]!.key).toBe(calls[0]!.key);
+  }
 });
 
 test('public activity patches only the switched key and links reject a sixth row before a write', async () => {
@@ -326,7 +352,7 @@ test('profile and activity failure controls honor native delay/date headers whil
       expect(calls[0]?.body).toEqual(
         scope === 'profile' ? { biography: 'Original words' } : { publicViews: { posts: false } },
       );
-      expect(calls[0]?.key).toBe(attempt?.idempotencyKey ?? 'missing original attempt');
+      expect(calls[0]?.key).toBe(JSON.stringify(attempt?.idempotencyKey ?? 'missing original attempt'));
       editor.retire();
     }
   }

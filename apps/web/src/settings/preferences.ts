@@ -14,6 +14,7 @@ import {
   readCollectionPrivacyResult,
 } from './collection-privacy-data';
 import type { AccountRenameNavigation } from './account-rename-actions';
+import { settingsCommandKeyHeader } from './command-headers';
 
 export type SpoilerLevel = 0 | 1 | 2;
 export type Suitability = 'blur' | 'show';
@@ -117,12 +118,14 @@ export async function changeCollectionVisibility(
     await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     if (!authorization || !sessionSubject(request)) return { ok: false, reason: 'forbidden' };
-    const result = await client
-      .collections({ collectionId: input.collectionId })
-      .patch(
-        { revision: input.revision, visibility: input.visibility },
-        { headers: { authorization, 'idempotency-key': input.idempotencyKey } as { 'idempotency-key': string } },
-      );
+    const result = await client.collections({ collectionId: input.collectionId }).patch(
+      { revision: input.revision, visibility: input.visibility },
+      {
+        headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey) } as {
+          'idempotency-key': string;
+        },
+      },
+    );
     if (!result.error && result.data?.collection)
       return { ok: true, collection: ownedCollection(result.data.collection) };
     const failure = collectionPrivacyFailureMetadata(result.error, result.status, result.headers);
@@ -324,7 +327,9 @@ export async function changePreferences(
     if (!authorization || !accountId) return { ok: false, reason: 'forbidden' };
     const { idempotencyKey, ...body } = change;
     const result = await client.accounts({ accountId }).preferences.patch(body, {
-      headers: { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string },
+      headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) } as {
+        'idempotency-key': string;
+      },
     });
     const preferences = !result.error ? present(result.data) : undefined;
     if (preferences) return { ok: true, preferences };
@@ -354,7 +359,7 @@ export async function changeNotifications(
     const result = await preferences.patch(body as Parameters<typeof preferences.patch>[0], {
       headers: {
         authorization,
-        'idempotency-key': idempotencyKey,
+        'idempotency-key': settingsCommandKeyHeader(idempotencyKey),
         'content-type': 'application/merge-patch+json',
       } as { 'idempotency-key': string; 'content-type': string },
     });

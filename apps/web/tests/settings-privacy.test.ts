@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { idempotencyKeyOf } from '../../../services/kernel/src/http/request.ts';
 import {
   changeCollectionVisibility,
   readOwnedCollections,
@@ -138,6 +139,35 @@ test('visibility changes send the collection revision and expose the server answ
     expect(sent?.method).toBe('PATCH');
     expect(new URL(sent!.url).pathname).toBe('/v1/collections/c1');
     expect(await sent!.clone().json()).toEqual({ revision: 7, visibility });
+  }
+});
+
+test('Collection visibility serializes the original key without changing the revision or replay request', async () => {
+  for (const idempotencyKey of ['123e4567-e89b-42d3-a456-426614174000', '  command "quoted" \\ path  ', '123']) {
+    const change = Object.freeze({ collectionId: 'c1', revision: 7, visibility: 'private' as const, idempotencyKey });
+    const original = structuredClone(change);
+    const calls: Request[] = [];
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async (input, init) => {
+        calls.push(new Request(input, init));
+        return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+      }) as typeof fetch,
+    });
+    for (const attempt of [1, 2]) {
+      expect(await changeCollectionVisibility(client, request('POST'), env, change)).toEqual({
+        ok: false,
+        reason: 'unavailable',
+      });
+      expect(calls).toHaveLength(attempt);
+      const sent = calls[attempt - 1]!;
+      expect(sent.method).toBe('PATCH');
+      expect(new URL(sent.url).pathname).toBe('/v1/collections/c1');
+      expect(sent.headers.get('authorization')).toBe('Bearer page-token');
+      expect(idempotencyKeyOf(sent.headers.get('idempotency-key'))).toBe(idempotencyKey);
+      expect(await sent.clone().json()).toEqual({ revision: 7, visibility: 'private' });
+      expect(change).toEqual(original);
+    }
+    expect(calls[1]!.headers.get('idempotency-key')).toBe(calls[0]!.headers.get('idempotency-key'));
   }
 });
 

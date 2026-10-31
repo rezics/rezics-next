@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { idempotencyKeyOf } from '../../../services/kernel/src/http/request.ts';
 import { operationGroups } from '../src/kernel/exposure';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
@@ -195,7 +196,7 @@ test('a verification request sends the selected subject, statement, and labelled
       operation: 'request',
       args: [
         { subject: input.subject, statement: input.statement, links: input.links },
-        { headers: { authorization: 'Bearer token', 'idempotency-key': input.idempotencyKey } },
+        { headers: { authorization: 'Bearer token', 'idempotency-key': JSON.stringify(input.idempotencyKey) } },
       ],
     },
   ]);
@@ -228,9 +229,53 @@ test('withdrawal calls the account command and displays the returned state', asy
   expect(calls).toEqual([
     {
       operation: 'withdraw',
-      args: [{}, { headers: { authorization: 'Bearer token', 'idempotency-key': input.idempotencyKey } }],
+      args: [
+        {},
+        { headers: { authorization: 'Bearer token', 'idempotency-key': JSON.stringify(input.idempotencyKey) } },
+      ],
     },
   ]);
+});
+
+test('verification request and withdrawal serialize the original key once through the actual client on explicit retry', async () => {
+  for (const idempotencyKey of ['123e4567-e89b-42d3-a456-426614174000', '  command "quoted" \\ path  ', '123']) {
+    const draft = Object.freeze({
+      ...input,
+      statement: '  Original e\u0301\nstatement  ',
+      links: [{ label: '  Original label  ', url: 'HTTPS://example.test/Profile?value=%2f#Original' }],
+      idempotencyKey,
+    });
+    const original = structuredClone(draft);
+    for (const operation of ['request', 'withdraw'] as const) {
+      const calls: Request[] = [];
+      const client = createKernelClient('https://kernel.example.test', {
+        fetch: (async (input, init) => {
+          calls.push(new Request(input, init));
+          return Response.json({ detail: 'Original native detail' }, { status: 503 });
+        }) as typeof fetch,
+      });
+      for (const attempt of [1, 2]) {
+        const result =
+          operation === 'request'
+            ? await requestVerification(client, 'alice', 'Bearer token', draft)
+            : await withdrawVerification(client, 'alice', 'Bearer token', draft.idempotencyKey);
+        expect(result).toEqual({ ok: false, status: 503, message: 'Original native detail' });
+        expect(calls).toHaveLength(attempt);
+        const sent = calls[attempt - 1]!;
+        expect(sent.method).toBe('POST');
+        expect(new URL(sent.url).pathname).toBe(`/v1/accounts/alice:$${operation}Verification`);
+        expect(sent.headers.get('authorization')).toBe('Bearer token');
+        expect(idempotencyKeyOf(sent.headers.get('idempotency-key'))).toBe(idempotencyKey);
+        expect(await sent.clone().json()).toEqual(
+          operation === 'request'
+            ? { subject: draft.subject, statement: '  Original e\u0301\nstatement  ', links: original.links }
+            : {},
+        );
+        expect(draft).toEqual(original);
+      }
+      expect(calls[1]!.headers.get('idempotency-key')).toBe(calls[0]!.headers.get('idempotency-key'));
+    }
+  }
 });
 
 test('invalid subject, statement, or link counts are rejected before the command', async () => {
