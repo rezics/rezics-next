@@ -208,24 +208,23 @@ export const DeniedDetail: Story = {
     const row = (await canvas.findByText(recordedCopy.note!, { exact: true })).closest('li');
     if (!row) throw new globalThis.Error('The recorded owner copy did not render in the list.');
     const rawRow = row.textContent;
-    const trigger = within(row).getByRole('button', { name: m.library_copy_more_actions(), exact: true });
+    const trigger = within(row).getByRole('button', { name: m.library_copy_more_actions() });
     await userEvent.click(trigger);
     const view = within(document.body);
     // Menu uses a titled sheet with buttons on phones and coarse pointers, and a portalled menu on desktop.
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     const actions = await view.findByRole(sheet ? 'dialog' : 'menu', {
       name: m.library_copy_more_actions(),
-      exact: true,
     });
     if (!sheet) expect(actions.id).toBe(trigger.getAttribute('aria-controls'));
     const edit = await within(actions).findByRole(sheet ? 'button' : 'menuitem', {
       name: m.library_copy_edit(),
-      exact: true,
     });
     expect(edit).toBeVisible();
     await userEvent.click(edit);
-    const dialog = within(await view.findByRole('dialog', { name: m.library_copy_edit(), exact: true }));
-    await dialog.findByText(m.library_copy_detail_forbidden());
+    // Wait for the current inspection before binding to an editor that remounts when its detail state changes.
+    await view.findByText(m.library_copy_detail_forbidden());
+    const dialog = within(view.getByRole('dialog', { name: m.library_copy_edit() }));
     expect(dialog.queryByText(recording.copies[0]!.note!)).not.toBeInTheDocument();
     expect(dialog.queryByRole('button', { name: m.library_copy_save() })).not.toBeInTheDocument();
     expect(dialog.queryByRole('button', { name: m.library_copy_delete() })).not.toBeInTheDocument();
