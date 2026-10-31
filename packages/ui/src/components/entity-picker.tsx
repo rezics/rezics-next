@@ -190,12 +190,18 @@ export function EntityPicker({
         itemToStringLabel={(subject: EntityPickerSubject) => subject.title}
         isItemEqualToValue={(a: EntityPickerSubject, b: EntityPickerSubject) => a.id === b.id}
       >
-        <ComboboxInput aria-label={label} placeholder={placeholder} showTrigger={false} className="w-full" />
-        <ComboboxContent aria-busy={busy}>
+        <ComboboxInput
+          aria-label={label}
+          placeholder={placeholder}
+          disabled={disabled}
+          showTrigger={false}
+          className="w-full"
+        />
+        <ComboboxContent aria-busy={busy} className="min-w-0">
           {/* Results scroll, and a scrolling region needs a keyboard stop for assistive technology that does not follow the input. */}
           <ComboboxList aria-label={label} tabIndex={results.items.length > 0 ? 0 : -1}>
             {(subject: EntityPickerSubject) => (
-              <ComboboxItem key={subject.id} value={subject} disabled={busy} className="items-start gap-3 py-2">
+              <ComboboxItem key={subject.id} value={subject} disabled={busy} className="min-w-0 items-start gap-3 py-2">
                 <ResultCover subject={subject} src={src} ratio={resultRatio} />
                 <ResultText subject={subject} />
               </ComboboxItem>
@@ -204,14 +210,20 @@ export function EntityPicker({
           <div
             role="status"
             className={cn(
-              'flex items-center justify-center gap-2 px-3 text-sm text-muted-foreground',
+              'flex flex-wrap items-center justify-center gap-2 px-3 text-center text-sm text-muted-foreground [overflow-wrap:anywhere]',
               (status || busy) && 'py-3',
             )}
           >
             {busy ? <Spinner role="presentation" aria-hidden="true" aria-label={undefined} /> : null}
-            {status}
+            <span className="min-w-0">{status}</span>
             {results.phase === 'failed' ? (
-              <Button type="button" variant="outline" size="sm" onClick={() => run(results.query, 0)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-auto whitespace-normal py-1"
+                onClick={() => run(results.query, 0)}
+              >
                 {t.retry}
               </Button>
             ) : null}
@@ -219,11 +231,11 @@ export function EntityPicker({
         </ComboboxContent>
       </Combobox>
       {multiple && selected.length > 0 ? (
-        <ul aria-label={t.selected} className="grid gap-2">
+        <ul aria-label={t.selected} className="grid min-w-0 gap-2">
           {selected.map((subject) => (
             <li
               key={subject.id}
-              className="flex items-start gap-3 rounded-2xl border border-border bg-card p-2 text-card-foreground"
+              className="flex min-w-0 items-start gap-3 rounded-2xl border border-border bg-card p-2 text-card-foreground"
             >
               <ResultCover subject={subject} src={src} ratio={selectedRatio} />
               <ResultText subject={subject} />

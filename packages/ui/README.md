@@ -34,6 +34,14 @@ props for numeric value text. The rating components compose [Base UI slider part
 directly because the native range needs question-specific value text, including the unrated state. The actual
 `Slider.Thumb` supplies its native input's label and formatted value; the root remains a group. This specialization
 belongs in the rating components, not in a generic slider wrapper.
+Editable input, textarea, grouped combobox and select boundaries use `--control`, with at least 3:1 non-text
+contrast on Aura's light and dark surfaces. Decorative borders keep `--border`. Focus retains the blue ring;
+invalid fields retain the danger boundary and disabled controls retain their disabled state. Grouped inputs draw
+one outer boundary. Theme adaptations live in `styles.css`; generated shadcn controls stay unchanged.
+
+Below 768px or with a coarse primary pointer, editable controls and standard action buttons have a minimum 44px
+target. Fine-pointer desktop controls retain their dense sizes. Inline combobox tokens and editor toolbar buttons
+keep their own composition; callers must not treat an inline token as a standalone action.
 
 ## Menu
 
@@ -297,3 +305,8 @@ The variant and placeholder code lives in `media-image-sources.ts`, so `Cover` c
 - Each result shows a small cover, the title, and the type label and year. The `id` is passed back through `onValueChange` and never rendered. The cover is `Cover` at `xs`, so a subject with no image shows its placeholder; rows share one frame ratio so covers align. `cover` is the `Cover` summary.
 - Arrow keys move through the results and Enter selects, as in the shadcn `combobox` it builds on. `multiple` keeps the chosen subjects listed below the search box, each with a remove button.
 - An empty answer says nothing matches the text. A failed search says so in words and offers Try again. While a search is running the earlier results stay but cannot be chosen.
+- Long result and selected titles wrap to at most two lines; type metadata clips to one line. Status text wraps,
+  the popup fits the available viewport, and selected rows reserve space for their remove control. A disabled
+  picker disables both its native input and removal. Presentation never substitutes ids or manufactures results;
+  the caller's independent search remains authoritative. Imports owns exact-value forms, Commerce owns copy
+  selection, and Accounts owns agent selection.

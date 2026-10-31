@@ -471,8 +471,61 @@
   stroke: var(--destructive-solid);
 }
 
-[data-slot][aria-invalid='true'] {
+/* Editable surfaces use the opaque control tone (at least 3:1 on Aura grounds),
+   while decorative card borders retain --border. Grouped inputs have one boundary. */
+:is(
+  [data-slot='input'],
+  [data-slot='textarea'],
+  [data-slot='input-group'],
+  [data-slot='combobox-chips'],
+  [data-slot='native-select'],
+  [data-slot='select-trigger']
+) {
+  border-color: var(--control);
+}
+
+:is(
+  [data-slot='input'],
+  [data-slot='textarea'],
+  [data-slot='native-select'],
+  [data-slot='select-trigger']
+):focus-visible,
+[data-slot='input-group']:has([data-slot='input-group-control']:focus-visible),
+[data-slot='combobox-chips']:focus-within {
+  border-color: var(--ring);
+}
+
+[data-slot][aria-invalid='true'],
+:is([data-slot='input-group'], [data-slot='combobox-chips']):has([aria-invalid='true']) {
   border-color: var(--destructive-solid);
+}
+
+/* Keep desktop density. Grow actual controls on phones and coarse pointers,
+   without turning inline tokens or editor toolbar buttons into standalone actions. */
+@media (pointer: coarse), (max-width: 767px) {
+  :is(
+    [data-slot='input'],
+    [data-slot='textarea'],
+    [data-slot='input-group'],
+    [data-slot='input-group-control'],
+    [data-slot='combobox-chips'],
+    [data-slot='combobox-item'],
+    [data-slot='native-select'],
+    [data-slot='select-trigger']
+  ) {
+    min-block-size: 44px;
+  }
+
+  :is([data-slot='button'], [data-slot='input-group-button'], [data-slot='combobox-clear']):not(
+    :where([data-slot='combobox-chip'] *, [role='toolbar'] *)
+  ) {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+
+  [data-slot='input-group-addon']:is([data-align='inline-start'], [data-align='inline-end']) {
+    padding-block: 0;
+  }
 }
 
 /* Simplified Chinese interface: Latin keeps Manrope and Source Serif; Han falls

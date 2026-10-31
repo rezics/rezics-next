@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
+import { Button } from '@rezics/ui/shadcn/button';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
@@ -18,6 +20,30 @@ const meta = {
 } satisfies Meta<typeof Input>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+export const Empty: Story = {
+  render: () => (
+    <form className="grid max-w-sm gap-3" onSubmit={(event) => event.preventDefault()}>
+      <Label htmlFor="empty-name">Name of the collection shared with your reading group</Label>
+      <Input id="empty-name" />
+      <Label htmlFor="empty-description">Description</Label>
+      <Textarea id="empty-description" />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit">Save collection</Button>
+        <Button type="reset" variant="outline">
+          Reset
+        </Button>
+      </div>
+    </form>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole('textbox', { name: 'Name of the collection shared with your reading group' }),
+    ).toHaveValue('');
+    await expect(canvas.getByRole('textbox', { name: 'Description' })).toHaveValue('');
+  },
+};
 
 export const Default: Story = {
   args: { placeholder: 'Hard science fiction' },

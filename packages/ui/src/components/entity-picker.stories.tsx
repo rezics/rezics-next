@@ -24,6 +24,23 @@ const catalogue: EntityPickerSubject[] = [
   subject('urn:rezics:0192f3a1-7c1e-7b52-9d34-aa06', '銀河英雄伝説', 'アニメ', 1988),
 ];
 
+const odd: EntityPickerSubject[] = [
+  subject(
+    'long-cjk',
+    '《银河英雄传说：新月之梦》——关于自由行星同盟与银河帝国之间漫长战争的叙事诗集与未发表手稿合订本',
+    '小说',
+    2019,
+  ),
+  subject(
+    'long-latin',
+    'Supercalifragilisticexpialidocious-Adventures-of-an-Extraordinarily-Long-Unbroken-Title',
+    'Novel',
+    undefined,
+  ),
+  subject('bare', 'Untitled', '', undefined, false),
+  subject('no-cover', '無題の物語', 'Visual novel', 2011, false),
+];
+
 interface FakeSearch {
   delay?: number;
   /** While `value` is true every search fails, as with no connection. */
@@ -74,6 +91,33 @@ const meta = {
 } satisfies Meta<typeof EntityPicker>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+// Use the shared phone (390px), desktop (1280px), theme and locale globals for every state.
+export const Empty: Story = {
+  args: { placeholder: '' },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('combobox', { name: 'Subject' })).toHaveValue('');
+  },
+};
+
+export const Selected: Story = {
+  args: { multiple: true, defaultValue: odd.slice(0, 2) },
+  async play({ canvasElement }) {
+    const list = within(canvasElement).getByRole('list', { name: 'Selected' });
+    await expect(within(list).getAllByRole('button')).toHaveLength(2);
+    await expect(list).toHaveTextContent(odd[0]!.title);
+    await expect(list).toHaveTextContent(odd[1]!.title);
+  },
+};
+
+export const SlowSearch: Story = {
+  args: { multiple: true, defaultValue: odd.slice(0, 1), search: fakeSearch({ delay: 60_000, pool: odd }) },
+  async play({ canvasElement }) {
+    await userEvent.type(within(canvasElement).getByRole('combobox', { name: 'Subject' }), 'long title');
+    await expect(await screen.findByText('Searching…')).toBeVisible();
+    await expect(within(canvasElement).getByRole('list', { name: 'Selected' })).toHaveTextContent(odd[0]!.title);
+  },
+};
 
 const options = () => screen.findAllByRole('option');
 const enabled = async (name: RegExp | string) => {
@@ -196,7 +240,7 @@ export const NothingMatches: Story = {
 
 const offline = { value: true };
 export const SearchFailed: Story = {
-  args: { search: fakeSearch({ offline }) },
+  args: { search: fakeSearch({ offline }), multiple: true, defaultValue: odd.slice(0, 1) },
   async play({ canvasElement }) {
     offline.value = true;
     await userEvent.type(within(canvasElement).getByRole('combobox', { name: 'Subject' }), 'three');
@@ -229,22 +273,6 @@ export const NeverShowsAnId: Story = {
   },
 };
 
-const odd: EntityPickerSubject[] = [
-  subject(
-    'long-cjk',
-    '《银河英雄传说：新月之梦》——关于自由行星同盟与银河帝国之间漫长战争的叙事诗集与未发表手稿合订本',
-    '小说',
-    2019,
-  ),
-  subject(
-    'long-latin',
-    'Supercalifragilisticexpialidocious-Adventures-of-an-Extraordinarily-Long-Unbroken-Title',
-    'Novel',
-    undefined,
-  ),
-  subject('bare', 'Untitled', '', undefined, false),
-  subject('no-cover', '無題の物語', 'Visual novel', 2011, false),
-];
 export const LongTitlesAndMissingData: Story = {
   args: { search: async () => odd, multiple: true },
   async play({ canvasElement }) {
@@ -264,13 +292,7 @@ export const LongTitlesAndMissingData: Story = {
 };
 
 export const PhoneWidth: Story = {
-  decorators: [
-    (Story) => (
-      <div className="w-[360px] overflow-hidden">
-        <Story />
-      </div>
-    ),
-  ],
+  globals: { viewport: { value: 'phone', isRotated: false } },
   args: { multiple: true },
   async play({ canvasElement }) {
     await userEvent.type(within(canvasElement).getByRole('combobox', { name: 'Subject' }), 'three');

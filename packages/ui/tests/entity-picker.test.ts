@@ -12,8 +12,14 @@ const typing = [
   'Select With Keyboard: passed',
   'Stale Search Is Cancelled: passed',
 ];
-const states = ['Never Shows An Id: passed', 'Nothing Matches: passed', 'Search Failed: passed'];
-const layouts = ['Long Titles And Missing Data: passed', 'Phone Width: passed'];
+const states = [
+  'Empty: passed',
+  'Never Shows An Id: passed',
+  'Nothing Matches: passed',
+  'Search Failed: passed',
+  'Slow Search: passed',
+];
+const layouts = ['Long Titles And Missing Data: passed', 'Phone Width: passed', 'Selected: passed'];
 
 /** Runs the stories once for both tests. */
 const outcomes = (() => {
