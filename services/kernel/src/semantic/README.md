@@ -328,6 +328,36 @@ The property's `disclosure: sourceOrConsent` requires either a reference or the 
 
 Private candidates share the hidden-statement exclusion probes. Public projections, counts, search snapshots and content disclosure omit them. Subject reads, forward and inverse pages and candidate listings give the linked account and accounts with Global `moderation:hide` access a bounded private overlay. Read permissions and subject moderation still apply. Reader identity is request-scoped and never inherited by relays or exports.
 
+`GET /v1/subjects/:id/candidates` optionally adds `consentIdentity` to an admitted, unretracted
+`sourceOrConsent` main-item candidate payload:
+
+```json
+{
+  "consentIdentity": {
+    "subject": { "id": "subject UUID", "labels": { "en": "River Ink" } },
+    "target": { "id": "original target UUID", "labels": { "en": "The person behind the name" }, "redirect": "optional survivor UUID" }
+  }
+}
+```
+
+Either identity may be `null`; an admitted identity with no labels retains an empty labels object.
+The relationship remains the exact property from the candidate's pinned release. Source labels come from its
+admitted snapshot. Target labels require independent ordinary subject-read Access and current visibility at the
+original and, if redirected, one-hop survivor, each in its own anchored native snapshot. A second source page
+revalidates current visibility, Access, audience, candidate lifecycle, disclosure and source fences after those
+checkouts have been released. Deleted markers and retracted or withheld candidates never retain identity labels.
+The work is bounded by the existing page limit (1–100) and at most two addressed target identities per candidate;
+redirects also revalidate the original after reading the survivor. Account candidate responses use `private, no-store`;
+anonymous caching stays `no-cache`.
+
+The consent adapter and screen use only this identity and pinned property labels for the private assertion, with
+`pickText` locale fallback. Missing names are explicitly unavailable, with reload before fresh confirmation;
+this is a display guard, not a new native permission. Retraction retains its native owner admission and exact-key
+uncertain retry. The assertion appears before confirmation and again before its checkbox and buttons. Anonymous
+public-result reads cannot fill or replace private identity. Denial/concealment clears prepared private state;
+terminal retraction clears the candidate. The focused default-composition regression is
+`test/semantic/statement-consent-identity.test.ts`; native execution is deferred during minimal verification.
+
 `POST /v1/statements/:id/disclose` uses ordinary proposal admission and checks current target ownership inside the command. It permanently discloses that candidate, bumps the holder's security revision and emits its ordinary link projection. Repeating it is harmless. There is no switch back to private; the target account must retract its statement with `POST /v1/statements/:id/retract`. Retraction is terminal and removes it from current views and projections without making a sourced third-party claim removable by the target. Statements are immutable: adding a reference through editing proposes a sourced replacement in the same target slot, which becomes public through ordinary review. The old private candidate remains private in history.
 
 ## Relations

@@ -3279,5 +3279,7 @@
   "catalogue_result_read_denied": "Vos autorisations actuelles ne permettent pas de lire ce résultat.",
   "catalogue_result_read_unavailable": "Le résultat actuel n’a pas pu être chargé.",
   "catalogue_retry_loading_result": "Réessayer de charger le résultat",
-  "authored_reload_current_text": "Recharger le texte actuel"
+  "authored_reload_current_text": "Recharger le texte actuel",
+  "statement_consent_identity_unavailable": "Identité indisponible",
+  "statement_consent_identity_help": "Cette assertion ne peut pas être entièrement identifiée. Rechargez les identités actuelles avant de la publier ou de la retirer. Les droits de retrait restent inchangés."
 }

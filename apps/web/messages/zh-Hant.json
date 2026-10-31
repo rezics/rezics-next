@@ -3279,5 +3279,7 @@
   "catalogue_result_read_denied": "你目前的權限不允許讀取此結果。",
   "catalogue_result_read_unavailable": "無法載入目前的結果。",
   "catalogue_retry_loading_result": "重試載入結果",
-  "authored_reload_current_text": "重新載入目前文字"
+  "authored_reload_current_text": "重新載入目前文字",
+  "statement_consent_identity_unavailable": "無法取得身分",
+  "statement_consent_identity_help": "目前無法完整辨識這項陳述。請重新載入最新身分，再決定公開或撤回；這不影響原有的撤回權限。"
 }

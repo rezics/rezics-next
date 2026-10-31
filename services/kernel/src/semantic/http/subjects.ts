@@ -2009,6 +2009,10 @@ function subjectRoutes(
                         t.Object({ source: SemanticSourceSchema, references: t.Array(BatchReferenceSchema) }),
                         t.Null(),
                       ]),
+                      consentIdentity: t.Optional(t.Object({
+                        subject: t.Union([t.Object({ id: t.String(), labels: t.Record(t.String(), t.String()) }), t.Null()]),
+                        target: t.Union([t.Object({ id: t.String(), labels: t.Record(t.String(), t.String()), redirect: t.Optional(t.String()) }), t.Null()]),
+                      })),
                       statement: StatementSchema,
                       release: t.String(),
                       revision: t.Integer(),
@@ -2029,7 +2033,7 @@ function subjectRoutes(
               ]),
               next: t.Union([t.String(), t.Null()]),
             }),
-            cacheControl,
+            { 'cache-control': t.Union([t.Literal('no-cache'), t.Literal('private, no-store')]) },
           ),
           ...listingErrors,
         },
@@ -2051,7 +2055,7 @@ function subjectRoutes(
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
-            readStatementAs(pool, access(), actor, job.deadline, () =>
+            readStatementAs(pool, access(), actor, job.deadline, (refreshAudience) =>
               listCandidates(pool, tokens, {
                 subject: params.id,
                 property: query.property,
@@ -2061,11 +2065,15 @@ function subjectRoutes(
                 ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
                 authorize: check,
                 routeKey,
+                identity: {
+                  access: access(), actor, deadline: job.deadline, refreshAudience,
+                  prepareSource: () => authorize({ ...resource, eligibility: subjectReadEligibility(resource) }),
+                },
               }),
             ),
           );
           session.record(component);
-          set.headers['cache-control'] = 'no-cache';
+          set.headers['cache-control'] = actor.kind === 'account' ? 'private, no-store' : 'no-cache';
           return result;
         } catch (error) {
           return candidateError(error);

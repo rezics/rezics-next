@@ -14,6 +14,7 @@ import definitions from '../recorded/definitions-release.json';
 
 export type ConsentScenario =
   | 'private'
+  | 'identity-withheld'
   | 'public'
   | 'sourced'
   | 'empty'
@@ -55,6 +56,10 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
     decision: 'accepted',
     head: 1,
     rank: 'normal',
+    consentIdentity: {
+      subject: { id, labels: subject.subject.labels },
+      target: scenario === 'identity-withheld' ? null : { id: target, labels: { en: 'The person behind the name' } },
+    },
     statement: {
       id: candidateId,
       rank: 'normal',
@@ -131,7 +136,7 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
       if (scenario === 'deleted' || scenario === 'lagging-deletion')
         return json({ candidates: [{ id: candidateId, deleted: true }], adoption: null, next: null });
       return json({
-        candidates: [{ ...candidate, retracted: retracted ? 3 : null }],
+        candidates: [{ ...candidate, ...(retracted ? { consentIdentity: undefined } : {}), retracted: retracted ? 3 : null }],
         adoption: { mode: 'replace', head: 1 },
         next: null,
       });

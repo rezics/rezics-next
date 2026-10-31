@@ -3279,5 +3279,7 @@
   "catalogue_result_read_denied": "現在の権限ではこの結果を閲覧できません。",
   "catalogue_result_read_unavailable": "現在の結果を読み込めませんでした。",
   "catalogue_retry_loading_result": "結果の読み込みを再試行",
-  "authored_reload_current_text": "現在の本文を再読み込み"
+  "authored_reload_current_text": "現在の本文を再読み込み",
+  "statement_consent_identity_unavailable": "人物・項目を確認できません",
+  "statement_consent_identity_help": "この記述の対象を完全には確認できません。公開または撤回する前に、最新の情報を再読み込みしてください。撤回できる人の権限は変わりません。"
 }

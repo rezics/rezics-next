@@ -3279,5 +3279,7 @@
   "catalogue_result_read_denied": "Tus permisos actuales no permiten leer este resultado.",
   "catalogue_result_read_unavailable": "No se pudo cargar el resultado actual.",
   "catalogue_retry_loading_result": "Reintentar cargar el resultado",
-  "authored_reload_current_text": "Recargar el texto actual"
+  "authored_reload_current_text": "Recargar el texto actual",
+  "statement_consent_identity_unavailable": "Identidad no disponible",
+  "statement_consent_identity_help": "No se puede identificar por completo esta afirmación. Vuelve a cargar las identidades actuales antes de publicarla o retirarla. El permiso para retirarla no cambia."
 }

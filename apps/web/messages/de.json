@@ -3279,5 +3279,7 @@
   "catalogue_result_read_denied": "Mit deinen aktuellen Berechtigungen kannst du dieses Ergebnis nicht lesen.",
   "catalogue_result_read_unavailable": "Das aktuelle Ergebnis konnte nicht geladen werden.",
   "catalogue_retry_loading_result": "Ergebnis erneut laden",
-  "authored_reload_current_text": "Aktuellen Text neu laden"
+  "authored_reload_current_text": "Aktuellen Text neu laden",
+  "statement_consent_identity_unavailable": "Identität nicht verfügbar",
+  "statement_consent_identity_help": "Diese Aussage lässt sich nicht vollständig zuordnen. Lade die aktuellen Identitäten vor dem Veröffentlichen oder Zurückziehen erneut. Die Berechtigung zum Zurückziehen bleibt unverändert."
 }

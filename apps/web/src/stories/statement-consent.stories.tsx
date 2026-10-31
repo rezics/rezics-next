@@ -70,6 +70,8 @@ async function confirm(canvasElement: HTMLElement, operation: 'disclose' | 'retr
 export const Private: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await open(canvasElement);
+    await expect(await canvas.findByText('River Ink')).toBeVisible();
+    await expect(await canvas.findByText('The person behind the name')).toBeVisible();
     await expect(await canvas.findByText(m.statement_consent_unsourced())).toBeVisible();
     await expect(await canvas.findByText(m.statement_consent_absent())).toBeVisible();
   },
@@ -78,6 +80,8 @@ export const Confirmation: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await open(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.statement_consent_share() }));
+    await expect(canvas.getAllByText('River Ink')).toHaveLength(2);
+    await expect(canvas.getAllByText('The person behind the name')).toHaveLength(2);
     await expect(await canvas.findByRole('button', { name: m.statement_consent_confirm() })).toBeDisabled();
     await userEvent.click(await canvas.findByRole('button', { name: m.candidate_cancel() }));
     await expect(canvas.queryByRole('checkbox')).not.toBeInTheDocument();
@@ -180,5 +184,17 @@ export const Pending: Story = {
     const canvas = await confirm(canvasElement);
     await expect(await canvas.findByText(m.statement_consent_shared())).toBeVisible();
     await expect(await canvas.findByText(m.statement_consent_absent())).toBeVisible();
+  },
+};
+
+export const IdentityWithheld: Story = {
+  args: { scenario: 'identity-withheld' },
+  play: async ({ canvasElement }) => {
+    const canvas = await open(canvasElement);
+    await expect(await canvas.findByText(m.statement_consent_identity_help())).toBeVisible();
+    await expect(canvas.queryByText('The person behind the name')).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: m.statement_consent_share() })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: m.statement_consent_retract() })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: m.candidate_reload() })).toBeEnabled();
   },
 };

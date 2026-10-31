@@ -8,6 +8,7 @@ import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import {
   consentAfterChange,
+  consentAssertion,
   type ConsentAddress,
   type ConsentCommand,
   type ConsentFailure,
@@ -102,6 +103,20 @@ export function StatementConsentPage({
   const candidate = current?.candidate;
   const attempt = candidate && current?.disclosure && !candidate.statement.references.length && !terminal;
   const uncertain = !!request.current;
+  const assertion = current ? consentAssertion(current, address, locale) : undefined;
+  const assertionView = (
+    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 break-words [overflow-wrap:anywhere]">
+      <span lang={assertion?.subject.lang ?? undefined}>{assertion?.subject.text || m.statement_consent_identity_unavailable({}, options)}</span>
+      <span aria-hidden="true">→</span>
+      <span lang={assertion?.relationship.lang ?? undefined}>{assertion?.relationship.text || m.subject_value_unlabelled({}, options)}</span>
+      <span aria-hidden="true">→</span>
+      <span lang={assertion?.target.lang ?? undefined}>{assertion?.target.text || m.statement_consent_identity_unavailable({}, options)}</span>
+    </p>
+  );
+  function openConfirmation(operation: ConsentCommand['operation']) {
+    if (busy || reload || uncertain || !attempt || !assertion?.identified) return;
+    setConfirmation(operation);
+  }
 
   async function load(cursor?: string) {
     if (running.current || request.current || terminal) return;
@@ -125,7 +140,7 @@ export function StatementConsentPage({
     }
   }
   async function change() {
-    if (running.current || !current || (!request.current && (!confirmation || !own || !attempt || reload))) return;
+    if (running.current || !current || (!request.current && (!confirmation || !own || !attempt || !assertion?.identified || reload))) return;
     request.current ??= {
       ...address,
       operation: confirmation!,
@@ -224,11 +239,8 @@ export function StatementConsentPage({
               <h2 className="text-lg font-semibold">
                 {pickText(current.field, locale).text || m.subject_value_unlabelled({}, options)}
               </h2>
-              <CandidateValue
-                snak={candidate.statement}
-                related={publicRead?.state === 'present' ? publicRead.related : {}}
-                locale={locale}
-              />
+              {assertionView}
+              {!assertion?.identified && <p>{m.statement_consent_identity_help({}, options)}</p>}
               <p>
                 {candidate.statement.references.length
                   ? m.statement_consent_sourced({}, options)
@@ -241,11 +253,11 @@ export function StatementConsentPage({
                   {!confirmation && !uncertain && (
                     <div className="flex flex-wrap gap-2">
                       {result?.kind !== 'disclosed' && (
-                        <Button disabled={busy || reload} onClick={() => setConfirmation('disclose')}>
+                        <Button disabled={busy || reload || !assertion?.identified} onClick={() => openConfirmation('disclose')}>
                           {m.statement_consent_share({}, options)}
                         </Button>
                       )}
-                      <Button variant="outline" disabled={busy || reload} onClick={() => setConfirmation('retract')}>
+                      <Button variant="outline" disabled={busy || reload || !assertion?.identified} onClick={() => openConfirmation('retract')}>
                         {m.statement_consent_retract({}, options)}
                       </Button>
                     </div>
@@ -262,6 +274,7 @@ export function StatementConsentPage({
                           ? m.statement_consent_share_help({}, options)
                           : m.statement_consent_retract_help({}, options)}
                       </p>
+                      {assertionView}
                       <Field orientation="horizontal">
                         <Checkbox
                           id="consent-own"
@@ -273,7 +286,7 @@ export function StatementConsentPage({
                       </Field>
                       {!uncertain && (
                         <div className="flex flex-wrap gap-2">
-                          <Button disabled={busy || !own} onClick={() => void change()}>
+                          <Button disabled={busy || !own || !assertion?.identified} onClick={() => void change()}>
                             {m.statement_consent_confirm({}, options)}
                           </Button>
                           <Button
@@ -290,7 +303,7 @@ export function StatementConsentPage({
                       )}
                     </div>
                   )}
-                  {reload && (
+                  {(reload || !assertion?.identified) && (
                     <Button variant="outline" disabled={busy} onClick={() => void load()}>
                       {m.candidate_reload({}, options)}
                     </Button>

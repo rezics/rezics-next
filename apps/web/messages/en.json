@@ -3631,5 +3631,7 @@
   "catalogue_result_read_denied": "Your current permissions prevent reading this result.",
   "catalogue_result_read_unavailable": "The current result could not be loaded.",
   "catalogue_retry_loading_result": "Retry loading result",
-  "authored_reload_current_text": "Reload current text"
+  "authored_reload_current_text": "Reload current text",
+  "statement_consent_identity_unavailable": "Identity unavailable",
+  "statement_consent_identity_help": "This assertion cannot be identified completely. Reload its current identities before sharing or retracting it. This does not change who may retract it."
 }

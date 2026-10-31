@@ -1,5 +1,6 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
+import { pickText } from '@rezics/composition';
 import { candidateContext, candidateHasPayload, type Candidate, type CandidateSlot } from '../../subject/candidates';
 
 export type ConsentAddress = { id: string; property: string; candidate: string; slot?: CandidateSlot };
@@ -33,6 +34,19 @@ export type ConsentTransport = {
   change: (command: ConsentCommand) => Promise<ConsentResult>;
   public: (session?: string, terminal?: boolean) => Promise<ConsentPublic>;
 };
+
+/** All three names belong to the admitted candidate and its exact pinned property. */
+export function consentAssertion(read: Extract<ConsentRead, { ok: true }>, address: ConsentAddress, locale: string) {
+  const candidate = read.candidate;
+  const identity = candidate?.consentIdentity;
+  const subject = pickText(identity?.subject?.labels ?? {}, locale);
+  const relationship = pickText(read.field, locale);
+  const target = pickText(identity?.target?.labels ?? {}, locale);
+  const identified = !!candidate && !read.terminal && identity?.subject?.id === address.id &&
+    candidate.statement.property.id === address.property && candidate.statement.value.type === 'value' &&
+    identity?.target?.id === candidate.statement.value.content && !!subject.text && !!relationship.text && !!target.text;
+  return { subject, relationship, target, identified };
+}
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function consentSelection(value: unknown): Omit<ConsentAddress, 'id'> {

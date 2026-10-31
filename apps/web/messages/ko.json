@@ -3279,5 +3279,7 @@
   "catalogue_result_read_denied": "현재 권한으로는 이 결과를 읽을 수 없습니다.",
   "catalogue_result_read_unavailable": "현재 결과를 불러오지 못했습니다.",
   "catalogue_retry_loading_result": "결과 불러오기 다시 시도",
-  "authored_reload_current_text": "현재 본문 다시 불러오기"
+  "authored_reload_current_text": "현재 본문 다시 불러오기",
+  "statement_consent_identity_unavailable": "대상을 확인할 수 없음",
+  "statement_consent_identity_help": "이 서술의 대상을 완전히 확인할 수 없습니다. 공개하거나 철회하기 전에 최신 대상 정보를 다시 불러오세요. 철회 권한은 바뀌지 않습니다."
 }

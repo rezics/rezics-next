@@ -3280,5 +3280,7 @@
   "catalogue_result_read_denied": "你目前的权限不允许读取此结果。",
   "catalogue_result_read_unavailable": "无法加载当前结果。",
   "catalogue_retry_loading_result": "重试加载结果",
-  "authored_reload_current_text": "重新加载当前文字"
+  "authored_reload_current_text": "重新加载当前文字",
+  "statement_consent_identity_unavailable": "无法获取身份",
+  "statement_consent_identity_help": "目前无法完整识别这项陈述。请重新加载最新身份，再决定公开或撤回；这不影响原有的撤回权限。"
 }
