@@ -193,13 +193,15 @@ export async function advanceNativeErasure(pool: Pool, progressId: string): Prom
     );
     const index = (cursor.rows[0]?.consumer_index ?? 0) % page.keys.length;
     const key = page.keys[index]!;
-    const intent = await withConnection(pool, async (tx) =>
-      (
-        await tx.query<{ revision: string }>(
-          `SELECT revision::text FROM access.${store} WHERE route=$1 AND account_id=$2`,
-          [...key],
-        )
-      ).rows[0],
+    const intent = await withConnection(
+      pool,
+      async (tx) =>
+        (
+          await tx.query<{ revision: string }>(
+            `SELECT revision::text FROM access.${store} WHERE route=$1 AND account_id=$2`,
+            [...key],
+          )
+        ).rows[0],
     );
     if (intent) {
       const input = { route: Number(key[0]), accountId: key[1]!, revision: intent.revision };

@@ -281,7 +281,10 @@ describe('Access native terminal cleanup', () => {
   async function snapshot(store: string, accountId: string) {
     // Independent exact locators, not discovery's output or participant completion.
     return (
-      await pool.query(`SELECT * FROM access.${store} WHERE route=$1 AND account_id=$2`, [routeOf(accountId), accountId])
+      await pool.query(`SELECT * FROM access.${store} WHERE route=$1 AND account_id=$2`, [
+        routeOf(accountId),
+        accountId,
+      ])
     ).rows;
   }
   async function ownerGroups(progressId: string) {
@@ -416,7 +419,8 @@ describe('Access native terminal cleanup', () => {
       await pool.query('DROP FUNCTION public.reject_native_checkpoint()');
     }
     expect(
-      (await pool.query('SELECT phase,page FROM access.erasure_native_progress WHERE progress_id=$1', [progressId])).rows,
+      (await pool.query('SELECT phase,page FROM access.erasure_native_progress WHERE progress_id=$1', [progressId]))
+        .rows,
     ).toEqual(before);
     expect(
       (
