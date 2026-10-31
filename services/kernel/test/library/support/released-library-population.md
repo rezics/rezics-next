@@ -33,30 +33,112 @@ try {
 }
 ```
 
-| Member          | Actual output / operation                                                                                                                                                                                                                                                                       |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`       | Literal 1.                                                                                                                                                                                                                                                                                      |
-| `base`          | The single actual `ReleasedDiscoveryFixture`, created with `{version:1}`; its release, personas, shared Book/Recipe groups and native transport are reused.                                                                                                                                     |
-| `calls`         | Read-only view of extension calls: persona, method, path, body, actual sent headers and original `HttpResponse`. Failed statuses remain intact. Base subject/editorial calls remain available through base transport, not rewritten here.                                                       |
-| `request`       | Exact base request signature and original response; extension calls are journaled without normalization.                                                                                                                                                                                        |
-| `profile(type)` | Actual HTTP-read bundled type reference and registry object, plus the expected accepting pin derived from that same release. This metadata is not proof that a backend persisted a pin.                                                                                                         |
-| `state()`       | Own state-only Book subject, selected active-role choice, expected accepting metadata, native entry handle and original response.                                                                                                                                                               |
-| `labels()`      | Own `vegetarian` label; shared B-long label-only assignment without an entry; Bob's distinct label/assignment on that same subject; independent Recipe with a private label and unchanged public unknown diet, including original public-before response.                                       |
-| `sessions()`    | Separate Book subjects supported only by active session and completed history. Each has create/record/optional complete responses, actual session handle and expected accepting metadata.                                                                                                       |
-| `holdings()`    | Separate Book supported only by a copy, actual copy handle, response and expected accepting metadata. No state or purchase.                                                                                                                                                                     |
-| `controls()`    | Empty subject, follow-only subject with native follow response, Bob-only state subject and curated-only subject. Empty subject is not an entry shell.                                                                                                                                           |
-| `multiple()`    | The same `state()` subject with independent native holding and completed session.                                                                                                                                                                                                               |
-| `recipes()`     | The base's shared released Recipe group; Alice create/record/complete on R-cooked and Bob on R-other-cooked. Neither creates state/copy.                                                                                                                                                        |
-| `sources()`     | Three curated source handles (public/unlisted/private), original create/member responses and ordered occurrence handles. Each contains every shared Book, edition, Recipe, personal support and empty/follow/Bob/curated-only control, plus a second B-long occurrence with a distinct note/ID. |
-| `prerequisites` | Explicit non-success boundaries: shell, ownerReadonly, publishedDynamicAndZone, historicalProfiles, cookedQuery. They are never successful populated groups.                                                                                                                                    |
-| `close()`       | Idempotently closes only the owned base resources. A failed family closes the base and rethrows native evidence; combined cleanup failure is preserved.                                                                                                                                         |
+| Member                           | Actual output / operation                                                                                                                                                                                                                                                                       |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                        | Literal 1.                                                                                                                                                                                                                                                                                      |
+| `base`                           | The single actual `ReleasedDiscoveryFixture`, created with `{version:1}`; its release, personas, shared Book/Recipe groups and native transport are reused.                                                                                                                                     |
+| `calls`                          | Read-only view of extension calls: persona, method, path, body, actual sent headers and original `HttpResponse`. Failed statuses remain intact. Base subject/editorial calls remain available through base transport, not rewritten here.                                                       |
+| `request`                        | Exact base request signature and original response; extension calls are journaled without normalization.                                                                                                                                                                                        |
+| `profile(type)`                  | Actual HTTP-read bundled type reference and registry object, plus the expected accepting pin derived from that same release. This metadata is not proof that a backend persisted a pin.                                                                                                         |
+| `state()`                        | Own state-only Book subject, selected active-role choice, expected accepting metadata, native entry handle and original response.                                                                                                                                                               |
+| `labels()`                       | Own `vegetarian` label; shared B-long label-only assignment without an entry; Bob's distinct label/assignment on that same subject; independent Recipe with a private label and unchanged public unknown diet, including original public-before response.                                       |
+| `sessions()`                     | Separate Book subjects supported only by active session and completed history. Each has create/record/optional complete responses, actual session handle and expected accepting metadata.                                                                                                       |
+| `holdings()`                     | Separate Book supported only by a copy, actual copy handle, response and expected accepting metadata. No state or purchase.                                                                                                                                                                     |
+| `controls()`                     | Empty subject, follow-only subject with native follow response, Bob-only state subject and curated-only subject. Empty subject is not an entry shell.                                                                                                                                           |
+| `multiple()`                     | The same `state()` subject with independent native holding and completed session.                                                                                                                                                                                                               |
+| `recipes()`                      | The base's shared released Recipe group; Alice create/record/complete on R-cooked and Bob on R-other-cooked. Neither creates state/copy.                                                                                                                                                        |
+| `sources()`                      | Three curated source handles (public/unlisted/private), original create/member responses and ordered occurrence handles. Each contains every shared Book, edition, Recipe, personal support and empty/follow/Bob/curated-only control, plus a second B-long occurrence with a distinct note/ID. |
+| `publishDynamicSelection(input)` | Creates one private saved dynamic Collection, then publishes exactly the explicit selected0..100 intent through native HTTP; returns `ReleasedDynamicSelection` only after current header and committed native receipt comparison.                                                              |
+| `prerequisites`                  | Explicit non-success boundaries: shell, ownerReadonly, publishedDynamicAndZone, historicalProfiles, cookedQuery. They are never successful populated groups.                                                                                                                                    |
+| `close()`                        | Idempotently closes only the owned base resources. A failed family closes the base and rethrows native evidence; combined cleanup failure is preserved.                                                                                                                                         |
 
-Families are lazy and memoized. Each acceptance owns a fresh instance and closes in `finally`, including assertion
+Families are lazy and memoized; `publishDynamicSelection` is an explicit operation and creates a Collection on each call.
+It does not initialize any family. Each acceptance owns a fresh instance and closes in `finally`, including assertion
 failure. This isolates missing labels, profiles and released measurements rather than introducing a skip mode or
 another product capability. Callers must discard an instance after a family fails. A partial family is never
-returned as successful. No SQL is issued by this extension; all positive routed IDs come from owner HTTP receipts.
+returned as successful. All positive routed IDs come from owner HTTP receipts. Selected publication alone uses
+`base.inspect` for bounded read-only native provenance comparison; it performs no SQL writes.
 The base's native Auth, Access, default kernel and owned projection infrastructure are retained. No worker readiness
 is inferred from link projection, and no replacement worker or permission map is installed.
+
+### Same-world selected publication callable
+
+Commerce, Semantic and Search import the method and declaration from
+`services/kernel/test/library/support/released-library-population.ts`. The exact additive signature is:
+
+```ts
+publishDynamicSelection(input: {
+  owner: 'alice' | 'bob';
+  title: string;
+  rule: CollectionRule; // services/kernel/src/library/collection-rules.ts
+  subjectIds: readonly string[];
+}): Promise<ReleasedDynamicSelection>;
+```
+
+Pass only actual API-created subject IDs from this population's world. `rule` is the product's actual
+`CollectionRule`, including its common filter document and `sort: 'id'`; the helper supplies no filter schema,
+owner facts, grants, authority, normalization or matching oracle. For example, in the existing population:
+
+```ts
+const own = await population.state();
+const selected = await population.publishDynamicSelection({
+  owner: 'alice',
+  title: 'Explicit selection',
+  rule: { filter: { owner: { presence: true } }, sort: 'id' },
+  subjectIds: [own.subject.id],
+});
+// Semantic passes selected.source through its own actual mount/page/TypeList APIs.
+// Search consumes selected.output.ref and selected.output.receipt as native locators only.
+```
+
+The operation sends `POST /v1/collections` with `membershipKind: 'dynamic'`, `visibility: 'private'`, and the supplied
+title/rule, then `POST /v1/collections/{actualID}:publishSelected` with the exact returned creation revision and
+explicit subject IDs. Both use ordinary `discoveryKey()` headers and the chosen base persona's real credentials.
+No IDs are added, removed or sorted by the helper. The product owns current admission, authority, closure and CAS,
+and can refuse even `[]`. A refusal, including `503`, propagates with its raw call/response retained in `calls`;
+the existing setup failure boundary closes the same population. There is no success fallback or extra cleanup owner.
+
+`ReleasedDynamicSelection` retains:
+
+- `created: {collection, response}`: the real private dynamic DTO and original creation response.
+- `collection`, `publication`, `response`: the exact native publication DTO, `{generation, state: 'complete', itemCount}`,
+  and original HTTP response, without reconstructing their fields.
+- `current: {collection, response}`: the owner GET DTO/response after publication. The creation revision is never
+  treated as this current header.
+- `source`: the actual composition `MemberSource` variant `{kind: 'collection', id: collection.id}`.
+- `nativeHeader`: the exact current native route, Collection/curator IDs, revision, source generation, state,
+  visibility and membership kind.
+- `output: {ref: CollectionOutputRef, receipt: CollectionOutputPublication}`: the selected committed generation's
+  native locator and complete original receipt, including actual transaction, position, xid, source/member fences
+  and member count. These fields grant no permissions.
+
+One `base.inspect` read-only snapshot reads the exact Collection header point and reuses
+`collection-source-output-head.sql`, the committed publication evidence query used by `readNativeCollectionMetadata`.
+That query checks the selected head, COMPLETE build, native publication receipt, same-transaction Core write basis,
+actual xid and current source/member/Collection fences. The helper compares its response generation/count and current
+GET revision against this evidence; a missing native receipt or mismatch fails the required positive operation.
+The reference's route/Collection ID come from the native header and its generation comes from that actual receipt.
+No UUID, generation, position, count or zero is synthesized.
+
+The immediate curated source already exists and is independent of this selected helper:
+
+```ts
+const group = await population.sources();
+const curated = group.sources.find((item) => item.source.visibility === 'public')!;
+const source = { kind: 'collection' as const, id: curated.source.id };
+// curated.response and curated.occurrences retain the original native create/member responses.
+const current = await population.request('alice', 'GET', `/v1/collections/${curated.source.id}`);
+```
+
+Use that GET for the current post-member header; `curated.source.revision` belongs to creation. Do not create another
+Source or wait for whole-query publication to compose this actual curated `MemberSource`.
+
+The remaining native owners must supply `requireCollectionRuleExecution` and `bindOwnerFilterRead`/candidate closure.
+This helper consumes their declared product HTTP/types now; source typing is not native success evidence. Explicit
+selected0..100 is not a whole-query snapshot, implicit publication of every match, or automatic dynamic lifecycle.
+`prerequisites.publishedDynamicAndZone` stays open for whole-query generation/lifecycle/C5 and actual native Zone
+mount/page/TypeList composition. Semantic owns that same-world composition and all original 20 cells remain intact.
+Catalogue-only Source proof cannot certify the mounted cells. This extension owns no Zone/Semantic fixture files.
 
 ## Native writes and reads
 
@@ -125,18 +207,18 @@ The adopted entry PUT requires state. No actual adopted shell creation API exist
 or fake shell handle; the empty-subject control is explicitly distinct. Historical renamed/retired bundled profiles
 still require two real immutable released objects from the base producer. Current bundled choices are independently
 required in acceptance; custom compiler/extension suites remain separate evidence. Public occurrence setup cannot
-supply a published dynamic generation, mount or Zone. Base `sources` is a prerequisite descriptor, not a callable
-source group, so v1 creates only its one curated group. Native mount/publication APIs and their workers remain
+supply a whole-query published dynamic generation, mount or Zone. Base `sources` is a prerequisite descriptor;
+the extension's existing `sources()` supplies its curated group, and `publishDynamicSelection` separately exposes
+the actual selected publication command. Native whole-query generation/lifecycle and Zone composition remain
 explicit prerequisites. Generic completed-session query adoption remains open; there is no `notCooked` request,
 policy or backend switch.
 
 ## Acceptance and handoff
 
-Run once after the final relevant edit:
+For this source delivery, run only the foreground local kernel typecheck after committing:
 
 ```sh
-bun run --cwd services/kernel check test/library/released-library-population.test.ts
-bun scripts/typecheck.ts
+env -u GOAL_TASK_ID -u KERNEL_CHECK_REMOTE REZICS_STACK_REMOTE=off bun run --cwd services/kernel typecheck
 ```
 
 The literal native test titles proposed for freezing are:
@@ -155,13 +237,18 @@ The literal native test titles proposed for freezing are:
 - `Released Recipe cooking history belongs to Alice on R-cooked and only Bob on R-other-cooked without state or copy`
 - `Bundled Book game Recipe and record choices are actual release bindings without a universal active state or synthetic pin`
 - `Released curated source setup preserves raw duplicate occurrences and public unlisted private controls`
+- `The existing released Library population exposes actual same-world selected dynamic publication responses and native output locators`
 
 The executable titles reside in `released-library-population.test.ts`. These are proposed acceptance bytes for
 manager review/freezing. Their required success paths remain red against missing native data/implementation;
 no missing-driver verifier, caught error, skip/todo, fake successful page or unsupported response counts as completion.
 The handoff must report the exact titles/counts, observed native failures, format status, file hashes and real commit.
 Only the explicitly amended native credential case/title is reconciled here; the other 13 cases and all frozen
-parent scenarios remain unchanged. This suite adds fixture discrimination and source setup rather
+parent scenarios remain unchanged. The additional selected-helper case asserts actual one-member and explicit-empty
+publication, retained responses/current headers/native locators, exclusion of an unselected matching subject and
+propagation of an actual unsupported-subject refusal through the same cleanup boundary. It is added without running
+native tests in this source delivery. Combined native acceptance remains pending integration.
+This suite adds fixture discrimination and source setup rather
 than duplicating curated CRUD, profile migration, privacy ordering or retained-history frameworks.
 
 Read-only reference surfaces inspected: the indexed BookWyrm `bookwyrm/models/shelf.py` owner-local uniqueness;
@@ -183,3 +270,13 @@ executed or modified. The API acceptance gaps report supplies evidence; adopted 
 - Growth check: downstream member/filter/API bindings use [three-scale checks](../../../../../docs/filtered-lists.md#three-scale-checks)
   and their counted-unit harness. This population acceptance claims neither composed numeric cost nor completion
   of the unbound owner suites or parent capabilities.
+
+### Construct and publish one explicit selection
+
+- Touches: the same owned native world and shared rule-create/selected-publication commands, one current HTTP GET,
+  and one read-only snapshot of the exact native header and indexed output-head/receipt evidence, for at most 100
+  explicitly selected native IDs.
+- Bound: existing product command/Source ledger and fixed indexed output evidence. No all-query scan/count, new
+  world, fixture SQL write, independent Source/token/capture engine, worker or parent runtime is introduced.
+- Growth check: preserve the original population/publication native outcome bounds for later controller proof.
+  This delivery adds no harness or growth campaign; typechecking cannot establish these native bounds.

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { HttpResponse, Subject } from '../../../../specs/semantic-driver.ts';
+import type { CollectionRule } from '../../src/library/collection-rules.ts';
 import { discoveryKey, type DiscoveryPersona } from '../support/released-discovery.ts';
 import {
   createReleasedLibraryPopulation,
@@ -7,6 +8,7 @@ import {
   type SessionHandle,
   type CopyHandle,
   type OccurrenceHandle,
+  type ReleasedDynamicSelection,
 } from './support/released-library-population.ts';
 
 function status(response: HttpResponse, expected: number) {
@@ -392,5 +394,100 @@ native(
         expect(read.body.members).toEqual(rows);
       }
     }
+  },
+);
+
+native(
+  'The existing released Library population exposes actual same-world selected dynamic publication responses and native output locators',
+  async (f) => {
+    const own = await f.state();
+    const unselected = await f.holdings();
+    const rule: CollectionRule = { filter: { owner: { presence: true } }, sort: 'id' };
+    const before = f.calls.length;
+    const selected: ReleasedDynamicSelection = await f.publishDynamicSelection({
+      owner: 'alice',
+      title: 'One explicit same-world selection',
+      rule,
+      subjectIds: [own.subject.id],
+    });
+    expect(selected.created.response.status).toBe(201);
+    expect(selected.created.collection).toBe(selected.created.response.body.collection);
+    expect(selected.created.collection).toMatchObject({ membershipKind: 'dynamic', visibility: 'private' });
+    expect(selected.collection).toBe(selected.response.body.collection);
+    expect(selected.publication).toBe(selected.response.body.publication);
+    expect(selected.publication).toEqual({
+      generation: selected.output.ref.generation,
+      state: 'complete',
+      itemCount: 1,
+    });
+    expect(selected.source).toEqual({ kind: 'collection', id: selected.collection.id });
+    expect(selected.current.response.status).toBe(200);
+    expect(selected.current.collection).toBe(selected.current.response.body.collection);
+    expect(selected.current.collection).toMatchObject({
+      id: selected.collection.id,
+      visibility: 'public',
+      revision: selected.collection.revision,
+    });
+    expect(selected.nativeHeader).toMatchObject({
+      collectionId: selected.collection.id,
+      curatorAccountId: f.base.personas.alice.accountId,
+      revision: selected.current.collection.revision,
+      sourceGeneration: selected.output.receipt.sourceGeneration,
+    });
+    expect(selected.output.receipt.generation).toBe(selected.publication.generation);
+    expect(selected.output.receipt.members).toBe('1');
+    expect(BigInt(selected.output.receipt.position)).toBeGreaterThan(0n);
+    expect(BigInt(selected.output.receipt.nativeXid)).toBeGreaterThan(0n);
+    const calls = f.calls.slice(before);
+    expect(calls.map(({ persona, method, path }) => ({ persona, method, path }))).toEqual([
+      { persona: 'alice', method: 'POST', path: '/v1/collections' },
+      { persona: 'alice', method: 'POST', path: `/v1/collections/${selected.collection.id}:publishSelected` },
+      { persona: 'alice', method: 'GET', path: `/v1/collections/${selected.collection.id}` },
+    ]);
+    expect(calls[0]!.body).toEqual({
+      membershipKind: 'dynamic',
+      visibility: 'private',
+      title: selected.collection.title,
+      rule,
+    });
+    expect(calls[0]!.response).toBe(selected.created.response);
+    expect(calls[1]!.body).toEqual({ revision: selected.created.collection.revision, subjectIds: [own.subject.id] });
+    expect(calls[1]!.response).toBe(selected.response);
+    for (const call of calls.slice(0, 2)) expect(call.headers).toHaveProperty('Idempotency-Key');
+    const { route, collectionId, generation } = selected.output.ref;
+    const rows = await f.base.inspect<{ subjectId: string }>(
+      `SELECT subject_id::text AS "subjectId" FROM library.collection_source_output_member
+       WHERE route=$1 AND collection_id=$2 AND generation=$3 ORDER BY subject_id LIMIT 100`,
+      [route, collectionId, generation],
+    );
+    expect(rows.rows).toEqual([{ subjectId: own.subject.id }]);
+    expect(rows.rows.some((row) => row.subjectId === unselected.subject.id)).toBe(false);
+
+    // Explicit empty intent uses Bob's actual credentials and the same world, not an empty-source shortcut.
+    const empty = await f.publishDynamicSelection({
+      owner: 'bob',
+      title: 'Explicit empty selection',
+      rule,
+      subjectIds: [],
+    });
+    expect(empty.publication).toEqual({ generation: empty.output.ref.generation, state: 'complete', itemCount: 0 });
+    expect(empty.output.receipt.members).toBe('0');
+    expect(empty.nativeHeader.curatorAccountId).toBe(f.base.personas.bob.accountId);
+    expect(f.prerequisites.publishedDynamicAndZone.state).toBe('prerequisite');
+
+    // A same-world API-created subject without Alice support must remain a native refusal. Setup cleanup
+    // closes this same population; the failed raw response remains inspectable in its call journal.
+    const outsider = await f.base.createSubject('schema:Book', 'Unselected unsupported native control');
+    await expect(
+      f.publishDynamicSelection({
+        owner: 'alice',
+        title: 'Unsupported selection must refuse',
+        rule,
+        subjectIds: [outsider.id],
+      }),
+    ).rejects.toThrow('expected HTTP 200, observed 404');
+    problem(f.calls.at(-1)!.response, 404, 'not_found');
+    expect(f.calls.at(-1)!.body).toMatchObject({ subjectIds: [outsider.id] });
+    await expect(f.request('alice', 'GET', `/v1/collections/${selected.collection.id}`)).rejects.toThrow('closed');
   },
 );
