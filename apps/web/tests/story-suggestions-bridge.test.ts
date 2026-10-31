@@ -81,7 +81,7 @@ test('the BFF keeps locale order, numeric bounds, explicit identity and each sto
     const response = await fetch(new Request(`${endpoint}?q=Prince&limit=10`, init));
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
-    const request = calls.at(-1)!;
+    const request = calls.filter((request) => new URL(request.url).pathname === '/v1/subjects:suggest').at(-1)!;
     const url = new URL(request.url);
     expect(url.searchParams.get('limit')).toBe('10');
     expect(url.searchParams.getAll('languages')).toEqual(['zh-Hant', 'zh', 'zh-Hans']);

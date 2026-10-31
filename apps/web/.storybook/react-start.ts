@@ -18,17 +18,15 @@ export function requestForStory(input?: RequestInfo | URL, init?: RequestInit): 
   if (!headers.has('x-forwarded-proto')) headers.set('x-forwarded-proto', url.protocol.slice(0, -1));
   if (input !== undefined && !headers.has('referer'))
     headers.set('referer', request.referrer && request.referrer !== 'about:client' ? request.referrer : page.href);
-  Object.defineProperty(request, 'headers', { value: headers });
   if (storyContext?.visitor === 'Signed In' && request.credentials !== 'omit' && !headers.has('cookie')) {
     // Browsers strip Cookie from Request headers, so expose the recorded session to route handlers locally.
-    const requestHeaders = new Headers(request.headers);
-    const getHeader = requestHeaders.get.bind(requestHeaders);
-    Object.defineProperty(requestHeaders, 'get', {
+    const getHeader = headers.get.bind(headers);
+    Object.defineProperty(headers, 'get', {
       value: (name: string) =>
         name.toLowerCase() === 'cookie' ? `__Host-rezics_session=${'a'.repeat(43)}` : getHeader(name),
     });
-    Object.defineProperty(request, 'headers', { value: requestHeaders });
   }
+  Object.defineProperty(request, 'headers', { value: headers });
   return request;
 }
 
