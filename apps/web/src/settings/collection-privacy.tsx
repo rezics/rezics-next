@@ -24,6 +24,8 @@ import {
   type CollectionPrivacyPageRead,
 } from './collection-privacy-recovery';
 
+const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
+
 const visibilityOptions = ['private', 'unlisted', 'public'] as const;
 const nativeIO: CollectionPrivacyIO = {
   save: (data) => saveCollectionVisibility({ data, headers: csrfHeaders() }),
@@ -87,7 +89,7 @@ export function CollectionRow({
   if (state.readRefusal) {
     return (
       <ListRow className="py-3">
-        <ListRowControl>
+        <ListRowControl className="min-w-0 max-w-full">
           <Alert variant="destructive" aria-live="polite">
             <AlertTitle>{state.attempt ? m.settings_privacy_uncertain_title() : m.settings_failed_title()}</AlertTitle>
             <AlertDescription className="space-y-3">
@@ -96,6 +98,7 @@ export function CollectionRow({
               {waiting ? <p role="status">{m.settings_privacy_row_retry_wait()}</p> : null}
               {busy ? <p role="status">{m.settings_privacy_reading()}</p> : null}
               <Button
+                className={preferenceActionClassName}
                 type="button"
                 variant="outline"
                 disabled={!canRead || busy || waiting || restarting}
@@ -127,10 +130,13 @@ export function CollectionRow({
           {m.settings_privacy_current({ visibility: label(current.visibility) })}
         </p>
       </div>
-      <ListRowControl>
-        <Field>
-          <FieldLabel htmlFor={id}>{m.settings_privacy_visibility_label()}</FieldLabel>
+      <ListRowControl className="min-w-0 max-w-full">
+        <Field className="min-w-0">
+          <FieldLabel className="max-w-full wrap-anywhere" htmlFor={id}>
+            {m.settings_privacy_visibility_label()}
+          </FieldLabel>
           <NativeSelect
+            className="w-full min-w-0 max-w-full [&>select]:h-auto [&>select]:min-h-11 [&>select]:min-w-11"
             id={id}
             value={desired}
             aria-describedby={`${id}-current`}
@@ -149,7 +155,7 @@ export function CollectionRow({
           </NativeSelect>
         </Field>
       </ListRowControl>
-      <ListRowControl className="sm:col-span-2">
+      <ListRowControl className="min-w-0 max-w-full sm:col-span-2">
         <div aria-live="polite" aria-atomic="true" className="space-y-3">
           {busy ? (
             <p role="status" className="text-sm text-muted-foreground">
@@ -184,9 +190,10 @@ export function CollectionRow({
                 </p>
                 {state.failure && phase !== 'refused' ? <p>{failureText(state.failure)}</p> : null}
                 {waiting ? <p role="status">{m.settings_privacy_row_retry_wait()}</p> : null}
-                <div className="flex flex-wrap gap-2">
+                <div className="flex min-w-0 flex-wrap gap-2">
                   {phase === 'uncertain' ? (
                     <Button
+                      className={preferenceActionClassName}
                       type="button"
                       variant="outline"
                       disabled={!csrfToken || !canSave || busy || waiting || restarting}
@@ -199,6 +206,7 @@ export function CollectionRow({
                   ) : null}
                   {phase === 'review' && desired !== current.visibility ? (
                     <Button
+                      className={preferenceActionClassName}
                       type="button"
                       disabled={!csrfToken || !canSave || busy || waiting || restarting}
                       onClick={() => {
@@ -209,6 +217,7 @@ export function CollectionRow({
                     </Button>
                   ) : null}
                   <Button
+                    className={preferenceActionClassName}
                     type="button"
                     variant="outline"
                     disabled={!canRead || busy || waiting || restarting}
@@ -254,7 +263,7 @@ export function CollectionPrivacyView({
   }, [pager]);
   return (
     <section id="privacy" aria-labelledby="settings-privacy-heading" className="scroll-mt-6">
-      <Card>
+      <Card className="min-w-0 max-w-full">
         <CardHeader>
           <CardTitle>
             <h2 id="settings-privacy-heading">{m.settings_privacy_heading()}</h2>
@@ -264,7 +273,7 @@ export function CollectionPrivacyView({
           </CardDescription>
           <CardDescription>{m.settings_automatic_save_help()}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="min-w-0 space-y-4">
           {state.loading ? <p role="status">{m.settings_privacy_loading()}</p> : null}
           {state.failure ? (
             <Alert variant="destructive">
@@ -282,6 +291,7 @@ export function CollectionPrivacyView({
                 {state.nativeFailure?.code === 'invalid_cursor' ? <p>{m.settings_privacy_list_restart()}</p> : null}
                 {waiting ? <p role="status">{m.settings_privacy_page_retry_wait()}</p> : null}
                 <Button
+                  className={preferenceActionClassName}
                   type="button"
                   variant="outline"
                   disabled={state.loading || waiting || (state.restartBlocked && pager.retryReplacesRows())}
@@ -305,6 +315,7 @@ export function CollectionPrivacyView({
           {state.loaded || state.failure ? (
             <div className="space-y-2">
               <Button
+                className={preferenceActionClassName}
                 type="button"
                 variant="outline"
                 disabled={state.loading || waiting || state.restartBlocked}
@@ -322,6 +333,7 @@ export function CollectionPrivacyView({
           ) : null}
           {state.next !== null && !state.failure ? (
             <Button
+              className={preferenceActionClassName}
               type="button"
               variant="outline"
               disabled={state.loading || waiting}

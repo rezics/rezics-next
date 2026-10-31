@@ -33,6 +33,8 @@ import {
   type ReadingValues,
 } from './reading-preferences';
 
+const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
+
 const levels: { value: SpoilerLevel; title: () => string; text: () => string }[] = [
   { value: 0, title: () => m.settings_spoiler_0_title(), text: () => m.settings_spoiler_0_text() },
   { value: 1, title: () => m.settings_spoiler_1_title(), text: () => m.settings_spoiler_1_text() },
@@ -239,14 +241,14 @@ export function ReadingCard({
                   ? m.settings_failed_title()
                   : m.settings_conflict_title();
   return (
-    <Card>
+    <Card className="min-w-0 max-w-full">
       <CardHeader>
         <CardTitle>
           <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_reading_text()}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex min-w-0 flex-col gap-4">
         <FieldGroup>
           <FieldSet>
             <FieldLegend id={`${ids}-spoilers`}>{m.settings_spoiler_legend()}</FieldLegend>
@@ -337,9 +339,10 @@ export function ReadingCard({
                   images: state.known.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
                 })}
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex min-w-0 flex-wrap gap-2">
                 {uncertain ? (
                   <Button
+                    className={preferenceActionClassName}
                     type="button"
                     variant="outline"
                     disabled={waiting || busy || !csrfToken}
@@ -348,17 +351,30 @@ export function ReadingCard({
                     {m.settings_reading_retry_original()}
                   </Button>
                 ) : null}
-                <Button type="button" variant="outline" disabled={waiting || busy} onClick={() => void reload()}>
+                <Button
+                  className={preferenceActionClassName}
+                  type="button"
+                  variant="outline"
+                  disabled={waiting || busy}
+                  onClick={() => void reload()}
+                >
                   {m.settings_reload()}
                 </Button>
                 {!state.pending && (state.phase === 'conflict' || state.phase === 'failed') ? (
-                  <Button type="button" variant="outline" disabled={waiting || busy} onClick={() => void reload(true)}>
+                  <Button
+                    className={preferenceActionClassName}
+                    type="button"
+                    variant="outline"
+                    disabled={waiting || busy}
+                    onClick={() => void reload(true)}
+                  >
                     {m.settings_reading_review_changes()}
                   </Button>
                 ) : null}
                 {state.phase === 'review' ? (
                   <>
                     <Button
+                      className={preferenceActionClassName}
                       type="button"
                       disabled={!csrfToken || sameReading(state.known, state.draft)}
                       onClick={() => void submit()}
@@ -366,6 +382,7 @@ export function ReadingCard({
                       {m.settings_reading_save_draft()}
                     </Button>
                     <Button
+                      className={preferenceActionClassName}
                       type="button"
                       variant="outline"
                       onClick={() =>

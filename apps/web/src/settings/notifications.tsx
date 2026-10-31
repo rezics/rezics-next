@@ -16,6 +16,8 @@ import type { NotificationPreferences } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
 import { useSettingsNavigationCurrent, useSettingsNavigationDraft } from './reading-navigation';
 
+const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
+
 export function notificationName(kind: string): string {
   if (kind === 'reply') return m.settings_notification_reply();
   if (kind === 'mention') return m.settings_notification_mention();
@@ -77,7 +79,7 @@ export function NotificationsCard({
   const waitDescription = waiting ? `${ids}-retry-wait` : undefined;
 
   return (
-    <Card>
+    <Card className="min-w-0 max-w-full">
       <CardHeader>
         <CardTitle>
           <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
@@ -87,7 +89,7 @@ export function NotificationsCard({
           {localEdit ? m.settings_notifications_draft_help() : m.settings_automatic_save_help()}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="min-w-0 space-y-4">
         <div role="group" aria-label={m.settings_notifications_heading()} className="space-y-4">
           <FieldGroup>
             <div className="flex flex-col gap-3">
@@ -141,7 +143,14 @@ export function NotificationsCard({
                         )}
                       </Field>
                     </FieldLabel>
-                    <Button type="submit" size="sm" variant="outline" hidden={hydrated} disabled={!csrfToken}>
+                    <Button
+                      className={preferenceActionClassName}
+                      type="submit"
+                      size="sm"
+                      variant="outline"
+                      hidden={hydrated}
+                      disabled={!csrfToken}
+                    >
                       {m.settings_notification_save()}
                     </Button>
                     <input type="hidden" name="action" value="save" />
@@ -162,6 +171,7 @@ export function NotificationsCard({
                 <input type="hidden" name="expectedVersion" value={version} />
                 <input type="hidden" name="action" value="restore" />
                 <Button
+                  className={preferenceActionClassName}
                   type="submit"
                   variant="outline"
                   disabled={waiting || disabled || !!state.pending || state.phase === 'conflict' || readFailed}
@@ -207,6 +217,7 @@ export function NotificationsCard({
                 </p>
                 {!state.pending ? (
                   <Button
+                    className={preferenceActionClassName}
                     type="button"
                     variant="outline"
                     disabled={waiting || busy || !hydrated}
@@ -232,6 +243,7 @@ export function NotificationsCard({
                 {!readFailed && state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
                 {!readFailed && state.reason === 'unavailable' ? <p>{m.settings_unavailable_text()}</p> : null}
                 <Button
+                  className={preferenceActionClassName}
                   type="button"
                   variant="outline"
                   disabled={waiting || disabled}
@@ -273,6 +285,7 @@ export function NotificationsCard({
                           : m.settings_failed_text()}
                 </p>
                 <Button
+                  className={preferenceActionClassName}
                   type="button"
                   variant="outline"
                   disabled={waiting || busy}
@@ -297,8 +310,9 @@ export function NotificationsCard({
                     </li>
                   ))}
                 </ul>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex min-w-0 flex-wrap gap-2">
                   <Button
+                    className={preferenceActionClassName}
                     type="button"
                     disabled={waiting || disabled}
                     aria-describedby={waitDescription}
@@ -306,7 +320,12 @@ export function NotificationsCard({
                   >
                     {m.settings_notifications_save_draft()}
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => editor.useCurrent()}>
+                  <Button
+                    className={preferenceActionClassName}
+                    type="button"
+                    variant="outline"
+                    onClick={() => editor.useCurrent()}
+                  >
                     {m.settings_notifications_use_current()}
                   </Button>
                 </div>
@@ -315,6 +334,7 @@ export function NotificationsCard({
           ) : null}
           {!state.pending && !needsReload && !readFailed ? (
             <Button
+              className={preferenceActionClassName}
               type="button"
               variant="ghost"
               disabled={waiting || !hydrated || busy}
