@@ -48,9 +48,7 @@ export class ProfileAvatarUpload {
   };
   private update(state: UploadState) {
     const failure = state.failure ?? this.rateFailure;
-    this.state = this.waiting()
-      ? { ...state, retryAt: this.retryAt, ...(failure ? { failure } : {}) }
-      : state;
+    this.state = this.waiting() ? { ...state, retryAt: this.retryAt, ...(failure ? { failure } : {}) } : state;
     this.listeners.forEach((listener) => listener());
   }
   private waiting() {
