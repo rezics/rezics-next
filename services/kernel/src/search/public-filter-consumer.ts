@@ -1,3 +1,9 @@
+import repairSave from './public-filter-custody-repair-save.sql';
+import repairCurrent from './public-filter-custody-repair-current.sql';
+import repairEffectSave from './public-filter-custody-repair-effect-save.sql';
+import repairEffectSql from './public-filter-custody-repair-effect.sql';
+import repairPageSave from './public-filter-custody-repair-page-save.sql';
+import repairPageSql from './public-filter-custody-repair-page.sql';
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, parseFilter, walkFilter } from '@rezics/filter';
@@ -511,8 +517,11 @@ import {
   encodePublicFilterNativeState as encodeNative,
   decodePublicFilterNativeState as decodeNative,
   readPublicFilterRepairSettlement,
+  configurePublicFilterRepairSource,
+  withPublicFilterRepairAllowance,
+  verifyPublicFilterRepairSourcePage,
 } from './public-filter-custody.ts';
-import type { RetainedRepairSettlement, RetainedRepairPage } from './public-filter-custody-contract.ts';
+import type { RetainedRepairSettlement, RetainedRepairPage, RetainedSourceRepair } from './public-filter-custody-contract.ts';
 import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
@@ -595,9 +604,9 @@ type ConsumerWork = {
   after: readonly (string | number | null)[] | undefined;
   execution: string | null;
   frontier: string | null;
-  repair: Omit<PublicSourceRepair, 'receipt'> | null;
+  repair: RetainedSourceRepair | null;
   repairPage: {
-    repairs: readonly Omit<PublicSourceRepair, 'receipt'>[];
+    repairs: readonly RetainedSourceRepair[];
     next: number;
     frontier: string | null;
     complete: boolean;
@@ -628,6 +637,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   if (!/^[a-z0-9][a-z0-9-]{0,95}$/.test(target)) throw new TypeError('Consumer requires a physical target');
   const custody = createPublicFilterCustody(config.pool);
   const binding = config.binding;
+  configurePublicFilterRepairSource(config.pool, binding);
   const pending = new Set<Promise<unknown>>();
   const owned = new Map<string, PublicFilterQueriedObservation>();
   let closed = false;
@@ -1476,19 +1486,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const next = encodeState(work);
     if (Buffer.byteLength(next) > 1048576) throw new ConsumerFailure('source_pending');
     const q = work.queried!;
-    const saved = await m.sql(
-      `WITH locked AS (
-      SELECT observation FROM search.public_filter_observation
-      WHERE (partition_no,observation)=($1,$2) AND state='open' AND consumer_work=$3 FOR UPDATE
-    ), advanced AS (
-      UPDATE search.public_filter_execution SET repair_settlement=$6
-      WHERE (partition_no,observation,id)=($1,$2,$5) AND repair_settlement IS NOT DISTINCT FROM $7
-        AND EXISTS (SELECT 1 FROM locked) RETURNING id
-    ) UPDATE search.public_filter_observation SET consumer_work=$4
-      WHERE (partition_no,observation)=($1,$2) AND EXISTS (SELECT 1 FROM advanced) RETURNING observation`,
-      [work.registration.partition, q.snapshot.observation, old, next, work.execution, encodeNative(state), previous],
-    );
-    if (saved.rowCount !== 1) throw new ConsumerFailure('source_pending');
+    const saved = await repairSave.run(m.pool, {
+      partition_no: work.registration.partition, observation: q.snapshot.observation,
+      old_work: old, next_work: next, execution: work.execution!, settlement: encodeNative(state), previous,
+    });
+    if (!saved) throw new ConsumerFailure('source_pending');
     m.cost.frontierWrites++;
     return next;
   }
@@ -1543,12 +1545,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       const retained = m.take(await custody.read({ queried: q, execution: work.execution }, context));
       if (retained.status !== 'found' || !retained.execution) return m.unavailable('observation_lost');
-      const current = (
-        await m.sql<{ repair_settlement: string | null }>(
-          'SELECT repair_settlement FROM search.public_filter_execution WHERE (partition_no,observation,id)=($1,$2,$3)',
-          [work.registration.partition, q.snapshot.observation, work.execution],
-        )
-      ).rows[0];
+      const current = await repairCurrent.run(m.pool, {
+        partition_no: work.registration.partition, observation: q.snapshot.observation, execution: work.execution,
+      });
       if (!current) return m.unavailable('observation_lost');
       let previous = current.repair_settlement;
       let state: RetainedRepairSettlement = previous
@@ -1574,13 +1573,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         previous = encodeNative(state);
       }
       if (!state.closed) {
-        const keys = [work.registration.partition, q.snapshot.observation, work.execution, state.pages];
-        let page = (
-          await m.sql<{ intent: string }>(
-            'SELECT intent FROM search.public_filter_repair_page WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)',
-            keys,
-          )
-        ).rows[0];
+        const keys = { partition_no: work.registration.partition, observation: q.snapshot.observation,
+          execution: work.execution, ordinal: state.pages };
+        let page = await repairPageSql.run(m.pool, keys);
+        let verifiedIntent: RetainedRepairPage | undefined;
+        const charge = (cost?: PublicFilterCost) => { if (cost) m.add(cost); m.check(); };
         if (!page) {
           const sourcePage = m.take(
             await binding.repairPage(
@@ -1596,50 +1593,26 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           );
           if (sourcePage.status !== 'progress' && sourcePage.status !== 'complete')
             return m.unavailable('source_pending');
-          // The final callback has no frontier. Locate its actual durable owner step by the same
-          // bootstrap/execution/predecessor, rather than manufacturing a receipt from its Boolean.
-          const sourceStep = (
-            await m.sql<{ step: string; complete: boolean }>(
-              `SELECT step::text,complete
-            FROM semantic.public_filter_repair_step WHERE partition_no=0 AND bootstrap=$1 AND execution=$2
-              AND predecessor IS NOT DISTINCT FROM $3::uuid`,
-              [state.bootstrap.slice(2), work.execution, state.frontier],
-            )
-          ).rows[0];
-          if (
-            !sourceStep ||
-            sourceStep.complete !== (sourcePage.status === 'complete') ||
-            (!sourceStep.complete && sourcePage.frontier !== sourceStep.step)
-          )
-            return m.unavailable('source_pending');
-          const intent: RetainedRepairPage = {
-            sourceStep: sourceStep.step,
-            predecessor: state.frontier,
-            frontier: sourcePage.frontier,
-            complete: sourcePage.status === 'complete',
-            repairs: sourcePage.repairs.map(({ kind, locator, source, projection }) => ({
-              kind,
-              locator,
-              source,
-              projection,
-            })),
-          };
+          // An actual owner successor resolves both nonempty items and the empty final step.
+          // Source callbacks/brands/frontier equality do not certify its original retained window.
+          const intent = await verifyPublicFilterRepairSourcePage(binding, {
+            bootstrap: state.bootstrap, queried: q, execution: work.execution, predecessor: state.frontier,
+          }, { repairs: sourcePage.repairs, frontier: sourcePage.frontier, complete: sourcePage.status === 'complete' }, context, charge);
           const body = encodeNative(intent);
-          await m.sql(
-            `INSERT INTO search.public_filter_repair_page
-            (partition_no,observation,execution,ordinal,has_repairs,intent) VALUES ($1,$2,$3,$4,$5,$6)
-            ON CONFLICT DO NOTHING`,
-            [...keys, intent.repairs.length > 0, body],
-          );
-          page = (
-            await m.sql<{ intent: string }>(
-              'SELECT intent FROM search.public_filter_repair_page WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)',
-              keys,
-            )
-          ).rows[0];
+          await repairPageSave.run(m.pool, { ...keys, has_repairs: intent.repairs.length > 0, intent: body });
+          page = await repairPageSql.run(m.pool, keys);
           if (!page || page.intent !== body) return m.unavailable('source_pending');
+          verifiedIntent = intent;
         }
-        const intent = decodeNative<RetainedRepairPage>(page.intent);
+        const intent = verifiedIntent ?? await verifyPublicFilterRepairSourcePage(binding, {
+          bootstrap: state.bootstrap, queried: q, execution: work.execution, predecessor: state.frontier,
+        }, decodeNative<RetainedRepairPage>(page.intent), context, charge);
+        // Foreign owner calls have ended. Reopen and compare immutable local custody before dispatch.
+        const finalCustody = m.take(await custody.read({ queried: q, execution: work.execution }, context));
+        if (finalCustody.status !== 'found' || !isDeepStrictEqual(finalCustody.definition, retained.definition) ||
+            !isDeepStrictEqual(finalCustody.covered, retained.covered) || !isDeepStrictEqual(finalCustody.execution, retained.execution))
+          return m.unavailable('observation_lost');
+        await physical(q, m, context);
         if (intent.predecessor !== state.frontier || (intent.complete ? intent.frontier !== null : !intent.frontier))
           return m.unavailable('source_pending');
         if (!work.repairPage) {
@@ -1661,7 +1634,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       // The canonical reader is the native guard. FAA's separate settle joins its own Source verifier.
       const nativeSettlement = m.take(
-        await readPublicFilterRepairSettlement(config.pool, { queried: q, execution: work.execution }, context),
+        await withPublicFilterRepairAllowance(m.cost, () =>
+          readPublicFilterRepairSettlement(config.pool, { queried: q, execution: work.execution! }, context)),
       );
       if (nativeSettlement.status !== 'settled') return m.unavailable('source_pending');
       const settled = m.take(
@@ -1683,7 +1657,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
   }
   async function applyRepair(
-    repair: Omit<PublicSourceRepair, 'receipt'>,
+    repair: RetainedSourceRepair,
     work: ConsumerWork,
     page: number,
     encoded: string,
@@ -1749,19 +1723,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       throw new ConsumerFailure('source_pending');
     await physical(q, m, context);
     const body = encodeNative(receipt);
-    const keys = [work.registration.partition, q.snapshot.observation, work.execution, page, work.repairPage!.next];
-    await m.sql(
-      `INSERT INTO search.public_filter_repair_effect
-      (partition_no,observation,execution,page,item,receipt) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
-      [...keys, body],
-    );
-    const retained = (
-      await m.sql<{ receipt: string }>(
-        `SELECT receipt FROM search.public_filter_repair_effect
-      WHERE (partition_no,observation,execution,page,item)=($1,$2,$3,$4,$5)`,
-        keys,
-      )
-    ).rows[0];
+    const keys = { partition_no: work.registration.partition, observation: q.snapshot.observation,
+      execution: work.execution!, page, item: work.repairPage!.next };
+    await repairEffectSave.run(m.pool, { ...keys, receipt: body });
+    const retained = await repairEffectSql.run(m.pool, keys);
     if (!retained || retained.receipt !== body) throw new ConsumerFailure('source_pending');
     work.repair = null;
     work.dispatch = null;

@@ -1,3 +1,15 @@
+import repairTransaction from './public-filter-custody-repair-transaction.sql';
+import repairFinish from './public-filter-custody-repair-finish.sql';
+import repairWriter from './public-filter-custody-repair-writer.sql';
+import repairGate from './public-filter-custody-repair-gate.sql';
+import repairOwner from './public-filter-custody-repair-owner.sql';
+import repairTarget from './public-filter-custody-repair-target.sql';
+import repairRegistration from './public-filter-custody-repair-registration.sql';
+import repairEffect from './public-filter-custody-repair-effect.sql';
+import repairPage from './public-filter-custody-repair-page.sql';
+import repairPages from './public-filter-custody-repair-pages.sql';
+import repairState from './public-filter-custody-repair-state.sql';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Pool, PoolClient, QueryResult } from 'pg';
@@ -20,6 +32,8 @@ import { compileFilter } from './filter.ts';
 import { compileText } from './text.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { createOpenSearch, OpenSearchError, type OpenSearch } from './opensearch.ts';
+import type { PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
+import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumer, PublicFilterDependencyKey } from '../semantic/public-filter-source-contract.ts';
 import type {
   PublicCanonicalCaptureInput,
@@ -31,6 +45,10 @@ import type {
   NativePublicFilterRepairSettlement,
   RetainedRepairSettlement,
   RetainedRepairPage,
+  RetainedSourceRepair,
+  NativeSourceRepairLocator,
+  NativeSourceRepairStepRead,
+  PublicFilterRepairSourceBinding,
   CustodyCost,
   CustodyDefinition,
   CustodyExecution,
@@ -44,8 +62,6 @@ import type {
 } from './public-filter-custody-contract.ts';
 
 const readSql = readFileSync(new URL('./public-filter-custody-read.sql', import.meta.url), 'utf8');
-const repairStateSql = readFileSync(new URL('./public-filter-custody-repair-state.sql', import.meta.url), 'utf8');
-const repairPagesSql = readFileSync(new URL('./public-filter-custody-repair-pages.sql', import.meta.url), 'utf8');
 // Process-local hints span factories (and wrapped pools). No hint can establish durable drain.
 const drainWaiters = new Map<string, Set<() => void>>();
 function drainSignal(observation: string) {
@@ -359,6 +375,7 @@ async function read(
   request: CustodyRead,
   context: PublicFilterConsumerContext,
   meter: Meter,
+  verifiedDefinition?: CustodyRetainedDefinition,
 ): Promise<CustodyFound> {
   check(context);
   queried(request.queried);
@@ -381,7 +398,9 @@ async function read(
   requireValue(definition.digest === digest(definition.data));
   if (isReleaseReference(definition.data.meaning.release)) {
     requireValue(definition.data.meaning.release.digest === definition.data.meaning.digest);
-    await requireReleaseAuthority(pool, meter, definition.data.meaning.digest);
+    if (verifiedDefinition !== undefined && !isDeepStrictEqual(verifiedDefinition, definition.data))
+      throw new Failure('binding_mismatch');
+    if (verifiedDefinition === undefined) await requireReleaseAuthority(pool, meter, definition.data.meaning.digest);
     check(context);
   }
   return {
@@ -406,44 +425,116 @@ export async function readPublicFilterConsumerCustody(
   }
 }
 
-/**
- * Native command-boundary guard over the durable execution and its actual engine effects.
- * Source must separately verify its own retained window/receipts; this never advances a Source ACK.
+// Constructor routing only, analogous to publicFilterSourceOrigin. No receipt, positive result,
+// settlement or retained state is cached here. Recovery must install the real owner binding again.
+const repairSources = new WeakMap<Pool, PublicFilterRepairSourceBinding>();
+const repairAllowance = new AsyncLocalStorage<CustodyCost>();
+export function configurePublicFilterRepairSource(pool: Pool, binding: PublicFilterRepairSourceBinding): void {
+  repairSources.set(pool, binding);
+}
+/** Keep all reader phases within the calling consumer's already-spent allowance. */
+export function withPublicFilterRepairAllowance<T>(spent: CustodyCost, work: () => Promise<T>): Promise<T> {
+  return repairAllowance.run({ ...spent }, work);
+}
+
+/** Data fields only. A missing legacy locator cannot be upgraded from its in-process brand. */
+function sourceReceipt(value: unknown): NativeSourceRepairLocator {
+  if (!value || typeof value !== 'object') throw new Failure('owner_unavailable');
+  const fields = ['bootstrap', 'execution', 'step', 'locatorDigest'] as const;
+  for (const field of fields)
+    if (typeof Reflect.get(value, field) !== 'string' || !Reflect.get(value, field))
+      throw new Failure('owner_unavailable');
+  return Object.fromEntries(fields.map((field) => [field, Reflect.get(value, field)])) as NativeSourceRepairLocator;
+}
+function sourceRepair(repair: PublicSourceRepair | RetainedSourceRepair): RetainedSourceRepair {
+  return {
+    kind: repair.kind,
+    locator: repair.locator,
+    source: repair.source,
+    projection: repair.projection,
+    receipt: sourceReceipt(repair.receipt),
+  };
+}
+
+/** Owner calls only: the caller must have released every local/native checkout first.
+ * `charge` admits each call before I/O and charges all returned owner work before proceeding.
+ * A verified empty final step is real owner closure; an empty repairs array alone proves nothing.
  */
+export async function verifyPublicFilterRepairSourcePage(
+  binding: PublicFilterRepairSourceBinding,
+  request: NativeSourceRepairStepRead,
+  expected: Readonly<{ repairs: readonly (PublicSourceRepair | RetainedSourceRepair)[]; frontier: string | null; complete: boolean; sourceStep?: string }>,
+  context: PublicFilterConsumerContext,
+  charge: (cost?: PublicFilterCost) => void,
+): Promise<RetainedRepairPage> {
+  if (typeof binding.readRepairStep !== 'function' || typeof binding.readRepairReceipt !== 'function')
+    throw new Failure('owner_unavailable');
+  charge();
+  const step = await binding.readRepairStep(request, context);
+  charge(step.cost);
+  if (step.status !== 'verified') throw new Failure(step.reason);
+  if (
+    !step.step || step.predecessor !== request.predecessor || step.complete !== expected.complete ||
+    step.frontier !== expected.frontier || (step.complete ? step.frontier !== null : step.frontier !== step.step) ||
+    (expected.sourceStep !== undefined && step.step !== expected.sourceStep) ||
+    !Array.isArray(step.receipts) || step.receipts.length > 256 || expected.repairs.length > 256
+  ) throw new Failure('binding_mismatch');
+  const repairs = expected.repairs.map(sourceRepair);
+  const receipts = step.receipts.map(sourceReceipt);
+  if (!isDeepStrictEqual(receipts, repairs.map((repair) => repair.receipt))) throw new Failure('binding_mismatch');
+  for (const [item, receipt] of receipts.entries()) {
+    if (receipt.bootstrap !== request.bootstrap || receipt.execution !== request.execution || receipt.step !== step.step)
+      throw new Failure('binding_mismatch');
+    charge();
+    const verified = await binding.readRepairReceipt({ receipt, queried: request.queried, execution: request.execution }, context);
+    charge(verified.cost);
+    if (verified.status !== 'verified') throw new Failure(verified.reason);
+    if (!isDeepStrictEqual(sourceRepair(verified.repair), repairs[item])) throw new Failure('binding_mismatch');
+  }
+  return { sourceStep: step.step, predecessor: step.predecessor, frontier: step.frontier, complete: step.complete, repairs };
+}
+
+/** The sole native guard: owner verification runs between released and freshly reopened local homes. */
 export async function readPublicFilterRepairSettlement(
   pool: Pool,
   request: Readonly<{ queried: PublicFilterQueriedObservation; execution: string }>,
   context: PublicFilterConsumerContext,
 ): Promise<PublicFilterRepairSettlementResult> {
   const meter: Meter = cost();
+  const spent = repairAllowance.getStore() ?? cost();
   const input = structuredClone(request);
   try {
     check(context);
     queried(input.queried);
     text(input.execution);
+    const binding = repairSources.get(pool);
     const url = process.env.OPENSEARCH_URL;
-    if (!url) throw new Failure('owner_unavailable');
+    if (!url || !binding) throw new Failure('owner_unavailable');
     const transport = createOpenSearch(url);
     const admit = () => {
       check(context);
-      // The existing consumer allowance also covers settlement; no free verification phase.
       if (
-        meter.inputKeys > 1000 ||
-        meter.bytes > 4 * 1024 * 1024 ||
-        meter.rows > 64 + 16 * Math.max(meter.candidates, 1) ||
-        meter.accessPoints + meter.dependencyPoints > 16 + 8 * Math.max(meter.candidates, 1)
-      )
-        throw new Failure('owner_unavailable');
+        spent.inputKeys + meter.inputKeys > 1000 ||
+        spent.bytes + meter.bytes > 4 * 1024 * 1024 ||
+        spent.rows + meter.rows > 64 + 16 * Math.max(spent.candidates + meter.candidates, 1) ||
+        spent.accessPoints + meter.accessPoints + spent.dependencyPoints + meter.dependencyPoints >
+          16 + 8 * Math.max(spent.candidates + meter.candidates, 1)
+      ) throw new Failure('owner_unavailable');
+    };
+    const charge = (next?: PublicFilterCost) => {
+      if (next) for (const key of Object.keys(meter) as (keyof CustodyCost)[]) {
+        const value = Reflect.get(next, key) ?? 0;
+        if (!Number.isSafeInteger(value) || value < 0) throw new Failure('owner_unavailable');
+        meter[key] += value;
+      }
+      admit();
     };
     const search: OpenSearch = {
       async request(method, path, body, options) {
         admit();
         meter.engineRequests++;
         meter.bytes += Buffer.byteLength(path) + Buffer.byteLength(encode(body));
-        const result = await transport.request(method, path, body, {
-          ...options,
-          timeoutMs: Math.max(1, context.deadline - Date.now()),
-        });
+        const result = await transport.request(method, path, body, { ...options, timeoutMs: Math.max(1, context.deadline - Date.now()) });
         meter.bytes += Buffer.byteLength(encode(result.body));
         if (path.endsWith('/_search')) {
           meter.engineSearches++;
@@ -453,354 +544,32 @@ export async function readPublicFilterRepairSettlement(
         admit();
         return result as never;
       },
-      bulk() {
-        throw new TypeError('Settlement reader never dispatches writes');
-      },
+      bulk() { throw new TypeError('Settlement reader never dispatches writes'); },
     };
-    return await withConnection(pool, async (client) => {
-      const db = {
-        query: async (text: string, parameters: unknown[]) => {
-          admit();
-          const request: import('pg').QueryConfig & { query_timeout: number } = {
-            text,
-            values: parameters,
-            query_timeout: Math.max(1, context.deadline - Date.now()),
-          };
-          return client.query(request);
-        },
-      } as Pool;
-      const query = async (statement: string, values: unknown[] = []) => {
-        const result = await sql(db, meter, statement, values);
+    // Resolve wide immutable release authority without holding Search's retained checkout.
+    const initial = await read(pool, input, context, meter);
+    admit();
+    const q = input.queried;
+    const home = partition(q.snapshot.observation);
+    const keys = { partition_no: home, observation: q.snapshot.observation, execution: input.execution };
+    const local = async <T>(work: (db: Pool, raw: Pool) => Promise<T>): Promise<T> => withConnection(pool, async (client) => {
+      const raw = { query: (statement: string, values: unknown[] = []) => {
+        admit();
+        return client.query({ text: statement, values, query_timeout: Math.max(1, context.deadline - Date.now()) });
+      } } as Pool;
+      const db = { query: async (statement: string, values: unknown[] = []) => {
+        admit();
+        const result = await sql(raw, meter, statement, values);
         admit();
         return result;
-      };
-      await query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      } } as Pool;
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
       try {
-        const q = input.queried;
-        const home = partition(q.snapshot.observation);
-        const keys = [home, q.snapshot.observation, input.execution];
-        const stateRow = (await query(repairStateSql, keys)).rows[0];
-        if (!stateRow?.repair_settlement || !stateRow.consumer_work) throw new Failure('execution_missing');
-        const state = decode<RetainedRepairSettlement>(stateRow.repair_settlement);
-        const retained = await read(db, input, context, meter);
-        if (!retained.execution || !state.closed || state.pages < 1 || state.frontier !== null)
-          throw new Failure('owner_unavailable');
-        if (
-          state.execution !== retained.execution.id ||
-          !isDeepStrictEqual(state.covered, retained.covered) ||
-          state.bootstrap !== retained.covered.observation ||
-          stateRow.consumer_bootstrap !== state.bootstrap
-        )
-          throw new Failure('binding_mismatch');
-        const work = decode<{
-          bootstrap: { id: string; covered: unknown };
-          execution: string;
-          queried: PublicFilterQueriedObservation;
-          repairPage: unknown;
-          records: unknown[];
-          projectionSource: unknown;
-          repair: unknown;
-          dispatch: unknown;
-        }>(stateRow.consumer_work);
-        if (
-          work.bootstrap.id !== state.bootstrap ||
-          !isDeepStrictEqual(work.bootstrap.covered, retained.covered) ||
-          !isDeepStrictEqual(work.queried, q) ||
-          work.execution !== input.execution
-        )
-          throw new Failure('binding_mismatch');
-        if (work.repairPage || work.records.length || work.projectionSource || work.repair || work.dispatch)
-          throw new Failure('owner_unavailable');
-        // Hold native registration/physical binding as well as the execution until the final boundary.
-        const registration = (
-          await query(
-            `SELECT consumer FROM search.public_filter_registration
-          WHERE (partition_no,id)=($1,$2) AND state='active' FOR SHARE`,
-            [home, stateRow.registration],
-          )
-        ).rows[0];
-        if (!registration || !isDeepStrictEqual(decode(registration.consumer), q.consumer))
-          throw new Failure('binding_mismatch');
-        const custodyOwner = (
-          await query(
-            `SELECT epoch,write_state FROM core.partition
-          WHERE partition_no=$1`,
-            [home],
-          )
-        ).rows[0];
-        if (custodyOwner?.write_state !== 'active') throw new Failure('owner_unavailable');
-        const target = (
-          await query(
-            `SELECT incarnation FROM search.public_filter_target
-          WHERE partition_no=$1 AND physical_target=$2 FOR SHARE`,
-            [home, q.consumer.physicalTarget],
-          )
-        ).rows[0];
-        if (target?.incarnation !== q.consumer.incarnation) throw new Failure('binding_mismatch');
-        const definition = retained.definition;
-        // Recheck native Source registration and immutable definition only; Source business settlement stays FAA-owned.
-        const source = (
-          await query(
-            `SELECT source_id::text,configuration::text,owner_epoch FROM semantic.public_filter_source
-          WHERE partition_no=$1 AND source_id=$2 FOR SHARE`,
-            [definition.source.partition, definition.source.id],
-          )
-        ).rows[0];
-        if (
-          !source ||
-          source.configuration !== definition.source.configuration ||
-          source.owner_epoch !== definition.source.epoch
-        )
-          throw new Failure('configuration_changed');
-        const owner = (
-          await query(`SELECT epoch,write_state FROM core.partition WHERE partition_no=$1`, [
-            definition.source.partition,
-          ])
-        ).rows[0];
-        if (owner?.epoch !== definition.source.epoch || owner.write_state !== 'active')
-          throw new Failure('owner_unavailable');
-        const readDefinition = (
-          await query(
-            `SELECT source_id::text,configuration::text,release_digest,subject_type,capture,dependency_keys
-          FROM semantic.public_filter_read_definition WHERE partition_no=$1 AND read_definition=$2 FOR SHARE`,
-            [definition.source.partition, definition.readDefinition],
-          )
-        ).rows[0];
-        if (
-          !readDefinition ||
-          readDefinition.source_id !== definition.source.id ||
-          readDefinition.configuration !== definition.source.configuration ||
-          readDefinition.release_digest !== definition.meaning.digest ||
-          readDefinition.subject_type !== definition.meaning.type ||
-          !isDeepStrictEqual(decode(readDefinition.capture), definition.capture) ||
-          !isDeepStrictEqual(readDefinition.dependency_keys, definition.dependencyKeys)
-        )
-          throw new Failure('definition_missing');
-        if (!/^0:[0-9a-f-]{36}$/.test(state.bootstrap)) throw new Failure('binding_mismatch');
-        const bootstrap = (
-          await query(
-            `SELECT read_definition::text,consumer,snapshot_kind,owner_epoch,state,queried
-          FROM semantic.public_filter_bootstrap WHERE partition_no=0 AND bootstrap=$1 FOR SHARE`,
-            [state.bootstrap.slice(2)],
-          )
-        ).rows[0];
-        if (
-          !bootstrap ||
-          bootstrap.read_definition !== definition.readDefinition ||
-          bootstrap.owner_epoch !== definition.source.epoch ||
-          bootstrap.state !== 'adopted' ||
-          bootstrap.queried !== q.snapshot.observation ||
-          bootstrap.snapshot_kind !== q.snapshot.kind ||
-          !isDeepStrictEqual(decode(bootstrap.consumer), q.consumer)
-        )
-          throw new Failure('binding_mismatch');
-        const last = (
-          await query(
-            `SELECT intent FROM search.public_filter_repair_page
-          WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)`,
-            [...keys, state.pages - 1],
-          )
-        ).rows[0];
-        if (!last) throw new Failure('owner_unavailable');
-        const finalPage = decode<RetainedRepairPage>(last.intent);
-        if (!finalPage.complete || finalPage.frontier !== null) throw new Failure('owner_unavailable');
-        const verifyStep = async (page: RetainedRepairPage) => {
-          if (!page.sourceStep) throw new Failure('owner_unavailable');
-          const step = (
-            await query(
-              `SELECT predecessor::text,complete FROM semantic.public_filter_repair_step
-            WHERE partition_no=0 AND bootstrap=$1 AND execution=$2 AND step=$3 FOR SHARE`,
-              [state.bootstrap.slice(2), input.execution, page.sourceStep],
-            )
-          ).rows[0];
-          if (
-            !step ||
-            step.complete !== page.complete ||
-            step.predecessor !== page.predecessor ||
-            (page.complete ? page.frontier !== null : page.frontier !== page.sourceStep)
-          )
-            throw new Failure('owner_unavailable');
-        };
-        // Source owns the step body's durable receipt/verifier and creation/change closure. This
-        // native binding cannot replace those proofs, or accept a callback alone as a closed cut.
-        await verifyStep(finalPage);
-        const copies = new Map<string, string>();
-        const latest = new Map<string, SearchRepairWriterReceipt>();
-        let after = -1;
-        for (;;) {
-          // Admit each bounded intent before loading the next; a large retained window must not
-          // materialize hundreds of MiB before discovering that its original allowance is spent.
-          const row = (await query(repairPagesSql, [...keys, after])).rows[0];
-          if (!row) break;
-          if (row.ordinal <= after) throw new Failure('binding_mismatch');
-          if (row.ordinal >= state.pages) throw new Failure('owner_unavailable');
-          after = row.ordinal;
-          const page = decode<RetainedRepairPage>(row.intent);
-          await verifyStep(page);
-          if (page.repairs.length > 256) throw new Failure('binding_mismatch');
-          for (const [item, repair] of page.repairs.entries()) {
-            meter.candidates++;
-            meter.inputKeys++;
-            meter.accessPoints++;
-            meter.dependencyPoints++;
-            admit();
-            if (repair.projection.status !== 'progress' && repair.projection.status !== 'complete')
-              throw new Failure('binding_mismatch');
-            if (
-              !isDeepStrictEqual(repair.source, repair.projection.source) ||
-              repair.source.partition !== subjectPartition(repair.source.subject) ||
-              repair.source.subject !== repair.locator.subject
-            )
-              throw new Failure('binding_mismatch');
-            const sourceKey = encode(repair.source);
-            const prior = copies.get(repair.source.subject);
-            if (prior && prior !== sourceKey) throw new Failure('binding_mismatch');
-            if (repair.projection.status === 'progress') {
-              copies.set(repair.source.subject, sourceKey);
-              continue;
-            }
-            if (repair.projection.status !== 'complete') throw new Failure('binding_mismatch');
-            const effect = (
-              await query(
-                `SELECT receipt FROM search.public_filter_repair_effect
-              WHERE (partition_no,observation,execution,page,item)=($1,$2,$3,$4,$5)`,
-                [...keys, row.ordinal, item],
-              )
-            ).rows[0];
-            if (!effect) throw new Failure('owner_unavailable');
-            const receipt = decode<SearchRepairWriterReceipt>(effect.receipt);
-            const locator = encode({
-              observation: q.snapshot.observation,
-              execution: input.execution,
-              page: row.ordinal,
-              item,
-            });
-            if (
-              receipt.locator !== locator ||
-              receipt.subject !== repair.source.subject ||
-              receipt.partition !== repair.source.partition ||
-              receipt.epoch !== repair.source.epoch ||
-              receipt.action.version < repair.source.position ||
-              receipt.incarnation !== q.consumer.incarnation
-            )
-              throw new Failure('binding_mismatch');
-            validateSearchRepairWriterEvidence(q.consumer.physicalTarget, receipt);
-            const previous = latest.get(receipt.subject);
-            if (
-              previous &&
-              (receipt.action.version < previous.action.version ||
-                receipt.enrollment.position <= previous.completion.position)
-            )
-              throw new Failure('binding_mismatch');
-            latest.set(receipt.subject, receipt);
-            copies.delete(receipt.subject);
-          }
-        }
-        if (copies.size) throw new Failure('owner_unavailable');
-        const physical = await readSearchWriterPhysicalTarget(search, q.consumer.physicalTarget);
-        if (physical.incarnation !== q.consumer.incarnation) throw new Failure('binding_mismatch');
-        // Final writer-key locks include original/terminal rows even when the retained window had no repair effects.
-        const own = [...new Set(retained.execution.ownRows.flatMap((row) => [row.original, row.terminal]))].sort();
-        // Lock every existing home gate before any writer/owner key, in the ordinary writer's order.
-        const homes = [
-          ...new Set([...own.map(subjectPartition), ...[...latest.values()].map((row) => row.partition)]),
-        ].sort((a, b) => a - b);
-        const gateEpochs = new Map<number, number>();
-        for (const partition of homes) {
-          const gate = (
-            await query(
-              `SELECT incarnation,owner_epoch,write_alias,closed_token FROM search.identity_writer_gate
-            WHERE partition_no=$1 AND physical_target=$2 FOR SHARE`,
-              [partition, q.consumer.physicalTarget],
-            )
-          ).rows[0];
-          if (
-            gate &&
-            (gate.incarnation !== physical.incarnation || gate.write_alias !== physical.writeAlias || gate.closed_token)
-          )
-            throw new Failure('identity_pending');
-          if (gate) gateEpochs.set(partition, gate.owner_epoch);
-        }
-        for (const original of own) {
-          meter.inputKeys++;
-          meter.candidates++;
-          const partition = subjectPartition(original);
-          const current = (
-            await query(
-              `SELECT writer_token,dispatch_state,closed_job,incarnation,owner_epoch
-            FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 FOR SHARE`,
-              [partition, q.consumer.physicalTarget, original],
-            )
-          ).rows[0];
-          const homeOwner = (
-            await query(`SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE`, [partition])
-          ).rows[0];
-          if (
-            homeOwner?.write_state !== 'active' ||
-            (gateEpochs.has(partition) && gateEpochs.get(partition) !== homeOwner.epoch) ||
-            (current &&
-              (current.writer_token ||
-                current.closed_job ||
-                current.dispatch_state !== 'settled' ||
-                current.incarnation !== physical.incarnation ||
-                current.owner_epoch !== homeOwner.epoch))
-          )
-            throw new Failure('identity_pending');
-        }
-        for (const receipt of [...latest.values()].sort(
-          (a, b) => a.partition - b.partition || a.subject.localeCompare(b.subject),
-        ))
-          await verifySearchRepairWriterReceipt({ query } as Pool, search, q.consumer.physicalTarget, receipt);
-        for (const partition of [...new Set([home, definition.source.partition])].sort((a, b) => a - b)) {
-          const finalOwner = (
-            await query(
-              `SELECT epoch,write_state FROM core.partition
-            WHERE partition_no=$1 FOR SHARE`,
-              [partition],
-            )
-          ).rows[0];
-          if (
-            finalOwner?.write_state !== 'active' ||
-            (partition === definition.source.partition && finalOwner.epoch !== definition.source.epoch)
-          )
-            throw new Failure('owner_unavailable');
-        }
-        const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
-        validateRefreshResponse(refreshed.status, refreshed.body);
-        if (!isDeepStrictEqual(await readSearchWriterPhysicalTarget(search, q.consumer.physicalTarget), physical))
-          throw new Failure('binding_mismatch');
-        const final = await read(db, input, context, meter);
-        if (!isDeepStrictEqual(final.execution, retained.execution) || !isDeepStrictEqual(final.covered, state.covered))
-          throw new Failure('binding_mismatch');
-        const transaction = (await query('SELECT txid_current()::text AS id')).rows[0]!.id as string;
-        const fenced: RetainedRepairSettlement = {
-          ...state,
-          fence: {
-            transaction,
-            incarnation: physical.incarnation,
-            writeAlias: physical.writeAlias,
-            sourceEpoch: definition.source.epoch,
-            refresh: refreshed.body,
-          },
-        };
-        const stored = await query(
-          `UPDATE search.public_filter_execution SET repair_settlement=$4
-          WHERE (partition_no,observation,id)=($1,$2,$3) AND repair_settlement=$5 RETURNING id`,
-          [...keys, encode(fenced), stateRow.repair_settlement],
-        );
-        if (stored.rowCount !== 1) throw new Failure('binding_mismatch');
-        admit();
-        await query('COMMIT');
-        return {
-          status: 'settled',
-          definition: retained.definition,
-          queried: retained.queried,
-          execution: retained.execution,
-          settlement: Object.freeze({ id: state.id }) as NativePublicFilterRepairSettlement,
-          cost: meter,
-        };
+        const result = await work(db, raw);
+        await db.query('COMMIT');
+        return result;
       } catch (error) {
-        // Rollback must release every held writer/owner lock even after allowance/deadline failure.
+        // Cleanup still runs when the original allowance/deadline is exhausted.
         meter.statements++;
         meter.bytes += Buffer.byteLength('ROLLBACK') + Buffer.byteLength(encode([]));
         const rolledBack = await client.query('ROLLBACK');
@@ -808,6 +577,160 @@ export async function readPublicFilterRepairSettlement(
         meter.bytes += Buffer.byteLength(encode(rolledBack.rows));
         throw error;
       }
+    });
+    const load = async (db: Pool, raw: Pool) => {
+      const stateRow = await repairState.run(db, keys);
+      if (!stateRow?.repair_settlement || !stateRow.consumer_work) throw new Failure('execution_missing');
+      const state = decode<RetainedRepairSettlement>(stateRow.repair_settlement);
+      const retained = await read(raw, input, context, meter, initial.definition);
+      admit();
+      if (!retained.execution || !state.closed || !Number.isSafeInteger(state.pages) || state.pages < 1 || state.frontier !== null)
+        throw new Failure('owner_unavailable');
+      if (
+        state.execution !== retained.execution.id || !isDeepStrictEqual(state.covered, retained.covered) ||
+        state.bootstrap !== retained.covered.observation || stateRow.consumer_bootstrap !== state.bootstrap ||
+        !isDeepStrictEqual(retained.definition, initial.definition) || !isDeepStrictEqual(retained.execution, initial.execution)
+      ) throw new Failure('binding_mismatch');
+      const work = decode<{
+        bootstrap: { id: string; covered: unknown }; execution: string; queried: PublicFilterQueriedObservation;
+        repairPage: unknown; records: unknown[]; projectionSource: unknown; repair: unknown; dispatch: unknown;
+      }>(stateRow.consumer_work);
+      if (work.bootstrap.id !== state.bootstrap || !isDeepStrictEqual(work.bootstrap.covered, retained.covered) ||
+          !isDeepStrictEqual(work.queried, q) || work.execution !== input.execution) throw new Failure('binding_mismatch');
+      if (work.repairPage || work.records.length || work.projectionSource || work.repair || work.dispatch)
+        throw new Failure('owner_unavailable');
+      const registration = await repairRegistration.run(db, { partition_no: home, registration: stateRow.registration });
+      const target = await repairTarget.run(db, { partition_no: home, physical_target: q.consumer.physicalTarget });
+      if (!registration || !isDeepStrictEqual(decode(registration.consumer), q.consumer) || target?.incarnation !== q.consumer.incarnation)
+        throw new Failure('binding_mismatch');
+      const pages: { ordinal: number; intent: string; page: RetainedRepairPage }[] = [];
+      const append = async (ordinal: number, intent: string) => {
+        const page = decode<RetainedRepairPage>(intent);
+        if (!page.sourceStep || page.repairs.length > 256 || (page.complete ? page.frontier !== null : page.frontier !== page.sourceStep))
+          throw new Failure('binding_mismatch');
+        // The native producer CAS advances through every page. Check adjacent retained links at
+        // each selected page; complete Source chain/window proof belongs to the final owner read.
+        const previous = ordinal === 0 ? null : await repairPage.run(db, { ...keys, ordinal: ordinal - 1 });
+        if ((ordinal > 0 && !previous) || page.predecessor !== (previous ? decode<RetainedRepairPage>(previous.intent).frontier : null))
+          throw new Failure('binding_mismatch');
+        pages.push({ ordinal, intent, page });
+      };
+      let after = -1;
+      for (;;) {
+        admit();
+        const row = await repairPages.run(db, { ...keys, after });
+        if (!row) break;
+        if (row.ordinal <= after || row.ordinal >= state.pages) throw new Failure('binding_mismatch');
+        await append(row.ordinal, row.intent);
+        after = row.ordinal;
+      }
+      if (after !== state.pages - 1) {
+        const last = await repairPage.run(db, { ...keys, ordinal: state.pages - 1 });
+        if (!last) throw new Failure('owner_unavailable');
+        await append(state.pages - 1, last.intent);
+      }
+      const last = pages.at(-1)!;
+      if (!last.page.complete || last.page.frontier !== null) throw new Failure('owner_unavailable');
+      const copies = new Map<string, string>();
+      const latest = new Map<string, SearchRepairWriterReceipt>();
+      const effects: { page: number; item: number; receipt: string }[] = [];
+      for (const entry of pages) for (const [item, repair] of entry.page.repairs.entries()) {
+        meter.candidates++;
+        meter.inputKeys++;
+        meter.accessPoints++;
+        meter.dependencyPoints++;
+        admit();
+        if ((repair.projection.status !== 'progress' && repair.projection.status !== 'complete') ||
+            !isDeepStrictEqual(repair.source, repair.projection.source) ||
+            repair.source.partition !== subjectPartition(repair.source.subject) || repair.source.subject !== repair.locator.subject)
+          throw new Failure('binding_mismatch');
+        const sourceKey = encode(repair.source);
+        const prior = copies.get(repair.source.subject);
+        if (prior && prior !== sourceKey) throw new Failure('binding_mismatch');
+        if (repair.projection.status === 'progress') { copies.set(repair.source.subject, sourceKey); continue; }
+        const effect = await repairEffect.run(db, { ...keys, page: entry.ordinal, item });
+        if (!effect) throw new Failure('owner_unavailable');
+        effects.push({ page: entry.ordinal, item, receipt: effect.receipt });
+        const receipt = decode<SearchRepairWriterReceipt>(effect.receipt);
+        const locator = encode({ observation: q.snapshot.observation, execution: input.execution, page: entry.ordinal, item });
+        if (receipt.locator !== locator || receipt.subject !== repair.source.subject || receipt.partition !== repair.source.partition ||
+            receipt.epoch !== repair.source.epoch || receipt.action.version < repair.source.position || receipt.incarnation !== q.consumer.incarnation)
+          throw new Failure('binding_mismatch');
+        validateSearchRepairWriterEvidence(q.consumer.physicalTarget, receipt);
+        const previous = latest.get(receipt.subject);
+        if (previous && (receipt.action.version < previous.action.version || receipt.enrollment.position <= previous.completion.position))
+          throw new Failure('binding_mismatch');
+        latest.set(receipt.subject, receipt);
+        copies.delete(receipt.subject);
+      }
+      if (copies.size) throw new Failure('owner_unavailable');
+      const physical = await readSearchWriterPhysicalTarget(search, q.consumer.physicalTarget);
+      if (physical.incarnation !== q.consumer.incarnation) throw new Failure('binding_mismatch');
+      const own = [...new Set(retained.execution.ownRows.flatMap((row) => [row.original, row.terminal]))].sort();
+      const subjects = [...new Set([...own, ...latest.keys()])].sort((a,b) => subjectPartition(a)-subjectPartition(b) || a.localeCompare(b));
+      const homes = [...new Set(subjects.map(subjectPartition))].sort((a,b) => a-b);
+      const gates = [];
+      for (const partition_no of homes) {
+        const gate = await repairGate.run(db, { partition_no, physical_target: q.consumer.physicalTarget });
+        if (gate && (gate.incarnation !== physical.incarnation || gate.write_alias !== physical.writeAlias || gate.closed_token))
+          throw new Failure('identity_pending');
+        gates.push({ partition_no, gate });
+      }
+      const owners = [];
+      for (const partition_no of [...new Set([...homes, home, retained.definition.source.partition])].sort((a,b) => a-b)) {
+        const owner = await repairOwner.run(db, { partition_no });
+        if (owner?.write_state !== 'active' || (partition_no === retained.definition.source.partition && owner.epoch !== retained.definition.source.epoch))
+          throw new Failure('owner_unavailable');
+        owners.push({ partition_no, epoch: owner.epoch, write_state: owner.write_state });
+      }
+      const writers = [];
+      for (const original_id of subjects) {
+        meter.inputKeys++; meter.candidates++; admit();
+        const partition_no = subjectPartition(original_id);
+        const writer = await repairWriter.run(db, { partition_no, physical_target: q.consumer.physicalTarget, original_id });
+        const owner = owners.find((row) => row.partition_no === partition_no)!;
+        const gate = gates.find((row) => row.partition_no === partition_no)!.gate;
+        if ((gate && gate.owner_epoch !== owner.epoch) || (writer && (writer.writer_token || writer.closed_job || writer.dispatch_state !== 'settled' ||
+            writer.incarnation !== physical.incarnation || writer.owner_epoch !== owner.epoch))) throw new Failure('identity_pending');
+        writers.push({ original_id, writer });
+      }
+      return {
+        state, retained, latest,
+        // Compare data only; mutable accumulated cost and unrelated partition command positions are excluded.
+        basis: { stateRow, definition: retained.definition, queried: retained.queried, covered: retained.covered,
+          execution: retained.execution, registration, target, pages, effects, physical, owners, gates, writers },
+      };
+    };
+    const staged = await local(load);
+    // No held Search checkout, transaction, writer lock or foreign-home lease crosses this boundary.
+    for (const entry of staged.basis.pages) {
+      await verifyPublicFilterRepairSourcePage(binding, {
+        bootstrap: staged.state.bootstrap, queried: q, execution: input.execution, predecessor: entry.page.predecessor,
+      }, entry.page, context, charge);
+    }
+    return await local(async (db, raw) => {
+      const final = await load(db, raw);
+      if (!isDeepStrictEqual(final.basis, staged.basis)) throw new Failure('binding_mismatch');
+      for (const receipt of [...final.latest.values()].sort((a,b) => a.partition-b.partition || a.subject.localeCompare(b.subject)))
+        await verifySearchRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
+      const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
+      validateRefreshResponse(refreshed.status, refreshed.body);
+      if (!isDeepStrictEqual(await readSearchWriterPhysicalTarget(search, q.consumer.physicalTarget), final.basis.physical))
+        throw new Failure('binding_mismatch');
+      const retained = await read(raw, input, context, meter, initial.definition);
+      if (!isDeepStrictEqual(retained.execution, final.retained.execution) || !isDeepStrictEqual(retained.covered, staged.state.covered))
+        throw new Failure('binding_mismatch');
+      const transaction = await repairTransaction.run(db);
+      if (!transaction) throw new Failure('owner_unavailable');
+      const fenced: RetainedRepairSettlement = { ...final.state, fence: {
+        transaction: transaction.id, incarnation: final.basis.physical.incarnation, writeAlias: final.basis.physical.writeAlias,
+        sourceEpoch: retained.definition.source.epoch, refresh: refreshed.body,
+      } };
+      const stored = await repairFinish.run(db, { ...keys, next: encode(fenced), previous: final.basis.stateRow.repair_settlement });
+      if (!stored) throw new Failure('binding_mismatch');
+      admit();
+      return { status: 'settled', definition: retained.definition, queried: retained.queried, execution: retained.execution!,
+        settlement: Object.freeze({ id: final.state.id }) as NativePublicFilterRepairSettlement, cost: meter };
     });
   } catch (error) {
     return failure(error, meter);

@@ -1556,7 +1556,8 @@ Native consumer repair settlement is retained under the existing custody executi
 `execution` is the immutable parent id, whose existing record retains the original start and own rows.
 `public_filter_repair_page`, keyed by `(partition_no, observation, execution, ordinal)`, holds immutable
 `{sourceStep, predecessor, frontier, complete, repairs}` (each repair retains kind, locator, own-home Source observation
-and projection, without serializing Source's private receipt brand). `public_filter_repair_effect`, keyed by the same execution plus page/item, retains each actual native
+and projection plus `receipt: {bootstrap, execution, step, locatorDigest}`; the private Source brand is never
+serialized). `public_filter_repair_effect`, keyed by the same execution plus page/item, retains each actual native
 writer receipt before advancing the scalar page frontier. The existing `identity_writer` row
 holds `repair_locator`, `repair_action` and `repair_receipt` beside its ordinary enrollment, dispatch,
 owner epoch, incarnation and visible/settled command positions. The locator binds observation, execution,
@@ -1571,6 +1572,25 @@ uses the configured native `OPENSEARCH_URL`, never a process receipt cache. It v
 native page advancement from the original bootstrap cut, the actual final/effectful Source step locators,
 finished retained-copy work, every actual writer receipt and
 current searchable winner, physical allocation and final locked writer/owner state before returning.
+The real Source binding is installed by the existing consumer constructor through
+`configurePublicFilterRepairSource(pool, binding)`. That weak association routes constructor configuration only;
+it stores no receipts, retained evidence or successful verification. Recovery installs the owner binding again.
+The temporary structural consumer declarations in `public-filter-custody-contract.ts` match the committed
+Source item ABI and selected step ABI until those original-module declarations arrive in this checkout.
+Unsupported ports and legacy intents without their original locator remain typed unavailable.
+
+The reader stages a bounded local snapshot, commits and releases its checkout, then calls the actual Source
+`readRepairStep` and `readRepairReceipt` ports. Step verification compares the exact native successor,
+predecessor, completion/frontier and ordered original locators (at most 256). Item verification compares the
+actual owner-loaded repair body, including its original locator digest. The final owner step additionally
+proves its original complete window/chain and creation/change closure; an empty final step needs no item receipt.
+Search does not infer this from counts, a current equivalent page, callback completion or a serialized brand.
+It then opens a fresh local transaction and compares the entire staged custody/execution/work, retained
+intent/effect, physical allocation, owner epoch, writer and enrollment/fence generation basis before its actual
+native writer verification, readback and refresh. A changed basis invalidates that invocation's owner positives.
+Immutable release authority is resolved before taking the local checkout. No raw Source registration,
+read-definition, bootstrap or repair-step SQL participates in this Search guard.
+
 This proves Search dispatch closure only. FAA must join its own durable Source step/window verifier,
 creation/change bridge and original/start/final checks; the Account owner remains independent.
 The final native fence is persisted on that same settlement record only after the reader's complete
@@ -1579,5 +1599,6 @@ and native refresh response. Re-reading a locator always repeats the guard; a pr
 cannot establish current readiness. Effectful pages use a partial execution-leading index and one scalar
 ordinal at a time, admitting each bounded intent before loading another; empty Source
 scan pages do not require rescanning all native homes. Every effect lookup, owner/writer lock, engine
-request and byte is charged against the consumer's existing allowance. An over-allowance closure remains
+request and byte, including owner verification and both local snapshots, is charged against the consumer's
+existing allowance. `withPublicFilterRepairAllowance` carries already-spent caller work into all reader phases. An over-allowance closure remains
 unavailable rather than receiving a second verification budget.
