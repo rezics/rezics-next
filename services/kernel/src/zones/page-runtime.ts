@@ -80,12 +80,13 @@ export async function readZonePage(
   let direct: ZoneMembership | undefined;
   let directPending: import('./membership.ts').ZonePending | undefined;
   const preparation = await zonePageWork(dependencies, {
-    id: input.id, actor: input.actor, body: input.body,
+    id: input.id, actor: input.actor, body: input.body, work,
     basis: zoneDigest({ sources: selected.sources, profile: active.digest }),
     ...(new URL(input.request.url).searchParams.get('cursor') ? { cursor: new URL(input.request.url).searchParams.get('cursor')! } : {}),
   });
   const position: ZonePagePosition = structuredClone(preparation.position);
   if ('subject' in input.body.target) {
+    work.select('target', 'id', 1);
     direct = await createZoneMembership(dependencies, base);
     const prior = position.reads.target;
     const result = await direct.contains(input.body.target.subject, prior?.basis === direct.basis ? prior.pending : undefined);
@@ -155,9 +156,9 @@ export async function readZonePage(
         ...stream,
         async member(id: string, pending?: import('./membership.ts').ZonePending) {
           const own = await stream.member(id, pending?.conjunct === 'zone' ? undefined : pending);
-          if (own.value !== true) return { ...own, ...(own.pending ? { pending: { ...own.pending, conjunct: 'source' as const } } : {}) };
+          if (own.value !== true) return { ...own, ...(own.pending ? { pending: { ...own.pending, source: 0, conjunct: 'source' as const } } : {}) };
           const match = await union.contains(id, pending?.conjunct === 'zone' ? { ...pending, source: pending.zoneSource ?? -1 } : undefined);
-          return { ...match, ...(match.pending ? { pending: { ...match.pending, zoneSource: match.pending.source, conjunct: 'zone' as const } } : {}) };
+          return { ...match, ...(match.pending ? { pending: { ...match.pending, source: 0, zoneSource: match.pending.source, conjunct: 'zone' as const } } : {}) };
         },
       }));
       membership = { ...sourceMembership, streams,
@@ -183,7 +184,43 @@ export async function readZonePage(
   // One native summaries batch over actual selected canonical IDs. It is not a Search page surrogate.
   const ids = [...new Set(prepared.flatMap(read => read.position.rows.map(row => row.id)))];
   const summaries = await readSubjectSummaries({ ...dependencies, actor: input.actor, deadline: input.deadline }, ids, { languages });
-  // Recheck retained rows before summaries or cursor publication. Unknown final work can itself advance.
+  for (const read of prepared) {
+    const descriptor = plan.reads[read.key]!;
+    const rows = read.position.rows.map(row => {
+      const summary = summaries.get(row.id);
+      if (!summary) return zoneUnavailable();
+      return { id: row.id, type: summary.type,
+        labels: summary.label ? { [summary.label.language]: summary.label.value } : {}, summary };
+    });
+    const next = null;
+    const shaped = descriptor.kind === 'search' && languages
+      ? { ...descriptor, body: { ...descriptor.body, languages: [...languages] } } : descriptor;
+    observed.set(canonicalize(shaped)!, { status: 200, body: read.kind === 'search'
+      ? { subjects: rows, next }
+      : { members: rows.map(row => ({ kind: 'dynamic', subjectId: row.id, summary: row.summary })), next } });
+  }
+  const properties = subject ? Object.keys((observed.get(canonicalize({ kind: 'subject', id: subject })!)?.body as { subject?: { statements?: object } })?.subject?.statements ?? {}) : [];
+  const documents = documentRead(document, subject ?? null, properties);
+  const page = await readPage({
+    dispatch: input.dispatch, incoming: input.request, reads: plan.reads, session, observed, budget,
+    ...(documents ? { documents } : {}), ...(languages ? { languages } : {}),
+  });
+  if (subject) for (const [key, descriptor] of Object.entries(plan.reads)) {
+    const result = page.results[key];
+    if (descriptor.kind === 'subject' && descriptor.id === subject && result?.status === 200 && result.body && typeof result.body === 'object')
+      page.results[key] = { ...result, body: { ...result.body, documents: page.documents, account: null } };
+  }
+  if (page.session) components.push(...(decodeSession(dependencies.tokens, session.scope, page.session) ?? []));
+  if (dependent) {
+    const current = await reads.page(input.actor, input.id, route, input.deadline);
+    if (!isDeepStrictEqual(current.sources, selected.sources) || !isDeepStrictEqual(current.document, selected.document)) return zoneUnavailable();
+    if ((await activeProfile(dependencies.pool))?.digest !== active.digest) return zoneUnavailable();
+    if (direct && 'subject' in input.body.target) {
+      work.select('target', 'id', 1);
+      if ((await direct.contains(input.body.target.subject)).value !== true) return zoneUnavailable();
+    }
+  }
+  // Recheck retained rows after ordinary reads and before cursor publication. Unknown final work can itself advance.
   for (const read of prepared) {
     const descriptor = plan.reads[read.key]!;
     work.select(read.key, descriptor.kind === 'search' ? descriptor.body.sort : 'id', readCost(descriptor));
@@ -202,40 +239,9 @@ export async function readZonePage(
     continuation = await preparation.progress(following);
   }
   for (const read of prepared) {
-    const descriptor = plan.reads[read.key]!;
-    const rows = read.position.rows.map(row => {
-      const summary = summaries.get(row.id);
-      if (!summary) return zoneUnavailable();
-      return { id: row.id, type: summary.type,
-        labels: summary.label ? { [summary.label.language]: summary.label.value } : {}, summary };
-    });
-    const next = read.position.exhausted ? null : continuation;
-    const shaped = descriptor.kind === 'search' && languages
-      ? { ...descriptor, body: { ...descriptor.body, languages: [...languages] } } : descriptor;
-    observed.set(canonicalize(shaped)!, { status: 200, body: read.kind === 'search'
-      ? { subjects: rows, next }
-      : { members: rows.map(row => ({ kind: 'dynamic', subjectId: row.id, summary: row.summary })), next } });
-  }
-  const properties = subject ? Object.keys((observed.get(canonicalize({ kind: 'subject', id: subject })!)?.body as { subject?: { statements?: object } })?.subject?.statements ?? {}) : [];
-  const documents = documentRead(document, subject ?? null, properties);
-  const page = await readPage({
-    dispatch: input.dispatch, incoming: input.request, reads: plan.reads, session, observed, budget,
-    ...(documents ? { documents } : {}), ...(languages ? { languages } : {}),
-  });
-  if (subject) for (const [key, descriptor] of Object.entries(plan.reads)) {
-    const result = page.results[key];
-    if (descriptor.kind === 'subject' && descriptor.id === subject && result?.status === 200 && result.body && typeof result.body === 'object')
-      page.results[key] = { ...result, body: { ...result.body, documents: page.documents } };
-  }
-  if (page.session) components.push(...(decodeSession(dependencies.tokens, session.scope, page.session) ?? []));
-  if (dependent) {
-    const current = await reads.page(input.actor, input.id, route, input.deadline);
-    if (!isDeepStrictEqual(current.sources, selected.sources) || !isDeepStrictEqual(current.document, selected.document)) return zoneUnavailable();
-    if ((await activeProfile(dependencies.pool))?.digest !== active.digest) return zoneUnavailable();
-    if (direct && 'subject' in input.body.target) {
-      work.select('target', 'id', 1);
-      if ((await direct.contains(input.body.target.subject)).value !== true) return zoneUnavailable();
-    }
+    const result = page.results[read.key];
+    if (result?.status === 200 && result.body && typeof result.body === 'object')
+      page.results[read.key] = { ...result, body: { ...result.body, next: read.position.exhausted ? null : continuation } };
   }
   requireAccessDeadline(input.deadline);
   if (prepared.every(read => read.position.exhausted)) await preparation.finish();

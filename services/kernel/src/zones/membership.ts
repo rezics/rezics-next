@@ -82,12 +82,13 @@ export function compareZoneKeys(order: ZoneOrder, a: ZoneKey, b: ZoneKey): numbe
 export class ZoneWork extends CollectionSourceLedger {
   private selected = 'target';
   private structuralKeys = 0;
+  private ordered = zeroScopeWork();
   private readonly reads = new Map<string, { limit: WorkDimensions; used: WorkDimensions; engine: number; structural: boolean }>();
   select(key: string, order: ZoneOrder, size: number): void {
     this.selected = key;
     if (this.reads.has(key)) return;
     const candidates = order === 'id' ? 256 : Math.min(600, 6 * size + 3);
-    this.reads.set(key, { engine: 0, structural: order === 'id', used: zeroScopeWork(), limit: {
+    this.reads.set(key, { engine: 0, structural: order === 'id', used: zeroScopeWork(), limit: order === 'id' ? scopeAllowance(256, this.initial.reservationId).remaining : {
       ...this.initial.remaining,
       candidateKeys: candidates,
       nativePoints: 16 + 8 * candidates,
@@ -101,6 +102,11 @@ export class ZoneWork extends CollectionSourceLedger {
     const read = this.reads.get(this.selected);
     if (!read) return root;
     if (read.structural) root = { ...root, remaining: { ...root.remaining, candidateKeys: Math.min(root.remaining.candidateKeys, 256 - this.structuralKeys) } };
+    else root = { ...root, remaining: { ...root.remaining,
+      nativeRows: Math.min(root.remaining.nativeRows, 14080 - this.ordered.nativeRows),
+      nativePoints: Math.min(root.remaining.nativePoints, 6784 - this.ordered.nativePoints),
+      statements: Math.min(root.remaining.statements, 72 - this.ordered.statements),
+    } };
     return { ...root, remaining: Object.fromEntries(scopeWorkAxes.map(axis =>
       [axis, Math.min(root.remaining[axis], read.limit[axis] - read.used[axis])],
     )) as unknown as WorkDimensions };
@@ -110,6 +116,7 @@ export class ZoneWork extends CollectionSourceLedger {
     if (scopeWorkAxes.some(axis => receipt.used[axis] > this.allowance().remaining[axis])) return zoneUnavailable();
     super.take(receipt);
     if (read?.structural) this.structuralKeys += receipt.used.candidateKeys;
+    else if (read) for (const axis of scopeWorkAxes) this.ordered = { ...this.ordered, [axis]: this.ordered[axis] + receipt.used[axis] };
     if (read) for (const axis of scopeWorkAxes) read.used = { ...read.used, [axis]: read.used[axis] + receipt.used[axis] };
   }
   orderedCost(engineSearches: number): void {
@@ -123,12 +130,12 @@ export function zoneWork(deadline: number, orderedSlots: readonly number[] = [])
   const candidates = orderedSlots.length ? Math.min(816, orderedSlots.reduce((sum, size) => sum + Math.min(600, 6 * size + 3), 0) + 256) : 256;
   const ledger = new ZoneWork(scopeAllowance(candidates, crypto.randomUUID(), {
     candidateKeys: candidates,
-    nativeRows: 14080,
+    nativeRows: 65536,
     identityMetadataRows: 16384,
     emptySeeks: 256,
-    nativePoints: 6784,
+    nativePoints: orderedSlots.length ? 6784 : 4096,
     witnessKeys: 8192,
-    statements: 72,
+    statements: 8192,
     bytes: 4 * 1024 * 1024,
   }), deadline);
   ledger.select('target', 'id', 1);

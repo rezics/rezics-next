@@ -1,10 +1,14 @@
+WITH input AS (
+ SELECT :route::integer AS route, :zone_id::uuid AS zone_id, :expected::bigint AS expected
+)
 INSERT INTO zones.page_preparation (route,zone_id,viewer,slot,request,basis,generation,revision,position)
-SELECT :route::integer,:zone_id::uuid,:viewer::text,:slot::smallint,:request::text,:basis::text,
+SELECT input.route,input.zone_id,:viewer::text,:slot::smallint,:request::text,:basis::text,
  :generation::uuid,1,:position::jsonb
-WHERE EXISTS (SELECT 1 FROM zones.zone WHERE route=:route::integer AND zone_id=:zone_id::uuid
- AND state='active' AND configuration IS NOT NULL)
+FROM input
+WHERE EXISTS (SELECT 1 FROM zones.zone z WHERE z.route=input.route AND z.zone_id=input.zone_id
+ AND z.state='active' AND z.configuration IS NOT NULL)
 ON CONFLICT (route,zone_id,viewer,slot) DO UPDATE
 SET request=EXCLUDED.request,basis=EXCLUDED.basis,generation=EXCLUDED.generation,
  revision=zones.page_preparation.revision+1,position=EXCLUDED.position
-WHERE (:expected::text IS NULL OR zones.page_preparation.revision=:expected::bigint)
+WHERE ((SELECT expected FROM input) IS NULL OR zones.page_preparation.revision=(SELECT expected FROM input))
 RETURNING revision::text AS revision;

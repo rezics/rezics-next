@@ -32,7 +32,7 @@ retained. Native Collection evidence hints stay request-local and are checked ag
 
 `page-work.ts` stores disposable bounded page locators in `zones.page_preparation`, not another Zone configuration
 or membership table. Thirty-two keyed slots per Zone/viewer bound simultaneous retained requests; each row has
-a 65,536-byte ceiling. Source/configuration/lifecycle changes remove those rows in the Zone transaction; eviction
+a 524,288-byte ceiling (including all 128 full native name tuples). Source/configuration/lifecycle changes remove those rows in the Zone transaction; eviction
 and unusable cursors restart ordinary authorization. Accounts alone supplies encryption and the existing search
 profile: eight keys, 4,864 unpadded base64url characters, fifteen minutes for every viewer. Stable route, viewer,
 Zone and body bind AAD; mutable basis, generation and retained revision are encrypted position keys. Owner cursors,
