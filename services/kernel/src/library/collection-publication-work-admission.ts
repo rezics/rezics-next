@@ -1,7 +1,13 @@
 /** SERVER ONLY. Original Library whole-query publication seam, distinct from Members and Kind. */
 import type { FilterDocument, FilterRelease } from '@rezics/filter';
-import type { OperationalTransaction } from '../command/operational.ts';
+import { authoritativeTimeValue, commandTime } from '../command/command.ts';
+import {
+  currentOperationalResources,
+  hasLiveOperationalTransaction,
+  type OperationalTransaction,
+} from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type {
@@ -53,26 +59,62 @@ export type CollectionPublicationWorkDefinition = Readonly<{
 }> &
   Extract<CollectionPublicationPhase, { phase: 'staging' | 'awaiting_activation' }>;
 
-/** TEMPORARY UNAVAILABLE CONTRACT ADAPTER. The later native episode producer must replace it.
- * On each use, verify the genuine live work-step transaction, exact pool/owner/namespace and T,
- * committed original operation/receipt, phase/rule/source/identity/receiving/custody/output fences.
- * Admission permits bounded own-namespace mechanical staging only; never disclosure or activation.
+/** Necessary executor/namespace conditions only. This does not admit a publication episode.
+ * Check the original object before touching its query method or interpreting any caller evidence.
  */
-export async function admitCollectionPublicationStep(
-  _tx: OperationalTransaction,
-  _locator: CollectionPublicationLocator,
-): Promise<boolean> {
-  throw new ProblemError('dependency_unavailable');
+function livePublicationNamespace(tx: OperationalTransaction, locator: CollectionPublicationLocator): boolean {
+  if (!hasLiveOperationalTransaction(tx)) return false;
+  const resources = currentOperationalResources(tx);
+  const ownerRoute = routeOf(locator.ownerAccountId);
+  if (
+    resources.mode !== 'work-step' ||
+    routeOf(locator.collectionId) !== locator.route ||
+    ownerRoute === null ||
+    resources.partition !== partitionOf(locator.route) ||
+    resources.partition !== partitionOf(ownerRoute) ||
+    resources.accounts.length !== 1 ||
+    resources.accounts[0] !== locator.ownerAccountId ||
+    typeof locator.publicationId !== 'string' ||
+    locator.publicationId.length === 0
+  )
+    return false;
+  const time = commandTime(tx);
+  if (!time) return false;
+  authoritativeTimeValue(time);
+  return true;
 }
 
-/** TEMPORARY UNAVAILABLE CONTRACT ADAPTER. Getter data alone is never admission or completion.
- * Native implementation must use the admitted SAME client; absent/changed evidence returns null
- * or unavailability, never ready-empty. Full-query exhaustion uses the shared Source/compiler and
- * existing WorkAllowance, never a selected 0..100 set, first page, or count as a complete query.
+/** The peer's original operation/source/creation-receipt reader is not delivered in this tree.
+ * CollectionPublicationInitiatorReader is only a DurableInitiatorReader type alias; it has no
+ * native implementation or episode reader to call. Never substitute current Collection/output
+ * rows, a locator or the caller's creation JSON for that independently committed provenance.
+ */
+function missingPublicationProducer(): never {
+  throw new ProblemError('dependency_unavailable', {
+    detail: 'Native Collection publication episode and original operation/source/creation receipt readers are unavailable.',
+  });
+}
+
+/** Admission permits bounded own-namespace mechanical staging only; never disclosure or activation.
+ * Executor checks precede the still-missing original native episode/creation reader. Its delivery
+ * must also bind the installed pool, current phase/rule/source/identity/custody and output fences.
+ */
+export async function admitCollectionPublicationStep(
+  tx: OperationalTransaction,
+  locator: CollectionPublicationLocator,
+): Promise<boolean> {
+  if (!livePublicationNamespace(tx, locator)) return false;
+  return missingPublicationProducer();
+}
+
+/** Getter data alone is never admission or completion. Recheck the SAME native client on each use.
+ * Missing original provenance is unavailable, never ready-empty. Source initialization cannot
+ * start from a bare locator while its owning episode reader is absent.
  */
 export async function readCollectionPublicationWorkDefinition(
-  _tx: OperationalTransaction,
-  _locator: CollectionPublicationLocator,
+  tx: OperationalTransaction,
+  locator: CollectionPublicationLocator,
 ): Promise<CollectionPublicationWorkDefinition | null> {
-  throw new ProblemError('dependency_unavailable');
+  if (!livePublicationNamespace(tx, locator)) return null;
+  return missingPublicationProducer();
 }

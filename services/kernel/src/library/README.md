@@ -355,6 +355,15 @@ worker or domain backend. Schema availability and local typing do not establish 
 
 ### Explicit selected-set publication
 
+The distinct whole-query seam in `collection-publication-work-admission.ts` rejects clients without
+the original live Core work-step, exact fenced owner namespace and native attempt time before IO.
+Its published locator and result declarations remain unchanged. A valid executor is still unavailable:
+`collection-publication-episode-contract.ts` supplies domain types and a `DurableInitiatorReader` alias,
+but no native episode reader or original committed operation/source/creation-receipt reader exists here.
+Those peer-owned readers must arrive before this seam can independently bind its installed pool,
+initialize the private working input or return a genuine current definition. Selected-set output rows
+cannot supply that missing authority. No successful whole-query admission or native proof is claimed.
+
 `POST /v1/collections/{collectionId}:publishSelected` takes the closed body `{revision,subjectIds}` and ordinary
 Idempotency-Key. `subjectIds` is an explicit selection of 0–100 distinct raw native Subject IDs. Calling this
 method consents to publishing the current title/description/presentation metadata and changing visibility to
