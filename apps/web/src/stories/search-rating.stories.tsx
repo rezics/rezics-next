@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import {
   PageStory,
@@ -150,5 +151,41 @@ export const MoreKindMetadata: Story = {
     await userEvent.click(page.getByRole('button', { name: m.discovery_more_kinds() }));
     await expect(await page.findByRole('checkbox', { name: /Atlas/ })).toBeEnabled();
     await expect(context.canvasElement.querySelectorAll('[data-slot="discovery-results"] > li')).toHaveLength(5);
+  },
+};
+
+/** Client navigation evidence from the existing fixture transport, not native rating-sort proof. */
+export const SortNavigation: Story = {
+  render: () => <PageStory visitor="Signed Out" path="/search?q=Mira%20continued&cursor=old-sort-hits%2B%2F%3D" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByText('Mira Reading Room');
+    await expect(context.canvasElement.querySelectorAll('[data-slot="discovery-results"] > li')).toHaveLength(3);
+
+    await userEvent.selectOptions(canvas.getByLabelText(m.search_sort_label()), 'rating');
+    // The actual loader receives a fresh traversal and returns the fixture's first page.
+    await waitFor(async () => {
+      await expect(canvas.getByLabelText(m.search_sort_label())).toHaveValue('rating');
+      await expect(context.canvasElement.querySelectorAll('[data-slot="discovery-results"] > li')).toHaveLength(1);
+    });
+    const more = await canvas.findByRole('link', { name: m.search_more() });
+    const ratingUrl = new URL(more.getAttribute('href')!, 'http://rezics.local');
+    await expect(ratingUrl.pathname).toBe(`/${getLocale()}/search`);
+    await expect(ratingUrl.searchParams.get('q')).toBe('Mira continued');
+    await expect(ratingUrl.searchParams.get('sort')).toBe('rating');
+    await expect(ratingUrl.searchParams.get('cursor')).toBe('opaque-hits-page+/=');
+
+    await userEvent.selectOptions(canvas.getByLabelText(m.search_sort_label()), 'relevance');
+    await waitFor(async () => {
+      await expect(canvas.getByLabelText(m.search_sort_label())).toHaveValue('relevance');
+    });
+    const relevanceUrl = new URL(
+      canvas.getByRole('link', { name: m.search_more() }).getAttribute('href')!,
+      'http://rezics.local',
+    );
+    await expect(relevanceUrl.searchParams.get('q')).toBe('Mira continued');
+    await expect(relevanceUrl.searchParams.has('sort')).toBe(false);
+    await expect(canvas.getByRole('heading', { level: 1, name: m.search_heading() })).toBeVisible();
   },
 };

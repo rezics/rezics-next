@@ -1,8 +1,19 @@
 import type { SearchLoaderDeps } from './search-params';
 import { discoverySearchHref, searchFormFields } from './search-params';
+import { useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+
+/** Reuse the public GET representation; changing order starts a fresh hit traversal. */
+export function searchSortHref(locale: string, state: SearchLoaderDeps, sort: 'relevance' | 'rating'): string {
+  const [path, search] = discoverySearchHref(locale, state).split('?');
+  const searchParams = new URLSearchParams(search);
+  searchParams.delete('cursor');
+  if (sort === 'rating') searchParams.set('sort', 'rating');
+  else searchParams.delete('sort');
+  return `${path}${searchParams.size ? `?${searchParams}` : ''}`;
+}
 
 /** A single search sort selector that preserves the query and filters while starting a fresh cursor. */
 export function SearchSort({
@@ -22,6 +33,8 @@ export function SearchSort({
   state?: SearchLoaderDeps | undefined;
   disabled?: boolean;
 }) {
+  // The selector also supports static form rendering outside the connected application.
+  const router = useRouter({ warn: false });
   return (
     <form method="get" action={`/${locale}/search`} className="flex max-w-full items-center justify-end gap-2">
       <Field orientation="horizontal" className="w-auto flex-wrap justify-end gap-2">
@@ -34,29 +47,20 @@ export function SearchSort({
           value={sort}
           className="h-9 shrink-0 rounded-md border border-input bg-background px-2 text-sm [&_select]:w-auto"
           onChange={(event) => {
-            const url = state
-              ? new URL(
-                  discoverySearchHref(locale, {
-                    ...state,
-                    query,
-                    type,
-                    facets,
-                    cursor: undefined,
-                    sort: event.currentTarget.value === 'rating' ? 'rating' : undefined,
-                  }),
-                  window.location.origin,
-                )
-              : new URL(window.location.href);
-            url.searchParams.delete('cursor');
-            if (event.currentTarget.value === 'rating') url.searchParams.set('sort', 'rating');
-            else url.searchParams.delete('sort');
-            window.location.assign(url);
+            void router?.navigate({
+              href: searchSortHref(
+                locale,
+                { cursor: undefined, sort: undefined, ...state, query, type, facets },
+                event.currentTarget.value === 'rating' ? 'rating' : 'relevance',
+              ),
+            });
           }}
         >
           <NativeSelectOption value="relevance">{m.search_sort_relevance()}</NativeSelectOption>
           <NativeSelectOption value="rating">{m.search_sort_rating()}</NativeSelectOption>
         </NativeSelect>
       </Field>
+      {sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
       {state &&
         searchFormFields({
           kinds: state.kinds,
