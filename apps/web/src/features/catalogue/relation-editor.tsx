@@ -741,19 +741,27 @@ export function RelationEditor({
                                   </NativeSelect>
                                 </Field>
                               )}
-                              <Button
-                                disabled={frozen || candidate.retracted !== null}
-                                onClick={() => setConfirmation(candidate.decision === 'accepted' ? 'adopt' : 'accept')}
-                              >
-                                {candidate.decision === 'accepted'
-                                  ? m.candidate_adopt({}, options)
-                                  : m.candidate_accept({}, options)}
-                              </Button>
-                              {candidate.decision !== 'rejected' && (
-                                <Button variant="outline" disabled={frozen} onClick={() => setConfirmation('reject')}>
-                                  {m.relation_reject({}, options)}
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  className="min-h-11"
+                                  disabled={frozen || candidate.retracted !== null}
+                                  onClick={() => setConfirmation(candidate.decision === 'accepted' ? 'adopt' : 'accept')}
+                                >
+                                  {candidate.decision === 'accepted'
+                                    ? m.candidate_adopt({}, options)
+                                    : m.candidate_accept({}, options)}
                                 </Button>
-                              )}
+                                {candidate.decision !== 'rejected' && (
+                                  <Button
+                                    className="min-h-11"
+                                    variant="outline"
+                                    disabled={frozen}
+                                    onClick={() => setConfirmation('reject')}
+                                  >
+                                    {m.relation_reject({}, options)}
+                                  </Button>
+                                )}
+                              </div>
                             </>
                           )
                         )}
@@ -800,10 +808,19 @@ export function RelationEditor({
             <Statement statement={draft} publicRead={current.public} names={current.names} locale={locale} />
           )}
           <div className="flex flex-wrap gap-2">
-            <Button disabled={busy || (!!failure && failure.reason !== 'unavailable')} onClick={confirm}>
+            <Button
+              className="min-h-11"
+              disabled={busy || (!!failure && failure.reason !== 'unavailable')}
+              onClick={confirm}
+            >
               {action}
             </Button>
-            <Button variant="outline" disabled={busy || !!request.current} onClick={() => setConfirmation(undefined)}>
+            <Button
+              className="min-h-11"
+              variant="outline"
+              disabled={busy || !!request.current}
+              onClick={() => setConfirmation(undefined)}
+            >
               {m.candidate_cancel({}, options)}
             </Button>
           </div>
