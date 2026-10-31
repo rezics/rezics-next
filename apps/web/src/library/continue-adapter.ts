@@ -107,7 +107,8 @@ export const nativeContinueSource: ContinueSource = async (client, authorization
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual', ...(signal ? { signal } : {}) },
     });
-    if (result.status !== 200 || result.error) return continueFailure(result.status, result.headers.get('retry-after'));
+    if (result.status !== 200 || result.error)
+      return continueFailure(result.status, new Headers(result.headers).get('retry-after'));
     return presentContinuePage(result.data);
   } catch {
     return { state: 'unavailable' };
