@@ -290,33 +290,37 @@ export async function retireAgentIdentitySDKWork(
   if (currentSource.state === 'pending') return currentSource;
   if (!same(currentSource, source)) return pending('identity-sdk-retirement-source-fence-changed');
   return (
-    await runCommand(pool, { partition: 0, deadline: context.deadline }, async (tx) => {
-      const current = await readAgentIdentitySDKReceivingBinding(
-        tx,
-        {
-          partition: 0,
-          locator: { artifactType: 'durable-work/v1', workId: receipt.binding.custodyId },
-          accounts: receipt.binding.source.accounts,
-        },
-        receipt.binding.barrier,
-      );
-      if (current.state === 'pending') return noEffect(current);
-      if (!same(current.binding, receipt.binding))
-        return noEffect(pending('identity-sdk-retirement-receiving-binding-changed'));
-      const row = (
-        await tx.query<{ sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null }>(
-          'SELECT sdk_retirement_receipt FROM core.agent_identity_work WHERE custody_id=$1 FOR UPDATE',
-          [receipt.binding.custodyId],
-        )
-      ).rows[0];
-      if (!row || (row.sdk_retirement_receipt && !same(row.sdk_retirement_receipt, receipt)))
-        return noEffect(pending('identity-sdk-native-receipt-changed'));
-      if (!row.sdk_retirement_receipt)
-        await tx.query('UPDATE core.agent_identity_work SET sdk_retirement_receipt=$2 WHERE custody_id=$1', [
-          receipt.binding.custodyId,
-          receipt,
-        ]);
-      return noEffect(observed);
-    })
+    await runCommand<AgentIdentitySDKFenceObservation>(
+      pool,
+      { partition: 0, deadline: context.deadline },
+      async (tx) => {
+        const current = await readAgentIdentitySDKReceivingBinding(
+          tx,
+          {
+            partition: 0,
+            locator: { artifactType: 'durable-work/v1', workId: receipt.binding.custodyId },
+            accounts: receipt.binding.source.accounts,
+          },
+          receipt.binding.barrier,
+        );
+        if (current.state === 'pending') return noEffect(current);
+        if (!same(current.binding, receipt.binding))
+          return noEffect(pending('identity-sdk-retirement-receiving-binding-changed'));
+        const row = (
+          await tx.query<{ sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null }>(
+            'SELECT sdk_retirement_receipt FROM core.agent_identity_work WHERE custody_id=$1 FOR UPDATE',
+            [receipt.binding.custodyId],
+          )
+        ).rows[0];
+        if (!row || (row.sdk_retirement_receipt && !same(row.sdk_retirement_receipt, receipt)))
+          return noEffect(pending('identity-sdk-native-receipt-changed'));
+        if (!row.sdk_retirement_receipt)
+          await tx.query('UPDATE core.agent_identity_work SET sdk_retirement_receipt=$2 WHERE custody_id=$1', [
+            receipt.binding.custodyId,
+            receipt,
+          ]);
+        return noEffect(observed);
+      },
+    )
   ).value;
 }

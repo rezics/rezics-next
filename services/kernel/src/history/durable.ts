@@ -127,7 +127,12 @@ async function minimizeIdentitySDKWork(
   )
     return AGENT_IDENTITY_SDK_RETIREMENT.gap;
   const receipt = saved.sdk_retirement_receipt;
-  if (canonicalize(receipt.binding.barrier) !== canonicalize(barrier)) return 'identity-sdk-retirement-barrier-changed';
+  if (
+    job.account_route !== barrier.accountRoute ||
+    job.account_id !== barrier.accountId ||
+    canonicalize(receipt.binding.barrier) !== canonicalize(barrier)
+  )
+    return 'identity-sdk-retirement-barrier-changed';
   // This path runs under the existing caller deadline, including SDK and physical probes.
   const context = { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) };
   if (job.partition_no !== 0) return 'identity-sdk-receiving-home-mismatch';

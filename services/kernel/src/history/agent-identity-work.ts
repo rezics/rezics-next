@@ -63,14 +63,14 @@ async function retiredWorkflow(pool: Pool, workflowId: string): Promise<boolean>
   return withConnection(pool, async (tx) => {
     const row = (
       await tx.query(
-        `SELECT w.state,m.sdk_retirement_receipt FROM core.agent_identity_work m
+        `SELECT w.state,m.sdk_retirement_receipt IS NOT NULL AS writers_fenced FROM core.agent_identity_work m
          JOIN core.history_work w ON w.partition_no=0 AND w.work_id=m.custody_id
            AND w.owner=$2 AND w.request_digest=m.request_digest
          WHERE m.workflow_id=$1`,
         [workflowId, AGENT_IDENTITY_WORK_OWNER],
       )
     ).rows[0];
-    return row?.state === 'retired' || row?.sdk_retirement_receipt != null;
+    return row?.state === 'retired' || row?.writers_fenced === true;
   });
 }
 
