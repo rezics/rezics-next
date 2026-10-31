@@ -101,7 +101,11 @@ function ProviderStatement({
       )}
       <p className="break-all text-xs text-muted-foreground">
         {m.candidate_rank({}, o)}:{' '}
-        {statement.rank === 'preferred' ? m.candidate_rank_preferred({}, o) : m.candidate_rank_normal({}, o)}
+        {statement.rank === 'preferred'
+          ? m.candidate_rank_preferred({}, o)
+          : statement.rank === 'deprecated'
+            ? m.changes_rank_deprecated({}, o)
+            : m.candidate_rank_normal({}, o)}
         {' · '}
         {statement.id}
       </p>
@@ -293,41 +297,45 @@ export function ProviderReviewActions({
     <div className="space-y-5">
       {page && visible.length > 0 && !concealRows && (
         <>
-          <div
-            className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3"
-            aria-label={m.provider_selection({}, o)}
-          >
-            <p className="me-auto text-sm" role="status">
-              {m.provider_selected_count({ count: selected.length }, o)}
-            </p>
-            <Button
-              variant="outline"
-              className="min-h-11"
-              disabled={locked || !selected.length}
-              onClick={() => review('accept')}
-            >
-              {m.candidate_accept({}, o)}
-            </Button>
-            <Button
-              variant="outline"
-              className="min-h-11"
-              disabled={locked || !selected.length}
-              onClick={() => review('reject')}
-            >
-              {m.candidate_reject({}, o)}
-            </Button>
-            <Button
-              variant="ghost"
-              className="min-h-11"
-              disabled={locked || !selected.length}
-              onClick={() => setSelection({ scope, ids: [] })}
-            >
-              {m.provider_clear({}, o)}
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {m.provider_visible_only({ limit: providerSelectionLimit }, o)}
-          </p>
+          {visible.some((row) => !concealed(row)) && (
+            <>
+              <div
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3"
+                aria-label={m.provider_selection({}, o)}
+              >
+                <p className="me-auto text-sm" role="status">
+                  {m.provider_selected_count({ count: selected.length }, o)}
+                </p>
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={locked || !selected.length}
+                  onClick={() => review('accept')}
+                >
+                  {m.candidate_accept({}, o)}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={locked || !selected.length}
+                  onClick={() => review('reject')}
+                >
+                  {m.candidate_reject({}, o)}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="min-h-11"
+                  disabled={locked || !selected.length}
+                  onClick={() => setSelection({ scope, ids: [] })}
+                >
+                  {m.provider_clear({}, o)}
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {m.provider_visible_only({ limit: providerSelectionLimit }, o)}
+              </p>
+            </>
+          )}
           <ul className="space-y-4">
             {visible.map((row, index) => {
               const key = providerRowKey(row);
