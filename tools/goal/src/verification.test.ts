@@ -1565,3 +1565,136 @@ test('interrupted ordinary proof launch never replays a prepared command or perm
     expect(h.store.events(task.id).some((event) => event.kind === 'proof-verified')).toBe(false);
   } finally { h.dispose(); }
 });
+
+test('authenticated logical reconciliation permits one fresh SAME-ID future capture while retaining the bound UNKNOWN incarnation byte for byte', async () => {
+  const h = registeredFixture(true);
+  try {
+    const oldBrief = structuredClone(h.store.task(h.proof.id).brief);
+    const oldAuthorization = h.store.task(h.proof.id).proofAuthorization;
+    const unknown = { status: 'unknown' as const, passed: false, cause: 'Retained native result unavailable',
+      record: null, physical: [{ physicalRunId: 'retained-unknown', cleanup: null }] };
+    h.store.observeProof(h.binding, unknown);
+    h.store.updateAttempt(h.current, (value) => {
+      value.result = 'Paid original report'; value.session = 'paid-session'; value.checks = [h.binding.checkId];
+    });
+    const originalEvents = h.store.events(h.proof.id);
+    h.store.close(h.current, 'stopped');
+    const rawAttempt = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=1').get(h.proof.id);
+    const originalHead = git(h.root, ['rev-parse', 'HEAD']);
+    // Advance integration independently; retain the original proof cwd/branch and empty report history.
+    const integrated = join(h.root, '.temp/new-integration');
+    git(h.root, ['worktree', 'add', '-b', 'new-integration', integrated, originalHead]);
+    writeFileSync(join(integrated, 'new-source'), 'Fresh integrated capture');
+    git(integrated, ['add', 'new-source']);
+    git(integrated, ['commit', '-m', 'Capture future proof source']);
+    const sourceCommit = git(integrated, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
+    const fresh = submittedProof(h, { proof: { ...h.proofBrief.proof, sourceCommit } });
+    expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: fresh.path }, h.actor))
+      .toThrow('explicit exited logical reconciliation');
+    expect(() => h.tasks.releaseProof(h.proof.id, 1, null)).toThrow('authenticated');
+    expect(() => h.tasks.releaseProof(h.proof.id, 2, h.actor)).toThrow('stale');
+    const runtime = createRuntime({ tasks: h.tasks, db: h.store.db });
+    const output: string[] = [];
+    expect(await runWorkerCommand('retry', [h.proof.id, '--release-proof', '--expected-attempt', '1'], {
+      runtime, env: { CODEX_THREAD_ID: h.actor.sessionId }, print: (value) => output.push(value),
+    })).toBe(0);
+    expect(JSON.parse(output.pop()!).checks).toEqual([h.binding.checkId]);
+    const releasedRow = h.store.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=? AND attempt=1').get(h.proof.id);
+    const releasedRun = h.store.proofReservation(h.proof.id, 1);
+    expect(releasedRun).toMatchObject({ binding: h.binding, status: 'released', observation: unknown,
+      logicalRelease: { reason: expect.stringContaining('native custody remains independent') } });
+    const changedArgv = submittedProof(h, { proof: fresh.brief.proof,
+      acceptance: { ...fresh.brief.acceptance, command: [...fresh.brief.acceptance.command, '--changed'] } });
+    expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: changedArgv.path }, h.actor))
+      .toThrow('exact original acceptance');
+    const changedOriginal = submittedProof(h, { proof: { ...fresh.brief.proof!, journey: 'Different journey' } });
+    expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: changedOriginal.path }, h.actor))
+      .toThrow('exact original metadata');
+    expect(await runWorkerCommand('retry', [h.proof.id, '--proof-start', '--expected-attempt', '1', '--brief', fresh.path], {
+      runtime, env: { CODEX_THREAD_ID: h.actor.sessionId }, print: (value) => output.push(value),
+    })).toBe(0);
+    expect(JSON.parse(output.pop()!)).toEqual({ taskId: h.proof.id, attempt: 1, status: 'created' });
+    const registered = h.store.task(h.proof.id);
+    expect(registered).toMatchObject({ currentAttempt: 1, brief: { proof: fresh.brief.proof }, proofRun: releasedRun });
+    expect(registered.brief.acceptance).toEqual(oldBrief.acceptance);
+    expect(h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=1').get(h.proof.id)).toEqual(rawAttempt);
+    expect(h.store.proofReservation(h.proof.id, 2)).toBeUndefined();
+    const archived = h.store.events(h.proof.id).filter((event) => event.kind === 'proof-registration-replaced');
+    expect(archived).toHaveLength(1);
+    expect(JSON.parse(archived[0]!.body)).toMatchObject({ brief: oldBrief, authorization: oldAuthorization,
+      previousFingerprint: proofFingerprint(oldBrief), newFingerprint: proofFingerprint(fresh.brief), proofRun: releasedRun });
+    const oldRecord = h.store.record(h.current);
+    h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1 }, h.actor);
+    expect(h.store.retryIntents().filter((intent) => intent.taskId === h.proof.id)).toEqual([
+      { taskId: h.proof.id, attempt: 1, options: {}, status: 'pending' },
+    ]);
+    expect(h.store.record(h.current)).toEqual(oldRecord);
+    expect(h.store.events(h.proof.id).filter((event) => event.kind === 'proof-registration-replaced')).toHaveLength(1);
+    let launches = 0;
+    const futureCheck = crypto.randomUUID();
+    const tasks = new WorkerTasks(h.settings, h.store, (pool) => reading(pool), async (store, task, next) => {
+      launches++;
+      expect(task.id).toBe(h.proof.id);
+      expect(next.attempt).toBe(2);
+      expect(git(task.worktree, ['rev-parse', 'HEAD'])).toBe(sourceCommit);
+      expect(task.worktree).not.toBe(h.binding.cwd);
+      expect(task.brief.acceptance.command).toEqual(h.binding.argv);
+      expect(task.proofRun).toEqual(releasedRun); // Old binding remains evidence, never this invocation's identity.
+      const saved = store.updateAttempt(next, (value) => { value.state = 'waiting'; value.checks = [futureCheck]; });
+      store.updateTask(next, (value) => { value.state = 'running'; });
+      return { attempt: saved, exited: Promise.resolve({ code: 0, signal: null }) };
+    });
+    await tasks.retry(h.proof.id, { expectedAttempt: 1 });
+    expect(launches).toBe(1);
+    expect(futureCheck).not.toBe(h.binding.checkId);
+    expect(h.store.task(h.proof.id).currentAttempt).toBe(2);
+    expect(h.store.events(h.proof.id, 2).filter((event) => event.kind === 'proof-command-ready')).toHaveLength(1);
+    expect(h.store.proofReservation(h.proof.id, 2)).toBeUndefined();
+    expect(h.store.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=? AND attempt=1').get(h.proof.id)).toEqual(releasedRow);
+    expect(h.store.events(h.proof.id).slice(0, originalEvents.length)).toEqual(originalEvents);
+    expect(h.store.attempt(h.current)).toMatchObject({ result: 'Paid original report', session: 'paid-session', checks: [h.binding.checkId] });
+    expect(git(h.root, ['rev-parse', 'HEAD'])).toBe(originalHead);
+    expect(h.store.events(h.proof.id).some((event) => ['proof-verified', 'historical-proof-terminal'].includes(event.kind))).toBe(false);
+    // The new current wait consumes one logical slot; released UNKNOWN history consumes none.
+    for (let index = 0; index < 2; index++) {
+      const task = h.store.createTask(fresh.brief,
+        { briefPath: fresh.path, worktree: integrated, branch: 'new-integration', base: sourceCommit }, 'implementation');
+      h.tasks.queueProofStart(task.id, { expectedAttempt: 0 }, h.actor);
+      h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory), undefined, true);
+    }
+    expect(h.store.proofCapacityAvailable('fixture', 'fourth')).toBe(false);
+    expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: fresh.path }, h.actor)).toThrow('stale');
+    expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 2, brief: fresh.path }, h.actor)).toThrow('stale');
+    expect(() => h.tasks.releaseProof(h.proof.id, 2, h.actor)).toThrow('stopped or exited');
+  } finally { h.dispose(); }
+});
+
+test('ordinary command-ready proof continuation needs explicit reconciliation and refuses a still-live terminal driver without aborting host reconciliation', () => {
+  const h = registeredFixture(true);
+  try {
+    const submitted = submittedProof(h);
+    const task = h.store.createTask(submitted.brief,
+      { briefPath: submitted.path, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+    h.tasks.queueProofStart(task.id, { expectedAttempt: 0 }, h.actor);
+    const ref = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory));
+    h.store.event(ref, 'proof-command-ready', { sourceCommit: h.binding.sourceCommit, argv: submitted.brief.acceptance.command });
+    h.store.close(ref, 'stopped');
+    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 1 }, h.actor)).toThrow('explicit exited logical reconciliation');
+    expect(h.tasks.releaseProof(task.id, 1, h.actor).checks).toEqual([]);
+    expect(h.store.proofReservation(task.id, 1)).toBeUndefined();
+    expect(h.store.events(task.id, 1).filter((event) => event.kind === 'proof-logical-reconciled')).toHaveLength(1);
+    expect(h.tasks.queueProofStart(task.id, { expectedAttempt: 1 }, h.actor).status).toBe('created');
+    const live = h.store.createTask(submitted.brief,
+      { briefPath: submitted.path, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+    const liveRef = h.store.nextAttempt({ taskId: live.id, attempt: 0 }, (n) => ({
+      ...attempt(live.id, n, h.settings.stateDirectory), driver: processIdentity(),
+    }));
+    h.store.event(liveRef, 'proof-command-ready', { argv: submitted.brief.acceptance.command });
+    h.store.close(liveRef, 'stopped');
+    expect(() => h.tasks.releaseProof(live.id, 1, h.actor)).toThrow('live or uncertain');
+    expect(h.store.releaseExitedProofReservations(liveRef)).toEqual([]);
+    expect(h.store.events(live.id, 1).some((event) => event.kind === 'proof-logical-reconciled')).toBe(false);
+    expect(() => h.tasks.queueProofStart(live.id, { expectedAttempt: 1 }, h.actor)).toThrow('explicit exited logical reconciliation');
+  } finally { h.dispose(); }
+});

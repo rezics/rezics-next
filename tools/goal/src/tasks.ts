@@ -521,7 +521,7 @@ export class WorkerTasks {
         throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, task.currentAttempt);
       authenticateProofManager(this.store, task.brief.manager,
         actor === undefined ? authenticatedManager(this.store.db) : actor, this.settings.integration.operationsManager);
-      const checks = this.store.releaseExitedProofReservations({ taskId, attempt: expectedAttempt });
+      const checks = this.store.releaseExitedProofReservations({ taskId, attempt: expectedAttempt }, true);
       return { taskId, attempt: expectedAttempt, status: 'released', checks };
     } finally { lease.release(); }
   }
@@ -568,6 +568,10 @@ export class WorkerTasks {
         if (briefPath) current.briefPath = briefPath;
         current.taskClass = classifyTask(nextBrief);
         current.proofAuthorization = authorization;
+        if (proofFingerprint(task.brief) !== proofFingerprint(nextBrief)) current.pendingBriefChange = {
+          previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
+          newBriefHash: briefHash(nextBrief.markdown),
+        };
         this.applyRetryPriority(current, previousCritical, actor, authorization);
         current.state = this.dependenciesMet(current) ? 'ready' : 'held';
         this.store.saveRetryIntent(ref, {});
@@ -922,9 +926,8 @@ export class WorkerTasks {
     if (git(task.worktree, ['status', '--porcelain', '--untracked-files=all']))
       throw new Error('Proof source is read-only; worktree differs from captured commit');
     if (tip !== captured) {
-      if (this.store.db.query('SELECT 1 FROM worker_proof_reservations WHERE task_id=?').get(task.id) ||
-          this.store.events(task.id).some((event) => event.kind === 'proof-command-ready') ||
-          git(task.worktree, ['merge-base', task.base, tip]) !== task.base ||
+      this.store.assertProofPreparation(ref);
+      if (git(task.worktree, ['merge-base', task.base, tip]) !== task.base ||
           git(task.worktree, ['diff', '--name-only', task.base, tip]))
         throw new Error('Proof source is read-only; only an unreserved clean retained empty-report branch can prepare a fresh capture');
       const worktree = join(this.settings.worktreeRoot, `${task.id}-proof-${captured}`);
@@ -944,7 +947,7 @@ export class WorkerTasks {
       throw new ProofUnavailableError('Proof pending/unavailable: authenticated registration required');
     const head = this.branchHead(this.settings.integrationBranch, false);
     if (head !== task.brief.proof.sourceCommit)
-      throw new ProofUnavailableError(`Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> before any reservation; bound proof sources cannot refresh`);
+      throw new ProofUnavailableError(`Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> before its new reservation; prior proof incarnations require retry ${task.id} --release-proof --expected-attempt ${task.currentAttempt} first, without changing any old binding/source`);
     if (spawnSync('git', ['cat-file', '-e', `${task.brief.proof.sourceCommit}:scripts/worker-check.ts`],
       { cwd: this.settings.mainCheckout, stdio: 'ignore' }).status !== 0)
       throw new ProofUnavailableError('Proof pending/unavailable: captured ordinary scripts/worker-check.ts is missing');

@@ -1073,8 +1073,9 @@ and stale generations cannot convert. Source refresh requires a new authenticate
 reservation, native intent or proof worker start. An exited historical product/claim generation is eligible: its raw
 attempt, report, session, sequence and classification remain unchanged. For an already typed contract, refresh retains
 the exact journey, sourceTasks and acceptance argv and updates the one existing pending start intent atomically under
-the expected generation. Once a source/token is reserved it cannot change, even after release. Missing or uncertain
-prior proof-start classification refuses refresh. A retained legacy product record predating `taskKind` keeps that
+the expected generation. A reserved incarnation's source/token never changes, even after release. A future capture
+on the same task requires the explicit exited logical reconciliation below; it preserves that old incarnation.
+Missing or uncertain prior proof-start classification refuses refresh without reconciliation. A retained legacy product record predating `taskKind` keeps that
 field absent; it is eligible when there is no proof observation, reservation or binding event. The host keeps the same intent through capacity waits and recovery;
 capacity waits never launch a model; optional unavailable custody does not block ordinary execution. A stale capture refusal names the old/current commits and exact authorized
 `--proof-start --expected-attempt` refresh needed; it never runs a doomed stale check.
@@ -1089,7 +1090,7 @@ the supported pinned Bun and workspace dependencies outside SQLite, before the w
 Setup failure is reported as an environment/tool error with bounded diagnostics, not as a product assertion.
 A clean retained branch whose commits beyond its recorded base have an empty tree diff can prepare a separate
 detached worktree at the newly authorized capture. The old worktree, branch, report commits and attempt history stay
-intact. Dirty trees, real source changes or any existing proof reservation/start intent refuse this preparation; it is
+intact. Dirty trees, real source changes or an unreconciled prior/current proof invocation refuse this preparation; it is
 never a reset, rebase, source swap under a token or manager checkout operation.
 
 The SQLite lifecycle admits at most three current proof runs per Goal, atomically before ordinary preparation.
@@ -1098,6 +1099,21 @@ slot each. `historicalProofChecks()` inspects only each task's CURRENT running/w
 labelled command strings, stopped/exited attempts and archived historical facts do not occupy new logical slots.
 A current running/waiting check remains counted even when its optional custody is unknown. Capacity waits preserve
 one durable start intent without launching a model. Normal host and physical check admission remain independent.
+
+To register a future capture after a stopped/exited proof, use the authenticated owner or configured operations
+session, in this order (both commands require the exact current generation):
+
+```sh
+bun tools/goal/src/cli.ts retry <task> --release-proof --expected-attempt <generation>
+bun tools/goal/src/cli.ts retry <task> --proof-start --expected-attempt <generation> --brief .temp/goal/original-proof.md
+```
+
+The submitted brief captures current dev and retains the exact original Goal, manager, journey, sourceTasks and
+acceptance. Registration archives the previous accepted contract and its hashes, keeps the SAME task ID and one
+pending start intent, and launches nothing. Normal host start creates the next attempt and one distinct ordinary
+invocation. Every previous proof incarnation must have explicit logical reconciliation and no live worker/driver;
+an active or unreleased incarnation refuses continuation. Reconciliation also records an exited ordinary
+command-ready attempt with no optional native binding. It never authorizes changing an old binding or source.
 
 The public logical release operation above and host reconciliation mark stopped/exited reservations `released`
 with a `logicalRelease` policy reason and a `proof-logical-released` event. They preserve the original binding, token,
