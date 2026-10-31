@@ -27,9 +27,12 @@ export function nativeProfileFailure(status: number, body?: unknown, headers?: H
   const problem = body && typeof body === 'object' ? body : undefined;
   const native =
     problem &&
-    'type' in problem && typeof problem.type === 'string' &&
-    'title' in problem && typeof problem.title === 'string' &&
-    'code' in problem && typeof problem.code === 'string'
+    'type' in problem &&
+    typeof problem.type === 'string' &&
+    'title' in problem &&
+    typeof problem.title === 'string' &&
+    'code' in problem &&
+    typeof problem.code === 'string'
       ? problem
       : undefined;
   const retryAfter = new Headers(headers).get('retry-after');

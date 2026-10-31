@@ -23,7 +23,11 @@ import { EditableProfileReadError, nativeProfileFailure } from '../../settings/e
 type SaveObserver = ((attempt: ProfileAttempt) => void) | undefined;
 type RecoveryScenario = 'delay' | 'date' | 'short' | 'malformed' | 'read';
 
-function ProfileExample({ scenario, recovery, onSave }: {
+function ProfileExample({
+  scenario,
+  recovery,
+  onSave,
+}: {
   scenario: ProfileScenario;
   recovery?: RecoveryScenario | undefined;
   onSave?: SaveObserver;
@@ -31,14 +35,27 @@ function ProfileExample({ scenario, recovery, onSave }: {
   const [editor] = useState(() => {
     const io = createProfileStoryIO(scenario);
     let failed = false;
-    const failure = () => nativeProfileFailure(503, {
-      type: 'https://rezics.com/problems/dependency_unavailable',
-      title: 'Dependency Unavailable',
-      code: 'dependency_unavailable',
-      retryable: true,
-      request_id: 'profile-story-request',
-    }, { 'retry-after': recovery === 'date' ? new Date(Date.now() + 60_000).toUTCString()
-      : recovery === 'short' ? '1' : recovery === 'malformed' ? 'invalid' : '60' });
+    const failure = () =>
+      nativeProfileFailure(
+        503,
+        {
+          type: 'https://rezics.com/problems/dependency_unavailable',
+          title: 'Dependency Unavailable',
+          code: 'dependency_unavailable',
+          retryable: true,
+          request_id: 'profile-story-request',
+        },
+        {
+          'retry-after':
+            recovery === 'date'
+              ? new Date(Date.now() + 60_000).toUTCString()
+              : recovery === 'short'
+                ? '1'
+                : recovery === 'malformed'
+                  ? 'invalid'
+                  : '60',
+        },
+      );
     return new ProfileEditor({
       ...io,
       read: async () => {
@@ -98,7 +115,11 @@ function ProfileHome() {
   );
 }
 
-function Example({ scenario = 'normal', recovery, onSave }: {
+function Example({
+  scenario = 'normal',
+  recovery,
+  onSave,
+}: {
   scenario?: ProfileScenario;
   recovery?: RecoveryScenario;
   onSave?: SaveObserver;
@@ -528,7 +549,9 @@ export const PublicActivityRetryDate: Story = {
     await expect(activity.getByRole('button', { name: m.settings_profile_review_draft() })).toBeEnabled();
     const view = await profileView(canvasElement);
     await expect(view.getByRole('button', { name: m.settings_profile_reload_current() })).toBeDisabled();
-    await expect(args.onSave).toHaveBeenCalledWith(expect.objectContaining({ patch: { publicViews: { reviews: false } } }));
+    await expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ patch: { publicViews: { reviews: false } } }),
+    );
     await expect(args.onSave).toHaveBeenCalledTimes(1);
   },
 };

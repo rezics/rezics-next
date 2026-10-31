@@ -137,9 +137,12 @@ test('private profile recovery preserves actual native problem metadata and dela
         ...(retryAfter ? { retryAfter } : {}),
       },
     });
-    const editor = new ProfileEditor({ read: async () => profileReadValue(result), save: async () => {
-      throw new Error('Must not write');
-    } });
+    const editor = new ProfileEditor({
+      read: async () => profileReadValue(result),
+      save: async () => {
+        throw new Error('Must not write');
+      },
+    });
     await editor.reload();
     expect(editor.snapshot().failure).toEqual({ ...result.failure, message: '' });
     expect(editor.snapshot().draft).toBeNull();

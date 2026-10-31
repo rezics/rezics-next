@@ -43,8 +43,7 @@ export async function profileReadResult(read: () => Promise<ProfileValues>): Pro
     return { ok: true, profile: await read() };
   } catch (error) {
     const failure = profileReadFailure(error);
-    if (failure)
-      return { ok: false, status: failure.status, ...(Object.keys(failure).length > 1 ? { failure } : {}) };
+    if (failure) return { ok: false, status: failure.status, ...(Object.keys(failure).length > 1 ? { failure } : {}) };
     throw error;
   }
 }
