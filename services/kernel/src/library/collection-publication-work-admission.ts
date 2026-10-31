@@ -50,7 +50,8 @@ export type CollectionPublicationWorkDefinition = Readonly<{
   custody: NativeSourceCustody;
   releaseDigest: string;
   audience: string;
-}> & Extract<CollectionPublicationPhase, { phase: 'staging' | 'awaiting_activation' }>;
+}> &
+  Extract<CollectionPublicationPhase, { phase: 'staging' | 'awaiting_activation' }>;
 
 /** TEMPORARY UNAVAILABLE CONTRACT ADAPTER. The later native episode producer must replace it.
  * On each use, verify the genuine live work-step transaction, exact pool/owner/namespace and T,
