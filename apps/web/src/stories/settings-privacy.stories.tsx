@@ -458,7 +458,9 @@ function ListRestartExample({ scenario }: { scenario: 'cursor' | 'exhausted' | '
       return {
         ok: true,
         value: {
-          collections: [{ ...current, title: 'Current reading', visibility: 'unlisted', revision: current.revision + 2 }],
+          collections: [
+            { ...current, title: 'Current reading', visibility: 'unlisted', revision: current.revision + 2 },
+          ],
           next: null,
         },
       };

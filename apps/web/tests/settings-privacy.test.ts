@@ -637,7 +637,12 @@ test('Recover the Collection privacy list from a rejected cursor with original r
   await pager.restart();
   expect(pager.snapshot()).toMatchObject({ collections: [], loaded: true, failure: null, next: null });
   expect(calls.map((call) => new URL(call.url).searchParams.get('cursor'))).toEqual([
-    null, cursor, cursor, null, null, null,
+    null,
+    cursor,
+    cursor,
+    null,
+    null,
+    null,
   ]);
   for (const call of calls) {
     expect(call.method).toBe('GET');
