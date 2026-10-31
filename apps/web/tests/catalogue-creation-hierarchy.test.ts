@@ -106,13 +106,14 @@ test('A contributor starts the actual creation task before alternative editors a
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
     expect(canvas.getAllByRole('heading', { name: m.story_arc_create() })).toHaveLength(1);
-    expect(host.querySelectorAll('h1')).toHaveLength(1);
+    expect(host.querySelector('h1')!.textContent).toBe(m.story_arc_create());
     expect(canvas.getByText(m.story_arc_creation_help())).toBeDefined();
     expect(canvas.getByRole('combobox', { name: m.story_arc_choose_existing() })).toBeDefined();
     expect(canvas.queryByRole('combobox', { name: m.catalogue_create_type() })).toBeNull();
     expect(host.querySelector('select#create-type')).toBeNull();
     expect(canvas.queryByText(m.catalogue_create_grain())).toBeNull();
     const arcName = canvas.getByRole('textbox', { name: m.catalogue_create_label() });
+    expect(arcName.closest('section')!.querySelectorAll('h1, h2')).toHaveLength(0);
     const form = within(arcName.closest('form')!);
     expect(form.getByText(storyArcType)).toBeDefined();
     expect(form.getByText(arc.release.types[storyArcType]!.labels.en!)).toBeDefined();
