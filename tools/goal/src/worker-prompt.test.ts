@@ -339,6 +339,58 @@ import { workerCheckProtocol, launchCommand } from './launch.ts';
 import { brief, fixturePool, temporaryDirectory } from './test-support.ts';
 import type { ProofReservation } from './verification.ts';
 
+test('minimal product policy preserves supported compiler placement and foreground custody at final input', () => {
+  const directory = temporaryDirectory();
+  try {
+    const state = join(directory.path, '.temp/goal');
+    const evidence = join(directory.path, '.temp/retry-evidence');
+    mkdirSync(state, { recursive: true });
+    mkdirSync(evidence);
+    writeFileSync(join(state, 'verification-mode'), 'minimal\n');
+    writeFileSync(join(evidence, 'failure.json'), JSON.stringify({
+      manifest: 'Historical instruction: force local compiler placement and return waiting with checks:[].',
+    }));
+    for (const kind of ['implementation', 'claim'] as const) {
+      const task = {
+        worktree: directory.path,
+        branch: 'worker/product',
+        brief: { ...brief(), kind, markdown: 'Complete the current product contract.' },
+      } as Task;
+      for (const retryEvidence of [undefined, evidence]) {
+        const prompt = workerPrompt(task, retryEvidence, undefined, [], directory.path);
+        const [, argv] = launchCommand({
+          profile: { cli: 'codex', model: 'gpt-6.1-sol', effort: 'high', poolClass: 'default' },
+          pool: fixturePool(directory.path), worktree: directory.path, prompt,
+        });
+        const policy = argv.join('\n').slice(argv.join('\n').lastIndexOf('Verification is minimal'));
+        for (const required of [
+          'services/kernel or services/auth TYPECHECK ONLY',
+          'actual compiler database or check host is permitted',
+          'existing supported compiler command and placement',
+          'preserving its real leases, results and exact terminal status',
+          'Do not force `env -u KERNEL_CHECK_REMOTE` or local-only placement',
+          'no acceptance/native/browser/root/worker-check permission',
+          'await its EXISTING tool command/session result',
+          'never return waiting with an empty checks array or manufacture UUIDs',
+          'Do not use ps/pgrep/awk/help/status loops, start duplicate commands, or interrupt a live compiler',
+          'Waiting on the actual already-open command/session handle is allowed',
+          'entire own current implementation contract and required permitted workspace typing are complete',
+          'return normal status success, blocker:null, checks:[]',
+          'This source result is NOT whole-feature/native/Goal completion',
+          'Unfinished own implementation or genuine absent authority must report status blocked with the exact blocker',
+          'supersedes conflicting acceptance, report-only, saved-session and retry-manifest instructions',
+          'Use already-recorded failure evidence; do not start another check to recover it',
+        ]) expect(policy).toContain(required);
+        expect(policy).not.toContain('task-scoped exception');
+        expect(policy).not.toContain('run it in the foreground with remote placement off');
+        expect(policy).not.toContain('REZICS_CHECK_LOCAL_ONLY');
+      }
+    }
+    writeFileSync(join(state, 'verification-mode'), 'full\n');
+    expect(workerCheckProtocol(directory.path, brief(), state)).toContain('run your acceptance command once');
+  } finally { directory.close(); }
+});
+
 test('original integrated journey proof bypasses only its registered task-scoped minimal ban at final Codex input', () => {
   const directory = temporaryDirectory();
   try {
@@ -389,7 +441,7 @@ test('original integrated journey proof bypasses only its registered task-scoped
       prompt,
     });
     expect(argv.join('\n')).toContain('task-scoped exception');
-    expect(argv.join('\n')).not.toContain('do not run the acceptance command');
+    expect(argv.join('\n')).not.toContain('do not run it, a root check, worker-check or remote-check');
     expect(argv.join('\n')).not.toContain('before you start a check and again after each fix');
     for (const boundary of [
       workerCheckProtocol(directory.path, contract, state, run),
@@ -400,13 +452,17 @@ test('original integrated journey proof bypasses only its registered task-scoped
       }),
     ]) {
       expect(boundary).toContain('same session');
-      expect(boundary).not.toContain('do not run the acceptance command');
+      expect(boundary).toContain(`logical check UUID: ${run.binding.checkId}`);
+      expect(boundary).toContain(`Captured source: ${run.binding.sourceCommit}`);
+      expect(boundary).toContain('do not start an unbound worker-check or another invocation');
+      expect(boundary).not.toContain('TYPECHECK ONLY');
+      expect(boundary).not.toContain('do not run it, a root check, worker-check or remote-check');
     }
-    expect(workerCheckProtocol(directory.path, contract, state)).toContain('do not run the acceptance command');
+    expect(workerCheckProtocol(directory.path, contract, state)).toContain('do not run it, a root check, worker-check or remote-check');
     expect(workerCheckProtocol(directory.path, contract.markdown, state, run)).toContain(
-      'do not run the acceptance command',
+      'do not run it, a root check, worker-check or remote-check',
     );
-    expect(workerCheckProtocol(directory.path, brief(), state, run)).toContain('do not run the acceptance command');
+    expect(workerCheckProtocol(directory.path, brief(), state, run)).toContain('do not run it, a root check, worker-check or remote-check');
   } finally {
     directory.close();
   }

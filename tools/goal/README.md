@@ -1124,8 +1124,13 @@ unknown reservations still occupy slots across waits and crashes; policy B chang
 The adapter reads actual `readWorkerCheckRecord` and `readWorkerCheckHistory` exports; physical records and terminal
 custody proofs for every incarnation are retained with the immutable observation. It never writes native records.
 
-Only a bound registered task gets the final original-proof protocol, including on same-session wake. Global minimal
-verification stays unchanged for product/fix tasks. The binder already started or replayed the one logical invocation;
+Only a bound registered task gets the final original-proof protocol, including on same-session wake. Product/fix
+tasks retain minimal verification: Kernel/Auth compiler database or check-host placement is permitted solely for
+workspace typing through its existing supported command, leases and terminal result. Workers await the existing
+foreground session without polling, cancellation, duplicates or fabricated check UUIDs. Original acceptance, native,
+browser, root and worker-check verification stays deferred. Source success requires the complete current
+implementation and permitted typing, with `checks: []`; it does not claim native or whole-Goal completion.
+The binder already started or replayed the one logical invocation;
 the worker receives its current owned records and returns the bare managed UUID while running. It never receives an
 unbound invocation that could mint a second UUID. Goal resumes the same session with actual records, without model polling or an automatic proof fix/retry. Terminal zero,
 valid owned custody, unchanged captured source and structured worker success with `checks: []` settle as `verified`.

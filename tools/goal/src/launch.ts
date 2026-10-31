@@ -117,12 +117,15 @@ export function workerCheckProtocol(
     ].join(' ');
   if (minimalVerification(stateDirectory))
     return [
-      'Verification is minimal for now: do not run the acceptance command in the brief, and do not run any native, database, browser, host or remote check, worker-check or remote-check.',
+      'Verification is minimal for now: complete your entire own current implementation contract and required permitted workspace typing. Original acceptance/native/browser verification is deferred until after integration; do not run it, a root check, worker-check or remote-check.',
       'Before finishing, run only the type check of the workspaces you changed, locally in the foreground from the worktree root (`bun run --cwd <workspace> typecheck`, or `bun scripts/typecheck.ts` for several), and fix every error it reports.',
-      'The type check of services/kernel or services/auth needs a compiler database: run it in the foreground with remote placement off, as `env -u KERNEL_CHECK_REMOTE bun run --cwd services/kernel typecheck` (or services/auth), which starts a local compiler database itself; wait for it to exit and read its status. It is not a worker-check, has no check id, and must never produce a waiting result; this is the only database use allowed.',
+      'For services/kernel or services/auth TYPECHECK ONLY, the actual compiler database or check host is permitted: use the existing supported compiler command and placement, preserving its real leases, results and exact terminal status. Do not force `env -u KERNEL_CHECK_REMOTE` or local-only placement over that supported configuration. This exception grants no acceptance/native/browser/root/worker-check permission and no other database, host or remote checks.',
+      'While an allowed foreground compiler is actually running, await its EXISTING tool command/session result and read its terminal status. It has no detached check id: never return waiting with an empty checks array or manufacture UUIDs. Do not use ps/pgrep/awk/help/status loops, start duplicate commands, or interrupt a live compiler. Waiting on the actual already-open command/session handle is allowed.',
       'Unit tests you wrote that need no database may be run directly with `bun test <file>` if they take seconds; nothing else.',
-      'Then commit and finish with the normal exit object and `"checks":[]`. The acceptance command runs after integration; a failure there comes back to you as a fix.',
-      'A previous session may contain instructions to start or wait on checks; they are superseded by this one.',
+      'When your entire own current implementation contract and required permitted workspace typing are complete, commit and return normal status success, blocker:null, checks:[], naming the actual code completed and deferred original acceptance/native obligations. This source result is NOT whole-feature/native/Goal completion; deferred acceptance alone is neither blocked nor waiting.',
+      'Typing alone cannot establish your own product completion. Unfinished own implementation or genuine absent authority must report status blocked with the exact blocker; do not invent success.',
+      'Status waiting is legal ONLY for genuinely still-running registered bare UUID check ids owned by this task/attempt. Completed command prose, checks:[], a real product blocker, or deferred acceptance cannot justify waiting. Terminal success has "checks":[].',
+      'This current execution policy supersedes conflicting acceptance, report-only, saved-session and retry-manifest instructions, including instructions to start or poll checks or rerun an earlier failure. Use already-recorded failure evidence; do not start another check to recover it.',
     ].join(' ');
   const contractText = typeof briefOrContract === 'string' ? briefOrContract : briefOrContract.markdown;
   const placement: AcceptancePlacement =
