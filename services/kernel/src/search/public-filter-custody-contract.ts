@@ -12,7 +12,11 @@ import type {
   PublicFilterProjectionMeaning,
 } from '../semantic/public-filter-source-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
-import type { PublicFilterSourceBinding, PublicFilterBindingFailure, PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
+import type {
+  PublicFilterSourceBinding,
+  PublicFilterBindingFailure,
+  PublicSourceRepair,
+} from '../semantic/public-filter-source-binding.ts';
 
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
 export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> =

@@ -520,7 +520,11 @@ import {
   readPublicFilterRepairSettlement,
   withPublicFilterRepairAllowance,
 } from './public-filter-custody.ts';
-import type { RetainedRepairSettlement, RetainedRepairPage, RetainedSourceRepair } from './public-filter-custody-contract.ts';
+import type {
+  RetainedRepairSettlement,
+  RetainedRepairPage,
+  RetainedSourceRepair,
+} from './public-filter-custody-contract.ts';
 import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
