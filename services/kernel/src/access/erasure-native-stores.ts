@@ -75,6 +75,9 @@ export const ADDITIONAL_NATIVE_ERASURE_GROUPS = [
   ['realm_erasure_succession', 'account_id'],
   ['realm_erasure_succession', 'best_account_id'],
   ['realm_erasure_succession', 'cursor_subject_id'],
+  ['agent_identity_technical_source', 'account_id'],
+  ['agent_identity_technical_role', 'account_id'],
+  ['agent_identity_technical_role', 'role_account_id'],
 ] as const;
 
 export type NativeStoreBlocker =
@@ -146,6 +149,8 @@ export async function nativeStoreBlocker(
     const row = await tx.query(`SELECT 1 FROM access.${store} WHERE route=$1 AND account_id=$2`, [...key]);
     if (row.rowCount) return 'account-discovery-consumer';
   }
+  if (store === 'agent_identity_technical_source' || store === 'agent_identity_technical_role')
+    return 'verification-source-custody';
   if (store === 'agent_identity_intent' || store === 'agent_identity_recovery') {
     const row = await tx.query(
       `SELECT 1 FROM access.${store} WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,

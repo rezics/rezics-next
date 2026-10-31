@@ -3720,3 +3720,20 @@ accepted, committed, current-owner local binding read without active admission o
 The existing `readIdentityBinding` invokes admission and is not a substitute after the terminal
 fence. Until that export is delivered, acceptance remains unavailable and verification false.
 The original personal-source minimizer and exhaustive consumer discharge remain independently owned.
+
+The Access receiver now stores the exact closed merge/unmerge intent, receipt key, original
+native component/digest, accepted current job and original binding generation/commit. The
+original workflow locator is retained as indispensable replay identity. Receiver provenance
+is separate. Its reserved owner position is verified against the executor's actual same-command
+outbox fence by a deferred constraint; callback verification aborts on any local mismatch.
+A null result registers no callback and enrolls no inventory. Replay locks the same receiver,
+accepted claim and current owner rather than creating another obligation.
+
+Technical payload excludes personal reasons, requester/decider attribution, barrier and private
+JSON. Normalized `agent_identity_technical_role` rows enroll the existing subject/actor/editor
+accounts through native discovery for every retained locator in the parent. These associations
+are personal custody and stay pending. New groups append after saved native phase identities.
+Undo-only reads resolve this native receiver without an Account activity check or recursive
+personal-source lookup. Ordinary admission retains the original active source checks and cannot
+obtain a new source capability from the receiver. The receiver does not minimize the original
+personal row or discharge any consumer; those owner boundaries remain unavailable in this base.

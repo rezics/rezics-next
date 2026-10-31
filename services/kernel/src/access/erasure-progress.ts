@@ -220,6 +220,11 @@ export const ERASURE_DISCOVERY_ROLES: readonly (readonly [string, string, Routin
     '',
   ],
   ['erasure_continuation_role', 'account_id', 'partitions', 'route:int,artifact:text,row_id:uuid', ''],
+  ['agent_identity_technical_source', 'account_id', 'owner', 'route:int,account_id:uuid,direction:text,receipt_id:uuid', ''],
+  ['agent_identity_technical_role', 'account_id', 'owner',
+    'route:int,account_id:uuid,direction:text,receipt_id:uuid,role_account_id:uuid,role:text', ''],
+  ['agent_identity_technical_role', 'role_account_id', 'partitions',
+    'route:int,account_id:uuid,direction:text,receipt_id:uuid,role_account_id:uuid,role:text', ''],
 ];
 
 export type ErasureDiscoveryPage = {

@@ -1,3 +1,4 @@
+import { acceptTechnicalSource, verifyTechnicalSource, readAccountIdentityTechnicalSource } from './agent-verification-identity-retention.ts';
 import type { IdentitySourceConsumerReference } from '../semantic/identity-source-consumer-custody.ts';
 import { recordAgentIdentityWorkSource } from '../history/agent-identity-source.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -308,6 +309,15 @@ export async function readAccountIdentitySource(
   if (command.basis !== null || command.partition !== partitionOf(route))
     throw new TypeError('Accounts source verification requires its native platform home');
   const time = authoritativeTimeValue(command.time);
+  if (undoOnly) {
+    const technical = await readAccountIdentityTechnicalSource(tx, receipt);
+    if (technical) {
+      if (intent && normalized(intent) !== normalized(technical.input.intent))
+        throw accountIdentityUnavailable(`mismatched accepted technical source ${keyOf(receipt)}`);
+      // Technical custody never receives the new-admission capability in nativeSources.
+      return technical;
+    }
+  }
   const account = await tx.query<{ kind: 'actor' | 'organization'; state: string; authn_fenced: boolean }>(
     `SELECT kind,state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE`,
     [route, receipt.account],
@@ -587,10 +597,7 @@ export async function acceptAccountIdentityTechnicalSource(
   tx: CommandTransaction,
   reference: IdentitySourceConsumerReference,
 ): Promise<IdentityNativeReceipt | null> {
-  // The native accepted-only binding reader must be delivered by its Semantic owner.
-  void tx;
-  void reference;
-  return null;
+  return acceptTechnicalSource(tx, reference);
 }
 
 /** Re-lock the durable receiver in the enclosing source-home command. */
@@ -599,8 +606,5 @@ export async function verifyAccountIdentityTechnicalSource(
   reference: IdentitySourceConsumerReference,
   receiving: IdentityNativeReceipt,
 ): Promise<boolean> {
-  void tx;
-  void reference;
-  void receiving;
-  return false;
+  return verifyTechnicalSource(tx, reference, receiving);
 }
