@@ -6,6 +6,7 @@ import type {
   NotificationWriteResult,
   SettingsPage,
 } from './preferences';
+import { preferenceRetryDeadline } from './preference-failure-retry';
 
 type Snapshot = { notifications: NotificationPreferences; version: number };
 type Attempt = { input: NotificationChange; draft: NotificationPreferences };
@@ -16,6 +17,7 @@ export type NotificationEditorState = {
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'review' | 'reloading' | 'failed';
   reason?: string | undefined;
   failure?: NativePreferenceFailure | undefined;
+  retryAt: number;
 };
 export type NotificationEditorIO = {
   save: (input: NotificationChange) => Promise<NotificationWriteResult>;
@@ -45,6 +47,7 @@ export class NotificationEditor {
       draft: { ...initial.notifications },
       pending: null,
       phase: initialFailed ? 'failed' : 'idle',
+      retryAt: 0,
     };
   }
   snapshot = () => this.state;
@@ -55,16 +58,26 @@ export class NotificationEditor {
     };
   };
   private update(patch: Partial<NotificationEditorState>) {
-    this.state = { ...this.state, ...patch };
+    this.state = {
+      ...this.state,
+      ...patch,
+      // Observe delay-seconds once, without restarting or discarding the wait on local draft actions.
+      ...(patch.failure ? { retryAt: preferenceRetryDeadline(patch.failure.retryAfter) } : {}),
+    };
     this.listeners.forEach((listener) => listener());
+  }
+  private waiting() {
+    return Date.now() < this.state.retryAt;
   }
   private confirm(known: Snapshot) {
     this.update({ known });
     this.io.confirmed?.(known.version);
   }
   async edit(kind: string, enabled: boolean, version: number) {
+    const local = this.state.pending || ['conflict', 'review', 'reloading'].includes(this.state.phase);
+    if (!local && this.waiting()) return;
     this.update({ draft: { ...this.state.draft, [kind]: enabled } });
-    if (this.state.pending || ['conflict', 'review', 'reloading'].includes(this.state.phase)) return;
+    if (local) return;
     await this.start({ [kind]: enabled }, version);
   }
   async restore(version: number) {
@@ -76,6 +89,7 @@ export class NotificationEditor {
     await this.start({ ...this.state.draft }, version);
   }
   private async start(notifications: NotificationPatch, version: number) {
+    if (this.waiting()) return;
     const input = Object.freeze({
       expectedVersion: version,
       notifications: notifications === null ? null : Object.freeze({ ...notifications }),
@@ -85,7 +99,8 @@ export class NotificationEditor {
     await this.send(false);
   }
   async retry() {
-    if (!this.state.pending || this.state.phase === 'saving' || this.state.phase === 'reloading') return;
+    if (this.waiting() || !this.state.pending || this.state.phase === 'saving' || this.state.phase === 'reloading')
+      return;
     await this.send(true);
   }
   private async send(recovering: boolean) {
@@ -184,7 +199,7 @@ export class NotificationEditor {
     }
   }
   async reload() {
-    if (this.state.pending || this.state.phase === 'reloading') return;
+    if (this.waiting() || this.state.pending || this.state.phase === 'reloading') return;
     const preserve =
       !sameNotifications(this.state.draft, this.state.known.notifications) || this.state.phase === 'conflict';
     this.update({ phase: 'reloading', failure: undefined });

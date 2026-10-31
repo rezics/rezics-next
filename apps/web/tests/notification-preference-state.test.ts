@@ -1,9 +1,10 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { createKernelClient } from '@rezics/client';
 import type { SessionEnv } from '../src/session/client';
 import { withPlatformClosedRecognition } from '../src/kernel/platform-closed';
 import { changeNotifications, loadSettingsPage } from '../src/settings/preferences';
+import { NotificationEditor } from '../src/settings/notification-recovery';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { loadInboxPage } = await import('../src/inbox/inbox-read');
@@ -208,5 +209,206 @@ test('Inbox conceals denied target text and preserves native dependency failures
         failure: { status: 503, code: 'dependency_unavailable', requestId: 'target-read' },
       });
     }
+  }
+});
+
+test('a definite notification refusal guards row autosave, Restore and Reload until the native deadline', async () => {
+  for (const retryAfter of ['30', 'Sat, 31 Oct 2026 00:00:30 GMT']) {
+    let now = Date.parse('2026-10-31T00:00:00Z');
+    const clock = spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const notifications = { reply: true, mention: true, weekly_digest: false };
+      let refused = true;
+      const transport = harness(
+        () =>
+          refused
+            ? Response.json(
+                { code: 'invalid_request', retryable: false, request_id: 'native-refusal', detail: 'private' },
+                { status: 422, headers: { 'retry-after': retryAfter } },
+              )
+            : Response.json({ ...reading, version: 8, notifications: { ...notifications, reply: false } }),
+        'POST',
+      );
+      const editor = new NotificationEditor(
+        { notifications, version: 7 },
+        {
+          save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
+          read: () => loadSettingsPage(transport.client, transport.request, transport.env),
+        },
+      );
+      await editor.edit('reply', false, 7);
+      const failed = editor.snapshot();
+      expect(failed).toMatchObject({
+        phase: 'failed',
+        pending: null,
+        draft: notifications,
+        retryAt: now + 30_000,
+        failure: { status: 422, code: 'invalid_request', retryAfter, requestId: 'native-refusal' },
+      });
+      await editor.edit('mention', false, 7);
+      await editor.restore(7);
+      await editor.submit(7);
+      await editor.retry();
+      await editor.reload();
+      expect(editor.snapshot()).toBe(failed);
+      expect(transport.calls).toHaveLength(1);
+      now += 29_999;
+      await editor.edit('weekly_digest', true, 7);
+      await editor.restore(7);
+      await editor.reload();
+      expect(editor.snapshot()).toBe(failed);
+      now++;
+      await Promise.resolve();
+      expect(transport.calls).toHaveLength(1);
+      refused = false;
+      await editor.edit('reply', false, 7);
+      expect(transport.calls).toHaveLength(2);
+      expect(transport.sessionReads()).toBe(2);
+      expect(transport.calls[1]!.headers.get('idempotency-key')).not.toBe(
+        transport.calls[0]!.headers.get('idempotency-key'),
+      );
+      expect(await transport.calls[1]!.json()).toEqual({ expectedVersion: 7, notifications: { reply: false } });
+      expect(editor.snapshot()).toMatchObject({ phase: 'saved', draft: { ...notifications, reply: false } });
+    } finally {
+      clock.mockRestore();
+    }
+  }
+});
+
+test('delayed original and recovery reads preserve local drafts, exact replay and deliberate review actions', async () => {
+  let now = Date.parse('2026-10-31T00:00:00Z');
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
+  try {
+    const notifications = { reply: true, mention: true, weekly_digest: false };
+    const receipt = { ...reading, version: 8, notifications: { ...notifications, reply: false } };
+    let step = 0;
+    const transport = harness(() => {
+      step++;
+      if (step === 1 || step === 3)
+        return Response.json(
+          { code: 'dependency_unavailable', retryable: true, request_id: `native-${step}` },
+          { status: 503, headers: { 'retry-after': step === 1 ? '30' : '20' } },
+        );
+      if (step === 2 || step === 4) return Response.json(receipt);
+      return Response.json({
+        ...reading,
+        version: step === 5 ? 9 : 10,
+        notifications: { ...notifications, reply: step === 5, mention: step === 5, weekly_digest: step === 6 },
+      });
+    }, 'POST');
+    const confirmed: number[] = [];
+    const editor = new NotificationEditor(
+      { notifications, version: 7 },
+      {
+        save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
+        read: () => loadSettingsPage(transport.client, transport.request, transport.env),
+        confirmed: (version) => confirmed.push(version),
+      },
+    );
+    await editor.edit('reply', false, 7);
+    const pending = editor.snapshot().pending;
+    now += 10_000;
+    await editor.edit('mention', false, 7);
+    await editor.restore(7);
+    await editor.submit(7);
+    await editor.reload();
+    await editor.retry();
+    expect(transport.calls).toHaveLength(1);
+    expect(editor.snapshot().retryAt).toBe(now + 20_000);
+    expect(editor.snapshot().pending).toBe(pending);
+    now += 20_000;
+    expect(transport.calls).toHaveLength(1);
+    await editor.retry();
+    expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET']);
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'uncertain',
+      known: { notifications, version: 7 },
+      draft: { ...notifications, reply: false, mention: false },
+      failure: { status: 503, retryAfter: '20', requestId: 'native-3' },
+    });
+    expect(editor.snapshot().pending).toBe(pending);
+    expect(confirmed).toEqual([]);
+    await editor.edit('weekly_digest', true, 7);
+    await editor.edit('weekly_digest', false, 7);
+    await editor.retry();
+    await editor.restore(7);
+    await editor.reload();
+    expect(transport.calls).toHaveLength(3);
+    now += 20_000;
+    await editor.retry();
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      pending: null,
+      known: { notifications, version: 9 },
+      draft: { ...notifications, reply: false, mention: false },
+    });
+    for (const index of [1, 3]) {
+      expect(transport.calls[index]!.headers.get('idempotency-key')).toBe(
+        transport.calls[0]!.headers.get('idempotency-key'),
+      );
+      expect(await transport.calls[index]!.clone().text()).toBe(await transport.calls[0]!.clone().text());
+    }
+    await editor.edit('weekly_digest', true, 9);
+    expect(transport.calls).toHaveLength(5);
+    await editor.submit(9);
+    expect(await transport.calls[5]!.json()).toEqual({
+      expectedVersion: 9,
+      notifications: { reply: false, mention: false, weekly_digest: true },
+    });
+    expect(transport.calls[5]!.headers.get('idempotency-key')).not.toBe(
+      transport.calls[0]!.headers.get('idempotency-key'),
+    );
+    expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET', 'PATCH', 'GET', 'PATCH']);
+    expect(transport.sessionReads()).toBe(6);
+    expect(confirmed).toEqual([9, 10]);
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'saved',
+      draft: { reply: false, mention: false, weekly_digest: true },
+    });
+  } finally {
+    clock.mockRestore();
+  }
+});
+
+test('a delayed conflict keeps local review edits and Reload and Use current retain their distinct outcomes', async () => {
+  let now = Date.parse('2026-10-31T00:00:00Z');
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
+  try {
+    const notifications = { reply: true, mention: true, weekly_digest: false };
+    let step = 0;
+    const transport = harness(
+      () =>
+        ++step === 1
+          ? Response.json({ code: 'conflict' }, { status: 409, headers: { 'retry-after': '30' } })
+          : Response.json({ ...reading, version: 8, notifications: { ...notifications, mention: false } }),
+      'POST',
+    );
+    const editor = new NotificationEditor(
+      { notifications, version: 7 },
+      {
+        save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
+        read: () => loadSettingsPage(transport.client, transport.request, transport.env),
+      },
+    );
+    await editor.edit('reply', false, 7);
+    await editor.edit('weekly_digest', true, 7);
+    await editor.restore(7);
+    await editor.submit(7);
+    await editor.reload();
+    expect(transport.calls).toHaveLength(1);
+    now += 30_000;
+    expect(transport.calls).toHaveLength(1);
+    await editor.reload();
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      known: { version: 8, notifications: { ...notifications, mention: false } },
+      draft: { ...notifications, reply: false, weekly_digest: true },
+    });
+    editor.useCurrent();
+    expect(editor.snapshot()).toMatchObject({ phase: 'idle', draft: { ...notifications, mention: false } });
+    expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'GET']);
+    expect(transport.sessionReads()).toBe(2);
+  } finally {
+    clock.mockRestore();
   }
 });

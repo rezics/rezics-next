@@ -34,11 +34,13 @@ const assertions = new Set<string>();
 const calls: Call[] = [];
 let counter = 0;
 let rejectNotifications = false;
+let delayNotifications = false;
 let stored: Stored;
 
 function reset(notifications: Record<string, boolean> = { reply: true, mention: true, weekly_digest: true }) {
   calls.length = 0;
   rejectNotifications = false;
+  delayNotifications = false;
   stored = { spoilerLevel: 0, suitability: 'blur', notifications: { ...notifications }, version: 3 };
 }
 
@@ -172,6 +174,11 @@ const fake = Bun.serve({
     if (request.method === 'PATCH') {
       const change = body as { expectedVersion?: number; notifications?: Record<string, boolean | null> | null };
       if (change.expectedVersion !== stored.version) return json(apiProblem(409, 'conflict'), 409, true);
+      if (delayNotifications)
+        return Response.json(apiProblem(400, 'invalid_request'), {
+          status: 400,
+          headers: { 'cache-control': 'no-store', 'retry-after': '30' },
+        });
       if (rejectNotifications && 'notifications' in change) return json(apiProblem(400, 'invalid_request'), 400, true);
       if (change.notifications === null) {
         stored.notifications = Object.fromEntries(Object.keys(stored.notifications).map((kind) => [kind, true]));
@@ -379,6 +386,56 @@ test(
       expect(patches()).toHaveLength(2);
       expect(patches()[1]).toMatchObject({ body: { expectedVersion: 4, notifications: null } });
       expect(stored.notifications).toEqual({ reply: true, mention: true });
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'notification autosave and Restore cannot bypass the native retry delay, and expiry sends nothing',
+  async () => {
+    reset({ reply: true, mention: true, weekly_digest: false });
+    const first = await readPage('/en/settings');
+    const page = await open('/en/settings', first.cookie!);
+    try {
+      await page.clock.install({ time: new Date('2026-10-31T00:00:00Z') });
+      await page.clock.pauseAt(new Date('2026-10-31T00:01:00Z'));
+      const group = page.getByRole('group', { name: 'Notifications' });
+      const replies = group.getByRole('switch', { name: 'Replies to your posts' });
+      const restore = group.getByRole('button', { name: 'Restore defaults' });
+      const reload = group.getByRole('button', { name: 'Reload', exact: true });
+      delayNotifications = true;
+      await replies.click();
+      await group.getByText('Wait before trying again.', { exact: true }).waitFor();
+      const requests = calls.length;
+      for (const control of [replies, group.getByRole('switch', { name: 'Weekly Digest' }), restore, reload]) {
+        expect(await control.isDisabled()).toBe(true);
+        expect(await control.getAttribute('aria-describedby')).toBeTruthy();
+      }
+      expect(await replies.isChecked()).toBe(true);
+      expect(patches()).toHaveLength(1);
+      // Dispatching submit exercises the handler even when the visible submit button is disabled.
+      await restore.locator('xpath=ancestor::form').evaluate((form) =>
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+      );
+      await page.clock.fastForward(29_999);
+      expect(await replies.isDisabled()).toBe(true);
+      expect(calls).toHaveLength(requests);
+      await page.clock.fastForward(1);
+      await group.getByText('Wait before trying again.', { exact: true }).waitFor({ state: 'hidden' });
+      expect(await replies.isEnabled()).toBe(true);
+      expect(await restore.isEnabled()).toBe(true);
+      expect(await reload.isEnabled()).toBe(true);
+      expect(calls).toHaveLength(requests);
+      delayNotifications = false;
+      await restore.click();
+      await group.getByText('Saved', { exact: true }).waitFor();
+      expect(patches()).toHaveLength(2);
+      expect(patches()[1]!.body).toEqual({ expectedVersion: 3, notifications: null });
+      expect(patches()[1]!.key).not.toBe(patches()[0]!.key);
+      expect(await group.getByRole('switch', { name: 'Weekly Digest' }).isChecked()).toBe(true);
     } finally {
       await page.context().close();
     }

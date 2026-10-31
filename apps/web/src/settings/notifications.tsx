@@ -65,12 +65,15 @@ export function NotificationsCard({
     () => isCurrent() && notificationsNeedNavigationDecision(editor.snapshot()),
     editor,
   );
-  const waiting = usePreferenceRetry(state.failure);
+  const waiting = usePreferenceRetry(state.failure, state.retryAt);
   useLayoutEffect(() => setHydrated(true), []);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const disabled = busy || !csrfToken;
   const uncertain = state.phase === 'uncertain' || (state.pending !== null && state.phase === 'reloading');
   const needsReload = state.phase === 'conflict' || state.phase === 'failed';
+  const localEdit = !!state.pending || ['conflict', 'review', 'reloading'].includes(state.phase);
+  const rowDisabled = disabled || (waiting && !localEdit);
+  const waitDescription = waiting ? `${ids}-retry-wait` : undefined;
 
   return (
     <Card>
@@ -113,7 +116,8 @@ export function NotificationsCard({
                             name="enabled"
                             value="true"
                             checked={checked}
-                            disabled={disabled}
+                            disabled={rowDisabled}
+                            aria-describedby={waitDescription}
                             aria-label={name}
                             onCheckedChange={(next) => void editor.edit(kind, next, version)}
                           />
@@ -125,7 +129,8 @@ export function NotificationsCard({
                             name="enabled"
                             value="true"
                             defaultChecked={checked}
-                            disabled={disabled}
+                            disabled={rowDisabled}
+                            aria-describedby={waitDescription}
                             aria-label={name}
                             className="size-5 shrink-0 cursor-pointer accent-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
                           />
@@ -155,7 +160,8 @@ export function NotificationsCard({
                 <Button
                   type="submit"
                   variant="outline"
-                  disabled={disabled || !!state.pending || state.phase === 'conflict'}
+                  disabled={waiting || disabled || !!state.pending || state.phase === 'conflict'}
+                  aria-describedby={waitDescription}
                 >
                   {m.settings_notifications_restore()}
                 </Button>
@@ -165,6 +171,11 @@ export function NotificationsCard({
           <div aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
             {busy ? m.settings_saving() : state.phase === 'saved' ? m.settings_saved() : null}
           </div>
+          {waiting ? (
+            <p id={waitDescription} role="status" className="text-sm text-muted-foreground">
+              {m.settings_retry_wait()}
+            </p>
+          ) : null}
           {uncertain ? (
             <Alert
               data-response-status={state.failure?.status ?? ''}
@@ -177,11 +188,11 @@ export function NotificationsCard({
                 {state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
                 {state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
                 {state.reason === 'unavailable' ? <p>{m.settings_unavailable_text()}</p> : null}
-                {waiting ? <p>{m.settings_retry_wait()}</p> : null}
                 <Button
                   type="button"
                   variant="outline"
                   disabled={waiting || disabled}
+                  aria-describedby={waitDescription}
                   onClick={() => void editor.retry()}
                 >
                   {m.settings_notifications_retry_original()}
@@ -218,8 +229,13 @@ export function NotificationsCard({
                           ? m.settings_unavailable_text()
                           : m.settings_failed_text()}
                 </p>
-                {waiting ? <p>{m.settings_retry_wait()}</p> : null}
-                <Button type="button" variant="outline" disabled={waiting || busy} onClick={() => void editor.reload()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={waiting || busy}
+                  aria-describedby={waitDescription}
+                  onClick={() => void editor.reload()}
+                >
                   {m.settings_reload()}
                 </Button>
               </AlertDescription>
@@ -239,7 +255,12 @@ export function NotificationsCard({
                   ))}
                 </ul>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" disabled={disabled} onClick={() => void editor.submit(version)}>
+                  <Button
+                    type="button"
+                    disabled={waiting || disabled}
+                    aria-describedby={waitDescription}
+                    onClick={() => void editor.submit(version)}
+                  >
                     {m.settings_notifications_save_draft()}
                   </Button>
                   <Button type="button" variant="outline" onClick={() => editor.useCurrent()}>
@@ -250,7 +271,13 @@ export function NotificationsCard({
             </Alert>
           ) : null}
           {!state.pending && !needsReload ? (
-            <Button type="button" variant="ghost" disabled={!hydrated || busy} onClick={() => void editor.reload()}>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={waiting || !hydrated || busy}
+              aria-describedby={waitDescription}
+              onClick={() => void editor.reload()}
+            >
               {m.settings_reload()}
             </Button>
           ) : null}

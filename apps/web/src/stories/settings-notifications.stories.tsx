@@ -16,7 +16,11 @@ const meta = {
 export default meta;
 type Story = StoryObj;
 
-function Example({ scenario = 'saved' }: { scenario?: 'saved' | 'lost' | 'stale' | 'unavailable' | 'refused' }) {
+function Example({
+  scenario = 'saved',
+}: {
+  scenario?: 'saved' | 'lost' | 'stale' | 'unavailable' | 'refused' | 'delayed';
+}) {
   const [version, setVersion] = useState(recording.version);
   const [io] = useState<NotificationEditorIO>(() => {
     let current = { notifications: { ...recording.notifications }, version: recording.version };
@@ -24,6 +28,14 @@ function Example({ scenario = 'saved' }: { scenario?: 'saved' | 'lost' | 'stale'
     let originalKey: string | undefined;
     return {
       save: async (input) => {
+        if (scenario === 'delayed' && !originalKey) {
+          originalKey = input.idempotencyKey;
+          return {
+            ok: false,
+            reason: 'invalid',
+            failure: { status: 400, code: 'invalid_request', retryAfter: '30' },
+          };
+        }
         if (scenario === 'refused')
           return { ok: false, reason: 'forbidden', failure: { status: 403, code: 'forbidden' } };
         if (scenario === 'stale' && !originalKey) {
@@ -160,5 +172,20 @@ export const Refused: Story = {
     await view.findByText(m.settings_failed_title());
     await expect(view.queryByText(m.settings_saved())).toBeNull();
     await expect(view.getByRole('switch', { name: m.settings_notification_reply() })).toBeChecked();
+  },
+};
+export const NativeRetryDelay: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <Example scenario="delayed" />,
+  play: async ({ canvasElement }) => {
+    const view = await toggle(canvasElement);
+    await view.findByText(m.settings_retry_wait());
+    await view.findByText(m.settings_failed_title());
+    await expect(view.getByRole('switch', { name: m.settings_notification_reply() })).toBeChecked();
+    for (const control of view.getAllByRole('switch')) await expect(control).toBeDisabled();
+    await expect(view.getByRole('button', { name: m.settings_notifications_restore() })).toBeDisabled();
+    await expect(view.getByRole('button', { name: m.settings_reload() })).toBeDisabled();
+    await expect(view.queryByText(m.settings_saved())).toBeNull();
+    await view.findByText(m.settings_notifications_mandatory());
   },
 };
