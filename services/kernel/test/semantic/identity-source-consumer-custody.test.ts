@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { mergeVerifiedAgent } from '../../src/access/agent-verification.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -11,6 +12,13 @@ import {
   type IdentitySourceConsumerCustody,
   type IdentitySourceConsumerReference,
 } from '../../src/semantic/identity-source-consumer-custody.ts';
+import {
+  identitySourceConsumerLibraryWork,
+  isLiveIdentitySourceConsumerMaintenance,
+  reserveIdentitySourceConsumerNativeWork,
+  withIdentitySourceConsumerMaintenance,
+} from '../../src/semantic/identity-source-consumer-maintenance.ts';
+import { readIdentitySourceMaintenanceConfig } from '../../src/semantic/identity-source-maintenance-config.ts';
 import { approvedVerification, cutoverFixture } from './support/identity-epoch-cutover.ts';
 
 // Authored native cases only. Run through the existing kernel fixture runner after integration.
@@ -71,7 +79,12 @@ test('Original account identity source bytes remain retained until exact native 
   expect(before).toBeString();
   // The job is actually published by the native producer, with real participant receipts.
   // No History-copy result or synthetic receiving record is supplied to complete the source.
-  const proof = await readIdentitySourceConsumerCustody(f.pool, reference, { deadline: Date.now() + 5000 });
+  const deadline = Date.now() + 5000;
+  const proof = await withIdentitySourceConsumerMaintenance(
+    { pool: f.pool, env: process.env },
+    { deadline },
+    (funded) => readIdentitySourceConsumerCustody(f.pool, reference, funded),
+  );
   expect(proof, 'publication alone does not discharge future native undo/replay consumers').toBeNull();
   expect(await originalBytes()).toBe(before);
   const retained = await f.admin.query<{ state: string; source_position: string }>(
@@ -91,6 +104,31 @@ test('Original account identity source bytes remain retained until exact native 
   expect(retained.rows).toEqual([{ state: 'retained', source_position: reference.source.position.toString() }]);
   expect(await readIdentitySourceConsumerCustody(f.pool, reference, { deadline: Date.now() + 5000 })).toBeNull();
   expect(await originalBytes()).toBe(before);
+});
+
+test('Source maintenance issues one genuinely configured live accounting frame with separate native and Library allocations and refuses all consumer I/O without that frame', async () => {
+  const configured = readIdentitySourceMaintenanceConfig(process.env);
+  expect(configured.native.rows).toBeGreaterThan(0);
+  expect(configured.native.statements).toBeGreaterThan(0);
+  expect(configured.library.candidateKeys).toBe(1);
+  expect(configured.library.nativeRows).toBeGreaterThan(0);
+  expect(configured.native).not.toBe(configured.library);
+
+  const deadline = Date.now() + 5000;
+  let work: import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork | undefined;
+  await withIdentitySourceConsumerMaintenance({ pool: f.pool, env: process.env }, { deadline }, async (funded) => {
+    work = funded.identityConsumerWork;
+    expect(isLiveIdentitySourceConsumerMaintenance(f.pool, work, funded.deadline)).toBe(true);
+    expect(identitySourceConsumerLibraryWork(f.pool, work, funded.deadline)).toBeDefined();
+    expect(reserveIdentitySourceConsumerNativeWork(f.pool, work, {
+      rows: 1, points: 1, statements: 1, bytes: 1, engineRequests: 0,
+    })).toBe(true);
+  });
+  expect(isLiveIdentitySourceConsumerMaintenance(f.pool, work, deadline)).toBe(false);
+  let checkouts = 0;
+  const pool = { connect: () => { checkouts++; throw new Error('unexpected Source checkout'); } } as unknown as Pool;
+  expect(await readIdentitySourceConsumerCustody(pool, reference, { deadline: Date.now() + 5000 })).toBeNull();
+  expect(checkouts).toBe(0);
 });
 
 test('wrong original source receipt job digest and erased logical role cannot stage custody for another obligation', async () => {
@@ -133,29 +171,49 @@ test('a retained locator or copied brand cannot authorize cleanup for any barrie
   }
 });
 
-test('Original source consumer custody requires real durable native discharge or technical undo transfer over exhaustive scope and later consumer fences independently of Account root and original copy closure', async () => {
-  const before = await originalBytes();
-  // This real published fixture supplies no native later-consumer fence or technical receiver.
-  // Publication and an immutable retained preparation cannot mint either terminal disposition.
-  const proof = await readIdentitySourceConsumerCustody(f.pool, reference, { deadline: Date.now() + 5000 });
-  expect(proof).toBeNull();
-  const terminal = await f.admin.query<{ state: string }>(
-    `SELECT t.state FROM semantic.identity_epoch_source_consumer_terminal t
-     JOIN semantic.identity_epoch_source_consumer_custody c
-       ON (c.partition_no,c.erasure_key)=(t.partition_no,t.custody_key)
-     WHERE c.partition_no=$1 AND c.receipt_key=$2 AND c.source_digest=$3
-       AND t.state IN ('discharged','transferred')`,
-    [reference.source.partition,
-      JSON.stringify([reference.receipt.kind, reference.receipt.account, reference.receipt.receipt]),
-      reference.sourceDigest],
-  );
-  expect(terminal.rows).toEqual([]);
-  expect(await originalBytes()).toBe(before);
-  // A caller cannot substitute an object that merely names a terminal disposition.
-  const manufactured = Object.freeze({ state: 'transferred', job: reference.job,
-    source: reference.source, barrier: reference.barrier }) as unknown as IdentitySourceConsumerCustody;
-  const verified = await runCommand(f.pool, { partition: reference.source.partition }, async (tx) =>
-    noEffect(await verifyIdentitySourceConsumerCustody(tx, reference, manufactured)),
-  );
-  expect(verified.value).toBe(false);
+test('Source funding remains one allocation across awaits and ends even when its callback fails', async () => {
+  const configured = readIdentitySourceMaintenanceConfig({});
+  let work: import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork | undefined;
+  const deadline = Date.now() + 5000;
+  const failure = new Error('maintenance callback failed');
+  await expect(withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
+    work = funded.identityConsumerWork;
+    const library = identitySourceConsumerLibraryWork(f.pool, work, deadline);
+    expect(library).not.toBeNull();
+    expect(reserveIdentitySourceConsumerNativeWork(f.pool, work, configured.native)).toBe(true);
+    await Promise.resolve();
+    expect(identitySourceConsumerLibraryWork(f.pool, work, deadline)).toBe(library);
+    expect(reserveIdentitySourceConsumerNativeWork(f.pool, work, {
+      rows: 1, points: 0, statements: 0, bytes: 0, engineRequests: 0,
+    })).toBe(false);
+    expect(library?.available('nativeRows')).toBe(configured.library.nativeRows);
+    throw failure;
+  })).rejects.toBe(failure);
+  expect(isLiveIdentitySourceConsumerMaintenance(f.pool, work, deadline)).toBe(false);
+  expect(identitySourceConsumerLibraryWork(f.pool, work, deadline)).toBeNull();
+  expect(await readIdentitySourceConsumerCustody(f.pool, reference, {
+    deadline, identityConsumerWork: work,
+  })).toBeNull();
+});
+
+test('Source consumer refuses copied foreign expired and ended frames before checkout', async () => {
+  let checkouts = 0;
+  const pool = { connect: () => { checkouts++; throw new Error('unexpected Source checkout'); } } as unknown as Pool;
+  const deadline = Date.now() + 5000;
+  await withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
+    expect(await readIdentitySourceConsumerCustody(pool, reference, funded)).toBeNull();
+    expect(await readIdentitySourceConsumerCustody(pool, reference, {
+      ...funded, identityConsumerWork: { ...funded.identityConsumerWork },
+    })).toBeNull();
+  });
+  let ended: import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceContext | undefined;
+  await withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (funded) => {
+    ended = funded;
+    expect(await readIdentitySourceConsumerCustody(pool, reference, {
+      ...funded, deadline: Date.now() - 1,
+    })).toBeNull();
+  });
+  expect(ended).toBeDefined();
+  expect(await readIdentitySourceConsumerCustody(pool, reference, ended!)).toBeNull();
+  expect(checkouts).toBe(0);
 });

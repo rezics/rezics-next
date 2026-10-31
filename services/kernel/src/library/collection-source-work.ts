@@ -62,12 +62,22 @@ export class NativeCollectionWork {
    */
   async compose<T extends { readonly work: WorkReceipt }>(
     operation: (allowance: WorkAllowance) => Promise<T>,
+    ceiling?: WorkDimensions,
   ): Promise<T> {
     this.assertReady();
     if (Date.now() >= this.deadline) throw this.unavailable();
+    const available = zero();
+    const ceilingSnapshot = ceiling === undefined ? undefined : { ...ceiling };
+    for (const axis of axes) {
+      if (ceilingSnapshot && (!Number.isSafeInteger(ceilingSnapshot[axis]) || ceilingSnapshot[axis] < 0))
+        throw new TypeError('Invalid composed source work ceiling');
+      available[axis] = this.available(axis);
+    }
     const remaining = zero();
     for (const axis of axes) {
-      remaining[axis] = this.available(axis);
+      remaining[axis] = Math.min(available[axis], ceilingSnapshot?.[axis] ?? available[axis]);
+    }
+    for (const axis of axes) {
       this.held[axis] += remaining[axis];
     }
     const settle = (receipt: WorkReceipt) => {

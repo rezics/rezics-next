@@ -11,6 +11,11 @@ import pagesSQL from './identity-epoch-prearm-custody-pages.sql';
 import inputsSQL from './identity-epoch-prearm-custody-inputs.sql';
 import type { IdentityFrontier, IdentityIntent, IdentityJobRef, NativeStepWork } from './identity-epoch-contract.ts';
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
+import type { IdentitySourceConsumerMaintenanceWork } from './identity-source-consumer-maintenance.ts';
+import {
+  isLiveIdentitySourceConsumerMaintenance,
+  reserveIdentitySourceConsumerNativeWork,
+} from './identity-source-consumer-maintenance.ts';
 
 export type IdentityPrearmCustodyRequest = Readonly<{
   job: IdentityJobRef;
@@ -18,7 +23,10 @@ export type IdentityPrearmCustodyRequest = Readonly<{
   limit: number;
   allowance: NativeStepWork;
 }>;
-export type IdentityPrearmCustodyContext = Readonly<{ deadline: number }>;
+export type IdentityPrearmCustodyContext = Readonly<{
+  deadline: number;
+  identityConsumerWork?: IdentitySourceConsumerMaintenanceWork;
+}>;
 declare const custodyCut: unique symbol;
 /** Only the exact retained admitted native input directory; no consumer completion authority. */
 export type IdentityPrearmCustodyCut = Readonly<{ [custodyCut]: true }>;
@@ -161,9 +169,12 @@ function decode(job: IdentityJobRef, value: IdentityFrontier, homes: number): Po
 class ReadWork {
   readonly work = emptyWork();
   readonly deadline: number;
+  private parentBytesReserved = false;
   constructor(
+    readonly pool: Pool,
     readonly allowance: NativeStepWork,
     context: IdentityPrearmCustodyContext,
+    private readonly consumerWork?: IdentitySourceConsumerMaintenanceWork,
   ) {
     this.deadline = Math.min(context.deadline, Date.now() + 5000);
   }
@@ -171,6 +182,13 @@ class ReadWork {
     if (!Number.isFinite(this.deadline) || Date.now() >= this.deadline) refuse('deadline');
     if (this.work.rows > 100 || keys.some((key) => this.work[key] > this.allowance[key]))
       refuse('native-work-allowance');
+  }
+  reserveParentBytes() {
+    if (this.parentBytesReserved || !this.consumerWork) return;
+    if (!reserveIdentitySourceConsumerNativeWork(this.pool, this.consumerWork, {
+      rows: 0, points: 0, statements: 0, bytes: this.allowance.bytes, engineRequests: 0,
+    })) return refuse('source-maintenance-work-allowance');
+    this.parentBytesReserved = true;
   }
   charge(rows: number, points: number, statements: number, bytes: number) {
     this.current();
@@ -181,6 +199,17 @@ class ReadWork {
       this.work.bytes + bytes > this.allowance.bytes
     )
       refuse('native-work-allowance');
+    if (
+      this.consumerWork &&
+      !reserveIdentitySourceConsumerNativeWork(this.pool, this.consumerWork, {
+        rows,
+        points,
+        statements,
+        bytes: 0,
+        engineRequests: 0,
+      })
+    )
+      return refuse('source-maintenance-work-allowance');
     this.work.rows += rows;
     this.work.points += points;
     this.work.statements += statements;
@@ -207,6 +236,9 @@ class ReadWork {
 }
 
 async function inventory(pool: Pool, job: IdentityJobRef, work: ReadWork): Promise<Inventory> {
+  // The complete child byte ceiling is held against Source before any result can be read;
+  // actual result bytes remain checked against this same bounded child allowance.
+  work.reserveParentBytes();
   return work.snapshot(pool, async (tx) => {
     const root = (
       await work.query<Root>(tx, jobSQL.sql, [identityJobPartition(job), job.jobId, job.epoch.toString()], 9)
@@ -312,7 +344,10 @@ export async function readIdentityPrearmCustodyPage(
   // Snapshot caller-owned locators before the first await. Authentication cannot authorize
   // a later mutation of the job, work allowance or scalar continuation.
   request = { ...request, job: { ...request.job }, allowance: { ...request.allowance } };
-  const work = new ReadWork(request.allowance, context);
+  if (context.identityConsumerWork &&
+    !isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline))
+    return { status: 'unavailable', reason: 'source-maintenance-work-unavailable', work: emptyWork() };
+  const work = new ReadWork(pool, request.allowance, context, context.identityConsumerWork);
   if (request.after && (request.after.after.length > 8 || Buffer.byteLength(json(request.after)) > 2048))
     return { status: 'unavailable', reason: 'invalid-frontier', work: work.work };
   request = {
@@ -442,7 +477,10 @@ export async function verifyIdentityPrearmCustodyCut(
   job = { ...job };
   const saved = cuts.get(cut);
   if (!saved || !validJob(job) || !sameJob(job, saved.job)) return { status: 'unavailable', work: emptyWork() };
-  const work = new ReadWork(saved.allowance, context);
+  if (context.identityConsumerWork &&
+    !isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline))
+    return { status: 'unavailable', work: emptyWork() };
+  const work = new ReadWork(pool, saved.allowance, context, context.identityConsumerWork);
   return withRequestDeadline(work.deadline, async () => {
     try {
       const { root, inputs, rootStamp } = await inventory(pool, job, work);

@@ -39,3 +39,43 @@ test('unknown native footprints and expired admissions cannot dispatch or consum
   expect(() => expired.reserve(footprint)).toThrow();
   expect(Object.values(expired.receipt().used).every((value) => value === 0)).toBe(true);
 });
+
+test('a later invalid compose ceiling leaves every parent axis available without dispatch', async () => {
+  const work = ledger();
+  let dispatched = false;
+  await expect(work.compose(async (allowance) => {
+    dispatched = true;
+    return { work: { reservationId: allowance.reservationId, used: allowance.remaining } };
+  }, { ...footprint, emptySeeks: -1 })).rejects.toThrow('Invalid composed source work ceiling');
+  expect(dispatched).toBe(false);
+  for (const axis of Object.keys(footprint) as (keyof WorkDimensions)[]) {
+    expect(work.available(axis)).toBe(footprint[axis]);
+    expect(work.receipt().used[axis]).toBe(0);
+  }
+  // Validation failure must also leave the parent usable for its original reservation.
+  const reservation = work.reserve(footprint);
+  reservation.dispatch();
+  reservation.settle();
+  expect(work.receipt().used).toEqual(footprint);
+});
+
+test('compose snapshots each child ceiling once and retains failed child charges in the same reservation', async () => {
+  const work = ledger();
+  const reads = new Map<string, number>();
+  const ceiling = Object.defineProperties({}, Object.fromEntries(Object.entries(footprint).map(([axis, value]) => [
+    axis,
+    { enumerable: true, get: () => { reads.set(axis, (reads.get(axis) ?? 0) + 1); return Math.floor(value / 2); } },
+  ]))) as WorkDimensions;
+  const childBound = Object.fromEntries(Object.entries(footprint).map(([axis, value]) => [axis, Math.floor(value / 2)])) as WorkDimensions;
+  const failure = new Error('child unavailable before returning its receipt');
+  await expect(work.compose(async (allowance) => {
+    expect(allowance.reservationId).toBe('native-reservation');
+    expect(allowance.remaining).toEqual(childBound);
+    for (const axis of Object.keys(footprint) as (keyof WorkDimensions)[])
+      expect(work.available(axis)).toBe(footprint[axis] - childBound[axis]);
+    throw failure;
+  }, ceiling)).rejects.toBe(failure);
+  expect([...reads.values()]).toEqual(Object.keys(footprint).map(() => 1));
+  expect(work.receipt()).toEqual({ reservationId: 'native-reservation', used: childBound });
+  expect(() => work.assertReady()).toThrow(failure.message);
+});

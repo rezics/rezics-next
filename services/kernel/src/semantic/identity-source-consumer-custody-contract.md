@@ -58,17 +58,19 @@ In `identity-epoch-binding.ts`:
 
 ```ts
 readIdentitySourceConsumerWork(pool: Pool, reference: IdentitySourceConsumerReference,
-  context: Readonly<{deadline: number}>): Promise<IdentitySourceConsumerWork | null>;
+  context: IdentitySourceConsumerContext): Promise<IdentitySourceConsumerWork | null>;
 lockIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference,
   expected: IdentitySourceConsumerGeneration): Promise<IdentitySourceConsumerDisposition | null>;
 verifyIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference,
   expected: IdentitySourceConsumerGeneration, disposition: IdentitySourceConsumerDisposition): Promise<boolean>;
 ```
 
-`read` supplies an actual admitted native work reservation and native replay, undo
-and restore generations; it performs no fresh identity admission. It must account for
-its own failed/control work and reserve the fixed Source-local claim/source/progress
-commands shown in this implementation before returning the directory suballowance. The local `lock` resolves the exact original accepted
+`read` resolves native replay, undo and restore generations using the same live
+`context.identityConsumerWork` frame. It charges that frame before its own native,
+control and failed work; it performs no fresh identity admission. Its returned native
+allowance is bounded directory planning data, never a second allocation or funding
+from the accepted claim/job. Source separately charges its fixed local
+claim/source/progress commands against this frame. The local `lock` resolves the exact original accepted
 claim under the same binding lock used by admission/replay/undo/restore. It returns
 discharged only after genuine native reversal and every surviving consumer is settled;
 it returns transferred only when the immutable technical input remains indispensable.
@@ -84,13 +86,17 @@ In `identity-scoped-observations.ts`:
 
 ```ts
 readIdentityScopeConsumerWork(pool: Pool, ticket: IdentityPrearmTicketData,
-  context: Readonly<{deadline: number}>): Promise<IdentitySourceScopeConsumerWork | null>;
+  context: IdentitySourceConsumerContext): Promise<IdentitySourceScopeConsumerWork | null>;
 retainIdentityScopeConsumerFence(tx: CommandTransaction, ticket: IdentityPrearmTicketData,
   seal: LibraryScopeEffectSeal): Promise<IdentityNativeReceipt | null>;
 ```
 
-`read` resolves the original retained registration/capture and its actual shared
-Source reservation and its native SQL footprint, including all failed/native/control work.
+`read` resolves the original retained registration/capture with the same live
+`context.identityConsumerWork` frame and charges its probes before dispatch. It returns
+the child ceiling and native SQL footprint, including all failed/native/control work.
+The returned allowance is current planning data; Source transfers work through its
+one frame-owned Library ledger's `compose`, preserving the parent reservation identity.
+Neither retained capture funds nor a new ledger supply this work.
 The footprint is accounting only; unknown SQL is refused before dispatch by the
 existing NativeCollectionWork instrumenter. It cannot provide discharge authority. It must not allocate
 a guessed reservation or depend on query readiness. `retain` runs on the exact
@@ -177,6 +183,58 @@ pages share the actual Source work reservation; native and Library work units ar
 never converted. No caller scope list, expected-set mirror, zero from EOF, timing
 shortcut or participant ACK is terminal authority. Account current root and all
 History copy associations/receipts remain independently required.
+
+Source funds this work once through `withIdentitySourceConsumerMaintenance` at the
+actual History default-maintenance invocation. The opaque frame is bound to that
+Pool, deadline and async invocation, and ends in `finally`. Deadline-only, copied,
+wrong-Pool and expired frames return pending before Source consumer I/O. Same-command
+verification resolves the current frame from the live command resources and checks
+the same Pool and invocation before reading.
+
+The independent native defaults are rows 236, points 236, statements 70, bytes
+270336 and engine requests 0. The row/point allowance is two existing 100-row child
+ceilings (one directory read and one current-cut verification), plus 32 fixed Source
+control touches and four same-command verification touches. Each directory child still
+refuses above 100. The statement allowance is 18 for the directory read (three
+four-statement read snapshots and six bounded selects), 17 for verification (three
+snapshots and five selects), 29 fixed Source control statements including the bounded
+command-executor failure/cleanup path, and six same-command verification statements.
+The byte allowance is 32 KiB for fixed Source controls, 8 KiB for same-command
+verification and two 112 KiB native child reservations. No engine request is dispatched
+by this PostgreSQL path, so only that proved-unused axis defaults to zero.
+
+Library dimensions stay in their existing units and are never converted into
+NativeStepWork. Defaults are candidateKeys 1 for the existing one-effect page,
+identityMetadataRows 0 because this path dispatches no identity metadata sweep,
+nativeRows 8192, nativePoints 128, witnessKeys 1, statements 128 and bytes 1048576
+from the existing Collection Source one-page ceilings, and emptySeeks 2 for the page
+end and sealed-empty case. The Source frame creates one `NativeCollectionWork`; child
+planning allowances cap its existing `compose` transfer and SQL footprints. Unknown
+footprints refuse before dispatch. A dispatched reservation is never refunded from
+result row counts.
+
+The exact optional overrides and defaults are:
+
+| Environment key | Default | Derivation |
+| --- | ---: | --- |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS` | 236 | Two 100-row native directory child ceilings, 32 fixed Source control touches and four same-command verification touches. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_POINTS` | 236 | The same bounded point footprint as the native row allowance. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS` | 70 | 18 directory-read statements, 17 cut-verification statements, 29 fixed Source control/failure/cleanup statements and six same-command verification statements. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES` | 270336 | 32 KiB Source controls, 8 KiB same-command verification and two 112 KiB native directory children. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ENGINE_REQUESTS` | 0 | This PostgreSQL path dispatches no engine request. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_CANDIDATE_KEYS` | 1 | One effect selection in the existing one-page bound. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_IDENTITY_METADATA_ROWS` | 0 | This path does not dispatch an identity metadata sweep. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_NATIVE_ROWS` | 8192 | Existing Collection Source one-page native row ceiling. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_NATIVE_POINTS` | 128 | Existing Collection Source one-page native point ceiling. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_WITNESS_KEYS` | 1 | One effect selection. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_STATEMENTS` | 128 | Existing Collection Source one-page statement ceiling. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_BYTES` | 1048576 | Existing Collection Source one-page byte ceiling. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_EMPTY_SEEKS` | 2 | The bounded page-end and sealed-empty probes. |
+
+Overrides are canonical non-negative safe integers no higher than the named
+existing ceilings; invalid values fail at frame creation. Required work dimensions
+cannot be set to zero. Zero is accepted only for the proved-unused engine-request
+and identity-metadata axes above.
 
 Native tests are authored but deferred. Local typing is implementation evidence,
 not native discharge, erasure or Goal completion.

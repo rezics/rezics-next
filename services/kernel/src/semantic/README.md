@@ -272,6 +272,42 @@ checks an irreversible receiving fence. Cancellation needs no new slot; admitted
 Output generation maintenance/retirement and the real mapping/Search/Library completion participants remain separate
 producers. Successful public merge and account verification/reversal delivery are not established by a pending store job.
 
+### Source-funded consumer maintenance
+
+`withIdentitySourceConsumerMaintenance` creates one ephemeral frame for the complete History default-maintenance
+callback. It binds the configured allocation to the actual Pool, deadline and async invocation, then invalidates the
+frame in `finally`. Source read/work contexts accept optional `identityConsumerWork`; absent, forged, wrong-Pool,
+expired and ended frames return pending before consumer Source I/O. Same-command verification obtains the live frame
+from the command's Pool and deadline. The frame grants no Source, permission, erasure, receiving or cleanup authority.
+
+NativeStepWork and Library WorkDimensions remain independent. Each directory child keeps the existing 100-row limit;
+the parent native allocation funds the bounded read, current-cut verification, fixed Source control probes and cleanup.
+The Library side uses the same `NativeCollectionWork` and its existing composition/SQL instrumentation for both the
+effect page and receiving/seal checks. The owner's allowance is only a per-child ceiling; it never creates a second
+ledger. Missing frame or unknown SQL footprint refuses before dispatch, and dispatched work is not refunded by
+result row counts.
+
+The deployment may override these bounded defaults with the exact `KERNEL_IDENTITY_SOURCE_MAINTENANCE_` keys:
+
+| Key suffix | Default | Derivation |
+| --- | ---: | --- |
+| `NATIVE_ROWS` | 236 | Two native child ceilings of 100, 32 fixed Source control touches and four same-command verification touches. |
+| `NATIVE_POINTS` | 236 | Same bounded point probes as the native row allocation. |
+| `NATIVE_STATEMENTS` | 70 | 18 directory read, 17 current-cut verify, 29 Source control/failure/cleanup, and six same-command verify statements. |
+| `NATIVE_BYTES` | 270336 | 32 KiB Source controls, 8 KiB same-command verification and two 112 KiB native child reservations. |
+| `NATIVE_ENGINE_REQUESTS` | 0 | This path dispatches PostgreSQL work only. |
+| `LIBRARY_CANDIDATE_KEYS` | 1 | The existing effect page requests one selection. |
+| `LIBRARY_IDENTITY_METADATA_ROWS` | 0 | No identity metadata sweep is dispatched by this path. |
+| `LIBRARY_NATIVE_ROWS` | 8192 | Existing bounded Collection Source row-work ceiling. |
+| `LIBRARY_NATIVE_POINTS` | 128 | Existing bounded Collection Source point ceiling. |
+| `LIBRARY_WITNESS_KEYS` | 1 | At most one selected effect is reconciled per invocation. |
+| `LIBRARY_STATEMENTS` | 128 | Existing bounded Collection Source statement ceiling. |
+| `LIBRARY_BYTES` | 1048576 | Existing bounded Collection Source response ceiling. |
+| `LIBRARY_EMPTY_SEEKS` | 2 | One page-end seek and one sealed-empty seek. |
+
+Configuration values must be canonical non-negative safe integers within the listed bounds. Zero is rejected for
+required work; the zero defaults are limited to dimensions with no dispatch on this path.
+
 ## Agents
 
 ### Account agents
