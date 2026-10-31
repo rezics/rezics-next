@@ -125,7 +125,14 @@ export async function publicationFixture(state: PublicationExampleState) {
         });
       if (path === `/v1/accounts/${creatorId}/editions`)
         return Response.json({
-          editions: edition ? [{ ...edition, identity: editionIdentity() }] : [],
+          editions: edition
+            ? [
+                {
+                  ...edition,
+                  ...(request.headers.get('rezics-edition-identity') === 'true' ? { identity: editionIdentity() } : {}),
+                },
+              ]
+            : [],
           next: null,
         });
       if (path === '/v1/viewerActions') {
@@ -187,7 +194,10 @@ export async function publicationFixture(state: PublicationExampleState) {
       if (path === `/v1/contentEditions/${editionId}` && edition)
         return metadataUnavailable
           ? Response.json({ code: 'overloaded' }, { status: 503 })
-          : Response.json({ ...edition, identity: editionIdentity() });
+          : Response.json({
+              ...edition,
+              ...(request.headers.get('rezics-edition-identity') === 'true' ? { identity: editionIdentity() } : {}),
+            });
       throw new Error(`Unexpected publication fixture request: ${request.method} ${path}`);
     },
     { preconnect() {} },

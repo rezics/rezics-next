@@ -41,7 +41,7 @@ export function createNativeCreatorEditionsApi(
       if (search.cursor) url.searchParams.set('cursor', search.cursor);
       const response = await fetcher(url, {
         method: 'GET',
-        headers: { authorization },
+        headers: { authorization, 'rezics-edition-identity': 'true' },
         redirect: 'manual',
         cache: 'no-store',
       });

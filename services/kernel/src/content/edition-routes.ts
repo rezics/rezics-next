@@ -30,6 +30,10 @@ const headers = t.Object(
   { [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.Optional(t.String()) },
   { additionalProperties: true },
 );
+const identityHeaders = t.Object(
+  { 'rezics-edition-identity': t.Optional(t.Literal('true')) },
+  { additionalProperties: true },
+);
 const cacheHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
 const command = strictContentSchema(ContentEditionCommandSchema);
 const empty = strictContentSchema(t.Object({}, { additionalProperties: false }));
@@ -86,6 +90,7 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
     .get(
       '/v1/accounts/:accountId/editions',
       {
+        headers: identityHeaders,
         params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
         query: t.Object(
           {
@@ -115,12 +120,17 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ actor, params: { accountId }, query, admission, job, set }) => {
+      async ({ actor, params: { accountId }, query, request, admission, job, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         set.headers['cache-control'] = 'private, no-store';
         return operation(() =>
           admission.run('normal', job, async () => {
-            const result = await readCreatorEditions(deps, actor, { accountId, ...query }, { deadline: job.deadline });
+            const result = await readCreatorEditions(
+              deps,
+              actor,
+              { accountId, ...query, identity: request.headers.get('rezics-edition-identity') === 'true' },
+              { deadline: job.deadline },
+            );
             return { editions: [...result.editions], next: result.next };
           }),
         );
@@ -223,6 +233,7 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
       '/v1/contentEditions/:id',
       {
         params,
+        headers: identityHeaders,
         response: { 200: withHeaders(strictContentSchema(ContentEditionSchema), cacheHeaders), ...failures },
         detail: {
           operationId: 'content_edition.get',
@@ -231,9 +242,16 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ actor, params: { id }, admission, job, session, set }) => {
+      async ({ actor, params: { id }, request, admission, job, session, set }) => {
         const result = await operation(() =>
-          admission.run('normal', job, () => readContentEdition(deps, id, { actor, deadline: job.deadline })),
+          admission.run('normal', job, () =>
+            readContentEdition(
+              deps,
+              id,
+              { actor, deadline: job.deadline },
+              request.headers.get('rezics-edition-identity') === 'true',
+            ),
+          ),
         );
         session.record({
           partition: result.anchor.partition.partitionNo,

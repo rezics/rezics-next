@@ -208,7 +208,7 @@ export function createNativeEditionCreateApi(
     readEditionCreateSource(client, authorization, viewerId, identity, includeMedia);
   async function metadata(id: string): Promise<EditionMetadata | EditionCreateFailure> {
     const response = await transport(new URL(`/v1/contentEditions/${encodeURIComponent(id)}`, origin), {
-      headers: { authorization },
+      headers: { authorization, 'rezics-edition-identity': 'true' },
     });
     if (response.status === 404 || response.status === 410) return { kind: 'missing', status: response.status };
     if (response.status !== 200) return failure(response.status);

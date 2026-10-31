@@ -27,8 +27,8 @@ import type { ContentEditionView, ContentEditionRevisionView } from './edition-m
 
 type Dependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
 /** Closed authorized metadata never returns source post/thread IDs, body, URLs or history. */
-export async function readContentEdition(deps: Dependencies, id: string, context: ReadContext) {
-  return readEditionMetadata(deps, id, context, false);
+export async function readContentEdition(deps: Dependencies, id: string, context: ReadContext, identity = false) {
+  return readEditionMetadata(deps, id, context, false, identity);
 }
 
 /** Creator inventory additionally retains ordinary source authority, even after publication. */

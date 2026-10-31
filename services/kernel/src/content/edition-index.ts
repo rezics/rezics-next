@@ -30,7 +30,7 @@ export class InvalidCreatorEditionCursorError extends Error {}
 export async function readCreatorEditions(
   deps: Dependencies,
   actor: Actor,
-  input: Readonly<{ accountId: string; cursor?: string; limit?: number }>,
+  input: Readonly<{ accountId: string; cursor?: string; limit?: number; identity?: boolean }>,
   context: Readonly<{ deadline: number }>,
 ): Promise<CreatorEditionPage> {
   const route = routeOf(input.accountId);
@@ -97,10 +97,14 @@ export async function readCreatorEditions(
     const current = await read(id);
     if (current) editions.push(current);
   }
-  const identities = await readEditionIdentities(deps, editions, { actor, deadline: context.deadline });
+  const identities = input.identity
+    ? await readEditionIdentities(deps, editions, { actor, deadline: context.deadline })
+    : null;
   const last = candidates.value.at(-1);
   return {
-    editions: editions.map((edition) => ({ ...edition, identity: identities.get(edition.editionId)! })),
+    editions: identities
+      ? editions.map((edition) => ({ ...edition, identity: identities.get(edition.editionId)! }))
+      : editions,
     next:
       last && candidates.value.length === limit
         ? await encodeListCursor(ring, binding, { epoch: candidates.anchor.epoch, after: [last.edition_id] }, now)
