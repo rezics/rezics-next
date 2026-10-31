@@ -1,7 +1,8 @@
 export { createAccountPublicEligibility } from './account-authority.ts';
 export type { AccessCheck, PreparedAccessCheckInvocation, PreparedAccessCheckWork } from '../request/access.ts';
+export type * from './kind-audience.ts';
 import type { PermissionAccount } from './account-authority.ts';
-import { accessCheckout, accessTransaction } from './work.ts';
+import { accessCheckout, accessTransaction, AccessWorkUnavailableError } from './work.ts';
 export {
   AccessWorkAccounting,
   AccessWorkUnavailableError,
@@ -341,6 +342,42 @@ export function createAccess(config: AccessConfig): Access {
     { actor: Actor; handle: ReadDecisions; time: AuthoritativeTime; checks: Map<string, Promise<boolean>> }
   >();
   const access: Access = {
+    kindAudience: Object.freeze({
+      ...permissions.kindAudience!,
+      capture: Object.freeze({
+        bound(input) {
+          const identity = input.actor.kind === 'account' ? authentication.identity(input.actor) : undefined;
+          if (
+            input.actor.kind === 'account' &&
+            (!identity ||
+              identity.pool !== input.context.pool ||
+              identity.durableTime ||
+              identity.expiryClock !== 'wall' ||
+              identityExpired(identity, clock) ||
+              Date.now() >= identity.deadline)
+          )
+            return undefined;
+          return permissions.kindAudience!.capture.bound(input);
+        },
+        async run(input) {
+          const identity = input.actor.kind === 'account' ? authentication.identity(input.actor) : undefined;
+          if (
+            input.actor.kind === 'account' &&
+            (!identity ||
+              identity.pool !== input.context.pool ||
+              identity.durableTime ||
+              identity.expiryClock !== 'wall' ||
+              identityExpired(identity, clock) ||
+              Date.now() >= identity.deadline)
+          )
+            throw new AccessWorkUnavailableError('Collection Kind audience actual native request origin');
+          // Anonymous requires native floor evidence in the original producer.
+          // The staged producer refuses before IO for both genuine origin kinds.
+          return permissions.kindAudience!.capture.run(input);
+        },
+        actual: permissions.kindAudience!.capture.actual,
+      }),
+    }),
     async prepareReadDecisions(input) {
       if (!validReadDecisionActions(input, actions)) throw new RangeError('Invalid read decision actions');
       const { actor, context } = input;

@@ -18,6 +18,8 @@ import { routeOf } from '../route/route.ts';
 import { permissionHistoryAccounts } from '../access/permission.ts';
 import { bindCommandHistoryEvidence } from '../history/record.ts';
 import type { AccountReference } from '../history/locator.ts';
+import type { KindAudienceAccess } from '../access/kind-audience.ts';
+export type * from '../access/kind-audience.ts';
 
 export type AccountActor = {
   kind: 'account';
@@ -234,6 +236,10 @@ export function nativePreparedAccessCheckWork(
 export type AccessCommandAuthorization = CommandAuthorization & { readonly check: AccessCheck };
 
 export interface Access {
+  /** Native Kind origin/evidence only; optional for existing mocks/adapters.
+   * The original factory is staged unavailable before IO until owner bodies exist.
+   */
+  readonly kindAudience?: KindAudienceAccess;
   /** Authentication has no authorization-time input; preserve its native request contract. */
   authenticate(token: string, context: { pool: Pool; deadline: number }): Promise<AccountActor>;
   prepareReadDecisions?(input: PrepareReadDecisionsInput): Promise<ReadDecisions>;

@@ -77,6 +77,30 @@ import {
   recordGovernanceReachUse,
 } from './governance-reach.ts';
 import { prepareAnonymousEligibility, type PreparedEligibilityVerify } from './eligibility.ts';
+import type { KindAudienceAccess, KindAudienceOperation } from './kind-audience.ts';
+import { AccessWorkUnavailableError } from './work.ts';
+
+/** Literal native seam only. Missing owner provenance/admission/currentness must
+ * refuse before checkout, formula, owner callback or any other IO. No zero receipt
+ * or successful origin is fabricated. Implement here using the original formula.
+ */
+function createKindAudienceAccess(): KindAudienceAccess {
+  const unavailable = <I, R extends Readonly<{ work: import('../library/collection-source.ts').WorkReceipt }>>(
+    phase: string,
+  ): KindAudienceOperation<I, R> =>
+    Object.freeze({
+      bound: () => undefined,
+      actual: () => undefined,
+      async run() {
+        throw new AccessWorkUnavailableError(`Collection Kind audience ${phase} native body`);
+      },
+    });
+  return Object.freeze({
+    capture: unavailable('origin capture'),
+    prepare: unavailable('evidence preparation'),
+    verifySource: unavailable('Source-local currentness'),
+  });
+}
 
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
  * Identity and this record must come from verified Auth/Access, never request JSON.
@@ -1364,6 +1388,7 @@ export function createAccess(config: PermissionConfig): Access {
     }
   }
   const access: Access = {
+    kindAudience: createKindAudienceAccess(),
     prepareReadDecisions,
     replayAuthorization: (action) => actions.get(action)?.replay,
     authenticate:
