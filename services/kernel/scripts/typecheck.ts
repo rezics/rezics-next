@@ -2,7 +2,6 @@ import { statSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withThrowawayDatabase } from './derived.ts';
-import { CLIENT_DECLARATIONS } from './client.ts';
 import { runOnCheckHost } from '../../../scripts/stack-run.ts';
 import { schemaDumps, validateMigrationVersions } from './database.ts';
 
@@ -21,6 +20,11 @@ function returnedPaths(
   emitClient: boolean,
   emitSchema: string | undefined,
 ): string[] | undefined {
+  // Client declarations are a complete import tree, larger than the bounded return
+  // contract. Leave returns undefined so StackRun retains every emitted file locally,
+  // including the selected schema when both emission modes are requested.
+  if (emitClient) return undefined;
+
   // Keep external Reylo projects local: their configuration and retained analyses are
   // outside the workspace-relative placement contract, even though we do not return them.
   const projectDirectory = env.REYLO_CONFIG ? dirname(resolve(directory, env.REYLO_CONFIG)) : directory;
@@ -40,10 +44,6 @@ function returnedPaths(
   ) {
     const schema = workspacePath(resolve(directory, 'db', emitSchema, 'schema.sql'));
     if (schema !== undefined) paths.push(schema);
-  }
-  if (emitClient) {
-    const declarations = workspacePath(CLIENT_DECLARATIONS);
-    if (declarations !== undefined) paths.push(declarations);
   }
   return paths;
 }
@@ -123,7 +123,7 @@ export async function runKernelTypecheck(
               ...(emitClient ? ['--emit-client'] : []),
               ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
             ],
-            keepsFiles: true,
+            keepsFiles: emitClient || emitSchema !== undefined || returns === undefined,
             ...(returns === undefined ? {} : { returns }),
           },
           env,

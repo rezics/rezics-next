@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runKernelTypecheck } from '../services/kernel/scripts/typecheck.ts';
 import { runAuthTypecheck } from '../services/auth/scripts/typecheck.ts';
+import { runOnCheckHost } from './stack-run.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const temporaryDirectories: string[] = [];
@@ -63,42 +64,79 @@ test.each([
 });
 
 test.each([
-  [[], ['bun', 'scripts/typecheck.ts'], ['services/kernel/.reylo']],
-  [
-    ['--emit-client'],
-    ['bun', 'scripts/typecheck.ts', '--emit-client'],
-    ['services/kernel/.reylo', 'packages/client/src/kernel'],
-  ],
+  [[], ['bun', 'scripts/typecheck.ts'], [], false],
+  [['--emit-client'], ['bun', 'scripts/typecheck.ts', '--emit-client'], undefined, true],
   [
     ['--emit-schema=semantic'],
     ['bun', 'scripts/typecheck.ts', '--emit-schema=semantic'],
-    ['services/kernel/.reylo', 'services/kernel/db/semantic/schema.sql'],
+    ['services/kernel/db/semantic/schema.sql'],
+    true,
   ],
   [
     ['--emit-schema=semantic', '--emit-client'],
     ['bun', 'scripts/typecheck.ts', '--emit-client', '--emit-schema=semantic'],
-    ['services/kernel/.reylo', 'services/kernel/db/semantic/schema.sql', 'packages/client/src/kernel'],
+    undefined,
+    true,
   ],
-])('Kernel placement returns files written by the selected emission modes: %j', async (args, command, returns) => {
-  let descriptor: { keepsFiles: boolean | undefined; returns: string[] | undefined } | undefined;
-  const status = await runKernelTypecheck(
-    { PATH: process.env.PATH },
-    {
-      place: async (run) => {
-        expect(run.command).toEqual(command);
-        descriptor = { keepsFiles: run.keepsFiles, returns: run.returns };
-        return 23;
+])(
+  'Kernel placement returns files written by the selected emission modes: %j',
+  async (args, command, returns, keepsFiles) => {
+    let descriptor: { keepsFiles: boolean | undefined; returns: string[] | undefined } | undefined;
+    const status = await runKernelTypecheck(
+      { PATH: process.env.PATH },
+      {
+        place: async (run) => {
+          expect(run.command).toEqual(command);
+          descriptor = { keepsFiles: run.keepsFiles, returns: run.returns };
+          return 23;
+        },
+        withThrowawayDatabase: async () => {
+          throw new Error('should not start locally');
+        },
       },
-      withThrowawayDatabase: async () => {
-        throw new Error('should not start locally');
-      },
-    },
-    args,
-  );
+      args,
+    );
 
-  expect(descriptor?.keepsFiles).toBe(true);
-  expect(descriptor?.returns).toEqual(returns);
-  expect(status).toBe(23);
+    expect(descriptor?.keepsFiles).toBe(keepsFiles);
+    expect(descriptor?.returns).toEqual(returns);
+    expect(status).toBe(23);
+  },
+);
+
+test('Kernel client emission uses StackRun local file retention before host discovery', async () => {
+  for (const schema of [undefined, 'semantic']) {
+    let databaseStarts = 0;
+    let compilerRuns = 0;
+    const databaseEnv = { DATABASE_URL: 'postgres://throwaway.test/db' };
+    const status = await runKernelTypecheck(
+      {
+        PATH: process.env.PATH,
+        GOAL_TASK_ID: 'worker',
+        get KERNEL_CHECK_REMOTE(): string {
+          throw new Error('file-retaining compiler must stay local before host discovery');
+        },
+      },
+      {
+        place: runOnCheckHost,
+        withThrowawayDatabase: async (work) => {
+          databaseStarts++;
+          return work(databaseEnv);
+        },
+        typecheck: async (env, emitClient, emitSchema) => {
+          compilerRuns++;
+          expect(env).toBe(databaseEnv);
+          expect(emitClient).toBe(true);
+          expect(emitSchema).toBe(schema);
+          return 23;
+        },
+      },
+      ['--emit-client', ...(schema === undefined ? [] : [`--emit-schema=${schema}`])],
+    );
+
+    expect(databaseStarts).toBe(1);
+    expect(compilerRuns).toBe(1);
+    expect(status).toBe(23);
+  }
 });
 
 test.each([false, true])('explicit local opt-out preserves the compiler emission mode: %j', async (emitClient) => {
