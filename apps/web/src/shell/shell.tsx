@@ -443,7 +443,9 @@ export function AppShell({ children, navigation, subjectPurchase, search }: AppS
   return (
     <NavigationProvider {...(navigation ? { contributions: navigation } : {})}>
       <FeatureSlotsProvider {...(subjectPurchase ? { subjectPurchase } : {})}>
-        <ShellContent search={search}>{children}</ShellContent>
+        <Toaster>
+          <ShellContent search={search}>{children}</ShellContent>
+        </Toaster>
       </FeatureSlotsProvider>
     </NavigationProvider>
   );
@@ -534,7 +536,6 @@ function ShellContent({ children, search }: Pick<AppShellProps, 'children' | 'se
             pathname={location.pathname}
             account={<AccountMenu session={session} csrfToken={csrfToken} phone />}
           />
-          <Toaster />
         </SidebarProvider>
       </HeaderSearchFilterProvider>
     </PhoneCreationProvider>
