@@ -461,7 +461,7 @@ export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
     return pending(database, id, 'auth-sdk-native-fence-receipt-mismatch');
   if (!(await copiesAbsent(database, id))) return pending(database, id, 'auth-sdk-physical-copies-pending');
   await database.query(
-    "UPDATE auth_copy_work SET absent=true,sdk_fence_pending=NULL,digest=decode(repeat('00',32),'hex'),source_key=NULL,result_digest=CASE WHEN result_digest IS NOT NULL THEN decode(repeat('00',32),'hex') END WHERE workflow_id=$1 AND retired",
+    "UPDATE auth_copy_work SET absent=true,sdk_fence_pending=NULL,digest=decode(repeat('00',32),'hex') WHERE workflow_id=$1 AND retired",
     [id],
   );
   return true;

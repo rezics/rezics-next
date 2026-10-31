@@ -31,9 +31,9 @@ BEGIN
   END IF;
   IF OLD.sdk_fence_generation IS NOT NULL AND (
     ROW(NEW.workflow_id,NEW.name,NEW.version,NEW.scope_count,NEW.parent_workflow_id,
-      NEW.ready,NEW.result_finished_at,NEW.sdk_fence_generation,NEW.sdk_fence_closure_id,NEW.sdk_fence_closed_at)
+      NEW.ready,NEW.source_key,NEW.result_digest,NEW.result_finished_at,NEW.sdk_fence_generation,NEW.sdk_fence_closure_id,NEW.sdk_fence_closed_at)
     IS DISTINCT FROM ROW(OLD.workflow_id,OLD.name,OLD.version,OLD.scope_count,OLD.parent_workflow_id,
-      OLD.ready,OLD.result_finished_at,OLD.sdk_fence_generation,OLD.sdk_fence_closure_id,OLD.sdk_fence_closed_at)
+      OLD.ready,OLD.source_key,OLD.result_digest,OLD.result_finished_at,OLD.sdk_fence_generation,OLD.sdk_fence_closure_id,OLD.sdk_fence_closed_at)
     OR (OLD.retired AND NOT NEW.retired) OR (OLD.absent AND NOT NEW.absent)) THEN
     RAISE EXCEPTION 'Auth native writer receipt is immutable' USING ERRCODE='23514';
   END IF;

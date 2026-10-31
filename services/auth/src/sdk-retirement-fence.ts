@@ -1,17 +1,6 @@
-import { DBOS } from '@dbos-inc/dbos-sdk';
+import { DBOS, type WorkflowWriterFence } from '@dbos-inc/dbos-sdk';
 
-/** Type-only adapter for the producer's exact API until its package is integrated.
- * No implementation, SDK SQL or alternate runtime lives in Auth. */
-export interface WorkflowWriterFence {
-  readonly workflowID: string;
-  readonly generation: string;
-  readonly closureID: string;
-  readonly closedAt: number;
-}
-interface NativeRetirement {
-  retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
-  getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
-}
+export type { WorkflowWriterFence } from '@dbos-inc/dbos-sdk';
 
 export const AUTH_SDK_RETIREMENT = Object.freeze({
   sdkVersion: '5.4.6-preview',
@@ -19,7 +8,7 @@ export const AUTH_SDK_RETIREMENT = Object.freeze({
   gap: 'auth-sdk-permanent-late-writer-fence-unavailable',
 } as const);
 
-function supported(sdk: object): sdk is NativeRetirement {
+function supported(sdk: object): boolean {
   return (
     'retireWorkflow' in sdk &&
     typeof sdk.retireWorkflow === 'function' &&
