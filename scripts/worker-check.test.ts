@@ -3380,7 +3380,7 @@ test('once',()=>{expect(process.env.REZICS_CHECK_LOCAL_ONLY).toBe('1');require('
     const record = readWorkerCheckRecord(binding.checkId, root);
     expect(record).toMatchObject({ id: binding.checkId, argv: binding.argv, controllerProof: binding });
     expect(record.physicalArgv).toBeUndefined();
-    expect(readWorkerCheckHistory(binding.checkId, record.physicalRunId!, root)?.argv).toEqual(binding.argv);
+    expect(readWorkerCheckHistory(binding.checkId, record.physicalRunId!, root)?.argv).toEqual([...binding.argv]);
     expect(readdirSync(join(root, '.temp/goal/checks/results'))).toEqual([binding.checkId + '.json']);
     const registration = JSON.parse(readFileSync(
       registrationPath(process.env.GOAL_CHECK_REGISTRY!, binding.checkId, record.physicalRunId!), 'utf8'));

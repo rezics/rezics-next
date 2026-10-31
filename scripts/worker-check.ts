@@ -1463,10 +1463,24 @@ export async function runWorkerCheck(
   const descriptor = openSync(file, recordedLog ? 'a' : 'wx', 0o600);
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
   wait.begin();
+  const setup = <T>(step: () => T): T => {
+    try {
+      return step();
+    } catch (error) {
+      try {
+        // Keep the native diagnostic verbatim. This is setup output, not a test verdict.
+        writeSync(descriptor, `${error instanceof Error ? error.message : String(error)}\n`);
+      } finally {
+        wait.stop();
+        closeSync(descriptor);
+      }
+      throw new CheckSetupFailure(error);
+    }
+  };
   const env = { ...process.env };
   env.REMOTE_CHECK_CANCELLATION_FILE = cancellation.file;
   env.REMOTE_CHECK_CANCELLATION_ID = cancellation.id;
-  applyTaskPriority(root, env);
+  setup(() => applyTaskPriority(root, env));
   // The wrapper records the complete command duration; nested stack and remote wait recorders would double-count it.
   delete env.GOAL_CHECK_WAIT_FILE;
   if (
@@ -1479,7 +1493,7 @@ export async function runWorkerCheck(
     process.stdout.write(`check: exit status 125\ncheck: log ${relative(root, file)}\n`);
     return 125;
   }
-  if (returnPaths.length) clearDeclaredArtifacts(root, returnPaths);
+  if (returnPaths.length) setup(() => clearDeclaredArtifacts(root, returnPaths));
   if (logicalCheckId) {
     try {
       clearDeclaredArtifacts(root, readArtifactCatalog(root, logicalCheckId));
@@ -1494,25 +1508,11 @@ export async function runWorkerCheck(
     env.REZICS_CHECK_STOP_FILE = stopIntentPath(root, logicalCheckId, physicalRunId);
     env.REZICS_CHECK_REMOTE_CUSTODY_FILE = remoteRunCustodyPath(root, physicalRunId);
   }
-  const needsStack = workerCheckNeedsStack(argv, root);
-  const commandClass = checkClass(argv, root);
-  argv = scopeRootTypecheck(argv, root, env, (line) => writeSync(descriptor, `${line}\n`));
-  const command = (() => {
-    try {
-      const resolved = resolveRepositoryBun(argv, root);
-      prepared?.();
-      return resolved;
-    } catch (error) {
-      try {
-        // Keep the native diagnostic verbatim. This is setup output, not a test verdict.
-        writeSync(descriptor, `${error instanceof Error ? error.message : String(error)}\n`);
-      } finally {
-        wait.stop();
-        closeSync(descriptor);
-      }
-      throw new CheckSetupFailure(error);
-    }
-  })();
+  const needsStack = setup(() => workerCheckNeedsStack(argv, root));
+  const commandClass = setup(() => checkClass(argv, root));
+  argv = setup(() => scopeRootTypecheck(argv, root, env, (line) => writeSync(descriptor, `${line}\n`)));
+  const command = setup(() => resolveRepositoryBun(argv, root));
+  setup(() => prepared?.());
   const checkout = mainCheckout(root);
   let ledger: CheckLedgerEntry | undefined;
   let ledgerStarted = 0;
