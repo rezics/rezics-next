@@ -65,3 +65,50 @@ export const Vertical: Story = {
     await expect(thumb).toHaveValue('31');
   },
 };
+
+export const NamedSingle: Story = {
+  args: {
+    defaultValue: [40],
+    step: 10,
+    thumbProps: {
+      'aria-label': 'Rating',
+      getAriaValueText: (_formatted, value) => `${value} points`,
+    },
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('slider', { name: 'Rating' });
+    await expect(input).toHaveAttribute('type', 'range');
+    await expect(input).toHaveAttribute('aria-valuetext', '40 points');
+    await expect(canvas.getByRole('group')).not.toHaveAttribute('aria-valuetext');
+    input.focus();
+    await userEvent.keyboard('{ArrowRight}{End}{Home}');
+    await expect(input).toHaveValue('0');
+    await expect(input).toHaveAttribute('aria-valuetext', '0 points');
+  },
+};
+
+export const NamedRange: Story = {
+  args: {
+    defaultValue: [20, 70],
+    thumbProps: {
+      getAriaLabel: (index) => index === 0 ? 'Minimum rating' : 'Maximum rating',
+      getAriaValueText: (_formatted, value, index) => `${index === 0 ? 'From' : 'Through'} ${value} points`,
+    },
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const minimum = canvas.getByRole('slider', { name: 'Minimum rating' });
+    const maximum = canvas.getByRole('slider', { name: 'Maximum rating' });
+    await expect(canvas.getAllByRole('slider')).toHaveLength(2);
+    await expect(minimum).toHaveValue('20');
+    await expect(maximum).toHaveValue('70');
+    await expect(minimum).toHaveAttribute('aria-valuetext', 'From 20 points');
+    await expect(maximum).toHaveAttribute('aria-valuetext', 'Through 70 points');
+    maximum.focus();
+    await userEvent.keyboard('{ArrowLeft}');
+    await expect(maximum).toHaveValue('69');
+    await expect(maximum).toHaveAttribute('aria-valuetext', 'Through 69 points');
+    await expect(minimum).toHaveValue('20');
+  },
+};
