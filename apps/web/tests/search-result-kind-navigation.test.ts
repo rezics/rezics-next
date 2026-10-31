@@ -31,9 +31,9 @@ test('default mixed SearchPage offers direct result-kind navigation that retains
     };
     const params = new URLSearchParams({ q: '  Mira | 星 + / =  ', type: 'schema:CreativeWork',
       sort: 'rating', filter: ' {"not":{"type":{"in":["schema:Movie"]}}} ',
-      condition: JSON.stringify({ or: [{ type: { in: ['schema:Book'], descendants: true } },
+      condition: JSON.stringify({ or: [{ type: { in: ['schema:Book'] } },
         { not: { statement: { property: 'schema:genre', in: ['mystery'] } } }] }),
-      'r.schema:numberOfPages': JSON.stringify({ gt: 1000000, unit: 'page' }),
+      'r.schema:numberOfPages': JSON.stringify({ gte: 1000001, unit: '1' }),
       cursor: 'signed-result+/=' });
     params.append('language', 'ja');
     params.append('language', 'en');
