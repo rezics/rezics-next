@@ -1116,337 +1116,6 @@ export class MergeTrain {
   private readonly workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
 
-  /** Explicit main cohort release; shares the ordinary main lease, proof, fence, ref transaction and sink. */
-  async releaseControlPlaneBatch(input: ControlPlaneBatchManifest): Promise<ControlPlaneBatchResult> {
-    const manifest = parseControlPlaneBatchManifest(input);
-    const batchId = controlPlaneBatchId(manifest);
-    const o = this.options;
-    if (!(o.fence instanceof WorkerStore) || o.queue.db !== o.fence.db)
-      throw new Error('Control-plane batches require the shared worker store and landing queue');
-    const store = o.fence;
-    mkdirSync(o.stateDirectory, { recursive: true });
-    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train-main.lease'));
-    try {
-      const path = join(o.stateDirectory, `control-plane-batch-${batchId}.json`);
-      let journal: ControlPlaneBatchJournal;
-      if (existsSync(path)) {
-        journal = JSON.parse(readFileSync(path, 'utf8')) as ControlPlaneBatchJournal;
-        if (journal.version !== 1 || journal.batchId !== batchId ||
-            JSON.stringify(journal.manifest) !== JSON.stringify(manifest))
-          throw new Error('Control-plane batch journal does not match its immutable manifest');
-      } else {
-        journal = { version: 1, batchId, manifest, nodes: {
-          root: { indices: manifest.members.map((_, index) => index), attempts: 0,
-            logPath: join(o.stateDirectory, `control-plane-batch-${batchId}-root.log`) },
-        }, results: [] };
-      }
-      const save = () => {
-        const temporary = `${path}.${randomUUID()}.tmp`;
-        writeFileSync(temporary, `${JSON.stringify(journal, null, 2)}\n`, { mode: 0o600 });
-        renameSync(temporary, path);
-      };
-      save();
-      o.queue.claimControlPlaneBatch(batchId, manifest.members);
-      const disposition = (value: ControlPlaneBatchDisposition) => {
-        journal.results = journal.results.filter(member => member.taskId !== value.taskId);
-        journal.results.push(value);
-      };
-      const assertMember = (index: number, recovery = false): LandingEntry => {
-        const member = manifest.members[index]!;
-        assertControlPlaneMember(store, member.taskId, manifest.managerId);
-        store.assertCurrent(member);
-        const entry = o.queue.entry(member);
-        if (!entry || entry.batchId !== batchId || !entry.request.managerLanding ||
-            entry.request.managerLanding.managerId !== manifest.managerId ||
-            entry.request.managerLanding.acceptedCommit !== member.acceptedCommit ||
-            (entry.request.workerCommit && entry.request.workerCommit !== member.acceptedCommit))
-          throw new Error(`Batch source/request identity changed for ${member.taskId}`);
-        assertManagerLandingEvidence(entry.request, store, { allowIntegrated: recovery,
-          allowNoDeltaOn: git(o.mainCheckout, 'rev-parse', `refs/heads/${o.mainBranch ?? 'main'}^{commit}`) });
-        // Even recovery must never attribute an old release to a newer source on the same attempt.
-        if (git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}^{commit}`) !== member.acceptedCommit)
-          throw new Error(`Accepted source moved for ${member.taskId}`);
-        if (!recovery && (entry.outcome || entry.delivered))
-          throw new Error(`Landing outcome for ${member.taskId} is already immutable`);
-        return entry;
-      };
-      const cleanup = (record: ControlPlaneReleaseRecord, logPath: string) => {
-        try { this.syncMainCheckout(record.mainBranch, [record.mainExpected, record.mainCommit]); }
-        catch (error) {
-          // Ref publication and its proof are durable. A checkout cleanup failure cannot turn green into red.
-          appendFileSync(logPath, `Published release ${record.mainCommit}; checkout synchronization deferred: ${error}\n`);
-        }
-      };
-      const complete = (record: ControlPlaneReleaseRecord, node: ControlPlaneBatchNode) => {
-        if (record.batchId !== batchId || !record.members?.length || !this.controlPlaneRecordPublished(record))
-          throw new Error('Cannot recover batch without its exact verified published release record');
-        const members = record.members;
-        for (const index of node.indices) assertMember(index, true);
-        for (const member of members) {
-          if (JSON.stringify(o.queue.entry(member.request)?.request) !== JSON.stringify(member.request))
-            throw new Error(`Published batch request identity changed for ${member.request.taskId}`);
-        }
-        store.commitBatchMerge(members.map(member => ({ ...member.request, commit: record.mainCommit })), () => {
-          for (const index of node.indices) assertMember(index, true);
-          for (const member of members) {
-            const entry = o.queue.entry(member.request)!;
-            if (entry.outcome && JSON.stringify(entry.outcome) !== JSON.stringify(member.outcome))
-              throw new Error(`Immutable landing outcome differs for ${member.request.taskId}`);
-            if (!entry.outcome) o.queue.finish(entry.id, member.outcome);
-          }
-          return record.mainCommit;
-        });
-        cleanup(record, node.logPath);
-        for (const member of members) {
-          disposition(member.disposition);
-          const entry = o.queue.entry(member.request)!;
-          if (!entry.delivered) {
-            o.sink.onGateOutcome(member.outcome);
-            o.queue.acknowledge(entry.id);
-          }
-          this.notifyOwnersOfOutsideChanges(member.request,
-            outsideScope(member.outcome.changedFiles, member.request.declaredPaths),
-            record.mainCommit, record.mainBranch, node.logPath);
-        }
-        node.completed = true;
-        save();
-      };
-      const visit = async (key: string): Promise<void> => {
-        const node = journal.nodes[key]!;
-        if (node.children) {
-          for (const child of node.children) await visit(child);
-          return;
-        }
-        if (node.prepared && this.controlPlaneRecordPublished(node.prepared.record)) {
-          complete(node.prepared.record, node);
-          return;
-        }
-        if (node.completed || node.failure) return;
-        // Split decisions survive restart. A failed whole cohort is never silently retried or sent to serial drain.
-        const split = (reason: string) => {
-          node.failure = reason;
-          appendFileSync(node.logPath, `\nCohort failed; bisecting ${node.indices.length} source(s): ${reason}\n`);
-          if (node.indices.length === 1) {
-            const member = manifest.members[node.indices[0]!]!;
-            disposition({ ...member, disposition: 'excluded', logPath: node.logPath,
-              reason: `Owning manager must fix this source; native proof failed: ${reason}` });
-          } else {
-            const middle = Math.ceil(node.indices.length / 2);
-            node.children = [`${key}-left`, `${key}-right`];
-            for (const [offset, indices] of [node.indices.slice(0, middle), node.indices.slice(middle)].entries()) {
-              const child = node.children[offset]!;
-              journal.nodes[child] = { indices, attempts: 0,
-                logPath: join(o.stateDirectory, `control-plane-batch-${batchId}-${child}.log`) };
-            }
-          }
-          save();
-        };
-        for (;;) {
-          if (node.attempts >= 3) throw new Error(`Control-plane batch ${key} exhausted three candidate/ref attempts`);
-          node.attempts++;
-          save();
-          appendFileSync(node.logPath, `\nCohort ${key} attempt ${node.attempts}\n`);
-          const started = Date.now();
-          const entries: LandingEntry[] = [];
-          const eligible: number[] = [];
-          for (const index of node.indices) {
-            const member = manifest.members[index]!;
-            try { entries.push(assertMember(index)); eligible.push(index); }
-            catch (error) {
-              const reason = `Source ${member.acceptedCommit}: ${error}; owning manager must repair or resubmit`;
-              appendFileSync(node.logPath, `${member.taskId}: ${reason}\n`);
-              disposition({ ...member, disposition: 'excluded', logPath: node.logPath, reason });
-            }
-          }
-          if (eligible.length !== node.indices.length) {
-            node.indices = eligible;
-            save();
-          }
-          if (!entries.length) { node.completed = true; save(); return; }
-          const identities = new Map(node.indices.map(index => {
-            const member = manifest.members[index]!;
-            const task = store.task(member.taskId);
-            return [index, JSON.stringify({ request: o.queue.entry(member)!.request, brief: task.brief,
-              base: task.base, frozen: frozenFilesForTask(o.stateDirectory, member.taskId) })];
-          }));
-          const assertIdentities = () => {
-            for (const index of node.indices) {
-              const entry = assertMember(index);
-              const task = store.task(entry.request.taskId);
-              if (identities.get(index) !== JSON.stringify({ request: entry.request, brief: task.brief,
-                base: task.base, frozen: frozenFilesForTask(o.stateDirectory, task.id) }))
-                throw new Error(`Batch member generation changed for ${task.id}`);
-            }
-          };
-          const snapshot = this.controlPlaneSnapshot(o.mainBranch ?? 'main');
-          if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${snapshot.mainBranch}`)
-            throw new Error('The main checkout must already have main checked out');
-          const tree = resolve(o.worktreeRoot, `control-plane-batch-${randomUUID()}`);
-          mkdirSync(o.worktreeRoot, { recursive: true });
-          git(o.mainCheckout, 'worktree', 'add', '--detach', tree, snapshot.mainHead);
-          try {
-            const preparedMembers: NonNullable<ControlPlaneReleaseRecord['members']> = [];
-            const contributionBases = new Map<string, string>();
-            let excluded = false;
-            for (const [offset, entry] of entries.entries()) {
-              const index = node.indices[offset]!;
-              const member = manifest.members[index]!;
-              const task = store.task(member.taskId);
-              const tip = member.acceptedCommit;
-              const fork = git(tree, 'merge-base', snapshot.mainHead, tip);
-              const sourcePaths = changedPathsBetween(tree, fork === tip ? task.base : fork, tip);
-              const frozen = frozenFilesForTask(o.stateDirectory, task.id);
-              const before = git(tree, 'rev-parse', 'HEAD');
-              const risk = readRiskOwnership(o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'));
-              const guardedRequest = { ...entry.request, protectedPaths: Object.entries(risk.areas)
-                .filter(([area]) => !task.brief.riskAreas.includes(area)).flatMap(([, paths]) => paths) };
-              let files: string[] = [];
-              try {
-                if (sourcePaths.some(path => !path.startsWith(CONTROL_PLANE_PATH)))
-                  throw new Error(`Source is outside tools/goal: ${sourcePaths.join(', ')}`);
-                this.checkScope(sourcePaths, guardedRequest, node.logPath);
-                git(tree, 'reset', '--hard', tip);
-                files = changedFrozenFiles(tree, frozen);
-                if (files.length) throw new Error(`Frozen acceptance files changed: ${files.join(', ')}`);
-                git(tree, 'reset', '--hard', before);
-                if (!isAncestor(tree, tip, before)) {
-                  const merged = candidateGit(tree, ['merge', '--no-ff', '--no-edit', '-m',
-                    `Merge accepted source ${entry.request.branch}`, tip], o.runCandidateGit);
-                  appendFileSync(node.logPath, `${merged.stdout}${merged.stderr}\n`);
-                  if (merged.status !== 0) {
-                    files = unmergedFiles(tree);
-                    const resolved = files.length && resolveMechanicalConflicts(tree, files, o.formatCommand, 'union', 3);
-                    if (resolved === false || !files.length)
-                      throw new Error(`Source merge conflicts: ${files.join(', ')}; ${merged.stderr || merged.stdout || merged.error}`);
-                    stagePaths(tree, files);
-                    git(tree, 'commit', '--no-edit');
-                  }
-                }
-                let after = git(tree, 'rev-parse', 'HEAD');
-                if (after !== before && treeDiffIsEmpty(tree, before, after)) {
-                  // A patch already represented on main needs a disposition, not an empty implementation merge.
-                  git(tree, 'reset', '--hard', before);
-                  after = before;
-                }
-                files = changedFrozenFiles(tree, frozen);
-                if (files.length) throw new Error(`Combined source changed frozen acceptance files: ${files.join(', ')}`);
-                for (const earlier of preparedMembers) {
-                  const erased = pathsChangedByTaskButUnchangedOnDev(tree,
-                    contributionBases.get(earlier.request.taskId)!, after,
-                    earlier.disposition.acceptedCommit, earlier.outcome.changedFiles);
-                  if (erased.length) {
-                    files = erased;
-                    throw new Error(`Would erase accepted contribution ${earlier.disposition.acceptedCommit}: ${erased.join(', ')}`);
-                  }
-                }
-                const changed = changedPathsBetween(tree, before, after);
-                this.checkScope(changed, guardedRequest, node.logPath);
-                const nonGenerated = nonGeneratedFiles(tree, changed);
-                contributionBases.set(task.id, before);
-                preparedMembers.push({ entryId: entry.id, request: entry.request,
-                  outcome: { taskId: task.id, attempt: member.attempt, passed: true, stage: 'merge',
-                    logPath: node.logPath, hostMs: 0, changedFiles: changed,
-                    diffLines: diffLineCount(tree, before), nonGeneratedChangedFiles: nonGenerated,
-                    nonGeneratedDiffLines: diffLineCount(tree, before, nonGenerated) },
-                  disposition: { ...member, disposition: treeDiffIsEmpty(tree, before, after) ? 'already-represented' : 'released',
-                    logPath: node.logPath } });
-              } catch (error) {
-                try { git(tree, 'merge', '--abort'); } catch { /* No open merge for source/scope refusals. */ }
-                git(tree, 'reset', '--hard', before);
-                const reason = `Source ${tip}: ${error}; owning manager must fix files [${files.join(', ')}]`;
-                appendFileSync(node.logPath, `${task.id}: ${reason}\n`);
-                disposition({ ...member, disposition: 'excluded', logPath: node.logPath, reason, files });
-                excluded = true;
-              }
-            }
-            if (excluded) {
-              node.indices = node.indices.filter(index => preparedMembers.some(member => member.request.taskId === manifest.members[index]!.taskId));
-              save();
-            }
-            if (!preparedMembers.length) { node.completed = true; save(); return; }
-            const frozen = node.indices.flatMap(index => frozenFilesForTask(o.stateDirectory, manifest.members[index]!.taskId));
-            const changed = changedPathsBetween(tree, snapshot.mainHead, git(tree, 'rev-parse', 'HEAD'));
-            this.formatControlPlaneCandidate(tree, changed, node.logPath);
-            const frozenChanges = changedFrozenFiles(tree, frozen);
-            if (frozenChanges.length) throw new Error(`Combined candidate changed frozen acceptance files: ${frozenChanges.join(', ')}`);
-            const candidate = git(tree, 'rev-parse', 'HEAD');
-            // Formatting is controller-owned; each affected member still carries its original source and contribution.
-            for (const member of preparedMembers) {
-              member.outcome.mergedCommit = candidate;
-              member.disposition.mergedCommit = candidate;
-            }
-            const proof = await this.verifyControlPlaneCandidate(tree, candidate, snapshot, node.logPath);
-            if (proof.moved) { appendFileSync(node.logPath, 'Captured refs moved; rebuilding bounded cohort\n'); continue; }
-            assertIdentities();
-            if (!proof.passed) {
-              split(proof.output);
-              break;
-            }
-            if (!proof.lifecycleEvidence || !proof.compatibilityCommand)
-              throw new Error('Control-plane batch has no exact native release evidence');
-            const release = this.prepareControlPlaneRelease(preparedMembers[0]!.request, snapshot, candidate,
-              proof.lifecycleEvidence, proof.compatibilityCommand, node.logPath);
-            if (!release.prepared) {
-              if (!this.controlPlaneSnapshotMatches(snapshot)) continue;
-              split(`Propagation from ${release.sourceBranch} into ${release.targetBranch}; files=[${release.conflicts?.join(', ') ?? ''}]; ${release.cause}`);
-              break;
-            }
-            const record = release.prepared.record;
-            for (const member of preparedMembers) member.outcome.hostMs = Math.round((Date.now() - started) / preparedMembers.length);
-            record.batchId = batchId;
-            record.members = preparedMembers;
-            node.prepared = release.prepared;
-            // Record proof and candidate before any externally visible ref update.
-            save();
-            for (const member of preparedMembers) {
-              o.queue.candidate(member.entryId, candidate);
-              const source = member.disposition.acceptedCommit;
-              const ownBase = git(tree, 'merge-base', snapshot.mainHead, source);
-              store.planIntegration(member.request, snapshot.mainHead, candidate,
-                git(tree, 'rev-list', '--reverse', `${ownBase}..${source}`).split('\n').filter(Boolean));
-              this.writeControlPlaneRecord(member.request, record);
-            }
-            const advanced = store.commitBatchMerge(preparedMembers.map(member => ({ ...member.request, commit: candidate })), () => {
-              o.beforeIntegrationAdvance?.();
-              o.beforePromotionAdvance?.();
-              assertIdentities();
-              if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${snapshot.mainBranch}`)
-                throw new Error('Main checkout HEAD changed');
-              if (!this.publishControlPlaneRelease(release.prepared!)) return '';
-              for (const member of preparedMembers) o.queue.finish(member.entryId, member.outcome);
-              return candidate;
-            });
-            if (!advanced) { delete node.prepared; save(); continue; }
-            complete(record, node);
-            return;
-          } finally {
-            try { git(o.mainCheckout, 'worktree', 'remove', '--force', tree); }
-            catch (error) { appendFileSync(node.logPath, `Train tree cleanup deferred: ${tree}: ${error}\n`); }
-          }
-        }
-        const children = journal.nodes[key]?.children;
-        if (children) for (const child of children) await visit(child);
-      };
-      await visit('root');
-      return { batchId, members: manifest.members.map(member => journal.results.find(result => result.taskId === member.taskId)!) };
-    } finally { lease.release(); }
-  }
-
-  private formatControlPlaneCandidate(tree: string, changed: readonly string[], logPath: string): void {
-    const command = this.options.formatCommand ?? [resolve(this.options.mainCheckout, 'node_modules/.bin/oxfmt'), ...FORMAT_FLAGS];
-    const files = changed.filter(path => existsSync(join(tree, path)));
-    if (!files.length || (command[0]!.endsWith('/node_modules/.bin/oxfmt') && !existsSync(command[0]!))) return;
-    const formatted = spawnSync(command[0]!, [...command.slice(1), ...files], { cwd: tree, encoding: 'utf8' });
-    appendFileSync(logPath, `$ ${command.join(' ')}\n${formatted.stdout ?? ''}${formatted.stderr ?? ''}\n`);
-    if (formatted.status !== 0) throw new Error(`Formatter failed: ${formatted.stderr || formatted.error || formatted.status}`);
-    const altered = changedWorkingFiles(tree);
-    if (altered.some(path => !files.includes(path))) throw new Error(`Formatter changed unrelated files: ${altered.join(', ')}`);
-    if (altered.length) {
-      stagePaths(tree, altered);
-      git(tree, 'commit', '-m', 'style: format accepted control-plane cohort');
-    }
-  }
-
   async run(): Promise<void> {
     await this.drainBoth(true);
   }
@@ -3728,6 +3397,337 @@ export class MergeTrain {
       for (const manager of managers) inbox.deliver({ managerId: manager, taskId, kind: 'spec-conflict', summary });
     } finally {
       owned?.close();
+    }
+  }
+
+  /** Explicit main cohort release; shares the ordinary main lease, proof, fence, ref transaction and sink. */
+  async releaseControlPlaneBatch(input: ControlPlaneBatchManifest): Promise<ControlPlaneBatchResult> {
+    const manifest = parseControlPlaneBatchManifest(input);
+    const batchId = controlPlaneBatchId(manifest);
+    const o = this.options;
+    if (!(o.fence instanceof WorkerStore) || o.queue.db !== o.fence.db)
+      throw new Error('Control-plane batches require the shared worker store and landing queue');
+    const store = o.fence;
+    mkdirSync(o.stateDirectory, { recursive: true });
+    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train-main.lease'));
+    try {
+      const path = join(o.stateDirectory, `control-plane-batch-${batchId}.json`);
+      let journal: ControlPlaneBatchJournal;
+      if (existsSync(path)) {
+        journal = JSON.parse(readFileSync(path, 'utf8')) as ControlPlaneBatchJournal;
+        if (journal.version !== 1 || journal.batchId !== batchId ||
+            JSON.stringify(journal.manifest) !== JSON.stringify(manifest))
+          throw new Error('Control-plane batch journal does not match its immutable manifest');
+      } else {
+        journal = { version: 1, batchId, manifest, nodes: {
+          root: { indices: manifest.members.map((_, index) => index), attempts: 0,
+            logPath: join(o.stateDirectory, `control-plane-batch-${batchId}-root.log`) },
+        }, results: [] };
+      }
+      const save = () => {
+        const temporary = `${path}.${randomUUID()}.tmp`;
+        writeFileSync(temporary, `${JSON.stringify(journal, null, 2)}\n`, { mode: 0o600 });
+        renameSync(temporary, path);
+      };
+      save();
+      o.queue.claimControlPlaneBatch(batchId, manifest.members);
+      const disposition = (value: ControlPlaneBatchDisposition) => {
+        journal.results = journal.results.filter(member => member.taskId !== value.taskId);
+        journal.results.push(value);
+      };
+      const assertMember = (index: number, recovery = false): LandingEntry => {
+        const member = manifest.members[index]!;
+        assertControlPlaneMember(store, member.taskId, manifest.managerId);
+        store.assertCurrent(member);
+        const entry = o.queue.entry(member);
+        if (!entry || entry.batchId !== batchId || !entry.request.managerLanding ||
+            entry.request.managerLanding.managerId !== manifest.managerId ||
+            entry.request.managerLanding.acceptedCommit !== member.acceptedCommit ||
+            (entry.request.workerCommit && entry.request.workerCommit !== member.acceptedCommit))
+          throw new Error(`Batch source/request identity changed for ${member.taskId}`);
+        assertManagerLandingEvidence(entry.request, store, { allowIntegrated: recovery,
+          allowNoDeltaOn: git(o.mainCheckout, 'rev-parse', `refs/heads/${o.mainBranch ?? 'main'}^{commit}`) });
+        // Even recovery must never attribute an old release to a newer source on the same attempt.
+        if (git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}^{commit}`) !== member.acceptedCommit)
+          throw new Error(`Accepted source moved for ${member.taskId}`);
+        if (!recovery && (entry.outcome || entry.delivered))
+          throw new Error(`Landing outcome for ${member.taskId} is already immutable`);
+        return entry;
+      };
+      const cleanup = (record: ControlPlaneReleaseRecord, logPath: string) => {
+        try { this.syncMainCheckout(record.mainBranch, [record.mainExpected, record.mainCommit]); }
+        catch (error) {
+          // Ref publication and its proof are durable. A checkout cleanup failure cannot turn green into red.
+          appendFileSync(logPath, `Published release ${record.mainCommit}; checkout synchronization deferred: ${error}\n`);
+        }
+      };
+      const complete = (record: ControlPlaneReleaseRecord, node: ControlPlaneBatchNode) => {
+        if (record.batchId !== batchId || !record.members?.length || !this.controlPlaneRecordPublished(record))
+          throw new Error('Cannot recover batch without its exact verified published release record');
+        const members = record.members;
+        for (const index of node.indices) assertMember(index, true);
+        for (const member of members) {
+          if (JSON.stringify(o.queue.entry(member.request)?.request) !== JSON.stringify(member.request))
+            throw new Error(`Published batch request identity changed for ${member.request.taskId}`);
+        }
+        store.commitBatchMerge(members.map(member => ({ ...member.request, commit: record.mainCommit })), () => {
+          for (const index of node.indices) assertMember(index, true);
+          for (const member of members) {
+            const entry = o.queue.entry(member.request)!;
+            if (entry.outcome && JSON.stringify(entry.outcome) !== JSON.stringify(member.outcome))
+              throw new Error(`Immutable landing outcome differs for ${member.request.taskId}`);
+            if (!entry.outcome) o.queue.finish(entry.id, member.outcome);
+          }
+          return record.mainCommit;
+        });
+        cleanup(record, node.logPath);
+        for (const member of members) {
+          disposition(member.disposition);
+          const entry = o.queue.entry(member.request)!;
+          if (!entry.delivered) {
+            o.sink.onGateOutcome(member.outcome);
+            o.queue.acknowledge(entry.id);
+          }
+          this.notifyOwnersOfOutsideChanges(member.request,
+            outsideScope(member.outcome.changedFiles, member.request.declaredPaths),
+            record.mainCommit, record.mainBranch, node.logPath);
+        }
+        node.completed = true;
+        save();
+      };
+      const visit = async (key: string): Promise<void> => {
+        const node = journal.nodes[key]!;
+        if (node.children) {
+          for (const child of node.children) await visit(child);
+          return;
+        }
+        if (node.prepared && this.controlPlaneRecordPublished(node.prepared.record)) {
+          complete(node.prepared.record, node);
+          return;
+        }
+        if (node.completed || node.failure) return;
+        // Split decisions survive restart. A failed whole cohort is never silently retried or sent to serial drain.
+        const split = (reason: string) => {
+          node.failure = reason;
+          appendFileSync(node.logPath, `\nCohort failed; bisecting ${node.indices.length} source(s): ${reason}\n`);
+          if (node.indices.length === 1) {
+            const member = manifest.members[node.indices[0]!]!;
+            disposition({ ...member, disposition: 'excluded', logPath: node.logPath,
+              reason: `Owning manager must fix this source; native proof failed: ${reason}` });
+          } else {
+            const middle = Math.ceil(node.indices.length / 2);
+            node.children = [`${key}-left`, `${key}-right`];
+            for (const [offset, indices] of [node.indices.slice(0, middle), node.indices.slice(middle)].entries()) {
+              const child = node.children[offset]!;
+              journal.nodes[child] = { indices, attempts: 0,
+                logPath: join(o.stateDirectory, `control-plane-batch-${batchId}-${child}.log`) };
+            }
+          }
+          save();
+        };
+        for (;;) {
+          if (node.attempts >= 3) throw new Error(`Control-plane batch ${key} exhausted three candidate/ref attempts`);
+          node.attempts++;
+          save();
+          appendFileSync(node.logPath, `\nCohort ${key} attempt ${node.attempts}\n`);
+          const started = Date.now();
+          const entries: LandingEntry[] = [];
+          const eligible: number[] = [];
+          for (const index of node.indices) {
+            const member = manifest.members[index]!;
+            try { entries.push(assertMember(index)); eligible.push(index); }
+            catch (error) {
+              const reason = `Source ${member.acceptedCommit}: ${error}; owning manager must repair or resubmit`;
+              appendFileSync(node.logPath, `${member.taskId}: ${reason}\n`);
+              disposition({ ...member, disposition: 'excluded', logPath: node.logPath, reason });
+            }
+          }
+          if (eligible.length !== node.indices.length) {
+            node.indices = eligible;
+            save();
+          }
+          if (!entries.length) { node.completed = true; save(); return; }
+          const identities = new Map(node.indices.map(index => {
+            const member = manifest.members[index]!;
+            const task = store.task(member.taskId);
+            return [index, JSON.stringify({ request: o.queue.entry(member)!.request, brief: task.brief,
+              base: task.base, frozen: frozenFilesForTask(o.stateDirectory, member.taskId) })];
+          }));
+          const assertIdentities = () => {
+            for (const index of node.indices) {
+              const entry = assertMember(index);
+              const task = store.task(entry.request.taskId);
+              if (identities.get(index) !== JSON.stringify({ request: entry.request, brief: task.brief,
+                base: task.base, frozen: frozenFilesForTask(o.stateDirectory, task.id) }))
+                throw new Error(`Batch member generation changed for ${task.id}`);
+            }
+          };
+          const snapshot = this.controlPlaneSnapshot(o.mainBranch ?? 'main');
+          if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${snapshot.mainBranch}`)
+            throw new Error('The main checkout must already have main checked out');
+          const tree = resolve(o.worktreeRoot, `control-plane-batch-${randomUUID()}`);
+          mkdirSync(o.worktreeRoot, { recursive: true });
+          git(o.mainCheckout, 'worktree', 'add', '--detach', tree, snapshot.mainHead);
+          try {
+            const preparedMembers: NonNullable<ControlPlaneReleaseRecord['members']> = [];
+            const contributionBases = new Map<string, string>();
+            let excluded = false;
+            for (const [offset, entry] of entries.entries()) {
+              const index = node.indices[offset]!;
+              const member = manifest.members[index]!;
+              const task = store.task(member.taskId);
+              const tip = member.acceptedCommit;
+              const fork = git(tree, 'merge-base', snapshot.mainHead, tip);
+              const sourcePaths = changedPathsBetween(tree, fork === tip ? task.base : fork, tip);
+              const frozen = frozenFilesForTask(o.stateDirectory, task.id);
+              const before = git(tree, 'rev-parse', 'HEAD');
+              const risk = readRiskOwnership(o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'));
+              const guardedRequest = { ...entry.request, protectedPaths: Object.entries(risk.areas)
+                .filter(([area]) => !task.brief.riskAreas.includes(area)).flatMap(([, paths]) => paths) };
+              let files: string[] = [];
+              try {
+                if (sourcePaths.some(path => !path.startsWith(CONTROL_PLANE_PATH)))
+                  throw new Error(`Source is outside tools/goal: ${sourcePaths.join(', ')}`);
+                this.checkScope(sourcePaths, guardedRequest, node.logPath);
+                git(tree, 'reset', '--hard', tip);
+                files = changedFrozenFiles(tree, frozen);
+                if (files.length) throw new Error(`Frozen acceptance files changed: ${files.join(', ')}`);
+                git(tree, 'reset', '--hard', before);
+                if (!isAncestor(tree, tip, before)) {
+                  const merged = candidateGit(tree, ['merge', '--no-ff', '--no-edit', '-m',
+                    `Merge accepted source ${entry.request.branch}`, tip], o.runCandidateGit);
+                  appendFileSync(node.logPath, `${merged.stdout}${merged.stderr}\n`);
+                  if (merged.status !== 0) {
+                    files = unmergedFiles(tree);
+                    const resolved = files.length && resolveMechanicalConflicts(tree, files, o.formatCommand, 'union', 3);
+                    if (resolved === false || !files.length)
+                      throw new Error(`Source merge conflicts: ${files.join(', ')}; ${merged.stderr || merged.stdout || merged.error}`);
+                    stagePaths(tree, files);
+                    git(tree, 'commit', '--no-edit');
+                  }
+                }
+                let after = git(tree, 'rev-parse', 'HEAD');
+                if (after !== before && treeDiffIsEmpty(tree, before, after)) {
+                  // A patch already represented on main needs a disposition, not an empty implementation merge.
+                  git(tree, 'reset', '--hard', before);
+                  after = before;
+                }
+                files = changedFrozenFiles(tree, frozen);
+                if (files.length) throw new Error(`Combined source changed frozen acceptance files: ${files.join(', ')}`);
+                for (const earlier of preparedMembers) {
+                  const erased = pathsChangedByTaskButUnchangedOnDev(tree,
+                    contributionBases.get(earlier.request.taskId)!, after,
+                    earlier.disposition.acceptedCommit, earlier.outcome.changedFiles);
+                  if (erased.length) {
+                    files = erased;
+                    throw new Error(`Would erase accepted contribution ${earlier.disposition.acceptedCommit}: ${erased.join(', ')}`);
+                  }
+                }
+                const changed = changedPathsBetween(tree, before, after);
+                this.checkScope(changed, guardedRequest, node.logPath);
+                const nonGenerated = nonGeneratedFiles(tree, changed);
+                contributionBases.set(task.id, before);
+                preparedMembers.push({ entryId: entry.id, request: entry.request,
+                  outcome: { taskId: task.id, attempt: member.attempt, passed: true, stage: 'merge',
+                    logPath: node.logPath, hostMs: 0, changedFiles: changed,
+                    diffLines: diffLineCount(tree, before), nonGeneratedChangedFiles: nonGenerated,
+                    nonGeneratedDiffLines: diffLineCount(tree, before, nonGenerated) },
+                  disposition: { ...member, disposition: treeDiffIsEmpty(tree, before, after) ? 'already-represented' : 'released',
+                    logPath: node.logPath } });
+              } catch (error) {
+                try { git(tree, 'merge', '--abort'); } catch { /* No open merge for source/scope refusals. */ }
+                git(tree, 'reset', '--hard', before);
+                const reason = `Source ${tip}: ${error}; owning manager must fix files [${files.join(', ')}]`;
+                appendFileSync(node.logPath, `${task.id}: ${reason}\n`);
+                disposition({ ...member, disposition: 'excluded', logPath: node.logPath, reason, files });
+                excluded = true;
+              }
+            }
+            if (excluded) {
+              node.indices = node.indices.filter(index => preparedMembers.some(member => member.request.taskId === manifest.members[index]!.taskId));
+              save();
+            }
+            if (!preparedMembers.length) { node.completed = true; save(); return; }
+            const frozen = node.indices.flatMap(index => frozenFilesForTask(o.stateDirectory, manifest.members[index]!.taskId));
+            const changed = changedPathsBetween(tree, snapshot.mainHead, git(tree, 'rev-parse', 'HEAD'));
+            this.formatControlPlaneCandidate(tree, changed, node.logPath);
+            const frozenChanges = changedFrozenFiles(tree, frozen);
+            if (frozenChanges.length) throw new Error(`Combined candidate changed frozen acceptance files: ${frozenChanges.join(', ')}`);
+            const candidate = git(tree, 'rev-parse', 'HEAD');
+            // Formatting is controller-owned; each affected member still carries its original source and contribution.
+            for (const member of preparedMembers) {
+              member.outcome.mergedCommit = candidate;
+              member.disposition.mergedCommit = candidate;
+            }
+            const proof = await this.verifyControlPlaneCandidate(tree, candidate, snapshot, node.logPath);
+            if (proof.moved) { appendFileSync(node.logPath, 'Captured refs moved; rebuilding bounded cohort\n'); continue; }
+            assertIdentities();
+            if (!proof.passed) {
+              split(proof.output);
+              break;
+            }
+            if (!proof.lifecycleEvidence || !proof.compatibilityCommand)
+              throw new Error('Control-plane batch has no exact native release evidence');
+            const release = this.prepareControlPlaneRelease(preparedMembers[0]!.request, snapshot, candidate,
+              proof.lifecycleEvidence, proof.compatibilityCommand, node.logPath);
+            if (!release.prepared) {
+              if (!this.controlPlaneSnapshotMatches(snapshot)) continue;
+              split(`Propagation from ${release.sourceBranch} into ${release.targetBranch}; files=[${release.conflicts?.join(', ') ?? ''}]; ${release.cause}`);
+              break;
+            }
+            const record = release.prepared.record;
+            for (const member of preparedMembers) member.outcome.hostMs = Math.round((Date.now() - started) / preparedMembers.length);
+            record.batchId = batchId;
+            record.members = preparedMembers;
+            node.prepared = release.prepared;
+            // Record proof and candidate before any externally visible ref update.
+            save();
+            for (const member of preparedMembers) {
+              o.queue.candidate(member.entryId, candidate);
+              const source = member.disposition.acceptedCommit;
+              const ownBase = git(tree, 'merge-base', snapshot.mainHead, source);
+              store.planIntegration(member.request, snapshot.mainHead, candidate,
+                git(tree, 'rev-list', '--reverse', `${ownBase}..${source}`).split('\n').filter(Boolean));
+              this.writeControlPlaneRecord(member.request, record);
+            }
+            const advanced = store.commitBatchMerge(preparedMembers.map(member => ({ ...member.request, commit: candidate })), () => {
+              o.beforeIntegrationAdvance?.();
+              o.beforePromotionAdvance?.();
+              assertIdentities();
+              if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${snapshot.mainBranch}`)
+                throw new Error('Main checkout HEAD changed');
+              if (!this.publishControlPlaneRelease(release.prepared!)) return '';
+              for (const member of preparedMembers) o.queue.finish(member.entryId, member.outcome);
+              return candidate;
+            });
+            if (!advanced) { delete node.prepared; save(); continue; }
+            complete(record, node);
+            return;
+          } finally {
+            try { git(o.mainCheckout, 'worktree', 'remove', '--force', tree); }
+            catch (error) { appendFileSync(node.logPath, `Train tree cleanup deferred: ${tree}: ${error}\n`); }
+          }
+        }
+        const children = journal.nodes[key]?.children;
+        if (children) for (const child of children) await visit(child);
+      };
+      await visit('root');
+      return { batchId, members: manifest.members.map(member => journal.results.find(result => result.taskId === member.taskId)!) };
+    } finally { lease.release(); }
+  }
+
+  private formatControlPlaneCandidate(tree: string, changed: readonly string[], logPath: string): void {
+    const command = this.options.formatCommand ?? [resolve(this.options.mainCheckout, 'node_modules/.bin/oxfmt'), ...FORMAT_FLAGS];
+    const files = changed.filter(path => existsSync(join(tree, path)));
+    if (!files.length || (command[0]!.endsWith('/node_modules/.bin/oxfmt') && !existsSync(command[0]!))) return;
+    const formatted = spawnSync(command[0]!, [...command.slice(1), ...files], { cwd: tree, encoding: 'utf8' });
+    appendFileSync(logPath, `$ ${command.join(' ')}\n${formatted.stdout ?? ''}${formatted.stderr ?? ''}\n`);
+    if (formatted.status !== 0) throw new Error(`Formatter failed: ${formatted.stderr || formatted.error || formatted.status}`);
+    const altered = changedWorkingFiles(tree);
+    if (altered.some(path => !files.includes(path))) throw new Error(`Formatter changed unrelated files: ${altered.join(', ')}`);
+    if (altered.length) {
+      stagePaths(tree, altered);
+      git(tree, 'commit', '-m', 'style: format accepted control-plane cohort');
     }
   }
 
