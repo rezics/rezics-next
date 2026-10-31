@@ -1,6 +1,7 @@
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ChevronDownIcon } from 'lucide-react';
+import { useId } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { builtinCollectionDestinations, type BuiltinCollectionRecord } from './builtin-collections';
@@ -134,6 +135,8 @@ function DestinationMenu({
   entries: readonly LibraryNavigationEntry[];
   current?: string | undefined;
 }) {
+  const titleId = useId();
+  const purposeId = useId();
   const menuEntries: MenuEntry[] = entries.map((entry) =>
     entry.href
       ? { type: 'link', label: entry.label, href: entry.href, current: entry.current }
@@ -144,8 +147,18 @@ function DestinationMenu({
       title={m.library_nav_selector()}
       entries={menuEntries}
       trigger={
-        <Button aria-label={m.library_nav_selector()} variant="outline" className="min-w-0 max-w-48 shrink-0">
-          <span className="truncate">{current ?? m.library_more()}</span>
+        <Button
+          aria-label={m.library_nav_selector()}
+          aria-labelledby={`${titleId} ${purposeId}`}
+          variant="outline"
+          className="min-w-0 max-w-48 shrink-0"
+        >
+          <span id={titleId} className="truncate">
+            {current ?? m.library_more()}
+          </span>
+          <span id={purposeId} className="sr-only">
+            {m.library_nav_selector()}
+          </span>
           <ChevronDownIcon aria-hidden="true" />
         </Button>
       }

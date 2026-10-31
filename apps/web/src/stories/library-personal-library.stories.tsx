@@ -52,7 +52,9 @@ export const ContinueAbsent: Story = {
         `/${getLocale()}/library/continue`,
       );
     } else {
-      await userEvent.click(canvas.getByRole('button', { name: m.library_nav_selector() }));
+      await userEvent.click(
+        canvas.getByRole('button', { name: `${m.library_nav_tracked_entries()} ${m.library_nav_selector()}` }),
+      );
       const role =
         window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches
           ? 'link'

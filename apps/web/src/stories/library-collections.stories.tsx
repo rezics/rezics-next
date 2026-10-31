@@ -158,7 +158,10 @@ export const LongCollectionTitles: Story = {
   play: async (context) => {
     await collectionsReady(context);
     const canvas = within(context.canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.library_nav_selector() }));
+    const title = window.matchMedia('(min-width: 1024px)').matches
+      ? m.library_more()
+      : m.library_nav_all_collections();
+    await userEvent.click(canvas.getByRole('button', { name: `${title} ${m.library_nav_selector()}` }));
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     const menu = await within(document.body).findByRole(sheet ? 'dialog' : 'menu');
     await expect(within(menu).getByRole(sheet ? 'link' : 'menuitem', { name: longTitles[1] })).toBeVisible();
@@ -302,7 +305,9 @@ export const CollectionsNinePins: Story = {
     if (!phone) throw new globalThis.Error('Missing phone Library navigation');
     await expect(phone).toBeVisible();
     expect(phone.querySelectorAll('a[data-library-pin]')).toHaveLength(3);
-    const selector = within(phone).getByRole('button', { name: m.library_nav_selector() });
+    const selector = within(phone).getByRole('button', {
+      name: `${m.library_nav_all_collections()} ${m.library_nav_selector()}`,
+    });
     await expect(selector).toBeVisible();
     await expect(selector).toHaveTextContent(m.library_nav_all_collections());
     await userEvent.click(selector);
@@ -435,7 +440,10 @@ export const PhoneSelectorOpen: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.library_nav_selector() }));
+    const title = window.matchMedia('(min-width: 1024px)').matches
+      ? m.library_more()
+      : m.library_nav_tracked_entries();
+    await userEvent.click(await canvas.findByRole('button', { name: `${title} ${m.library_nav_selector()}` }));
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     if (sheet) {
       const menu = await within(document.body).findByRole('dialog', { name: m.library_nav_selector() });

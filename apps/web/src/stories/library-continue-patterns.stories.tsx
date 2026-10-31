@@ -126,7 +126,9 @@ export const Navigation: Story = {
         `/${getLocale()}/library`,
       );
     } else {
-      await userEvent.click(await canvas.findByRole('button', { name: m.library_nav_selector() }));
+      await userEvent.click(
+        await canvas.findByRole('button', { name: `${m.library_continue()} ${m.library_nav_selector()}` }),
+      );
       await expect(await within(document.body).findByText(m.library_nav_tracked_entries())).toBeVisible();
     }
   },

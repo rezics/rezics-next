@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { LibraryNavigation } from '../library/library-nav';
 import { PatternStory } from './page';
+import collectionRecording from '../kernel/recorded/library-collection.json';
 
 const meta = { title: 'Patterns/Library/Navigation', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -58,7 +60,9 @@ export const PhoneSelectorOpen: Story = {
   ),
   play: async (context) => {
     const canvas = within(context.canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.library_nav_selector() }));
+    await userEvent.click(
+      await canvas.findByRole('button', { name: `${m.library_nav_tracked_entries()} ${m.library_nav_selector()}` }),
+    );
     const sheet = document.querySelector('[data-slot="drawer-content"]');
     await expect(sheet).toBeVisible();
     const menu = within(sheet as HTMLElement);
@@ -74,5 +78,47 @@ export const PhoneSelectorOpen: Story = {
         },
       ),
     ).toHaveLength(3);
+  },
+};
+
+export const SelectedCollectionSelector: Story = {
+  name: 'Selected Collection title and keyboard focus',
+  parameters: PhoneSelectorOpen.parameters,
+  render: () => (
+    <PatternStory>
+      <LibraryNavigation
+        current={{ collectionId: collectionRecording.collection.id }}
+        pins={{
+          ...pins,
+          pins: [
+            { collectionId: collectionRecording.collection.id, target: collectionRecording.collection },
+            ...pins.pins,
+          ],
+        }}
+        collections={destinations}
+      />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const phone = canvasElement.querySelector<HTMLElement>('[data-library-navigation-phone]');
+    if (!phone) throw new Error('Missing phone Library navigation.');
+    const title = collectionRecording.collection.title;
+    const selector = within(phone).getByRole('button', { name: `${title} ${m.library_nav_selector()}` });
+    await expect(selector).toBeVisible();
+    await expect(selector).toHaveTextContent(title);
+    selector.focus();
+    await userEvent.keyboard('{Enter}');
+    const menu = await within(document.body).findByRole('dialog', { name: m.library_nav_selector() });
+    const destination = within(menu).getByRole('link', { name: title });
+    await expect(destination).toBeVisible();
+    await expect(destination).toHaveAttribute(
+      'href',
+      `/${getLocale()}/collections/${encodeURIComponent(collectionRecording.collection.id)}`,
+    );
+    await expect(destination).toHaveAttribute('aria-current', 'page');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(selector).toHaveFocus());
+    await expect(selector).toHaveAccessibleName(`${title} ${m.library_nav_selector()}`);
+    await expect(within(document.body).queryByRole('dialog', { name: m.library_nav_selector() })).toBeNull();
   },
 };

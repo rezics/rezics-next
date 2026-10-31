@@ -35,7 +35,9 @@ async function checkShortcuts(canvasElement: HTMLElement, count: number) {
   if (phone) {
     const navigation = canvasElement.querySelector('[data-library-navigation-phone]');
     if (!navigation) throw new Error('Missing phone Collection navigation.');
-    await userEvent.click(canvas.getByRole('button', { name: m.library_nav_selector() }));
+    await userEvent.click(
+      canvas.getByRole('button', { name: `${m.library_nav_tracked_entries()} ${m.library_nav_selector()}` }),
+    );
     const sheet = document.querySelector('[data-slot="drawer-content"]');
     await expect(sheet).toBeVisible();
     const links = within(sheet as HTMLElement).getAllByRole('link', { name: /Reading list/ });
