@@ -90,9 +90,11 @@ export function SecurityPage({
       pending = true;
       clearPrivateData('loading');
       setConsentReduced(false);
+      const generation = authorityGeneration.current;
       const result = provided ?? (await loadSecurity(passkeysSupported()));
       if (!active) return;
       pending = false;
+      if (authorityGeneration.current !== generation) return;
       if (result.kind === 'ready') {
         activeAccount.current = result.accountId;
         setAccountId(result.accountId);
