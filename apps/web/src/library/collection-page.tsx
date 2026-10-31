@@ -1,5 +1,6 @@
 import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
 import { readCollectionDestination, type CollectionDestination } from './collection-read';
+import { CollectionAddMembers } from './collection-add-members';
 import { CollectionMemberDetails } from './collection-member-row';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { Cover } from '@rezics/ui/cover';
@@ -252,6 +253,9 @@ export function CollectionPage({
   const updateAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection.update');
   // The editor also needs the loaded private metadata, independently of native action admission.
   const owner = updateAdmitted && page.visibility !== null && (page.memberState ?? 'ready') === 'ready';
+  const addAdmitted =
+    page.visibility !== null &&
+    admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection_member.create');
   const deleteAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:delete', 'collection.delete');
   const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
   const pins = navigation.data?.pins ?? { state: 'closed' as const };
@@ -262,6 +266,7 @@ export function CollectionPage({
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeKeys = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [destinationId, setDestinationId] = useState('');
   const [destination, setDestination] = useState<CollectionDestination | null>(null);
   const [destinationLoading, setDestinationLoading] = useState(false);
@@ -419,9 +424,7 @@ export function CollectionPage({
       const plan = buildCollectionMemberEditPlan(initial, members, page.firstPage);
       const fail = async (result: Extract<CollectionWriteResult, { ok: false }>) => {
         if (committed > 0) {
-          await reloadCollection();
-          setEditing(false);
-          setConflict(false);
+          setConflict(true);
           setFailure(m.library_collection_save_partial({ count: committed }));
         } else if (result.reason === 'conflict') setConflict(true);
         else {
@@ -429,7 +432,10 @@ export function CollectionPage({
           if (result.reason === 'unavailable' || result.reason === 'closed') setBulkUnavailable(true);
         }
       };
+      // Guard the loaded draft with the existing parent CAS before independently receipted member commands.
       if (
+        plan.length > 0 ||
+        transfer !== null ||
         title !== page.title ||
         description !== (page.description ?? '') ||
         visibility !== page.visibility ||
@@ -451,7 +457,10 @@ export function CollectionPage({
         });
         if (!result.ok) {
           if (result.reason === 'conflict') setConflict(true);
-          else setFailure(writeMessage(result));
+          else {
+            setFailure(writeMessage(result));
+            if (result.reason === 'unavailable' || result.reason === 'closed') setBulkUnavailable(true);
+          }
           return;
         }
         currentRevision = result.revision;
@@ -541,9 +550,7 @@ export function CollectionPage({
       committed += applied.completed;
       if (applied.failed) {
         if (committed > 0) {
-          await reloadCollection();
-          setEditing(false);
-          setConflict(false);
+          setConflict(true);
           setFailure(m.library_collection_save_partial({ count: committed }));
         } else if (applied.failed.reason === 'conflict') setConflict(true);
         else setFailure(m.error_message());
@@ -556,13 +563,7 @@ export function CollectionPage({
       setFailure('');
     } catch {
       if (committed > 0) {
-        try {
-          await reloadCollection();
-        } catch {
-          // Keep the failure visible even when refresh cannot confirm already accepted writes.
-        }
-        setEditing(false);
-        setConflict(false);
+        setConflict(true);
         setFailure(m.library_collection_save_partial({ count: committed }));
       } else setFailure(m.error_message());
     } finally {
@@ -688,12 +689,19 @@ export function CollectionPage({
           ) : null}
           <div data-slot="collection-actions" className="flex min-w-0 flex-wrap items-center gap-2">
             <ResourceAccessLink resourceId={page.id} />
-            <FollowTargetControl
-              targetId={page.id}
-              {...(page.visibility === null ? { following: page.following } : {})}
-            />
+            {addAdmitted ? (
+              <Button
+                type="button"
+                disabled={!hydrated || pending || editing || adding}
+                onClick={() => setAdding(true)}
+              >
+                {m.library_collection_add_items()}
+              </Button>
+            ) : null}
+            {page.visibility === null ? <FollowTargetControl targetId={page.id} following={page.following} /> : null}
             <CollectionReadActions
               onShare={() => copyLink(collectionHref(page.id))}
+              primaryShare={!addAdmitted}
               entries={[
                 ...(owner
                   ? [
@@ -701,7 +709,7 @@ export function CollectionPage({
                         type: 'item' as const,
                         label: m.library_collection_edit(),
                         onSelect: beginEditing,
-                        disabled: !hydrated || pending || editing,
+                        disabled: !hydrated || pending || editing || adding,
                       },
                     ]
                   : []),
@@ -716,7 +724,7 @@ export function CollectionPage({
                       {
                         type: 'destructive' as const,
                         label: m.library_collection_delete(),
-                        disabled: !hydrated || pending || editing,
+                        disabled: !hydrated || pending || editing || adding,
                         onSelect: () => {
                           setDeleteFailure('');
                           setDeletion({
@@ -797,7 +805,10 @@ export function CollectionPage({
               disabled={pending}
               onClick={() => {
                 cancelEditing();
-                void reloadCollection().catch(() => setFailure(m.error_message()));
+                setPending(true);
+                void reloadCollection()
+                  .catch(() => setFailure(m.error_message()))
+                  .finally(() => setPending(false));
               }}
             >
               {m.library_collection_reload()}
@@ -805,53 +816,58 @@ export function CollectionPage({
           </p>
         ) : null}
 
+        {adding && addAdmitted ? (
+          <CollectionAddMembers
+            key={page.id}
+            collectionId={page.id}
+            onAdded={reloadCollection}
+            onClose={() => setAdding(false)}
+          />
+        ) : null}
         {editing && owner ? (
           <form
-            className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-4 sm:p-6"
+            id="collection-edit-form"
+            className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6"
             onSubmit={(event) => void save(event)}
           >
-            <h2 className="text-xl font-semibold">{m.library_collection_edit()}</h2>
-            <label className="block max-w-3xl">
-              {m.library_collection_title()}
-              <input
-                disabled={pending}
-                className={fieldClass}
-                onChange={(event) => setTitle(event.target.value)}
-                required
-                maxLength={512}
-                value={title}
-              />
-            </label>
-            <label className="block max-w-3xl">
-              {m.library_collection_description()}
-              <textarea
-                disabled={pending}
-                maxLength={20_000}
-                className={fieldClass}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={4}
-                value={description}
-              />
-            </label>
-            <CollectionPresentationFields
-              types={page.presentationTypes}
-              kind={kind}
-              onKindChange={setKind}
-              coverMediaId={coverMediaId}
-              onCoverChange={setCoverMediaId}
-              members={page.members}
-              disabled={pending}
-            />
-            <VisibilityField onChange={setVisibility} value={visibility} disabled={pending} />
-            <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" disabled={!hydrated || pending || conflict}>
-                {pending ? m.library_collection_save_pending() : m.library_collection_save()}
-              </Button>
-              <Button type="button" variant="outline" disabled={pending} onClick={cancelEditing}>
-                {m.library_collection_cancel()}
-              </Button>
-            </div>
+            <details data-collection-details>
+              <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_collection_details()}</summary>
+              <div className="space-y-5 pt-3">
+                <label className="block max-w-3xl">
+                  {m.library_collection_title()}
+                  <input
+                    disabled={pending}
+                    className={fieldClass}
+                    onChange={(event) => setTitle(event.target.value)}
+                    required
+                    maxLength={512}
+                    value={title}
+                  />
+                </label>
+                <label className="block max-w-3xl">
+                  {m.library_collection_description()}
+                  <textarea
+                    disabled={pending}
+                    maxLength={20_000}
+                    className={fieldClass}
+                    onChange={(event) => setDescription(event.target.value)}
+                    rows={4}
+                    value={description}
+                  />
+                </label>
+                <CollectionPresentationFields
+                  types={page.presentationTypes}
+                  kind={kind}
+                  onKindChange={setKind}
+                  coverMediaId={coverMediaId}
+                  onCoverChange={setCoverMediaId}
+                  members={page.members}
+                  disabled={pending}
+                />
+                <VisibilityField onChange={setVisibility} value={visibility} disabled={pending} />
+                <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
+              </div>
+            </details>
           </form>
         ) : null}
 
@@ -899,7 +915,7 @@ export function CollectionPage({
         />
         <section aria-label={m.library_collection_members()}>
           <h2 className="sr-only">{m.library_collection_members()}</h2>
-          {editing && owner ? (
+          {editing && owner && (selectedIds.size > 0 || batchRemovalIds.size > 0 || transfer !== null) ? (
             <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3" data-collection-selection>
               <p className="me-auto self-center text-sm text-muted-foreground">
                 {m.library_collection_selection_count({ count: selectedIds.size })}
@@ -1060,6 +1076,24 @@ export function CollectionPage({
             />
           )}
         </section>
+        {editing && owner ? (
+          <div
+            className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-sm"
+            data-collection-save
+          >
+            <Button type="submit" form="collection-edit-form" disabled={!hydrated || pending || conflict}>
+              {pending ? m.library_collection_save_pending() : m.library_collection_save()}
+            </Button>
+            <Button type="button" variant="outline" disabled={pending} onClick={cancelEditing}>
+              {m.library_collection_cancel()}
+            </Button>
+            {memberDraftChanged || transfer ? (
+              <span role="status" className="text-sm text-muted-foreground">
+                {m.library_collection_unsaved_members()}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {page.next && !editing ? (
           <nav aria-label={m.library_collection_members()}>
             <a href={collectionViewAddress(page.id, layout, page.next, search)} className={buttonClass}>
@@ -1083,17 +1117,21 @@ export function CollectionPage({
 export function CollectionReadActions({
   onShare,
   entries = [],
+  primaryShare = true,
 }: {
+  primaryShare?: boolean;
   onShare: () => void | Promise<void>;
   entries?: MenuEntry[];
 }) {
   return (
     <>
-      <Button type="button" variant="outline" onClick={onShare}>
-        <Share2Icon aria-hidden="true" />
-        {m.library_collection_share()}
-      </Button>
-      {entries.length ? (
+      {primaryShare ? (
+        <Button type="button" variant="outline" onClick={onShare}>
+          <Share2Icon aria-hidden="true" />
+          {m.library_collection_share()}
+        </Button>
+      ) : null}
+      {entries.length || !primaryShare ? (
         <Menu
           title={m.library_collection_actions()}
           backLabel={m.library_collection_cancel()}
@@ -1102,7 +1140,11 @@ export function CollectionReadActions({
               <EllipsisIcon aria-hidden="true" />
             </Button>
           }
-          entries={entries}
+          entries={
+            primaryShare
+              ? entries
+              : [{ type: 'item', label: m.library_collection_share(), onSelect: onShare }, ...entries]
+          }
         />
       ) : null}
     </>

@@ -588,6 +588,7 @@ export const UnlistedVisitor: Story = {
     await expect(view.queryByRole('button', { name: m.library_collection_actions() })).toBeNull();
     await expect(view.getByText(m.library_member_count({ count: 0 }))).toBeVisible();
     await expect(view.getByText(m.library_collection_empty())).toBeVisible();
+    await expect(view.getByRole('button', { name: m.library_collection_add_items() })).toBeVisible();
     await expect(view.queryByRole('link', { name: 'The Little Prince' })).toBeNull();
     await expect(context.canvasElement.ownerDocument.querySelector('script[type="application/ld+json"]')).toBeNull();
   },

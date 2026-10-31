@@ -38,7 +38,7 @@ export const routes: FakeRoute[] = [
             id,
             viewerActions: owner
               ? [
-                  { action: 'collection:update', operations: ['collection.update'] },
+                  { action: 'collection:update', operations: ['collection.update', 'collection_member.create'] },
                   { action: 'collection:delete', operations: ['collection.delete'] },
                 ]
               : [],

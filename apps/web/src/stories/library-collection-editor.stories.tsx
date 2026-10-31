@@ -64,7 +64,7 @@ function renderEditor(mode: CollectionStoryMode = 'private') {
     </PatternStory>
   );
 }
-async function openEditor(canvasElement: HTMLElement) {
+async function openEditor(canvasElement: HTMLElement, details = true) {
   const canvas = within(canvasElement);
   await canvas.findByRole('heading', { level: 1, name: 'Books I come back to' });
   const trigger = canvas.getByRole('button', { name: m.library_collection_actions() });
@@ -72,7 +72,9 @@ async function openEditor(canvasElement: HTMLElement) {
   const menu = await menuForTrigger(trigger, m.library_collection_actions());
   const edit = menu.getByText(m.library_collection_edit(), { exact: true });
   await userEvent.click(edit);
-  await canvas.findByRole('textbox', { name: m.library_collection_title() });
+  await canvas.findByRole('button', { name: m.library_collection_save() });
+  if (details) await userEvent.click(canvas.getByText(m.library_collection_details(), { selector: 'summary' }));
+  if (details) await canvas.findByRole('textbox', { name: m.library_collection_title() });
   return canvas;
 }
 async function menuForTrigger(trigger: HTMLElement, title: string) {
@@ -106,6 +108,11 @@ function rowAction(row: HTMLElement, action: string) {
   return within(row).getByRole('button', { name: `${action}: ${context}` });
 }
 
+async function openNote(row: HTMLElement) {
+  const details = row.querySelector<HTMLDetailsElement>('[data-collection-note-editor]')!;
+  if (!details.open) await userEvent.click(details.querySelector('summary')!);
+}
+
 export const Details: Story = {
   render: () => renderEditor(),
   play: async ({ canvasElement }) => {
@@ -115,14 +122,16 @@ export const Details: Story = {
 export const Members: Story = {
   render: () => renderEditor(),
   play: async ({ canvasElement }) => {
-    const canvas = await openEditor(canvasElement);
+    const canvas = await openEditor(canvasElement, false);
     await expect(canvas.getAllByRole('checkbox')).toHaveLength(4);
     for (const row of canvasElement.querySelectorAll<HTMLElement>('[data-collection-members] [data-member]')) {
+      await openNote(row);
       const label = within(row).getByText(m.library_member_note(), { selector: 'label', exact: true });
       const note = within(row).getByRole('textbox');
       await expect(label).toBeVisible();
       await expect(label).toHaveAttribute('for', note.id);
       await expect(note).toHaveAttribute('id', `collection-member-note-${row.dataset.member}`);
+      await userEvent.click(row.querySelector('[data-collection-note-editor] summary')!);
     }
   },
 };
@@ -154,6 +163,7 @@ export const RowActionContext: Story = {
     await expect(rowAction(rows[0]!, m.library_member_move_up())).toBeDisabled();
     await expect(rowAction(rows.at(-1)!, m.library_member_move_down())).toBeDisabled();
     const duplicate = rows[1]!;
+    await openNote(duplicate);
     const originalNote = within(duplicate).getByRole('textbox') as HTMLTextAreaElement;
     const noteId = originalNote.id;
     const noteValue = originalNote.value;
@@ -179,13 +189,14 @@ export const RowActionContext: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_cancel() }));
     await openEditor(canvasElement);
     await expect(firstRow(canvasElement)).toHaveAttribute('data-member', rows[0]!.dataset.member);
+    await openNote(firstRow(canvasElement));
     await expect(within(firstRow(canvasElement)).getByRole('textbox')).toHaveValue('');
   },
 };
 export const Selection: Story = {
   render: () => renderEditor(),
   play: async ({ canvasElement }) => {
-    const canvas = await openEditor(canvasElement);
+    const canvas = await openEditor(canvasElement, false);
     await userEvent.click(canvas.getAllByRole('checkbox')[0]!);
     await userEvent.click(canvas.getAllByRole('checkbox')[1]!);
     await expect(canvas.getByText(m.library_collection_selection_count({ count: 2 }))).toBeVisible();
@@ -194,7 +205,7 @@ export const Selection: Story = {
 export const Reordering: Story = {
   render: () => renderEditor(),
   play: async ({ canvasElement }) => {
-    const canvas = await openEditor(canvasElement);
+    const canvas = await openEditor(canvasElement, false);
     const row = firstRow(canvasElement);
     const controls = [m.library_member_move_up(), m.library_member_move_down(), m.library_member_remove()].map((name) =>
       rowAction(row, name),
@@ -219,7 +230,7 @@ export const Reordering: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
     await expect(firstRow(canvasElement)).toHaveTextContent('The Tale of Genji');
-    await openEditor(canvasElement);
+    await openEditor(canvasElement, false);
     await expect(firstRow(canvasElement)).toHaveTextContent('The Tale of Genji');
     await expect(canvas.getByRole('button', { name: m.library_collection_save() })).toBeVisible();
   },
@@ -228,16 +239,19 @@ export const Note: Story = {
   render: () => renderEditor(),
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
+    await openNote(firstRow(canvasElement));
     await userEvent.type(within(firstRow(canvasElement)).getByRole('textbox'), 'A draft note');
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_cancel() }));
     await expect(canvas.queryByDisplayValue('A draft note')).toBeNull();
     await openEditor(canvasElement);
+    await openNote(firstRow(canvasElement));
     await expect(within(firstRow(canvasElement)).getByRole('textbox')).toHaveValue('');
     await userEvent.type(within(firstRow(canvasElement)).getByRole('textbox'), 'A saved note');
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
     await expect(await canvas.findByText('A saved note', { exact: true })).toBeVisible();
     await openEditor(canvasElement);
+    await openNote(firstRow(canvasElement));
     await expect(within(firstRow(canvasElement)).getByRole('textbox')).toHaveValue('A saved note');
   },
 };
@@ -388,5 +402,15 @@ export const SelectedMove: Story = {
     await expect(canvas.queryByText('Snow Country', { exact: true })).toBeNull();
     await openEditor(canvasElement);
     await expect(canvas.getAllByRole('checkbox')).toHaveLength(2);
+  },
+};
+
+export const AddItems: Story = {
+  render: () => renderEditor('empty'),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.library_collection_add_items() }));
+    await expect(canvas.getByRole('combobox', { name: m.library_collection_find_subject() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.library_collection_add_selected() })).toBeDisabled();
   },
 };

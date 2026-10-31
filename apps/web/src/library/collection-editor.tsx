@@ -253,18 +253,29 @@ export function CollectionMemberList({
             </div>
             {editing && member.subject ? (
               <ListRowControl className="col-span-2 col-start-2">
-                <Field className="min-w-0 gap-1">
-                  <FieldLabel htmlFor={noteId}>{m.library_member_note()}</FieldLabel>
-                  <Textarea
-                    id={noteId}
-                    aria-label={`${m.library_member_note()}: ${title}`}
-                    className="min-h-16"
-                    disabled={busy}
-                    maxLength={20_000}
-                    value={member.note ?? ''}
-                    onChange={(event) => onNoteChange?.(member.id, event.target.value)}
-                  />
-                </Field>
+                <details className="min-w-0" data-collection-note-editor>
+                  <summary
+                    className="min-h-11 cursor-pointer py-2 text-sm text-primary"
+                    aria-label={actionLabel(m.library_member_note())}
+                  >
+                    {m.library_member_note()}
+                  </summary>
+                  <Field className="min-w-0 gap-1">
+                    <FieldLabel htmlFor={noteId}>{m.library_member_note()}</FieldLabel>
+                    <Textarea
+                      id={noteId}
+                      aria-label={`${m.library_member_note()}: ${title}`}
+                      className="min-h-16"
+                      disabled={busy}
+                      maxLength={20_000}
+                      value={member.note ?? ''}
+                      onChange={(event) => onNoteChange?.(member.id, event.target.value)}
+                    />
+                  </Field>
+                </details>
+                {member.note ? (
+                  <p className="line-clamp-2 text-sm text-muted-foreground [overflow-wrap:anywhere]">{member.note}</p>
+                ) : null}
               </ListRowControl>
             ) : member.subject && member.note ? (
               <p data-slot="collection-member-note" className="col-start-2 line-clamp-2 text-sm text-muted-foreground">
