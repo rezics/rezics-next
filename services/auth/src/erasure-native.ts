@@ -26,9 +26,6 @@ import {
 // 48 locators of at most 1 KiB leave room for the progress anchor under 64 KiB.
 export const ERASURE_PAGE_SIZE = 48;
 export const ERASURE_VERSION = 1;
-// Each deletion may visit its proof and three indexed original reader kinds,
-// including the immutable transition guard. Reserve that work for EVERY row.
-const proofReaderPage = Math.floor(ERASURE_PAGE_SIZE / 6);
 export type ErasurePage = {
   id: string;
   state: 'more' | 'consent' | 'pending';
@@ -365,9 +362,9 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
       [
         owner,
         after,
-<<<<<<< HEAD
         // Reserve checkpoint/guard keys. Consumer joins and nested continuations
-        // admit one locator; ordinary rows also charge child and client seeks.
+        // admit one locator, including final proof-reader checks; ordinary rows
+        // also charge child and client seeks.
         [
           'auth_client_reduction_progress',
           'auth_provisioning_receipt',
@@ -378,18 +375,6 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
         ].includes(store.table)
           ? 1
           : Math.floor((ERASURE_PAGE_SIZE - 10) / (2 + (store.children?.length ?? 0) + (store.client ? 1 : 0))),
-=======
-        // Reserve the native consumer's source neighborhood as well as its
-        // locator. Reduction's existing ordinal reader admits an eight-row
-        // batch, even when the consumer requests only one delivered owner.
-        store.table === 'auth_client_reduction_progress'
-          ? ERASURE_PAGE_SIZE - 10
-          : ['auth_provisioning_receipt', 'auth_registration_stage', 'auth_workflow_request'].includes(store.table)
-            ? proofReaderPage
-            : store.table === 'auth_recovery_establishment'
-              ? ERASURE_PAGE_SIZE - 4
-              : ERASURE_PAGE_SIZE,
->>>>>>> ae22c8f3a5 (Squash worker branch changes)
       ],
     )
   ).rows;
@@ -755,7 +740,6 @@ export async function nativeErasurePage(
         );
       return answer('consent', 'consent');
     }
-<<<<<<< HEAD
     if (phase.kind === 'request') {
       const store = nativeErasureStores.find((store) => store.table === phase.table)!;
       const page = await drainStore(connection, store, phase.role, row.account_id, row.after_key);
@@ -769,46 +753,6 @@ export async function nativeErasurePage(
     if (phase.kind === 'unavailable') {
       await checkpoint(connection, row, { after: row.after_key, code: phase.code });
       return answer('pending', phase.code);
-=======
-    const requestRoles = [
-      'erasure_subject_id',
-      'erasure_human_id',
-      'erasure_operator_id',
-      'erasure_member_id',
-      'erasure_previous_operator_id',
-      ...nativeAdditionalRoles.filter(({ table }) => table === 'auth_workflow_request').map(({ role }) => role),
-    ];
-    const requestRole = requestRoles[tail - 3];
-    if (requestRole) {
-      const requests = (
-        await connection.query<{
-          workflow_id: string | null;
-          terminal_at: Date | null;
-          erasure_stage_id: string | null;
-        }>(
-          `SELECT CASE WHEN octet_length(workflow_id)<=1024 THEN workflow_id END AS workflow_id,terminal_at,erasure_stage_id FROM auth_workflow_request WHERE ${quote(requestRole)}=$1
-         ORDER BY auth_workflow_request.workflow_id LIMIT $2 FOR UPDATE`,
-          [row.account_id, proofReaderPage],
-        )
-      ).rows;
-      if (requests.length) await connection.query('UPDATE auth_erasure SET applicable=true WHERE id=$1', [id]);
-      for (const request of requests) {
-        if (
-          (request.erasure_stage_id !== null || !request.terminal_at) &&
-          !(request.workflow_id && (await nativeRequestTerminal(connection, request.workflow_id)))
-        ) {
-          await checkpoint(connection, row, { code: 'native-request' });
-          return answer('pending', 'native-request');
-        }
-        if (request.workflow_id === null) {
-          await checkpoint(connection, row, { code: 'locator-size' });
-          return answer('pending', 'locator-size');
-        }
-        await connection.query('DELETE FROM auth_workflow_request WHERE workflow_id=$1', [request.workflow_id]);
-      }
-      await checkpoint(connection, row, { phase: row.phase + (requests.length ? 0 : 1) });
-      return answer('more', 'native-request');
->>>>>>> ae22c8f3a5 (Squash worker branch changes)
     }
     const covered = await nativeRoleCoverageComplete(connection);
     if (restoreGeneration) {

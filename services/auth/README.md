@@ -2149,10 +2149,10 @@ remains refused; this path never restores its former authority.
 
 Credential proof is one point operation per raw receipt, with the original page
 transaction and checkpoint. Other consumer pages reserve their source neighborhood
-inside the 48-key budget: eight outer keys for registration/provisioning/request
-pages reserve each row's proof and indexed final-reader checks; recovery admits
-44 outer keys and reduction 38, including its existing eight-row ordinal batch. Only one held
-consumer is continued per page. Locators stay within 1 KiB each and 64 KiB total;
+inside the 48-key budget: consumer pages admit one outer locator, reserving
+its proof, indexed final-reader checks and nested continuation work, including
+reduction's existing eight-row ordinal batch. Ordinary pages also reserve child
+and client seeks. Only one held consumer is continued per page. Locators stay within 1 KiB each and 64 KiB total;
 there is no workflow-history search or account-map fanout. The native consumer
 growth acceptance measures proof, trigger work, cleanup, transaction and checkpoint
 at 256, 1024 and 4096 unrelated stages, effects and native request histories with
