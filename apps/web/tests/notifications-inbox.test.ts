@@ -480,7 +480,13 @@ test('actual Retry-After survives list, target and thrown native failures; only 
           if (targetFailure && path.endsWith('/notifications'))
             return Response.json({ items: [{ ...reporterNotice, decisionId: decision }], next: null });
           return Response.json(
-            { status: 503, code: 'deadline_exceeded', retryable: true, request_id: 'native-deadline', retryAfter: '99' },
+            {
+              status: 503,
+              code: 'deadline_exceeded',
+              retryable: true,
+              request_id: 'native-deadline',
+              retryAfter: '99',
+            },
             { status: 503, headers: retryAfter === undefined ? {} : { 'Retry-After': retryAfter } },
           );
         }) as typeof fetch,

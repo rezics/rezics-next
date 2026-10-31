@@ -209,7 +209,10 @@ function authHeaders(authorization: string) {
 function failTargetRead(result: ReadResult): boolean {
   if (!result.error && result.status === 200) return false;
   const failure = nativeFailure(result.error, result.status, result.headers);
-  if (failure.code !== 'platform_closed' && (failure.status === 401 || failure.status === 403 || failure.status === 404))
+  if (
+    failure.code !== 'platform_closed' &&
+    (failure.status === 401 || failure.status === 403 || failure.status === 404)
+  )
     return true;
   throw new InboxReadError(failure);
 }
