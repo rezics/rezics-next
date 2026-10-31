@@ -21,14 +21,16 @@ function returnedPaths(
   emitClient: boolean,
   emitSchema: string | undefined,
 ): string[] | undefined {
-  // Reylo uses the configured project's directory for `.reylo/`; without REYLO_CONFIG,
-  // the kernel package is the project because it owns this tsconfig and package.json.
+  // Keep external Reylo projects local: their configuration and retained analyses are
+  // outside the workspace-relative placement contract, even though we do not return them.
   const projectDirectory = env.REYLO_CONFIG ? dirname(resolve(directory, env.REYLO_CONFIG)) : directory;
-  const cache = workspacePath(resolve(projectDirectory, '.reylo'));
-  // An external project cache cannot be named in StackRun's workspace-relative return contract.
-  if (cache === undefined) return undefined;
+  if (workspacePath(resolve(projectDirectory, '.reylo')) === undefined) return undefined;
 
-  const paths = [cache];
+  // tsc, construct and optional client emission consume the compiler's `.reylo/`
+  // analyses before placement returns. The caller consumes only their status and
+  // requested generated outputs. Release analyses are generated separately by analyse.ts;
+  // returning this cache would recursively include entries from unrelated databases/runs.
+  const paths: string[] = [];
   if (emitSchema === 'core') paths.push('services/kernel/db/schema.sql');
   if (
     emitSchema !== undefined &&

@@ -122,6 +122,73 @@ test.each([false, true])('explicit local opt-out preserves the compiler emission
   expect(status).toBe(19);
 });
 
+test('Kernel compiler placement returns only its genuinely required bounded outputs and never recursively declares an unbounded disposable Reylo cache; native status, required generated outputs and all existing return validation limits stay truthful', async () => {
+  const modes: { args: string[]; command: string[]; returns: string[] }[] = [
+    { args: [], command: [], returns: [] },
+    { args: ['--emit-client=false'], command: [], returns: [] },
+    {
+      args: ['--emit-client'],
+      command: ['--emit-client'],
+      returns: ['packages/client/src/kernel'],
+    },
+    {
+      args: ['--emit-schema=core'],
+      command: ['--emit-schema=core'],
+      returns: ['services/kernel/db/schema.sql'],
+    },
+    {
+      args: ['--emit-schema=semantic'],
+      command: ['--emit-schema=semantic'],
+      returns: ['services/kernel/db/semantic/schema.sql'],
+    },
+    {
+      args: ['--emit-schema=semantic', '--emit-client'],
+      command: ['--emit-client', '--emit-schema=semantic'],
+      returns: ['services/kernel/db/semantic/schema.sql', 'packages/client/src/kernel'],
+    },
+  ];
+  // An external project's analyses may be retained inputs. Preserve its local-only
+  // boundary while omitting disposable in-workspace compiler caches from all modes.
+  const projects: NodeJS.ProcessEnv[] = [
+    {},
+    { REYLO_CONFIG: '.reylo.yaml' },
+    { REYLO_CONFIG: '../../.temp/compiler-project/.reylo.yaml' },
+    { REYLO_CONFIG: '/external/compiler-project/.reylo.yaml' },
+  ];
+  for (const project of projects) {
+    for (const mode of modes) {
+      for (const compilerStatus of [0, 23]) {
+        const env = { PATH: process.env.PATH, ...project };
+        let placements = 0;
+        const status = await runKernelTypecheck(
+          env,
+          {
+            place: async (run, receivedEnv) => {
+              placements++;
+              expect(receivedEnv).toBe(env);
+              expect(run.command).toEqual(['bun', 'scripts/typecheck.ts', ...mode.command]);
+              expect(run.keepsFiles).toBe(true);
+              expect(run.returns).toEqual(
+                project.REYLO_CONFIG?.startsWith('/external/') ? undefined : mode.returns,
+              );
+              return compilerStatus;
+            },
+            withThrowawayDatabase: async () => {
+              throw new Error('must not start a database after a placed compiler result');
+            },
+            typecheck: async () => {
+              throw new Error('must not compile locally after a placed compiler result');
+            },
+          },
+          mode.args,
+        );
+        expect(placements).toBe(1);
+        expect(status).toBe(compilerStatus);
+      }
+    }
+  }
+});
+
 test('without DATABASE_URL and no answering host, typecheck and construct share the local throwaway database', async () => {
   let receivedUrl: string | undefined;
   const status = await runKernelTypecheck(
