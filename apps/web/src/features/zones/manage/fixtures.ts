@@ -103,8 +103,17 @@ export function zonesFixture(scenario: Scenario = 'list') {
       return reply(receipts.get(key), request.method === 'POST' && url.pathname === '/v1/zones' ? 201 : 200);
     let zone: OwnedZone;
     if (url.pathname === '/v1/zones' && request.method === 'POST') {
-      const input = body as { configuration: { labels: OwnedZone['labels'] }; visibility: OwnedZone['visibility'] };
-      zone = { ...fixtureZone(), labels: input.configuration.labels, visibility: input.visibility, revision: '1' };
+      const input = body as {
+        configuration: { labels: OwnedZone['labels']; primaryLanguage?: OwnedZone['primaryLanguage'] };
+        visibility: OwnedZone['visibility'];
+      };
+      zone = {
+        ...fixtureZone(),
+        labels: input.configuration.labels,
+        ...(input.configuration.primaryLanguage ? { primaryLanguage: input.configuration.primaryLanguage } : {}),
+        visibility: input.visibility,
+        revision: '1',
+      };
       zones = [zone];
     } else {
       zone = zones.find((candidate) => url.pathname.startsWith(`/v1/zones/${candidate.id}`))!;

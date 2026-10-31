@@ -66,8 +66,8 @@ grants or act as public discovery. Open links to the independently authorized cu
 Configure links to the selected editor destination without borrowing reader or source authority.
 
 Creation copies the selected `packages/definitions/presentation/*/zone.json` into an ordinary create
-command, retaining its pages and saved scopes, all eight editable labels, empty mounts and private
-visibility. No label translation, source data or grants are synthesized. Later releases never instantiate
+command, retaining its pages and saved scopes, empty mounts and private visibility. The owner authors a primary
+name in a selected supported language; translations are optional and are never filled from starter labels. No label translation, source data or grants are synthesized. Later releases never instantiate
 or rewrite the saved site. A confirmed create navigates to its returned ID's configuration destination;
 source-dependent starter pages remain subject to current source Access, feature admission and readiness.
 The form does not promise that creating the resource makes those reads available.
@@ -103,31 +103,32 @@ The implementation adds code-first TypeBox/Elysia request and response declarati
 `services/kernel/src/zones/http.ts`. These TypeScript shapes specify that ABI; emit OpenAPI from those
 route declarations, never a handwritten schema. Every object below is closed; string aliases carry the
 existing validators, not coercion. UUIDs are canonical lowercase routed IDs, revisions decimal strings,
-instants RFC 3339 UTC with milliseconds. `View`, `CompositionDocument`, `ZoneStarter` and `APPEARANCE`
+instants RFC 3339 UTC with milliseconds. `View`, `CompositionDocument`, `ZoneConfiguration` and `APPEARANCE`
 are imported from `@rezics/composition`. No alternative composition format is admitted.
 
 ```ts
-import type { CompositionDocument, View, ZoneStarter } from '@rezics/composition';
+import type { CompositionDocument, View, ZoneConfiguration, ZoneLanguage } from '@rezics/composition';
 import { APPEARANCE } from '@rezics/composition';
 type UUID = string;
 type Revision = string;
 type Instant = string;
 type Visibility = 'private' | 'unlisted' | 'public';
 type Appearance = { [K in keyof typeof APPEARANCE]?: (typeof APPEARANCE)[K][number] };
-type PublicLabels = Partial<ZoneStarter['labels']>;
+type PublicLabels = ZoneConfiguration['labels'];
 type Navigation = { route: string }[];
 type ZonePublic = {
   id: UUID;
   revision: Revision;
   labels: PublicLabels;
+  primaryLanguage?: ZoneLanguage;
   visibility: Visibility;
   appearance: Appearance;
   navigation: Navigation;
 };
 type ZoneOwned = ZonePublic & { ownerId: UUID; deletedAt: Instant | null; restoreUntil: Instant | null };
-type CreateZone = { configuration: ZoneStarter; mounts: UUID[]; visibility: Visibility };
-type ConfigureZone = { configuration: ZoneStarter; mounts: UUID[] };
-type ConfigurationResponse = { zone: ZoneOwned; configuration: ZoneStarter; mounts: UUID[] };
+type CreateZone = { configuration: ZoneConfiguration; mounts: UUID[]; visibility: Visibility };
+type ConfigureZone = { configuration: ZoneConfiguration; mounts: UUID[] };
+type ConfigurationResponse = { zone: ZoneOwned; configuration: ZoneConfiguration; mounts: UUID[] };
 type ZoneResponse = { zone: ZoneOwned };
 type ZoneMetadataResponse = { zone: ZonePublic };
 type PageRequest = {
@@ -152,9 +153,22 @@ type Purge = { reason: string; order?: string };
 ```
 
 `languages` uses the existing presentation page `validateHitOptions` language constraints and fallback order.
-Configuration/input requires exactly the eight label keys `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr`, `es`; selecting one does
-not change the configured labels envelope. Public output uses `PublicLabels`: a closed partial map of
-those same locale keys and safe values; withholding may remove keys, including every key. Labels are safe nonempty plain text, at most 80 code points each. A configured
+Saved configuration adds optional `primaryLanguage` to the existing versioned JSON representation; no
+migration or bulk rewrite is needed. With an explicit supported primary language, the closed label map
+requires that name and allows any of the other seven translations. Each present name is nonblank safe
+plain text of at most 80 code points. Legacy configurations without primary metadata retain all eight
+required names and remain readable and editable without an implicit rename. Inert starters and generic
+composition label rules keep their existing requirements.
+
+Zone-only display uses the requested readable language, then the stored primary language, then the
+explicit legacy order: `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr`, `es`. The shared `pickZoneName`
+helper consumes only disclosed labels; missing or withheld names are never recovered from private
+configuration. The owner editor explains the legacy order and stores an explicit primary when the owner
+edits a name or chooses its language. Switching either interface or primary language preserves entered
+names; selecting a missing primary creates a blank required field. Only nonprimary translations can be
+removed. Optional translations are progressively disclosed and must be authored, never synthesized.
+Public output remains a closed partial label map, including the empty map after withholding, with optional
+primary-language metadata subject to the same field withholding. A configured
 route has no `view`; a subject has no `route`; account targets are not Zone targets. Bodies with extra keys,
 invalid targets or reserved configured routes fail with 400 `invalid_request` and existing RFC 6901 field
 errors. Shared validation violations map `limit` to `out_of_range`, and the remaining composition violations

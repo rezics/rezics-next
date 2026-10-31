@@ -57,6 +57,16 @@ export function zoneEditorFixture() {
       calls.push(request.clone());
       const url = new URL(request.url);
       if (request.headers.get('authorization') !== authorization) return problem(401, 'unauthorized');
+      if (url.pathname === '/v1/zones' && request.method === 'POST') {
+        const body = (await request.json()) as ZoneConfigureInput;
+        resource.configuration = structuredClone(body.configuration);
+        resource.mounts = [...body.mounts];
+        resource.zone.labels = { ...body.configuration.labels };
+        if (body.configuration.primaryLanguage) resource.zone.primaryLanguage = body.configuration.primaryLanguage;
+        else delete resource.zone.primaryLanguage;
+        resource.zone.revision = '1';
+        return response({ zone: resource.zone }, 201);
+      }
       if (url.pathname === '/v1/viewerActions' && mode.actionsStatus !== 200)
         return problem(mode.actionsStatus, 'invalid_request');
       if (url.pathname === '/v1/viewerActions')
@@ -114,6 +124,7 @@ export function zoneEditorFixture() {
             mode.mutationStatus,
             mode.mutationStatus === 412 ? 'precondition_failed' : 'dependency_unavailable',
           );
+        if (request.method === 'PUT' && !mode.configure) return problem(403, 'forbidden');
         const key = request.headers.get('idempotency-key') ?? '';
         const body = (await request.json()) as ZoneConfigureInput & { visibility: Visibility };
         const signature = JSON.stringify([url.pathname, request.headers.get('if-match'), body]);
@@ -128,6 +139,8 @@ export function zoneEditorFixture() {
           resource.configuration = body.configuration;
           resource.mounts = body.mounts;
           resource.zone.labels = body.configuration.labels;
+          if (body.configuration.primaryLanguage) resource.zone.primaryLanguage = body.configuration.primaryLanguage;
+          else delete resource.zone.primaryLanguage;
           resource.zone.navigation = body.configuration.pages.map((page: { route: string }) => ({ route: page.route }));
         } else resource.zone.visibility = body.visibility;
         advance();
@@ -160,6 +173,8 @@ export function zoneEditorFixture() {
   };
   return {
     id,
+    client,
+    authorization,
     calls,
     mode,
     transport,

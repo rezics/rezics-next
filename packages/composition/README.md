@@ -53,6 +53,13 @@ single hyphens. The scope contains at most 16 distinct saved-filter IDs defined 
 definition release. `validateZoneStarter` checks this envelope and validates each page with
 `validateComposition`.
 
+Saved Zone resources use the additive `ZoneConfiguration` envelope. Its optional `primaryLanguage`
+selects one of the supported languages and requires that nonblank name; other names are optional.
+Without metadata, legacy configuration still requires all eight names. `validateZoneConfiguration`
+validates this Zone-only variant, while `validateZoneStarter` and composition labels remain unchanged.
+`pickZoneName` selects the requested readable name, the stored primary, then the first readable name in
+`UI_LOCALES` order for legacy fallback. It never reads private configuration or synthesizes translations.
+
 ## Limits
 
 `validateComposition` is pure, does not mutate its input, and does not throw on parsed JSON.

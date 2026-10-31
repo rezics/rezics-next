@@ -1,3 +1,4 @@
+import type { ZoneConfiguration } from '@rezics/composition';
 import type { KernelClient } from '@rezics/client';
 import { MediaProblem } from '../../../media/kernel';
 import { isPlatformClosedError } from '../../../kernel/platform-closed';
@@ -82,10 +83,11 @@ export async function createOwnedZone(
   env: Partial<SessionEnv>,
   command: CreateCommand,
 ): Promise<CommandOutcome> {
-  const configuration = command && copyStarter(command.starter);
-  const fields = command ? invalidLabels(command.labels) : [];
+  const configuration: ZoneConfiguration | undefined = command && copyStarter(command.starter);
+  const fields = command ? invalidLabels(command.labels, command.primaryLanguage) : [];
   if (!configuration || !/^[0-9a-f-]{36}$/.test(command.key) || fields.length) return { kind: 'invalid', fields };
   configuration.labels = { ...command.labels };
+  if (command.primaryLanguage !== undefined) configuration.primaryLanguage = command.primaryLanguage;
   return asViewer(request, env, async (authorization): Promise<CommandOutcome> => {
     const headers = { authorization, 'idempotency-key': command.key };
     const result = await client.zones.post(

@@ -1,4 +1,4 @@
-import { UI_LOCALES, type CompositionDocument } from '@rezics/composition';
+import { type CompositionDocument } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -8,6 +8,8 @@ import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react
 import { m } from '../../../paraglide/messages.js';
 import { PageHeading } from '../../../shell/page-heading';
 import { readerHref, type Failure, type Visibility, type ZoneEditorSession } from './model';
+
+import { ZoneNameFields } from './name-fields';
 
 const CompositionEditor = lazy(() => import('./composition'));
 const SavedPreview = lazy(() => import('./preview'));
@@ -218,31 +220,14 @@ export function ZoneConfigurationEditor({
               </ul>
             </div>
           ) : null}
-          <fieldset disabled={editDisabled} className="grid min-w-0 gap-4 sm:grid-cols-2">
-            <legend className="mb-3 text-lg font-semibold">{m.zone_editor_labels()}</legend>
-            {UI_LOCALES.map((language) => (
-              <Field key={language}>
-                <FieldLabel htmlFor={`zone-label-${language}`}>
-                  {new Intl.DisplayNames([locale], { type: 'language' }).of(language) ?? language}
-                </FieldLabel>
-                <Input
-                  id={`zone-label-${language}`}
-                  lang={language}
-                  value={draft.configuration.labels[language]}
-                  onChange={(event) =>
-                    session.edit({
-                      ...draft,
-                      configuration: {
-                        ...draft.configuration,
-                        labels: { ...draft.configuration.labels, [language]: event.target.value },
-                      },
-                    })
-                  }
-                  required
-                />
-              </Field>
-            ))}
-          </fieldset>
+          <ZoneNameFields
+            locale={locale}
+            labels={draft.configuration.labels}
+            primaryLanguage={draft.configuration.primaryLanguage}
+            disabled={editDisabled}
+            errors={state.violations.map((error) => `/configuration${error.pointer}`)}
+            onChange={(names) => session.edit({ ...draft, configuration: { ...draft.configuration, ...names } })}
+          />
           <section className="min-w-0 space-y-4" aria-labelledby="zone-pages-heading">
             <h2 id="zone-pages-heading" className="text-xl font-semibold">
               {m.zone_editor_pages()}

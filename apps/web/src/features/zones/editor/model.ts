@@ -1,4 +1,4 @@
-import { platformRegistry, validateZoneStarter, type CompositionViolation } from '@rezics/composition';
+import { platformRegistry, validateZoneConfiguration, type CompositionViolation } from '@rezics/composition';
 import type {
   ZoneConfigurationResponse,
   ZoneConfigureInput,
@@ -41,7 +41,7 @@ export const validRevision = (value: string) => /^[1-9][0-9]*$/.test(value);
 
 /** Navigation is derived from sorted configured routes; it has no second editable store. */
 export function configurationErrors(draft: ZoneConfigureInput, filters: ReadonlySet<string>): CompositionViolation[] {
-  const errors = validateZoneStarter(platformRegistry, draft.configuration, { filters });
+  const errors = validateZoneConfiguration(platformRegistry, draft.configuration, { filters });
   draft.configuration.pages.forEach((page, index) => {
     if (page.route.split('/')[0] === 'subjects') errors.push({ pointer: `/pages/${index}/route`, code: 'invalid' });
   });

@@ -1,4 +1,4 @@
-import type { ZoneStarter } from '@rezics/composition';
+import type { ZoneConfiguration } from '@rezics/composition';
 import type { AccessClient } from '../request/access.ts';
 import { readAccount } from '../access/account-data.ts';
 import type { CommandTransaction } from '../command/command.ts';
@@ -15,7 +15,7 @@ export type ZoneHead = Omit<
   NonNullable<Awaited<ReturnType<typeof head.run>>>,
   'configuration' | 'visibility' | 'mounts'
 > & {
-  configuration: ZoneStarter | null;
+  configuration: ZoneConfiguration | null;
   visibility: 'private' | 'unlisted' | 'public';
   mounts: string[] | null;
 };
@@ -46,7 +46,7 @@ export async function insertZone(
     id: string;
     ownerId: string;
     visibility: ZoneHead['visibility'];
-    configuration: ZoneStarter;
+    configuration: ZoneConfiguration;
     mounts: string[];
     releaseDigest: string;
     at: string;

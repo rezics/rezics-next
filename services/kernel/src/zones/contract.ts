@@ -8,7 +8,7 @@ import {
   VIEWS,
   plainText,
   type CompositionDocument,
-  type ZoneStarter,
+  type ZoneConfiguration,
 } from '@rezics/composition';
 import { t } from 'elysia';
 import type { Static, TLiteral, TOptional, TSchema, TUnion } from 'typebox';
@@ -28,20 +28,9 @@ function literalUnion<const Values extends readonly [string, ...string[]]>(
   return t.Union(literals) as unknown as TUnion<LiteralTuple<Values>>;
 }
 
-type RequiredLocaleProperties<Locales extends readonly string[], Value extends TSchema> = {
-  [Locale in Locales[number]]: Value;
-};
-
 type OptionalLocaleProperties<Locales extends readonly string[], Value extends TSchema> = {
   [Locale in Locales[number]]: TOptional<Value>;
 };
-
-function requiredLocaleProperties<const Locales extends readonly string[], Value extends TSchema>(
-  locales: Locales,
-  value: Value,
-): RequiredLocaleProperties<Locales, Value> {
-  return Object.fromEntries(locales.map((locale) => [locale, value])) as RequiredLocaleProperties<Locales, Value>;
-}
 
 function optionalLocaleProperties<const Locales extends readonly string[], Value extends TSchema>(
   locales: Locales,
@@ -54,7 +43,7 @@ function optionalLocaleProperties<const Locales extends readonly string[], Value
 }
 
 const safeLabelSchema = t.Intersect([plainText({ maxLength: 80 }), t.String({ minLength: 1 })]);
-const configurationLabelsSchema = t.Object(requiredLocaleProperties(UI_LOCALES, safeLabelSchema), closed);
+const configurationLabelsSchema = t.Object(optionalLocaleProperties(UI_LOCALES, safeLabelSchema), closed);
 const publicLabelsSchema = t.Object(optionalLocaleProperties(UI_LOCALES, safeLabelSchema), closed);
 
 // Zone paths use the same lowercase relative segments as composition profile routes.
@@ -82,6 +71,7 @@ export const ZonePublicSchema = t.Object(
     id: routedUuidSchema,
     revision: revisionSchema,
     labels: publicLabelsSchema,
+    primaryLanguage: t.Optional(literalUnion(UI_LOCALES)),
     visibility: visibilitySchema,
     appearance: appearanceSchema,
     navigation: t.Array(navigationItemSchema, { maxItems: MAX_ZONE_PAGES }),
@@ -111,7 +101,7 @@ export const ZonePageRequestSchema = t.Object(
 /** The existing common page response with a top-level public Zone shell. */
 export const ZonePageResponseSchema = extendPageResponseSchema({ zone: ZonePublicSchema });
 
-// Keep the shared CompositionDocument envelope; resource commands apply validateZoneStarter
+// Keep the shared CompositionDocument envelope; resource commands apply validateZoneConfiguration
 // for registry-specific admission.
 const compositionNodeSchema = t.Object(
   {
@@ -129,10 +119,11 @@ const compositionDocumentSchema = t.Unsafe<CompositionDocument>(
     closed,
   ),
 );
-const zoneStarterSchema = t.Unsafe<ZoneStarter>(
+const zoneStarterSchema = t.Unsafe<ZoneConfiguration>(
   t.Object(
     {
       labels: configurationLabelsSchema,
+      primaryLanguage: t.Optional(literalUnion(UI_LOCALES)),
       pages: t.Array(t.Object({ route: zoneRouteSchema, document: compositionDocumentSchema }, closed), {
         minItems: 1,
         maxItems: MAX_ZONE_PAGES,

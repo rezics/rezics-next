@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { plainText, UI_LOCALES, type ZoneStarter } from '@rezics/composition';
+import { plainText, UI_LOCALES, type ZoneConfiguration, type ZoneLanguage } from '@rezics/composition';
 
 export type OwnedZoneList = NonNullable<Awaited<ReturnType<KernelClient['zones']['get']>>['data']>;
 export type OwnedZone = OwnedZoneList['zones'][number];
@@ -11,7 +11,12 @@ export type Failure = {
 export type ListOutcome = { kind: 'ready'; page: OwnedZoneList } | Failure;
 export type CommandOutcome = { kind: 'saved'; zone: OwnedZone } | Failure;
 export type LifecycleCommand = { id: string; revision: string; key: string; operation: 'delete' | 'restore' };
-export type CreateCommand = { starter: string; labels: ZoneStarter['labels']; key: string };
+export type CreateCommand = {
+  starter: string;
+  labels: ZoneConfiguration['labels'];
+  primaryLanguage?: ZoneLanguage;
+  key: string;
+};
 export const pageLimit = 20;
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const labelPattern = new RegExp(Reflect.get(plainText({ maxLength: 80 }), 'pattern'), 'u');
@@ -33,12 +38,18 @@ export function validLifecycle(command: LifecycleCommand): boolean {
   );
 }
 
-export function invalidLabels(labels: ZoneStarter['labels']): string[] {
+export function invalidLabels(labels: ZoneConfiguration['labels'], primaryLanguage?: ZoneLanguage): string[] {
   if (!labels || typeof labels !== 'object') return UI_LOCALES.map((locale) => `/configuration/labels/${locale}`);
-  return UI_LOCALES.filter((locale) => {
-    const value = labels[locale];
-    return typeof value !== 'string' || !value.trim() || [...value].length > 80 || !labelPattern.test(value);
-  }).map((locale) => `/configuration/labels/${locale}`);
+  if (primaryLanguage !== undefined && !UI_LOCALES.includes(primaryLanguage)) return ['/configuration/primaryLanguage'];
+  const unknown = Object.keys(labels).filter((key) => !UI_LOCALES.includes(key as ZoneLanguage));
+  return [
+    ...unknown.map((key) => `/configuration/labels/${key}`),
+    ...UI_LOCALES.filter((locale) => {
+      if (primaryLanguage !== undefined && locale !== primaryLanguage && !Object.hasOwn(labels, locale)) return false;
+      const value = labels[locale];
+      return typeof value !== 'string' || !value.trim() || [...value].length > 80 || !labelPattern.test(value);
+    }).map((locale) => `/configuration/labels/${locale}`),
+  ];
 }
 
 /** Only native status/code and field locations are exposed; never raw private Problem details. */
@@ -55,7 +66,10 @@ export function failure(status: number, body: unknown): Failure {
     const fields = Array.isArray(errors)
       ? errors.flatMap((error: unknown) => {
           const pointer: unknown = error && typeof error === 'object' ? Reflect.get(error, 'pointer') : undefined;
-          return typeof pointer === 'string' && pointer.startsWith('/configuration/labels/') ? [pointer] : [];
+          return typeof pointer === 'string' &&
+            (pointer.startsWith('/configuration/labels/') || pointer === '/configuration/primaryLanguage')
+            ? [pointer]
+            : [];
         })
       : [];
     return { kind: 'invalid', fields };

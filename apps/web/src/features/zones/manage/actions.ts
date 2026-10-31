@@ -1,7 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { UI_LOCALES } from '@rezics/composition';
 import { kernelClient } from '../../../kernel/client';
 import type { SessionEnv } from '../../../session/client';
 import { listInput, type CreateCommand, type LifecycleCommand } from './model';
@@ -30,9 +29,8 @@ export const createMyZone = createServerFn({ method: 'POST', strict: false })
   .validator((input: CreateCommand): CreateCommand => ({
     starter: input?.starter,
     key: input?.key,
-    labels: Object.fromEntries(
-      UI_LOCALES.map((locale) => [locale, input?.labels?.[locale]]),
-    ) as CreateCommand['labels'],
+    labels: input?.labels,
+    ...(input?.primaryLanguage === undefined ? {} : { primaryLanguage: input.primaryLanguage }),
   }))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');

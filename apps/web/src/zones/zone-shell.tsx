@@ -1,4 +1,4 @@
-import { type CompositionDocument, type View } from '@rezics/composition';
+import { pickZoneName, type CompositionDocument, type View } from '@rezics/composition';
 import { useLocation, useRouter, notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -34,7 +34,7 @@ import { getLocale, locales } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
 
 function zoneLabel(zone: ZonePublic, locale: string): { text: string; lang?: string } | undefined {
-  const label = pageText(zone.labels, locale);
+  const label = pickZoneName(zone, locale);
   if (!label.text) return;
   return { text: label.text, ...(label.lang ? { lang: label.lang } : {}) };
 }

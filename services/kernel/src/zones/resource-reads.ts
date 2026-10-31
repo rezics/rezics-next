@@ -45,6 +45,9 @@ export function zonePublic(row: ZoneHead): ZonePublic {
     id: row.id,
     revision: row.revision,
     labels,
+    ...(configuration.primaryLanguage && !zoneWithheld(row, '/primaryLanguage')
+      ? { primaryLanguage: configuration.primaryLanguage }
+      : {}),
     visibility: row.visibility,
     appearance,
     navigation: configuration.pages

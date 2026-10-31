@@ -1,5 +1,5 @@
 import { enrollResourceRecordSources } from '../semantic/record-purge-custody.ts';
-import { platformRegistry, validateZoneStarter } from '@rezics/composition';
+import { platformRegistry, validateZoneConfiguration } from '@rezics/composition';
 import type { Pool } from 'pg';
 import { commandAccessContext } from '../access/command-admission.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -64,7 +64,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
   ): Promise<PreparedConfiguration> {
     const release = await activeRelease(pool);
     if (!release) throw new ProblemError('semantic_not_ready');
-    const violations = validateZoneStarter(platformRegistry, body.configuration, {
+    const violations = validateZoneConfiguration(platformRegistry, body.configuration, {
       filters: new Set(Object.keys(release.release.filters ?? {})),
     });
     const reserved = body.configuration.pages.flatMap((page, index) =>

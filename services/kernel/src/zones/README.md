@@ -62,3 +62,18 @@ openings and ungranted 403 assertions remain unchanged. Existing acceptance test
 Local delivery runs Kernel typing only. Native six-surface, Source publication, physical/growth, privacy repair,
 GET lists, withholding/purge/account cleanup and worker/default-world completion remain their existing obligations;
 source integration does not certify them. No external reference implementation is named by this contract.
+
+## Authored names
+
+Saved configurations use `ZoneConfiguration`: a bounded partial language map plus optional
+`primaryLanguage` inside the existing versioned configuration JSON. Explicit primary names admit a
+single authored language and optional translations; legacy eight-name configurations remain valid
+without rewriting. `validateZoneConfiguration` retains all page, scope, text and closed-field checks;
+`validateZoneStarter` and generic Composition label validation are unchanged. Native commands keep
+ordinary authorization, sealed replay, CAS and one-partition writes. No separate rename operation or
+translation service is introduced. Public metadata carries the primary language only through the
+existing withholding filter. Zone readers and owner surfaces share `pickZoneName` over disclosed maps.
+
+The naming journey is authored in `test/zones/naming.test.ts` using the existing real resource fixture.
+Its native execution, growth evidence, browser interaction and captures remain deferred; workspace typing
+alone does not establish native behavior.

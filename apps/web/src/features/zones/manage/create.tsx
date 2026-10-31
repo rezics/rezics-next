@@ -1,8 +1,8 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { pickText, UI_LOCALES, type ZoneStarter } from '@rezics/composition';
+import { pickText, UI_LOCALES, type ZoneConfiguration, type ZoneLanguage } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
-import { Input } from '@rezics/ui/shadcn/input';
+import { ZoneNameFields } from '../editor/name-fields';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { PageHeading } from '../../../shell/page-heading';
 import { m } from '../../../paraglide/messages.js';
@@ -21,7 +21,10 @@ export type CreateProps = {
 export function CreateZone({ locale, session, onCreate, onNavigate }: CreateProps) {
   const options = { locale: locale as never };
   const [starter, setStarter] = useState('');
-  const [labels, setLabels] = useState<ZoneStarter['labels'] | null>(null);
+  const [labels, setLabels] = useState<ZoneConfiguration['labels'] | null>(null);
+  const [primaryLanguage, setPrimaryLanguage] = useState<ZoneLanguage>(
+    UI_LOCALES.find((language) => language === locale) ?? 'en',
+  );
   const [command, setCommand] = useState<CreateCommand | null>(null);
   const [result, setResult] = useState<CommandOutcome | null>(null);
   const [busy, setBusy] = useState(false);
@@ -57,13 +60,13 @@ export function CreateZone({ locale, session, onCreate, onNavigate }: CreateProp
       choose.current?.focus();
       return;
     }
-    const fields = invalidLabels(labels);
+    const fields = invalidLabels(labels, primaryLanguage);
     if (fields.length) {
       setResult({ kind: 'invalid', fields });
       requestAnimationFrame(() => alert.current?.focus());
       return;
     }
-    void send({ starter, labels: structuredClone(labels), key: crypto.randomUUID() });
+    void send({ starter, primaryLanguage, labels: structuredClone(labels), key: crypto.randomUUID() });
   }
 
   const invalid = result?.kind === 'invalid';
@@ -111,7 +114,7 @@ export function CreateZone({ locale, session, onCreate, onNavigate }: CreateProp
               onChange={(event) => {
                 const id = event.target.value;
                 setStarter(id);
-                setLabels(copyStarter(id)?.labels ?? null);
+                setLabels((current) => current ?? (copyStarter(id) ? { [primaryLanguage]: '' } : null));
                 setResult(null);
               }}
             >
@@ -125,35 +128,17 @@ export function CreateZone({ locale, session, onCreate, onNavigate }: CreateProp
             <FieldDescription id="zone-starter-help">{m.zones_create_starter_help({}, options)}</FieldDescription>
           </Field>
           {labels ? (
-            <fieldset className="space-y-4" disabled={frozen}>
-              <legend className="text-xl font-semibold">{m.zones_create_names({}, options)}</legend>
-              <p id="zone-label-help" className="text-sm text-muted-foreground">
-                {m.zones_create_names_help({}, options)}
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {UI_LOCALES.map((language) => {
-                  const fieldInvalid = invalid && result.fields?.includes(`/configuration/labels/${language}`);
-                  return (
-                    <Field key={language} data-invalid={fieldInvalid}>
-                      <FieldLabel htmlFor={`zone-label-${language}`}>
-                        {m.zones_create_label({ language }, options)}
-                      </FieldLabel>
-                      <Input
-                        id={`zone-label-${language}`}
-                        lang={language}
-                        value={labels[language]}
-                        required
-                        aria-invalid={fieldInvalid}
-                        aria-describedby="zone-label-help"
-                        onChange={(event) => {
-                          setLabels((current) => (current ? { ...current, [language]: event.target.value } : current));
-                        }}
-                      />
-                    </Field>
-                  );
-                })}
-              </div>
-            </fieldset>
+            <ZoneNameFields
+              locale={locale}
+              labels={labels}
+              primaryLanguage={primaryLanguage}
+              disabled={frozen}
+              errors={invalid ? result.fields : undefined}
+              onChange={(names) => {
+                setLabels(names.labels);
+                setPrimaryLanguage(names.primaryLanguage);
+              }}
+            />
           ) : null}
           <p className="text-muted-foreground">{m.zones_create_visibility({}, options)}</p>
           {result ? (

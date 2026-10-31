@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { pickText } from '@rezics/composition';
+import { pickZoneName } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
   AlertDialog,
@@ -47,7 +47,7 @@ function DeleteZone({
 }) {
   const [open, setOpen] = useState(false);
   const options = { locale: locale as never };
-  const title = pickText(zone.labels, locale).text || m.zones_owner_unnamed({}, options);
+  const title = pickZoneName(zone, locale).text || m.zones_owner_unnamed({}, options);
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger render={<Button variant="ghost" disabled={disabled} />}>
@@ -204,7 +204,7 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, onChange, onReload
           {zones
             .filter((zone) => result?.kind !== 'saved' || zone.id !== result.zone.id)
             .map((zone) => {
-              const title = pickText(zone.labels, locale).text || m.zones_owner_unnamed({}, options);
+              const title = pickZoneName(zone, locale).text || m.zones_owner_unnamed({}, options);
               const zoneLinks = zonePaths(locale, zone.id);
               const expired = !zone.restoreUntil || Date.parse(zone.restoreUntil) <= now;
               const visibility = {
