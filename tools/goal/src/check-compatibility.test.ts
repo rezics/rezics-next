@@ -306,6 +306,7 @@ function completeScriptsRoot(directory: string) {
     .packageManager;
   const artifact = CHECK_COMPATIBILITY_CONTRACT.workerCheck.bun.artifacts[pin];
   if (!artifact) throw new Error(`No trusted identity for actual dev pin ${pin}`);
+  expect(pin).toBe(`bun@${artifact.packageVersion.split('+')[0]}`);
   const platform = artifact.platforms[`${process.platform}-${process.arch}`];
   if (!platform) throw new Error(`No trusted platform artifact for ${process.platform}-${process.arch}`);
   const wrapper = pinnedArtifact('bun', artifact.packageTarball, artifact.packageIntegrity);
@@ -331,9 +332,8 @@ function completeScriptsRoot(directory: string) {
 test('complete executable contract accepts actual dev scripts and genuine manifest-pinned Bun with real success and failure records', () => {
   const directory = temporaryDirectory();
   try {
-    const { root, executable, pin, artifact } = completeScriptsRoot(directory);
+    const { root, executable, artifact } = completeScriptsRoot(directory);
     expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(devFile('package.json'));
-    expect(pin).toBe(`bun@${artifact.packageVersion.split('+')[0]}`);
     const cli = spawnSync(
       process.execPath,
       [join(repositoryRoot, 'tools/goal/scripts/check-compatibility.ts'), '--scripts-root', root],
