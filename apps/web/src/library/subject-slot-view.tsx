@@ -17,10 +17,11 @@ import {
 } from '@rezics/ui/shadcn/select';
 import { Loader2Icon } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
-import { useRouter } from '@tanstack/react-router';
+import { useLocation, useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { SubjectLabelNotice } from './subject-labels.tsx';
 import { subjectHref } from '../subject/subject-href';
+import { subjectSlotReturnTo } from './subject-slot-return-context';
 import { AccountRef } from './account-ref';
 import { SubjectRef } from './subject-ref';
 import type { SubjectReference } from './subject-ref';
@@ -107,6 +108,8 @@ function LibraryStateSelect({
 export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) {
   const queryClient = useQueryClient();
   const action = subjectHref({ id: subject.id, label: subject.label }, locale).href;
+  const currentHref = useLocation({ select: (location) => location.publicHref });
+  const returnTo = subjectSlotReturnTo(currentHref, subject, locale);
   const router = useRouter();
   const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
@@ -657,7 +660,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
             <a
               data-library-sign-in
               className={primaryClass}
-              href={`/auth/sign-in?return_to=${encodeURIComponent(action)}`}
+              href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
             >
               {m.account_sign_in()}
             </a>
