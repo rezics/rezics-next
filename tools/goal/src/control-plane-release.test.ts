@@ -6,8 +6,19 @@ import { git, type GateRunner } from './merge.ts';
 import type { GateOutcome } from './contracts.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { integrationHarness, markdown } from './test-support.ts';
+import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 
-type ReleaseHooks = Partial<Pick<TrainOptions, 'beforeIntegrationAdvance' | 'beforePromotionAdvance'>>;
+type ReleaseHooks = Partial<
+  Pick<
+    TrainOptions,
+    | 'beforeIntegrationAdvance'
+    | 'beforePromotionAdvance'
+    | 'beforeRelease'
+    | 'codeIsCurrent'
+    | 'handOff'
+    | 'controlPlaneDevLeaseTimeoutMs'
+  >
+>;
 type SmokeRunner = GateRunner;
 
 const success: GateRunner = async () => ({ passed: true, output: '', timedOut: false });
@@ -53,6 +64,7 @@ async function train(
   runGate: GateRunner = success,
   runLaunchSmoke: SmokeRunner = releaseEvidence,
   hooks: ReleaseHooks = {},
+  mode: 'run' | 'pump' = 'run',
 ) {
   await new MergeTrain({
     ...h.settings,
@@ -67,7 +79,7 @@ async function train(
     runGate,
     runLaunchSmoke,
     ...hooks,
-  }).run();
+  })[mode]();
   await h.job.drain();
 }
 
@@ -107,6 +119,214 @@ function releaseRecords(h: ReturnType<typeof integrationHarness>) {
     .filter((name) => /^control-plane-release-.*\.json$/.test(name))
     .map((name) => JSON.parse(readFileSync(join(h.settings.stateDirectory, name), 'utf8')) as Record<string, unknown>);
 }
+
+test('ordinary release waits for dev drain before capturing refs and retains both leases through publication', async () => {
+  const h = integrationHarness();
+  const resumeDev = Promise.withResolvers<void>();
+  const waitingForDev = Promise.withResolvers<void>();
+  let running: Promise<void> | undefined;
+  try {
+    h.ensureDev();
+    h.settings.integration.devLandingChecks = false;
+    const devTask = h.dispatch('dev-result.txt');
+    const task = dispatchControlPlane(h);
+    await h.start(devTask);
+    await h.start(task);
+    let devDrained = false;
+    let gateCalls = 0;
+    let smokeCalls = 0;
+    let published = false;
+    let owners: string[] | undefined;
+    const assertLeases = () => {
+      const current = ['train-main.lease', 'train.lease'].map((name) => {
+        const path = join(h.settings.stateDirectory, name);
+        expect(() => acquireDirectoryLease(path)).toThrow(LeaseHeldError);
+        const files = readdirSync(path);
+        expect(files).toHaveLength(1);
+        return readFileSync(join(path, files[0]!), 'utf8');
+      });
+      owners ??= current;
+      expect(current).toEqual(owners);
+    };
+    running = train(
+      h,
+      async () => {
+        gateCalls++;
+        assertLeases();
+        return { passed: true, output: '', timedOut: false };
+      },
+      async (command, cwd) => {
+        smokeCalls++;
+        assertLeases();
+        return releaseEvidence(command, cwd);
+      },
+      {
+        codeIsCurrent: () => {
+          if (devDrained && existsSync(join(h.settings.stateDirectory, 'train-main.lease'))) waitingForDev.resolve();
+          return true;
+        },
+        beforeRelease: async () => {
+          if (devDrained) return;
+          devDrained = true;
+          await resumeDev.promise;
+        },
+        beforePromotionAdvance: () => {
+          assertLeases();
+          published = true;
+        },
+      },
+    );
+    await waitingForDev.promise;
+    expect(gateCalls).toBe(0);
+    expect(smokeCalls).toBe(0);
+    const capturedDev = h.head('dev');
+    expect(capturedDev).toBe(h.store.task(devTask.id).integratedCommit!);
+    resumeDev.resolve();
+    await running;
+    expect(h.outcomes.map((outcome) => [outcome.taskId, outcome.passed])).toEqual([
+      [devTask.id, true],
+      [task.id, true],
+    ]);
+    expect(gateCalls).toBeGreaterThan(0);
+    expect(smokeCalls).toBe(1);
+    expect(published).toBe(true);
+    expect(releaseRecords(h)[0]?.devScriptTree).toBe(capturedDev);
+    expect(git(h.root, 'merge-base', '--is-ancestor', capturedDev, 'dev')).toBe('');
+    expect(existsSync(join(h.settings.stateDirectory, 'train-main.lease'))).toBe(false);
+    expect(existsSync(join(h.settings.stateDirectory, 'train.lease'))).toBe(false);
+  } finally {
+    resumeDev.resolve();
+    await running;
+    h.dispose();
+  }
+});
+
+test('ordinary release contention is bounded and preserves the live dev owner and pending request', async () => {
+  const h = integrationHarness();
+  let owner: ReturnType<typeof acquireDirectoryLease> | undefined;
+  try {
+    h.ensureDev();
+    const base = h.head('main');
+    const task = dispatchControlPlane(h);
+    await h.start(task);
+    const entry = h.queue.next()!;
+    const path = join(h.settings.stateDirectory, 'train.lease');
+    owner = acquireDirectoryLease(path);
+    const ownerFiles = readdirSync(path);
+    const identity = readFileSync(join(path, ownerFiles[0]!), 'utf8');
+    let gates = 0;
+    const started = performance.now();
+    await train(
+      h,
+      async () => {
+        gates++;
+        return { passed: true, output: '', timedOut: false };
+      },
+      releaseEvidence,
+      { controlPlaneDevLeaseTimeoutMs: 25 },
+      'pump',
+    );
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(gates).toBe(0);
+    expect(h.outcomes).toEqual([]);
+    expect(h.queue.entry({ taskId: task.id, attempt: 1 })).toMatchObject({
+      id: entry.id,
+      delivered: 0,
+      outcome: null,
+      candidate: null,
+    });
+    expect([h.head('main'), h.head('dev')]).toEqual([base, base]);
+    expect(readdirSync(path)).toEqual(ownerFiles);
+    expect(readFileSync(join(path, ownerFiles[0]!), 'utf8')).toBe(identity);
+    expect(() => acquireDirectoryLease(path)).toThrow(LeaseHeldError);
+    expect(existsSync(join(h.settings.stateDirectory, 'train-main.lease'))).toBe(false);
+    expect(readFileSync(join(h.settings.stateDirectory, `landing-${entry.id}.log`), 'utf8')).toContain(
+      'release deferred: dev train lease held after waiting 25ms; request remains pending',
+    );
+    owner.release();
+    await train(h);
+    expect(h.outcomes[0]?.passed).toBe(true);
+  } finally {
+    owner?.release();
+    h.dispose();
+  }
+});
+
+for (const failure of ['gate refusal', 'gate exception', 'cancelled attempt'] as const) {
+  test(`ordinary release releases both leases after ${failure}`, async () => {
+    const h = integrationHarness();
+    try {
+      h.ensureDev();
+      const base = h.head('main');
+      const task = dispatchControlPlane(h);
+      await h.start(task);
+      await train(h, async () => {
+        expect(() => acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease'))).toThrow(LeaseHeldError);
+        if (failure === 'gate exception') throw new Error('fixture gate exception');
+        if (failure === 'cancelled attempt')
+          h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
+            attempt.state = 'cancelled';
+          });
+        return { passed: false, output: 'fixture gate refusal', timedOut: false };
+      });
+      expect([h.head('main'), h.head('dev')]).toEqual([base, base]);
+      expect(h.outcomes.some((outcome) => outcome.passed)).toBe(false);
+      if (failure === 'cancelled attempt') expect(h.outcomes).toEqual([]);
+      else expect(h.outcomes[0]?.firstFailure?.assertion).toContain(`fixture ${failure}`);
+      for (const name of ['train-main.lease', 'train.lease']) {
+        const path = join(h.settings.stateDirectory, name);
+        expect(existsSync(path)).toBe(false);
+        acquireDirectoryLease(path).release();
+      }
+    } finally {
+      h.dispose();
+    }
+  });
+}
+
+test('ordinary release refuses repeated external dev drift at the final atomic ref fence', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const base = h.head('main');
+    git(h.root, 'branch', 'stabilize', base);
+    const task = dispatchControlPlane(h);
+    await h.start(task);
+    let external = base;
+    let attempts = 0;
+    let suites = 0;
+    let contracts = 0;
+    let lifecycles = 0;
+    await train(
+      h,
+      async (command) => {
+        if (command[1] === 'test') suites++;
+        if (command[1] === 'tools/goal/scripts/check-compatibility.ts') contracts++;
+        return { passed: true, output: '', timedOut: false };
+      },
+      async (command, cwd) => {
+        lifecycles++;
+        return releaseEvidence(command, cwd);
+      },
+      {
+        beforePromotionAdvance: () => {
+          attempts++;
+          expect(() => acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease'))).toThrow(LeaseHeldError);
+          external = addBranchCommit(h, 'dev', { 'external.txt': `external change ${attempts}\n` });
+        },
+      },
+    );
+    expect([attempts, suites, contracts, lifecycles]).toEqual([5, 5, 5, 5]);
+    expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual([base, base, external]);
+    expect(h.outcomes[0]?.passed).toBe(false);
+    expect(h.outcomes[0]?.firstFailure?.assertion).toContain('refs kept moving during five validation attempts');
+    expect(releaseRecords(h)).toEqual([]);
+    expect(existsSync(join(h.settings.stateDirectory, 'train-main.lease'))).toBe(false);
+    expect(existsSync(join(h.settings.stateDirectory, 'train.lease'))).toBe(false);
+  } finally {
+    h.dispose();
+  }
+});
 
 test('a checked candidate publishes main, stabilize and dev together with exact release evidence', async () => {
   const h = integrationHarness();

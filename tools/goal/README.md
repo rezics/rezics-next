@@ -75,8 +75,14 @@ brief continue to be written and formatted from that brief.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
 enqueues its landing request, and starts the train. Requests targeting `main` use the `train-main.lease`; other
-requests use `train.lease`. The two lanes select and order their own requests, so a long control-plane landing on
-`main` can run alongside a dev landing. Each lane remains serial. A train releases its lease and checks its lane's
+requests use `train.lease`. The two lanes select and order their own requests. An ordinary control-plane release,
+while holding the main lane, acquires the existing dev lane before capturing refs or forming its candidate. It retains
+both through the complete required checks, captured-dev compatibility, provider lifecycle, propagation preparation
+and final atomic main/dev/stabilize compare-and-swap. Dev drains never wait for main. Contention waits asynchronously
+for at most 30 seconds, preserves the live owner and leaves the request pending for a later pump on timeout. A stale
+controller hands off, and cancellation or any exit releases only its owned leases. External ref changes still
+invalidate proof through the existing ref guards and finite retry budget. Other main and dev work retains independent
+lanes. Each lane remains serial. A train releases its lease and checks its lane's
 queue again, reacquiring the lease to drain a request that arrived during shutdown. Detached train processes wait for
 the lane lease and recheck the control-plane version while they wait. Every process records the Git object id for
 `main:tools/goal` when it starts; a stale train finishes its active landing, releases its lease and hands the remaining
