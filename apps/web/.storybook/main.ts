@@ -17,7 +17,9 @@ const config: StorybookConfig = {
     name: '@storybook/react-vite',
     options: { builder: { viteConfigPath: null } },
   },
-  features: { viewportStoryGlobals: true } as NonNullable<StorybookConfig['features']> & { viewportStoryGlobals: true },
+  features: { componentsManifest: true, viewportStoryGlobals: true } as NonNullable<StorybookConfig['features']> & {
+    viewportStoryGlobals: true;
+  },
   stories: [
     '../src/stories/**/*.stories.tsx',
     '../src/stories/**/*.mdx',
