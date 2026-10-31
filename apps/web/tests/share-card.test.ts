@@ -32,8 +32,8 @@ function pageFixture(title?: string): SubjectPageData {
 }
 
 async function renderer() {
-  const [yoga, raster, data] = await Promise.all([
-    Bun.file(import.meta.resolve('satori/yoga.wasm'))
+  const [layout, raster, data] = await Promise.all([
+    Bun.file(import.meta.resolve('satori/layout.wasm'))
       .arrayBuffer()
       .then(WebAssembly.compile),
     Bun.file(import.meta.resolve('@resvg/resvg-wasm/index_bg.wasm'))
@@ -43,7 +43,7 @@ async function renderer() {
       import.meta.resolve('@fontsource/source-serif-4/files/source-serif-4-latin-600-normal.woff'),
     ).arrayBuffer(),
   ]);
-  return createShareCardRenderer({ yoga, raster, fonts: () => [{ name: 'Share Serif', data, weight: 600 }] });
+  return createShareCardRenderer({ layout, raster, fonts: () => [{ name: 'Share Serif', data, weight: 600 }] });
 }
 
 test('current anonymous-readable page data produces a bounded typographic PNG placeholder while missing or withdrawn targets never leak text', async () => {

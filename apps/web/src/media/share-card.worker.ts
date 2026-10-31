@@ -1,6 +1,6 @@
 import { createKernelClient } from '@rezics/client';
 import { env } from 'cloudflare:workers';
-import yoga from 'satori/yoga.wasm?module';
+import layout from 'satori/layout.wasm?module';
 import raster from '@resvg/resvg-wasm/index_bg.wasm?module';
 import latin from '@fontsource/source-serif-4/files/source-serif-4-latin-600-normal.woff?inline';
 import extended from '@fontsource/source-serif-4/files/source-serif-4-latin-ext-600-normal.woff?inline';
@@ -48,7 +48,7 @@ function fonts(page: ShareCardPage): Font[] {
   return [latin, extended, ...cjk].map(font);
 }
 
-const render = createShareCardRenderer({ yoga, raster, fonts });
+const render = createShareCardRenderer({ layout, raster, fonts });
 
 export function currentShareCardResponse(request: Request): Promise<Response> {
   return shareCardResponse(request, {

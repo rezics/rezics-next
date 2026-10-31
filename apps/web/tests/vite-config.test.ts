@@ -95,7 +95,7 @@ test('Workers resolve both share-card public Wasm exports through the installed 
         assert.equal(config.environments.ssr.resolve.noExternal, true);
         const resolveId = config.createResolver();
         const importer = resolve('src/media/share-card.worker.ts');
-        for (const exported of ['satori/yoga.wasm', '@resvg/resvg-wasm/index_bg.wasm']) {
+        for (const exported of ['satori/layout.wasm', '@resvg/resvg-wasm/index_bg.wasm']) {
           const local = realpathSync(resolve('node_modules', exported));
           for (const query of ['', '?module'])
             assert.equal(await resolveId(exported + query, importer, false, true), local + query);

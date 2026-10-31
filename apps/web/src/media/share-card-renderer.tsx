@@ -4,7 +4,7 @@ import { ShareCardView } from './share-card-view';
 import { shareCardSize, type ShareCardPage } from './share-card';
 
 export type ShareCardAssets = {
-  yoga: WebAssembly.Module;
+  layout: WebAssembly.Module;
   raster: WebAssembly.Module;
   fonts: (page: ShareCardPage) => Font[];
 };
@@ -13,7 +13,7 @@ export type ShareCardAssets = {
 export function createShareCardRenderer(assets: ShareCardAssets) {
   let ready: Promise<void> | undefined;
   return async (page: ShareCardPage): Promise<Uint8Array<ArrayBuffer>> => {
-    ready ??= Promise.all([init(assets.yoga), initWasm(assets.raster)]).then(() => undefined);
+    ready ??= Promise.all([init(assets.layout), initWasm(assets.raster)]).then(() => undefined);
     await ready;
     const fonts = assets.fonts(page);
     if (
