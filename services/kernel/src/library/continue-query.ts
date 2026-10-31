@@ -14,6 +14,7 @@ import { openOwnerQuery, ownerQueryWork, type OwnerQueryDependencies } from './b
 import { readOwnerOriginalActivityPrefix, type OwnerActivitySeek } from './owner-index-continue.ts';
 import { evaluateContinueGroup, readContinueOriginalFacts } from './continue-source.ts';
 import type { ContinuePage, ContinueSubject } from './continue-reads.ts';
+import { readSubjectSummaries } from '../semantic/summaries.ts';
 
 type Snapshot = <T>(read: (client: Pick<PoolClient, 'query'>) => Promise<T>) => Promise<T>;
 const unavailable = () => new ProblemError('dependency_unavailable');
@@ -37,6 +38,8 @@ export async function readContinueOwnerPage(
     actor: AccountActor;
     limit: number;
     cursor?: string;
+    view?: 'BASIC' | 'FULL';
+    languages?: readonly string[];
     deadline: number;
     snapshot: Snapshot;
     readVersion: () => Promise<string>;
@@ -195,6 +198,21 @@ export async function readContinueOwnerPage(
     }
     if (!exhausted && completed.length <= input.limit) throw unavailable();
     const shown = completed.slice(0, input.limit);
+    let summaries: Awaited<ReturnType<typeof readSubjectSummaries>> | null = null;
+    if (input.view === 'FULL') {
+      if (!deps.routeKey || deps.routeKey.byteLength < 32) throw unavailable();
+      summaries = await readSubjectSummaries(
+        {
+          pool: deps.pool,
+          access: deps.access,
+          actor: input.actor,
+          routeKey: deps.routeKey,
+          deadline: input.deadline,
+        },
+        shown.map((row) => row.subjectId),
+        { languages: input.languages ?? [] },
+      );
+    }
     const final = await openOwnerQuery(deps, {
       actor: input.actor,
       collectionId,
@@ -213,7 +231,10 @@ export async function readContinueOwnerPage(
       final.close();
     }
     return {
-      subjects: shown,
+      subjects:
+        summaries === null
+          ? shown
+          : shown.map((row) => ({ ...row, subject: summaries.get(row.subjectId) ?? null })),
       next:
         completed.length > input.limit
           ? await encodeListCursor(

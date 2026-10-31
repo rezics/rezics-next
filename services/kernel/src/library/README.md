@@ -436,7 +436,16 @@ never retains a definition, prepares a scope or saves evaluation progress. All r
 one reservation. Final reads mint a fresh native time and compare source, identity and exact source-version fences.
 Continue consumes native chronological original seeks and complete Source groups, completes timestamp ties before
 canonical ordering, and evaluates the existing accepted-state/session supports after releasing the owner snapshot.
-It creates no preparation, header, grant, touch, receipt or work intent.
+It creates no preparation, persistent source header or grant, touch, receipt or work intent.
+
+The existing Continue GET also accepts optional `view=BASIC|FULL`. An omitted view and `BASIC` preserve the original
+closed response exactly. `FULL` adds nullable `subject` using the native `SubjectSummarySchema`; `continue-query.ts`
+calls the existing `readSubjectSummaries` once with only the shown canonical IDs (at most 100), the request Actor,
+current Access binding, deadline, trusted route key and `Accept-Language` ranges. The summary reader retains its
+per-partition anchored batches and 256-ID ceiling. Unknown or currently withheld summaries remain `null`. The existing
+final owner, complete Source, disclosure and version comparisons run after this batch; a changed source returns the
+existing unavailable response without delivering either the page or its headers. The cursor binding, activity order,
+readiness, and BASIC shape are unchanged.
 
 This is default caller composition, not native readiness or main proof. In this checkout the actual
 `identity-scoped-observations.ts` factory returns `source_unready` and `public-filter-source.ts` returns

@@ -9,6 +9,8 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { createContinueReads } from './continue-reads.ts';
 import { sessionSchema } from './progress-routes.ts';
 import type { SearchService } from '../search/service-scope.ts';
+import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
+import { languageRanges } from '../semantic/language.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullableString = t.Union([t.String(), t.Null()]);
@@ -22,6 +24,7 @@ export const continuePageSchema = t.Object(
           state: nullableString,
           lastActivityAt: t.String(),
           activeProgressSession: t.Union([sessionSchema, t.Null()]),
+          subject: t.Optional(t.Union([SubjectSummarySchema, t.Null()])),
         },
         closed,
       ),
@@ -51,6 +54,7 @@ export function continueRoutes(
         {
           limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
           cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+          view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])),
         },
         closed,
       ),
@@ -58,7 +62,7 @@ export function continueRoutes(
         set.headers['cache-control'] = 'private, no-store';
         // Check the original URL before query coercion can discard unknown fields.
         for (const name of new URL(request.url).searchParams.keys())
-          if (name !== 'limit' && name !== 'cursor') throw new ProblemError('invalid_request');
+          if (name !== 'limit' && name !== 'cursor' && name !== 'view') throw new ProblemError('invalid_request');
       },
       response: {
         200: continuePageSchema,
@@ -82,7 +86,7 @@ export function continueRoutes(
         security: [{ bearerAuth: [] }],
       },
     },
-    async ({ actor, query, admission, job }) => {
+    async ({ actor, query, admission, job, request }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
       if (!actor.scopes.includes('library_entry:list') || !actor.scopes.includes('progress_session:list'))
         throw new ProblemError('forbidden', {
@@ -97,7 +101,12 @@ export function continueRoutes(
           deadline: job.deadline,
         });
         reads ??= createContinueReads({ ...deps, access: deps.access() });
-        return reads.list(actor, query, job.deadline);
+        return reads.list(
+          actor,
+          query,
+          job.deadline,
+          query.view === 'FULL' ? languageRanges(request.headers.get('accept-language')) : [],
+        );
       });
     },
   );

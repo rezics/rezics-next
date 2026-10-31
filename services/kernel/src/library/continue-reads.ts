@@ -11,12 +11,14 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { OwnerQueryDependencies } from './builtin-runtime-query.ts';
 import { readContinueOwnerPage } from './continue-query.ts';
 import type { ContinueActiveSession } from './continue-source.ts';
+import type { SubjectSummary } from '../semantic/summaries.ts';
 
 export type ContinueSubject = Readonly<{
   subjectId: string;
   state: string | null;
   lastActivityAt: string;
   activeProgressSession: ContinueActiveSession | null;
+  subject?: SubjectSummary | null;
 }>;
 export type ContinuePage = { subjects: ContinueSubject[]; next: string | null };
 
@@ -28,7 +30,12 @@ export function createContinueReads(
   },
 ) {
   return {
-    async list(actor: Actor, query: { limit?: number; cursor?: string }, deadline: number): Promise<ContinuePage> {
+    async list(
+      actor: Actor,
+      query: { limit?: number; cursor?: string; view?: 'BASIC' | 'FULL' },
+      deadline: number,
+      languages: readonly string[] = [],
+    ): Promise<ContinuePage> {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
       if (!actor.scopes.includes('library_entry:list') || !actor.scopes.includes('progress_session:list'))
         throw new ProblemError('forbidden', {
@@ -36,6 +43,8 @@ export function createContinueReads(
         });
       const limit = query.limit ?? 20;
       if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
+      if (query.view !== undefined && query.view !== 'BASIC' && query.view !== 'FULL')
+        throw new ProblemError('invalid_request');
       const accountActor = actor;
       const route = routeOf(accountActor.accountId);
       if (route === null) throw new ProblemError('forbidden');
@@ -101,6 +110,8 @@ export function createContinueReads(
           actor,
           limit,
           ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+          ...(query.view === undefined ? {} : { view: query.view }),
+          ...(query.view === 'FULL' ? { languages } : {}),
           deadline,
           snapshot,
           readVersion: () =>
