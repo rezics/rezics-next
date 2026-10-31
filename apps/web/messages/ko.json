@@ -1068,6 +1068,7 @@
   "inbox_empty": "새 알림이 없습니다.",
   "inbox_unavailable_item": "이 항목은 더 이상 볼 수 없습니다.",
   "inbox_load_more": "더 보기",
+  "inbox_start_first_page": "첫 페이지부터 보기",
   "inbox_page_retry_hint": "불러온 알림은 계속 볼 수 있습니다. 다음 페이지를 불러오려면 다시 시도하세요.",
   "inbox_unread_count": "읽지 않은 알림 {count}개",
   "nav_inbox": "받은 알림",

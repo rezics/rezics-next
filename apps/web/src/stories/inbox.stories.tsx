@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
+import { readInboxPage, type InboxPage } from '../inbox/inbox-read';
 import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
 import { AppShell } from '../shell/shell';
@@ -168,5 +169,131 @@ export const ViewerBecomesUnknown: Story = {
     await expect(main.queryByRole('list')).toBeNull();
     for (const id of ids) await expect(canvasElement.querySelector(`[data-notice-id="${id}"]`)).toBeNull();
     await expect(main.queryByText(m.inbox_seen_unavailable())).toBeNull();
+  },
+};
+
+const rejectedCursor = 'opaque.signed+rejected/cursor==';
+let restartRequests: (string | undefined)[] = [];
+
+function RejectedContinuationExample({ failedReset = false }: { failedReset?: boolean }) {
+  const loadPage = useMemo(() => {
+    restartRequests = [];
+    let firstPages = 0;
+    return async (cursor?: string): Promise<InboxPage> => {
+      restartRequests.push(cursor);
+      if (cursor !== undefined)
+        return { signedIn: true, state: 'unavailable', failure: { status: 409, retryAfter: '1' } };
+      firstPages++;
+      if (failedReset && firstPages === 2)
+        return { signedIn: true, state: 'unavailable', failure: { status: 503, retryAfter: '1' } };
+      // Illustrative IO sequence over existing fixture rows; no native cursor rejection is claimed.
+      const page = await readInboxPage({ data: {} });
+      if (!page.signedIn || page.state !== 'ready') return page;
+      const index = firstPages === 1 ? 0 : 1;
+      return {
+        ...page,
+        items: page.items.slice(index, index + 1).map((item) => ({ ...item, unread: false })),
+        next: firstPages === 1 ? rejectedCursor : null,
+      };
+    };
+  }, [failedReset]);
+  return (
+    <PatternStory visitor="Signed In" path="/inbox?fixture=mixed">
+      <InboxPageView loadPage={loadPage} />
+    </PatternStory>
+  );
+}
+
+const restartParameters = {
+  docs: {
+    description: {
+      story:
+        'Actual Inbox page with illustrative rejected-continuation IO and existing mixed fixture rows. Uses shared locale/theme globals; review at phone390 and desktop1280. Native, runtime and visual proof remain separate.',
+    },
+  },
+};
+
+async function rejectedContinuation({ canvasElement }: { canvasElement: HTMLElement }) {
+  const view = within(canvasElement);
+  await view.findByRole('list');
+  await expect(view.queryByRole('button', { name: m.inbox_start_first_page() })).toBeNull();
+  const loadMore = await view.findByRole('button', { name: m.inbox_load_more() });
+  await waitFor(() => expect(loadMore).toBeEnabled());
+  await userEvent.click(loadMore);
+  const status = await view.findByRole('status');
+  await expect(status).toHaveAttribute('data-response-status', '409');
+  await expect(view.queryByRole('list')).toBeNull();
+  await expect(view.queryByText(m.inbox_empty())).toBeNull();
+  const retry = within(status).getByRole('button', { name: m.inbox_retry() });
+  const restart = within(status).getByRole('button', { name: m.inbox_start_first_page() });
+  await expect(retry).toBeDisabled();
+  await expect(restart).toBeDisabled();
+  await waitFor(() => expect(retry).toBeEnabled(), { timeout: 5000 });
+  await expect(restart).toBeEnabled();
+  await expect(restartRequests).toEqual([undefined, rejectedCursor]);
+}
+
+export const RejectedContinuation: Story = {
+  name: 'Rejected continuation with separate first-page choice',
+  parameters: restartParameters,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <RejectedContinuationExample />,
+  play: async (context) => {
+    await rejectedContinuation(context);
+    const view = within(context.canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.inbox_retry() }));
+    await waitFor(() => expect(restartRequests).toEqual([undefined, rejectedCursor, rejectedCursor]));
+    await expect(view.getByRole('status')).toHaveAttribute('data-response-status', '409');
+    await waitFor(() => expect(view.getByRole('button', { name: m.inbox_start_first_page() })).toBeEnabled(), {
+      timeout: 5000,
+    });
+    await expect(view.queryByRole('list')).toBeNull();
+  },
+};
+
+export const RestartAfterRejectedContinuation: Story = {
+  name: 'Explicit first-page restart after rejection',
+  parameters: restartParameters,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  render: () => <RejectedContinuationExample />,
+  play: async (context) => {
+    await rejectedContinuation(context);
+    const view = within(context.canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.inbox_start_first_page() }));
+    const list = within(await view.findByRole('list'));
+    await expect(list.getAllByRole('listitem').map((row) => row.getAttribute('data-notice-id'))).toEqual([
+      '01a17a3b-0884-721b-91ef-d7ffd7bb5802',
+    ]);
+    await expect(restartRequests).toEqual([undefined, rejectedCursor, undefined]);
+    await expect(view.queryByRole('button', { name: m.inbox_load_more() })).toBeNull();
+    await expect(view.queryByRole('button', { name: m.inbox_start_first_page() })).toBeNull();
+    await expect(view.queryByText(m.inbox_unavailable())).toBeNull();
+  },
+};
+
+export const FirstPageRestartUnavailable: Story = {
+  name: 'First-page restart unavailable, then deliberate retry',
+  parameters: restartParameters,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <RejectedContinuationExample failedReset />,
+  play: async (context) => {
+    await rejectedContinuation(context);
+    const view = within(context.canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.inbox_start_first_page() }));
+    const status = await view.findByRole('status');
+    await expect(status).toHaveAttribute('data-response-status', '503');
+    await expect(view.queryByRole('list')).toBeNull();
+    await expect(view.queryByText(m.inbox_empty())).toBeNull();
+    await expect(view.queryByRole('button', { name: m.inbox_start_first_page() })).toBeNull();
+    const retry = within(status).getByRole('button', { name: m.inbox_retry() });
+    await expect(retry).toBeDisabled();
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 5000 });
+    await expect(restartRequests).toEqual([undefined, rejectedCursor, undefined]);
+    await userEvent.click(retry);
+    const list = within(await view.findByRole('list'));
+    await expect(list.getAllByRole('listitem').map((row) => row.getAttribute('data-notice-id'))).toEqual([
+      '01a17a3b-0884-721b-91ef-d7ffd7bb5802',
+    ]);
+    await expect(restartRequests).toEqual([undefined, rejectedCursor, undefined, undefined]);
   },
 };

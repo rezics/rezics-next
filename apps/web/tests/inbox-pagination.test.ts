@@ -5,6 +5,7 @@ import {
   nextInboxPage,
   readableInboxPage,
   receiveInboxPage,
+  restartInboxPage,
 } from '../src/inbox/inbox-pagination';
 import type { InboxPage, ResolvedInboxPage } from '../src/inbox/inbox-read';
 
@@ -111,5 +112,55 @@ test('signed-out, closed and non-transient native failures erase retained rows p
     expect(readableInboxPage(receiveInboxPage(cleared, undefined))).toBeNull();
     expect(readableInboxPage(receiveInboxPage(cleared, inboxTransportFailure))).toBeNull();
     expect(readableInboxPage(receiveInboxPage(cleared, ready([item('fresh')], null)))?.items).toEqual([item('fresh')]);
+  }
+});
+
+test('Let an Inbox reader restart after a rejected continuation with original request/privacy/recovery bounds intact', () => {
+  const first = receiveInboxPage(emptyInboxPagination, ready([item('original')], secondCursor));
+  expect(restartInboxPage(emptyInboxPagination)).toBe(emptyInboxPagination);
+  expect(restartInboxPage(first)).toBe(first);
+  const continuation = nextInboxPage(first);
+  expect(restartInboxPage(continuation)).toBe(continuation);
+  for (const status of [400, 409, 410]) {
+    const rejection: InboxPage = {
+      signedIn: true,
+      state: 'unavailable',
+      failure: { status, requestId: 'rejected-cursor', retryAfter: '2' },
+    };
+    const failed = receiveInboxPage(continuation, rejection);
+    expect(failed.cursor).toBe(secondCursor);
+    expect(failed.result).toBe(rejection);
+    expect(readableInboxPage(failed)).toBeNull();
+    expect(nextInboxPage(failed)).toBe(failed);
+    const exactRetry = receiveInboxPage(failed, { ...rejection });
+    expect(exactRetry.cursor).toBe(secondCursor);
+    expect(readableInboxPage(exactRetry)).toBeNull();
+    const reset = restartInboxPage(exactRetry);
+    expect(reset.cursor).toBeUndefined();
+    expect(readableInboxPage(reset)).toBeNull();
+    const fresh = receiveInboxPage(reset, ready([item('current-first')], thirdCursor));
+    expect(readableInboxPage(fresh)).toEqual({ items: [item('current-first')], next: thirdCursor });
+    expect(nextInboxPage(fresh).cursor).toBe(thirdCursor);
+  }
+});
+
+test('a failed first-page restart cannot resurrect the abandoned chain, including after a transient continuation failure or native viewer denial', () => {
+  const first = receiveInboxPage(emptyInboxPagination, ready([item('old-private-row')], secondCursor));
+  const failed = receiveInboxPage(nextInboxPage(first), inboxTransportFailure);
+  expect(readableInboxPage(failed)?.items).toEqual([item('old-private-row')]);
+  const reset = restartInboxPage(failed);
+  expect(readableInboxPage(reset)).toBeNull();
+  for (const failure of [
+    inboxTransportFailure,
+    { signedIn: false },
+    { signedIn: true, state: 'unavailable', failure: { status: 403, code: 'forbidden' } },
+  ] satisfies InboxPage[]) {
+    const resetFailed = receiveInboxPage(reset, failure);
+    expect(resetFailed.cursor).toBeUndefined();
+    expect(readableInboxPage(resetFailed)).toBeNull();
+    expect(restartInboxPage(resetFailed)).toBe(resetFailed);
+    expect(readableInboxPage(receiveInboxPage(resetFailed, inboxTransportFailure))).toBeNull();
+    const recovered = receiveInboxPage(resetFailed, ready([item('new-private-row')], null));
+    expect(readableInboxPage(recovered)?.items).toEqual([item('new-private-row')]);
   }
 });

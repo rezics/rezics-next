@@ -5,14 +5,20 @@ import { ListRow, ListRowLink } from '@rezics/ui/list-row';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Flag, Gavel, MessageCircleReply } from 'lucide-react';
-import { inboxPageQuery, markInboxViewerSeen, type InboxPageLoader } from './inbox-query';
+import { inboxPageQuery, inboxViewerQueryKey, markInboxViewerSeen, type InboxPageLoader } from './inbox-query';
 import { useInboxViewer, type InboxViewer } from './inbox-viewer';
 import { InboxEntryState } from './inbox-entry-state';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
 import { usePreferenceRetry } from '../settings/preference-failure-retry';
-import { emptyInboxPagination, nextInboxPage, readableInboxPage, receiveInboxPage } from './inbox-pagination';
+import {
+  emptyInboxPagination,
+  nextInboxPage,
+  readableInboxPage,
+  receiveInboxPage,
+  restartInboxPage,
+} from './inbox-pagination';
 import type { InboxSeenAttempt, ResolvedInboxPage } from './inbox-read';
 
 function kindLabel(item: ResolvedInboxPage['items'][number]) {
@@ -192,6 +198,14 @@ export function ViewerInboxPage({
     if (next === received) void pageQuery.refetch();
     else setPagination(next);
   };
+  const startAtFirstPage = () => {
+    if (pageQuery.isFetching || waiting || !viewer.isCurrent()) return;
+    const first = restartInboxPage(received);
+    if (first === received) return;
+    // Discard cached pages and cancel their responses before observing the same native first-page query.
+    queryClient.removeQueries({ queryKey: inboxViewerQueryKey(viewer) });
+    setPagination(first);
+  };
   const failed = pageQuery.isError || operationState !== null;
   const failure = failed ? (
     <section
@@ -212,14 +226,20 @@ export function ViewerInboxPage({
         <p className="mt-2 text-sm text-muted-foreground">{m.inbox_page_retry_hint()}</p>
       ) : null}
       {waiting ? <p className="mt-2 text-sm text-muted-foreground">{m.settings_retry_wait()}</p> : null}
-      <Button
-        variant="outline"
-        className="mt-4"
-        onClick={() => void pageQuery.refetch()}
-        disabled={pageQuery.isFetching || waiting}
-      >
-        {m.inbox_retry()}
-      </Button>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Button
+          variant="outline"
+          onClick={() => void pageQuery.refetch({ cancelRefetch: false })}
+          disabled={pageQuery.isFetching || waiting}
+        >
+          {m.inbox_retry()}
+        </Button>
+        {cursor !== undefined ? (
+          <Button variant="outline" onClick={startAtFirstPage} disabled={pageQuery.isFetching || waiting}>
+            {m.inbox_start_first_page()}
+          </Button>
+        ) : null}
+      </div>
     </section>
   ) : null;
 

@@ -1068,6 +1068,7 @@
   "inbox_empty": "新しい通知はありません。",
   "inbox_unavailable_item": "この項目は現在利用できません。",
   "inbox_load_more": "さらに読み込む",
+  "inbox_start_first_page": "最初のページから表示",
   "inbox_page_retry_hint": "読み込み済みの通知は引き続き確認できます。再試行して次のページを読み込んでください。",
   "inbox_unread_count": "未読通知 {count} 件",
   "nav_inbox": "受信箱",

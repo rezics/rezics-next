@@ -1068,6 +1068,7 @@
   "inbox_empty": "Du bist auf dem neuesten Stand.",
   "inbox_unavailable_item": "Dieser Eintrag ist nicht mehr verfügbar.",
   "inbox_load_more": "Mehr laden",
+  "inbox_start_first_page": "Auf der ersten Seite beginnen",
   "inbox_page_retry_hint": "Die geladenen Benachrichtigungen bleiben verfügbar. Versuche erneut, die nächste Seite zu laden.",
   "inbox_unread_count": "{count} ungelesene Benachrichtigungen",
   "nav_inbox": "Posteingang",

@@ -6,6 +6,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient } from '@tanstack/react-query';
 import { ReporterStatusView } from '../src/moderation/reporter-status-view';
 import type { ReporterStatus } from '../src/moderation/reporter-status-model';
+import type { InboxPage } from '../src/inbox/inbox-read';
+import {
+  emptyInboxPagination,
+  nextInboxPage,
+  readableInboxPage,
+  receiveInboxPage,
+  restartInboxPage,
+} from '../src/inbox/inbox-pagination';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { resolveInboxItems } = await import('../src/inbox/inbox-read');
 const { unreadBadgeLabel } = await import('../src/inbox/unread-badge');
@@ -567,5 +575,123 @@ test('malformed native notice pages refuse all target and seen IO before any row
     const result = await loadInboxPage(client, 'reporter-1', 'Bearer reporter').catch(inboxReadFailure);
     expect(result).toEqual({ signedIn: true, state: 'unavailable', failure: { status: 200 } });
     expect(requests).toEqual(['GET /v1/accounts/reporter-1/notifications']);
+  }
+});
+
+test('rejected native cursors retry the identical GET and only an explicit restart omits the cursor, with unchanged page and distinct-target bounds', async () => {
+  const { inboxReadFailure } = await import('../src/inbox/inbox-read');
+  const cursor = 'opaque.signed+rejected/cursor==';
+  for (const status of [400, 409, 410]) {
+    const requests: Request[] = [];
+    let firstPages = 0;
+    const client = createKernelClient('http://kernel.local', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+        const url = new URL(request.url);
+        if (url.pathname.endsWith('/notifications')) {
+          expect(request.headers.get('authorization')).toBe('Bearer reader');
+          expect(url.searchParams.get('limit')).toBe('20');
+          if (url.searchParams.has('cursor')) {
+            expect(url.searchParams.get('cursor')).toBe(cursor);
+            return Response.json({ status, request_id: 'cursor-rejected' }, { status, headers: { 'Retry-After': '2' } });
+          }
+          firstPages++;
+          return Response.json({
+            items: [0, 1].map((index) => notice({ id: `${firstPages === 1 ? 'old' : 'current'}-${index}` })),
+            next: firstPages === 1 ? cursor : null,
+          });
+        }
+        if (url.pathname === '/v1/accounts') {
+          expect(url.searchParams.get('ids')).toBe('actor-1');
+          return Response.json({ accounts: [{ id: 'actor-1', displayName: 'Momo' }] });
+        }
+        expect(url.pathname).toBe(`/v1/posts/${post}`);
+        return Response.json({ post: { threadId: thread, body: { type: 'doc', content: [] } } });
+      }) as typeof fetch,
+    });
+    const read = async (value?: string): Promise<InboxPage> =>
+      loadInboxPage(client, 'reader', 'Bearer reader', value)
+        .then((page): InboxPage => ({ signedIn: true, state: 'ready', ...page }))
+        .catch(inboxReadFailure);
+    let state = receiveInboxPage(emptyInboxPagination, await read());
+    state = nextInboxPage(state);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      state = receiveInboxPage(state, await read(state.cursor));
+      expect(state.cursor).toBe(cursor);
+      expect(state.result).toEqual({
+        signedIn: true,
+        state: 'unavailable',
+        failure: { status, requestId: 'cursor-rejected', retryAfter: '2' },
+      });
+      expect(readableInboxPage(state)).toBeNull();
+      expect(firstPages).toBe(1);
+    }
+    state = restartInboxPage(state);
+    state = receiveInboxPage(state, await read(state.cursor));
+    expect(readableInboxPage(state)?.items.map(({ id }) => id)).toEqual(['current-0', 'current-1']);
+    expect(readableInboxPage(state)?.next).toBeNull();
+    const urls = requests.map((request) => new URL(request.url));
+    expect(requests.every((request) => request.method === 'GET')).toBe(true);
+    expect(urls.filter((url) => url.pathname.endsWith('/notifications')).map((url) => url.searchParams.get('cursor')))
+      .toEqual([null, cursor, cursor, null]);
+    expect(urls.filter((url) => url.pathname === `/v1/posts/${post}`)).toHaveLength(2);
+    expect(urls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(2);
+    expect(requests).toHaveLength(8);
+  }
+});
+
+test('discarded page responses cannot repopulate a restarted chain or outlive a viewer denial, and resetting pages leaves the badge alone', async () => {
+  for (const loseViewer of [false, true]) {
+    const client = new QueryClient();
+    const store = inboxViewerStore(client);
+    const unsubscribe = store.subscribe(() => {});
+    try {
+      client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'same-token' });
+      const viewer = store.snapshot()!;
+      const countKey = unreadCountQueryFor(viewer).queryKey;
+      client.setQueryData(countKey, { signedIn: true, state: 'ready', count: 7, capped: false });
+      const oldPage = deferred<InboxPage>();
+      const old = client.fetchQuery(inboxPageQuery(viewer, undefined, () => oldPage.promise)).catch(() => null);
+      const loaded = receiveInboxPage(emptyInboxPagination, {
+        signedIn: true, state: 'ready', items: [], next: 'rejected-cursor',
+      });
+      const rejected = receiveInboxPage(nextInboxPage(loaded), {
+        signedIn: true, state: 'unavailable', failure: { status: 409 },
+      });
+      const reset = restartInboxPage(rejected);
+      client.removeQueries({ queryKey: inboxViewerQueryKey(viewer) });
+      const currentPage = deferred<InboxPage>();
+      let reads = 0;
+      const query = inboxPageQuery(viewer, reset.cursor, () => {
+        reads++;
+        return currentPage.promise;
+      });
+      const fresh = client.fetchQuery(query).catch(() => undefined);
+      const coalesced = client.fetchQuery(query).catch(() => undefined);
+      expect(reads).toBe(1);
+      if (loseViewer) {
+        client.setQueryData(['session'], { state: 'unavailable', subject: null, csrfToken: null });
+        client.setQueryData(['session'], { state: 'signed-in', subject: 'bob', csrfToken: 'same-token' });
+      }
+      const current: InboxPage = { signedIn: true, state: 'ready', items: [], next: null };
+      currentPage.resolve(current);
+      const result = await fresh;
+      expect(await coalesced).toBe(result);
+      const obsolete: InboxPage = {
+        signedIn: true, state: 'ready',
+        items: [{ ...notice(), text: 'Old private content', unavailable: false }], next: 'old-continuation',
+      };
+      oldPage.resolve(obsolete);
+      await old;
+      expect(client.getQueryData(query.queryKey)).toEqual(loseViewer ? undefined : current);
+      expect(readableInboxPage(receiveInboxPage(reset, result))).toEqual(loseViewer ? null : { items: [], next: null });
+      expect(client.getQueryData(countKey)).toMatchObject({ count: 7 });
+      expect(client.getQueryState(countKey)?.isInvalidated).toBe(false);
+      if (loseViewer) expect(client.getQueryData(inboxPageQuery(store.snapshot()!).queryKey)).toBeUndefined();
+    } finally {
+      unsubscribe();
+      client.clear();
+    }
   }
 });
