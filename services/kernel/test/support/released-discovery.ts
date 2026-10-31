@@ -16,7 +16,9 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, QueryResult, QueryResultRow } from 'pg';
 import type { HttpResponse, Persona, StatementInput, Subject } from '../../../../specs/semantic-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import type { Access } from '../../src/request/access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { isRelationProperty } from '../../src/semantic/item.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { withReadTransaction } from '../../src/semantic/read.ts';
@@ -36,6 +38,11 @@ export const releasedDiscoveryVersion = 1 as const;
 type Account = Awaited<ReturnType<SemanticOutcomeDriver['fixtures']['person']>>;
 export type DiscoveryPersona = Persona | 'alice' | 'bob' | 'outsider' | 'unscoped';
 export type DiscoveryAccountName = 'alice' | 'bob' | 'outsider' | 'unscoped';
+export type ReleasedDiscoveryClock = Readonly<{
+  now(): Date;
+  freeze(): Date;
+  advanceBy(milliseconds: number): Date;
+}>;
 export type DiscoveryScopedTransport = Readonly<{
   accountId: string;
   request(
@@ -95,6 +102,7 @@ export type RecipeGroup = Readonly<{
 /** Closed extension points name missing owner data without pretending an API exists. */
 export interface ReleasedDiscoveryFixture {
   readonly version: 1;
+  readonly clock: ReleasedDiscoveryClock;
   readonly search?: ReleasedDiscoveryRuntime;
   readonly release: { digest: string; definition: Release; activeHead: number };
   readonly personas: Readonly<Record<'alice' | 'bob' | 'outsider' | 'unscoped', Account>>;
@@ -127,6 +135,7 @@ export interface ReleasedDiscoveryFixture {
     operation?: 'set' | 'unassign' | 'restore',
   ): Promise<void>;
   scoped(persona: 'alice' | 'bob', scopes: readonly string[]): Promise<DiscoveryScopedTransport>;
+  signIn(persona: DiscoveryAccountName | 'suspended'): Promise<HttpResponse>;
   /** Trusted test SQL on the owned kernel database, within the existing native read-only transaction. */
   inspect<Row extends QueryResultRow = QueryResultRow>(
     sql: string,
@@ -193,12 +202,46 @@ export async function createReleasedDiscoveryFixture(
   },
 ): Promise<ReleasedDiscoveryFixture> {
   if (options.version !== releasedDiscoveryVersion) throw new Error('Unsupported released discovery fixture version');
+  let closed = false;
+  const requireOpen = () => {
+    if (closed) throw new Error('Released discovery fixture is closed');
+  };
+  let frozenAt: number | undefined;
+  // This same function remains callable by native cleanup after the public controls close.
+  const kernelClock: KernelClock = () => new Date(frozenAt ?? systemClock().getTime());
+  const clock: ReleasedDiscoveryClock = {
+    now: kernelClock,
+    freeze() {
+      requireOpen();
+      frozenAt ??= systemClock().getTime();
+      return kernelClock();
+    },
+    advanceBy(milliseconds) {
+      requireOpen();
+      if (frozenAt === undefined) throw new Error('Released discovery clock must be frozen before advancing');
+      if (!Number.isSafeInteger(milliseconds) || milliseconds < 0)
+        throw new Error('Clock advance must be a finite nonnegative safe integer');
+      const next = frozenAt + milliseconds;
+      if (!Number.isSafeInteger(next) || next > 8_640_000_000_000_000)
+        throw new Error('Released discovery clock overflow');
+      frozenAt = next;
+      return kernelClock();
+    },
+  };
   const native = options.search === 'native' ? releasedDiscoveryRuntime(options.kernelPool) : undefined;
   const driver = await createSemanticDriver(
     (config) =>
       createKernel({
         receiptKeys: testReceiptKeys(),
         ...config,
+        ...(config.onAccessReady || native
+          ? {
+              onAccessReady(access: Access) {
+                config.onAccessReady?.(access);
+                native?.onAccessReady(access);
+              },
+            }
+          : {}),
         ...(native ? { search: native.service(config) } : {}),
         writeRate: createWriteRateLimiter({
           secret: 'released-discovery-native-test-rate-secret',
@@ -207,6 +250,7 @@ export async function createReleasedDiscoveryFixture(
       }),
     {
       strictCleanup: true,
+      clock: kernelClock,
       ...(options.kernelPool ? { kernelPool: options.kernelPool } : {}),
       ...(native
         ? {
@@ -225,10 +269,6 @@ export async function createReleasedDiscoveryFixture(
       driver.fixtures.person('discovery-unscoped', { scopes: [] }),
     ]);
     const personas = { alice, bob, outsider, unscoped };
-    let closed = false;
-    const requireOpen = () => {
-      if (closed) throw new Error('Released discovery fixture is closed');
-    };
     const request: ReleasedDiscoveryFixture['request'] = (persona, method, path, body, headers) => {
       if (persona === 'alice' || persona === 'bob' || persona === 'outsider' || persona === 'unscoped')
         return driver.fixtures.send(personas[persona], method, path, body, headers);
@@ -334,6 +374,7 @@ export async function createReleasedDiscoveryFixture(
     let recipes: RecipeGroup | undefined;
     const fixture: ReleasedDiscoveryFixture = {
       version: releasedDiscoveryVersion,
+      clock,
       ...(native ? { search: native.control } : {}),
       release: {
         digest: bundledDigest,
@@ -362,7 +403,7 @@ export async function createReleasedDiscoveryFixture(
       ),
       privacy: pending(
         'accounts',
-        'Native suspension fences and advances the authentication floor, revoking the existing driver bearer (401). Accounts must provide a current verified suspended bearer for account_suspended 403 without treating revoked credentials as valid. Content moderation/source fences/consent and delegated actors must also produce withheld harem, hidden original/readable terminal and foreign repair.',
+        'Native suspension fences and advances the authentication floor, revoking the existing driver bearer (401). Raw native correct-password sign-in of the retained suspended account must return account_suspended 403 with code ACCOUNT_SUSPENDED and no session. Content moderation/source fences/consent and delegated actors must also produce withheld harem, hidden original/readable terminal and foreign repair.',
       ),
       profiles: pending(
         'semantic',
@@ -373,6 +414,12 @@ export async function createReleasedDiscoveryFixture(
         'Adopt released same-statement platform/language/date qualifier grammar: inLanguage currently string, not a Concept or credit role.',
       ),
       request,
+      async signIn(persona) {
+        requireOpen();
+        if (persona === 'suspended') return driver.fixtures.signIn(await driver.fixtures.person('suspended'));
+        if (!Object.hasOwn(personas, persona)) throw new Error('Sign-in requires a named discovery account');
+        return driver.fixtures.signIn(personas[persona]);
+      },
       async reviewedCatalogueOperator(persona) {
         requireOpen();
         // The explicit test operator receives real native Access grants, never an importer default.
@@ -409,7 +456,7 @@ export async function createReleasedDiscoveryFixture(
         requireOpen();
         // Delivered DAO seam: authenticate the real bearer, then use the real scoped owner command runner.
         const actor = await driver.fixtures.authenticatedAccount(personas[persona]);
-        await createLibraryCommandRunner({ pool: driver.fixtures.pool }).ownAccount(
+        await createLibraryCommandRunner({ pool: driver.fixtures.pool, clock: kernelClock }).ownAccount(
           actor,
           {
             action: 'library_entry:update',

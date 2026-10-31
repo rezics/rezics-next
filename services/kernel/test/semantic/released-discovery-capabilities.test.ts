@@ -6,6 +6,9 @@ import {
   type ReleasedDiscoveryFixture,
 } from '../support/released-discovery.ts';
 import { createSemanticDriver } from './outcome-driver.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { accessClock } from '../../src/access/access-clock.ts';
+import type { Access } from '../../src/request/access.ts';
 
 let fixture: ReleasedDiscoveryFixture;
 let book: string;
@@ -169,6 +172,33 @@ test('explicit named Space setup preserves native persona identity and independe
   expect(await openings()).toEqual(['collections', 'personal_library', 'reading_progress']);
 }, 120_000);
 
+test('discovery clock follows wall time until frozen and rejects invalid or overflowing advances without mutation', () => {
+  const before = Date.now();
+  const wall = fixture.clock.now();
+  expect(wall.getTime()).toBeGreaterThanOrEqual(before);
+  expect(wall.getTime()).toBeLessThanOrEqual(Date.now());
+  expect(() => fixture.clock.advanceBy(0)).toThrow('frozen');
+  const frozen = fixture.clock.freeze();
+  const at = frozen.getTime();
+  wall.setTime(0);
+  frozen.setTime(0);
+  expect(fixture.clock.freeze().getTime()).toBe(at);
+  const copy = fixture.clock.now();
+  copy.setTime(0);
+  expect(fixture.clock.now().getTime()).toBe(at);
+  for (const invalid of [-1, 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    expect(() => fixture.clock.advanceBy(invalid)).toThrow('safe integer');
+    expect(fixture.clock.now().getTime()).toBe(at);
+  }
+  expect(() => fixture.clock.advanceBy(Number.MAX_SAFE_INTEGER)).toThrow('overflow');
+  expect(fixture.clock.now().getTime()).toBe(at);
+  const advanced = fixture.clock.advanceBy(1);
+  expect(advanced.getTime()).toBe(at + 1);
+  advanced.setTime(0);
+  expect(fixture.clock.advanceBy(0).getTime()).toBe(at + 1);
+  expect(fixture.clock.freeze().getTime()).toBe(at + 1);
+});
+
 test('owned database inspection is native read-only and expires with fixture cleanup', async () => {
   const before = await entryRows();
   await expect(
@@ -202,4 +232,70 @@ test('native scope variants reject known scope escalation and preserve the origi
   } finally {
     await driver.close();
   }
+}, 180_000);
+
+test('driver forwards the same trusted clock to installed Access and raw sign-in validates retained account identity and lifetime', async () => {
+  const clock = () => new Date();
+  let installed: Access | undefined;
+  const driver = await createSemanticDriver(
+    (config) => {
+      expect(config.clock).toBe(clock);
+      return createKernel({
+        ...config,
+        onAccessReady(access) {
+          config.onAccessReady?.(access);
+          installed = access;
+        },
+      });
+    },
+    { clock },
+  );
+  const original = await driver.fixtures.person('raw-signin');
+  try {
+    expect(installed).toBeDefined();
+    expect(accessClock(installed!)).toBe(clock);
+    const retained = { ...original };
+    await expect(driver.fixtures.signIn({ ...original })).rejects.toThrow('existing native');
+    const signed = await driver.fixtures.signIn(original);
+    status(signed, 200);
+    expect(signed.headers.getSetCookie().length).toBeGreaterThan(0);
+    expect(signed.body).not.toHaveProperty('access_token');
+    expect(original).toEqual(retained);
+    expect(await driver.fixtures.person('raw-signin')).toBe(original);
+    status(await driver.fixtures.send(original, 'GET', '/v1/definitions/active'), 200);
+  } finally {
+    await driver.close();
+  }
+  await expect(driver.fixtures.signIn(original)).rejects.toThrow('closed');
+}, 180_000);
+
+test('The existing single native discovery world forwards its actual installed Access and one shared Kernel clock and exposes raw native sign-in for the retained original fixture account', async () => {
+  const native = await createReleasedDiscoveryFixture({ version: 1, search: 'native' });
+  try {
+    // The native runtime requires installed Access and retains the actual missing Source prerequisite.
+    expect(await native.search!.preparePublication(1, { deadline: Date.now() + 10_000 })).toMatchObject({
+      status: 'unready',
+      reason: 'source_pending',
+    });
+    const original = { ...native.personas.alice };
+    const signed = await native.signIn('alice');
+    status(signed, 200);
+    expect(signed.headers.getSetCookie().length).toBeGreaterThan(0);
+    expect(signed.body).not.toHaveProperty('access_token');
+    expect(native.personas.alice).toEqual(original);
+    const suspended = await native.signIn('suspended');
+    status(suspended, 403);
+    expect(suspended.body).toEqual({ error: 'account_suspended', code: 'ACCOUNT_SUSPENDED' });
+    expect(suspended.headers.getSetCookie()).toEqual([]);
+    problem(await native.request('suspended', 'GET', '/v1/definitions/active'), 401, 'invalid_credentials');
+    const frozen = native.clock.freeze().getTime();
+    expect(native.clock.advanceBy(1).getTime()).toBe(frozen + 1);
+    await expect(native.signIn('invented' as 'alice')).rejects.toThrow('named discovery');
+  } finally {
+    await native.close();
+  }
+  expect(() => native.clock.advanceBy(0)).toThrow('closed');
+  expect(() => native.clock.freeze()).toThrow('closed');
+  expect(Number.isFinite(native.clock.now().getTime())).toBe(true);
+  await expect(native.signIn('alice')).rejects.toThrow('closed');
 }, 180_000);

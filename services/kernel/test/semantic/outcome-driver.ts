@@ -22,6 +22,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
@@ -111,6 +112,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
       authJwksUrl: string;
     };
     person(name: string, options?: { scopes?: readonly string[] }): Promise<Account>;
+    signIn(account: Account): Promise<HttpResponse>;
     authenticatedAccount(account: Account): Promise<AccountActor>;
     scopeVariant(account: Account, scopes: readonly string[]): Promise<Account>;
     openFeatures(groups: readonly ReleasedDiscoveryFeature[]): Promise<void>;
@@ -126,6 +128,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
 };
 
 export type SemanticOutcomeOptions = {
+  clock?: KernelClock;
   /** Named development gate grants for the original fourteen semantic capability scenarios only. */
   originalCapabilities?: boolean;
   /** Actual HTTP/relay runtime pool; fixture seeding and inspection keep their own pool. */
@@ -237,6 +240,7 @@ async function startDriver(
     let access!: ReturnType<typeof createAccess>;
     const app = compose({
       pool: runtimePool,
+      ...(options.clock ? { clock: options.clock } : {}),
       routeKey,
       tokens: sessionKeys,
       writeRate: createWriteRateLimiter({
@@ -278,6 +282,7 @@ async function startDriver(
       const bindings = createNativeAccountBindings({
         pool: bindingPool,
         access,
+        ...(options.clock ? { clock: options.clock } : {}),
         actions,
         routeKey,
         referenceKeys: sessionKeys,
@@ -357,6 +362,20 @@ async function startDriver(
     }
 
     const credentials = new WeakMap<Account, { email: string; scopes: readonly string[] }>();
+    async function signIn(account: Account): Promise<HttpResponse> {
+      if (completion) throw new Error('Semantic outcome fixture is closed');
+      const original = credentials.get(account);
+      if (!original) throw new Error('Sign-in requires an existing native fixture account');
+      return jsonResponse(
+        await service.handler(
+          new Request(`${issuer}/signin`, {
+            method: 'POST',
+            headers: { origin: issuer, 'content-type': 'application/json' },
+            body: JSON.stringify({ email: original.email, password, client_id: clientId, scope: original.scopes }),
+          }),
+        ),
+      );
+    }
     const people = new Map<string, { scopes: string; account: Promise<Account> }>();
     async function person(name: string, options?: { scopes?: readonly string[] }): Promise<Account> {
       const requested = options?.scopes === undefined ? scopes : options.scopes;
@@ -520,7 +539,7 @@ async function startDriver(
     ]);
 
     const boundary = { pool, deadline: Date.now() + 10_000 };
-    await createSuspensionCommands({ pool, access, clock: () => new Date() }).suspend(
+    await createSuspensionCommands({ pool, access, clock: options.clock ?? systemClock }).suspend(
       { ...boundary, actor: await access.authenticate(governor.bearer, boundary) },
       { accountId: accounts.suspended.accountId, key: randomUUID() },
     );
@@ -616,6 +635,7 @@ async function startDriver(
           authJwksUrl: required(runtimeAuth?.jwksUrl, 'Kernel did not construct Access with the Auth JWKS URL'),
         },
         person,
+        signIn,
         scopeVariant,
         async openFeatures(groups) {
           if (completion) throw new Error('Semantic outcome fixture is closed');
