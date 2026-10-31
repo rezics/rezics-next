@@ -1136,7 +1136,7 @@
   "decision_refresh": "Actualizar el estado actual",
   "decision_refreshing": "Comprobando el estado actual…",
   "decision_appeal_explanation": "Quien escribió el contenido originalmente puede presentar una apelación una sola vez, hasta la fecha límite inclusive, 183 días después de la decisión. La revisará otra persona moderadora.",
-  "decision_authority_hint": "Al enviar la apelación, se comprueba si constas actualmente como autor, el plazo y si ya existe una apelación. Este formulario no confirma que cumplas los requisitos para apelar.",
+  "decision_authority_hint": "Al enviar la apelación, se comprueba si figuras actualmente como autor, si estás dentro del plazo y si ya existe una apelación. Este formulario no confirma que cumplas los requisitos para apelar.",
   "decision_author_only": "Solo quien escribió el contenido originalmente puede presentar una apelación. El estado de una apelación existente se muestra arriba cuando está disponible.",
   "decision_pending_explanation": "La consulta de la decisión confirma que ya existe una apelación. Una persona moderadora independiente aún no ha registrado un resultado. No puedes presentar otra apelación para esta decisión.",
   "decision_review_heading": "Revisión independiente completada",
