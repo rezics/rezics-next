@@ -2036,6 +2036,53 @@ New personal metadata stays closed until its source-approved subject/context and
 A recorded owner never proves absence of other people; JSON, address, handle and ciphertext searches cannot
 supply attribution. Unknown creation/release witnesses remain pending until their actual source consumers retire.
 
+### Historical configuration disposition
+
+`internal.scrubMetadataConfiguration(store)` implements the adopted whole-field disposition for
+`auth_client`, `oauthResource` and `oauthClientResource`. Each native maintenance tick runs one separately
+committed page per store, through separate count-only DBOS steps. A page admits two raw primary keys, reserving
+the rest of the 48-key ceiling for existing old/new erasure and native role guards, exact-row inspection and
+the deployment checkpoint. SQL returns keys and presence booleans only; it never returns or parses historical
+JSON, addresses, handles, labels or claims. Locators are bounded to 1 KiB and returned control data to 64 KiB.
+An oversized key returns `locator-too-large` without its bytes and holds that store's boundary. Other stores
+continue independently. Native fence and writer-version refusals stay pending through their existing owners.
+
+`auth_metadata_scrub` stores only store, writer version and the last committed raw key. Empty tails wrap to
+revisit pending rows after source replacement. Payload changes and the boundary commit or roll back together;
+there is no ready bit, completion flag, coverage certificate or participant acknowledgement. Clean rows avoid
+rewrites. This deployment pass neither discovers people nor infers ownership from a linked client.
+
+The client pass removes contacts, arbitrary metadata outside the sole native website consumer, provider
+name/URI/icon/terms/policy, software identifiers/versions/statements and unproven `display_name`. Resource and
+link metadata are removed independently, including resources shared by living clients. Unproven resource names
+become the inert empty string; resources are never deleted by this operation. IDs, ownership, first-party and
+scope ceilings, redirect/logout URLs, JWKS and other protocol-authority fields remain under their existing commands.
+Legacy provider `referenceId` stays precisely pending because this slice has no source command retiring that
+authority. Native website metadata and resource `customClaims` also stay pending rather than changing token
+authorization through a maintenance write.
+
+The website admission read blocks historical metadata, provider references and custom resource claims before
+the provider consumes them. The existing `registerWebsiteClient` transaction replaces metadata/claims for its
+actual configured audience and reasserts the real `REZICS API` constant alongside its existing validated keys,
+scopes and exact callback configuration. A failed replacement rolls back all of those fields. Unknown resources
+remain independently pending; registering one audience never certifies any other resource or historical copy.
+
+Native configuration triggers suppress new unsupported free-field writes, including raw provider/import SQL.
+They preserve existing consumer-used inputs until the actual source replaces them. Unsupported replacement
+claims, references and metadata are never adopted; clearing a consumer-used value requires its actual source
+command. Presence checks and assignment preserve opaque originals without JSON comparison or traversal. No
+personal metadata producer is enabled. The trusted deployment `registerClient` command supplies the actual
+application label, never a `safe` assertion; callers must supply application constants without person-derived
+interpolation. Its transaction binds the exact configured client and label to field-specific writer provenance.
+Website resource provenance similarly binds the exact resource and service constant. Copying a label or setting
+the provenance column directly supplies no provenance. Exact `create-or-match` replay still preserves the existing
+row. Client/session/inventory reads withhold historical unproven labels before the scrub reaches them.
+
+`test/metadata-config-scrub.test.ts` covers previous-schema historical rows, whole-field disposal, independent
+shared resources, resumable rollback, bounded raw locators, native writer guards and actual website replacement.
+Shared/provider archives and histories still require their own supported disposition and custody. None of these
+native pages proves final erasure, closes the personal-contact/source gap or supplies Auth participant completion.
+
 ## Native erasure and custody
 
 The existing deletion operation accepts a durable `auth_erasure` obligation after

@@ -1,4 +1,5 @@
 import { requireRestoredAuthAdmission } from './restore-admission.ts';
+import { configureClientLabel, scrubMetadataConfigurationPage } from './metadata-scrub.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { emitAuthDiagnostic } from './diagnostics.ts';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
@@ -338,7 +339,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     // confidential OAuth client. Its registry identity is reserved for bootstrap.
     if (clientId === WEBSITE_CLIENT_ID) throw new Denied(status);
     const result = await database.query<Client>(
-      'SELECT client_id, display_name, first_party, scopes FROM auth_client WHERE client_id=$1 AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready) AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)',
+      'SELECT client_id, CASE WHEN display_name_writer=1 THEN display_name END AS display_name, first_party, scopes FROM auth_client WHERE client_id=$1 AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready) AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)',
       [clientId],
     );
     if (!result.rows[0]) throw new Denied(status);
@@ -1613,6 +1614,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         await (await getContext()).internalAdapter.deleteUserSessions(accountId);
       },
       registerWebsiteClient: website.register,
+      scrubMetadataConfiguration: (store) => scrubMetadataConfigurationPage(database, store),
       async registerClient(input) {
         if (input.mode !== undefined && input.mode !== 'create-or-match') throw new Denied(400);
         const id = text(input.clientId);
@@ -1650,6 +1652,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             await connection.query('COMMIT');
             return;
           }
+          await configureClientLabel(connection, id, displayName);
           await connection.query(
             'INSERT INTO auth_client (client_id, first_party, scopes, display_name) VALUES ($1,$2,$3,$4) ON CONFLICT (client_id) DO UPDATE SET first_party=EXCLUDED.first_party, scopes=EXCLUDED.scopes, display_name=EXCLUDED.display_name',
             [id, input.firstParty, granted, displayName],
@@ -1736,7 +1739,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           const human = await humanProof(request.headers);
           const currentId = proofSources.get(human)!.id;
           const sessions = await database.query(
-            `SELECT s.id,s."clientId" AS client_id,c.display_name AS client_display_name,
+            `SELECT s.id,s."clientId" AS client_id,CASE WHEN c.display_name_writer=1 THEN c.display_name END AS client_display_name,
                     s."createdAt" AS created_at,s."expiresAt" AS expires_at,
                     s."userAgent" AS user_agent,s.id=$2 AS current
              FROM session s LEFT JOIN auth_client c ON c.client_id=s."clientId"

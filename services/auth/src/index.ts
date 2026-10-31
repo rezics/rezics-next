@@ -6,6 +6,7 @@ import type {
   TrustedAccessPorts,
   SessionProof,
 } from '@rezics/auth-contract';
+import type { MetadataConfigurationStore, MetadataScrubPage } from './metadata-scrub.ts';
 export type {
   AccessAccount,
   InvalidationReceipt,
@@ -241,6 +242,8 @@ export interface AuthService {
     ): Promise<T>;
     /** One native expiry batch, at most 1000 rows; scheduled by the Auth host. */
     pruneExpiredVerifications(): Promise<number>;
+    /** Bounded deployment disposition only; no coverage or participant acknowledgement. */
+    scrubMetadataConfiguration(store: MetadataConfigurationStore): Promise<MetadataScrubPage>;
     /** Bounded maintenance; the host registers and schedules these ports. */
     pruneExpiredSessions(batch?: number): Promise<number>;
     /** One bounded batch of consent left by accounts erased in Auth. */

@@ -7,9 +7,10 @@ import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../../kern
 
 type Selected = { obligationId: string; clientId: string; ownerId: string };
 
-// This measures the available native whole-client disposition with opaque
-// historical contacts/metadata. It does not seed proposed contact-role coverage
-// or claim that the missing personal metadata producer exists.
+// This measures current guarded whole-client disposal. The installed native
+// guard purges attempted arbitrary contacts/metadata before the measured drain.
+// Actual historical scrub cases cover retained pre-guard bytes separately;
+// this does not establish contact-role or shared-copy coverage.
 for (const axis of ['clients', 'resource-links', 'encrypted-stages'] as const) {
   test(`native metadata owner drain charges guards, payload deletion and checkpoint at fixed page size as unrelated ${axis} grow`, async () => {
     const f = await nativeFixture();
@@ -41,7 +42,7 @@ for (const axis of ['clients', 'resource-links', 'encrypted-stages'] as const) {
         expect(obligation.user_deleted_at).toBeNull();
         expect(
           (await f.pool.query('SELECT contacts FROM auth_client WHERE client_id=$1', [clientId])).rows[0]!.contacts,
-        ).toHaveLength(1);
+        ).toBeNull();
         selected.push({ obligationId: obligation.id, clientId, ownerId: owner.accountId });
       }
       // No worker can race the selected native pages once their real obligations
@@ -102,7 +103,7 @@ for (const axis of ['clients', 'resource-links', 'encrypted-stages'] as const) {
               [prefix, previous + 1, scale],
             );
           } else if (axis === 'resource-links') {
-            // Unrelated historical populations only: the selected client and its
+            // Unrelated guarded populations only: the selected client and its
             // erasure still originate in real native registration/deletion.
             await current.admin.query(
               `INSERT INTO auth_client (client_id,first_party,scopes)

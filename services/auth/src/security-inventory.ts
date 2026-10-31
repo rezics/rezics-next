@@ -96,7 +96,7 @@ export function securityInventory(database: Pool, secret: string, issuer: string
         // Existing erasure_auth_client_0(userId,client_id) is the native owner
         // keyset. Consent's primary key supplies the other view; no new index.
         const { rows } = await connection.query<ClientRow>(
-          `SELECT c.client_id,c.display_name,c.disabled,c.scopes,c.erasure_fenced
+          `SELECT c.client_id,CASE WHEN c.display_name_writer=1 THEN c.display_name END AS display_name,c.disabled,c.scopes,c.erasure_fenced
            FROM auth_client c WHERE c."userId"=$1 AND c.client_id>$2 ORDER BY c.client_id LIMIT $3`,
           [binding.accountId, after ?? '', limit + 1],
         );
@@ -128,7 +128,7 @@ export function securityInventory(database: Pool, secret: string, issuer: string
             ? []
             : (
                 await connection.query<ClientRow>(
-                  `SELECT c.client_id,c.display_name,c.disabled,c.first_party,c.scopes,c.erasure_fenced,
+                  `SELECT c.client_id,CASE WHEN c.display_name_writer=1 THEN c.display_name END AS display_name,c.disabled,c.first_party,c.scopes,c.erasure_fenced,
              EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=c.client_id AND v.ready) AS ready,
              EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=c.client_id) AS reducing
            FROM auth_client c WHERE c.client_id=ANY($1::text[])`,

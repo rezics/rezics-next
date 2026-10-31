@@ -2,6 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { AuthService } from './index.ts';
 import { SigningRotationPending } from './signing.ts';
 import { CONSENT_ERASURE_BATCH } from './consent-erasure.ts';
+import { metadataConfigurationStores } from './metadata-scrub.ts';
 import {
   readWorkflowRetentionConfig,
   runWorkflowRetentionSweep,
@@ -54,11 +55,15 @@ export function registerAuthMaintenance(
   const nativeErasure = step('nativeErasure', redrive);
   const sharedCopies = step('sharedCopies', () => auth.internal.redriveErasureHistory());
   const eraseDueConsents = step('eraseDueConsents', () => auth.internal.eraseDueConsents(CONSENT_ERASURE_BATCH));
+  const scrubConfiguration = metadataConfigurationStores.map((store) =>
+    step(`scrubConfiguration.${store}`, async () => (await auth.internal.scrubMetadataConfiguration(store)).changed),
+  );
   const tick = DBOS.registerWorkflow(
     async (_scheduledAt: Date, _context: unknown): Promise<void> => {
       await sweepExpiredSessions();
       await retireSigningKeys();
       await sweepExpiredVerifications();
+      for (const scrub of scrubConfiguration) await scrub();
       await nativeErasure();
       if (await auth.internal.hasDueConsentErasure()) await eraseDueConsents();
       await sharedCopies();
