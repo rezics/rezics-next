@@ -396,3 +396,70 @@ test('a seeded private loader and cached viewer cannot upgrade an unknown, ident
     client.clear();
   }
 });
+
+test('A settled signed-out browser Settings view retains local Display controls and the sign-in return target while exposing no private account controls', async () => {
+  const client = new QueryClient();
+  const before = requests;
+  const previous = getServerAsyncLocalStorage();
+  const storage = new AsyncLocalStorage<{ locale: (typeof locales)[number] }>();
+  overwriteServerAsyncLocalStorage(storage);
+  try {
+    for (const locale of locales) {
+      await storage.run({ locale }, async () => {
+        const path = `/${locale}/settings?from=account&view=local#display`;
+        const html = await pageMarkup(client, { state: 'signed-out', csrfToken: null }, path);
+        expect(html).toContain(`href="/auth/sign-in?return_to=${encodeURIComponent(path)}"`);
+        expect(html).toContain('id="display"');
+        expect(html).toContain(`<h2 id="settings-display-heading">${m.settings_display_heading()}</h2>`);
+        expect(html.match(/<section\b[^>]*>/g)).toEqual([
+          expect.stringContaining(`aria-label="${m.shell_appearance()}"`),
+        ]);
+        expect(html).toContain(m.shell_language());
+        expect(html).toContain(`aria-label="${m.shell_theme()}"`);
+        expect(html).toContain(m.settings_account_sign_in_text());
+        expect(html).not.toMatch(/role="(?:radio|radiogroup|switch)"/);
+        expect(html).not.toContain('<form');
+        expect(html).not.toContain('https://auth.test/security');
+        expect(html).not.toContain(m.settings_account_delete_continue());
+        expect(html).not.toContain(m.settings_sections_loading());
+        expect(retryButtons(html)).toHaveLength(0);
+        noPrivateSections(html);
+      });
+    }
+    expect(requests).toBe(before);
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
+    expect(client.isFetching()).toBe(0);
+  } finally {
+    overwriteServerAsyncLocalStorage(previous);
+    client.clear();
+  }
+});
+
+test('a settled signed-out request ignores cached identity and private loader data even for a managed-account return target', async () => {
+  const client = new QueryClient();
+  const before = requests;
+  try {
+    client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      subject: 'current-viewer',
+      csrfToken: 'cached-token',
+    });
+    const path = '/fr/settings?managedAccount=019a0000-0000-7000-8000-000000000002&view=accounts#account';
+    const html = await pageMarkup(client, { state: 'signed-out', csrfToken: null }, path);
+    expect(html).toContain(`href="/auth/sign-in?return_to=${encodeURIComponent(path)}"`);
+    expect(html).toContain('id="display"');
+    noPrivateSections(html);
+    expect(html).not.toContain('cached-token');
+    expect(html).not.toContain('ignored-prop');
+    expect(html).not.toContain('current-viewer');
+    expect(html).not.toContain(m.managed_detail_title());
+    expect(html).not.toContain(m.managed_back());
+    expect(html).not.toMatch(/role="(?:radio|radiogroup|switch)"/);
+    expect(html).not.toContain('<form');
+    expect(requests).toBe(before);
+    expect(client.getQueryCache().getAll().map((query) => query.queryKey)).toEqual([sessionQuery.queryKey]);
+    expect(client.isFetching()).toBe(0);
+  } finally {
+    client.clear();
+  }
+});

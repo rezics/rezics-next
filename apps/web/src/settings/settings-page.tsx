@@ -350,6 +350,18 @@ export function SettingsSessionRecovery({
   );
 }
 
+/** Local browser choices remain available after the account session ends. */
+export function SignedOutSettings({ returnTo }: { returnTo: string }) {
+  return (
+    <div className="space-y-8">
+      <div id="display" className="scroll-mt-6">
+        <DisplayPreferences />
+      </div>
+      <AccountSafetyCard state="signed-out" returnTo={returnTo} />
+    </div>
+  );
+}
+
 export function SettingsPageView({
   page,
   requestSession,
@@ -424,7 +436,7 @@ export function SettingsPageView({
           />
         </SettingsNavigationProvider>
       ) : signedOut ? (
-        <AccountSafetyCard state="signed-out" returnTo={location.publicHref} />
+        <SignedOutSettings returnTo={location.publicHref} />
       ) : (
         <div className="space-y-3">
           <SettingsSessionRecovery

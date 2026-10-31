@@ -3,8 +3,8 @@ import { expect, userEvent, within } from 'storybook/test';
 import settingsPreferencesRecording from '../kernel/recorded/settings-preferences.json';
 import { setFakeVerificationState } from '../kernel/fake/verification';
 import { m } from '../paraglide/messages.js';
+import { SignedOutSettings } from '../settings/settings-page';
 import { PageHeading } from '../shell/page-heading';
-import { SignInPrompt } from '../threads/composer';
 import { PageStory, pageReady } from './page';
 
 const meta = {
@@ -26,10 +26,7 @@ function SignedOutSettingsPreview() {
           <header>
             <PageHeading>{m.settings_heading()}</PageHeading>
           </header>
-          <div className="space-y-3">
-            <p className="text-muted-foreground">{m.settings_signed_out()}</p>
-            <SignInPrompt returnTo="/settings" />
-          </div>
+          <SignedOutSettings returnTo="/settings" />
         </article>
       </div>
     </main>
@@ -256,8 +253,21 @@ export const SignedOut: Story = {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
     await view.findByRole('heading', { level: 1, name: m.settings_heading() });
-    await view.findByRole('link', { name: m.account_sign_in() });
+    await expect(await view.findByRole('link', { name: m.account_sign_in() })).toHaveAttribute(
+      'href',
+      '/auth/sign-in?return_to=%2Fsettings',
+    );
     await expect(view.queryByRole('radio')).toBeNull();
+    await view.findByRole('heading', { level: 2, name: m.settings_display_heading() });
+    const display = await view.findByRole('region', { name: m.shell_appearance() });
+    await expect(view.getAllByRole('region', { name: m.shell_appearance() })).toHaveLength(1);
+    await expect(
+      within(display).getByRole('button', { name: (name) => name.startsWith(m.shell_language()) }),
+    ).toBeEnabled();
+    await expect(within(display).getByRole('button', { name: m.shell_theme() })).toBeEnabled();
+    await expect(view.queryByRole('switch')).toBeNull();
+    await expect(view.queryByRole('button', { name: m.account_sign_out() })).toBeNull();
+    await expect(context.canvasElement.querySelector('[name="csrf_token"]')).toBeNull();
   },
   render: () => <SignedOutSettingsPreview />,
 };

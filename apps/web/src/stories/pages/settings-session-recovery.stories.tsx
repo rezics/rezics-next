@@ -3,8 +3,7 @@ import { useRef, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import { AccountSafetyCard } from '../../settings/account-safety';
-import { SettingsSessionRecovery } from '../../settings/settings-page';
+import { SettingsSessionRecovery, SignedOutSettings } from '../../settings/settings-page';
 import { PageHeading } from '../../shell/page-heading';
 import { AppShell } from '../../shell/shell';
 import { PatternStory } from '../page';
@@ -50,7 +49,7 @@ function RecoveryExample({ scenario }: { scenario: Scenario }) {
       <article className="mx-auto w-full max-w-6xl space-y-8 px-4 text-foreground sm:px-6">
         <PageHeading>{m.settings_heading()}</PageHeading>
         {signedOut ? (
-          <AccountSafetyCard state="signed-out" returnTo={`/${getLocale()}/settings?from=account#display`} />
+          <SignedOutSettings returnTo={`/${getLocale()}/settings?from=account#display`} />
         ) : (
           <SettingsSessionRecovery
             state="unknown"
@@ -75,6 +74,12 @@ function Example({ scenario }: { scenario: Scenario }) {
 async function recoveryView(canvasElement: HTMLElement) {
   const view = within(await within(canvasElement).findByRole('main'));
   await expect(view.getByRole('region', { name: m.settings_display_heading() })).toBeVisible();
+  const display = view.getByRole('region', { name: m.shell_appearance() });
+  await expect(view.getAllByRole('region', { name: m.shell_appearance() })).toHaveLength(1);
+  await expect(
+    within(display).getByRole('button', { name: (name) => name.startsWith(m.shell_language()) }),
+  ).toBeEnabled();
+  await expect(within(display).getByRole('button', { name: m.shell_theme() })).toBeEnabled();
   await expect(view.queryByRole('region', { name: m.settings_reading_heading() })).toBeNull();
   await expect(view.queryByRole('region', { name: m.settings_notifications_heading() })).toBeNull();
   await expect(canvasElement.querySelector('[name="csrf_token"]')).toBeNull();
@@ -136,5 +141,6 @@ export const RecoveredSignedOut: Story = {
     await expect(view.queryByText(m.settings_session_unavailable())).toBeNull();
     await expect(view.queryByRole('button', { name: m.settings_retry() })).toBeNull();
     await expect(view.queryByRole('button', { name: m.account_sign_out() })).toBeNull();
+    await recoveryView(canvasElement);
   },
 };
