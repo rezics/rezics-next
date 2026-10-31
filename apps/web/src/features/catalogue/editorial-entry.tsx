@@ -134,7 +134,7 @@ export function EditorialEntry({
           title={m.contribute_title({}, o)}
           backLabel={m.contribute_back({}, o)}
           trigger={
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="min-h-11">
               {m.contribute_title({}, o)}
             </Button>
           }

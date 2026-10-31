@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { ContextComparisonView } from '../features/catalogue/context-curation-view';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -58,6 +58,10 @@ export function CandidateReview({
   const [requiresReload, setRequiresReload] = useState(false);
   const [failure, setFailure] = useState<CandidateFailure>();
   const [result, setResult] = useState<CandidateResult & { ok: true }>();
+  const confirmationTitle = useId();
+  const confirmationRegion = useRef<HTMLElement>(null);
+  const confirmationTrigger = useRef<HTMLButtonElement | null>(null);
+  const restoreConfirmationFocus = useRef(false);
   const request = useRef<CandidateCommand | null>(null);
   const running = useRef(false);
   const session = useRef<string | undefined>(undefined);
@@ -180,6 +184,26 @@ export function CandidateReview({
     void load(initialProperty);
   });
 
+  useEffect(() => {
+    if (confirmation) confirmationRegion.current?.focus();
+    else if (restoreConfirmationFocus.current) {
+      restoreConfirmationFocus.current = false;
+      confirmationTrigger.current?.focus();
+    }
+  }, [confirmation]);
+
+  function openConfirmation(operation: CandidateCommand['operation'], trigger: HTMLButtonElement) {
+    if (locked || requiresReload || running.current || request.current) return;
+    confirmationTrigger.current = trigger;
+    setConfirmation(operation);
+  }
+
+  function cancelConfirmation() {
+    if (running.current || request.current) return;
+    restoreConfirmationFocus.current = true;
+    setConfirmation(null);
+  }
+
   async function confirm() {
     if (
       !current?.page ||
@@ -254,6 +278,79 @@ export function CandidateReview({
       return context ? m.context_pending({}, options) : m.candidate_pending({}, options);
     return item.decision === 'accepted' ? m.candidate_unselected({}, options) : m.candidate_unresolved({}, options);
   }
+
+  const confirmationContent = confirmation && (
+    <section
+      ref={confirmationRegion}
+      tabIndex={-1}
+      aria-labelledby={confirmationTitle}
+      className="flex flex-col gap-3 rounded-lg border border-border p-4"
+    >
+      <h4 id={confirmationTitle} className="font-semibold">
+        {m.candidate_confirm_title({ action }, options)}
+      </h4>
+      <p className="text-sm">
+        {confirmation === 'accept'
+          ? context
+            ? m.context_confirm_accept({}, options)
+            : m.candidate_confirm_accept({}, options)
+          : confirmation === 'reject'
+            ? m.candidate_confirm_reject({}, options)
+            : context && mode !== 'replace'
+              ? m.context_empty_selection({}, options)
+              : context
+                ? m.context_confirm_replace({}, options)
+                : m.candidate_confirm_replace({}, options)}
+      </p>
+      {context && confirmation === 'adopt' && (
+        <p>
+          {mode === 'inherit'
+            ? m.context_inherit({}, options)
+            : mode === 'suppress'
+              ? m.context_suppress({}, options)
+              : m.context_replace({}, options)}
+        </p>
+      )}
+      {confirmation === 'adopt' && (!context || mode === 'replace') && (
+        <ul className="space-y-2">
+          {draft?.selection.map((entry) => {
+            const value = choices.get(entry.candidate);
+            return (
+              <li key={entry.candidate}>
+                {value && (
+                  <CandidateValue
+                    snak={value.statement}
+                    related={(current!.contextReview?.reading ?? current!.public).related}
+                    locale={locale}
+                    subject={id}
+                    documents={documents?.candidates}
+                  />
+                )}
+                <span className="ml-2 text-sm">
+                  {entry.rank === 'preferred'
+                    ? m.candidate_rank_preferred({}, options)
+                    : m.candidate_rank_normal({}, options)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button className="min-h-11" disabled={busy || !!request.current} onClick={() => void confirm()}>
+          {action}
+        </Button>
+        <Button
+          variant="outline"
+          className="min-h-11"
+          disabled={busy || !!request.current}
+          onClick={cancelConfirmation}
+        >
+          {m.candidate_cancel({}, options)}
+        </Button>
+      </div>
+    </section>
+  );
 
   return (
     <section
@@ -463,42 +560,45 @@ export function CandidateReview({
                           <CandidateProvenance candidate={candidate} read={current} locale={locale} />
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {candidate.retracted === null && candidate.decision !== 'accepted' && (
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-wrap gap-2">
+                          {candidate.retracted === null && candidate.decision !== 'accepted' && (
+                            <Button
+                              variant="outline"
+                              className="min-h-11"
+                              disabled={locked || requiresReload}
+                              onClick={(event) => openConfirmation('accept', event.currentTarget)}
+                            >
+                              {m.candidate_accept({}, options)}
+                            </Button>
+                          )}
+                          {candidate.retracted === null && candidate.decision !== 'rejected' && (
+                            <Button
+                              variant="outline"
+                              className="min-h-11"
+                              disabled={locked || requiresReload}
+                              onClick={(event) => openConfirmation('reject', event.currentTarget)}
+                            >
+                              {m.candidate_reject({}, options)}
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             className="min-h-11"
-                            disabled={locked || requiresReload}
-                            onClick={() => setConfirmation('accept')}
+                            disabled={locked}
+                            onClick={() => setCandidate(undefined)}
                           >
-                            {m.candidate_accept({}, options)}
+                            {m.candidate_back({}, options)}
                           </Button>
-                        )}
-                        {candidate.retracted === null && candidate.decision !== 'rejected' && (
-                          <Button
-                            variant="outline"
-                            className="min-h-11"
-                            disabled={locked || requiresReload}
-                            onClick={() => setConfirmation('reject')}
-                          >
-                            {m.candidate_reject({}, options)}
-                          </Button>
-                        )}
-                        <Button
-                          variant="outline"
-                          className="min-h-11"
-                          disabled={locked}
-                          onClick={() => setCandidate(undefined)}
-                        >
-                          {m.candidate_back({}, options)}
-                        </Button>
+                        </div>
+                        {confirmation !== 'adopt' && confirmationContent}
                       </div>
                     </div>
                   )}
                   {draft && (
                     <section
                       aria-label={context ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
-                      className="space-y-3 rounded-lg border border-border p-3"
+                      className="flex flex-col gap-3 rounded-lg border border-border p-3"
                     >
                       <h3 className="font-semibold">
                         {context ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
@@ -599,82 +699,18 @@ export function CandidateReview({
                       {!valid && <p role="status">{m.candidate_selection_invalid({}, options)}</p>}
                       <Button
                         variant="outline"
-                        className="min-h-11"
+                        className="min-h-11 self-start"
                         disabled={locked || requiresReload || !valid}
-                        onClick={() => setConfirmation('adopt')}
+                        onClick={(event) => openConfirmation('adopt', event.currentTarget)}
                       >
                         {context ? m.context_adopt({}, options) : m.candidate_adopt({}, options)}
                       </Button>
+                      {confirmation === 'adopt' && confirmationContent}
                     </section>
                   )}
                 </>
               )}
             </>
-          )}
-          {confirmation && (
-            <div className="space-y-3 rounded-lg border border-border p-4">
-              <h4 className="font-semibold">{m.candidate_confirm_title({ action }, options)}</h4>
-              <p className="text-sm">
-                {confirmation === 'accept'
-                  ? context
-                    ? m.context_confirm_accept({}, options)
-                    : m.candidate_confirm_accept({}, options)
-                  : confirmation === 'reject'
-                    ? m.candidate_confirm_reject({}, options)
-                    : context && mode !== 'replace'
-                      ? m.context_empty_selection({}, options)
-                      : context
-                        ? m.context_confirm_replace({}, options)
-                        : m.candidate_confirm_replace({}, options)}
-              </p>
-              {context && confirmation === 'adopt' && (
-                <p>
-                  {mode === 'inherit'
-                    ? m.context_inherit({}, options)
-                    : mode === 'suppress'
-                      ? m.context_suppress({}, options)
-                      : m.context_replace({}, options)}
-                </p>
-              )}
-              {confirmation === 'adopt' && (!context || mode === 'replace') && (
-                <ul className="space-y-2">
-                  {draft?.selection.map((entry) => {
-                    const value = choices.get(entry.candidate);
-                    return (
-                      <li key={entry.candidate}>
-                        {value && (
-                          <CandidateValue
-                            snak={value.statement}
-                            related={(current!.contextReview?.reading ?? current!.public).related}
-                            locale={locale}
-                            subject={id}
-                            documents={documents?.candidates}
-                          />
-                        )}
-                        <span className="ml-2 text-sm">
-                          {entry.rank === 'preferred'
-                            ? m.candidate_rank_preferred({}, options)
-                            : m.candidate_rank_normal({}, options)}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Button className="min-h-11" disabled={busy} onClick={() => void confirm()}>
-                  {action}
-                </Button>
-                <Button
-                  variant="outline"
-                  className="min-h-11"
-                  disabled={busy || !!request.current}
-                  onClick={() => setConfirmation(null)}
-                >
-                  {m.candidate_cancel({}, options)}
-                </Button>
-              </div>
-            </div>
           )}
           <Button
             variant="outline"

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, fn, mocked, userEvent, waitFor, within } from 'storybook/test';
 import { CandidateStory } from '../subject/candidate-story';
 import { m } from '../paraglide/messages.js';
 import { candidateProperty } from '../kernel/fake/subject-candidates';
@@ -81,8 +81,71 @@ export const Review: Story = {
   },
 };
 export const Confirmation: Story = {
-  play: async ({ canvasElement }) => {
-    await confirmation(canvasElement);
+  args: { onRequests: fn() },
+  play: async ({ canvasElement, args }) => {
+    const canvas = await review(canvasElement);
+    const calls = mocked(args.onRequests!).mock.calls.at(-1)![0];
+    const commands = () => calls.filter((call) => call.method === 'POST');
+    const field = canvas.getByRole('combobox', { name: m.candidate_field() });
+    const proposed = canvas.getByRole('heading', { name: m.candidate_proposed() });
+    const draft = canvas.getByRole('region', { name: m.candidate_selection_draft() });
+    const selection = within(draft).getAllByRole('checkbox');
+    const selected = selection.map((choice) => choice.getAttribute('aria-checked'));
+    const rank = within(draft).getByRole('combobox', { name: m.candidate_rank() });
+    await userEvent.selectOptions(rank, 'preferred');
+
+    const accept = canvas.getByRole('button', { name: m.candidate_accept() });
+    const reject = canvas.getByRole('button', { name: m.candidate_reject() });
+    const adopt = within(draft).getByRole('button', { name: m.candidate_adopt() });
+    for (const [trigger, action] of [
+      [accept, m.candidate_accept()],
+      [reject, m.candidate_reject()],
+      [adopt, m.candidate_adopt()],
+    ] as const) {
+      await userEvent.click(trigger);
+      const title = m.candidate_confirm_title({ action });
+      const local = await canvas.findByRole('region', { name: title });
+      await expect(local).toBeVisible();
+      await expect(local).toHaveFocus();
+      await expect(within(local).getByRole('heading', { name: title })).toBeVisible();
+      await expect(canvas.getAllByRole('button', { name: m.candidate_cancel() })).toHaveLength(1);
+      await expect(trigger === adopt ? trigger.nextElementSibling : trigger.parentElement!.nextElementSibling).toBe(
+        local,
+      );
+      await expect(trigger).toBeDisabled();
+      await expect(commands()).toHaveLength(0);
+
+      await userEvent.click(within(local).getByRole('button', { name: m.candidate_cancel() }));
+      await expect(canvas.queryByRole('region', { name: title })).toBeNull();
+      await expect(trigger).toHaveFocus();
+      await expect(trigger).toBeEnabled();
+      await expect(field).toHaveValue(candidateProperty);
+      await expect(canvas.getByRole('heading', { name: m.candidate_proposed() })).toBe(proposed);
+      await expect(
+        within(draft)
+          .getAllByRole('checkbox')
+          .map((choice) => choice.getAttribute('aria-checked')),
+      ).toEqual(selected);
+      await expect(rank).toHaveValue('preferred');
+      await expect(commands()).toHaveLength(0);
+    }
+
+    await userEvent.click(accept);
+    await expect(commands()).toHaveLength(0);
+    await userEvent.click(confirmationButton(canvasElement, m.candidate_accept()));
+    await waitFor(() =>
+      expect(
+        canvas.queryByRole('region', { name: m.candidate_confirm_title({ action: m.candidate_accept() }) }),
+      ).toBeNull(),
+    );
+    await expect(commands()).toHaveLength(1);
+    await expect(commands()[0]).toMatchObject({
+      path: expect.stringMatching(/\/candidates\/[^/]+:accept$/),
+      authorization: 'Bearer fixture',
+      body: { expected_head: null },
+    });
+    await expect(canvas.getByRole('status')).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
   },
 };
 export const Pending: Story = {
