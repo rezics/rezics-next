@@ -373,6 +373,14 @@ test('The one mounted Zone source runtime composes actual saved catalogue and co
       }
       return answer;
     };
+    const direct = async (subject: string) => {
+      const answer = await resolve({ subject });
+      expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+      expect(Compile(ZonePageResponseSchema).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
+      expect(answer.headers.get('cache-control')).toBe('private, no-store');
+      expect(answer.body.subject).toBe(subject);
+      expect(answer.body.views).toContain('overview');
+    };
     const answer = await resolve({ route: '' }, 'unusable');
     const result = complete(answer);
     expect(result.document).toEqual(document);
@@ -396,8 +404,8 @@ test('The one mounted Zone source runtime composes actual saved catalogue and co
       expect(read.body.next).toBeNull();
     }
     expect(result.reads[plan.nodes.mounted!].status).toBe(200);
-    expect((await resolve({ subject: recipe })).body.subject).toBe(recipe);
-    expect(complete(await resolve({ subject: book })).subject).toBe(book);
+    await direct(recipe);
+    await direct(book);
     expect(JSON.stringify(result)).not.toContain('Second occurrence with a distinct note');
 
     // Remove the actual mounted source while preserving all original catalogue scopes.
@@ -413,7 +421,7 @@ test('The one mounted Zone source runtime composes actual saved catalogue and co
     expect(configuration.scope).toEqual(scopes);
     const excluded = await resolve({ subject: recipe });
     expect(excluded.status, JSON.stringify(excluded.body)).toBe(404);
-    expect(complete(await resolve({ subject: book })).subject).toBe(book);
+    await direct(book);
 
     configuration.scope = [];
     const empty = await population.request(
