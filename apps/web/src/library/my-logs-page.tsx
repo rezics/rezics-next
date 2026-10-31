@@ -1,4 +1,4 @@
-import { ListRow, ListRowLink } from '@rezics/ui/list-row';
+import { ListRow } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Link } from '@tanstack/react-router';
 import { Exposure } from '../kernel/exposure';
@@ -12,7 +12,7 @@ import { displayLibraryTitle, LibraryTitle } from './title';
 
 function SnapshotDate({ label, value }: { label: string; value: string }) {
   return (
-    <span>
+    <span className="[overflow-wrap:anywhere]">
       {label}: <time dateTime={value}>{fullDateTime(value, getLocale())}</time>
     </span>
   );
@@ -72,15 +72,13 @@ export function MyLogsPageView({
                       ? m.library_progress_state_abandoned()
                       : m.library_progress_state_active();
                 return (
-                  <ListRow key={log.id} className="flex min-w-0 items-start gap-4 rounded-xl px-3 py-4">
-                    <Exposure operation="published_log.read">
-                      <ListRowLink href={`/${getLocale()}/logs/${encodeURIComponent(log.id)}`}>
-                        {m.library_my_logs_read({ title, date: fullDateTime(log.publishedAt, getLocale()) })}
-                      </ListRowLink>
-                    </Exposure>
+                  <ListRow
+                    key={log.id}
+                    className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-2 rounded-xl px-3 py-4"
+                  >
                     <SubjectCover subject={log.subject} ratio={ratio} />
                     <div className="min-w-0 flex-1 space-y-2">
-                      <p className="break-words font-semibold">
+                      <p className="line-clamp-2 font-semibold [overflow-wrap:anywhere]">
                         {log.subject ? <LibraryTitle label={log.subject.label} locale={getLocale()} /> : title}
                       </p>
                       <p className="text-sm text-muted-foreground">
@@ -93,10 +91,32 @@ export function MyLogsPageView({
                           <SnapshotDate label={m.library_logs_completed()} value={log.completedAt} />
                         ) : null}
                       </div>
-                      {log.note ? (
-                        <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{log.note}</p>
-                      ) : null}
+                      <Exposure operation="published_log.read">
+                        <a
+                          href={`/${getLocale()}/logs/${encodeURIComponent(log.id)}`}
+                          aria-label={m.library_my_logs_read({ title, date: fullDateTime(log.publishedAt, getLocale()) })}
+                          className="inline-flex min-h-11 items-center rounded text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          {m.library_my_logs_open_log()}
+                        </a>
+                      </Exposure>
                     </div>
+                    {log.note ? (
+                      <details className="group/note col-span-full min-w-0">
+                        <summary className="cursor-pointer list-none rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                          <span
+                            aria-hidden="true"
+                            className="line-clamp-3 whitespace-pre-wrap [overflow-wrap:anywhere] group-open/note:hidden"
+                          >
+                            {log.note}
+                          </span>
+                          <span className="flex min-h-11 items-center text-sm text-primary underline underline-offset-4">
+                            {m.library_my_logs_full_note()}
+                          </span>
+                        </summary>
+                        <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{log.note}</p>
+                      </details>
+                    ) : null}
                   </ListRow>
                 );
               })}

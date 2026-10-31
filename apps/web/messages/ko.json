@@ -3050,6 +3050,8 @@
   "library_my_logs_newest": "최근 공개 기록",
   "library_my_logs_no_visible": "이 페이지에 표시할 수 있는 공개 기록이 없습니다.",
   "library_my_logs_read": "{title}의 기록 읽기, 공개 일시: {date}",
+  "library_my_logs_full_note": "전체 메모",
+  "library_my_logs_open_log": "기록 열기",
   "library_my_logs_sign_in": "로그인하여 공개한 독서 기록 보기",
   "curation_head": "불러온 버전: {head}.",
   "curation_instructions": "템플릿과 보기를 전환해도 수정 내용은 유지됩니다. 게시하면 전체 초안 구성이 적용됩니다.",

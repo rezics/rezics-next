@@ -3050,6 +3050,8 @@
   "library_my_logs_newest": "最新發布的閱讀日誌",
   "library_my_logs_no_visible": "此頁沒有可顯示的已發布閱讀日誌。",
   "library_my_logs_read": "閱讀《{title}》的日誌，發布於 {date}",
+  "library_my_logs_full_note": "完整筆記",
+  "library_my_logs_open_log": "開啟日誌",
   "library_my_logs_sign_in": "登入以查看你發布的閱讀日誌",
   "curation_head": "已載入版本：{head}。",
   "curation_instructions": "切換範本和檢視會保留編輯內容。發布將啟用整份草稿設定。",

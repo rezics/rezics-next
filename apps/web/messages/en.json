@@ -3388,6 +3388,8 @@
   "library_my_logs_newest": "Newest published logs",
   "library_my_logs_no_visible": "No visible published logs on this page.",
   "library_my_logs_read": "Read log for {title}, published {date}",
+  "library_my_logs_full_note": "Full note",
+  "library_my_logs_open_log": "Open log",
   "library_my_logs_sign_in": "Sign in to see your published logs",
   "curation_head": "Loaded head: {head}.",
   "curation_instructions": "Switch templates and views without losing edits. Publishing activates the whole draft profile.",

@@ -6,6 +6,7 @@ import { MyLogsPageView } from '../library/my-logs-page';
 import { myLogsNavigation } from '../library/my-logs';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
+import { logPreviewJourney } from '../../tests/log-preview-journey.test';
 
 const meta = {
   title: 'Pages/Library/My published logs',
@@ -50,6 +51,9 @@ export const Empty: Story = {
 export const Long: Story = {
   render,
   beforeEach: scenario('long'),
+  play: async (context) => {
+    await context.step('Published logs remain scannable with expandable full notes', () => logPreviewJourney(context));
+  },
 };
 export const UnknownSubject: Story = { render, beforeEach: scenario('unknown') };
 export const Denied: Story = {

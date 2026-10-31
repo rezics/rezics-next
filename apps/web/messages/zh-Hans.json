@@ -3051,6 +3051,8 @@
   "library_my_logs_newest": "最新发布的阅读日志",
   "library_my_logs_no_visible": "此页没有可显示的已发布阅读日志。",
   "library_my_logs_read": "阅读《{title}》的日志，发布于 {date}",
+  "library_my_logs_full_note": "完整笔记",
+  "library_my_logs_open_log": "打开日志",
   "library_my_logs_sign_in": "登录以查看你发布的阅读日志",
   "curation_head": "已加载版本：{head}。",
   "curation_instructions": "切换模板和视图会保留编辑内容。发布将启用整个草稿配置。",

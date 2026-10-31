@@ -3050,6 +3050,8 @@
   "library_my_logs_newest": "Neueste veröffentlichte Leseeinträge",
   "library_my_logs_no_visible": "Keine sichtbaren veröffentlichten Leseeinträge auf dieser Seite.",
   "library_my_logs_read": "Leseeintrag zu {title} lesen, veröffentlicht am {date}",
+  "library_my_logs_full_note": "Vollständige Notiz",
+  "library_my_logs_open_log": "Protokoll öffnen",
   "library_my_logs_sign_in": "Melde dich an, um deine veröffentlichten Leseeinträge zu sehen",
   "curation_head": "Geladene Version: {head}.",
   "curation_instructions": "Beim Wechsel von Vorlage und Ansicht bleiben Änderungen erhalten. Veröffentlichen aktiviert den gesamten Profilentwurf.",

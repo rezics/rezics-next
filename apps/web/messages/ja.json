@@ -3050,6 +3050,8 @@
   "library_my_logs_newest": "最新の公開ログ",
   "library_my_logs_no_visible": "このページに表示できる公開ログはありません。",
   "library_my_logs_read": "{title}のログを読む（公開日時：{date}）",
+  "library_my_logs_full_note": "メモ全文",
+  "library_my_logs_open_log": "ログを開く",
   "library_my_logs_sign_in": "ログインして公開した読書ログを見る",
   "curation_head": "読み込んだバージョン：{head}。",
   "curation_instructions": "テンプレートやビューを切り替えても編集内容は保持されます。公開すると構成全体が有効になります。",

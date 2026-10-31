@@ -3050,6 +3050,8 @@
   "library_my_logs_newest": "Registros publicados más recientes",
   "library_my_logs_no_visible": "No hay registros publicados visibles en esta página.",
   "library_my_logs_read": "Leer el registro de {title}, publicado el {date}",
+  "library_my_logs_full_note": "Nota completa",
+  "library_my_logs_open_log": "Abrir registro",
   "library_my_logs_sign_in": "Inicia sesión para ver tus registros publicados",
   "curation_head": "Versión cargada: {head}.",
   "curation_instructions": "Los cambios se conservan al cambiar de plantilla o vista. Publicar activa todo el perfil del borrador.",

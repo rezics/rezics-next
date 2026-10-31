@@ -3050,6 +3050,8 @@
   "library_my_logs_newest": "Journaux publiés les plus récents",
   "library_my_logs_no_visible": "Aucun journal publié visible sur cette page.",
   "library_my_logs_read": "Lire le journal de {title}, publié le {date}",
+  "library_my_logs_full_note": "Note complète",
+  "library_my_logs_open_log": "Ouvrir le journal",
   "library_my_logs_sign_in": "Connectez-vous pour voir vos journaux publiés",
   "curation_head": "Version chargée : {head}.",
   "curation_instructions": "Les modifications sont conservées lors du changement de modèle ou de vue. La publication active tout le profil du brouillon.",

@@ -134,7 +134,7 @@ export function PublishedLogPageView({
       {log.note ? (
         <section className="space-y-2">
           <h2 className="text-xl font-semibold">{m.library_logs_note()}</h2>
-          <p className="whitespace-pre-wrap">{log.note}</p>
+          <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{log.note}</p>
         </section>
       ) : null}
       {error ? (
