@@ -50,7 +50,14 @@ import {
   createCommandAdmission,
   installCommandAdmission,
 } from './command-admission.ts';
-import { AuthenticationError, validReadDecisionActions, resourcePage, type ResourcePage } from '../request/access.ts';
+import {
+  AuthenticationError,
+  validReadDecisionActions,
+  resourcePage,
+  type ResourcePage,
+  installPreparedAccessCheckWork,
+  nativePreparedAccessCheckWork,
+} from '../request/access.ts';
 import type {
   Access,
   AccessConfig as KernelAccessConfig,
@@ -418,6 +425,9 @@ export function createAccess(config: AccessConfig): Access {
       ).allowed;
     },
   };
+  installPreparedAccessCheckWork(access, (actor, action, resource, evidence, dispatch) =>
+    nativePreparedAccessCheckWork(permissions, actor, action, resource, evidence, dispatch),
+  );
   installAccountStandingCheck(access, (input) => accountStandingCheck(permissions, input));
   installAccessClock(access, clock);
   preparedReadTimes.set(access, readTimes);

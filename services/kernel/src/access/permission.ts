@@ -1,5 +1,7 @@
 import {
   accessNativeWork,
+  accessNativeDeclaration,
+  addAccessWork,
   accessCheckout,
   accessOwnerWork,
   type AccessWorkAccounting,
@@ -32,6 +34,9 @@ import {
 } from '../command/command.ts';
 import {
   accessCheck,
+  installPreparedAccessCheckWork,
+  type PreparedAccessCheckInvocation,
+  type PreparedAccessCheckWork,
   validReadDecisionActions,
   resourcePage,
   type ResourcePage,
@@ -71,7 +76,7 @@ import {
   PLATFORM_RESOURCE,
   recordGovernanceReachUse,
 } from './governance-reach.ts';
-import { prepareAnonymousEligibility } from './eligibility.ts';
+import { prepareAnonymousEligibility, type PreparedEligibilityVerify } from './eligibility.ts';
 
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
  * Identity and this record must come from verified Auth/Access, never request JSON.
@@ -152,7 +157,7 @@ type Prepared = {
   scope: boolean;
   admitsAnonymous: boolean;
   capability: Resource['eligibility'];
-  verifyFloor: ((client: AccessClient, at: string) => Promise<boolean>) | undefined;
+  verifyFloor: PreparedEligibilityVerify | undefined;
 };
 
 // Object identity is the trust boundary: serialized, spread, and caller-created
@@ -247,6 +252,49 @@ function eligible(account: PermissionAccount, actor: AccountActor): boolean {
   );
 }
 
+function preparedFormula(
+  facts: Prepared,
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  at: string,
+  floor: boolean,
+  page?: ResourcePage,
+  includeExplicit = false,
+) {
+  const ids = page?.ids ?? [resource.id];
+  const input = {
+    route: resource.route,
+    resource_ids: [...ids],
+    include_explicit: includeExplicit && !facts.anonymous && facts.scope,
+    include_global: isGlobalReachAction(action),
+    action,
+    own_account: facts.ownAccount,
+    authenticated_resource_id: facts.buyerEvidence?.benefit.resource.id ?? null,
+    authenticated_buyer_ids: facts.buyerEvidence ? [...facts.buyerEvidence.buyers.keys()] : [],
+    actor_id: actor.kind === 'account' ? actor.accountId : '',
+    principal_id: facts.principalId ?? '',
+    assignment_route: facts.assignmentRoute,
+    assignment_request_id: facts.assignmentRequestId,
+    anonymous: facts.anonymous,
+    floor,
+    at,
+    roles: facts.roles,
+    grant_roles: [...facts.grantRoles],
+    deadline: facts.databaseDeadline,
+  };
+  const shape = {
+    targets: ids.length,
+    roles: facts.roles.length,
+    members: actor.kind === 'account' ? (facts.principalId ? 2 : 1) : 0,
+    grantRoles: facts.grantRoles.length,
+    explicit: input.include_explicit,
+    global: input.include_global,
+    assignment: facts.assignmentRequestId !== null,
+  };
+  return { input, shape };
+}
+
 /** Runs only the final resource-anchored statement on the command's own client.
  * Reuse through accessCheck so every actual command attempt checks current rows/time.
  */
@@ -293,7 +341,7 @@ async function checkPreparedPermission(
     requireAccessDeadline(facts.deadline);
     if (!at || (facts.buyerEvidence && !validBuyerEvidence(facts.buyerEvidence, time)))
       return { allowed: false, explicit: false };
-    const domainEligible = facts.verifyFloor ? await facts.verifyFloor(client, at) : false;
+    const domainEligible = facts.verifyFloor ? await facts.verifyFloor(client, at, time, facts.work) : false;
     requireAccessDeadline(facts.deadline);
     const floor = facts.admitsAnonymous && domainEligible;
     // Scope caps only the independent authenticated grant branch. Other token
@@ -316,40 +364,9 @@ async function checkPreparedPermission(
     };
     if (!stillValid()) return { allowed: false, explicit: false };
     const ids = page?.ids ?? [resource.id];
-    const formulaInput = {
-      route: resource.route,
-      resource_ids: [...ids],
-      include_explicit: includeExplicit && !facts.anonymous && facts.scope,
-      include_global: isGlobalReachAction(action),
-      action,
-      own_account: facts.ownAccount,
-      authenticated_resource_id: facts.buyerEvidence?.benefit.resource.id ?? null,
-      authenticated_buyer_ids: facts.buyerEvidence ? [...facts.buyerEvidence.buyers.keys()] : [],
-      actor_id: actor.kind === 'account' ? actor.accountId : '',
-      principal_id: facts.principalId ?? '',
-      assignment_route: facts.assignmentRoute,
-      assignment_request_id: facts.assignmentRequestId,
-      anonymous: facts.anonymous,
-      floor,
-      at,
-      roles: facts.roles,
-      grant_roles: [...facts.grantRoles],
-      deadline: facts.databaseDeadline,
-    };
-    const rows = await accessNativeWork(
-      facts.work,
-      'formula',
-      formulaInput,
-      {
-        targets: ids.length,
-        roles: facts.roles.length,
-        members: actor.kind === 'account' ? (facts.principalId ? 2 : 1) : 0,
-        grantRoles: facts.grantRoles.length,
-        explicit: formulaInput.include_explicit,
-        global: formulaInput.include_global,
-        assignment: facts.assignmentRequestId !== null,
-      },
-      () => permissionRead.run(client, formulaInput),
+    const formula = preparedFormula(facts, actor, action, resource, at, floor, page, includeExplicit);
+    const rows = await accessNativeWork(facts.work, 'formula', formula.input, formula.shape, () =>
+      permissionRead.run(client, formula.input),
     );
     if (
       !stillValid() ||
@@ -382,6 +399,87 @@ async function checkPreparedPermission(
     throwEvidenceFailure(error);
     return { allowed: false, explicit: false };
   }
+}
+
+/** Only current native preparation on this accounting/time can declare final work. */
+function preparedCheckWork(
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  evidence: unknown,
+  dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>,
+): PreparedAccessCheckWork | undefined {
+  const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
+  if (!facts?.work || !facts.time) return undefined;
+  const receipts = new WeakMap<
+    PreparedAccessCheckInvocation,
+    {
+      value: boolean;
+      usage: import('./work.ts').AccessWork;
+      client: AccessClient;
+      time: AuthoritativeTime;
+      work: AccessWorkAccounting;
+    }
+  >();
+  const invoked = new WeakSet<PreparedAccessCheckInvocation>();
+  const bound = (input: PreparedAccessCheckInvocation) => {
+    if (
+      input.work !== facts.work ||
+      input.time !== facts.time ||
+      Date.now() >= facts.deadline ||
+      facts.binding !== bind(actor, action, resource) ||
+      facts.capability !== (resource.eligibility ?? resource.anonymousEligibility) ||
+      (resource.eligibility !== undefined &&
+        resource.anonymousEligibility !== undefined &&
+        resource.eligibility !== resource.anonymousEligibility)
+    )
+      return undefined;
+    let at: string;
+    try {
+      at = authoritativeTimeValue(input.time);
+    } catch {
+      return undefined;
+    }
+    const owner = facts.verifyFloor ? facts.verifyFloor.bound?.(input) : undefined;
+    if (facts.verifyFloor && !owner) return undefined;
+    // false is the larger serialized boolean; the mounted native plan is identical
+    // for either eligibility outcome. Undispatched branches settle at zero.
+    const formula = preparedFormula(facts, actor, action, resource, at, false);
+    return addAccessWork(
+      accessNativeDeclaration('formula', formula.input, formula.shape).bound,
+      ...(owner ? [owner] : []),
+    );
+  };
+  return {
+    bound,
+    async run(input) {
+      if (invoked.has(input)) return input.work.unavailable('Access prepared invocation already dispatched');
+      invoked.add(input);
+      const { client, time, work } = input;
+      const result = await work.invocation('Access prepared check', bound(input), () => dispatch(input));
+      receipts.set(input, { ...result, client, time, work });
+      return result.value;
+    },
+    actual(input, value) {
+      const receipt = receipts.get(input);
+      receipts.delete(input);
+      if (
+        !receipt ||
+        receipt.value !== value ||
+        receipt.client !== input.client ||
+        receipt.time !== input.time ||
+        receipt.work !== input.work ||
+        Date.now() >= facts.deadline
+      )
+        return undefined;
+      try {
+        authoritativeTimeValue(input.time);
+      } catch {
+        return undefined;
+      }
+      return receipt.usage;
+    },
+  };
 }
 
 /** Thin Access adapter. Auth and the kernel request hook are separate bindings. */
@@ -455,7 +553,7 @@ export function createAccess(config: PermissionConfig): Access {
       }
       const verifyFloor = await prepareAnonymousEligibility(
         { actor, action, resource: Object.freeze({ ...resource }), deadline },
-        context,
+        { ...context, ...(time ? { time } : {}) },
       );
       // Every query uses the pool independently before resource checkout. None
       // of these reads holds a connection while another partition is consulted.
@@ -1312,6 +1410,7 @@ export function createAccess(config: PermissionConfig): Access {
       return allowed;
     },
   };
+  installPreparedAccessCheckWork(access, preparedCheckWork);
   installAccountStandingCheck(access, async ({ accountId, action, target, context }) => {
     const page = 'ids' in target ? resourcePage(target) : undefined;
     const resource = page ? { route: page.route, id: page.ids[0]! } : (Object.freeze({ ...target }) as Resource);

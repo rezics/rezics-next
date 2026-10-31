@@ -99,6 +99,36 @@ A missing declaration refuses BEFORE that callback, with `AccessWorkUnavailableE
 `Content AccessRealmRoleReader`, `Content AccessRealmRoleReader.batch`, or `Commerce ContentEditionBuyerFactReader`.
 No foreign native implementation is claimed by publishing these ports.
 
+`accessCheck` preserves its ordinary `(client, time?) => Promise<boolean>` call. Native checks prepared with
+live `AccessContext.time` and the existing `AccessContext.work` additionally expose optional `.work`:
+`PreparedAccessCheckWork` is an `AccessWorkProducer<PreparedAccessCheckInvocation, boolean>` with
+`run(input): Promise<boolean>`, where `input` is exactly `{client, time, work}`. These types are exported from
+the original `access/index.ts`. Manual and foreign checks can omit the property.
+
+Prepare on the released pool before acquiring the target client. The native producer's pure `bound(input)`
+combines the existing mounted formula declaration with the original eligibility owner's verify declaration,
+using the actual prepared roles, assignment, buyer, resource and deadline evidence. Undefined means unsupported
+before nested IO. Unmetered preparation cannot acquire a declaration afterward. The invocation must retain the
+same accounting and live native time object as preparation; a formatted `at`, copied time or cached permission
+cannot substitute for it. Both eligibility contexts now carry optional `time` and `work`; verify retains its
+ordinary formatted `at`. These fields come from the evaluator, including at preparation.
+
+Call `.work.run(input)` to invoke the same native authorizer on the supplied target client. Its synchronous
+`.actual(input, result)` consumes a one-shot receipt for that exact invocation object and result. Distinct
+invocations sharing T remain independent; a cloned input, repeated invocation or missing receipt supplies no proof.
+A false decision still charges the owner points and formula statements actually dispatched.
+
+Owner reservations establish an asynchronous accounting frame inside the SAME `AccessWorkAccounting`. Nested
+native statements and owner envelopes reserve from that finite admitted parent footprint before dispatch. They
+settle into the parent receipt, without a second reservation or charge in the caller's sink. `invocation` returns
+only that frame's child receipts, never a difference of global usage. Concurrent siblings cannot borrow each
+other's reservations. An owner receipt must include every admitted child; unfinished children, an overrun,
+failure or missing receipt burn the full reservation and poison the attempt. Closed frames forbid late IO.
+Native statement row declarations and all six dimensions retain their original meaning.
+
+This bridge does not declare Content cover readiness: consumers still need to propagate genuine preparation
+time/accounting and compose their own native owner declarations and receipts.
+
 Native account variants use the existing `account-viewer-actions.sql` full-key projection through
 `readNativeAccountStates`: UUID, kind/state enums, fence, current operator and positive bigint authentication floor.
 `ReadDecisions.prepareAccountAuthority` supports batches admitting `account:read`, `account:update` and

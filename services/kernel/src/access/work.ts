@@ -1,4 +1,5 @@
 import { AccessUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 /** Neutral native dimensions, structurally compatible with the Source ledger. */
 export type AccessWork = Readonly<{
@@ -56,11 +57,22 @@ function copy(work: AccessWork): AccessWork {
   return Object.freeze(Object.fromEntries(ACCESS_WORK_AXES.map((axis) => [axis, work[axis]]))) as AccessWork;
 }
 
+export function addAccessWork(...values: readonly AccessWork[]): AccessWork {
+  return copy(
+    Object.fromEntries(
+      ACCESS_WORK_AXES.map((axis) => [axis, values.reduce((total, value) => total + value[axis], 0)]),
+    ) as AccessWork,
+  );
+}
+
+type AccountingFrame = { bound: AccessWork; used: AccessWork; open: boolean; active: number };
+
 /** Receipt accumulator only. Admission and remaining budget stay with the sink.
  * Dispatch charges the bound immediately, so timeout/parallel/failed work cannot
  * disappear from a caller's receipt while an operation is still unwinding.
  */
 export class AccessWorkAccounting {
+  private readonly frames = new AsyncLocalStorage<AccountingFrame>();
   private used: AccessWork = EMPTY_ACCESS_WORK;
   private failure: unknown;
   private readonly pending = new Set<{ finish(charged: AccessWork): void; bound: AccessWork }>();
@@ -93,6 +105,29 @@ export class AccessWorkAccounting {
   unavailable(dependency: string): never {
     throw new AccessWorkUnavailableError(dependency);
   }
+  /** Exact receipt of this admitted invocation, independent of concurrent roots. */
+  async invocation<T>(
+    operation: string,
+    bound: AccessWork | undefined,
+    dispatch: () => Promise<T>,
+  ): Promise<Readonly<{ value: T; usage: AccessWork }>> {
+    let usage: AccessWork | undefined;
+    const value = await this.run(
+      operation,
+      bound,
+      async () => {
+        const frame = this.frames.getStore();
+        if (!frame) return this.unavailable(`${operation}: native frame`);
+        const result = await dispatch();
+        usage = frame.used;
+        return result;
+      },
+      () => usage,
+      'owner',
+    );
+    if (!usage) return this.unavailable(`${operation}: native receipt`);
+    return { value, usage };
+  }
   async run<T>(
     operation: string,
     footprint: AccessWork | undefined,
@@ -104,23 +139,47 @@ export class AccessWorkAccounting {
     requireAccessDeadline(this.deadline);
     if (!footprint) this.unavailable(operation);
     const bound = copy(footprint);
+    const parent = this.frames.getStore();
+    if (parent && !parent.open) this.unavailable(`${operation}: closed native frame`);
     // Validate the cumulative arithmetic before asking the parent to hold work.
     const next = copy(
-      Object.fromEntries(ACCESS_WORK_AXES.map((axis) => [axis, this.used[axis] + bound[axis]])) as AccessWork,
+      Object.fromEntries(
+        ACCESS_WORK_AXES.map((axis) => [axis, (parent?.used ?? this.used)[axis] + bound[axis]]),
+      ) as AccessWork,
     );
-    const reservation = this.sink.reserve(operation, bound, kind);
+    if (parent && ACCESS_WORK_AXES.some((axis) => next[axis] > parent.bound[axis]))
+      this.unavailable(`${operation}: native frame capacity`);
+    const reservation = parent
+      ? {
+          settle: (charged: AccessWork) => {
+            parent.active--;
+            parent.used = copy(
+              Object.fromEntries(
+                ACCESS_WORK_AXES.map((axis) => [axis, parent.used[axis] - bound[axis] + charged[axis]]),
+              ) as AccessWork,
+            );
+          },
+        }
+      : this.sink.reserve(operation, bound, kind);
     if (!reservation) this.unavailable(operation);
     // Synchronous admission cannot interleave sibling dispatches.
-    this.used = next;
+    if (parent) {
+      parent.used = next;
+      parent.active++;
+    } else this.used = next;
+    const frame: AccountingFrame | undefined =
+      kind === 'owner' ? { bound, used: EMPTY_ACCESS_WORK, open: true, active: 0 } : undefined;
     const pending = {
       bound,
       finish: (charged: AccessWork) => {
         if (!this.pending.delete(pending)) return;
-        this.used = copy(
-          Object.fromEntries(
-            ACCESS_WORK_AXES.map((axis) => [axis, this.used[axis] - bound[axis] + charged[axis]]),
-          ) as AccessWork,
-        );
+        if (frame) frame.open = false;
+        if (!parent)
+          this.used = copy(
+            Object.fromEntries(
+              ACCESS_WORK_AXES.map((axis) => [axis, this.used[axis] - bound[axis] + charged[axis]]),
+            ) as AccessWork,
+          );
         try {
           reservation.settle(charged);
         } catch (error) {
@@ -132,8 +191,9 @@ export class AccessWorkAccounting {
     this.pending.add(pending);
     let charged = bound;
     try {
-      const result = await dispatch();
+      const result = await (frame ? this.frames.run(frame, dispatch) : dispatch());
       if (this.failure) throw this.failure;
+      if (frame?.active) this.unavailable(`${operation}: unfinished native children`);
       if (actual) {
         const receipt = actual(result);
         if (!receipt) this.unavailable(`${operation}: actual receipt`);
@@ -144,6 +204,8 @@ export class AccessWorkAccounting {
         )
           throw new TypeError('Access work exceeds declaration or refunds dispatched native rows');
       }
+      if (frame && ACCESS_WORK_AXES.some((axis) => charged[axis] < frame.used[axis]))
+        throw new TypeError('Access owner receipt omits dispatched child work');
       requireAccessDeadline(this.deadline);
       return result;
     } catch (error) {

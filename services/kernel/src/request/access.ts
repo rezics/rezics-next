@@ -201,12 +201,36 @@ export type PreparedAccessCheckInvocation = Readonly<{
   time: AuthoritativeTime;
   work: AccessWorkAccounting;
 }>;
-export type PreparedAccessCheckWork = AccessWorkProducer<PreparedAccessCheckInvocation, boolean> & Readonly<{
-  run(input: PreparedAccessCheckInvocation): Promise<boolean>;
-}>;
-export type AccessCheck = ((client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>) & Readonly<{
-  work?: PreparedAccessCheckWork;
-}>;
+export type PreparedAccessCheckWork = AccessWorkProducer<PreparedAccessCheckInvocation, boolean> &
+  Readonly<{
+    run(input: PreparedAccessCheckInvocation): Promise<boolean>;
+  }>;
+export type AccessCheck = ((client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>) &
+  Readonly<{
+    work?: PreparedAccessCheckWork;
+  }>;
+type PreparedWorkFactory = (
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  evidence: unknown,
+  dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>,
+) => PreparedAccessCheckWork | undefined;
+const preparedWorkFactories = new WeakMap<Access, PreparedWorkFactory>();
+/** Installed only by the original native evaluator and its original wrapper. */
+export function installPreparedAccessCheckWork(access: Access, factory: PreparedWorkFactory): void {
+  preparedWorkFactories.set(access, factory);
+}
+export function nativePreparedAccessCheckWork(
+  access: Access,
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  evidence: unknown,
+  dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>,
+): PreparedAccessCheckWork | undefined {
+  return preparedWorkFactories.get(access)?.(actor, action, resource, evidence, dispatch);
+}
 export type AccessCommandAuthorization = CommandAuthorization & { readonly check: AccessCheck };
 
 export interface Access {
@@ -252,7 +276,12 @@ export async function accessCheck(
   context: AccessContext,
 ): Promise<AccessCheck> {
   const evidence = access.prepare ? await access.prepare(actor, action, resource, context) : null;
-  return (client, time = commandTime(client)) => access.authorize(client, actor, action, resource, evidence, time);
+  const check: AccessCheck = (client, time = commandTime(client)) =>
+    access.authorize(client, actor, action, resource, evidence, time);
+  const work = nativePreparedAccessCheckWork(access, actor, action, resource, evidence, ({ client, time }) =>
+    check(client, time),
+  );
+  return work ? Object.assign(check, { work }) : check;
 }
 
 /** Resolve the installed port through derived adapters; never infer explicit

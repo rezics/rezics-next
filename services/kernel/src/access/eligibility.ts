@@ -3,6 +3,9 @@ import { accessEvidence } from './evidence.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import { within } from './authenticate.ts';
 import type { AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
+import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
+import type { PreparedAccessCheckInvocation } from '../request/access.ts';
+import type { AccessWork } from './work.ts';
 
 declare const resourceEligibility: unique symbol;
 /** Server capability only; serialized input and structural copies carry no authority. */
@@ -14,6 +17,8 @@ export type ResourceEligibilityPrepareContext = Readonly<{
   resource: ResourceIdentity;
   pool: AccessContext['pool'];
   deadline: number;
+  time?: AuthoritativeTime;
+  work?: AccessWorkAccounting;
 }>;
 export type ResourceEligibilityVerifyContext<E> = Readonly<{
   client: AccessClient;
@@ -24,6 +29,8 @@ export type ResourceEligibilityVerifyContext<E> = Readonly<{
   /** Authoritative server/database T, supplied by the evaluator. */
   at: string;
   deadline: number;
+  time?: AuthoritativeTime;
+  work?: AccessWorkAccounting;
 }>;
 export type ResourceEligibilityOptions<E> = Readonly<{
   /** Native owner declarations for these SAME callbacks, not an alternate evaluator. */
@@ -46,7 +53,15 @@ export type ResourceEligibilityOptions<E> = Readonly<{
 }>;
 
 type Binding = Readonly<{ actor: Actor; action: string; resource: Resource; deadline: number }>;
-type Verify = (client: AccessClient, at: string) => Promise<boolean>;
+export type PreparedEligibilityVerify = ((
+  client: AccessClient,
+  at: string,
+  time?: AuthoritativeTime,
+  work?: AccessWorkAccounting,
+) => Promise<boolean>) & {
+  bound?(input: PreparedAccessCheckInvocation): AccessWork | undefined;
+};
+type Verify = PreparedEligibilityVerify;
 type Capability = {
   resource: ResourceIdentity;
   action: string;
@@ -85,8 +100,13 @@ export function createResourceAnonymousEligibility<E>(options: ResourceEligibili
           context.deadline,
         );
         if (evidence === null || evidence === undefined) throw new Error('Missing resource eligibility evidence');
-        return async (client: AccessClient, at: string) => {
-          const input = Object.freeze({
+        const inputFor = (
+          client: AccessClient,
+          at: string,
+          time?: AuthoritativeTime,
+          invocationWork?: AccessWorkAccounting,
+        ) =>
+          Object.freeze({
             actor: context.actor,
             action: context.action,
             resource: context.resource,
@@ -94,13 +114,26 @@ export function createResourceAnonymousEligibility<E>(options: ResourceEligibili
             client,
             at,
             evidence,
+            ...(time ? { time } : {}),
+            ...(invocationWork ? { work: invocationWork } : {}),
           });
+        const preparedVerify: Verify = async (client, at, time, invocationWork) => {
+          const input = inputFor(client, at, time, invocationWork);
           return (
             (await accessOwnerWork(work, 'Content resource eligibility.verify', producer?.verify, input, () =>
               verify(input),
             )) === true
           );
         };
+        if (work && context.work === work && context.time && producer) {
+          preparedVerify.bound = (input) => {
+            if (input.work !== work || input.time !== context.time) return undefined;
+            return producer.verify.bound(
+              inputFor(input.client, authoritativeTimeValue(input.time), input.time, input.work),
+            );
+          };
+        }
+        return preparedVerify;
       },
     }),
   );
@@ -125,7 +158,13 @@ export class ResourceEligibilityUnavailableError extends Error {
  */
 export async function evaluateResourceEligibility(
   eligibility: ResourceEligibility,
-  attempt?: { evidence: unknown; client: AccessClient; at: string },
+  attempt?: {
+    evidence: unknown;
+    client: AccessClient;
+    at: string;
+    time?: AuthoritativeTime;
+    work?: AccessWorkAccounting;
+  },
 ): Promise<boolean> {
   if (!capabilities.has(eligibility)) return false;
   if (!attempt) throw new ResourceEligibilityUnavailableError();
@@ -134,7 +173,7 @@ export async function evaluateResourceEligibility(
   if (facts) requireAccessDeadline(facts.deadline);
   if (!facts || facts.token !== eligibility || !Number.isFinite(Date.parse(attempt.at))) return false;
   const result = await within(facts.deadline, () =>
-    accessEvidence(() => facts.verify(attempt.client, attempt.at), false, facts.deadline),
+    accessEvidence(() => facts.verify(attempt.client, attempt.at, attempt.time, attempt.work), false, facts.deadline),
   );
   requireAccessDeadline(facts.deadline);
   return result === true;
@@ -174,10 +213,21 @@ export async function prepareAnonymousEligibility(
       resource,
       pool: context.pool,
       deadline: binding.deadline,
+      ...(context.time ? { time: context.time } : {}),
+      ...(context.work ? { work: context.work } : {}),
     }),
     context.work,
   );
   const evidence = Object.freeze({});
   observations.set(evidence, { token, verify, deadline: binding.deadline });
-  return (client, at) => evaluateResourceEligibility(token, { evidence, client, at });
+  const result: Verify = (client, at, time, work) =>
+    evaluateResourceEligibility(token, {
+      evidence,
+      client,
+      at,
+      ...(time ? { time } : {}),
+      ...(work ? { work } : {}),
+    });
+  if (verify.bound) result.bound = verify.bound;
+  return result;
 }
