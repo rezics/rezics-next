@@ -41,6 +41,7 @@ export declare class AccessWorkUnavailableError extends AccessUnavailableError {
     readonly dependency: string;
     constructor(dependency: string);
 }
+export declare function addAccessWork(...values: readonly AccessWork[]): AccessWork;
 /** Receipt accumulator only. Admission and remaining budget stay with the sink.
  * Dispatch charges the bound immediately, so timeout/parallel/failed work cannot
  * disappear from a caller's receipt while an operation is still unwinding.
@@ -48,6 +49,7 @@ export declare class AccessWorkUnavailableError extends AccessUnavailableError {
 export declare class AccessWorkAccounting {
     private readonly sink;
     readonly deadline: number;
+    private readonly frames;
     private used;
     private failure;
     private readonly pending;
@@ -57,7 +59,12 @@ export declare class AccessWorkAccounting {
     fail(error: unknown): void;
     capture<T>(operation: () => Promise<T>): Promise<AccessWorkResult<T>>;
     unavailable(dependency: string): never;
-    run<T>(operation: string, footprint: AccessWork | undefined, dispatch: () => Promise<T>, actual?: (result: T) => AccessWork | undefined, kind?: 'native' | 'owner'): Promise<T>;
+    /** Exact receipt of this admitted invocation, independent of concurrent roots. */
+    invocation<T>(operation: string, bound: AccessWork | undefined, dispatch: () => Promise<T>, deadline?: number): Promise<Readonly<{
+        value: T;
+        usage: AccessWork;
+    }>>;
+    run<T>(operation: string, footprint: AccessWork | undefined, dispatch: () => Promise<T>, actual?: (result: T) => AccessWork | undefined, kind?: 'native' | 'owner', notAfter?: number): Promise<T>;
 }
 export declare function accessOwnerWork<C, R>(work: AccessWorkAccounting | undefined, operation: string, producer: AccessWorkProducer<C, R> | undefined, context: C, dispatch: () => Promise<R>): Promise<R>;
 /** Owner declarations for the explicit SQL call sites, never a SQL classifier.

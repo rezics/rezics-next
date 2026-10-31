@@ -139,6 +139,7 @@ export class AccessWorkAccounting {
     notAfter = this.deadline,
   ): Promise<T> {
     if (this.failure) throw this.failure;
+    if (!Number.isFinite(notAfter)) throw new TypeError('Invalid Access work invocation deadline');
     const parent = this.frames.getStore();
     const deadline = Math.min(this.deadline, parent?.deadline ?? this.deadline, notAfter);
     requireAccessDeadline(deadline);

@@ -3926,7 +3926,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
@@ -4142,7 +4142,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
             readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
@@ -4168,7 +4168,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<Response>, {
     response: {
@@ -8324,7 +8324,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
@@ -8846,7 +8846,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
             readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
@@ -8876,7 +8876,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     exposure: import("./catalogue.ts").ExposureValue;
@@ -12969,7 +12969,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
@@ -13141,7 +13141,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
             readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
@@ -13167,7 +13167,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     admitted: string[];

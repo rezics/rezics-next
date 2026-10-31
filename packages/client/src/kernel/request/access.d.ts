@@ -163,7 +163,21 @@ export type PrepareReadDecisionsInput = {
 };
 /** Validate the bounded catalogue before reading any authority dependency. */
 export declare function validReadDecisionActions(input: PrepareReadDecisionsInput, catalogue: ActionCatalogue): boolean;
-export type AccessCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>;
+export type PreparedAccessCheckInvocation = Readonly<{
+    client: AccessClient;
+    time: AuthoritativeTime;
+    work: AccessWorkAccounting;
+}>;
+export type PreparedAccessCheckWork = AccessWorkProducer<PreparedAccessCheckInvocation, boolean> & Readonly<{
+    run(input: PreparedAccessCheckInvocation): Promise<boolean>;
+}>;
+export type AccessCheck = ((client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>) & Readonly<{
+    work?: PreparedAccessCheckWork;
+}>;
+type PreparedWorkFactory = (actor: Actor, action: string, resource: Resource, evidence: unknown, dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>) => PreparedAccessCheckWork | undefined;
+/** Installed only by the original native evaluator and its original wrapper. */
+export declare function installPreparedAccessCheckWork(access: Access, factory: PreparedWorkFactory): void;
+export declare function nativePreparedAccessCheckWork(access: Access, actor: Actor, action: string, resource: Resource, evidence: unknown, dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>): PreparedAccessCheckWork | undefined;
 export type AccessCommandAuthorization = CommandAuthorization & {
     readonly check: AccessCheck;
 };
@@ -205,3 +219,4 @@ export declare class AuthenticationError extends Error {
 }
 export declare function actorOf(access: Access, request: Request, context: AccessContext): Promise<Actor>;
 export declare const anonymousAccess: Access;
+export {};

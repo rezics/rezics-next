@@ -1,5 +1,8 @@
-import { type AccessWorkProducer } from './work.ts';
+import { type AccessWorkAccounting, type AccessWorkProducer } from './work.ts';
 import type { AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
+import { type AuthoritativeTime } from '../command/command.ts';
+import type { PreparedAccessCheckInvocation } from '../request/access.ts';
+import type { AccessWork } from './work.ts';
 declare const resourceEligibility: unique symbol;
 /** Server capability only; serialized input and structural copies carry no authority. */
 export type ResourceEligibility = {
@@ -12,6 +15,8 @@ export type ResourceEligibilityPrepareContext = Readonly<{
     resource: ResourceIdentity;
     pool: AccessContext['pool'];
     deadline: number;
+    time?: AuthoritativeTime;
+    work?: AccessWorkAccounting;
 }>;
 export type ResourceEligibilityVerifyContext<E> = Readonly<{
     client: AccessClient;
@@ -22,6 +27,8 @@ export type ResourceEligibilityVerifyContext<E> = Readonly<{
     /** Authoritative server/database T, supplied by the evaluator. */
     at: string;
     deadline: number;
+    time?: AuthoritativeTime;
+    work?: AccessWorkAccounting;
 }>;
 export type ResourceEligibilityOptions<E> = Readonly<{
     /** Native owner declarations for these SAME callbacks, not an alternate evaluator. */
@@ -48,7 +55,10 @@ type Binding = Readonly<{
     resource: Resource;
     deadline: number;
 }>;
-type Verify = (client: AccessClient, at: string) => Promise<boolean>;
+export type PreparedEligibilityVerify = ((client: AccessClient, at: string, time?: AuthoritativeTime, work?: AccessWorkAccounting) => Promise<boolean>) & {
+    bound?(input: PreparedAccessCheckInvocation): AccessWork | undefined;
+};
+type Verify = PreparedEligibilityVerify;
 /** Generic anonymous-action domain capability, never an authorization boolean.
  * Snapshot identity/action and callbacks without executing domain code. Command
  * callbacks prove that action's current prerequisites (including verified captcha
@@ -74,6 +84,8 @@ export declare function evaluateResourceEligibility(eligibility: ResourceEligibi
     evidence: unknown;
     client: AccessClient;
     at: string;
+    time?: AuthoritativeTime;
+    work?: AccessWorkAccounting;
 }): Promise<boolean>;
 /** Prepare bounded owning-module evidence before resource checkout. Each check
  * binds the exact capability, actor, action, resource and deadline independently.

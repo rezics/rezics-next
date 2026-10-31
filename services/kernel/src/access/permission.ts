@@ -459,7 +459,13 @@ function preparedCheckWork(
       const result = await work.invocation(
         'Access prepared check',
         bound(input),
-        () => dispatch(input),
+        async () => {
+          const value = await dispatch(input);
+          if (input.client !== client || input.time !== time || input.work !== work)
+            return work.unavailable('Access prepared invocation changed during dispatch');
+          authoritativeTimeValue(time);
+          return value;
+        },
         facts.deadline,
       );
       receipts.set(input, { ...result, client, time, work });
