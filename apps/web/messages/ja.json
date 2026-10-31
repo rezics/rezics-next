@@ -1347,6 +1347,7 @@
   "settings_verification_request_refused": "認証申請は受け付けられませんでした。内容と現在の状態を確認してから再試行してください。",
   "settings_verification_withdraw_refused": "取り下げは受け付けられませんでした。現在の状態を確認してから次の操作を決めてください。",
   "settings_verification_command_details": "送信の技術的な詳細",
+  "settings_verification_withdraw_details": "保存した取り下げ依頼の技術的な詳細",
   "settings_verification_diagnostic_code": "応答コード：{code}",
   "settings_verification_diagnostic_request": "サポート用参照番号：{requestId}",
   "settings_verification_command_error": "操作の応答（{status}）：{message}",

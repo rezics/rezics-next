@@ -421,7 +421,8 @@ async function showRetryAfter(canvasElement: HTMLElement, withdraw = false) {
     await expect(view.getByRole('button', { name: m.settings_verification_add_link() })).toBeEnabled();
   } else {
     await expect(view.getByText(m.settings_verification_withdraw_action({ subject: 'Avery' }))).toBeVisible();
-    await expect(view.queryByText(pending.id)).toBeNull();
+    await userEvent.click(view.getByText(m.settings_verification_withdraw_details()));
+    await expect(view.getByText(pending.id)).toBeVisible();
   }
   await expect(view.queryByText(m.settings_verification_draft_preserved())).toBeNull();
 }

@@ -1347,6 +1347,7 @@
   "settings_verification_request_refused": "Deine Verifizierungsanfrage wurde nicht angenommen. Prüfe ihren Inhalt und den aktuellen Status, bevor du es erneut versuchst.",
   "settings_verification_withdraw_refused": "Deine Rücknahme wurde nicht angenommen. Prüfe den aktuellen Status, bevor du über den nächsten Schritt entscheidest.",
   "settings_verification_command_details": "Technische Details des Sendeversuchs",
+  "settings_verification_withdraw_details": "Technische Details der gespeicherten Rücknahme",
   "settings_verification_diagnostic_code": "Antwortcode: {code}",
   "settings_verification_diagnostic_request": "Support-Referenz: {requestId}",
   "settings_verification_command_error": "Antwort auf den Vorgang ({status}): {message}",

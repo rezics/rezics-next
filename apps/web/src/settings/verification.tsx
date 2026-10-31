@@ -41,11 +41,14 @@ function subjectLabel(title: string | null | undefined, subjectId: string | unde
   return title?.trim() && title !== subjectId ? title : m.settings_verification_generic_subject();
 }
 
+function boundedDiagnosticId(value: string | null | undefined) {
+  return value && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$/.test(value) ? value : null;
+}
+
 function CommandDetails({ failure }: { failure: VerificationFailure }) {
   // Only bounded diagnostic identifiers belong here; never render the transported message or command key.
   const code = failure.code && /^[a-z][a-z0-9_]{0,63}$/.test(failure.code) ? failure.code : null;
-  const requestId =
-    failure.requestId && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$/.test(failure.requestId) ? failure.requestId : null;
+  const requestId = boundedDiagnosticId(failure.requestId);
   return (
     <details>
       <summary>{m.settings_verification_command_details()}</summary>
@@ -395,6 +398,11 @@ export function VerificationCard({
                       ))}
                     </ul>
                   </div>
+                </details>
+              ) : boundedDiagnosticId(state.attempt.requestId) ? (
+                <details>
+                  <summary>{m.settings_verification_withdraw_details()}</summary>
+                  <p className="break-all">{state.attempt.requestId}</p>
                 </details>
               ) : null}
               <Button

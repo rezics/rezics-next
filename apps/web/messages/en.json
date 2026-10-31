@@ -1372,6 +1372,7 @@
   "settings_verification_request_refused": "Your verification request was refused. Review it and check current status before trying again.",
   "settings_verification_withdraw_refused": "Your withdrawal was refused. Check current status before deciding what to do next.",
   "settings_verification_command_details": "Technical details of the send attempt",
+  "settings_verification_withdraw_details": "Technical details of the saved withdrawal",
   "settings_verification_diagnostic_code": "Response code: {code}",
   "settings_verification_diagnostic_request": "Support reference: {requestId}",
   "settings_verification_command_error": "Command response ({status}): {message}",

@@ -1347,6 +1347,7 @@
   "settings_verification_request_refused": "Votre demande de vérification a été refusée. Relisez-la et consultez le statut actuel avant de réessayer.",
   "settings_verification_withdraw_refused": "Votre retrait a été refusé. Consultez le statut actuel avant de décider de la suite.",
   "settings_verification_command_details": "Détails techniques de la tentative d’envoi",
+  "settings_verification_withdraw_details": "Détails techniques du retrait enregistré",
   "settings_verification_diagnostic_code": "Code de réponse : {code}",
   "settings_verification_diagnostic_request": "Référence pour l’assistance : {requestId}",
   "settings_verification_command_error": "Réponse à la commande ({status}) : {message}",

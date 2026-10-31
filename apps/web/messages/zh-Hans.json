@@ -1348,6 +1348,7 @@
   "settings_verification_request_refused": "你的认证申请未被接受。请检查内容并查看当前状态后再试。",
   "settings_verification_withdraw_refused": "你的撤回请求未被接受。请查看当前状态，再决定下一步操作。",
   "settings_verification_command_details": "此次发送的技术详情",
+  "settings_verification_withdraw_details": "已保存撤回请求的技术详情",
   "settings_verification_diagnostic_code": "响应代码：{code}",
   "settings_verification_diagnostic_request": "支持参考编号：{requestId}",
   "settings_verification_command_error": "操作响应（{status}）：{message}",

@@ -1347,6 +1347,7 @@
   "settings_verification_request_refused": "No se aceptó tu solicitud de verificación. Revísala y consulta el estado actual antes de volver a intentarlo.",
   "settings_verification_withdraw_refused": "No se aceptó tu retirada. Consulta el estado actual antes de decidir qué hacer.",
   "settings_verification_command_details": "Detalles técnicos del intento de envío",
+  "settings_verification_withdraw_details": "Detalles técnicos de la retirada guardada",
   "settings_verification_diagnostic_code": "Código de respuesta: {code}",
   "settings_verification_diagnostic_request": "Referencia para soporte: {requestId}",
   "settings_verification_command_error": "Respuesta de la operación ({status}): {message}",

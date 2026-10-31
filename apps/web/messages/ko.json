@@ -1347,6 +1347,7 @@
   "settings_verification_request_refused": "인증 요청이 거부되었습니다. 내용과 현재 상태를 확인한 후 다시 시도하세요.",
   "settings_verification_withdraw_refused": "철회 요청이 거부되었습니다. 현재 상태를 확인한 후 다음 작업을 결정하세요.",
   "settings_verification_command_details": "전송 시도의 기술 세부 정보",
+  "settings_verification_withdraw_details": "저장된 철회 요청의 기술 세부 정보",
   "settings_verification_diagnostic_code": "응답 코드: {code}",
   "settings_verification_diagnostic_request": "지원 참조 번호: {requestId}",
   "settings_verification_command_error": "작업 응답 ({status}): {message}",

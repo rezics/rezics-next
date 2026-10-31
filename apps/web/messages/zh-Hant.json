@@ -1347,6 +1347,7 @@
   "settings_verification_request_refused": "你的驗證申請未被接受。請檢查內容並查看目前狀態後再試。",
   "settings_verification_withdraw_refused": "你的撤回請求未被接受。請查看目前狀態，再決定下一步操作。",
   "settings_verification_command_details": "此次傳送的技術詳情",
+  "settings_verification_withdraw_details": "已儲存撤回請求的技術詳情",
   "settings_verification_diagnostic_code": "回應代碼：{code}",
   "settings_verification_diagnostic_request": "支援參考編號：{requestId}",
   "settings_verification_command_error": "操作回應（{status}）：{message}",
