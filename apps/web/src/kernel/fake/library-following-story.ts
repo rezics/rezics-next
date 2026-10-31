@@ -4,6 +4,8 @@ import followsRecording from '../recorded/library-follows.json';
 export type LibraryFollowingStoryMode =
   | 'recorded'
   | 'none'
+  | 'inactive-page'
+  | 'last-follow'
   | 'many'
   | 'unavailable'
   | 'error'
@@ -23,6 +25,13 @@ function list() {
     return { status: 500, type: 'https://rezics.com/problems/internal_error', code: 'internal_error' };
   const base = followsRecording.follows;
   if (mode === 'none') return { status: 200, follows: [], next: null };
+  if (mode === 'inactive-page')
+    return {
+      status: 200,
+      follows: base.map((follow) => ({ ...follow, state: 'unfollowed' as const })),
+      next: 'next-page',
+    };
+  if (mode === 'last-follow') return { status: 200, follows: base.slice(-1), next: null };
   if (mode === 'hidden') {
     const hidden = base.map((follow, index) => (index < 2 ? { ...follow, target: null } : follow));
     return { status: 200, follows: hidden, next: null };

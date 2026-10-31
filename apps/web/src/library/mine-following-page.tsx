@@ -1,5 +1,7 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@rezics/ui/shadcn/empty';
 import { useEffect, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { getLocale } from '../paraglide/runtime.js';
@@ -15,9 +17,12 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
   const canReadCollection = useOperation('collection.get');
   const [follows, setFollows] = useState(page.follows);
   const [removed, setRemoved] = useState(false);
-  useEffect(() => setFollows(page.follows), [page.follows]);
+  useEffect(() => {
+    setFollows(page.follows);
+    setRemoved(false);
+  }, [page.follows]);
 
-  const active = follows.filter((follow) => follow.state === 'following');
+  const active = page.signedIn ? follows.filter((follow) => follow.state === 'following') : [];
   const groups = [
     { type: 'subject' as const, label: m.library_following_subjects() },
     { type: 'collection' as const, label: m.library_following_collections() },
@@ -29,7 +34,7 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
       <header>
         <PageHeading>{m.library_following_heading()}</PageHeading>
       </header>
-      {removed ? <p role="status">{m.library_follow_removed()}</p> : null}
+      {page.signedIn && removed ? <p role="status">{m.library_follow_removed()}</p> : null}
       {active.length ? (
         <div className="space-y-8">
           {groups.map(({ type, label }) => {
@@ -106,10 +111,21 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
             );
           })}
         </div>
-      ) : (
-        <p className="text-muted-foreground">{m.library_following_empty()}</p>
-      )}
-      {page.next ? (
+      ) : page.signedIn ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyDescription>
+              {page.next ? m.library_following_page_empty() : m.library_following_empty()}
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <a href={`/${getLocale()}/search`} className={buttonVariants({ variant: 'outline' })}>
+              {m.search_heading()}
+            </a>
+          </EmptyContent>
+        </Empty>
+      ) : null}
+      {page.signedIn && page.next ? (
         <Exposure operation="follow.list">
           <nav aria-label={m.library_following_heading()}>
             <Link

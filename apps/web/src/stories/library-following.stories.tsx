@@ -49,6 +49,38 @@ export const Empty: Story = {
   },
 };
 
+export const InactivePage: Story = {
+  render: () => FollowingStory('inactive-page'),
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(canvas.getByText(m.library_following_page_empty())).toBeVisible();
+    await expect(canvas.getByRole('link', { name: m.search_heading() })).toHaveAttribute('href', /\/search$/);
+    await expect(canvas.getByRole('link', { name: m.library_collection_more() })).toHaveAttribute(
+      'href',
+      /cursor=next-page/,
+    );
+  },
+};
+
+export const AfterLastUnfollow: Story = {
+  render: () => FollowingStory('last-follow'),
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: /more actions for/i }));
+    const body = within(context.canvasElement.ownerDocument.body);
+    const remove =
+      body.queryByRole('menuitem', { name: m.library_follow_unfollow() }) ??
+      body.getByRole('button', { name: m.library_follow_unfollow() });
+    await userEvent.click(remove);
+    await expect(canvas.getByText(m.library_follow_removed())).toBeVisible();
+    await expect(canvas.getByText(m.library_following_empty())).toBeVisible();
+    await expect(canvas.getByRole('link', { name: m.search_heading() })).toHaveAttribute('href', /\/search$/);
+    await expect(canvas.queryByRole('link', { name: 'Kokoro' })).toBeNull();
+  },
+};
+
 export const LongContent: Story = {
   render: () => FollowingStory('many'),
   play: async (context) => {

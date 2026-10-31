@@ -1,8 +1,12 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, createElement, useState } from 'react';
 import { createKernelClient } from '@rezics/client';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
 import { loadMineFollowingPage, unfollowFollow } from '../src/library/mine-following';
+import type { MineFollowingPage } from '../src/library/mine-following';
+import { loadFollowState, writeFollowRecord, type FollowWriteInput } from '../src/library/follow-records';
 
 const siteOrigin = 'https://site.example.test';
 const sessionId = 'a'.repeat(43);
@@ -178,4 +182,224 @@ test('unfollow sends one authenticated native delete for the selected target', a
   expect(new URL(requests[0]!.url).pathname).toBe('/v1/follows/collection-1');
   expect(requests[0]?.headers.get('authorization')).toBe('Bearer alice-page-token');
   expect(requests[0]?.headers.get('idempotency-key')).toBe('123e4567-e89b-42d3-a456-426614174000');
+});
+
+test('Following management has a genuine discovery destination after the last unfollow and never claims a partial empty page proves an empty account', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: `${siteOrigin}/en/library/following`, width: 1280, height: 900 });
+  window.document.documentElement.lang = 'en';
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Element: window.Element,
+    Node: window.Node,
+    NodeFilter: window.NodeFilter,
+    Document: window.Document,
+    ShadowRoot: window.ShadowRoot,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    Event: window.Event,
+    MouseEvent: window.MouseEvent,
+    PointerEvent: window.PointerEvent,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+
+  const requests: Request[] = [];
+  const follow = {
+    targetId: '01a17a3b-6b89-748f-a486-33c354ef3c9a',
+    targetType: 'subject',
+    state: 'following',
+    reason: 'library',
+    updatedAt: stamp,
+    target: { id: '01a17a3b-6b89-748f-a486-33c354ef3c9a', type: 'schema:Book', label: 'Kokoro' } as {
+      id: string;
+      type: string;
+      label: string;
+    } | null,
+  };
+  let list = { follows: [follow], next: 'opaque-next' as string | null };
+  let listStatus = 200;
+  let deleteResponse = async () => Response.json({ code: 'forbidden' }, { status: 403 });
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      expect(request.headers.get('authorization')).toBe('Bearer alice-page-token');
+      const url = new URL(request.url);
+      if (request.method === 'GET') {
+        expect(url.pathname).toBe('/v1/follows');
+        expect(url.searchParams.get('view')).toBe('FULL');
+        expect(url.searchParams.get('limit')).toBe('100');
+        return listStatus === 200
+          ? Response.json(list)
+          : Response.json({ code: listStatus === 403 ? 'forbidden' : 'unavailable' }, { status: listStatus });
+      }
+      expect(request.method).toBe('DELETE');
+      expect(url.pathname).toBe(`/v1/follows/${follow.targetId}`);
+      return deleteResponse();
+    },
+  });
+  const env = sessionEnv();
+  const read = (cursor?: string) =>
+    loadMineFollowingPage(client, pageRequest('/en/library/following'), env, { cursor });
+  // Only the server-function transport/session boundary is supplied by this DOM test.
+  // The page, shared control and default client consume constructed HTTP responses, not native evidence.
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const originalFollowActions = { ...(await import('../src/library/follow-actions')) };
+  mock.module('../src/library/follow-actions', () => ({
+    readFollowState: ({ data }: { data: { targetId: string } }) =>
+      loadFollowState(client, pageRequest('/en/library/following'), env, data.targetId),
+    setFollow: ({ data, headers }: { data: FollowWriteInput; headers: Record<string, string> }) => {
+      expect(headers['X-CSRF-Token']).toBe(csrfToken);
+      return writeFollowRecord(client, pageRequest('/en/library/following', 'POST', true), env, data);
+    },
+  }));
+  const session = { ...(await import('../src/session/query')) };
+  mock.module('../src/session/query', () => ({
+    ...session,
+    useSession: () => ({ state: 'signed-in', csrfToken }),
+  }));
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { MineFollowingPageView } = await import('../src/library/mine-following-page');
+  const { m } = await import('../src/paraglide/messages.js');
+  const initial = await read();
+  let showPage!: (page: MineFollowingPage) => void;
+  function Page() {
+    const [page, setPage] = useState(initial);
+    showPage = setPage;
+    return createElement(MineFollowingPageView, { page });
+  }
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false } } });
+  queryClient.setQueryData(session.exposureQuery.queryKey, ['personal_library']);
+  const router = createRouter({
+    routeTree: createRootRoute({ component: Page }),
+    history: createMemoryHistory({ initialEntries: ['/library/following'] }),
+  });
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const row = () => host.querySelector('[data-slot="list-row"]');
+  const empty = () => host.querySelector('[data-slot="empty"]');
+  const discovery = () => host.querySelector<HTMLAnchorElement>('[data-slot="empty"] a');
+  const more = () =>
+    [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => link.textContent === m.library_collection_more());
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+  const remove = async () => {
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
+    });
+    await settle();
+    const action = window.document.querySelector<HTMLElement>('[role="menuitem"]');
+    expect(action?.textContent).toBe(m.library_follow_unfollow());
+    await act(async () => {
+      action!.click();
+    });
+    await settle();
+  };
+  try {
+    await router.load();
+    await act(async () => {
+      root.render(
+        createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+      );
+    });
+    expect(row()?.textContent).toContain('Kokoro');
+    expect(row()?.textContent).toContain(m.library_follow_reason_library());
+    expect(empty()).toBeNull();
+    for (const response of [
+      async () => Response.json({ code: 'forbidden' }, { status: 403 }),
+      async () => Response.json({ code: 'unavailable' }, { status: 503 }),
+      async () => Response.json({}),
+      async () => {
+        throw new TypeError('Response lost');
+      },
+    ]) {
+      deleteResponse = response;
+      await remove();
+      expect(row()?.textContent).toContain('Kokoro');
+      expect(host.querySelector('[role="alert"]')).not.toBeNull();
+      expect(empty()).toBeNull();
+      expect(host.textContent).not.toContain(m.library_follow_removed());
+    }
+    let resolveDelete!: (response: Response) => void;
+    deleteResponse = () =>
+      new Promise<Response>((resolve) => {
+        resolveDelete = resolve;
+      });
+    await remove();
+    expect(row()).not.toBeNull();
+    expect(host.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(empty()).toBeNull();
+    await act(async () => {
+      resolveDelete(Response.json({ follow: { ...follow, state: 'unfollowed' } }));
+    });
+    expect(row()).toBeNull();
+    expect(host.textContent).toContain(m.library_follow_removed());
+    expect(empty()?.textContent).toContain(m.library_following_page_empty());
+    expect(discovery()?.getAttribute('href')).toBe('/en/search');
+    expect(discovery()?.textContent).toBe(m.search_heading());
+    expect(new URL(more()!.href).searchParams.get('cursor')).toBe('opaque-next');
+    const deletes = requests.filter((request) => request.method === 'DELETE');
+    expect(deletes).toHaveLength(5);
+    expect(
+      deletes.every((request) => request.headers.get('idempotency-key') === initial.follows[0]!.idempotencyKey),
+    ).toBe(true);
+    expect(requests.filter((request) => request.method === 'GET')).toHaveLength(1);
+
+    list = { follows: [{ ...follow, state: 'unfollowed', target: null }], next: 'opaque-next' };
+    const inactive = await read('opaque-current');
+    await act(async () => showPage(inactive));
+    expect(row()).toBeNull();
+    expect(empty()?.textContent).toContain(m.library_following_page_empty());
+    expect(empty()?.textContent).not.toContain(m.library_following_empty());
+    expect(host.textContent).not.toContain(m.library_follow_removed());
+    expect(discovery()?.getAttribute('href')).toBe('/en/search');
+    expect(new URL(more()!.href).searchParams.get('cursor')).toBe('opaque-next');
+    expect(requests.filter((request) => request.method === 'GET')).toHaveLength(2);
+    expect(new URL(requests.at(-1)!.url).searchParams.get('cursor')).toBe('opaque-current');
+
+    list = { follows: [], next: null };
+    await act(async () => showPage(await read()));
+    expect(empty()?.textContent).toContain(m.library_following_empty());
+    expect(host.textContent).not.toContain(m.library_follow_removed());
+    expect(discovery()?.getAttribute('href')).toBe('/en/search');
+    const beforeSignedOut = requests.length;
+    const signedOut = await loadMineFollowingPage(client, new Request(`${siteOrigin}/en/library/following`), {}, {});
+    await act(async () => showPage(signedOut));
+    expect(empty()).toBeNull();
+    expect(requests).toHaveLength(beforeSignedOut);
+    for (const status of [403, 503]) {
+      listStatus = status;
+      await expect(read()).rejects.toThrow();
+    }
+  } finally {
+    await act(async () => root.unmount());
+    queryClient.clear();
+    await window.happyDOM.close();
+    mock.module('../src/library/follow-actions', () => originalFollowActions);
+    mock.module('../src/session/query', () => session);
+    mock.restore();
+    for (const key of Object.keys(globals)) {
+      const descriptor = previous.get(key);
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
 });
