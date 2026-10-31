@@ -280,6 +280,11 @@ export const DefaultReadRecovery: StoryObj = {
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_submit() }));
     await view.findByText(m.settings_verification_uncertain_request());
     await expect(fixture.commands).toHaveLength(1);
+    const originalCommands = fixture.commands.map((command) => ({ ...command }));
+    await expect(originalCommands[0]).toMatchObject({
+      method: 'POST',
+      path: '/v1/accounts/story-viewer:requestVerification',
+    });
     const originalKey = JSON.parse(fixture.commands[0]!.key!);
     await userEvent.click(view.getByText(m.settings_verification_original()));
     await view.findByText(originalKey);
@@ -296,6 +301,10 @@ export const DefaultReadRecovery: StoryObj = {
     await expect(failure).toHaveAttribute('data-response-code', 'dependency_unavailable');
     await expect(failure).toHaveAttribute('data-request-id', 'verification-status');
     await expect(failure).toHaveAttribute('data-retry-after', '2');
+    const details = within(failure as HTMLElement).getByText(m.settings_verification_read_details()).closest('details')!;
+    await expect(details).not.toHaveAttribute('open');
+    await userEvent.click(within(failure as HTMLElement).getByText(m.settings_verification_read_details()));
+    await expect(within(details).getByText(m.settings_verification_read_error({ status: 503 }))).toBeVisible();
     await expect(view.queryByText(transportedReadMessage, { exact: false })).toBeNull();
     await userEvent.click(view.getByRole('button', { name: m.settings_privacy_load_more() }));
     await view.findByText(m.settings_privacy_page_load_failed());
@@ -319,7 +328,7 @@ export const DefaultReadRecovery: StoryObj = {
     );
     // Retry-After expiry only enables controls; it sends no read or command.
     await expect(fixture.reads).toEqual({ collections: [null, continuation], verification: 2 });
-    await expect(fixture.commands).toHaveLength(1);
+    await expect(fixture.commands).toEqual(originalCommands);
     await userEvent.click(retry);
     await view.findByRole('link', { name: collectionsRecording.collections[1]!.title });
     await expect(view.getByRole('link', { name: collectionsRecording.collections[0]!.title })).toBe(retained);
@@ -335,7 +344,7 @@ export const DefaultReadRecovery: StoryObj = {
     await expect(view.getByRole('button', { name: m.settings_verification_retry_original() })).toBeEnabled();
     await expect(fixture.reads).toEqual({ collections: [null, continuation, continuation], verification: 3 });
     // All recovery was GET: no visibility write, request replay, withdrawal or replacement command key.
-    await expect(fixture.commands).toHaveLength(1);
+    await expect(fixture.commands).toEqual(originalCommands);
     await expect(view.queryByRole('button', { name: m.settings_verification_withdraw() })).toBeNull();
   },
 };
