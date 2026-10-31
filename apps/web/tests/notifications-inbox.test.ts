@@ -594,7 +594,10 @@ test('rejected native cursors retry the identical GET and only an explicit resta
           expect(url.searchParams.get('limit')).toBe('20');
           if (url.searchParams.has('cursor')) {
             expect(url.searchParams.get('cursor')).toBe(cursor);
-            return Response.json({ status, request_id: 'cursor-rejected' }, { status, headers: { 'Retry-After': '2' } });
+            return Response.json(
+              { status, request_id: 'cursor-rejected' },
+              { status, headers: { 'Retry-After': '2' } },
+            );
           }
           firstPages++;
           return Response.json({
@@ -633,8 +636,9 @@ test('rejected native cursors retry the identical GET and only an explicit resta
     expect(readableInboxPage(state)?.next).toBeNull();
     const urls = requests.map((request) => new URL(request.url));
     expect(requests.every((request) => request.method === 'GET')).toBe(true);
-    expect(urls.filter((url) => url.pathname.endsWith('/notifications')).map((url) => url.searchParams.get('cursor')))
-      .toEqual([null, cursor, cursor, null]);
+    expect(
+      urls.filter((url) => url.pathname.endsWith('/notifications')).map((url) => url.searchParams.get('cursor')),
+    ).toEqual([null, cursor, cursor, null]);
     expect(urls.filter((url) => url.pathname === `/v1/posts/${post}`)).toHaveLength(2);
     expect(urls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(2);
     expect(requests).toHaveLength(8);
@@ -654,10 +658,15 @@ test('discarded page responses cannot repopulate a restarted chain or outlive a 
       const oldPage = deferred<InboxPage>();
       const old = client.fetchQuery(inboxPageQuery(viewer, undefined, () => oldPage.promise)).catch(() => null);
       const loaded = receiveInboxPage(emptyInboxPagination, {
-        signedIn: true, state: 'ready', items: [], next: 'rejected-cursor',
+        signedIn: true,
+        state: 'ready',
+        items: [],
+        next: 'rejected-cursor',
       });
       const rejected = receiveInboxPage(nextInboxPage(loaded), {
-        signedIn: true, state: 'unavailable', failure: { status: 409 },
+        signedIn: true,
+        state: 'unavailable',
+        failure: { status: 409 },
       });
       const reset = restartInboxPage(rejected);
       client.removeQueries({ queryKey: inboxViewerQueryKey(viewer) });
@@ -679,8 +688,10 @@ test('discarded page responses cannot repopulate a restarted chain or outlive a 
       const result = await fresh;
       expect(await coalesced).toBe(result);
       const obsolete: InboxPage = {
-        signedIn: true, state: 'ready',
-        items: [{ ...notice(), text: 'Old private content', unavailable: false }], next: 'old-continuation',
+        signedIn: true,
+        state: 'ready',
+        items: [{ ...notice(), text: 'Old private content', unavailable: false }],
+        next: 'old-continuation',
       };
       oldPage.resolve(obsolete);
       await old;
