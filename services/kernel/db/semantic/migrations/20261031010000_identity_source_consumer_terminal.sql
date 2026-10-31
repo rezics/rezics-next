@@ -20,6 +20,10 @@ CREATE TABLE semantic.identity_epoch_source_consumer_terminal (
  restore_generation bigint NOT NULL CHECK(restore_generation>=0),
  owner_epoch integer NOT NULL CHECK(owner_epoch>0),
  transaction_id uuid NOT NULL,
+ receiving_partition integer CHECK(receiving_partition BETWEEN 0 AND 4095),
+ receiving_epoch integer CHECK(receiving_epoch>0),
+ receiving_position bigint CHECK(receiving_position>0),
+ receiving_transaction_id uuid,
  erasure_key bigint NOT NULL DEFAULT nextval('semantic.erasure_record_key'),
  PRIMARY KEY(partition_no,custody_key,sequence),
  UNIQUE(partition_no,erasure_key),
@@ -38,6 +42,10 @@ CREATE TABLE semantic.identity_epoch_source_consumer_terminal (
  CHECK(octet_length(jsonb_build_array(directory_after,effect_after)::text)<=2048),
  CHECK((scope_partition IS NULL AND scope_epoch IS NULL AND scope_position IS NULL AND scope_transaction_id IS NULL)
   OR (scope_partition IS NOT NULL AND scope_epoch IS NOT NULL AND scope_position IS NOT NULL AND scope_transaction_id IS NOT NULL)),
+ CHECK((state='transferred' AND receiving_partition=partition_no AND receiving_epoch=owner_epoch
+  AND receiving_partition IS NOT NULL AND receiving_epoch IS NOT NULL AND receiving_position IS NOT NULL
+  AND receiving_transaction_id IS NOT NULL) OR (state<>'transferred' AND receiving_partition IS NULL
+  AND receiving_epoch IS NULL AND receiving_position IS NULL AND receiving_transaction_id IS NULL)),
  CHECK(state='scope' OR effect_after IS NULL),
  CHECK(state NOT IN ('discharged','transferred') OR directory_after IS NOT NULL),
  CHECK(scope_transaction_id IS NULL OR (ticket_key IS NOT NULL AND seal_digest IS NOT NULL))

@@ -1,6 +1,7 @@
 SELECT r.sequence::text,r.state,r.directory_after,r.ticket_key,r.effect_after,r.seal_digest,
        r.replay_generation::text,r.undo_generation::text,r.restore_generation::text,
        r.transaction_id,r.owner_epoch,n.position::text,
+       r.receiving_partition,r.receiving_epoch,r.receiving_position::text,r.receiving_transaction_id,
        (n.transaction_id IS NOT NULL AND p.partition_no IS NOT NULL) AS native_current
 FROM (
  SELECT * FROM semantic.identity_epoch_source_consumer_terminal

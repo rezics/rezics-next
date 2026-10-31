@@ -86,7 +86,7 @@ In `identity-scoped-observations.ts`:
 readIdentityScopeConsumerWork(pool: Pool, ticket: IdentityPrearmTicketData,
   context: Readonly<{deadline: number}>): Promise<IdentitySourceScopeConsumerWork | null>;
 retainIdentityScopeConsumerFence(tx: CommandTransaction, ticket: IdentityPrearmTicketData,
-  seal: LibraryScopeEffectSeal): Promise<boolean>;
+  seal: LibraryScopeEffectSeal): Promise<IdentityNativeReceipt | null>;
 ```
 
 `read` resolves the original retained registration/capture and its actual shared
@@ -97,7 +97,7 @@ a guessed reservation or depend on query readiness. `retain` runs on the exact
 Source home after Source has independently verified the current Library seal on
 that same transaction. It rechecks the native registration/capture/attempt and
 exhaustive current completion, records a durable native fence with real commit
-provenance, and retains every proof obligation. Later scoped writers must extend
+provenance, returns that exact native receipt (including on replay), and retains every proof obligation. Later scoped writers must extend
 that durable obligation or reject old-source use; ordinary finish/revalidate and
 a receipt read before release do not implement this guarantee. Unsupported public
 catalogue and public-output sources remain separate pending branches.
@@ -106,16 +106,18 @@ In `access/agent-verification-identity.ts`:
 
 ```ts
 acceptAccountIdentityTechnicalSource(tx: CommandTransaction,
-  reference: IdentitySourceConsumerReference): Promise<boolean>;
+  reference: IdentitySourceConsumerReference): Promise<IdentityNativeReceipt | null>;
 verifyAccountIdentityTechnicalSource(tx: CommandTransaction,
-  reference: IdentitySourceConsumerReference): Promise<boolean>;
+  reference: IdentitySourceConsumerReference, receiving: IdentityNativeReceipt): Promise<boolean>;
 ```
 
 These are same-original-home native receiving operations. Acceptance resolves the
 actual original accepted immutable input and job and stores only indispensable
 technical undo/replay identity, never reason/requester/decider/private payloads.
 It enrolls all remaining personal locators through native all-role custody and
-records real receiving commit provenance. The existing Accounts source/undo read
+records real receiving commit provenance and returns the exact native receiving
+receipt. Source binds that receipt in its terminal row; verify must resolve that
+same receipt, not a replacement obligation. The existing Accounts source/undo read
 must resolve this native obligation after original source minimization, without an
 active-account requirement or current-release reconstruction. Verify resolves and
 locks that actual durable receiver in the same live command, with no foreign I/O.
@@ -124,7 +126,7 @@ Source's own receipt does not implement this receiver and cannot stand in for it
 These hooks are indispensable: the delivered directory proves inventory only,
 the Library seal may be invalidated by a later writer, and current Accounts undo
 reads still require the original source row. Their absence must leave the exact
-branch pending. Source does not edit these owner modules or copy their SQL. False acceptance/fence
+branch pending. Source does not edit these owner modules or copy their SQL. Null acceptance/fence
 results must be effects-free; after a successful receiver write, failed local verification
 rolls the whole command back.
 
@@ -136,7 +138,8 @@ sequence, original claim and current owner and has same-transaction
 `erasure_source_commit` provenance. It enrolls through the existing all-role native
 trigger. It stores bounded directory/effect cursors, seal digests and native fence
 receipts; it stores no Source payload, scope inventory, opaque directory cut or
-serialized proof brand. A changed seal restarts that scope; a changed native
+serialized proof brand. A changed seal restarts that scope; a directory continuation rejected after a
+process restart restarts native directory enumeration; a changed native
 replay/undo/restore generation restarts the directory.
 
 Each invocation reads one actual admitted directory page and at most one Library
@@ -158,7 +161,8 @@ native replay/undo/restore fence and genuine technical receiver on the same comm
 It performs no foreign reads. The public read first resolves an already committed
 terminal receipt locally, so source minimization cannot force reconstruction of the
 erased original input before the technical receiver can be used. Neither a retained row nor a later pending continuation
-can satisfy it. A surviving requester's/decider's verification requires transfer.
+can satisfy it. A surviving requester's/decider's verification requires transfer; subject erasure
+requires native discharge after reversal and consumer settlement.
 
 New continuation records still contain native personal locators through their parent
 key and are enrolled and conservatively deferred by the existing minimizer. Terminal

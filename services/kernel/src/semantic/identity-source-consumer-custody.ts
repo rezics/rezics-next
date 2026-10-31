@@ -86,11 +86,11 @@ type ScopedConsumerOwner = {
   readIdentityScopeConsumerWork(pool: Pool, ticket: IdentityPrearmTicketData,
     context: Readonly<{ deadline: number }>): Promise<IdentitySourceScopeConsumerWork | null>;
   retainIdentityScopeConsumerFence(tx: CommandTransaction, ticket: IdentityPrearmTicketData,
-    seal: LibraryScopeEffectSeal): Promise<boolean>;
+    seal: LibraryScopeEffectSeal): Promise<IdentityNativeReceipt | null>;
 };
 type TechnicalConsumerOwner = {
-  acceptAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference): Promise<boolean>;
-  verifyAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference): Promise<boolean>;
+  acceptAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference): Promise<IdentityNativeReceipt | null>;
+  verifyAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference, receiving: IdentityNativeReceipt): Promise<boolean>;
 };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -386,6 +386,10 @@ type Progress = {
   owner_epoch: number;
   position: string;
   native_current: boolean;
+  receiving_partition: number | null;
+  receiving_epoch: number | null;
+  receiving_position: string | null;
+  receiving_transaction_id: string | null;
 };
 const hash = (value: unknown) => createHash('sha256').update(json(value)).digest('hex');
 const terminal = (state: Progress['state']): state is IdentitySourceConsumerDisposition =>
@@ -498,7 +502,7 @@ async function checkpoint(pool: Pool, reference: IdentitySourceConsumerReference
         next.fence?.partition ?? null, next.fence?.epoch ?? null,
         next.fence?.position.toString() ?? null, next.fence?.transactionId ?? null,
         generation.replayGeneration, generation.undoGeneration, generation.restoreGeneration,
-        owner.epoch, transactionId]);
+        owner.epoch, transactionId, null, null, null, null]);
     });
     return { value: true, events: [{ type: SEMANTIC_ERASURE_PROGRESS,
       subject: reference.barrier.accountId, data: { accountId: reference.barrier.accountId } }] };
@@ -524,7 +528,15 @@ async function advanceConsumers(pool: Pool, reference: IdentitySourceConsumerRef
   if (!allowance) return null;
   const directory = await readIdentityPrearmCustodyPage(pool, { job: reference.job,
     after: previous?.directory_after ?? null, limit: 1, allowance }, { deadline });
-  if (directory.status === 'unavailable' || !boundedFrontier(directory.frontier) || directory.tickets.length > 1) return null;
+  if (directory.status === 'unavailable') {
+    // Native directory continuations are process-authenticated locators. A restart may
+    // invalidate their MAC; restart enumeration without reusing any checked scope prefix.
+    if (directory.reason === 'invalid-frontier' && previous?.directory_after)
+      await checkpoint(pool, reference, retained, saved, work, { state: 'directory',
+        directory: null, ticket: null, after: null, seal: null, fence: null }, roles, deadline);
+    return null;
+  }
+  if (!boundedFrontier(directory.frontier) || directory.tickets.length > 1) return null;
   if (previous?.directory_after && json(directory.frontier) === json(previous.directory_after)) return null;
   const ticket = directory.tickets[0];
   if (ticket) {
@@ -558,17 +570,20 @@ async function advanceConsumers(pool: Pool, reference: IdentitySourceConsumerRef
       }
       // No foreign read under this local Source command. Revalidate the SAME seal even
       // for intermediate pages, then pin the complete cut before releasing this home.
-      return runCommand(pool, { partition: identityScopeAddress(ticket.scope).partition, deadline }, async (tx) => {
-        if (!(await verifyLibraryScopeEffectsSeal(tx, key, page.seal))) return noEffect(false);
-        if (!page.exhausted) return noEffect(true);
-        if (!(await ports.scope.retainIdentityScopeConsumerFence!(tx, ticket, page.seal))) return noEffect(false);
-        return { value: true, events: [] };
-      });
+      return runCommand<{ fence: IdentityNativeReceipt | null } | null>(pool,
+        { partition: identityScopeAddress(ticket.scope).partition, deadline }, async (tx) => {
+          if (!(await verifyLibraryScopeEffectsSeal(tx, key, page.seal))) return noEffect(null);
+          if (!page.exhausted) return noEffect({ fence: null });
+          const fence = await ports.scope.retainIdentityScopeConsumerFence!(tx, ticket, page.seal);
+          if (!fence) return noEffect(null);
+          return { value: { fence }, events: [] };
+        });
     });
     if (!current?.value) return null;
-    const fence = page.exhausted ? { partition: current.partition, epoch: current.epoch,
-      position: current.position, transactionId: current.transactionId } : null;
-    if (fence && fence.position <= 0n) return null;
+    const fence = current.value.fence;
+    if (page.exhausted && (!fence || fence.partition !== current.partition ||
+      fence.epoch !== current.epoch || fence.position <= 0n || fence.position > current.position ||
+      (fence.transactionId === current.transactionId && fence.position !== current.position))) return null;
     if (!page.exhausted) {
       await checkpoint(pool, reference, retained, saved, work, { state: 'scope',
         directory: previous?.directory_after ?? null, ticket: ticketKey,
@@ -613,12 +628,17 @@ async function finishConsumers(pool: Pool, reference: IdentitySourceConsumerRefe
     const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
     if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
     const disposition = await ports.binding.lockIdentitySourceConsumerCut!(tx, reference, generation);
-    if (!disposition || (reference.receipt.kind === 'account-agent.verify' &&
+    if (!disposition || (reference.erasedRole === 'subject' && disposition !== 'discharged') ||
+      (reference.receipt.kind === 'account-agent.verify' &&
       reference.erasedRole !== 'subject' && disposition !== 'transferred')) return noEffect(false);
+    let receiving: IdentityNativeReceipt | null = null;
     if (disposition === 'transferred') {
       if (!ports.technical.acceptAccountIdentityTechnicalSource || !ports.technical.verifyAccountIdentityTechnicalSource) return noEffect(false);
-      if (!(await ports.technical.acceptAccountIdentityTechnicalSource(tx, reference))) return noEffect(false);
-      if (!(await ports.technical.verifyAccountIdentityTechnicalSource(tx, reference)))
+      receiving = await ports.technical.acceptAccountIdentityTechnicalSource(tx, reference);
+      if (!receiving) return noEffect(false);
+      if (receiving.partition !== reference.source.partition || receiving.epoch !== owner.epoch ||
+        receiving.position <= 0n || !uuid.test(receiving.transactionId) ||
+        !(await ports.technical.verifyAccountIdentityTechnicalSource(tx, reference, receiving)))
         throw new IdentityEpochStoreError('identity_effect_stale', 'Technical source acceptance lost native custody');
     }
     if (!(await ports.binding.verifyIdentitySourceConsumerCut!(tx, reference, generation, disposition)))
@@ -631,7 +651,8 @@ async function finishConsumers(pool: Pool, reference: IdentitySourceConsumerRefe
         disposition, json(directory.frontier), next.ticket, null, next.seal ? hash(next.seal) : null,
         next.fence?.partition ?? null, next.fence?.epoch ?? null,
         next.fence?.position.toString() ?? null, next.fence?.transactionId ?? null,
-        generation.replayGeneration, generation.undoGeneration, generation.restoreGeneration, owner.epoch, transactionId]);
+        generation.replayGeneration, generation.undoGeneration, generation.restoreGeneration, owner.epoch, transactionId, receiving?.partition ?? null,
+        receiving?.epoch ?? null, receiving?.position.toString() ?? null, receiving?.transactionId ?? null]);
     });
     return { value: true, events: [{ type: SEMANTIC_ERASURE_PROGRESS,
       subject: reference.barrier.accountId, data: { accountId: reference.barrier.accountId } }] };
@@ -657,8 +678,14 @@ export async function verifyIdentitySourceConsumerCustody(
   const row = await latest(tx, retained);
   if (!row || !terminal(row.state) || row.transaction_id !== native.transactionId ||
     row.owner_epoch !== native.epoch || BigInt(row.position) !== native.position || !validGeneration(generations(row))) return false;
+  if ((reference.erasedRole === 'subject' && row.state !== 'discharged') ||
+    (reference.receipt.kind === 'account-agent.verify' && reference.erasedRole !== 'subject' && row.state !== 'transferred')) return false;
   const ports = await owners();
   if (!(await ports.binding.verifyIdentitySourceConsumerCut?.(tx, reference, generations(row), row.state))) return false;
-  return row.state !== 'transferred' ||
-    (await ports.technical.verifyAccountIdentityTechnicalSource?.(tx, reference)) === true;
+  if (row.state !== 'transferred') return true;
+  if (row.receiving_partition !== reference.source.partition || row.receiving_epoch !== row.owner_epoch ||
+    !row.receiving_position || !row.receiving_transaction_id) return false;
+  const receiving = { partition: row.receiving_partition, epoch: row.receiving_epoch,
+    position: BigInt(row.receiving_position), transactionId: row.receiving_transaction_id };
+  return (await ports.technical.verifyAccountIdentityTechnicalSource?.(tx, reference, receiving)) === true;
 }
