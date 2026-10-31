@@ -295,15 +295,16 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
       if (!prepared || currentCommand(tx).time !== command.time) throw unavailable();
       if (materialization) await materialization.materialize(tx);
       else {
-        const changed=await tx.query(`UPDATE library.collection SET revision=revision+1,updated_at=$4::timestamptz,transaction_id=$5
-          WHERE route=$1 AND collection_id=$2 AND revision=$3 AND state='active' RETURNING revision`,
-          [route,input.collectionId,input.revision,authoritativeTimeValue(command.time),command.transactionId]);
-        if (changed.rows.length!==1) throw conflict();
+        // CAS holds the actual header through commit without rewriting A's native Source fence.
+        const current=(await tx.query<{revision:number}>(`SELECT revision FROM library.collection
+          WHERE route=$1 AND collection_id=$2 AND state='active' FOR UPDATE`,[route,input.collectionId])).rows[0];
+        if (!current || current.revision!==input.revision) throw conflict();
+        if (!isDeepStrictEqual(await readCurrentMeaning(tx,route,input.collectionId),prepared.meaning)) throw conflict();
       }
       const metadata=(await readNativeCollectionWorkingMetadata(pool,{route,collectionId:input.collectionId},
         {commandTx:tx,deadline,allowance:metadataAllowance()})).metadata;
       if (!metadata || metadata.curatorAccountId!==actor.accountId || metadata.authority!=='private_builtin' ||
-        metadata.sourceGeneration!==prepared.saved.sourceGeneration || metadata.revision!==input.revision+1) throw unavailable();
+        metadata.sourceGeneration!==prepared.saved.sourceGeneration || metadata.revision!==(materialization ? 1 : input.revision)) throw unavailable();
       const identity=await initializeCanonicalCollectionSource(tx,{pool,route,collectionId:input.collectionId,deadline,allowance:metadataAllowance()});
       // Allocation is real native Source storage, with no capture/observation/repair/complete evidence yet.
       if (!identity || identity.scope!=='private_builtin') throw unavailable();
@@ -311,7 +312,7 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
       const sourceId = newId(route), output = { route, collectionId: input.collectionId, generation: newId(route) };
       const rule: CollectionPublicationRuleRef = {
         ...(prepared.meaning.key ? {kind:'builtin' as const,key:prepared.meaning.key} : {kind:'saved' as const,revision:prepared.saved.revision}),
-        collectionRevision: input.revision + 1, sourceGeneration: prepared.saved.sourceGeneration,
+        collectionRevision: metadata.revision, sourceGeneration: prepared.saved.sourceGeneration,
         releaseDigest: prepared.saved.releaseDigest, incarnation: metadata.incarnation,
         digest: hash({ filter: prepared.saved.filter, sort: prepared.saved.sort, releaseDigest: prepared.saved.releaseDigest }) };
       const source: CollectionPublicationSource = { locator, input: { kind: 'private_working_source', identity },

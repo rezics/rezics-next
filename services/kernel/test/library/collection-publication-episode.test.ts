@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
+import { beginCollectionSourceOutput, completeCollectionSourceOutput } from '../../src/library/collection-source-output.ts';
 import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
 import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts';
-import { mintReadTime, releaseOperationalTime, runCommand, noEffect } from '../../src/command/command.ts';
+import { mintReadTime, releaseOperationalTime, runCommand, noEffect, principalCommandIdentity } from '../../src/command/command.ts';
 import { createCollectionPublicationEpisodes, readCollectionPublicationEpisode,
   readCollectionPublicationInitiator, readCollectionPublicationRule } from '../../src/library/collection-publication-episodes.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
@@ -70,7 +72,7 @@ test('Whole-query publication begins with a real authorized immutable operation 
       AND g.generation=(s.bytes::jsonb->'output'->>'generation')::uuid
     WHERE o.route=$1 AND o.publication_id=$2`, [command.value.locator.route,command.value.locator.publicationId])).rows;
   expect(rows).toHaveLength(1);
-  expect(rows[0]).toMatchObject({ original: true, expected_members: null, visibility: 'private', revision: input.revision+1 });
+  expect(rows[0]).toMatchObject({ original: true, expected_members: null, visibility: 'private', revision: input.revision });
   for (const privateField of ['filter','scopes','bearer','authnEpoch','originalAccount']) expect(JSON.parse(rows[0].bytes)).not.toHaveProperty(privateField);
   expect((await episodes().begin(actor, input, key)).value).toEqual(command.value);
   expect((await f.database.pool.query('SELECT 1 FROM library.collection_publication_operation WHERE route=$1 AND publication_id=$2',
@@ -147,4 +149,38 @@ test('first native Everything publication materializes the stable logical ID wit
   await expect(episodes().begin(actor,{collectionId:liked,revision:0,visibility:'public'},randomUUID())).rejects.toThrow();
   expect((await f.database.pool.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2',
     [routeOf(liked),liked])).rows).toHaveLength(0);
+},120000);
+
+
+test('whole-query B preserves the original selected A receipt and public membership fence', async () => {
+  const input=await prepared();
+  const changed=await f.send('PATCH',`/v1/collections/${input.collectionId}`,{revision:input.revision,visibility:'public'});
+  expect(changed.status).toBe(200);
+  const revision=(await changed.json()).collection.revision as number;
+  const route=routeOf(input.collectionId)!, deadline=Date.now()+30000;
+  // An explicit empty prior selection is real A; it makes no claim to exhaust the private query.
+  const output={route,collectionId:input.collectionId,generation:randomUUID()};
+  const a=await runCommand(f.database.pool,{...principalCommandIdentity(actor),partition:partitionOf(route),deadline,
+    receipt:{kind:'library.collection.explicit-output',key:randomUUID(),digest:createHash('sha256').update(JSON.stringify(output)).digest()},
+    authorization:resourceAuthorization({access:f.runtime.identity.access,actor,action:'collection:update',
+      anchor:{resource:{route,id:input.collectionId},async validate(client) {
+        return (await client.query(`SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2
+          AND curator_account_id=$3 AND state='active' AND revision=$4`,[route,input.collectionId,actor.accountId,revision])).rows.length===1;
+      }},context:{pool:f.database.pool,partition:partitionOf(route),deadline}}),
+  },async(tx)=>{
+    await beginCollectionSourceOutput(tx,{...output,expectedMembers:0});
+    await completeCollectionSourceOutput(tx,output);
+    return {value:output,events:[{type:'com.rezics.library.collection.updated.v1',subject:input.collectionId,data:{collectionId:input.collectionId}}]};
+  });
+  const b=await episodes().begin(actor,{collectionId:input.collectionId,revision,visibility:'unlisted'},randomUUID());
+  const episode=await readCollectionPublicationEpisode(f.database.pool,b.value.locator);
+  expect(episode?.phase).toBe('staging');
+  expect(episode?.selected?.ref).toEqual(output);
+  expect(episode?.selected?.publication.transactionId).toBe(a.transactionId);
+  expect(episode?.selected?.publication.members).toBe('0');
+  expect(episode?.output.state).toBe('building');
+  expect(episode?.output).not.toHaveProperty('publication');
+  expect(episode?.source.output.generation).not.toBe(output.generation);
+  expect((await f.database.pool.query('SELECT visibility,revision FROM library.collection WHERE route=$1 AND collection_id=$2',
+    [route,input.collectionId])).rows[0]).toEqual({visibility:'public',revision});
 },120000);

@@ -196,8 +196,9 @@ Its `begin(actor,{collectionId,revision,visibility},requestKey)` is also the Col
 `beginCollectionPublication`. It uses ordinary current owner `collection:update`, every expanded private-family
 read/list check and gate, pinned accepted rule bytes, the native private working Source identity, and the actual
 command's account/fact fences. Admission runs before receipt replay. One command allocates routable operation,
-immutable source and building output references, captures the original admitted initiator, increments the Collection
-revision, and commits their commitment in the exact native creation receipt. The Collection retains the sole query
+immutable source and building output references, captures the original admitted initiator, holds the current
+Collection revision CAS, and commits their commitment in the exact native creation receipt. An existing header is
+locked without rewriting its native Source fence, preserving selected A's original publication proof. The Collection retains the sole query
 AST. Desired visibility stays in the immutable target until activation; pending B does not select public membership
 or replace A. Unknown whole-query cardinality stays NULL, with no complete receipt; explicit selected-output hooks
 refuse such builds.

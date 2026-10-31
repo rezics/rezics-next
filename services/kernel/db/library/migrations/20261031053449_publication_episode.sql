@@ -121,7 +121,6 @@ BEGIN
       AND c.curator_account_id=o.owner_account_id AND c.state='active' AND c.membership_kind='dynamic'
       AND g.account_id=o.owner_account_id AND g.state='building' AND g.expected_members IS NULL
       AND g.source_generation=c.source_generation AND e.phase='staging'
-      AND c.xmin=o.xmin AND c.transaction_id=o.transaction_id
       AND s.bytes::jsonb->'locator'=jsonb_build_object('route',o.route,'ownerAccountId',o.owner_account_id,'collectionId',o.collection_id,'publicationId',o.publication_id)
       AND s.bytes::jsonb->'target'=jsonb_build_object('kind','collection_output','route',o.route,'collectionId',o.collection_id,'visibility',s.bytes::jsonb->'target'->>'visibility')
       AND s.bytes::jsonb->'target'->>'visibility' IN ('public','unlisted')
