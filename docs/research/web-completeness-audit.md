@@ -15,7 +15,11 @@ Filters at its right end, and a phone full-screen search panel. None is reopened
 The inspected development revision is `6d3f767467c85dbb9d3bb561d12af784407bd92c`. The current public
 [`build.json`](https://storybook.rezics.com/build.json) exposes commit
 `b29a80a0aad38c008125fb032f5fe1af96bd6164`, built `2026-10-31T08:32:54.450Z`,
-Storybook `11.0.0-alpha.8`. These are different revisions. A read-only Git comparison found no differences under
+Storybook `11.0.0-alpha.8`. The cell observations ran from `2026-10-31T14:14:02.326Z` to
+`2026-10-31T15:11:17.483Z`. After the sweep, the index and build were fetched again: index bytes have identical
+SHA-256 `820bbb9d6a9e45f4aa7b19dab1fcdd4eb629d70eccf0faf2d8aae3fa1a1aaa9d`, and build metadata is
+byte-identical. This fences the observed public delivery; it cannot promise the URL will remain unchanged later.
+Development and public are different revisions. A read-only Git comparison found no differences under
 `apps/web` or `packages/ui` between them; this supports the source explanations for these surfaces, without
 claiming that development backend bindings were exercised by the public static site.
 
@@ -44,13 +48,16 @@ It is ignored research evidence, not product source. The main checkout's tracked
 
 | Artifact | Meaning |
 | --- | --- |
-| `index.json`, `index.headers.txt` | Exact initial public index and HTTP provenance; the manifest records its SHA-256. |
-| `build.json`, `root.html`, `root.headers.txt`, `iframe.html` | Exposed version and delivered bootstrap evidence. |
+| `index.json`, `index.headers.txt`, `index.final.json`, `index.final.headers.txt` | Exact initial/final public index and HTTP provenance; hashes are recorded. |
+| `build.json`, `build.final.json`, `build.final.headers.txt`, `root.html`, `root.headers.txt`, `iframe.html` | Exposed version and delivered bootstrap evidence; final version comparison. |
 | `manifest.json` | Every requested story ID, title/name/import path, width/height, requested URL/globals, capture status, timestamp, screenshot path/hash, diagnostics and review status. |
 | `shots/<story-id>--<width>.png` | One public-browser screenshot per required cell; width is exactly 1280 or 390 CSS pixels. |
 | `cells/<story-id>--<width>.json` | Observed story ID, URL, text, image load state, document dimensions, render phase and browser console/network exceptions. |
 | `contact/index.json`, `contact/sheet-*.jpg` | Visual inspection atlas; pixel-identical PNGs share an inspection with an explicit list of all matching cells. |
 | `visual-review.json` | Human visual classifications and notes keyed by screenshot SHA-256, with atlas location. |
+| `summary.json`, `manifest.csv`, `titles.json` | Final counts, portable exhaustive matrix and per-title grouping. |
+| `incomplete-cells.json`, `failure-groups.json`, `diagnostics.json` | Explicit incomplete observations, visible provider/import/section failures and per-cell diagnostic counts. |
+| `manifest.capture.json` | Original capture manifest retained before review annotations; raw per-cell embedded requests can still say pending. |
 | `initial-loading-attempt/` | Preserved early spinner observations, superseded only by subsequent matching-state evidence. |
 | `scripts/` | Ignored observation/atlas scripts; never installed as application or test code. |
 
@@ -92,7 +99,54 @@ visual success. This is a completeness triage, not pixel-perfect typography appr
 
 ### Classification and honest counts
 
-FINAL_CAPTURE_COUNTS
+**All 3,798 required cells were captured and visually inspected**: 3,205 distinct PNG hashes, reviewed through
+134 contact sheets, with explicit hash-identical reuse covering the remaining cells. There are no pending capture
+cells, missing screenshot files, hash mismatches or height-truncated images. This is exhaustive observation
+coverage, not a claim that 3,798 designs work.
+
+| Surface / width | Finished | Unfinished design | Broken layout | Error-unavailable wall | Missing data | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pages / 1280 | 20 | 769 | 0 | 220 | 239 | 1,248 |
+| Pages / 390 | 20 | 763 | 4 | 228 | 233 | 1,248 |
+| Patterns / 1280 | 201 | 228 | 7 | 110 | 105 | 651 |
+| Patterns / 390 | 208 | 225 | 1 | 108 | 109 | 651 |
+| **All cells** | **449** | **1,985** | **12** | **666** | **686** | **3,798** |
+
+Only 449 cells (11.8% of the requested matrix) are visually finished in their exercised, bounded state. Many of
+these are isolated controls, navigation regions, honest empty lists or recovery states; only 40 are Pages cells.
+The denominator includes intentionally unavailable/denied/loading stories, so this is **not** a normal-user failure
+rate, a ready-state completion percentage or a backend grade. No undocumented ready-only denominator was invented.
+The wall count includes 32 unexpected QueryClient-provider failures and three dynamic-import failures, separately
+listed in `failure-groups.json`. The remaining walls include deliberately modelled access/lifecycle/fault states;
+those are not all bugs. Partial unavailable sections are visibly present in 189 cells (`missing-section` group).
+
+`summary.json` contains the counts above; `manifest.json` and `manifest.csv` give every story-width decision,
+review note, exact source, screenshot/hash, observed identity, render phase and diagnostic link. `titles.json`
+provides the complete 228-title inventory without replacing the per-export matrix.
+
+**Incomplete render/interaction evidence remains explicit.** Twelve cells have a blank/spinner/withheld body:
+`patterns-library-collection-access--loading`, `patterns-community-thread-reading--loading`,
+`patterns-community-realm-home-presentation--current-denied`, `patterns-composed-member-list--concealed`,
+`patterns-community-realm-claim-review--confirm-review` and `patterns-community-realm-claim--claim-journey`,
+each at both widths. The last two remain preparing/rendering journey observations, not completed confirmation
+screens; the others include intentional loading/concealment examples. None was called finished.
+
+At capture, renderer phases were finished 2,928; completing 586; playing 261; errored 12; afterEach three;
+rendering four; preparing three; unrecorded one. `incomplete-cells.json` explicitly enumerates 878 cells with a
+non-finished phase and/or blank body, with separate reasons. Completing/cleanup is not necessarily a broken render;
+still-running play is not an observed later interaction outcome. A readable screenshot can be classified visually
+without claiming that its entire play finished or passed. The early named Collection desktop observation lacks a
+phase record. Twenty-one early cells have document-title identity rather than renderer-ID evidence; all titles
+match their requested IDs. All 3,777 recorded renderer IDs match. Post-play route transitions remain in each cell's
+observed URL, rather than being silently treated as the original route's state.
+
+Diagnostics are similarly not a pass/fail total. Across the recorded cell windows there are 889 console-error
+events, 384 error log entries, 1,087 warning log entries, two console warnings, 16 verbose entries, 156 HTTP 404
+responses, 25 HTTP 502 responses, 203 non-cancelled network failures and 547 cancellations. Events can describe the
+same failure more than once; a reused tab can also produce late diagnostics from a prior request. These are not
+889 failed stories or a native availability measurement. `diagnostics.json` maps counts to the raw per-cell
+messages; `errorCount` in the original capture is an all-event count and must not be interpreted as an error total.
+Visible errors and PNG review determine classifications, not console counts or Storybook phase alone.
 
 A cell has one dominant visual class, with secondary findings retained in notes:
 
@@ -116,7 +170,7 @@ current public site's result. No old screenshot was reused without matching publ
 
 ## Findings grouped by cause
 
-### Public ready-state provider errors and a transient delivery failure
+### Public ready-state provider errors and asset-delivery failures
 
 **Defect class: error-unavailable wall; owner seam: Web story composition and its query/session consumers.**
 `pages-subjects-subject--imported-scores` and `pages-commerce-order--active` display the full Storybook
@@ -140,6 +194,16 @@ this newly composed dependency. A restricted member state should show its intent
 a provider exception before that state is an unexpected composition defect. These examples demonstrate why
 provider ownership must follow the mounted subtree as it evolves, rather than the original component label.
 
+The exhaustive manifest also finds the same provider wall in all four header-composing Search History exports
+(`--local-queries`, `--empty`, `--unavailable-scope`, `--offline`) at both widths. `--history` and `--conflict`
+render an isolated history section and do not share it. `apps/web/src/stories/search-history.stories.tsx` mounts
+`HeaderSearchView` directly. Its `RecentPanel` now composes `CurrentTrendingSearches` from
+`apps/web/src/search/trending-section.tsx`, which calls `useSession`; supplying local recent entries therefore no
+longer makes the subtree provider-free. Together with five Order exports, Imported Scores and six Managed Account
+Detail exports, this is 16 exports / 32 cells. An unavailable-scope fixture is not an excuse for a QueryClient
+exception: it should reach its intended unavailable state. Add providers at the real subtree boundary, and keep
+local/private-history evidence distinct from actual synchronisation/API support.
+
 The first phone capture of `pages-community-thread--editor-mention` instead shows
 `Failed to fetch dynamically imported module: https://storybook.rezics.com/assets/thread-media.stories-C5SnEn_Q.js`.
 Its desktop observation renders the mention editor, and subsequent fresh direct visits render it at both widths.
@@ -148,6 +212,14 @@ observed transient asset-delivery failure, not a demonstrated permanent phone la
 not establish whether cache, connection or publication asset lifetime caused it. The publication/CDN seam should
 retain versioned assets and distinguish delivery errors from component errors; do not remove the observation
 from the counts merely because a later visit recovered.
+
+Two additional desktop cells show dynamic-import walls:
+`patterns-account-notice-preferences--refused` references
+`/assets/settings-notifications.stories-D_zGHCwv.js`, and
+`patterns-account-collection-privacy--ambiguous-response` references
+`/assets/settings-privacy.stories-D4L1LWoZ.js`. Their counterpart states at 390 render; these two failures were not
+independently revisited, so recovery is unknown. They remain errors in the matrix. These are observed delivery
+failures, with the root transport/cache/CDN cause unproven; they do not establish a permanent desktop-only defect.
 
 The cause that lets these states look complete in an inventory is counting exported stories or narrow fixture
 assertions instead of observing their actual published composition. Storybook's renderer can even report a
@@ -372,6 +444,30 @@ unit/status vocabulary and long histories. Honest historical data is necessary, 
 concise labels, bounded summaries and deeper inspection routes. Preserve historical meaning without making the
 main page an implementation dump. This is a design recommendation, not permission to mutate old records.
 
+### Catalogue/editor density and unavailable-first compositions
+
+**Defect class: unfinished hierarchy and partial/blocked content; owner seam: Web catalogue, account, moderation,
+Zones and source-owning read adapters.** This is not confined to the three maintainer examples. The exhaustive
+atlas includes ordinary catalogue contribution, publication, context, source/provenance and moderation editors
+that expose IDs, raw release/rank concepts, extensive explanatory paragraphs and equal-weight secondary controls.
+Examples include `pages-catalogue-edit-facts`, `pages-catalogue-context-review`,
+`patterns-subject-candidate-review`, `patterns-curation-presentation-resolution` and
+`patterns-community-exact-revision`. Their full story IDs, states and widths are in the manifest; a family name
+here is not a claim that every export has the same dominant class.
+
+The cause is treating correct lifecycle vocabulary and broad fixture enumeration as a finished task hierarchy.
+Users need an understandable primary action, readable current values and progressive provenance/advanced details;
+maintainers still need exact recorded identifiers in the deeper inspection route. An authorisation refusal,
+concealed revision or missing meaning must remain explicit. Keep their semantics, but distinguish a deliberate
+boundary from a useful ready view, and do not equate a form retaining a draft with a successful dependent read.
+The owner should review a coherent ready/edit/confirm/recovery journey, with source owners supplying current
+read/command evidence; Web should not fabricate authority to replace unavailable records.
+
+The blank claim-confirmation/journey cells are a separate incomplete observation, not evidence that the native
+ownership transition is absent. Likewise, intentionally concealed member content is not a layout bug. Attribution
+requires a bounded fresh observation and provider/fixture trace before claiming a backend defect. The matrix
+preserves these distinctions instead of declaring the whole backend broken from a screenshot.
+
 ## Implemented, exposed and tested are separate capabilities
 
 In this matrix, “source” means actual inspected code, not a claim that a runtime dependency is ready. “Published”
@@ -514,6 +610,15 @@ These are desk estimates and proposed invariants, not measured performance or ad
 | State changes | Rule/type/release/source changes can leave stale scope, cover, facts, counts or cursors under a fresh-looking UI. | Bind continuation/selection to current generation and query; explicit reset/refusal/preparing states, preserving drafts and historical records. |
 | Phone interactions | A page can fit at 390 while an expanded filter, virtual keyboard or bottom bar obscures its action. | Exercise the actual full-screen panel, safe scrolling, focus return, backdrop and keyboard; static screenshots are insufficient certification. |
 
+For concrete scale, a proposed first review budget could be 20 discovery cards, 50 chooser matches, five recents
+and ten pinned contexts per initial surface, with explicit continuation. These are illustrative design budgets for
+owner adoption, not current promises or measured limits. At 200,000 kinds, 50 matches is 1/4,000 of the catalogue;
+at one million Collection items, a 40-row member page would be 1/25,000 of the collection. The backend cost must
+follow the selected window and bounded enrichment batches, not require scanning those entire populations to find
+that window. Keeping 20 cards but issuing one request per followed identity still fails the thousands-of-follows
+bound. Rating comparison and cover fallback also need explicit bounded producers, not merely a visually limited
+consumer. No latency, memory, throughput or database-growth measurements were run.
+
 Cross-surface consistency requires the same portrait-default rule in Home, search, Collection list/grid, subject
 relations and compact Library cards; the same search scope semantics in header, results, URL and back navigation;
 and the same empty/unavailable/private distinctions in full pages and Patterns. A shared primitive helps only if
@@ -552,7 +657,25 @@ repair. This is the one scope boundary to resolve before expanding the work, not
 
 ## Delivery record
 
-FINAL_DELIVERY_RECORD
+The completed evidence root is mirrored at the exact primary-checkout location above, including the raw index,
+final snapshots, all 3,798 PNGs, per-cell diagnostics, 134 visual sheets and final manifest/classifications.
+The audit's browser profile is deliberately excluded from that reusable mirror; it is temporary browser state,
+not necessary research evidence. Existing publishers, the old frozen `c2c7` capture and other researchers' files
+were preserved.
+
+Decisions made in this report: use the current public index as the exhaustive denominator; credit portrait/member
+covers and the isolated full-screen search primitive where they actually exist; count intentional fault states by
+visible class without calling them unexpected product failures; treat hash-identical PNGs as shared visual evidence;
+retain still-running and blank observations explicitly; require shell integration only for the claim exercised;
+attribute missing providers to the mounted subtree rather than to a supposed failed native API. Settled product
+choices remain inputs. Recommendations await owner adoption.
+
+No tracked file outside `docs/research/web-completeness-audit.md` changed. Outside that declared report path, ignored
+`.temp/goal/web/research-shots/web-completeness-audit/` artifacts in this worktree and the primary checkout were written
+because the contract requires reusable progressive capture. Authority/reference images were staged under the exact
+worktree `.temp/goal/web/refs/` and `.temp/goal/supermanager/refs/` paths for read-only inspection. The primary
+`.reference/INDEX.md` gained reuse/provenance entries for the existing Storybook, Primer React and BookWyrm clones;
+no clone was installed, built or run. These are the explicit research exceptions, not product changes.
 
 Only this English report is a tracked worktree change. Ignored scripts, screenshots, manifests and reference-index
 entries are research evidence under the explicitly authorised locations. Reference-index additions document reuse,
