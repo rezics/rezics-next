@@ -66,6 +66,7 @@ test('question closure requires a direct info or decision link; digest groups ac
     const original = s.shared.log({ grep: 'Which contract?' }).entries[0]!;
     s.advance(31 * 60_000);
     s.inbox.deliver({ managerId: 'consumer', from: 'owner', kind: 'question', summary: 'Do you mean v2?', replyToId: original.id });
+    const clarification = s.shared.log({ grep: 'Do you mean v2?' }).entries[0]!;
     s.inbox.deliver({ managerId: 'other', from: 'consumer', kind: 'decision', summary: 'Use signed IDs', goalId: 'accounts', taskId: 'task-2',
       documentRefs: [{ path: 'docs/identity.md', change: 'Added signed ID format' }] });
     s.inbox.deliver({ managerId: 'owner', from: 'consumer', kind: 'blocker', summary: 'Migration host is unavailable', goalId: 'accounts', taskId: 'task-2' });
@@ -94,7 +95,7 @@ test('question closure requires a direct info or decision link; digest groups ac
     expect(aged.details.entries.some((entry) => entry.category === 'blocker-intervention')).toBe(true);
 
     s.inbox.deliver({ managerId: 'owner', from: 'consumer', kind: 'info', summary: 'The clarification is answered',
-      goalId: 'accounts', taskId: 'task-1', replyToId: digest.details.entries.find((entry) => entry.kind === 'question' && entry.summary === 'Do you mean v2?')!.id });
+      goalId: 'accounts', taskId: 'task-1', replyToId: clarification.id });
     s.inbox.deliver({ managerId: 'owner', from: 'consumer', kind: 'decision', summary: 'The original question is answered',
       goalId: 'accounts', taskId: 'task-1', replyToId: original.id });
     const answered = s.shared.digest(s.now(), { now: s.now() });
@@ -145,7 +146,7 @@ test('legacy migration preserves instruction and system rows, leaves arrival tim
       const secondPage = new SharedInboxQueries(secondDb).thread(root.id, { limit: 1, cursor: firstPage.nextCursor! });
       expect(secondPage.entries.map((entry) => entry.summary)).toEqual(['Clarify root']);
       expect(new SharedInboxQueries(secondDb).thread('task-x').entries).toHaveLength(3);
-      expect(db.query('SELECT read_at, acknowledged_at, notified FROM manager_inbox WHERE manager = ?').get('legacy-recipient'))
+      expect(db.query('SELECT read_at, acknowledged_at, notified FROM manager_inbox WHERE id = ? AND manager = ?').get(legacy.id, 'legacy-recipient'))
         .toEqual({ read_at: 10, acknowledged_at: 20, notified: 1 });
     } finally { secondDb.close(); }
   } finally { db.close(); t.close(); }
