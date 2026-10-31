@@ -20,11 +20,18 @@ export function feedBinding(
   stream: string,
   limit: number,
   languages: readonly string[],
+  kind?: string,
 ): ListCursorBinding {
   return {
     route: 'GET /v1/feedItems/v1',
     viewer: actor.kind === 'account' ? actor.accountId : null,
-    query: { stream, limit, languages: languages.join(','), authority: fingerprint(actor) },
+    query: {
+      stream,
+      limit,
+      languages: languages.join(','),
+      authority: fingerprint(actor),
+      ...(kind === undefined ? {} : { kind }),
+    },
   };
 }
 

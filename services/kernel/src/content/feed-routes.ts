@@ -3,7 +3,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { Access } from '../request/access.ts';
 import { languageRanges } from '../semantic/language.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
-import { FeedPageSchema } from './feed-contract.ts';
+import { FeedKindSchema, FeedPageSchema } from './feed-contract.ts';
 import { FEED_CURSOR_BYTES } from './feed-cursor.ts';
 import { createFeedReads, type FeedDependencies } from './feed.ts';
 
@@ -23,13 +23,16 @@ export function feedRoutes(
           stream: t.Optional(t.Union([t.Literal('home'), t.Literal('following')])),
           limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1, default: 20 })),
           cursor: t.Optional(t.String({ minLength: 1, maxLength: FEED_CURSOR_BYTES })),
+          kind: t.Optional(FeedKindSchema),
         },
         { additionalProperties: false },
       ),
       transform: ({ request, set }) => {
         if (request.headers.has('authorization')) set.headers['cache-control'] = 'private, no-store';
-        for (const name of new URL(request.url).searchParams.keys())
-          if (!['stream', 'limit', 'cursor'].includes(name)) throw new ProblemError('invalid_request');
+        const parameters = new URL(request.url).searchParams;
+        for (const name of parameters.keys())
+          if (!['stream', 'limit', 'cursor', 'kind'].includes(name)) throw new ProblemError('invalid_request');
+        if (parameters.getAll('kind').length > 1) throw new ProblemError('invalid_request');
       },
       response: {
         200: FeedPageSchema,
@@ -37,6 +40,7 @@ export function feedRoutes(
         401: problemSchema('authentication_required', 'invalid_credentials'),
         403: problemSchema('forbidden', 'platform_closed'),
         409: problemSchema('stale_cursor', 'search_restart_required'),
+        422: problemSchema('unsupported_query'),
         503: problemSchema('deadline_exceeded', 'dependency_unavailable', 'overloaded', 'partition_unavailable'),
       },
       detail: {

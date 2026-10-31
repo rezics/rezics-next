@@ -17,7 +17,7 @@ import { readPublication } from '../community/publication.ts';
 import { ContentNotFoundError, discloseThreads, readBoard, readPost, type ThreadView } from './reads.ts';
 import { createFeedActivityStore, feedRoute, type ActivityRef } from './feed-activity.ts';
 import { decodeFeedCursor, encodeFeedCursor, feedBinding, fingerprint, type FeedPosition } from './feed-cursor.ts';
-import type { FeedItem, FeedPage, FeedSourceState } from './feed-contract.ts';
+import { readFeedKind, type FeedItem, type FeedPage, type FeedSourceState } from './feed-contract.ts';
 
 export type FeedDependencies = {
   pool: Pool;
@@ -40,6 +40,7 @@ const sourceState = (error: unknown): FeedSourceState => {
         'forbidden',
         'platform_closed',
         'invalid_request',
+        'unsupported_query',
         'invalid_cursor',
         'stale_cursor',
         'search_restart_required',
@@ -155,12 +156,13 @@ export function createFeedReads(deps: FeedDependencies) {
   return {
     async list(
       actor: Actor,
-      query: { stream?: 'home' | 'following'; limit?: number; cursor?: string },
+      query: { stream?: 'home' | 'following'; limit?: number; cursor?: string; kind?: string },
       deadline: number,
       languages: readonly string[],
     ): Promise<FeedPage> {
       const stream = query.stream ?? 'home';
       const limit = query.limit ?? 20;
+      const kind = readFeedKind(query.kind);
       if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw new ProblemError('invalid_request');
       const personal = actor.kind === 'account';
       if (stream === 'following' && !personal) throw new AuthenticationError(401, 'Bearer');
@@ -210,7 +212,7 @@ export function createFeedReads(deps: FeedDependencies) {
           deadline,
         });
       const now = deps.clock();
-      const binding = feedBinding(actor, stream, limit, languages);
+      const binding = feedBinding(actor, stream, limit, languages, kind);
       const position: FeedPosition = query.cursor
         ? await decodeFeedCursor(deps.tokens, binding, query.cursor, now)
         : {
@@ -249,6 +251,7 @@ export function createFeedReads(deps: FeedDependencies) {
                   representation: 'discovery-v1',
                   limit: discoveryLimit,
                   languages: [...languages],
+                  ...(kind === undefined ? {} : { filter: { kind: { in: [kind] } } }),
                   ...(position.discovery ? { cursor: position.discovery } : {}),
                 },
                 { access: deps.access, actor, deadline },
@@ -295,27 +298,25 @@ export function createFeedReads(deps: FeedDependencies) {
                   ) + 1
                 : 0;
               if (position.resume && !offset) throw new ProblemError('stale_cursor');
-              lanes.continue = page.subjects
-                .slice(offset)
-                .map((row) => ({
-                  after: fingerprint([row.subjectId, row.lastActivityAt]),
-                  item: row.subject
-                    ? {
-                        id: `continue:${row.subject.id}`,
-                        source: 'continue',
-                        key: {
-                          owner: 'semantic',
-                          kind: row.subject.type,
-                          route: feedRoute(row.subject.id),
-                          id: row.subject.id,
-                        },
-                        occurredAt: row.lastActivityAt,
-                        summary: row.subject,
-                        continue: row,
-                        destination: { kind: 'subject', id: row.subject.id, title: row.subject.label?.value ?? null },
-                      }
-                    : null,
-                }));
+              lanes.continue = page.subjects.slice(offset).map((row) => ({
+                after: fingerprint([row.subjectId, row.lastActivityAt]),
+                item: row.subject
+                  ? {
+                      id: `continue:${row.subject.id}`,
+                      source: 'continue',
+                      key: {
+                        owner: 'semantic',
+                        kind: row.subject.type,
+                        route: feedRoute(row.subject.id),
+                        id: row.subject.id,
+                      },
+                      occurredAt: row.lastActivityAt,
+                      summary: row.subject,
+                      continue: row,
+                      destination: { kind: 'subject', id: row.subject.id, title: row.subject.label?.value ?? null },
+                    }
+                  : null,
+              }));
               next.continue = page.next ?? false;
               next.resume = null;
             } else if (actor.kind === 'account') {
@@ -370,6 +371,12 @@ export function createFeedReads(deps: FeedDependencies) {
           }
         }),
       );
+      // Keep rejected candidates in their original slots: they still consume the native
+      // raw budget and examined frontier, including Continue's fingerprint/resume keys.
+      if (kind !== undefined)
+        for (const lane of names)
+          for (const candidate of lanes[lane])
+            if (candidate.item && candidate.item.key.kind !== kind) candidate.item = null;
       const preferred = new Map<string, Lane>();
       for (const lane of names)
         for (const candidate of lanes[lane])

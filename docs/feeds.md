@@ -5,6 +5,32 @@
 selects native summary languages. The response is `{feedItems,next,asOf,sources}`.
 The exported closed `FeedItemSchema` and `FeedPageSchema` define the client-inferred wire.
 
+Optional singular `kind` is the exact native kind ID, for example
+`GET /v1/feedItems?stream=home&limit=20&kind=schema%3ABook`. Omission retains all kinds.
+The native `kind.in` literal grammar permits a nonempty string of at most 256 UTF-8
+bytes without control characters; IDs are neither trimmed nor case folded. Empty,
+malformed, oversized or repeated `kind` parameters return RFC 9457 validation problems.
+No arbitrary JSON filter, Space or Context query parameter is accepted.
+
+Selection applies to the freshly disclosed primary `FeedItem.key.kind` across all
+three sources. A thread about a Book remains kind `thread`, a reply remains `post`,
+and a Collection containing Books remains `collection`. An attached Subject or follow
+reason does not change the primary kind or grant disclosure. Following and Continue
+retain all their original current owner, body, parent, container and erasure checks.
+Discovery receives `filter: {kind: {in: [kind]}}` through the existing
+`DiscoverySearch(principal, MixedDiscoveryRequest, DiscoveryReadContext)` provider
+with `representation: 'discovery-v1'`. Native release/input refusal, including
+`unsupported_query` (422), is returned as its actual problem rather than an unavailable
+lane or an all-kind fallback. Genuine dependency/preparation failures retain their
+existing source states.
+
+The existing native choice source is `POST /v1/subjects:search` with
+`{representation:'discovery-v1',kindPage:{limit:8}}`. Its response includes
+`kinds:{values:[{id,labels,icon,count?}],next}` with at most eight native choices.
+Continue metadata with `kindPage:{limit:8,cursor:kinds.next}` and the same request
+bindings; this continuation is metadata-only. This source does not claim choice text
+search. There is no separate Content choice directory or all-kind enumeration.
+
 Each item has a stable native `id`, `source`, canonical `key`, nullable `occurredAt`,
 currently disclosed native `summary`, and typed `destination`. Destinations contain IDs
 and titles, never external URLs. A post preserves both `threadId` and `postId` for the
@@ -55,10 +81,15 @@ may partially consume Continue's native six: the cursor retains the original own
 cursor, the last examined native activity key and the page's key fingerprint. The next
 read rehydrates that same native page and resumes after that key. A changed owner page
 requires a stale-cursor restart instead of skipping data or caching private progress.
-Sparse pages are valid. The server never derives a frontier from visible output count.
+Sparse pages, including empty pages with `next`, are valid. Kind rejections consume
+the original raw budget and advance actual examined source positions before merge,
+deduplication and output. No refill or additional candidate read runs for a selection.
+The server never derives a frontier from visible output count.
 
 The composite cursor binds the exact viewer/credential authority inputs, stream, page
-size, languages, format, fixed boundary, next turn and source positions. Bounded parts
+size, languages, exact optional kind, format, fixed boundary, next turn and source positions.
+A cursor from all kinds or one selected kind cannot replay under another selection.
+Omitting kind preserves the existing cursor query semantics. Bounded parts
 use the existing native encrypted list-cursor envelopes with a common authenticated
 digest and part/count bindings. Total cursor size is capped at 32 KiB and expires after
 15 minutes. Following's initial keyset boundary is fixed by that page sequence.
@@ -142,3 +173,12 @@ identity remains unavailable until native recovery; it is never declared empty.
 The default-composition regression is `services/kernel/test/content/feed.test.ts`, using
 real server/worker, discovery, canonical owner work, native follow changes and disclosure.
 Module schema dumps are derived by the controller through the normal supported path.
+
+## Remaining dimensions
+
+Native kind selection is the delivered feed selection surface. Space selection still
+depends on Search's retained scoped journey and is not integrated here. Rating-question
+Context discovery selection still has no adopted native meaning, request literal,
+candidate witness or eligibility reader. Contexts are not Realms, and no rating threshold
+or placeholder selector supplies those missing dependencies. The full dimensions goal
+remains incomplete.

@@ -1,5 +1,7 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
+import { FilterError, parseDiscoveryFilter } from '@rezics/filter';
+import { ProblemError } from '../http/problem.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import type { ThreadView } from './reads.ts';
 import type { ItemView } from './model.ts';
@@ -10,6 +12,23 @@ import { continuePageSchema } from '../library/continue-routes.ts';
 const closed = { additionalProperties: false } as const;
 const nullable = t.Union([t.String(), t.Null()]);
 const uuid = t.String({ format: 'uuid' });
+export const FeedKindSchema = t.String({ minLength: 1, maxLength: 256 });
+
+/** Use the native kind.in literal grammar, including its UTF-8 byte and control-character bounds.
+ * Exact IDs are preserved: no trimming, case folding or catalogue-type coercion. */
+export function readFeedKind(kind: string | undefined): string | undefined {
+  if (kind === undefined) return undefined;
+  try {
+    parseDiscoveryFilter({ kind: { in: [kind] } });
+    return kind;
+  } catch (error) {
+    if (error instanceof FilterError)
+      throw new ProblemError(error.problem, {
+        errors: error.errors.map(({ code }) => ({ pointer: '/kind', code })),
+      });
+    throw error;
+  }
+}
 const avatar = t.Object(
   {
     media: uuid,
