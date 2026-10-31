@@ -102,13 +102,15 @@ async function bookRowFactsReady(context: { canvasElement: HTMLElement }) {
     await expect(within(row as HTMLElement).getByText(type, { exact: true })).toBeVisible();
     const details = row.querySelector('[data-slot="member-list-row-facts"]');
     await expect(details).toBeVisible();
+    const facts = within(details as HTMLElement);
     const author = member.facts['schema:author']![0]!;
-    if (author.kind === 'item') await expect(details).toHaveTextContent(pickText(author.labels, locale).text);
+    if (author.kind === 'item')
+      await expect(facts.getByText(pickText(author.labels, locale).text, { exact: true })).toBeVisible();
     const publication = member.facts['schema:datePublished']?.[0];
     if (publication?.kind === 'time')
-      await expect(details).toHaveTextContent(
-        new Intl.NumberFormat(locale, { useGrouping: false }).format(publication.year),
-      );
+      await expect(
+        facts.getByText(new Intl.NumberFormat(locale, { useGrouping: false }).format(publication.year), { exact: true }),
+      ).toBeVisible();
     const image = row.querySelector('img');
     if (member.subject.cover)
       await expect(image).toHaveAttribute('src', expect.stringContaining(member.subject.cover.media));
@@ -430,7 +432,8 @@ export const AnotherReaderGrid: Story = {
   play: async (context) => {
     await AnotherReader.play?.(context);
     await expect(context.canvasElement.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(4);
-    await expect(context.canvasElement.querySelector('[data-slot="member-list-row-facts"]')).toBeNull();
+    // The same exact localized author/year assertions run for AnotherReader's list and this page's grid.
+    await expect(context.canvasElement.querySelectorAll('[data-slot="member-list-row-facts"]')).toHaveLength(4);
   },
 };
 
@@ -440,6 +443,19 @@ export const MixedTypesGrid: Story = {
     await variantReady(context, 'A collection across many kinds of work');
     await expect(context.canvasElement.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(4);
     await expect(context.canvasElement.querySelector('[data-slot="member-list-row-facts"]')).toBeNull();
+    const canvas = within(context.canvasElement);
+    for (const member of collectionStoryMembers) {
+      const author = member.facts['schema:author']![0]!;
+      if (author.kind === 'item')
+        await expect(canvas.queryByText(pickText(author.labels, getLocale()).text, { exact: true })).toBeNull();
+      const publication = member.facts['schema:datePublished']?.[0];
+      if (publication?.kind === 'time')
+        await expect(
+          canvas.queryByText(new Intl.NumberFormat(getLocale(), { useGrouping: false }).format(publication.year), {
+            exact: true,
+          }),
+        ).toBeNull();
+    }
   },
 };
 

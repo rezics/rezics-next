@@ -47,8 +47,8 @@ test('the Collection story gives each covered subject its own media and preserve
     ?.cover;
   const prince = members?.find((member) => member.subject?.id === '01a17a3b-0884-721b-91ef-d7ffd7bb58e4')?.subject
     ?.cover;
-  expect(genji?.media).toBe('01a17a3b-0884-7c01-8a3f-c0de00000001');
+  expect(genji).toBeNull();
   expect(kokoro?.media).toBe('0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0003');
-  expect(genji?.media).not.toBe(kokoro?.media);
-  expect(prince).toBeNull();
+  expect(prince?.media).toBe('01a17a3b-0884-7c01-8a3f-c0de00000001');
+  expect(prince?.media).not.toBe(kokoro?.media);
 });
