@@ -20,6 +20,7 @@ import { IMPORTED_VN_SUBJECT_ID } from '../kernel/fake/ratings';
 import { storySubjects } from '../kernel/story-subjects';
 import { subjectHref, subjectViewHref } from '../subject/subject-href';
 import { continuationSubject } from '../kernel/fake/view-continuation';
+import { AppShell } from '../shell/shell';
 import { Cover, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
 
@@ -47,13 +48,17 @@ function countUnavailablePage(): SubjectPageData {
 function CountUnavailablePageStory() {
   const page = countUnavailablePage();
   return (
-    <SubjectPage
-      page={page}
-      locale={getLocale()}
-      messages={subjectPageMessages()}
-      tabs={subjectTabs(page)}
-      tabLabels={viewTabLabels()}
-    />
+    <PatternStory visitor="Signed In" path={pagePaths.subject}>
+      <AppShell>
+        <SubjectPage
+          page={page}
+          locale={getLocale()}
+          messages={subjectPageMessages()}
+          tabs={subjectTabs(page)}
+          tabLabels={viewTabLabels()}
+        />
+      </AppShell>
+    </PatternStory>
   );
 }
 

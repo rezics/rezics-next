@@ -91,19 +91,44 @@ export const Authoring: Story = {
   },
 };
 
+function templateControls(canvasElement: HTMLElement) {
+  const templates = within(canvasElement).getByRole('region', { name: m.curation_templates() });
+  const section = within(templates);
+  return {
+    template: section.getByRole('combobox', { name: m.curation_template() }),
+    view: section.getByRole('combobox', { name: m.curation_view() }),
+  };
+}
+
+function languageFieldLabel(language: string): string {
+  return new Intl.DisplayNames([language], { type: 'language' }).of(language) ?? language;
+}
+
+async function selectDetailsHeading(canvasElement: HTMLElement) {
+  const editor = within(canvasElement).getByRole('region', { name: m.curation_editor() });
+  const rows = editor.querySelectorAll('[data-puck-layer-tree-id="details"]');
+  if (rows.length !== 1) throw new Error('The details Heading is missing from the Puck outline.');
+  const row = rows.item(0);
+  if (!(row instanceof HTMLElement)) throw new Error('The details Heading outline row did not render.');
+  await userEvent.click(within(row).getByRole('button', { name: 'Heading', exact: true }));
+}
+
+function headingTextField(canvasElement: HTMLElement) {
+  const editor = within(canvasElement).getByRole('region', { name: m.curation_editor() });
+  return within(editor).findByRole('textbox', { name: languageFieldLabel('en'), exact: true });
+}
+
 // Real Puck field interaction, including an uncommitted edit before switching away and back.
 async function editDetails(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
+  const controls = templateControls(canvasElement);
   await userEvent.selectOptions(
-    await canvas.findByLabelText(m.curation_template()),
+    controls.template,
     JSON.stringify({ scope: 'type', key: 'schema:Book' }),
   );
-  await userEvent.selectOptions(canvas.getByLabelText(m.curation_view()), 'details');
-  // Select a block from Puck's own outline; the same shared field editor owns its language object.
-  const headings = await canvas.findAllByText('Heading', { exact: true });
-  await userEvent.click(headings[headings.length - 1]!);
-  const language = new Intl.DisplayNames(['en'], { type: 'language' }).of('en') ?? 'en';
-  const field = await canvas.findByLabelText(language);
+  await userEvent.selectOptions(controls.view, 'details');
+  await selectDetailsHeading(canvasElement);
+  const field = await headingTextField(canvasElement);
   await userEvent.clear(field);
   await userEvent.type(field, 'Retained draft');
   return canvas;
@@ -113,22 +138,20 @@ export const RetainedViewDraft: Story = {
   ...Authoring,
   play: async ({ canvasElement }) => {
     const canvas = await editDetails(canvasElement);
-    await userEvent.selectOptions(canvas.getByLabelText(m.curation_view()), 'overview');
+    await userEvent.selectOptions(templateControls(canvasElement).view, 'overview');
     await userEvent.selectOptions(
-      canvas.getByLabelText(m.curation_template()),
+      templateControls(canvasElement).template,
       JSON.stringify({ scope: 'generic', key: null }),
     );
     await userEvent.selectOptions(
-      canvas.getByLabelText(m.curation_template()),
+      templateControls(canvasElement).template,
       JSON.stringify({ scope: 'type', key: 'schema:Book' }),
     );
-    await userEvent.selectOptions(canvas.getByLabelText(m.curation_view()), 'details');
+    await userEvent.selectOptions(templateControls(canvasElement).view, 'details');
     await expect(canvas.getByText(m.curation_unsaved())).toBeVisible();
     // Restoring a view restores the document even though Puck's selected block may be reset.
-    const heading = await canvas.findAllByText('Heading', { exact: true });
-    await userEvent.click(heading[heading.length - 1]!);
-    const language = new Intl.DisplayNames(['en'], { type: 'language' }).of('en') ?? 'en';
-    await expect(await canvas.findByLabelText(language)).toHaveValue('Retained draft');
+    await selectDetailsHeading(canvasElement);
+    await expect(await headingTextField(canvasElement)).toHaveValue('Retained draft');
   },
 };
 
@@ -137,7 +160,7 @@ export const StaleProfile: Story = {
   args: { ...Authoring.args, transport: { ...transport, publish: async () => ({ ok: false, reason: 'stale' }) } },
   play: async ({ canvasElement }) => {
     const canvas = await editDetails(canvasElement);
-    await userEvent.click(canvas.getAllByRole('button', { name: m.curation_publish() })[0]!);
+    await userEvent.click(await canvas.findByRole('button', { name: m.curation_publish() }));
     await expect(await canvas.findByText(m.curation_stale())).toBeVisible();
     await expect(canvas.getByText(m.curation_unsaved())).toBeVisible();
     for (const button of canvas.getAllByRole('button', { name: m.curation_publish() })) {
@@ -169,7 +192,7 @@ export const NativeValidation: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click((await canvas.findAllByRole('button', { name: m.curation_publish() }))[0]!);
+    await userEvent.click(await canvas.findByRole('button', { name: m.curation_publish() }));
     await expect(await canvas.findByText('/types/0/views/details/content/0/props/text/en — invalid')).toBeVisible();
   },
 };
