@@ -455,7 +455,9 @@ test('first-page replacement coalesces busy actions and preserves an in-flight s
       expect(inventory.snapshot()[sibling].next).toBe('sibling continuation');
       expect(calls).toEqual([
         {},
-        feed === 'organizations' ? { organizationsCursor: page()[feed].next! } : { operatorsCursor: page()[feed].next! },
+        feed === 'organizations'
+          ? { organizationsCursor: page()[feed].next! }
+          : { operatorsCursor: page()[feed].next! },
         sibling === 'organizations'
           ? { organizationsCursor: page()[sibling].next! }
           : { operatorsCursor: page()[sibling].next! },
