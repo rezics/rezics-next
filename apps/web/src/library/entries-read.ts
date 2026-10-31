@@ -3,6 +3,7 @@ export { libraryEntryStateWrite, type LibraryEntryStateWrite } from './shelf-par
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
+import { MediaProblem } from '../media/kernel';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import type { ProgressLabelInput } from './progress-label';
@@ -61,6 +62,8 @@ export type SavedLibraryEntry = {
   revision: number;
   incarnationId?: string | null;
   updatedAt: string;
+  lastActivityAt?: string;
+  finishedAt?: string | null;
 };
 
 export type ReloadedLibraryEntry = Omit<PersonalLibraryEntry, 'changeKey' | 'removeKey'>;
@@ -68,7 +71,10 @@ export type ReloadedLibraryEntry = Omit<PersonalLibraryEntry, 'changeKey' | 'rem
 export type LibraryMutationResult =
   | { ok: true; entry?: SavedLibraryEntry; undo?: { deletionId: string; revision: number } }
   | { ok: false; reason: 'conflict'; entry: ReloadedLibraryEntry }
-  | { ok: false; reason: 'closed' | 'missing' | 'unavailable' | 'signed-out' | 'unsupported_library_profile' };
+  | {
+      ok: false;
+      reason: 'closed' | 'denied' | 'missing' | 'unavailable' | 'signed-out' | 'unsupported_library_profile';
+    };
 
 export type LibraryChangeInput = {
   subjectId: string;
@@ -260,13 +266,30 @@ async function reloadEntry(
   client: KernelClient,
   authorization: string,
   subjectId: string,
-): Promise<{ ok: true; entry: ReloadedLibraryEntry } | { ok: false; reason: 'missing' | 'unavailable' }> {
+): Promise<
+  | { ok: true; entry: ReloadedLibraryEntry }
+  | { ok: false; reason: 'missing' | 'unavailable' | 'signed-out' | 'closed' | 'denied' }
+> {
   const result = await client.libraryEntries({ subjectId }).get({
     query: libraryFullQuery(),
     headers: { authorization },
   });
-  if (result.error || result.data == null)
-    return { ok: false, reason: statusOf(result) === 404 ? 'missing' : 'unavailable' };
+  if (result.error || result.data == null) {
+    const status = statusOf(result);
+    return {
+      ok: false,
+      reason:
+        status === 404
+          ? 'missing'
+          : status === 401
+            ? 'signed-out'
+            : status === 403
+              ? codeOf(result.error) === 'platform_closed'
+                ? 'closed'
+                : 'denied'
+              : 'unavailable',
+    };
+  }
   return { ok: true, entry: presentEntry((result.data as { libraryEntry: RawEntry }).libraryEntry) };
 }
 
@@ -302,6 +325,15 @@ export async function changePersonalLibraryEntry(
     );
     if (!result.error && result.data) {
       const saved = (result.data as { libraryEntry: RawEntry }).libraryEntry;
+      if (
+        !saved ||
+        saved.subjectId !== input.subjectId ||
+        saved.state !== input.state ||
+        !Number.isSafeInteger(saved.revision) ||
+        saved.revision < 1 ||
+        typeof saved.updatedAt !== 'string'
+      )
+        return { ok: false, reason: 'unavailable' };
       return {
         ok: true,
         entry: {
@@ -310,17 +342,24 @@ export async function changePersonalLibraryEntry(
           revision: saved.revision,
           ...(saved.incarnationId === undefined ? {} : { incarnationId: saved.incarnationId }),
           updatedAt: saved.updatedAt,
+          ...(saved.lastActivityAt === undefined ? {} : { lastActivityAt: saved.lastActivityAt }),
+          ...(saved.finishedAt === undefined ? {} : { finishedAt: saved.finishedAt }),
         },
       };
     }
     const conflict = await explainConflict(client, authorization, input.subjectId, result);
     if (conflict) return conflict;
     if (statusOf(result) === 404) return { ok: false, reason: 'missing' };
+    if (statusOf(result) === 401) return { ok: false, reason: 'signed-out' };
+    if (statusOf(result) === 403)
+      return { ok: false, reason: codeOf(result.error) === 'platform_closed' ? 'closed' : 'denied' };
     if (statusOf(result) === 422 && codeOf(result.error) === 'unsupported_library_profile')
       return { ok: false, reason: 'unsupported_library_profile' };
     return { ok: false, reason: 'unavailable' };
   } catch (error) {
     if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
+    if (error instanceof MediaProblem && error.problem.status === 403) return { ok: false, reason: 'denied' };
+    if (error instanceof MediaProblem && error.problem.status === 401) return { ok: false, reason: 'signed-out' };
     return { ok: false, reason: 'unavailable' };
   }
 }

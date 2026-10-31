@@ -127,3 +127,17 @@ export const UndoRestored: Story = {
   },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
 };
+
+export const SelectedLoadedPage: Story = {
+  name: 'Owner, loaded page selected',
+  render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
+  play: async (context) => {
+    await libraryEntriesReady(context);
+    const canvas = within(context.canvasElement);
+    const select = await canvas.findByRole('button', { name: m.library_selection_page() });
+    await waitFor(() => expect(select).toBeEnabled());
+    await userEvent.click(select);
+    await expect(await canvas.findByRole('region', { name: m.library_selection_heading() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.library_selection_clear() })).toBeEnabled();
+  },
+};

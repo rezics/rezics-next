@@ -19,9 +19,9 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useNavigate } from '@tanstack/react-router';
+import { useLocation, useNavigate } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
@@ -31,6 +31,8 @@ import { displayLibraryTitle } from './title';
 import { progressView } from './progress-label';
 import { shelfHref, type ShelfLayout, type ShelfSize, type ShelfSort } from './shelf-params';
 import { useHydrated, useShelfRows, type ShelfFailure, type ShelfRow } from './shelf-rows';
+import { useSession } from '../session/query';
+import { selectableEntry, type ShelfOutcome } from './shelf-selection';
 import type { LibrarySubject } from './reads';
 import type { LabelShelfEntry } from './label-shelf-read';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@rezics/ui/shadcn/table';
@@ -40,6 +42,7 @@ export function stateLabel(state: LibraryEntryStateRead, label?: string): string
 }
 function failureText(reason: ShelfFailure): string {
   if (reason === 'closed') return m.platform_closed_message();
+  if (reason === 'denied') return m.library_sort_denied();
   if (reason === 'signed-out') return m.library_sign_in();
   if (reason === 'unsupported_library_profile') return m.library_entry_profile_unsupported();
   return m.error_message();
@@ -114,7 +117,7 @@ function EntryMenu({
   const title = titleOf(entry, controls.locale).text;
   const subjectId = entry.subject?.id;
   const entries: ItemMenuEntry[] = [];
-  if (admitted && entry.stateOptions?.length) {
+  if (admitted && entry.stateOptions?.length && !row.unknownIntent) {
     entries.push({
       type: 'submenu',
       label: m.library_menu_status(),
@@ -127,6 +130,13 @@ function EntryMenu({
           onValueChange: (value) => void controls.changeState(entry.subjectId, value),
         },
       ],
+    });
+  }
+  if (admitted && row.unknownIntent) {
+    entries.push({
+      type: 'item',
+      label: m.library_selection_retry(),
+      onSelect: () => void controls.retryState(entry.subjectId),
     });
   }
   if (subjectId) {
@@ -154,7 +164,7 @@ function EntryMenu({
         onSelect: () => void navigate({ to: '/library/progress', search: { subjectId } }),
       });
   }
-  if (deleteAdmitted) {
+  if (deleteAdmitted && !row.unknownIntent) {
     entries.push({ type: 'separator' });
     entries.push({
       type: 'item',
@@ -188,6 +198,125 @@ function EntryMenu({
 function Updated({ entry, locale }: { entry: PersonalLibraryEntry; locale: string }) {
   return <RelativeTime value={entry.lastActivityAt ?? entry.updatedAt} locale={locale} timeZone="UTC" />;
 }
+function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
+  if (!controls.writeAdmitted || !controls.hydrated || !selectableEntry(entry)) return {};
+  return {
+    selectable: true,
+    selected: controls.selected.includes(entry.subjectId),
+    onSelectedChange: (selected: boolean) => controls.select(entry.subjectId, selected),
+  };
+}
+
+function SelectionBar({ controls }: { controls: Controls }) {
+  const [chosen, setChosen] = useState('');
+  const selectedState = controls.commonStates.some((option) => option.id === chosen) ? chosen : '';
+  if (!controls.writeAdmitted) return null;
+  const eligible = controls.rows.some((row) => selectableEntry(row.entry));
+  if (!controls.selected.length)
+    return eligible ? (
+      <Button variant="outline" disabled={!controls.hydrated || controls.pending} onClick={controls.selectPage}>
+        {m.library_selection_page()}
+      </Button>
+    ) : null;
+  return (
+    <div
+      role="region"
+      aria-label={m.library_selection_heading()}
+      className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-lg border bg-background p-3 shadow-sm"
+    >
+      <p role="status" className="text-sm">
+        {m.library_selection_count({ count: controls.selected.length })}
+      </p>
+      <Button variant="ghost" disabled={controls.pending} onClick={controls.selectPage}>
+        {m.library_selection_page()}
+      </Button>
+      <Button variant="ghost" disabled={controls.pending} onClick={controls.clearSelection}>
+        {m.library_selection_clear()}
+      </Button>
+      {controls.commonStates.length ? (
+        <>
+          <label className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+            {m.library_menu_status()}
+            <select
+              aria-label={m.library_selection_state()}
+              className="h-11 max-w-full rounded-md border bg-background px-2"
+              value={selectedState}
+              disabled={controls.pending || controls.selectionBlocked}
+              onChange={(event) => setChosen(event.target.value)}
+            >
+              <option value="">{m.library_selection_choose()}</option>
+              {controls.commonStates.map((option) => (
+                <option key={option.id} value={option.id} lang={option.label.lang}>
+                  {option.label.text}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button
+            disabled={controls.pending || controls.selectionBlocked || !selectedState}
+            onClick={() => void controls.changeSelectedState(selectedState)}
+          >
+            {controls.pending ? m.library_selection_applying() : m.library_selection_apply()}
+          </Button>
+        </>
+      ) : (
+        <p className="text-sm">{m.library_selection_no_common()}</p>
+      )}
+      {controls.selectionBlocked ? <p className="text-sm">{m.library_selection_unknown()}</p> : null}
+    </div>
+  );
+}
+
+const outcomeLabels: Record<ShelfOutcome['status'], () => string> = {
+  changed: () => m.library_selection_changed(),
+  unchanged: () => m.library_selection_unchanged(),
+  conflicted: () => m.library_selection_conflicted(),
+  failed: () => m.library_selection_failed(),
+  unknown: () => m.library_selection_unknown_label(),
+  'not-attempted': () => m.library_selection_not_attempted(),
+};
+function SelectionOutcomes({ controls }: { controls: Controls }) {
+  if (!controls.outcomes.length) return null;
+  return (
+    <section aria-label={m.library_selection_results()} className="space-y-2 rounded-lg border p-3 text-sm">
+      <p>{m.library_selection_partial()}</p>
+      <dl role="status" className="flex flex-wrap gap-x-4 gap-y-1">
+        {Object.entries(outcomeLabels).map(([status, label]) => (
+          <div key={status} className="flex gap-1">
+            <dt>{label()}</dt>
+            <dd>{controls.outcomes.filter((outcome) => outcome.status === status).length}</dd>
+          </div>
+        ))}
+      </dl>
+      <ul className="max-h-64 space-y-1 overflow-y-auto">
+        {controls.outcomes.map((outcome) => (
+          <li
+            key={outcome.subjectId}
+            className="flex flex-wrap items-center gap-2"
+            data-selection-outcome={outcome.status}
+          >
+            <span>
+              {outcome.title}: {outcomeLabels[outcome.status]()}
+            </span>
+            {outcome.status === 'unknown' &&
+            controls.rows.some((row) => row.entry.subjectId === outcome.subjectId && row.unknownIntent) ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={controls.pending || !controls.writeAdmitted}
+                onClick={() => void controls.retryState(outcome.subjectId)}
+                aria-label={m.library_selection_retry_title({ title: outcome.title })}
+              >
+                {m.library_selection_retry()}
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
   const { rows, locale } = controls;
   return (
@@ -202,12 +331,15 @@ function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
           row.conflict || row.failure ? (
             <div className="space-y-1">
               {row.conflict ? <p role="status">{m.library_conflict()}</p> : null}
-              {row.failure ? <p role="alert">{failureText(row.failure)}</p> : null}
+              {row.failure ? (
+                <p role="alert">{row.unknownIntent ? m.library_selection_unknown() : failureText(row.failure)}</p>
+              ) : null}
             </div>
           ) : undefined;
         return (
           <EntryMenu key={entry.subjectId} row={row} controls={controls} triggerSlot trigger={{ variant: 'ghost' }}>
             <CoverCard
+              {...selectionProps(entry, controls)}
               href={hrefOf(entry, locale)}
               title={title.text}
               {...(title.lang ? { titleLang: title.lang } : {})}
@@ -215,7 +347,7 @@ function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
               {...(progress ? { progress } : {})}
               {...(status ? { status: { label: status, ...(statusHref ? { href: statusHref } : {}) } } : {})}
               menuTrigger={<ItemMenuTriggerSlot />}
-              {...(notes ? { state: notes } : {})}
+              {...(notes ? (progress ? { meta: notes } : { state: notes }) : {})}
             />
           </EntryMenu>
         );
@@ -237,6 +369,7 @@ function ListView({ controls }: { controls: Controls }) {
         return (
           <ShelfListRow
             key={entry.subjectId}
+            {...selectionProps(entry, controls)}
             href={hrefOf(entry, locale)}
             cover={coverOf(entry)}
             title={title}
@@ -294,6 +427,8 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
     const title = titleOf(entry, locale);
     return {
       id: entry.subjectId,
+      ...selectionProps(entry, controls),
+      selectLabel: title.text,
       href: hrefOf(entry, locale),
       title: title.text,
       ...(title.lang ? { titleLang: title.lang } : {}),
@@ -347,15 +482,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
     />
   );
 }
-export function ShelfEntries({
-  entries,
-  locale,
-  layout,
-  size,
-  sort,
-  filterSort,
-  state,
-}: {
+type ShelfEntriesProps = {
   entries: PersonalLibraryEntry[];
   locale: string;
   layout: ShelfLayout;
@@ -363,9 +490,22 @@ export function ShelfEntries({
   sort?: ShelfSort;
   filterSort?: ShelfSort;
   state?: string;
-}) {
+};
+
+export function ShelfEntries(props: ShelfEntriesProps) {
+  const session = useSession();
+  const location = useLocation();
+  const context = `${session.subject ?? session.state}:${props.locale}:${location.href}:${props.state ?? ''}`;
+  const [source, setSource] = useState({ entries: props.entries, context, generation: 0 });
+  if (source.entries !== props.entries || source.context !== context) {
+    setSource({ entries: props.entries, context, generation: source.generation + 1 });
+  }
+  return <ShelfEntriesPage key={source.generation} {...props} />;
+}
+
+function ShelfEntriesPage({ entries, locale, layout, size, sort, filterSort, state }: ShelfEntriesProps) {
   const hydrated = useHydrated();
-  const shelfRows = useShelfRows(entries);
+  const shelfRows = useShelfRows(entries, locale);
   const controls: Controls = {
     ...shelfRows,
     locale,
@@ -377,9 +517,11 @@ export function ShelfEntries({
   };
   const leaving = shelfRows.rows.find((row) => row.entry.subjectId === shelfRows.removing)?.entry;
   const notices = layout === 'grid' ? [] : shelfRows.rows.filter((row) => row.conflict || row.failure);
-  if (!shelfRows.rows.length && !shelfRows.restoreMessage) return null;
+  if (!shelfRows.rows.length && !shelfRows.restoreMessage && !shelfRows.outcomes.length) return null;
   return (
     <>
+      <SelectionBar controls={controls} />
+      <SelectionOutcomes controls={controls} />
       {shelfRows.restoreMessage ? (
         <p role="status" className="text-sm">
           {shelfRows.restoreMessage}
@@ -388,7 +530,11 @@ export function ShelfEntries({
       {notices.map((row) => (
         <p key={row.entry.subjectId} role={row.failure ? 'alert' : 'status'} className="text-sm">
           <span className="font-medium">{titleOf(row.entry, locale).text}</span>{' '}
-          {row.failure ? failureText(row.failure) : m.library_conflict()}
+          {row.unknownIntent
+            ? m.library_selection_unknown()
+            : row.failure
+              ? failureText(row.failure)
+              : m.library_conflict()}
         </p>
       ))}
       <noscript>
@@ -405,18 +551,20 @@ export function ShelfEntries({
           </div>
         ))}
       </noscript>
-      {layout === 'grid' ? <GridView controls={controls} size={size} /> : null}
-      {layout === 'list' ? <ListView controls={controls} /> : null}
-      {layout === 'table' ? (
-        <>
-          <div className="hidden sm:block">
-            <TableView controls={controls} {...(state ? { state } : {})} />
-          </div>
-          <div className="sm:hidden">
-            <ListView controls={controls} />
-          </div>
-        </>
-      ) : null}
+      <fieldset disabled={shelfRows.pending} aria-busy={shelfRows.pending} className="min-w-0">
+        {layout === 'grid' ? <GridView controls={controls} size={size} /> : null}
+        {layout === 'list' ? <ListView controls={controls} /> : null}
+        {layout === 'table' ? (
+          <>
+            <div className="hidden sm:block">
+              <TableView controls={controls} {...(state ? { state } : {})} />
+            </div>
+            <div className="sm:hidden">
+              <ListView controls={controls} />
+            </div>
+          </>
+        ) : null}
+      </fieldset>
       <Exposure operation="library_entry.delete">
         <AlertDialog open={leaving !== undefined} onOpenChange={(open) => !open && shelfRows.cancelRemove()}>
           <AlertDialogContent size="sm">

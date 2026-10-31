@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Toaster } from '@rezics/ui/shadcn/toast';
-import { expect, userEvent, within } from 'storybook/test';
-import type { PersonalLibraryView } from '../library/entries-read';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import type { PersonalLibraryEntry, PersonalLibraryView } from '../library/entries-read';
 import { PersonalLibraryPage } from '../library/entries-page';
 import { continueProgress } from '../library/continue-read';
 import type { ContinueView } from '../library/continue-source';
@@ -10,6 +10,9 @@ import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
+import recordedDefinitions from '../kernel/recorded/definitions-release.json';
+import { libraryStateOptions } from '../library/profiles';
+import type { Release } from '../subject/definitions';
 
 const meta = {
   decorators: [
@@ -229,3 +232,156 @@ export const ChronologicalUnavailable: Story = chronological({
   readState: 'unavailable',
   sort: { orderBy: 'finishedAt', direction: 'asc' },
 });
+
+// Constructed HTTP outcomes exercise the ordinary action adapter; they are not native proof recordings.
+const selectionId = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(6000 + n).padStart(12, '0')}`;
+function selectionEntries(): PersonalLibraryEntry[] {
+  const options = libraryStateOptions(recordedDefinitions.release as unknown as Release, 'schema:Book', getLocale());
+  return [1, 2, 3, 4].map((n) => ({
+    subjectId: selectionId(n),
+    state: options[n === 4 ? 1 : 0]!.id,
+    stateLabel: options[n === 4 ? 1 : 0]!.label.text,
+    stateOptions: options,
+    revision: 2,
+    incarnationId: selectionId(100 + n),
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    subject: {
+      id: selectionId(n),
+      type: 'schema:Book',
+      types: ['schema:Book'],
+      label: {
+        value: ['A new reading state', 'A concurrent change', 'A lost response', 'Already in this state'][n - 1]!,
+        language: 'en',
+      },
+      cover: null,
+    },
+    changeKey: crypto.randomUUID(),
+    removeKey: crypto.randomUUID(),
+  }));
+}
+function selectionExample(incompatible = false): Story {
+  return {
+    render: () => {
+      const entries = selectionEntries();
+      if (incompatible)
+        entries[1] = {
+          ...entries[1]!,
+          stateOptions: [{ ...entries[0]!.stateOptions![0]!, label: { text: 'A different meaning', lang: 'en' } }],
+        };
+      setLibraryNavigationStoryState({ pinCount: 0, builtins: 'none', collectionCount: 0 });
+      return (
+        <PatternStory visitor="Signed In" path="/library">
+          <div className="mx-auto max-w-7xl p-4 sm:p-8">
+            <PersonalLibraryPage
+              page={{ signedIn: true, entries, next: null }}
+              continueState={{ state: 'loaded', entries: [], next: null }}
+              locale={getLocale()}
+              display={{ layout: 'grid', size: 'm' }}
+            />
+          </div>
+        </PatternStory>
+      );
+    },
+  };
+}
+function partialResponses(stopOnSecond = false) {
+  const original = globalThis.fetch;
+  const entries = selectionEntries();
+  let unknown = true;
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const entry = entries.find((row) => url.pathname === `/v1/libraryEntries/${row.subjectId}`);
+    if (!entry) return original(input, init);
+    if (request.method === 'GET')
+      return Response.json({ libraryEntry: { ...entry, state: entry.stateOptions![2]!.id, revision: 9 } });
+    if (request.method !== 'PUT') return original(input, init);
+    if (entry.subjectId === selectionId(2))
+      return stopOnSecond
+        ? Response.json({ code: 'platform_closed' }, { status: 403 })
+        : Response.json({ code: 'conflict' }, { status: 409 });
+    if (entry.subjectId === selectionId(3) && unknown) {
+      unknown = false;
+      throw new TypeError('Constructed lost response');
+    }
+    const data = (await request.json()) as { state: string; revision: number; incarnationId: string };
+    return Response.json({
+      libraryEntry: {
+        subjectId: entry.subjectId,
+        ...data,
+        revision: data.revision + 1,
+        updatedAt: '2026-02-01T00:00:00.000Z',
+      },
+    });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+async function applySelection({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement);
+  const select = await canvas.findByRole('button', { name: m.library_selection_page() });
+  await waitFor(() => expect(select).toBeEnabled());
+  await userEvent.click(select);
+  const options = libraryStateOptions(recordedDefinitions.release as unknown as Release, 'schema:Book', getLocale());
+  await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.library_selection_state() }), options[1]!.id);
+  await userEvent.click(canvas.getByRole('button', { name: m.library_selection_apply() }));
+  await waitFor(() => expect(canvasElement.querySelectorAll('[data-selection-outcome="unknown"]')).toHaveLength(1));
+  await expect(canvasElement.querySelectorAll('[data-selection-outcome="changed"]')).toHaveLength(1);
+  await expect(canvasElement.querySelectorAll('[data-selection-outcome="conflicted"]')).toHaveLength(1);
+  await expect(canvasElement.querySelectorAll('[data-selection-outcome="unchanged"]')).toHaveLength(1);
+}
+export const SelectedPartialOutcomes: Story = {
+  ...selectionExample(),
+  name: 'Selected entries, partial outcomes',
+  beforeEach: () => partialResponses(),
+  play: applySelection,
+};
+export const SelectedUnknownRecovered: Story = {
+  ...selectionExample(),
+  name: 'Selected entries, unknown change recovered',
+  beforeEach: () => partialResponses(),
+  play: async (context) => {
+    await applySelection(context);
+    const canvas = within(context.canvasElement);
+    const retry = await canvas.findByRole('button', {
+      name: m.library_selection_retry_title({ title: 'A lost response' }),
+    });
+    await userEvent.click(retry);
+    await waitFor(() =>
+      expect(context.canvasElement.querySelectorAll('[data-selection-outcome="unknown"]')).toHaveLength(0),
+    );
+    await expect(context.canvasElement.querySelectorAll('[data-selection-outcome="changed"]')).toHaveLength(2);
+  },
+};
+export const SelectedNoCommonState: Story = {
+  ...selectionExample(true),
+  name: 'Selected entries, no common state',
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const select = await canvas.findByRole('button', { name: m.library_selection_page() });
+    await waitFor(() => expect(select).toBeEnabled());
+    await userEvent.click(select);
+    await expect(await canvas.findByText(m.library_selection_no_common())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.library_selection_apply() })).toBeNull();
+  },
+};
+
+export const SelectedAuthorityLost: Story = {
+  ...selectionExample(),
+  name: 'Selected entries, stopped after access closes',
+  beforeEach: () => partialResponses(true),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const select = await canvas.findByRole('button', { name: m.library_selection_page() });
+    await waitFor(() => expect(select).toBeEnabled());
+    await userEvent.click(select);
+    const options = libraryStateOptions(recordedDefinitions.release as unknown as Release, 'schema:Book', getLocale());
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.library_selection_state() }), options[1]!.id);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_selection_apply() }));
+    await waitFor(() => expect(canvasElement.querySelectorAll('[data-selection-outcome="failed"]')).toHaveLength(1));
+    await expect(canvasElement.querySelectorAll('[data-selection-outcome="changed"]')).toHaveLength(1);
+    await expect(canvasElement.querySelectorAll('[data-selection-outcome="not-attempted"]')).toHaveLength(2);
+  },
+};
