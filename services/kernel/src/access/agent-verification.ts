@@ -1247,6 +1247,7 @@ export async function finishAgentVerificationReversal(
   clock: () => Date,
 ): Promise<void> {
   const settlement = await prepareAccountIdentityReversalSettlement(pool, input);
+  input = settlement.input;
   await runCommand(
     pool,
     {
