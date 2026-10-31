@@ -24,7 +24,7 @@ import type { SessionStore } from '../src/session/store';
 import { publicationExample } from '../src/kernel/fake/collection-publication';
 import { isSignedInPath } from '../src/session/guard';
 import { m } from '../src/paraglide/messages.js';
-import { getLocale, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
 
 const key = '0192f3a0-6c1e-7b2a-9d4e-0000000000aa';
 const input: PublicationInput = { collectionId: 'saved-dynamic', revision: 7, subjectIds: [], idempotencyKey: key };
@@ -255,7 +255,7 @@ test('Selected Collection publication communicates zero one and many selected it
   );
   for (const [name, value] of Object.entries(globals))
     Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
-  const previousLocale = getLocale();
+  const previousGetLocale = getLocale;
   const { createRoot } = await import('react-dom/client');
   const host = window.document.createElement('div');
   window.document.body.append(host);
@@ -282,7 +282,7 @@ test('Selected Collection publication communicates zero one and many selected it
       ['fr', '1 élément sélectionné'],
       ['es', '1 elemento seleccionado'],
     ] as const) {
-      setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       for (const count of [0, 1, 2]) {
         let sent: PublicationInput | undefined;
         let finish!: (result: PublicationResult) => void;
@@ -350,7 +350,7 @@ test('Selected Collection publication communicates zero one and many selected it
   } finally {
     await act(async () => root.unmount());
     host.remove();
-    setLocale(previousLocale, { reload: false });
+    overwriteGetLocale(previousGetLocale);
     await window.happyDOM.close();
     for (const [name, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, name, descriptor);
