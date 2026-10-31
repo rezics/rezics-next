@@ -7,6 +7,9 @@ import {
   registerCommandCallback,
   type CommandTransaction,
 } from '../command/command.ts';
+import { readAgentIdentityInventoryInTransaction } from '../history/agent-identity-inventory.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
+import { unionHistoryScope } from '../history/record.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import * as nativeBinding from '../semantic/identity-epoch-binding.ts';
 import type {
@@ -25,6 +28,8 @@ import select from './agent-verification-identity-technical-read.sql';
 import insert from './agent-verification-identity-technical-insert.sql';
 
 type AccountReceipt = Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
+// Failure bookkeeping only; all positive authority comes from durable locked native rows.
+const wroteTechnical = new WeakSet<CommandTransaction>();
 const json = (value: unknown): string =>
   JSON.stringify(value, (_key, entry: unknown) => (typeof entry === 'bigint' ? entry.toString() : entry));
 const normalized = (value: unknown): string => canonicalize(JSON.parse(json(value)))!;
@@ -102,12 +107,46 @@ function sameReceipt(a: IdentityNativeReceipt, b: IdentityNativeReceipt): boolea
     a.transactionId === b.transactionId;
 }
 async function inventory(tx: CommandTransaction, receipt: AccountReceipt) {
-  return (await tx.query<{ account_id: string; role: string }>(
-    `SELECT role_account_id::text AS account_id,role FROM access.agent_identity_technical_role
+  const rows = (await tx.query<{ account_id: string; source_roles: number }>(
+    `SELECT role_account_id::text AS account_id,source_roles FROM access.agent_identity_technical_role
      WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4
-     ORDER BY role_account_id,role LIMIT 9 FOR SHARE`,
+     ORDER BY role_account_id LIMIT 65 FOR SHARE`,
     [routeOf(receipt.account), receipt.account, receipt.kind, receipt.receipt],
   )).rows;
+  if (!rows.length || rows.length > 64) return [];
+  return rows.flatMap((row) => [
+    ...(row.source_roles & 1 ? [{ account_id: row.account_id, role: 'subject' }] : []),
+    ...(row.source_roles & 2 ? [{ account_id: row.account_id, role: 'actor' }] : []),
+    ...(row.source_roles & 4 ? [{ account_id: row.account_id, role: 'editor' }] : []),
+  ]);
+}
+
+/** Read the genuine bounded serializer role union; source.roles alone omits inherited undo,
+ * principals and acting humans. No HistoryArtifact, subject or candidate is synthesized.
+ */
+async function producerInventory(tx: CommandTransaction, source: AccountIdentitySource) {
+  const receipt = source.input.receipt;
+  const native = await readAgentIdentityInventoryInTransaction(tx, {
+    route: routeOf(receipt.account)!, accountId: receipt.account,
+    direction: receipt.kind, receiptId: receipt.receipt,
+  });
+  if (native.state !== 'sealed' || !sameReceipt(native.proof.original, source) ||
+    native.proof.original.digest !== source.digest) return null;
+  const accounts = unionHistoryScope('command-receipt/v1',
+    ...native.proof.artifacts.map((artifact) => artifact.accounts)).accounts;
+  const sourceMask = { subject: 1, actor: 2, editor: 4 };
+  const historyMask = { subject: ACCOUNT_ROLE_BITS.subject, actor: ACCOUNT_ROLE_BITS.actor,
+    editor: ACCOUNT_ROLE_BITS.reviewer };
+  for (const role of source.roles) {
+    if (!(role.role in sourceMask)) return null;
+    const name = role.role as keyof typeof sourceMask;
+    if (!accounts.some((a) => a.accountId === role.account_id && (a.roles & historyMask[name]) !== 0)) return null;
+  }
+  return {
+    domainGeneration: native.proof.domainGeneration,
+    accounts: accounts.map((a) => ({ ...a, sourceRoles: source.roles.reduce((mask, role) =>
+      role.account_id === a.accountId ? mask | sourceMask[role.role as keyof typeof sourceMask] : mask, 0) })),
+  };
 }
 
 /** Native-only receiver lookup. It does not recurse through the personal source and cannot
@@ -174,23 +213,25 @@ export async function acceptTechnicalSource(
   }
   const intent = technicalIntent(source.input.intent, reference.receipt);
   if (!intent || normalized(intent) !== normalized(source.input.intent) || source.roles.length > 8) return null;
+  const producers = await producerInventory(tx, source);
+  if (!producers) return null;
   // All rejection paths precede the first write/callback. SQL reserves the locked owner's
   // forthcoming fence, checked against the actual executor outbox by a deferred constraint.
   const row = (await tx.query(insert.sql, [
     routeOf(reference.receipt.account), reference.receipt.account, reference.receipt.kind, reference.receipt.receipt,
     json(intent), source.digest, source.partition, source.epoch, source.position.toString(), source.transactionId,
     reference.job.jobId, reference.job.epoch.toString(), binding.generation, binding.transactionId,
-    source.workflowId, currentCommand(tx).transactionId,
+    source.workflowId, currentCommand(tx).transactionId, producers.domainGeneration,
   ])).rows[0];
   if (!row) throw accountIdentityUnavailable('technical receiver lost its locked native owner');
-  for (const role of source.roles) {
-    if (!['subject', 'actor', 'editor'].includes(role.role))
-      throw accountIdentityUnavailable('unknown original technical source role');
+  wroteTechnical.add(tx);
+  for (const account of producers.accounts) {
     await tx.query(
-      `INSERT INTO access.agent_identity_technical_role(route,account_id,direction,receipt_id,role_account_id,role)
-       VALUES($1,$2,$3,$4,$5,$6)`,
+      `INSERT INTO access.agent_identity_technical_role
+       (route,account_id,direction,receipt_id,role_account_id,roles,source_roles)
+       VALUES($1,$2,$3,$4,$5,$6,$7)`,
       [routeOf(reference.receipt.account), reference.receipt.account, reference.receipt.kind, reference.receipt.receipt,
-        role.account_id, role.role],
+        account.accountId, account.roles, account.sourceRoles],
     );
   }
   registerCommandCallback(tx, async (transactionId) => {
@@ -210,14 +251,17 @@ export async function verifyTechnicalSource(
   reference: IdentitySourceConsumerReference,
   native: IdentityNativeReceipt,
 ): Promise<boolean> {
-  if (!live(tx, reference.receipt) || !acceptedReader()) return false;
+  if (!live(tx, reference.receipt) || !acceptedReader()) {
+    if (wroteTechnical.has(tx)) throw accountIdentityUnavailable('technical receiver mismatch after write');
+    return false;
+  }
   const row = await receiver(tx, reference.receipt);
   const source = await readAccountIdentityTechnicalSource(tx, reference.receipt);
   const valid = !!row && !!source && matches(reference, source) &&
     row.accepted_job_id === reference.job.jobId && BigInt(row.accepted_job_epoch) === reference.job.epoch &&
     sameReceipt(receiving(row), native);
   // A false post-write observation must never let Source commit only its terminal half.
-  if (!valid && row?.receiving_transaction_id === currentCommand(tx).transactionId)
+  if (!valid && wroteTechnical.has(tx))
     throw accountIdentityUnavailable('technical receiver mismatch after write');
   return valid;
 }

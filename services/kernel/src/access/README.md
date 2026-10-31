@@ -3737,3 +3737,9 @@ Undo-only reads resolve this native receiver without an Account activity check o
 personal-source lookup. Ordinary admission retains the original active source checks and cannot
 obtain a new source capability from the receiver. The receiver does not minimize the original
 personal row or discharge any consumer; those owner boundaries remain unavailable in this base.
+
+The normalized inventory consumes the real original native serializer inventory's bounded role
+union, including inherited undo roles, principals and acting humans. It keeps existing role bits
+and the original restore domain generation. It neither invents a History artifact nor copies any
+artifact payload. Only the original source's three closed role meanings are returned to mechanical
+undo consumers; every native role association remains discoverable and pending separately.

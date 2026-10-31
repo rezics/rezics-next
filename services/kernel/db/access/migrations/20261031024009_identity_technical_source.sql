@@ -19,6 +19,7 @@ CREATE TABLE access.agent_identity_technical_source (
  workflow_id text NOT NULL CHECK(octet_length(workflow_id)<=256),
  receiving_transaction_id uuid NOT NULL,
  receiving_epoch integer NOT NULL CHECK(receiving_epoch>0),
+ domain_generation bigint NOT NULL CHECK(domain_generation>0),
  receiving_position bigint NOT NULL CHECK(receiving_position>0),
  PRIMARY KEY(route,account_id,direction,receipt_id),
  CHECK(route=get_byte(uuid_send(account_id),10)*256+get_byte(uuid_send(account_id),11)),
@@ -44,15 +45,16 @@ CREATE TABLE access.agent_identity_technical_role (
  direction text NOT NULL,
  receipt_id uuid NOT NULL,
  role_account_id uuid NOT NULL,
- role text NOT NULL CHECK(role IN ('subject','actor','editor')),
- PRIMARY KEY(route,account_id,direction,receipt_id,role_account_id,role),
+ roles integer NOT NULL CHECK(roles BETWEEN 1 AND 262143),
+ source_roles smallint NOT NULL CHECK(source_roles BETWEEN 0 AND 7),
+ PRIMARY KEY(route,account_id,direction,receipt_id,role_account_id),
  FOREIGN KEY(route,account_id,direction,receipt_id)
   REFERENCES access.agent_identity_technical_source(route,account_id,direction,receipt_id)
 );
 CREATE INDEX erasure_agent_identity_technical_role_account ON access.agent_identity_technical_role
- (role_account_id,route,account_id,direction,receipt_id,role);
+ (role_account_id,route,account_id,direction,receipt_id);
 CREATE INDEX erasure_agent_identity_technical_role_owner ON access.agent_identity_technical_role
- (account_id,route,direction,receipt_id,role_account_id,role);
+ (account_id,route,direction,receipt_id,role_account_id);
 
 CREATE FUNCTION access.validate_identity_technical_source() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -67,7 +69,7 @@ BEGIN
   OR NOT EXISTS(SELECT 1 FROM access.agent_identity_technical_role r
     WHERE (r.route,r.account_id,r.direction,r.receipt_id)=
       (NEW.route,NEW.account_id,NEW.direction,NEW.receipt_id)
-      AND r.role_account_id=NEW.account_id AND r.role='subject') THEN
+      AND r.role_account_id=NEW.account_id AND (r.source_roles & 1)<>0) THEN
   RAISE EXCEPTION 'Accounts technical custody lacks same-command native receiving fence/inventory' USING ERRCODE='23514';
  END IF;
  RETURN NEW;
