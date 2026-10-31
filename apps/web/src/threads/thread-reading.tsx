@@ -48,7 +48,7 @@ export function ThreadReading({
   signedOut: ReactNode;
   personal: ThreadReadingPersonal | undefined;
   session: SessionState | 'unknown';
-  readerSubject?: string | undefined;
+  readerSubject?: string | null | undefined;
   returnTo: string;
   renderHeader: (title: string | null) => ReactNode;
   onMutation: () => Promise<void>;

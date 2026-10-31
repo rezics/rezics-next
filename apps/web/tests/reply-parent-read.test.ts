@@ -16,7 +16,7 @@ import { exactRevisionHref } from '../src/threads/exact-revision-href';
 import { getLocale } from '../src/paraglide/runtime.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const originalReads = await import('../src/threads/reads');
+const originalReads = { ...(await import('../src/threads/reads')) };
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 
 // This single regression uses the actual default composition and native-shaped HTTP responses.
