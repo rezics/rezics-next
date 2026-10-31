@@ -4,7 +4,7 @@ import { requestForStory } from './react-start';
 const kernelOrigin = 'http://kernel.local';
 const runtime = globalThis as typeof globalThis & { __rezicsStoryFetchInstalled?: boolean };
 
-/** Only the existing suggestion BFF and recorded kernel belong to this browser bridge. */
+/** Only the existing suggestions/trending BFF routes and recorded kernel belong to this browser bridge. */
 export function createStoryFetch(
   liveFetch: typeof fetch,
   recordedFetch = createStoryRecordedKernelFetch(),
@@ -15,15 +15,18 @@ export function createStoryFetch(
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
     if (
       url.origin !== window.location.origin ||
-      url.pathname !== '/api/search/suggestions' ||
+      (url.pathname !== '/api/search/suggestions' && url.pathname !== '/api/search/trending') ||
       method.toUpperCase() !== 'GET'
     )
       return liveFetch(input, init);
     const request = requestForStory(input instanceof Request ? input : url, init);
     request.signal.throwIfAborted();
-    const { suggestionResponse } = await import('../src/search/suggestions');
+    const respond =
+      url.pathname === '/api/search/suggestions'
+        ? (await import('../src/search/suggestions')).suggestionResponse
+        : (await import('../src/search/trending')).trendingResponse;
     request.signal.throwIfAborted();
-    const response = await suggestionResponse(request, env);
+    const response = await respond(request, env);
     request.signal.throwIfAborted();
     return response;
   }) as typeof fetch;

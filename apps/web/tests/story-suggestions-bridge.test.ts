@@ -5,6 +5,7 @@ import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import search from '../src/kernel/recorded/search.json';
 
 mock.module('cloudflare:workers', () => ({ env }));
+mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 
 const { loadGlobalHeaderSuggestions } = await import('../src/search/header-search/suggestions');
@@ -163,7 +164,87 @@ test('Request and init cancellation reject fetch while unrelated paths, methods 
     [endpoint, { method: 'POST' }],
     [new Request(endpoint, { method: 'HEAD' }), undefined],
     [request, { method: 'OPTIONS' }],
-    ['https://storybook.test/api/search/trending', undefined],
+  ] as const) {
+    expect(await (await fetch(input, init)).text()).toBe('live');
+    expect(live.mock.calls.at(-1)).toEqual([input, init]);
+  }
+});
+
+test('the exact trending route rejects missing language through its BFF without native or live reads', async () => {
+  const response = await fetch('https://storybook.test/api/search/trending');
+  expect(response.status).toBe(400);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(await response.json()).toHaveProperty('code', 'invalid_request');
+  expect(calls).toHaveLength(0);
+  expect(live).not.toHaveBeenCalled();
+});
+
+test('trending keeps language, bounds and story identity while a missing recording stays unavailable', async () => {
+  for (const [visitor, credential, init] of [
+    ['Signed Out', null, {}],
+    ['Signed In', 'Bearer recorded-story-token', {}],
+    ['Signed In', null, { credentials: 'omit' }],
+    ['Signed In', 'Bearer supplied', { headers: { authorization: 'Bearer supplied' } }],
+  ] as const) {
+    start.setStoryRequestContext({ visitor, url: '/en/collections/recorded' });
+    const response = await fetch('/api/search/trending?language=zh-Hant', init);
+    expect(response.status).toBe(404);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.json()).toHaveProperty('code', 'dependency_unavailable');
+    const request = calls.at(-1)!;
+    const url = new URL(request.url);
+    expect(request.method).toBe('GET');
+    expect(url.pathname).toBe('/v1/trendingSearches');
+    expect(url.searchParams.get('language')).toBe('zh-Hant');
+    expect(url.searchParams.get('limit')).toBe('10');
+    expect(request.headers.get('accept-language')).toBe('zh-Hant, zh;q=0.9, zh-Hans;q=0.8');
+    expect(request.headers.get('authorization'), `${visitor} ${JSON.stringify(init)}`).toBe(credential);
+  }
+  expect(calls).toHaveLength(4);
+  expect(live).not.toHaveBeenCalled();
+});
+
+test('trending preserves native refusal and preparation without anonymous retry', async () => {
+  for (const [status, code] of [
+    [401, 'invalid_credentials'],
+    [403, 'platform_closed'],
+    [503, 'semantic_not_ready'],
+    [503, 'index_not_ready'],
+    [503, 'dependency_unavailable'],
+  ] as const) {
+    const before = calls.length;
+    native = (async () => Response.json({ code }, { status })) as typeof fetch;
+    const response = await fetch('/api/search/trending?language=en', { headers: { authorization: 'Bearer denied' } });
+    expect(response.status).toBe(status);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.json()).toHaveProperty('code', code);
+    expect(calls).toHaveLength(before + 1);
+    expect(calls.at(-1)!.headers.get('authorization')).toBe('Bearer denied');
+  }
+  expect(live).not.toHaveBeenCalled();
+});
+
+test('trending preserves cancellation and passes through other paths, origins and methods', async () => {
+  const endpoint = 'https://storybook.test/api/search/trending?language=en';
+  const controller = new AbortController();
+  const request = new Request(endpoint, { signal: controller.signal });
+  controller.abort();
+  await expect(fetch(request)).rejects.toHaveProperty('name', 'AbortError');
+  expect(calls).toHaveLength(0);
+  const active = new AbortController();
+  native = (async () => {
+    active.abort();
+    return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+  }) as typeof fetch;
+  await expect(fetch(request, { signal: active.signal })).rejects.toHaveProperty('name', 'AbortError');
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.signal.aborted).toBe(true);
+  for (const [input, init] of [
+    ['https://storybook.test/api/search/trending/extra', undefined],
+    ['https://external.test/api/search/trending?language=en', undefined],
+    [endpoint, { method: 'POST' }],
+    [new Request(endpoint, { method: 'HEAD' }), undefined],
+    [request, { method: 'OPTIONS' }],
   ] as const) {
     expect(await (await fetch(input, init)).text()).toBe('live');
     expect(live.mock.calls.at(-1)).toEqual([input, init]);
