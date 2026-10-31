@@ -3,7 +3,10 @@ import { validatePageNode, validatePageRealm, validateViewCursor } from '../feat
 import { deLocalizeUrl, isLocale, localizeUrl } from '../paraglide/runtime.js';
 import { subjectHref, type SubjectHrefInput } from '../subject/subject-href';
 
-const safeHref = new RegExp(href().pattern!, 'u');
+const linkSchema = href();
+if (!('pattern' in linkSchema) || typeof linkSchema.pattern !== 'string')
+  throw new Error('The shared href schema requires a pattern');
+const safeHref = new RegExp(linkSchema.pattern, 'u');
 const localOrigin = 'https://rezics.invalid';
 
 /** The router's current reader address is navigation only; the destination still checks Auth and Realm access. */
