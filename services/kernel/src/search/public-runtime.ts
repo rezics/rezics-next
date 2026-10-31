@@ -4,6 +4,9 @@ import type { SearchHit } from './query.ts';
 import { advanceSearchRecovery } from './page-recovery.ts';
 import { collectRetainedUsefulPage, type RetainedUsefulPage } from './useful-page.ts';
 import type { Pool } from 'pg';
+import type { DiscoveryRegistry } from './discovery.ts';
+import { nativeDiscoveryRegistry } from './account-discovery.ts';
+import { discoveryIndexName } from './indices.ts';
 import { createSearchGenerationPublication, type SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
@@ -47,6 +50,13 @@ export type BoundPublicRequest = Readonly<{
   capture: PublicFilterConsumerCapture;
 }>;
 export type DefaultPublicFilterRuntime = Readonly<{
+  /** Pins the active mixed physical allocation; retained roots must still address that allocation. */
+  openDiscovery(
+    registry: DiscoveryRegistry,
+    digest: string,
+    context: PublicFilterConsumerContext,
+    queried?: PublicFilterQueriedObservation,
+  ): Promise<PublicDiscoveryConsumerOperations>;
   publication: SearchGenerationPublication;
   preparePublication(
     generation: number,
@@ -92,6 +102,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   const listing = subjectListingSource(config.pool);
   const owned = new Set<{ close(): Promise<void> }>();
   const pending = new Set<Promise<unknown>>();
+  // Consumer factories retain PIT ownership until exhaustion or runtime shutdown. Reusing the
+  // active factory avoids closing signed continuations at the end of their HTTP request.
+  const mixed = new Map<string, Promise<PublicDiscoveryConsumerOperations>>();
   let closed = false;
   let closing: Promise<void> | undefined;
   const track = <T>(operation: () => Promise<T>): Promise<T> => {
@@ -171,6 +184,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     physicalTarget: string,
     meaning: Pick<NonNullable<Awaited<ReturnType<typeof activeRelease>>>, 'digest' | 'release'>,
     context: PublicFilterConsumerContext,
+    registry?: DiscoveryRegistry,
   ): Promise<PublicDiscoveryConsumerOperations> {
     checkDeadline(context);
     if (!meaning.release.types['schema:Thing']) notReady();
@@ -183,6 +197,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       context,
       physicalTarget,
       meaning: { digest: meaning.digest, release: meaning.release, type: 'schema:Thing' },
+      ...(registry === undefined ? {} : { registry }),
     });
     // Request-owned close also deregisters the factory; shutdown waits for admitted work first.
     owned.add(operations);
@@ -199,6 +214,36 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     };
   }
   return {
+    openDiscovery(registry, digest, context, queried) {
+      return track(async () => {
+        checkDeadline(context);
+        const release = await activeRelease(config.pool);
+        if (!release) notReady();
+        if (release.digest !== digest) throw new ProblemError('search_restart_required');
+        const result = await config.pool.query<{ generation: number; uuid: string; incarnation: string }>(
+          `SELECT generation::float8 AS generation,index_uuid AS uuid,incarnation::text
+           FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state='active'`,
+          [config.prefix],
+        );
+        if (result.rows.length !== 1) notReady();
+        const allocation = result.rows[0]!;
+        if (!allocation.uuid || !Number.isSafeInteger(allocation.generation)) notReady();
+        const target = discoveryIndexName(config.prefix, allocation.generation);
+        if (queried && (
+          queried.consumer.physicalTarget !== target ||
+          queried.consumer.incarnation !== allocation.uuid ||
+          queried.consumer.meaningDigest !== digest
+        )) throw new ProblemError('search_restart_required');
+        const key = JSON.stringify([target, allocation.uuid, allocation.incarnation, digest]);
+        let operations = mixed.get(key);
+        if (!operations) {
+          operations = create(target, release, context, registry);
+          mixed.set(key, operations);
+          void operations.catch(() => { if (mixed.get(key) === operations) mixed.delete(key); });
+        }
+        return operations;
+      });
+    },
     publication,
     preparePublication(generation, context) {
       return track(async () => {
@@ -314,7 +359,10 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         const release = digest === null ? null : await readRelease(config.pool, digest);
         if (!release || digest === null) notReady();
         // The job only locates producer state. Native repair resolves incarnation, definition and grant again.
-        const operations = await create(job.consumer.physicalTarget, { digest, release }, context);
+        const registry = job.consumer.physicalTarget.startsWith(`${config.prefix}discovery-g`)
+          ? await nativeDiscoveryRegistry(config.pool, config.routeKey, nativeSource, { release })
+          : undefined;
+        const operations = await create(job.consumer.physicalTarget, { digest, release }, context, registry);
         try {
           return await operations.repairStep(job, context);
         } finally {

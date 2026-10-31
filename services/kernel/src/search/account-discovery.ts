@@ -2,18 +2,17 @@ import type { Pool, PoolClient } from 'pg';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { noEffect, runCommand } from '../command/command.ts';
 import { activeRelease } from '../semantic/definitions.ts';
-import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
+import type { FilterRelease } from '@rezics/filter';
 import {
   accountDiscoverySource,
-  readAccountDiscoverySummaries,
   readAccountDiscoveryBindings,
 } from '../access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../access/account-discovery-work.ts';
 import { readErasureStatus, recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
-import type { AccountDiscoverySummary, DiscoveryIndexAction, DiscoveryKey, DiscoveryRegistry } from './discovery.ts';
+import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryRegistry } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
 import type { OpenSearch } from './opensearch.ts';
-import { createDiscoveryRegistry } from './discovery-registry.ts';
+import { createNativeDiscoveryRegistry } from './discovery-hydration.ts';
 import { discoveryDocumentActions, discoveryDocumentId, parseDiscoveryDocumentId } from './discovery-documents.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import { writeDiscoveryActions, validateRefreshResponse } from './write-actions.ts';
@@ -239,27 +238,26 @@ export async function readDiscoveryCensus(
 }
 
 /** The production registry uses each owner's real current-summary reader. No summary is indexed. */
-export async function nativeDiscoveryRegistry(pool: Pool, routeKey: Uint8Array, subjects: SubjectSource) {
-  const active = await activeRelease(pool);
-  if (!active) throw new Error('Discovery requires an active definition release');
-  return createDiscoveryRegistry({
-    release: active.release,
+export async function nativeDiscoveryRegistry(
+  pool: Pool,
+  routeKey: Uint8Array,
+  subjects: SubjectSource,
+  options?: { release: FilterRelease; languages?: readonly string[] },
+) {
+  const release = options?.release ?? (await activeRelease(pool))?.release;
+  if (!release) throw new Error('Discovery requires an active definition release');
+  return createNativeDiscoveryRegistry({
+    pool,
+    routeKey,
+    release,
+    languages: options?.languages,
     semantic: {
       source: subjects,
-      icons: Object.fromEntries(Object.keys(active.release.types).map((kind) => [kind, 'file-text'])),
-      async hydrate(ids, context) {
-        const rows = await readSubjectSummaries({ pool, routeKey, ...context }, ids);
-        return new Map([...rows].filter((row): row is [string, SubjectSummary] => row[1] !== null));
-      },
+      icons: Object.fromEntries(Object.keys(release.types).map((kind) => [kind, 'file-text'])),
     },
     accounts: {
-      source: accountDiscoverySource(pool),
       labels: { en: 'Accounts' },
       icon: 'user-round',
-      async hydrate(ids, context) {
-        const rows = await readAccountDiscoverySummaries({ pool, routeKey, ...context }, ids);
-        return new Map([...rows].filter((row): row is [string, AccountDiscoverySummary] => row[1] !== null));
-      },
     },
   });
 }

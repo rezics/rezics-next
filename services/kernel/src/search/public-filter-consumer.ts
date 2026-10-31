@@ -18,7 +18,7 @@ import type { PublicFilterConsumerCaptureInput } from './public-filter-consumer-
 import { compileFilter } from './filter.ts';
 import { compileText, TEXT_LIMITS, type TextNode } from './text.ts';
 import { assertCompleteSearch } from './complete-search.ts';
-import { subjectIndexName } from './indices.ts';
+import { subjectIndexName, discoveryIndexName } from './indices.ts';
 import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { admitSearchPayload, requireSearchOverflow } from './query-payload.ts';
 import { SCOPE_HIT_TEMPLATE, type SearchPlan, type SearchResult } from './query.ts';
@@ -247,7 +247,11 @@ export async function readPublicFilterConsumerIncarnation(
   physicalTarget: string,
   context: PublicFilterConsumerContext,
 ): Promise<string> {
-  targetParts(physicalTarget);
+  const mixed = /^([a-z0-9][a-z0-9-]{0,47})discovery-g([1-9][0-9]*)$/.exec(physicalTarget);
+  if (mixed) {
+    if (discoveryIndexName(mixed[1]!, Number(mixed[2])) !== physicalTarget)
+      throw new TypeError('Invalid physical discovery index');
+  } else targetParts(physicalTarget);
   const { status, body } = await search.request<unknown>('GET', `/${physicalTarget}/_settings`, undefined, {
     timeoutMs: remaining(context),
   });

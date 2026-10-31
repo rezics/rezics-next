@@ -48,6 +48,8 @@ export function createDiscoverySearch(config: {
   }>;
   now(): number;
   asOf(queried: PublicFilterQueriedObservation): Promise<string>;
+  /** Existing durable default-worker preparation delivery; the job is only a native locator. */
+  prepare?(job: PublicFilterConsumerJob): Promise<void>;
 }): DiscoverySearch {
   const execute: DiscoverySearch = async (principal, request, context) => {
     const { registry, release, digest } = await config.resolve(request);
@@ -115,6 +117,7 @@ export function createDiscoverySearch(config: {
       );
       const captured = await config.consumer.captureDiscovery({ plan, snapshot: 'pit' }, nativeContext);
       if (captured.status === 'preparing') {
+        await config.prepare?.(captured.repair);
         await config.consumer.repairStep(captured.repair, nativeContext);
         throw ready();
       }
@@ -138,6 +141,10 @@ export function createDiscoverySearch(config: {
         const batch = await config.consumer.queryDiscovery(queried, nativeContext, refill);
         if (batch.status !== 'queried') {
           retained = batch.status === 'preparing';
+          if (retained && repair) await config.prepare?.(repair);
+          if (batch.status === 'unavailable' &&
+            (batch.reason === 'incarnation_changed' || batch.reason === 'observation_lost') && request.cursor)
+            throw new ProblemError('search_restart_required');
           throw ready();
         }
         last = batch;
@@ -188,6 +195,7 @@ export function createDiscoverySearch(config: {
       if (!last || (!exhausted && hits.length < admitted.limit)) {
         // Advance actual finite preparation, never publish an empty cursor chain.
         if (repair) {
+          await config.prepare?.(repair);
           await config.consumer.repairStep(repair, nativeContext);
           retained = true;
         }

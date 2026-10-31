@@ -28,6 +28,7 @@ import { createAccess, type AccessConfig } from './access/index.ts';
 import type { AuthenticationConfig } from './access/authenticate.ts';
 import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } from './search/public-runtime.ts';
 import { createPublicPreparationStore } from './search/public-preparation-store.ts';
+import { createDefaultDiscoverySearch, type DefaultDiscoverySearch } from './search/default-discovery.ts';
 import type { AccessFactory } from './request/access.ts';
 import { MAX_BODY_LIMIT } from './http/body.ts';
 
@@ -215,6 +216,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const openSearch = searchConfig === undefined ? undefined : createOpenSearch(searchConfig.url);
   let app: ReturnType<typeof createKernel> | undefined;
   let publicFilters: DefaultPublicFilterRuntime | undefined;
+  let discovery: DefaultDiscoverySearch | undefined;
   let workClient: ReturnType<typeof createWorkClient> | undefined;
   let contentWorkflows: Promise<NativeAuthorErasureWorkflows> | undefined;
   const workflows = (): Promise<NativeAuthorErasureWorkflows> =>
@@ -255,7 +257,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       clock: defaults.clock,
       access: defaults.access,
       onAccessReady(access) {
-        if (openSearch && searchConfig)
+        if (openSearch && searchConfig) {
           publicFilters = createDefaultPublicFilterRuntime({
             pool,
             routeKey: config.routeKey,
@@ -264,12 +266,26 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             prefix: searchConfig.prefix,
             clock: defaults.clock,
           });
+          discovery = createDefaultDiscoverySearch({
+            pool,
+            routeKey: config.routeKey,
+            access,
+            search: openSearch,
+            prefix: searchConfig.prefix,
+            keys: config.tokens,
+            clock: defaults.clock,
+          });
+        }
       },
       content: { ...config.content, workflows: operationWorkflows },
       ratePeer: (request) => peers.get(request),
       ...(openSearch === undefined || searchConfig === undefined || rated === undefined
         ? {}
         : {
+            discovery: (principal, request, context) => {
+              if (!discovery) throw new Error('Discovery Access composition is incomplete');
+              return discovery.search(principal, request, context);
+            },
             search: createSearchService({
               pool,
               client: openSearch,
@@ -359,6 +375,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
         } finally {
           try {
             await boot.catch(() => {});
+            await discovery?.close();
             await publicFilters?.close();
             if (workClient) await (await workClient).close();
           } finally {
