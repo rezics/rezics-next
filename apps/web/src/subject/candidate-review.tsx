@@ -295,22 +295,24 @@ export function CandidateReview({
                           : m.candidate_rejected({}, options)
                         : m.candidate_pending({}, options)}
               </p>
-              {!context && result.kind === 'selected' && result.public && (
-                <a
-                  className="underline underline-offset-4"
-                  href={
-                    subjectHref(
-                      { id: result.public.subject.id, label: pageText(result.public.subject.labels, locale).text },
-                      locale,
-                    ).href
-                  }
-                >
-                  {m.candidate_view_public({}, options)}
-                </a>
-              )}
-              <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void load()}>
-                {m.candidate_reload({}, options)}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {!context && result.kind === 'selected' && result.public && (
+                  <a
+                    className="underline underline-offset-4"
+                    href={
+                      subjectHref(
+                        { id: result.public.subject.id, label: pageText(result.public.subject.labels, locale).text },
+                        locale,
+                      ).href
+                    }
+                  >
+                    {m.candidate_view_public({}, options)}
+                  </a>
+                )}
+                <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void load()}>
+                  {m.candidate_reload({}, options)}
+                </Button>
+              </div>
             </div>
           )}
           {current && (

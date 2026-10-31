@@ -322,7 +322,7 @@
   "candidate_unresolved": "Awaiting a review decision",
   "candidate_selection_draft": "Public selection draft",
   "candidate_replace_hint": "Choose every value to keep in this field and its rank. This replaces the whole selection. Current public values stay in your draft across suggestion pages.",
-  "candidate_selection_limit": "Choose at most {limit} values.",
+  "candidate_selection_limit": "Selection limit: {limit}.",
   "candidate_include": "Include",
   "candidate_choice_unresolved": "Reload this choice before selecting it, or remove it from the draft.",
   "candidate_rank": "Rank",

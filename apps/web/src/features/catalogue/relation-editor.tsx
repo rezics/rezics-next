@@ -6,7 +6,7 @@ import { StatementConsentLink } from './statement-consent-view';
 import { consentAddress, type ConsentAddress } from './statement-consent';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Field, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { EntityPicker, type EntityPickerSubject, type EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -375,21 +375,24 @@ export function RelationEditor({
                           )}
                         </>
                       )}
-                      <EntityPicker
-                        label={m.relation_target({}, options)}
-                        search={search}
-                        src={coverSrc}
-                        disabled={frozen}
-                        {...(composition ? { disabled: true } : {})}
-                        value={draft.value.type === 'value' ? target(draft.value.content) : []}
-                        onValueChange={(items) => {
-                          remember(items);
-                          edit({
-                            ...draft,
-                            value: items[0] ? { type: 'value', content: items[0].id } : { type: 'somevalue' },
-                          });
-                        }}
-                      />
+                      <Field className="gap-2">
+                        <FieldTitle>{m.relation_target({}, options)}</FieldTitle>
+                        <EntityPicker
+                          label={m.relation_target({}, options)}
+                          search={search}
+                          src={coverSrc}
+                          disabled={frozen}
+                          {...(composition ? { disabled: true } : {})}
+                          value={draft.value.type === 'value' ? target(draft.value.content) : []}
+                          onValueChange={(items) => {
+                            remember(items);
+                            edit({
+                              ...draft,
+                              value: items[0] ? { type: 'value', content: items[0].id } : { type: 'somevalue' },
+                            });
+                          }}
+                        />
+                      </Field>
                       {draft.value.type === 'somevalue' && (
                         <p className="text-sm">{m.relation_unresolved({}, options)}</p>
                       )}
@@ -841,17 +844,20 @@ function QualifierInput({
   const value = snak.value.type === 'value' ? snak.value.content : undefined;
   if (definition?.datatype === 'wikibase-item')
     return (
-      <EntityPicker
-        label={label}
-        search={search}
-        src={coverSrc}
-        disabled={disabled}
-        value={value ? target(value) : []}
-        onValueChange={(items) => {
-          remember(items);
-          onChange({ type: 'value', content: items[0]?.id ?? '' });
-        }}
-      />
+      <Field className="gap-2">
+        <FieldTitle>{label}</FieldTitle>
+        <EntityPicker
+          label={label}
+          search={search}
+          src={coverSrc}
+          disabled={disabled}
+          value={value ? target(value) : []}
+          onValueChange={(items) => {
+            remember(items);
+            onChange({ type: 'value', content: items[0]?.id ?? '' });
+          }}
+        />
+      </Field>
     );
   return (
     <Field>
