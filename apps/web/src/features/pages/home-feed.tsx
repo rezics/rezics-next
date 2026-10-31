@@ -51,7 +51,7 @@ function FeedRow({ item, locale }: { item: FeedItem; locale: string }) {
         <div className="w-16 shrink-0">
           <Cover
             subject={{ id: summary.id, title, types: [] }}
-            cover={summary.avatar}
+            cover={summary.avatar ? { ...summary.avatar, variants: [...summary.avatar.variants] } : null}
             ratio="1:1"
             size="fill"
             src={coverSrc}
