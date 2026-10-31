@@ -190,9 +190,9 @@ test('A signed-out Join entry navigates to sign-in for both absent and earlier v
     expect(html).not.toContain('<button');
     for (const admittedAction of [null, 'join', 'leave'] as const)
       expect(renderToStaticMarkup(createElement(RealmMembership, { realm, returnTo, admittedAction }))).toBe('');
-    expect(
-      renderToStaticMarkup(createElement(RealmMembership, { realm, returnTo, admittedAction: 'sign-in' })),
-    ).toBe(html);
+    expect(renderToStaticMarkup(createElement(RealmMembership, { realm, returnTo, admittedAction: 'sign-in' }))).toBe(
+      html,
+    );
     const protectedHtml = renderToStaticMarkup(
       createElement(RealmMembership, { realm: { ...realm, visibility: 'protected' }, returnTo }),
     );
