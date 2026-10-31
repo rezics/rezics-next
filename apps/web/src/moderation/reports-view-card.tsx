@@ -1,47 +1,32 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { Badge } from "@rezics/ui/shadcn/badge";
-import { Button } from "@rezics/ui/shadcn/button";
-import { Card, CardContent, CardHeader } from "@rezics/ui/shadcn/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@rezics/ui/shadcn/collapsible";
-import { Field, FieldDescription, FieldLabel } from "@rezics/ui/shadcn/field";
-import { Textarea } from "@rezics/ui/shadcn/textarea";
-import { m } from "../paraglide/messages.js";
-import { getLocale } from "../paraglide/runtime.js";
-import { reportDecisionReason } from "./actions";
-import {
-  createReportReviewAction,
-  type ReportReviewResult,
-} from "./reports-view-action";
-import type {
-  Report,
-  ReportTargetValue,
-  ResolvedReportTarget,
-} from "./reports-read";
-import type { ReportQueueAction } from "../stories/patterns/board-report-queue/board-report-queue";
-import { moderationTargetContent } from "./target-content";
+import { useEffect, useId, useRef, useState } from 'react';
+import { Badge } from '@rezics/ui/shadcn/badge';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Card, CardContent, CardHeader } from '@rezics/ui/shadcn/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
+import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import { reportDecisionReason } from './actions';
+import { createReportReviewAction, type ReportReviewResult } from './reports-view-action';
+import type { Report, ReportTargetValue, ResolvedReportTarget } from './reports-read';
+import type { ReportQueueAction } from '../stories/patterns/board-report-queue/board-report-queue';
+import { moderationTargetContent } from './target-content';
 
-type Confirmation =
-  { action: "dismiss" } | { action: "take-down"; reason: string };
+type Confirmation = { action: 'dismiss' } | { action: 'take-down'; reason: string };
 const date = (value: string) =>
-  new Intl.DateTimeFormat(getLocale(), {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 function submittedReason(reason: string) {
   switch (reason) {
-    case "spam":
+    case 'spam':
       return m.report_spam();
-    case "illegal":
+    case 'illegal':
       return m.report_illegal();
-    case "inappropriate":
+    case 'inappropriate':
       return m.report_inappropriate();
-    case "off_topic":
+    case 'off_topic':
       return m.report_off_topic();
-    case "other":
+    case 'other':
       return m.report_other();
     default:
       return reason;
@@ -67,49 +52,37 @@ export function ReportReviewCard({
   onRefresh?: () => Promise<void>;
 }) {
   const id = useId();
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState('');
   const [reviewAction] = useState(createReportReviewAction);
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
-  const [failure, setFailure] = useState<
-    Extract<ReportReviewResult, { ok: false }>["state"] | null
-  >(null);
+  const [message, setMessage] = useState('');
+  const [failure, setFailure] = useState<Extract<ReportReviewResult, { ok: false }>['state'] | null>(null);
   const [confirmed, setConfirmed] = useState<Confirmation | null>(null);
   const confirmationRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (confirmed) confirmationRef.current?.focus();
   }, [confirmed]);
   const status =
-    report.outcome === "actioned"
+    report.outcome === 'actioned'
       ? m.moderation_actioned()
-      : report.outcome === "dismissed" || confirmed?.action === "dismiss"
+      : report.outcome === 'dismissed' || confirmed?.action === 'dismiss'
         ? m.moderation_dismissed()
         : confirmed
           ? m.moderation_queue_takedown_confirmed()
           : m.moderation_queue_open();
 
-  async function act(action: "dismiss" | "take-down") {
-    if (
-      pending ||
-      confirmed ||
-      report.outcome ||
-      failure ||
-      (takenDown && action === "take-down")
-    )
-      return;
-    setMessage("");
+  async function act(action: 'dismiss' | 'take-down') {
+    if (pending || confirmed || report.outcome || failure || (takenDown && action === 'take-down')) return;
+    setMessage('');
     let confirmation: Confirmation;
     try {
-      confirmation =
-        action === "dismiss"
-          ? { action }
-          : { action, reason: reportDecisionReason(reason) };
+      confirmation = action === 'dismiss' ? { action } : { action, reason: reportDecisionReason(reason) };
     } catch {
       setMessage(m.moderation_queue_reason_invalid());
       return;
     }
     const intent =
-      confirmation.action === "dismiss"
+      confirmation.action === 'dismiss'
         ? { action: confirmation.action, reportId: report.id }
         : {
             action: confirmation.action,
@@ -126,10 +99,7 @@ export function ReportReviewCard({
     }
   }
 
-  function finish(
-    result: ReportReviewResult | undefined,
-    confirmation: Confirmation,
-  ) {
+  function finish(result: ReportReviewResult | undefined, confirmation: Confirmation) {
     if (!result) return;
     if (!result.ok) {
       setFailure(result.state);
@@ -137,20 +107,18 @@ export function ReportReviewCard({
     }
     setFailure(null);
     setConfirmed(confirmation);
-    if (confirmation.action === "take-down") onTakenDown();
+    if (confirmation.action === 'take-down') onTakenDown();
   }
 
   async function retry() {
     const input = reviewAction.input;
     if (pending || !input) return;
     setPending(true);
-    setMessage("");
+    setMessage('');
     try {
       finish(
         await reviewAction.retry(onAction),
-        input.action === "dismiss"
-          ? { action: "dismiss" }
-          : { action: "take-down", reason: input.reason },
+        input.action === 'dismiss' ? { action: 'dismiss' } : { action: 'take-down', reason: input.reason },
       );
     } finally {
       setPending(false);
@@ -160,7 +128,7 @@ export function ReportReviewCard({
   async function refresh() {
     if (pending || !onRefresh) return;
     setPending(true);
-    setMessage("");
+    setMessage('');
     try {
       await reviewAction.refresh(onRefresh);
       setFailure(null);
@@ -174,15 +142,15 @@ export function ReportReviewCard({
 
   const blocked = pending || !!failure;
   const failureMessage =
-    failure === "conflict"
+    failure === 'conflict'
       ? m.moderation_queue_conflict()
-      : failure === "forbidden"
+      : failure === 'forbidden'
         ? m.moderation_queue_denied()
-        : failure === "sign-in"
+        : failure === 'sign-in'
           ? m.moderation_queue_sign_in_required()
-          : failure === "unavailable"
+          : failure === 'unavailable'
             ? m.moderation_target_unavailable()
-            : failure === "uncertain"
+            : failure === 'uncertain'
               ? m.moderation_queue_uncertain()
               : m.moderation_action_failed();
 
@@ -191,68 +159,46 @@ export function ReportReviewCard({
       <CardHeader className="gap-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 id={`${id}-title`} className="text-lg font-semibold">
-            {report.target.kind === "post"
+            {report.target.kind === 'post'
               ? m.moderation_queue_post()
-              : report.target.kind === "thread"
+              : report.target.kind === 'thread'
                 ? m.moderation_queue_thread()
                 : m.moderation_queue_board()}
           </h2>
           <Badge variant="secondary">{status}</Badge>
         </div>
         <p className="text-sm text-muted-foreground">
-          {m.moderation_queue_submitted()}{" "}
-          <time dateTime={report.createdAt}>{date(report.createdAt)}</time>
+          {m.moderation_queue_submitted()} <time dateTime={report.createdAt}>{date(report.createdAt)}</time>
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
-        <section
-          aria-labelledby={`${id}-submission`}
-          className="space-y-3 rounded-xl bg-muted/50 p-4"
-        >
+        <section aria-labelledby={`${id}-submission`} className="space-y-3 rounded-xl bg-muted/50 p-4">
           <h3 id={`${id}-submission`} className="text-sm font-semibold">
             {m.moderation_queue_submission()}
           </h3>
           <dl className="space-y-3 text-sm">
             <div>
-              <dt className="text-muted-foreground">
-                {m.moderation_reason_label()}
-              </dt>
-              <dd className="mt-1 font-medium">
-                {submittedReason(report.reason)}
-              </dd>
+              <dt className="text-muted-foreground">{m.moderation_reason_label()}</dt>
+              <dd className="mt-1 font-medium">{submittedReason(report.reason)}</dd>
             </div>
             {report.evidence ? (
               <div>
-                <dt className="text-muted-foreground">
-                  {m.moderation_submitted_evidence_label()}
-                </dt>
-                <dd className="mt-1 whitespace-pre-wrap break-words">
-                  {report.evidence}
-                </dd>
+                <dt className="text-muted-foreground">{m.moderation_submitted_evidence_label()}</dt>
+                <dd className="mt-1 whitespace-pre-wrap break-words">{report.evidence}</dd>
               </div>
             ) : null}
           </dl>
         </section>
         <div className="grid min-w-0 gap-6">
-          <section
-            aria-labelledby={`${id}-revision`}
-            className="min-w-0 space-y-2"
-          >
+          <section aria-labelledby={`${id}-revision`} className="min-w-0 space-y-2">
             <h3 id={`${id}-revision`} className="text-sm font-semibold">
               {m.moderation_reported_revision_label()}
             </h3>
             <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">
-              {moderationTargetContent({
-                key: `post:${report.target.id}`,
-                kind: "post",
-                value: revision,
-              })}
+              {moderationTargetContent({ key: `post:${report.target.id}`, kind: 'post', value: revision })}
             </div>
           </section>
-          <section
-            aria-labelledby={`${id}-current`}
-            className="min-w-0 space-y-2"
-          >
+          <section aria-labelledby={`${id}-current`} className="min-w-0 space-y-2">
             <h3 id={`${id}-current`} className="text-sm font-semibold">
               {m.moderation_current_target_label()}
             </h3>
@@ -269,34 +215,22 @@ export function ReportReviewCard({
               tabIndex={-1}
               className="space-y-2 text-sm focus-visible:rounded-lg focus-visible:outline focus-visible:outline-ring"
             >
-              {confirmed && !report.outcome ? (
-                <p className="font-medium">{status}</p>
-              ) : null}
+              {confirmed && !report.outcome ? <p className="font-medium">{status}</p> : null}
               {report.resolvedAt ? (
                 <p className="text-muted-foreground">
-                  {m.moderation_queue_resolved_at()}{" "}
-                  <time dateTime={report.resolvedAt}>
-                    {date(report.resolvedAt)}
-                  </time>
+                  {m.moderation_queue_resolved_at()} <time dateTime={report.resolvedAt}>{date(report.resolvedAt)}</time>
                 </p>
               ) : null}
-              {confirmed?.action === "take-down" ? (
+              {confirmed?.action === 'take-down' ? (
                 <>
-                  <p className="whitespace-pre-wrap break-words">
-                    {confirmed.reason}
-                  </p>
-                  <p className="text-muted-foreground">
-                    {m.moderation_queue_projection_pending()}
-                  </p>
+                  <p className="whitespace-pre-wrap break-words">{confirmed.reason}</p>
+                  <p className="text-muted-foreground">{m.moderation_queue_projection_pending()}</p>
                 </>
               ) : null}
             </div>
           ) : (
             <Collapsible>
-              <CollapsibleTrigger
-                render={<Button variant="outline" className="min-h-11" />}
-                disabled={pending}
-              >
+              <CollapsibleTrigger render={<Button variant="outline" className="min-h-11" />} disabled={pending}>
                 {m.moderation_queue_review()}
               </CollapsibleTrigger>
               <CollapsibleContent keepMounted>
@@ -305,13 +239,11 @@ export function ReportReviewCard({
                   aria-busy={pending}
                   onSubmit={(event) => {
                     event.preventDefault();
-                    void act("take-down");
+                    void act('take-down');
                   }}
                 >
                   <Field>
-                    <FieldLabel htmlFor={`${id}-reason`}>
-                      {m.moderation_reason_label()}
-                    </FieldLabel>
+                    <FieldLabel htmlFor={`${id}-reason`}>{m.moderation_reason_label()}</FieldLabel>
                     <Textarea
                       id={`${id}-reason`}
                       name="reason"
@@ -319,29 +251,20 @@ export function ReportReviewCard({
                       maxLength={1024}
                       rows={3}
                       value={reason}
-                      disabled={pending || failure === "uncertain"}
+                      disabled={pending || failure === 'uncertain'}
                       aria-describedby={`${id}-hint`}
                       onChange={(event) => {
                         setReason(event.target.value);
                         reviewAction.changed();
                       }}
                     />
-                    <FieldDescription id={`${id}-hint`}>
-                      {m.moderation_queue_reason_hint()}
-                    </FieldDescription>
+                    <FieldDescription id={`${id}-hint`}>{m.moderation_queue_reason_hint()}</FieldDescription>
                   </Field>
                   {takenDown ? (
-                    <p className="text-sm text-muted-foreground">
-                      {m.moderation_queue_takedown_confirmed()}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{m.moderation_queue_takedown_confirmed()}</p>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="submit"
-                      variant="destructive"
-                      className="min-h-11"
-                      disabled={blocked || takenDown}
-                    >
+                    <Button type="submit" variant="destructive" className="min-h-11" disabled={blocked || takenDown}>
                       {m.moderation_take_down()}
                     </Button>
                     <Button
@@ -349,7 +272,7 @@ export function ReportReviewCard({
                       variant="outline"
                       className="min-h-11"
                       disabled={blocked}
-                      onClick={() => void act("dismiss")}
+                      onClick={() => void act('dismiss')}
                     >
                       {m.moderation_dismiss()}
                     </Button>
@@ -363,11 +286,9 @@ export function ReportReviewCard({
                     <div role="alert" className="space-y-1 text-sm">
                       <p>{failureMessage}</p>
                       <p className="text-muted-foreground">
-                        {failure === "uncertain"
-                          ? m.moderation_queue_retry_hint()
-                          : m.moderation_queue_refresh_hint()}
+                        {failure === 'uncertain' ? m.moderation_queue_retry_hint() : m.moderation_queue_refresh_hint()}
                       </p>
-                      {failure === "uncertain" ? (
+                      {failure === 'uncertain' ? (
                         <Button
                           type="button"
                           variant="outline"
@@ -388,7 +309,7 @@ export function ReportReviewCard({
                           {m.moderation_queue_refresh()}
                         </Button>
                       ) : null}
-                      {failure === "sign-in" ? (
+                      {failure === 'sign-in' ? (
                         <a
                           className="inline-flex min-h-11 items-center underline"
                           href={`/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}
@@ -399,14 +320,7 @@ export function ReportReviewCard({
                     </div>
                   ) : null}
                   {message ? (
-                    <p
-                      role={
-                        message === m.moderation_queue_refreshed()
-                          ? "status"
-                          : "alert"
-                      }
-                      className="text-sm"
-                    >
+                    <p role={message === m.moderation_queue_refreshed() ? 'status' : 'alert'} className="text-sm">
                       {message}
                     </p>
                   ) : null}
