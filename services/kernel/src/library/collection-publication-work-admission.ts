@@ -110,7 +110,10 @@ function exactLocator(value: unknown): value is CollectionPublicationLocator {
 }
 
 /** Core executor and exact owner namespace checks only; native episode admission follows. */
-function livePublicationNamespace(tx: OperationalTransaction, locator: unknown): locator is CollectionPublicationLocator {
+function livePublicationNamespace(
+  tx: OperationalTransaction,
+  locator: unknown,
+): locator is CollectionPublicationLocator {
   if (!hasLiveOperationalTransaction(tx)) return false;
   const resources = currentOperationalResources(tx);
   if (!exactLocator(locator)) return false;

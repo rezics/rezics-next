@@ -3,10 +3,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { commandTime } from '../command/command.ts';
-import {
-  createIdentityScopedObservations,
-  identityScopeAddress,
-} from '../semantic/identity-scoped-observations.ts';
+import { createIdentityScopedObservations, identityScopeAddress } from '../semantic/identity-scoped-observations.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CanonicalBasis } from './canonical-source-store.ts';
@@ -204,7 +201,10 @@ export async function readCollectionPublicationNativeSource(
     source_generation: identity.generation,
   };
   const rows = (
-    await tx.query<NativeRow>(sourceQuery.sql, sourceQuery.params.map((name) => values[name]))
+    await tx.query<NativeRow>(
+      sourceQuery.sql,
+      sourceQuery.params.map((name) => values[name]),
+    )
   ).rows;
   const row = rows[0];
   if (
