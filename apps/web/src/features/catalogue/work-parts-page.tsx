@@ -143,15 +143,12 @@ export function WorkPartsPage({
         {read && (
           <>
             <a
-              className="font-serif text-xl underline"
+              className="font-sans text-xl font-semibold underline"
               lang={title.lang ?? undefined}
               href={subjectHref({ id, label: title.text }, locale).href}
             >
               {title.text || m.subject_value_unlabelled({}, o)}
             </a>
-            <p className="break-all text-sm text-muted-foreground">
-              {read.public.subject.type} · {id}
-            </p>
             {!read.streams.length && <p>{m.work_parts_no_stream({}, o)}</p>}
             {stream && (
               <>
@@ -165,7 +162,7 @@ export function WorkPartsPage({
                   >
                     {read.streams.map((item) => (
                       <NativeSelectOption key={item.key} value={item.key} lang={item.label.lang ?? undefined}>
-                        {item.label.text || item.property}
+                        {item.label.text || m.subject_value_unlabelled({}, o)}
                       </NativeSelectOption>
                     ))}
                   </NativeSelect>
@@ -193,32 +190,61 @@ export function WorkPartsPage({
                         <a
                           lang={row.summary.label?.language}
                           href={subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href}
-                          className="font-serif text-lg underline"
+                          className="font-sans text-lg font-semibold underline"
                         >
                           {row.summary.label?.value || m.subject_value_unlabelled({}, o)}
                         </a>
                       ) : (
                         <p>{m.work_parts_unresolved({}, o)}</p>
                       )}
-                      <p className="break-all text-xs text-muted-foreground">
-                        {row.holder} · {stream.property} · {row.statementId}
-                      </p>
                       {row.statement ? (
-                        <div className="space-y-1 text-sm">
-                          <CandidateValue snak={row.statement} related={row.related} locale={locale} />
+                        <div className="space-y-3 text-sm">
+                          <div>
+                            <p
+                              lang={read.labels[row.statement.property.id]?.lang ?? undefined}
+                              className="text-muted-foreground"
+                            >
+                              {read.labels[row.statement.property.id]?.text || m.subject_value_unlabelled({}, o)}
+                            </p>
+                            <CandidateValue snak={row.statement} related={row.related} locale={locale} />
+                          </div>
                           {row.statement.qualifiers.map((snak, index) => (
                             <div key={index}>
-                              <span className="text-muted-foreground">{snak.property.id}: </span>
+                              <p
+                                lang={read.labels[snak.property.id]?.lang ?? undefined}
+                                className="text-muted-foreground"
+                              >
+                                {read.labels[snak.property.id]?.text || m.subject_value_unlabelled({}, o)}
+                              </p>
                               <CandidateValue snak={snak} related={row.related} locale={locale} />
                             </div>
                           ))}
-                          {row.statement.references.map((reference, index) => (
-                            <div key={index}>
-                              {reference.parts.map((snak, at) => (
-                                <CandidateValue key={at} snak={snak} related={row.related} locale={locale} />
-                              ))}
-                            </div>
-                          ))}
+                          <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
+                            <h3 className="font-medium">{m.sources_citations({}, o)}</h3>
+                            {row.statement.references.length ? (
+                              row.statement.references.map((reference, index) => (
+                                <div key={index} className="space-y-2">
+                                  {reference.parts.length ? (
+                                    reference.parts.map((snak, at) => (
+                                      <div key={at}>
+                                        <p
+                                          lang={read.labels[snak.property.id]?.lang ?? undefined}
+                                          className="text-muted-foreground"
+                                        >
+                                          {read.labels[snak.property.id]?.text || m.subject_value_unlabelled({}, o)}
+                                        </p>
+                                        <CandidateValue snak={snak} related={row.related} locale={locale} />
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p>{m.value_reference_unavailable({}, o)}</p>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <p>{m.sources_no_citations({}, o)}</p>
+                            )}
+                          </section>
                           {partCorrection(row, stream) && (
                             <Button variant="outline" onClick={() => open(row, stream)}>
                               {m.work_parts_correct({}, o)}
@@ -228,6 +254,28 @@ export function WorkPartsPage({
                       ) : (
                         <p>{m.work_parts_assertion_unavailable({}, o)}</p>
                       )}
+                      <details className="rounded-lg border border-border p-3 text-sm">
+                        <summary className="cursor-pointer font-medium">{m.catalogue_technical_details({}, o)}</summary>
+                        <dl className="mt-3 space-y-2 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
+                          <div>
+                            <dt>{m.work_parts_holder({}, o)}</dt>
+                            <dd>{row.holder}</dd>
+                          </div>
+                          <div>
+                            <dt>{m.work_parts_relation({}, o)}</dt>
+                            <dd>{stream.property}</dd>
+                          </div>
+                          <div>
+                            <dt>{m.catalogue_statement_id({}, o)}</dt>
+                            <dd>{row.statementId}</dd>
+                          </div>
+                        </dl>
+                        {row.statement && (
+                          <pre className="mt-3 whitespace-pre-wrap break-all text-xs">
+                            {JSON.stringify(row.statement, null, 2)}
+                          </pre>
+                        )}
+                      </details>
                     </li>
                   ))}
                 </ul>
@@ -260,13 +308,35 @@ export function WorkPartsPage({
                 </section>
               </>
             )}
+            <details className="rounded-lg border border-border p-4 text-sm">
+              <summary className="cursor-pointer font-medium">{m.catalogue_technical_details({}, o)}</summary>
+              <dl className="mt-3 space-y-2 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
+                <div>
+                  <dt>{m.creator_editions_subject({}, o)}</dt>
+                  <dd>{id}</dd>
+                </div>
+                <div>
+                  <dt>{m.catalogue_create_type({}, o)}</dt>
+                  <dd>{read.public.subject.type}</dd>
+                </div>
+                {read.streams.map((item) => (
+                  <div key={item.key}>
+                    <dt lang={item.label.lang ?? undefined}>{item.label.text || m.subject_value_unlabelled({}, o)}</dt>
+                    <dd>{item.key}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
           </>
         )}
         {drafts.map((draft) => (
           <section key={draft.key} className="space-y-3 border-t border-border pt-6">
-            <p className="break-all text-sm">
-              {m.work_parts_holder({}, o)}: {draft.id}
-            </p>
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium">{m.catalogue_technical_details({}, o)}</summary>
+              <p className="mt-3 break-all">
+                {m.work_parts_holder({}, o)}: <code>{draft.id}</code>
+              </p>
+            </details>
             <RelationEditor
               id={draft.id}
               locale={locale}

@@ -27,6 +27,7 @@ export type PartRow = {
   summary: ForwardPage['relations'][number]['summary'];
   related: SubjectRead['related'];
 };
+type PartLabels = Record<string, ReturnType<typeof pickText>>;
 export type WorkPartsRead =
   | CandidateFailure
   | {
@@ -35,6 +36,7 @@ export type WorkPartsRead =
       streams: PartStream[];
       stream?: PartStream;
       rows: PartRow[];
+      labels: PartLabels;
       next: string | null;
       count?: ForwardPage['count'];
       caughtUp: boolean;
@@ -44,6 +46,23 @@ export type WorkPartsRead =
 // These are existing canonical part relations, not their display-only inverse aliases.
 const contained = new Set(['bf:hasPart', 'rezics:storyArc']);
 const belongs = new Set(['schema:isPartOf', 'wdt:P179', 'wdt:P1433', 'wdt:P361']);
+
+/** Project only properties present in this bounded page from the definitions already loaded. */
+export function partLabels(release: Definitions, rows: PartRow[], locale: string): PartLabels {
+  const labels: PartLabels = {};
+  for (const row of rows) {
+    if (!row.statement) continue;
+    for (const snak of [
+      row.statement,
+      ...row.statement.qualifiers,
+      ...row.statement.references.flatMap((reference) => reference.parts),
+    ]) {
+      const property = release.properties[snak.property.id];
+      if (property) labels[snak.property.id] = pickText(property.labels, locale);
+    }
+  }
+  return labels;
+}
 
 function isType(release: Definitions, type: string, target: string, seen = new Set<string>()): boolean {
   if (type === target) return true;
@@ -124,7 +143,7 @@ export async function readWorkParts(
     const streams = partStreams(definitions, current.data.subject.type, locale);
     const stream = streamKey ? streams.find((item) => item.key === streamKey) : streams[0];
     if ((streamKey && !stream) || (cursor && !streamKey)) return candidateFailure(400);
-    if (!stream) return { ok: true, public: current.data, streams, rows: [], next: null, caughtUp: true };
+    if (!stream) return { ok: true, public: current.data, streams, rows: [], labels: {}, next: null, caughtUp: true };
     const query = {
       property: stream.property,
       context: candidateContext,
@@ -171,6 +190,7 @@ export async function readWorkParts(
       streams,
       stream,
       rows,
+      labels: partLabels(definitions, rows, locale),
       next: page.next,
       ...(page.count ? { count: page.count } : {}),
       caughtUp: page.freshness.caught_up,

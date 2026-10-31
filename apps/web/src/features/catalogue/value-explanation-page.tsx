@@ -86,41 +86,6 @@ export function ValueExplanationPage({
             <a href={`${page.href}/changes`}>{m.changes_title({}, o)}</a>
             {page.reviewHref && <a href={page.reviewHref}>{m.sources_compare({}, o)}</a>}
           </nav>
-          <p className="text-sm text-muted-foreground">{m.value_basis({}, o)}</p>
-          <dl className="space-y-3 rounded-xl border border-border bg-card p-4 text-sm">
-            <div>
-              <dt className="text-muted-foreground">{m.context_title({}, o)}</dt>
-              <dd>
-                {page.context === candidateContext ? (
-                  m.context_global({}, o)
-                ) : (
-                  <span>
-                    {m.context_unnamed({}, o)} <code className="break-all text-xs">{page.context}</code>
-                  </span>
-                )}
-              </dd>
-            </div>
-            {statement && (
-              <>
-                <div>
-                  <dt className="text-muted-foreground">{m.candidate_rank({}, o)}</dt>
-                  <dd>
-                    {statement.rank === 'preferred'
-                      ? m.candidate_rank_preferred({}, o)
-                      : m.candidate_rank_normal({}, o)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">{m.value_proposal_revision({}, o)}</dt>
-                  <dd>{m.changes_revision({ revision: String(statement.rezics.revision) }, o)}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">{m.value_proposal_release({}, o)}</dt>
-                  <dd className="break-all font-mono text-xs">{statement.rezics.release}</dd>
-                </div>
-              </>
-            )}
-          </dl>
           {statement ? (
             <>
               <section className="space-y-3" aria-labelledby="value-selected">
@@ -185,22 +150,31 @@ export function ValueExplanationPage({
                         ? m.value_not_returned({}, o)
                         : m.value_metadata_unavailable({}, o)}
                 </p>
+                <dl className="space-y-3 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground">{m.context_title({}, o)}</dt>
+                    <dd>{page.context === candidateContext ? m.context_global({}, o) : m.context_unnamed({}, o)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">{m.candidate_rank({}, o)}</dt>
+                    <dd>
+                      {statement.rank === 'preferred'
+                        ? m.candidate_rank_preferred({}, o)
+                        : m.candidate_rank_normal({}, o)}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="text-sm text-muted-foreground">{m.value_basis({}, o)}</p>
                 {competition?.kind === 'returned' && (
-                  <>
-                    <p className="text-sm">
-                      {m.value_candidate_revision({ revision: String(competition.revision) }, o)}
-                    </p>
-                    <p className="break-all font-mono text-xs">{competition.release}</p>
-                    <p>
-                      {competition.adoption === 'inherit'
-                        ? m.context_inherited({}, o)
-                        : competition.adoption === 'replace'
-                          ? m.context_replaced({}, o)
-                          : competition.adoption === 'suppress'
-                            ? m.context_suppressed({}, o)
-                            : m.value_adoption_unavailable({}, o)}
-                    </p>
-                  </>
+                  <p>
+                    {competition.adoption === 'inherit'
+                      ? m.context_inherited({}, o)
+                      : competition.adoption === 'replace'
+                        ? m.context_replaced({}, o)
+                        : competition.adoption === 'suppress'
+                          ? m.context_suppressed({}, o)
+                          : m.value_adoption_unavailable({}, o)}
+                  </p>
                 )}
                 {competition?.kind === 'not-returned' && competition.next !== null && onMore && (
                   <Button variant="outline" disabled={busy} onClick={() => onMore(competition.next!)}>
@@ -223,16 +197,67 @@ export function ValueExplanationPage({
               </section>
             </>
           ) : (
-            <p role="status">
-              {page.absence === 'unresolved'
-                ? m.context_unresolved({}, o)
-                : page.absence === 'suppressed'
-                  ? m.context_suppressed({}, o)
-                  : page.absence === 'withheld'
-                    ? m.value_withheld({}, o)
-                    : m.value_not_selected({}, o)}
-            </p>
+            <div className="space-y-3">
+              <p role="status">
+                {page.absence === 'unresolved'
+                  ? m.context_unresolved({}, o)
+                  : page.absence === 'suppressed'
+                    ? m.context_suppressed({}, o)
+                    : page.absence === 'withheld'
+                      ? m.value_withheld({}, o)
+                      : m.value_not_selected({}, o)}
+              </p>
+              <p className="text-sm">
+                {m.context_title({}, o)}:{' '}
+                {page.context === candidateContext ? m.context_global({}, o) : m.context_unnamed({}, o)}
+              </p>
+            </div>
           )}
+          <details className="min-w-0 rounded-xl border border-border p-4 text-sm">
+            <summary className="cursor-pointer font-medium">{m.catalogue_technical_details({}, o)}</summary>
+            <dl className="mt-4 space-y-3 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
+              <div>
+                <dt>{m.creator_editions_subject({}, o)}</dt>
+                <dd>{page.id}</dd>
+              </div>
+              <div>
+                <dt>{m.context_title({}, o)}</dt>
+                <dd>{page.context}</dd>
+              </div>
+              {statement && (
+                <>
+                  <div>
+                    <dt>{m.catalogue_statement_id({}, o)}</dt>
+                    <dd>{statement.id}</dd>
+                  </div>
+                  <div>
+                    <dt>{page.propertyLabel.text || m.subject_value_unlabelled({}, o)}</dt>
+                    <dd>{statement.property.id}</dd>
+                  </div>
+                  <div>
+                    <dt>{m.value_proposal_revision({}, o)}</dt>
+                    <dd>{m.changes_revision({ revision: String(statement.rezics.revision) }, o)}</dd>
+                  </div>
+                  <div>
+                    <dt>{m.value_proposal_release({}, o)}</dt>
+                    <dd>{statement.rezics.release}</dd>
+                  </div>
+                </>
+              )}
+              {competition?.kind === 'returned' && (
+                <>
+                  <div>
+                    <dt>{m.value_decision({}, o)}</dt>
+                    <dd>{m.value_candidate_revision({ revision: String(competition.revision) }, o)}</dd>
+                  </div>
+                  <div>
+                    <dt>{m.value_proposal_release({}, o)}</dt>
+                    <dd>{competition.release}</dd>
+                  </div>
+                </>
+              )}
+            </dl>
+          </details>
         </>
       )}
       {onReload && (

@@ -8,7 +8,13 @@ import {
   readRelationEditor,
   type RelationStatementInput,
 } from '../../subject/relation-candidates';
-import { partStreams, readWorkParts, type WorkPartsRead, type PartRow } from '../../features/catalogue/work-parts';
+import {
+  partLabels,
+  partStreams,
+  readWorkParts,
+  type WorkPartsRead,
+  type PartRow,
+} from '../../features/catalogue/work-parts';
 import type { WorkPartsTransport } from '../../features/catalogue/work-parts-page';
 import recording from '../recorded/subject.json';
 import type { FakeRoute } from '../fake-modules';
@@ -117,6 +123,7 @@ export function workPartsFixture(initialScenario: WorkPartsScenario = 'current',
       streams,
       stream,
       rows: rows(),
+      labels: partLabels(release, rows(), locale),
       next: scenario === 'partial' ? 'native-next' : null,
       count: { value: scenario === 'partial' ? 2 : rows().length, exact: scenario !== 'partial' },
       caughtUp: scenario !== 'pending',
