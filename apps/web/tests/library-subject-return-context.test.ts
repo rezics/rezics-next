@@ -76,6 +76,7 @@ describe('Library sign-in from a Realm reader preserves the validated local read
       '/en/settings',
       '/en/subjects/other/book',
       `${canonical}/edit`,
+      `${canonical}/overview`,
     ]) {
       expect(subjectSlotReturnTo(current, subject, 'en')).toBe(canonical);
     }

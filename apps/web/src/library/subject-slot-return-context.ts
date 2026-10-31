@@ -32,7 +32,7 @@ export function subjectSlotReturnTo(
       path[1] !== 'subjects' ||
       decodeURIComponent(path[2] ?? '') !== subject.id ||
       !path[3] ||
-      (path.length !== 4 && (path.length !== 5 || !isView(path[4])))
+      (path.length !== 4 && (path.length !== 5 || !isView(path[4]) || path[4] === 'overview'))
     )
       return fallback;
 
