@@ -39,6 +39,7 @@ export function PublicViewsCard({ editor, writable = true }: { editor: ProfileEd
         <CardDescription>
           {m.settings_public_activity_text()} {m.settings_profile_visibility_help()}
         </CardDescription>
+        <CardDescription>{m.settings_automatic_save_help()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4" aria-busy={busy}>
         <ProfileFeedback editor={editor} scope="views" writable={writable} />

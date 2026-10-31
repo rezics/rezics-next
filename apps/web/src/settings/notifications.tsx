@@ -82,6 +82,7 @@ export function NotificationsCard({
           <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_notifications_text()}</CardDescription>
+        <CardDescription>{m.settings_automatic_save_help()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div role="group" aria-label={m.settings_notifications_heading()} className="space-y-4">

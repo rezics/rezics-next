@@ -111,7 +111,14 @@ export function ProfileAvatar({
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <Button ref={choose} type="button" variant="outline" disabled={disabled} onClick={() => input.current?.click()}>
+        <Button
+          ref={choose}
+          type="button"
+          variant="outline"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+          disabled={disabled}
+          onClick={() => input.current?.click()}
+        >
           {m.settings_profile_choose_avatar()}
         </Button>
         <input
@@ -130,6 +137,7 @@ export function ProfileAvatar({
           <Button
             type="button"
             variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={disabled}
             onClick={() => {
               controller.cancel();
@@ -143,6 +151,7 @@ export function ProfileAvatar({
           <Button
             type="button"
             variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={disabled || waiting}
             onClick={() => {
               controller.retry();
@@ -156,6 +165,7 @@ export function ProfileAvatar({
           <Button
             type="button"
             variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={disabled}
             onClick={() => {
               controller.remove();

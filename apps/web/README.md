@@ -1479,6 +1479,21 @@ does not establish either outcome.
 
 ### Settings page
 
+Profile name, biography, links and avatar remain a local draft until **Save profile**. The visible live unsaved
+indicator compares only those Profile fields, never Public activity. It yields to pending or unknown command
+outcomes; existing save, confirmed readback and recovery announcements retain their separate meanings.
+Notifications, Collection visibility and Public activity explain automatic saving inside their own sections.
+Recovery still requires the existing explicit review and confirmation controls when indicated.
+
+Profile callers give short inputs and actions a minimum 44px target. Actions wrap long labels and grow in height;
+biography keeps its multi-line control. No shared primitive defaults or save transports change.
+
+The focused default-composition regression is `pages-account-settings--saving-boundaries`, using the installed
+`PageStory` route and recorded fake-fetch boundary. It checks initial guidance, a live unsaved announcement with
+zero writes, one explicit Profile PATCH with confirmed status, and one separate Public activity PATCH with no
+Profile resend, plus the rendered short controls' minimum-target classes and styles. Browser and native execution
+are deferred to integration; local workspace typing does not establish visual or native acceptance.
+
 - **Touches:** One session read and `GET /v1/accounts/<id>/preferences` for the signed-in account. Each change is one
   `PATCH /v1/accounts/<id>/preferences` after that session read, carrying the version the person read and an
   idempotency key. A reload after a stale version repeats the page's two reads.

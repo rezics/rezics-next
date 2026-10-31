@@ -70,6 +70,7 @@ export function ProfileFeedback({
                 <Button
                   type="button"
                   variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
                   disabled={!writable || busy || waiting}
                   onClick={() => void editor.retry()}
                 >
@@ -79,6 +80,7 @@ export function ProfileFeedback({
               <Button
                 type="button"
                 variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
                 disabled={!writable || busy || waiting}
                 onClick={() => void editor.reload()}
               >
@@ -88,6 +90,7 @@ export function ProfileFeedback({
                 <Button
                   type="button"
                   variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
                   disabled={!writable || busy || denied}
                   onClick={() => editor.review()}
                 >
@@ -184,9 +187,15 @@ export function ProfileCard({
           <h2>{m.settings_profile_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_profile_text()}</CardDescription>
+        <CardDescription>{m.settings_profile_save_help()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <ProfileFeedback editor={editor} scope="profile" writable={writable} />
+        <div role="status" aria-live="polite" aria-atomic="true" className="text-sm font-medium">
+          {changed && !closed && !busy && !state.attempt && state.phase !== 'uncertain'
+            ? m.settings_profile_unsaved()
+            : null}
+        </div>
         {profile ? (
           <form
             className="space-y-5"
@@ -239,6 +248,7 @@ export function ProfileCard({
               {m.settings_profile_display_name()}
               <Input
                 id={`${ids}-displayName`}
+                className="min-h-11"
                 ref={(control) => {
                   controls.current.displayName = control;
                 }}
@@ -300,12 +310,17 @@ export function ProfileCard({
               />
             </div>
             <div className="flex flex-wrap gap-3">
-              <Button type="submit" disabled={closed || busy || uploading || !!state.attempt || !changed}>
+              <Button
+                type="submit"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                disabled={closed || busy || uploading || !!state.attempt || !changed}
+              >
                 {busy ? m.settings_saving() : m.settings_profile_save()}
               </Button>
               <Button
                 type="button"
                 variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
                 disabled={!writable || busy || waiting}
                 onClick={() => void editor.reload()}
               >

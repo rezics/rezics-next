@@ -262,6 +262,7 @@ export function CollectionPrivacyView({
           <CardDescription>
             {m.settings_privacy_text()} {m.settings_privacy_members()}
           </CardDescription>
+          <CardDescription>{m.settings_automatic_save_help()}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {state.loading ? <p role="status">{m.settings_privacy_loading()}</p> : null}
