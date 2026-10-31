@@ -54,7 +54,7 @@ It is ignored research evidence, not product source. The main checkout's tracked
 | `shots/<story-id>--<width>.png` | One public-browser screenshot per required cell; width is exactly 1280 or 390 CSS pixels. |
 | `cells/<story-id>--<width>.json` | Observed story ID, URL, text, image load state, document dimensions, render phase and browser console/network exceptions. |
 | `contact/index.json`, `contact/sheet-*.jpg` | Visual inspection atlas; pixel-identical PNGs share an inspection with an explicit list of all matching cells. |
-| `visual-review.json` | Human visual classifications and notes keyed by screenshot SHA-256, with atlas location. |
+| `visual-review.json` | Agent visual classifications and notes keyed by screenshot SHA-256, with atlas location. |
 | `summary.json`, `manifest.csv`, `titles.json` | Final counts, portable exhaustive matrix and per-title grouping. |
 | `incomplete-cells.json`, `failure-groups.json`, `diagnostics.json` | Explicit incomplete observations, visible provider/import/section failures and per-cell diagnostic counts. |
 | `manifest.capture.json` | Original capture manifest retained before review annotations; raw per-cell embedded requests can still say pending. |
@@ -588,9 +588,12 @@ content feed. That is actual source evidence for the missing hierarchy concern, 
 The new repository's read-only `legacy-final` resolves to `1ac6ed6e0668f04e30025c41e59ceaf3bdee5061`.
 `git show legacy-final:apps/web/features/home/home-page.tsx`, `home/tabs.tsx`, `home/followed-concept-feed.ts`
 and `home/rail.tsx` show a feed provider, Continue strip, bounded concept tabs/overflow and mixed discovery regions.
-The followed-topic source has bounded initial/maximum sizes; it would be inaccurate to say this source blindly
-renders a tab for every follow. It still does not prove that all backend work, selective invalidation or ranking
-remains bounded at REZICS's current partition/disclosure upper bounds. Reuse behavior as evidence and redesign
+The followed-topic source uses 20 follows per page, 20 feed items by default and a maximum feed page of 64;
+it would be inaccurate to say this source blindly renders a tab for every follow. In contrast, `rail.tsx` maps
+every supplied `moderated` entry into a queue link and reduces all of them for its total; if the producer supplies
+hundreds of moderated Realms, that rail grows with them. Bound the supplied summary/window and provide a deeper
+route rather than hiding a full-array read behind a small-looking rail. The tab bounds still do not prove that all
+backend work, selective invalidation or ranking remains bounded at current partition/disclosure upper bounds. Reuse behavior as evidence and redesign
 within current authority; no merge, wholesale port or legacy runtime campaign occurred.
 
 ## Upper bounds, lifecycle and cross-surface correction
