@@ -55,11 +55,13 @@ function IdentityRow({
 function Failure({
   failure,
   retry,
+  firstPage,
   busy,
   scope,
 }: {
   failure: ManagedAccountsFailure;
   retry: () => void;
+  firstPage?: (() => void) | undefined;
   busy: boolean;
   scope: 'inventory' | ManagedFeed;
 }) {
@@ -87,9 +89,16 @@ function Failure({
                 : m.settings_managed_responsibilities_retry_wait()}
           </p>
         ) : null}
-        <Button type="button" variant="outline" className="min-h-11" disabled={busy || waiting} onClick={retry}>
-          {m.settings_retry()}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" className="min-h-11" disabled={busy || waiting} onClick={retry}>
+            {m.settings_retry()}
+          </Button>
+          {firstPage ? (
+            <Button type="button" variant="outline" className="min-h-11" disabled={busy || waiting} onClick={firstPage}>
+              {m.settings_managed_restart_list()}
+            </Button>
+          ) : null}
+        </div>
       </AlertDescription>
     </Alert>
   );
@@ -100,15 +109,25 @@ function FeedActions({
   scope,
   preparing = false,
   retry,
+  firstPage,
 }: {
-  feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure'>;
+  feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure' | 'restartable'>;
   scope: ManagedFeed;
   preparing?: boolean;
   retry: () => void;
+  firstPage: () => void;
 }) {
   return (
     <>
-      {feed.failure ? <Failure failure={feed.failure} retry={retry} busy={feed.busy} scope={scope} /> : null}
+      {feed.failure ? (
+        <Failure
+          failure={feed.failure}
+          retry={retry}
+          firstPage={feed.restartable && feed.next !== null && !preparing ? firstPage : undefined}
+          busy={feed.busy}
+          scope={scope}
+        />
+      ) : null}
       {!feed.failure && (feed.next !== null || preparing) ? (
         <Button type="button" variant="outline" className="min-h-11" disabled={feed.busy} onClick={retry}>
           {feed.busy ? m.settings_managed_loading() : preparing ? m.settings_retry() : m.settings_managed_load_more()}
@@ -122,11 +141,13 @@ export function ManagedAccountsView({
   snapshot,
   settingsHref,
   more,
+  firstPage,
   retry,
 }: {
   snapshot: ManagedAccountsSnapshot;
   settingsHref: string;
   more: (feed: ManagedFeed) => void;
+  firstPage: (feed: ManagedFeed) => void;
   retry: () => void;
 }) {
   const { account, organizations, responsibilities } = snapshot;
@@ -178,6 +199,7 @@ export function ManagedAccountsView({
                 scope="organizations"
                 preparing={organizations.state === 'preparing'}
                 retry={() => more('organizations')}
+                firstPage={() => firstPage('organizations')}
               />
             </CardContent>
           </Card>
@@ -217,7 +239,12 @@ export function ManagedAccountsView({
                     : m.managed_no_responsibilities()}
                 </p>
               )}
-              <FeedActions feed={responsibilities} scope="responsibilities" retry={() => more('responsibilities')} />
+              <FeedActions
+                feed={responsibilities}
+                scope="responsibilities"
+                retry={() => more('responsibilities')}
+                firstPage={() => firstPage('responsibilities')}
+              />
             </CardContent>
           </Card>
         </>
@@ -246,6 +273,7 @@ function ViewerInventory({
       snapshot={snapshot}
       settingsHref={settingsHref}
       more={(feed) => void inventory.more(feed)}
+      firstPage={(feed) => void inventory.firstPage(feed)}
       retry={() => void inventory.load()}
     />
   );

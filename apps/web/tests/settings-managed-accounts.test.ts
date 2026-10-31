@@ -334,3 +334,233 @@ test('busy initial and selected-feed actions make one request while disposal sti
   expect(inventory.snapshot().account?.id).toBe(viewer);
   expect(calls).toHaveLength(4);
 });
+
+test('Recover a managed inventory feed from a rejected cursor preserving exact original semantic input, native authority and bounded requests', async () => {
+  for (const feed of ['organizations', 'responsibilities'] as const) {
+    for (const status of [400, 409]) {
+      const requests: Request[] = [];
+      const initial = page();
+      initial.organizations.items.push({
+        ...initial.organizations.items[0]!,
+        account: { ...initial.organizations.items[0]!.account, id: operated },
+      });
+      initial.responsibilities.items.push({ ...initial.responsibilities.items[0]!, reservationId: viewer });
+      initial[feed].next = ' opaque +/= &?% cursor ';
+      const replacement = page();
+      replacement.organizations = { state: 'ready', items: [], next: null };
+      replacement.responsibilities = { items: [], next: null };
+      if (feed === 'organizations')
+        replacement.organizations.items = [{ ...page().organizations.items[0]!, role: 'owner' }];
+      else replacement.responsibilities.items = [{ ...page().responsibilities.items[0]!, state: 'current' }];
+      const client = createKernelClient('https://kernel.test', {
+        fetch: (async (input, init) => {
+          requests.push(new Request(input, init));
+          expect(init?.cache).toBe('no-store');
+          return requests.length === 1
+            ? Response.json(initial)
+            : requests.length < 4
+              ? Response.json({ code: status === 400 ? 'invalid_cursor' : 'stale_cursor' }, { status })
+              : Response.json(replacement);
+        }) as typeof fetch,
+      });
+      const inventory = new ManagedAccountsInventory(viewer, (cursors) =>
+        loadManagedAccounts(client, 'Bearer viewer', viewer, cursors),
+      );
+      await inventory.firstPage(feed);
+      await inventory.load();
+      await inventory.firstPage(feed);
+      expect(requests).toHaveLength(1);
+      const before = inventory.snapshot();
+      await inventory.more(feed);
+      expect(inventory.snapshot()[feed].failure?.status).toBe(status);
+      expect(inventory.snapshot()[feed].items).toBe(before[feed].items);
+      expect(requests).toHaveLength(2);
+      await inventory.more(feed);
+      expect(requests).toHaveLength(3);
+      await inventory.firstPage(feed);
+      const after = inventory.snapshot();
+      expect(after[feed].items).toEqual(replacement[feed].items);
+      expect(after[feed].next).toBeNull();
+      expect(after[feed].failure).toBeNull();
+      expect(after[feed].restartable).toBe(false);
+      const sibling = feed === 'organizations' ? 'responsibilities' : 'organizations';
+      expect(after[sibling]).toBe(before[sibling]);
+      expect(after.account).toBe(before.account);
+      await inventory.firstPage(feed);
+      await inventory.more(feed);
+      expect(requests).toHaveLength(4);
+      const cursorKey = feed === 'organizations' ? 'organizationsCursor' : 'operatorsCursor';
+      expect(requests.map((request) => Object.fromEntries(new URL(request.url).searchParams))).toEqual([
+        {},
+        { [cursorKey]: initial[feed].next },
+        { [cursorKey]: initial[feed].next },
+        {},
+      ]);
+      for (const request of requests) {
+        expect(request.method).toBe('GET');
+        expect(new URL(request.url).pathname).toBe('/v1/me/managedAccounts');
+        expect(request.headers.get('authorization')).toBe('Bearer viewer');
+        expect(request.headers.get('cache-control')).toBe('no-store');
+      }
+    }
+  }
+});
+
+test('first-page replacement coalesces busy actions and preserves an in-flight sibling in either completion order', async () => {
+  for (const feed of ['organizations', 'responsibilities'] as const) {
+    for (const restartFirst of [true, false]) {
+      const sibling = feed === 'organizations' ? 'responsibilities' : 'organizations';
+      const calls: ManagedAccountsCursors[] = [];
+      const pending: ((result: ManagedAccountsResult) => void)[] = [];
+      const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
+        calls.push(cursors);
+        if (calls.length === 1) return ready(page());
+        if (calls.length === 2) return managedAccountsFailure(400, { code: 'invalid_cursor' });
+        return new Promise((resolve) => pending.push(resolve));
+      });
+      await inventory.load();
+      await inventory.more(feed);
+      const siblingRead = inventory.more(sibling);
+      const before = inventory.snapshot();
+      const restart = inventory.firstPage(feed);
+      await inventory.firstPage(feed);
+      await inventory.more(feed);
+      expect(inventory.snapshot()[feed].busy).toBe(true);
+      expect(inventory.snapshot()[feed].failure).toBe(before[feed].failure);
+      expect(inventory.snapshot()[feed].items).toBe(before[feed].items);
+      expect(inventory.snapshot()[sibling]).toBe(before[sibling]);
+      const fresh = page();
+      fresh[feed].items = [];
+      fresh[feed].next = 'fresh first-page continuation';
+      const siblingPage = page();
+      siblingPage[sibling].next = 'sibling continuation';
+      if (restartFirst) {
+        pending[1]!(ready(fresh));
+        await restart;
+        expect(inventory.snapshot()[sibling]).toBe(before[sibling]);
+        expect(inventory.snapshot()[sibling].busy).toBe(true);
+        pending[0]!(ready(siblingPage));
+      } else {
+        pending[0]!(ready(siblingPage));
+        await siblingRead;
+        const completed = inventory.snapshot()[sibling];
+        pending[1]!(ready(fresh));
+        await restart;
+        expect(inventory.snapshot()[sibling]).toBe(completed);
+      }
+      await siblingRead;
+      expect(inventory.snapshot()[feed].items).toEqual([]);
+      expect(inventory.snapshot()[feed].next).toBe('fresh first-page continuation');
+      expect(inventory.snapshot()[sibling].items).toEqual(page()[sibling].items);
+      expect(inventory.snapshot()[sibling].next).toBe('sibling continuation');
+      expect(calls).toEqual([
+        {},
+        feed === 'organizations' ? { organizationsCursor: page()[feed].next! } : { operatorsCursor: page()[feed].next! },
+        sibling === 'organizations'
+          ? { organizationsCursor: page()[sibling].next! }
+          : { operatorsCursor: page()[sibling].next! },
+        {},
+      ]);
+    }
+  }
+});
+
+test('a failed first-page read retains stale pages and explicit recovery until a genuine ready or preparing first page arrives', async () => {
+  for (const feed of ['organizations', 'responsibilities'] as const) {
+    const calls: ManagedAccountsCursors[] = [];
+    const failure = managedAccountsFailure(503, { code: 'overloaded' }, { 'Retry-After': '2' });
+    const fresh = page();
+    fresh.organizations = { state: 'preparing', items: [], next: null };
+    fresh.responsibilities = { items: [], next: null };
+    const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
+      calls.push(cursors);
+      if (calls.length === 1) return ready(page());
+      if (calls.length === 3) return failure;
+      if (calls.length === 5) return ready(fresh);
+      return managedAccountsFailure(409, { code: 'stale_cursor' });
+    });
+    await inventory.load();
+    const original = inventory.snapshot();
+    await inventory.more(feed);
+    await inventory.firstPage(feed);
+    expect(inventory.snapshot()[feed].failure).toBe(failure);
+    expect(inventory.snapshot()[feed].items).toBe(original[feed].items);
+    expect(inventory.snapshot()[feed].next).toBe(original[feed].next);
+    expect(inventory.snapshot()[feed].restartable).toBe(true);
+    expect(inventory.snapshot()[feed].busy).toBe(false);
+    await inventory.more(feed);
+    expect(calls[3]).toEqual(calls[1]!);
+    await inventory.firstPage(feed);
+    expect(calls[2]).toEqual({});
+    expect(calls[4]).toEqual({});
+    expect(inventory.snapshot()[feed].items).toEqual([]);
+    expect(inventory.snapshot()[feed].failure).toBeNull();
+    expect(inventory.snapshot()[feed].restartable).toBe(false);
+    expect(inventory.snapshot().organizations.state).toBe(feed === 'organizations' ? 'preparing' : 'ready');
+    await inventory.firstPage(feed);
+    expect(calls).toHaveLength(5);
+  }
+});
+
+test('denied or wrong-viewer first-page results clear both feeds and invalidate siblings, while stale resets cannot revive data', async () => {
+  for (const outcome of ['denied', 'wrong-viewer', 'wrong-kind', 'disposed', 'reloaded'] as const) {
+    const pending: ((result: ManagedAccountsResult) => void)[] = [];
+    let calls = 0;
+    const inventory = new ManagedAccountsInventory(viewer, async () => {
+      calls++;
+      if (calls === 1 || calls === 5) return ready(page());
+      if (calls === 2) return managedAccountsFailure(400, { code: 'invalid_cursor' });
+      return new Promise((resolve) => pending.push(resolve));
+    });
+    await inventory.load();
+    await inventory.more('organizations');
+    const sibling = inventory.more('responsibilities');
+    const restart = inventory.firstPage('organizations');
+    if (outcome === 'disposed') inventory.dispose();
+    if (outcome === 'reloaded') await inventory.load();
+    const beforeCompletion = inventory.snapshot();
+    const wrongViewer = page();
+    wrongViewer.account = { ...wrongViewer.account, id: operated };
+    const wrongKind = page();
+    wrongKind.account = { ...wrongKind.account, kind: 'organization' };
+    pending[1]!(
+      outcome === 'denied'
+        ? managedAccountsFailure(403, { code: 'forbidden' })
+        : ready(outcome === 'wrong-viewer' ? wrongViewer : outcome === 'wrong-kind' ? wrongKind : page()),
+    );
+    await restart;
+    pending[0]!(ready(page()));
+    await sibling;
+    if (outcome === 'disposed' || outcome === 'reloaded') {
+      expect(inventory.snapshot()).toBe(beforeCompletion);
+    } else {
+      expect(inventory.snapshot().account).toBeNull();
+      expect(inventory.snapshot().organizations.items).toEqual([]);
+      expect(inventory.snapshot().responsibilities.items).toEqual([]);
+      expect(inventory.snapshot().failure?.kind).toBe('denied');
+    }
+    expect(calls).toBe(outcome === 'reloaded' ? 5 : 4);
+  }
+});
+
+test('initial, preparing and exhausted feeds do not offer cursor recovery or issue first-page requests', async () => {
+  for (const state of ['initial-failure', 'preparing', 'no-more'] as const) {
+    const calls: ManagedAccountsCursors[] = [];
+    const initial = page();
+    initial.organizations = { state: state === 'preparing' ? 'preparing' : 'ready', items: [], next: null };
+    initial.responsibilities.next = null;
+    const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
+      calls.push(cursors);
+      return state === 'initial-failure' || calls.length > 1
+        ? managedAccountsFailure(400, { code: 'invalid_cursor' })
+        : ready(initial);
+    });
+    await inventory.load();
+    await inventory.more('organizations');
+    await inventory.firstPage('organizations');
+    await inventory.firstPage('responsibilities');
+    expect(inventory.snapshot().organizations.restartable).toBe(false);
+    expect(inventory.snapshot().responsibilities.restartable).toBe(false);
+    expect(calls).toEqual(state === 'preparing' ? [{}, {}] : [{}]);
+  }
+});

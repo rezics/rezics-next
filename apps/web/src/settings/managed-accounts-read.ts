@@ -122,7 +122,13 @@ export function managedAccountHref(settingsHref: string, accountId: string): str
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-type Feed<T> = { items: T[]; next: string | null; busy: boolean; failure: ManagedAccountsFailure | null };
+type Feed<T> = {
+  items: T[];
+  next: string | null;
+  busy: boolean;
+  failure: ManagedAccountsFailure | null;
+  restartable: boolean;
+};
 export type ManagedAccountsSnapshot = {
   account: ManagedIdentity | null;
   loading: boolean;
@@ -135,8 +141,8 @@ function empty(): ManagedAccountsSnapshot {
     account: null,
     loading: false,
     failure: null,
-    organizations: { state: 'ready', items: [], next: null, busy: false, failure: null },
-    responsibilities: { items: [], next: null, busy: false, failure: null },
+    organizations: { state: 'ready', items: [], next: null, busy: false, failure: null, restartable: false },
+    responsibilities: { items: [], next: null, busy: false, failure: null, restartable: false },
   };
 }
 function append<T>(before: T[], after: T[], key: (item: T) => string): T[] {
@@ -202,25 +208,48 @@ export class ManagedAccountsInventory {
         items: page.organizations.state === 'preparing' ? [] : page.organizations.items,
         busy: false,
         failure: null,
+        restartable: false,
       },
-      responsibilities: { ...page.responsibilities, busy: false, failure: null },
+      responsibilities: { ...page.responsibilities, busy: false, failure: null, restartable: false },
     });
   }
   async more(feed: ManagedFeed) {
+    return this.readFeed(feed, false);
+  }
+  async firstPage(feed: ManagedFeed) {
+    return this.readFeed(feed, true);
+  }
+  private async readFeed(feed: ManagedFeed, firstPage: boolean) {
     const before = this.value;
     if (!before.account || before.loading || before[feed].busy) return;
     const preparing = feed === 'organizations' && before.organizations.state === 'preparing';
     const cursor = before[feed].next;
     if (cursor === null && !preparing) return;
+    if (firstPage && (preparing || cursor === null || !before[feed].restartable)) return;
     const epoch = this.epoch;
-    this.publish({ ...before, [feed]: { ...before[feed], busy: true, failure: null } });
+    this.publish({ ...before, [feed]: { ...before[feed], busy: true } });
     const result = await this.request(
-      cursor === null ? {} : feed === 'organizations' ? { organizationsCursor: cursor } : { operatorsCursor: cursor },
+      firstPage || cursor === null
+        ? {}
+        : feed === 'organizations'
+          ? { organizationsCursor: cursor }
+          : { operatorsCursor: cursor },
     );
     if (epoch !== this.epoch) return;
     if (!result.ok) {
       if (result.kind === 'denied') this.deny(result);
-      else this.publish({ ...this.value, [feed]: { ...this.value[feed], busy: false, failure: result } });
+      else
+        this.publish({
+          ...this.value,
+          [feed]: {
+            ...this.value[feed],
+            busy: false,
+            failure: result,
+            restartable:
+              before[feed].restartable ||
+              (!preparing && cursor !== null && (result.status === 400 || result.status === 409)),
+          },
+        });
       return;
     }
     const current = this.value;
@@ -228,27 +257,33 @@ export class ManagedAccountsInventory {
       const next = result.page.organizations;
       this.publish({
         ...current,
-        account: result.page.account,
+        account: firstPage ? current.account : result.page.account,
         organizations: {
           ...next,
           items:
             next.state === 'preparing'
               ? []
-              : append(preparing ? [] : current.organizations.items, next.items, (item) => item.account.id),
+              : firstPage
+                ? next.items
+                : append(preparing ? [] : current.organizations.items, next.items, (item) => item.account.id),
           busy: false,
           failure: null,
+          restartable: false,
         },
       });
     } else {
       const next = result.page.responsibilities;
       this.publish({
         ...current,
-        account: result.page.account,
+        account: firstPage ? current.account : result.page.account,
         responsibilities: {
           ...next,
-          items: append(current.responsibilities.items, next.items, (item) => item.reservationId),
+          items: firstPage
+            ? next.items
+            : append(current.responsibilities.items, next.items, (item) => item.reservationId),
           busy: false,
           failure: null,
+          restartable: false,
         },
       });
     }
