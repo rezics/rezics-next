@@ -12,9 +12,11 @@ import { createOutcomeWorker, type WorkerStats } from './outcome-worker.ts';
 import type { HttpResponse } from '../../../../../specs/semantic-driver.ts';
 import type { createKernel } from '../../../src/http/kernel.ts';
 import { subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
-import { createOpenSearch, OpenSearchError } from '../../../src/search/opensearch.ts';
+import { createOpenSearch, OpenSearchError, SearchUnavailableError } from '../../../src/search/opensearch.ts';
 import { SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE } from '../../../src/search/query.ts';
 import { createSearchService } from '../../../src/search/service.ts';
+import { readFreshness } from '../../../src/search/freshness.ts';
+import { subjectConsumer } from '../../../src/search/runner.ts';
 import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
 import { createWorkClient, type WorkClient } from '../../../src/work/client.ts';
 import { systemClock } from '../../../src/clock.ts';
@@ -59,7 +61,10 @@ export interface ReleasedDiscoveryRuntime extends ReleasedNativeConsumers {
   converge(subjects: readonly CreatedSubject[]): Promise<void>;
   rebuild(): Promise<{ generation: number; previous: number | null }>;
   barrier(boundary: ReleasedTransportBoundary): ReleasedTransportBarrier;
-  preparePublic(job: Parameters<DefaultPublicFilterRuntime['repair']>[0]): Promise<string>;
+  /** Read the current native consumer's PostgreSQL lag; conveys no Source readiness. */
+  freshness(): Promise<import('../../../src/search/freshness.ts').Freshness>;
+  /** Optional owner expiry applies to this retain only; the default remains exactly 24 hours. */
+  preparePublic(job: ReleasedNativeRepairJob, options?: Readonly<{ expiresAt: number }>): Promise<string>;
   readPreparation(id: string): Promise<PreparationRecord | null>;
   workerStats(): Promise<WorkerStats>;
   crash(): Promise<{ code: number | null; signal: string | null }>;
@@ -157,12 +162,17 @@ export function releasedDiscoveryRuntime(
     if (worker) return worker.rpc.request<T>(method, params);
     return Promise.reject(new Error('Released discovery worker has not started'));
   }
-  async function retain(job: Parameters<DefaultPublicFilterRuntime['repair']>[0]): Promise<string> {
+  async function retain(job: ReleasedNativeRepairJob, options?: Readonly<{ expiresAt: number }>): Promise<string> {
     if (!config || !databaseUrl) throw new Error('Released discovery preparation has not started');
+    if (options !== undefined) {
+      const now = Date.now();
+      if (!Number.isSafeInteger(options.expiresAt) || options.expiresAt <= now || options.expiresAt > now + 24 * 60 * 60 * 1000)
+        throw new RangeError('Preparation expiresAt must be a safe future instant within 24 hours');
+    }
     preparationClient ??= createWorkClient(databaseUrl, config.pool);
     return createPublicPreparationStore(config.pool, await preparationClient, prefix).retain(
       { kind: 'repair', key: JSON.stringify(job), job },
-      Date.now() + 24 * 60 * 60 * 1000,
+      options?.expiresAt ?? Date.now() + 24 * 60 * 60 * 1000,
     );
   }
   const control: ReleasedDiscoveryRuntime = {
@@ -176,7 +186,14 @@ export function releasedDiscoveryRuntime(
       if (sealed || !started || !proxy) throw new Error('Released discovery transport is not running');
       return proxy.barrier(boundary);
     },
-    preparePublic: (job) => operation(() => retain(job)),
+    freshness: () =>
+      operation(async () => {
+        if (!config || !publicFilters) throw new SearchUnavailableError('Released discovery owner is unavailable');
+        const { active } = await subjectGenerations(search, prefix);
+        if (active === null) throw new SearchUnavailableError('Released discovery current generation is unavailable');
+        return readFreshness(config.pool, subjectConsumer(prefix, active));
+      }),
+    preparePublic: (job, options) => operation(() => retain(job, options)),
     readPreparation: (id) =>
       operation(async () => {
         const result = await config!.pool.query<PreparationRecord>(
