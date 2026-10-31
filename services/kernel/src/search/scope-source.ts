@@ -54,6 +54,20 @@ import {
 } from './scope-work-context.ts';
 import type { ScopeLeafResume } from './scope-execution.ts';
 import type { CollectionKindWorkDefinition } from '../library/collection-kind-work-admission.ts';
+import {
+  validateScopeOrderedPrepare,
+  validateScopeOrderedPrefix,
+  type ScopeNativeOrder,
+  type ScopeOrderedPrefixRequest,
+  type SearchScopeOrderedPrefix,
+} from './scope-ordered.ts';
+export type {
+  ScopeNativeOrder,
+  ScopeNameSortTuple,
+  ScopeCollectionsSortTuple,
+  ScopeOrderedPrefixRequest,
+  SearchScopeOrderedPrefix,
+} from './scope-ordered.ts';
 
 /** Independent native work reservation; none of these units are candidate keys. */
 export type ScopeNativeBudget = Omit<LeafWork, 'keys'>;
@@ -93,6 +107,10 @@ export type ScopeBasis = Readonly<{
 export type ScopePrepareOptions = Readonly<{
   releaseDigest?: string;
   order?: SearchScopeOrder;
+  /** Immutable native output definition; separate from structural Collection traversal. */
+  nativeOrder?: ScopeNativeOrder;
+  /** Required with nativeOrder, together with an explicit caller allowance. */
+  pageSize?: number;
   /** Native caller's shared root; omitted legacy calls retain the bounded compatibility ceilings. */
   allowance?: WorkAllowance;
   /** Read an already published scope without retaining, preparing or saving reader progress. */
@@ -339,6 +357,12 @@ export function createSearchScopeSource({
       return receipt;
     },
     async prepare(filter: FilterDocument, options?: ScopePrepareOptions): Promise<PreparedSearchScope> {
+      if (options?.nativeOrder !== undefined || options?.pageSize !== undefined) {
+        validateScopeOrderedPrepare(options);
+        // Interface stage: no ordered capture, prepared handle or receipt is fabricated.
+        // The native producer must bind output order/size into its immutable preparation.
+        unavailable();
+      }
       if (evidence?.work?.kind === 'members-preparation') {
         const native = await readMembersPreparationWorkDefinition(evidence.work, {
           pool,
@@ -679,6 +703,16 @@ export function createSearchScopeSource({
       });
       states.set(prepared, value);
       return measured(prepared, work);
+    },
+    async orderedPrefix(
+      prepared: PreparedSearchScope,
+      request: ScopeOrderedPrefixRequest,
+    ): Promise<SearchScopeOrderedPrefix> {
+      validateScopeOrderedPrefix(request);
+      state(prepared);
+      // Existing handles are structural/UUID preparations. Only the follow-on native
+      // producer can supply an ordered handle and validate its exact captured order.
+      unavailable();
     },
     async prefix(
       prepared: PreparedSearchScope,
