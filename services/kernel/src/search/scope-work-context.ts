@@ -2,7 +2,6 @@ import type { Pool } from 'pg';
 import { admitFilter, parseFilter } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
-import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import { authoritativeTimeValue, commandTime, type AuthoritativeTime } from '../command/command.ts';
 import {
   currentOperationalResources,
@@ -201,7 +200,7 @@ export async function readCollectionPublicationScopeWorkDefinition(
         definition.filter,
       ) ||
       creation.initiator.sourceDigest !== createHash('sha256').update(canonicalize(creation.source)!).digest('hex') ||
-      creation.durableInitiator !== durableInitiatorCommitment(creation.initiator)
+      creation.durableInitiator !== createHash('sha256').update(canonicalize(creation.initiator)!).digest('hex')
     )
       throw new ProblemError('semantic_not_ready');
   } catch {
