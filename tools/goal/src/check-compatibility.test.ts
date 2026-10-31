@@ -38,6 +38,52 @@ function reportCheck(report: ReturnType<typeof checkScriptCompatibility>, field:
   return report.checks.filter((check) => check.field === field);
 }
 
+test('compatibility probes isolate the invoking controller task attempt and registry', () => {
+  const directory = temporaryDirectory();
+  try {
+    const root = scriptsRoot(directory);
+    const registry = join(directory, 'controller-registry');
+    const waitFile = join(directory, 'controller-wait.json');
+    const cli = spawnSync(
+      process.execPath,
+      [join(repositoryRoot, 'tools/goal/scripts/check-compatibility.ts'), '--scripts-root', root],
+      {
+        cwd: repositoryRoot,
+        encoding: 'utf8',
+        timeout: 60_000,
+        maxBuffer: 2 * 1024 * 1024,
+        env: {
+          ...process.env,
+          GOAL_TASK_ID: 'compatibility-controller',
+          GOAL_ATTEMPT: '3',
+          GOAL_CHECK_REGISTRY: registry,
+          GOAL_CHECK_WAIT_FILE: waitFile,
+        },
+      },
+    );
+    const report = JSON.parse(cli.stdout) as ReturnType<typeof checkScriptCompatibility>;
+    // This fixture has no pinned installation; lifecycle probes must still run locally.
+    expect(cli.status).toBe(1);
+    for (const field of [
+      'workerCheck.start',
+      'workerCheck.record.running',
+      'workerCheck.foreground',
+      'workerCheck.failureStart',
+      'workerCheck.failureForeground',
+    ]) {
+      expect(reportCheck(report, field).map((check) => check.status)).toEqual(['compatible']);
+    }
+    const records = reportCheck(report, 'workerCheck.record.finished');
+    expect(records).toHaveLength(2);
+    expect(records.map((check) => (check.evidence?.record as { exitCode: number }).exitCode).sort()).toEqual([0, 7]);
+    for (const check of records) expect(check.evidence?.record).not.toHaveProperty('ownership');
+    expect(existsSync(registry)).toBe(false);
+    expect(existsSync(waitFile)).toBe(false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('main consumer exercises actual dev worker-check forms, validates records and probes remote options', () => {
   const directory = temporaryDirectory();
   try {

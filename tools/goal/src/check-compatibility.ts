@@ -422,7 +422,10 @@ function startWorkerCheck(
   delete env.KERNEL_CHECK_REMOTE;
   delete env.REMOTE_CHECK_PRIORITY;
   delete env.GOAL_CHECK_WAIT_FILE;
+  // These local probes do not belong to the invoking controller's task attempt or registry.
   delete env.GOAL_TASK_ID;
+  delete env.GOAL_ATTEMPT;
+  delete env.GOAL_CHECK_REGISTRY;
   const result = run(command, scratchRoot, env);
   const ids = [...result.stdout.matchAll(/^check: id ([0-9a-f-]{36})$/gm)].map((match) => match[1]!);
   const id = ids[0];
