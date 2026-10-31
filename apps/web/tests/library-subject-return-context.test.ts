@@ -114,9 +114,9 @@ describe('Library sign-in from a Realm reader preserves the validated local read
     const query = `realm=${realm}&node=editions&cursor=opaque%2B%2F%3D%20next`;
     const privateQuery = 'code=private-code&csrf_token=private-csrf&access_token=private-token&undoKey=private-key';
     const redirects = 'return_to=https%3A%2F%2Fevil.test&next=%2F%2Fevil.test&redirect_uri=%5C%5Cevil.test';
-    expect(subjectSlotReturnTo(`${view}?${privateQuery}&${query}&${redirects}#access_token=secret`, subject, 'en')).toBe(
-      `${view}?${query}`,
-    );
+    expect(
+      subjectSlotReturnTo(`${view}?${privateQuery}&${query}&${redirects}#access_token=secret`, subject, 'en'),
+    ).toBe(`${view}?${query}`);
     expect(subjectSlotReturnTo(`${canonical}?slot=collections&cursor=unowned&node=unowned`, subject, 'en')).toBe(
       `${canonical}?slot=collections`,
     );

@@ -51,9 +51,7 @@ function LeafStory({ fallback = false }: { fallback?: boolean }) {
   const subject = currentSubject();
   const path = subjectHref(subject, getLocale()).href;
   return (
-    <PatternStory
-      path={fallback ? '/' : `${path}/editions?realm=${realm}&node=editions&cursor=opaque%2Bnext`}
-    >
+    <PatternStory path={fallback ? '/' : `${path}/editions?realm=${realm}&node=editions&cursor=opaque%2Bnext`}>
       <AppShell>
         <h1 className="font-serif text-3xl font-semibold">{subject.label}</h1>
         <SubjectLibrarySlot subject={subject} locale={getLocale()} data={signedOut} />

@@ -39,19 +39,22 @@ export function subjectSlotReturnTo(
     // Keep only selectors owned by the current reader. Never copy callback credentials, CSRF, undo keys,
     // nested return_to/redirect values or arbitrary query/referrer input into the login transaction.
     const seen = new Set<string>();
-    const query = target.search.slice(1).split('&').filter((pair) => {
-      const [key, value] = new URLSearchParams(pair).entries().next().value ?? [];
-      if (key === undefined || value === undefined) return false;
-      if (key !== 'realm' && key !== 'node' && key !== 'cursor' && key !== 'slot') return false;
-      if (seen.has(key)) throw new Error('Ambiguous reader selector');
-      seen.add(key);
-      if (key === 'realm') return validatePageRealm(value) !== undefined;
-      if (path.length === 5) {
-        if (key === 'node') return validatePageNode(value) !== undefined;
-        if (key === 'cursor') return validateViewCursor(value) !== undefined;
-      }
-      return path.length === 4 && key === 'slot' && value === 'collections';
-    });
+    const query = target.search
+      .slice(1)
+      .split('&')
+      .filter((pair) => {
+        const [key, value] = new URLSearchParams(pair).entries().next().value ?? [];
+        if (key === undefined || value === undefined) return false;
+        if (key !== 'realm' && key !== 'node' && key !== 'cursor' && key !== 'slot') return false;
+        if (seen.has(key)) throw new Error('Ambiguous reader selector');
+        seen.add(key);
+        if (key === 'realm') return validatePageRealm(value) !== undefined;
+        if (path.length === 5) {
+          if (key === 'node') return validatePageNode(value) !== undefined;
+          if (key === 'cursor') return validateViewCursor(value) !== undefined;
+        }
+        return path.length === 4 && key === 'slot' && value === 'collections';
+      });
     target.search = query.length ? `?${query.join('&')}` : '';
     target.hash = '';
     // publicHref already includes the locale in production. Support unprefixed router locations as well.
