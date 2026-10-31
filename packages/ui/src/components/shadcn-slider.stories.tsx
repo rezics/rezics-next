@@ -92,7 +92,7 @@ export const NamedRange: Story = {
   args: {
     defaultValue: [20, 70],
     thumbProps: {
-      getAriaLabel: (index) => index === 0 ? 'Minimum rating' : 'Maximum rating',
+      getAriaLabel: (index) => (index === 0 ? 'Minimum rating' : 'Maximum rating'),
       getAriaValueText: (_formatted, value, index) => `${index === 0 ? 'From' : 'Through'} ${value} points`,
     },
   },

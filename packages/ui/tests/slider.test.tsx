@@ -38,12 +38,21 @@ test('typed getters and state class names reach the actual thumb and input', () 
         'aria-valuetext': 'Fallback value',
         getAriaLabel: (index) => `Rating ${index + 1}`,
         getAriaValueText: (_formatted, value, index) => `${value} points on scale ${index + 1}`,
-        className: (state) => state.disabled ? 'disabled-thumb' : 'enabled-thumb',
+        className: (state) => (state.disabled ? 'disabled-thumb' : 'enabled-thumb'),
       }}
     />,
   );
   const input = inputs(html)[0] ?? '';
-  for (const attribute of ['aria-label="Rating 1"', 'aria-valuetext="6 points on scale 1"', 'min="1"', 'max="10"', 'step="0.5"', 'name="rating"', 'value="6"', 'disabled=""'])
+  for (const attribute of [
+    'aria-label="Rating 1"',
+    'aria-valuetext="6 points on scale 1"',
+    'min="1"',
+    'max="10"',
+    'step="0.5"',
+    'name="rating"',
+    'value="6"',
+    'disabled=""',
+  ])
     expect(input).toContain(attribute);
   expect(slot(html, 'slider-thumb')).toContain('disabled-thumb');
   expect(slot(html, 'slider-thumb')).toContain('focus-visible:ring-4');
@@ -52,7 +61,7 @@ test('typed getters and state class names reach the actual thumb and input', () 
 
 test('optional thumb props preserve existing default, controlled and multi-thumb counts', () => {
   for (const props of [{}, { defaultValue: [30] }, { defaultValue: [20, 70] }, { value: [10, 30, 80] }]) {
-    const expected = 'value' in props ? 3 : props.defaultValue?.length ?? 2;
+    const expected = 'value' in props ? 3 : (props.defaultValue?.length ?? 2);
     const html = renderToStaticMarkup(<Slider {...props} />);
     expect(inputs(html)).toHaveLength(expected);
     const named = renderToStaticMarkup(<Slider {...props} thumbProps={{ 'aria-label': 'Rating' }} />);
