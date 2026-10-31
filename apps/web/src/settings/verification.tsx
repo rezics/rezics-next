@@ -1,10 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
-import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { personalRead } from '../kernel/query';
 import { useOperation } from '../kernel/exposure';
@@ -15,6 +14,12 @@ import { csrfHeaders } from '../threads/composer';
 import { useSession } from '../session/query';
 import { type AgentVerificationRequest } from './verification-core';
 import { VerificationSubjectChooser } from './verification-subject-chooser';
+import { VerificationLinks, verificationIssueMessage, type VerificationLinkRow } from './verification-links';
+import {
+  validateVerificationDraft,
+  verificationCharacterCount,
+  type VerificationIssue,
+} from './verification-validation';
 import {
   VerificationRecovery,
   canRequestVerification,
@@ -108,7 +113,11 @@ export function VerificationCard({
   const id = useId();
   const [selected, setSelected] = useState<VerificationDraft['selected']>(initialDraft?.selected ?? null);
   const [statement, setStatement] = useState(initialDraft?.statement ?? '');
-  const [links, setLinks] = useState(initialDraft?.links ?? [{ label: '', url: '' }]);
+  const [links, setLinks] = useState<VerificationLinkRow[]>(() =>
+    (initialDraft?.links ?? [{ label: '', url: '' }]).map((link, key) => ({ ...link, key })),
+  );
+  const form = useRef<HTMLFormElement>(null);
+  const [showValidation, setShowValidation] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
   const pending = state.phase === 'sending' || state.phase === 'reading';
   const verification = state.current?.verificationRequest ?? null;
@@ -117,11 +126,35 @@ export function VerificationCard({
   const canWithdraw = canWithdrawVerification(state.current) && !state.attempt && !pending;
   const hasDraft = !!selected || !!statement || links.some((link) => link.label || link.url);
 
+  // Wholly empty optional rows remain editable placeholders, as before. Every populated byte stays in order.
+  const populated = links.filter((link) => link.label || link.url);
+  const draft = {
+    subject: selected?.id ?? '',
+    statement,
+    links: populated.map(({ label, url }) => ({ label, url })),
+  };
+  const issues = showValidation ? validateVerificationDraft(draft) : [];
+  function fieldId(issue: VerificationIssue) {
+    if (issue.field === 'label' || issue.field === 'url') return `${id}-${issue.field}-${populated[issue.index!]!.key}`;
+    return issue.field === 'links' ? `${id}-add-link` : `${id}-${issue.field}`;
+  }
+  const errors = new Map(issues.map((issue) => [fieldId(issue), verificationIssueMessage(issue)]));
+  function focusField(target: string) {
+    if (target === `${id}-subject`) form.current?.querySelector<HTMLInputElement>('[role="combobox"]')?.focus();
+    else form.current?.ownerDocument.getElementById(target)?.focus();
+  }
+
   if (state.failure?.message === 'rezics-platform-closed') return null;
 
   async function submit() {
-    if (!csrfToken || !selected || !canRequest) return;
-    await controller.submit({ subject: selected.id, statement, links: links.filter((link) => link.label || link.url) });
+    if (!csrfToken || !canRequest) return;
+    const invalid = validateVerificationDraft(draft);
+    setShowValidation(true);
+    if (invalid.length) {
+      focusField(fieldId(invalid[0]!));
+      return;
+    }
+    await controller.submit(draft);
   }
 
   async function withdraw() {
@@ -145,83 +178,65 @@ export function VerificationCard({
         {state.phase === 'unavailable' ? <p role="alert">{m.settings_verification_load_failed()}</p> : null}
         {canRequest || hasDraft || state.attempt?.kind === 'request' ? (
           <form
+            ref={form}
+            noValidate
             onSubmit={(event) => {
               event.preventDefault();
               void submit();
             }}
             className="space-y-4"
           >
+            {issues.length ? (
+              <Alert role="alert">
+                <AlertTitle>{m.settings_verification_fix_fields()}</AlertTitle>
+                <AlertDescription>
+                  <ul>
+                    {issues.map((issue) => (
+                      <li key={fieldId(issue)}>
+                        <a
+                          className="flex min-h-11 items-center underline"
+                          href={`#${fieldId(issue)}`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            focusField(fieldId(issue));
+                          }}
+                        >
+                          {issue.index === undefined
+                            ? verificationIssueMessage(issue)
+                            : m.settings_verification_link_issue({
+                                number: links.indexOf(populated[issue.index]!) + 1,
+                                message: verificationIssueMessage(issue),
+                              })}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <FieldGroup>
               <VerificationSubjectChooser selected={selected} onSelect={setSelected} disabled={pending || !csrfToken} />
-              <Field>
+              <Field data-invalid={errors.has(`${id}-statement`)}>
                 <FieldLabel htmlFor={`${id}-statement`}>{m.settings_verification_statement()}</FieldLabel>
                 <Textarea
                   id={`${id}-statement`}
                   value={statement}
-                  maxLength={2000}
+                  aria-invalid={errors.has(`${id}-statement`)}
+                  aria-describedby={`${id}-statement-count${errors.has(`${id}-statement`) ? ` ${id}-statement-error` : ''}`}
                   onChange={(event) => setStatement(event.target.value)}
                 />
-                <FieldDescription>{m.settings_verification_characters({ count: statement.length })}</FieldDescription>
+                <FieldDescription id={`${id}-statement-count`}>
+                  {m.settings_verification_characters({ count: verificationCharacterCount(statement) })}
+                </FieldDescription>
+                {errors.has(`${id}-statement`) ? (
+                  <FieldDescription id={`${id}-statement-error`} className="text-destructive">
+                    {errors.get(`${id}-statement`)}
+                  </FieldDescription>
+                ) : null}
               </Field>
-              {links.map((link, index) => (
-                <div key={index} className="grid gap-2 sm:grid-cols-2">
-                  <Field>
-                    <FieldLabel htmlFor={`${id}-label-${index}`}>{m.settings_verification_link_label()}</FieldLabel>
-                    <Input
-                      id={`${id}-label-${index}`}
-                      value={link.label}
-                      onChange={(event) =>
-                        setLinks((rows) =>
-                          rows.map((row, i) => (i === index ? { ...row, label: event.target.value } : row)),
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor={`${id}-url-${index}`}>{m.settings_verification_link_url()}</FieldLabel>
-                    <Input
-                      id={`${id}-url-${index}`}
-                      type="url"
-                      value={link.url}
-                      onChange={(event) =>
-                        setLinks((rows) =>
-                          rows.map((row, i) => (i === index ? { ...row, url: event.target.value } : row)),
-                        )
-                      }
-                    />
-                  </Field>
-                  {links.length > 1 ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setLinks((rows) => rows.filter((_, i) => i !== index))}
-                    >
-                      {m.settings_verification_remove_link()}
-                    </Button>
-                  ) : null}
-                </div>
-              ))}
-              {links.length < 5 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setLinks((rows) => [...rows, { label: '', url: '' }])}
-                >
-                  {m.settings_verification_add_link()}
-                </Button>
-              ) : null}
+              <VerificationLinks id={id} rows={links} onChange={setLinks} errors={errors} />
             </FieldGroup>
-            <Button
-              type="submit"
-              disabled={
-                !csrfToken ||
-                !canRequest ||
-                pending ||
-                !selected ||
-                !statement.trim() ||
-                links.some((link) => Boolean(link.label) !== Boolean(link.url))
-              }
-            >
+            <Button type="submit" disabled={!csrfToken || !canRequest || pending || !selected}>
               {m.settings_verification_submit()}
             </Button>
           </form>

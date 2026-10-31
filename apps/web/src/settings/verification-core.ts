@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
+import { validateVerificationDraft } from './verification-validation';
 
 export type VerificationInput = {
   subject: string;
@@ -72,13 +73,8 @@ export async function requestVerification(
   authorization: string,
   input: VerificationInput,
 ): Promise<VerificationCommandResult> {
-  const invalid =
-    !input.subject ||
-    !input.statement.trim() ||
-    input.statement.length > 2000 ||
-    input.links.length > 5 ||
-    input.links.some((link) => !link.label.trim() || !link.url.trim());
-  if (invalid) return { ok: false, status: 0, message: m.settings_verification_validation(), outcome: 'refused' };
+  if (validateVerificationDraft(input).length)
+    return { ok: false, status: 0, message: m.settings_verification_validation(), outcome: 'refused' };
   const result = await client
     .accounts({ accountId })
     .$requestVerification.post(

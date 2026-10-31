@@ -4,6 +4,7 @@ import { operationGroups } from '../src/kernel/exposure';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
 import { loadSettingsPage } from '../src/settings/preferences';
+import { validateVerificationDraft, verificationCharacterCount } from '../src/settings/verification-validation';
 import {
   readVerification,
   requestVerification,
@@ -50,6 +51,85 @@ const input: VerificationInput = {
   links: [{ label: 'Homepage', url: 'https://example.test' }],
   idempotencyKey: '00000000-0000-4000-8000-000000000001',
 };
+
+test('Make verification form limits and supporting links actionable preserving the current native and draft/recovery contracts', async () => {
+  const prefix = 'HTTPS://example.test/';
+  for (const count of [1001, 2000]) {
+    const exact = {
+      ...input,
+      statement: '😀'.repeat(count),
+      links: [
+        { label: '😀'.repeat(64), url: prefix + '😀'.repeat(2048 - prefix.length) },
+        { label: '  Public profile  ', url: 'https://example.test/Profile?value=%2f#Original' },
+        { label: 'Third', url: 'https://example.test/3' },
+        { label: 'Fourth', url: 'https://example.test/4' },
+        { label: 'Fifth', url: 'https://example.test/5' },
+      ],
+    };
+    const before = structuredClone(exact);
+    expect(verificationCharacterCount(exact.statement)).toBe(count);
+    expect(verificationCharacterCount(exact.links[0]!.url)).toBe(2048);
+    expect(validateVerificationDraft(exact)).toEqual([]);
+    const receipt = { ...request, statement: exact.statement, links: exact.links };
+    const { client, calls } = fakeClient([{ status: 201, data: { verificationRequest: receipt } }]);
+    await expect(requestVerification(client as never, 'alice', 'Bearer token', exact)).resolves.toEqual({
+      ok: true,
+      verificationRequest: receipt,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.args[0]).toEqual({ subject: 'subject-1', statement: exact.statement, links: exact.links });
+    expect(exact).toEqual(before);
+  }
+});
+
+test('over-limit and unsafe verification drafts fail closed before native IO without changing any draft bytes', async () => {
+  const badDrafts: VerificationInput[] = [
+    { ...input, statement: '😀'.repeat(2001) },
+    { ...input, statement: ' \n\t ' },
+    { ...input, links: [{ label: '😀'.repeat(65), url: 'https://example.test' }] },
+    { ...input, links: [{ label: ' \t ', url: 'https://example.test' }] },
+    { ...input, links: Array.from({ length: 6 }, () => ({ ...input.links[0]! })) },
+    ...[
+      'https://example.test/' + '😀'.repeat(2028),
+      'https://user:password@example.test/path',
+      'https://user@example.test/path',
+      'https://@example.test/path',
+      'http://example.test',
+      '//example.test',
+      'https:example.test',
+      'https:///example.test',
+      'https://',
+      ' https://example.test',
+      'https://example.test/ ',
+      'https://example.test/\npath',
+      'https://example.test/\tpath',
+      'https://example.test/\u007fpath',
+      '',
+    ].map((url) => ({ ...input, links: [{ label: 'Original label', url }] })),
+  ];
+  const { client, calls } = fakeClient([]);
+  for (const draft of badDrafts) {
+    const before = structuredClone(draft);
+    expect(validateVerificationDraft(draft).length).toBeGreaterThan(0);
+    await expect(requestVerification(client as never, 'alice', 'Bearer token', draft)).resolves.toMatchObject({
+      ok: false,
+      status: 0,
+      outcome: 'refused',
+    });
+    expect(draft).toEqual(before);
+  }
+  expect(calls).toEqual([]);
+});
+
+test('verification validation counts original whitespace and combining code points without normalizing them', () => {
+  const exact = { ...input, statement: ` ${'e\u0301'.repeat(999)}\n`, links: [] };
+  expect(verificationCharacterCount(exact.statement)).toBe(2000);
+  expect(validateVerificationDraft(exact)).toEqual([]);
+  expect(validateVerificationDraft({ ...exact, statement: exact.statement + 'x' })).toEqual([
+    { field: 'statement', code: 'statement-limit' },
+  ]);
+  expect(exact.statement).toBe(` ${'e\u0301'.repeat(999)}\n`);
+});
 
 test('verification controls are declared behind the agent_verification gate', () => {
   expect(operationGroups['agent_verification.request']).toBe('agent_verification');

@@ -9,6 +9,7 @@ import { prepareSession, sessionSubject, viewerCredential } from '../session/req
 import { requestLanguages } from '../kernel/languages';
 import { readRelease } from '../subject/definitions';
 import type { VerificationInput } from './verification-core';
+import { validateVerificationDraft } from './verification-validation';
 
 function uuid(value: unknown): value is string {
   return (
@@ -22,10 +23,7 @@ function parseInput(input: unknown): VerificationInput | undefined {
   const value = input as Record<string, unknown>;
   if (
     typeof value.subject !== 'string' ||
-    !value.subject ||
     typeof value.statement !== 'string' ||
-    !value.statement.trim() ||
-    value.statement.length > 2000 ||
     !Array.isArray(value.links) ||
     value.links.length > 5 ||
     !uuid(value.idempotencyKey)
@@ -35,21 +33,16 @@ function parseInput(input: unknown): VerificationInput | undefined {
   for (const link of value.links) {
     if (!link || typeof link !== 'object') return;
     const candidate = link as Record<string, unknown>;
-    if (
-      typeof candidate.label !== 'string' ||
-      !candidate.label.trim() ||
-      typeof candidate.url !== 'string' ||
-      !candidate.url.trim()
-    )
-      return;
+    if (typeof candidate.label !== 'string' || typeof candidate.url !== 'string') return;
     links.push({ label: candidate.label, url: candidate.url });
   }
-  return {
+  const parsed = {
     subject: value.subject,
     statement: value.statement,
     links,
     idempotencyKey: value.idempotencyKey,
   };
+  return validateVerificationDraft(parsed).length ? undefined : parsed;
 }
 
 function expectedAccount(input: unknown): string {
