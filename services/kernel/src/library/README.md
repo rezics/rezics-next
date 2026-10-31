@@ -141,9 +141,8 @@ Current implementation evidence is narrower than the capability:
   `test/library/owner-filter-native-closure.test.ts` await controller-owned execution; typing is not journey proof.
   This does not supply `requireCollectionRuleExecution`'s missing saved-rule admission body or a private working
   Source for publication replay after public activation. Those cases remain unavailable. The Semantic scope/public-capture
-  modules retain their own producer qualifications. Complete native population,
-  current disclosure, retained preparation/default worker integration and physical bounds still require the
-  real producer bodies and combined native verification; source typing does not certify those outcomes.
+  modules retain their own producer qualifications. Combined native journey and physical-bound proof of this closure
+  remains controller-owned after actual runtime release; source typing does not certify those outcomes.
 - `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
   the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.
