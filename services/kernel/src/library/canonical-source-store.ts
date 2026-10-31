@@ -262,7 +262,7 @@ export async function initializeCanonicalCollectionSource(
   const {metadata}=await readNativeCollectionWorkingMetadata(input.pool,input,{
     commandTx:tx,deadline:input.deadline,allowance:input.allowance,
   });
-  if (!metadata || metadata.state!=='active' || metadata.authority!=='private_builtin' ||
+  if (!metadata || !metadata.curatorAccountId || metadata.state!=='active' || metadata.authority!=='private_builtin' ||
     metadata.curatorAccountId!==command.basis?.actorAccountId) return null;
   await shareAccount(tx,metadata.curatorAccountId);
   const identity=nativeSourceIdentity(metadata), fence=nativeSourceFence(metadata);

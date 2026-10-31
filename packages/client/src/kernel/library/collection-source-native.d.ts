@@ -1,6 +1,6 @@
 import { type Pool } from 'pg';
 import { type OperationalTransaction } from '../command/operational.ts';
-import { type AuthoritativeTime } from '../command/command.ts';
+import { type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
@@ -14,6 +14,8 @@ type Options = {
     allowance: WorkAllowance;
     /** Structural reads only. The Source work branch separately admits the actual native episode. */
     tx?: OperationalTransaction;
+    /** Original native creation command; independent of mechanical work authority. */
+    commandTx?: CommandTransaction;
 };
 type Ref = {
     route: number;

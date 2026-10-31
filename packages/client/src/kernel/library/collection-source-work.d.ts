@@ -21,7 +21,7 @@ export declare class NativeCollectionWork {
      */
     compose<T extends {
         readonly work: WorkReceipt;
-    }>(operation: (allowance: WorkAllowance) => Promise<T>): Promise<T>;
+    }>(operation: (allowance: WorkAllowance) => Promise<T>, ceiling?: WorkDimensions): Promise<T>;
     assertReady(): void;
     /** Undefined means unproved, including for an operation expected to return no rows. */
     reserve(footprint: WorkDimensions | undefined, cleanup?: boolean): {

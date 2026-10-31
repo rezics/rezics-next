@@ -160,11 +160,22 @@ export type CanonicalPublication = CanonicalNotReady | {
     readonly work: CanonicalWork;
 };
 import type { WorkContext } from '../work/registry.ts';
+import { type NativeSourceIdentity } from './native-source-custody.ts';
 import { type NativeCollectionMetadata } from './collection-source-native.ts';
+import type { WorkAllowance } from './collection-source.ts';
+import { type CommandTransaction } from '../command/command.ts';
 export declare const CANONICAL_SOURCE_WORKFLOW = "library.canonicalSource";
 /** Bound once by the sole default Library WorkModule, using its real client and queues. */
 export declare function bindCanonicalSourceWork(context: WorkContext): void;
 export declare function nativeSourceFence(metadata: NativeCollectionMetadata): string;
+/** Original native command only. Uses its SAME pool/transaction and existing Source identity storage. */
+export declare function initializeCanonicalCollectionSource(tx: CommandTransaction, input: Readonly<{
+    pool: Pool;
+    route: number;
+    collectionId: string;
+    deadline: number;
+    allowance: WorkAllowance;
+}>): Promise<NativeSourceIdentity | null>;
 export declare function observeCanonicalSource(pool: Pool, input: CanonicalCall): Promise<CanonicalAuthorityRead>;
 export declare function readCanonicalSourceState(pool: Pool, input: CanonicalCall): Promise<CanonicalReadyRead>;
 export declare function seekCanonicalSourceGroup(pool: Pool, input: CanonicalBoundCall & {

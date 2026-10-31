@@ -4809,6 +4809,80 @@
                       ],
                       "type": "object"
                     },
+                    "authActions": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "operations": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "action": {
+                                    "type": "string"
+                                  },
+                                  "operationId": {
+                                    "enum": [
+                                      "auth.account.rename",
+                                      "auth.organization.membership",
+                                      "auth.operator.transfer",
+                                      "auth.organization.delete"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "resource": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "route": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "route",
+                                      "id"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "operationId",
+                                  "action",
+                                  "resource"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "state": {
+                              "const": "ready",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "operations"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "state": {
+                              "const": "unavailable",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
                     "members": {
                       "additionalProperties": false,
                       "properties": {
@@ -14138,7 +14212,10 @@
                         },
                         "requestedBy": {
                           "format": "uuid",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "state": {
                           "enum": [
@@ -16399,7 +16476,10 @@
                         },
                         "requestedBy": {
                           "format": "uuid",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "state": {
                           "enum": [
@@ -19400,7 +19480,10 @@
                         },
                         "requestedBy": {
                           "format": "uuid",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "state": {
                           "enum": [
@@ -246784,7 +246867,10 @@
                           },
                           "requestedBy": {
                             "format": "uuid",
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "state": {
                             "enum": [
@@ -247542,7 +247628,10 @@
                         },
                         "requestedBy": {
                           "format": "uuid",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "state": {
                           "enum": [
@@ -248385,7 +248474,10 @@
                         },
                         "requestedBy": {
                           "format": "uuid",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "state": {
                           "enum": [

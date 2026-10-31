@@ -36,6 +36,7 @@ import type { CollectionPublicationBeginInput, CollectionPublicationCreation, Co
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
 import type { WorkAllowance } from './collection-source.ts';
+import type { NativeSourceIdentity } from './native-source-custody.ts';
 import headQuery from './collection-source-output-head.sql';
 import operationQuery from './collection-publication-episode-read.sql';
 import receiptQuery from './collection-publication-episode-receipt.sql';
@@ -61,6 +62,9 @@ const hash = (value: unknown) => createHash('sha256').update(canonical(value)).d
 function locatorValid(locator: CollectionPublicationLocator) {
   return routeOf(locator.collectionId) === locator.route && routeOf(locator.publicationId) === locator.route &&
     routeOf(locator.ownerAccountId) === locator.route;
+}
+function privateWorkingIdentity(identity: NativeSourceIdentity): identity is CollectionPublicationSource['input']['identity'] {
+  return identity.scope==='private_builtin';
 }
 function sourceValid(source: CollectionPublicationSource, record: DurableInitiatorRecord) {
   const { locator, input, target, output, rule } = source;
@@ -310,7 +314,7 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
         metadata.sourceGeneration!==prepared.saved.sourceGeneration || metadata.revision!==(materialization ? 1 : input.revision)) throw unavailable();
       const identity=await initializeCanonicalCollectionSource(tx,{pool,route,collectionId:input.collectionId,deadline,allowance:metadataAllowance()});
       // Allocation is real native Source storage, with no capture/observation/repair/complete evidence yet.
-      if (!identity || identity.scope!=='private_builtin') throw unavailable();
+      if (!identity || !privateWorkingIdentity(identity)) throw unavailable();
       const locator: CollectionPublicationLocator = { route, ownerAccountId: actor.accountId, collectionId: input.collectionId, publicationId: newId(route) };
       const sourceId = newId(route), output = { route, collectionId: input.collectionId, generation: newId(route) };
       const rule: CollectionPublicationRuleRef = {

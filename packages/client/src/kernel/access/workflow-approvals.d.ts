@@ -73,6 +73,13 @@ export declare class WorkflowApprovalDeniedError extends Error {
     readonly status = 403;
     constructor();
 }
+type Descriptor = {
+    action: NativeCreationContext['operation']['action'];
+    target: string;
+    targetKind: 'actor' | 'organization' | 'either' | 'global';
+};
+/** Shared native workflow identity only; payload validation remains in operationSnapshot. */
+export declare function managedAuthWorkflowDescriptor(kind: 'rename' | 'membership' | 'transfer' | 'delete', target: string): Descriptor;
 type CredentialWorkflowPorts = {
     approveCredentialForActor(actor: AccountActor, binding: CredentialEffectBinding, context: AccessContext): Promise<WorkflowApproval>;
     readConsumedCredential(reference: string, context: AccessContext): ReturnType<typeof credentialRead.run>;

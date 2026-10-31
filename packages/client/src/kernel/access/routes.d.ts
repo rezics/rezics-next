@@ -5586,6 +5586,19 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     displayName: string | null;
                                 };
                                 self: boolean;
+                                authActions?: {
+                                    state: "ready";
+                                    operations: {
+                                        operationId: "auth.account.rename" | "auth.operator.transfer" | "auth.organization.delete" | "auth.organization.membership";
+                                        action: string;
+                                        resource: {
+                                            route: number;
+                                            id: string;
+                                        };
+                                    }[];
+                                } | {
+                                    state: "unavailable";
+                                };
                                 role: "member" | "owner" | null;
                                 operator: {
                                     id: string;
