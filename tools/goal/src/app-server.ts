@@ -223,13 +223,20 @@ export class WebSocketAppServer implements AppServer {
   }
 }
 
+export function connectPool(
+  pool: CodexPool,
+  onStart?: (identity: ProcessIdentity) => void,
+  parentEnvironment?: NodeJS.ProcessEnv,
+): Promise<WebSocketAppServer>;
+
 /** Starts one loopback app-server owned by this process and connects its JSON-RPC WebSocket. */
 export async function connectPool(
   pool: CodexPool,
   onStart?: (identity: ProcessIdentity) => void,
-  parentEnvironment: NodeJS.ProcessEnv = process.env,
 ): Promise<WebSocketAppServer> {
   const executable = pool.executable ?? 'codex';
+  // The overload exposes an isolated environment while keeping the transport entry signature stable.
+  const parentEnvironment: NodeJS.ProcessEnv = arguments[2] === undefined ? process.env : arguments[2];
   const env = { ...cleanManagedProviderEnvironment(parentEnvironment), CODEX_HOME: pool.codexHome };
   const child = spawn(executable, ['app-server', '--listen', 'ws://127.0.0.1:0'], { env, stdio: 'pipe' });
   if (onStart) {

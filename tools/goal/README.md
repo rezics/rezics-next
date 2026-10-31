@@ -43,55 +43,6 @@ does not name another existing wrapper path, the worker runs the command in the 
 does not add a wrapper. Workers do not run the root typecheck, affected checks or other
 regression checks. The task's acceptance command defines when its work is done.
 
-When the configured state directory's `verification-mode` file contains `minimal`, every launch and continuation
-receives the current source-completion policy alongside its canonical contract. Workers finish their own implementation
-and required changed-workspace typing, then commit and return `success`, `blocker:null`, `checks:[]`, naming the code
-completed and the original acceptance/native obligations deferred until after integration. This source result does not
-claim whole-feature, native or Goal completion. Typing alone does not establish product completion: unfinished own
-implementation or absent authority requires an exact blocker. Deferred acceptance alone is neither blocked nor waiting.
-Waiting requires genuinely running registered bare UUID checks owned by that task and attempt; an empty list, completed
-command or product blocker cannot justify it. Normal mode retains the wrapper continuation protocol above.
-
-Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking, with
-its real leases, results and terminal status preserved. It grants no acceptance, native, browser, root or worker-check
-permission. A foreground compiler must finish through its already-open tool command/session handle; workers must not
-invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or interrupt
-live compilers. The controller forwards this policy through its existing prompt seam; it does not steer live sessions.
-
-Ordinary contracts can be amended before their first worker starts:
-
-```sh
-bun tools/goal/src/cli.ts amend <task> --expected-attempt 0 --brief <file>
-```
-
-`WorkerTasks.amend(taskId, { expectedAttempt: 0, brief }, actor)` is the same receiving boundary. It requires the live,
-unambiguous persisted provider session of the owning manager or configured operations manager. Only ordinary
-generation-zero tasks in `ready`, genuinely dependency-held `held`, or deliberately selected never-started `stopped`
-state are eligible, with no attempt, check, settlement or completed state. A zero counter alone is insufficient:
-stopped tasks refuse any historical attempt, result, landing, integration, proof reservation/registration, worker
-run/evidence path or known or unknown check custody. Retained metadata with no readable ownership cannot establish
-absence of custody and refuses replacement. The submitted full brief passes ordinary path, risk-area and dependency validation, keeps
-the same Goal and manager, preserves normal priority and its grant/history bytes, and retains frozen acceptance
-blocks unchanged. Operations can deliver this same-priority amendment directly; no owner impersonation or priority
-grant is required. Verification registration continues to use its separate existing proof entry.
-
-Under the task lease and SQLite write transaction, amendment saves an immutable current brief and archives both
-contracts, paths and hashes in the existing task events. Identical input returns `unchanged`; accepted changes return
-`amended`, each with the task, generation and current contract hash. Identical stopped input stays stopped. A changed
-stopped contract records its prior stopped state, retains existing stop history and branch/worktree/base/source,
-and enters `held` while any genuine dependency remains unmet, otherwise `ready`. This explicit authenticated full
-replacement is the only stopped-zero transition added here; it does not restart other stopped tasks. A pending first-start intent and capacity ticket
-remain the same single intent and ticket. Amendment does not dispatch, retry, create an attempt, start a provider or
-bypass capacity. The waiting launcher rereads the accepted task under its lease after capacity admission, so the first
-native prompt contains the full latest canonical contract and current verification policy. Removing a held task's last
-dependency uses that same first-start path. Advanced/live generations refuse with their actual current identity and
-log/process handle, without changing them. This command does not steer an active worker.
-
-Each actual worker prompt boundary records its log offset and accumulated check-wait baseline in the existing
-`worker-run-started` event. Recovery uses that boundary's original timestamp rather than restarting its clock. Silence,
-startup and elapsed-limit accounting exclude earlier-turn output and waits, while retaining the current prompt's
-recorded waits across controller restart, capped to its silent interval for adoption.
-
 The dev landing train runs exactly one mandatory root typecheck on each final candidate: once for a combined batch or
 once for an individual landing. It does not run affected, sibling, acceptance, native, import or page-story checks
 before dev advances. Those checks run through the independent verifier after integration. Promotion runs the full
@@ -167,6 +118,55 @@ When a waiting session wakes on a finished failed check, Goal includes the exact
 and original log path. It reads only a UUID-owned log in that task's check directory and includes at most 4 KiB of its
 tail. Missing, unreadable, mismatched or truncated evidence is identified as unknown; other check logs and the worker's
 attempt log are not used as substitutes.
+
+When the configured state directory's `verification-mode` file contains `minimal`, every launch and continuation
+receives the current source-completion policy alongside its canonical contract. Workers finish their own implementation
+and required changed-workspace typing, then commit and return `success`, `blocker:null`, `checks:[]`, naming the code
+completed and the original acceptance/native obligations deferred until after integration. This source result does not
+claim whole-feature, native or Goal completion. Typing alone does not establish product completion: unfinished own
+implementation or absent authority requires an exact blocker. Deferred acceptance alone is neither blocked nor waiting.
+Waiting requires genuinely running registered bare UUID checks owned by that task and attempt; an empty list, completed
+command or product blocker cannot justify it. Normal mode retains the wrapper continuation protocol above.
+
+Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking, with
+its real leases, results and terminal status preserved. It grants no acceptance, native, browser, root or worker-check
+permission. A foreground compiler must finish through its already-open tool command/session handle; workers must not
+invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or interrupt
+live compilers. The controller forwards this policy through its existing prompt seam; it does not steer live sessions.
+
+Ordinary contracts can be amended before their first worker starts:
+
+```sh
+bun tools/goal/src/cli.ts amend <task> --expected-attempt 0 --brief <file>
+```
+
+`WorkerTasks.amend(taskId, { expectedAttempt: 0, brief }, actor)` is the same receiving boundary. It requires the live,
+unambiguous persisted provider session of the owning manager or configured operations manager. Only ordinary
+generation-zero tasks in `ready`, genuinely dependency-held `held`, or deliberately selected never-started `stopped`
+state are eligible, with no attempt, check, settlement or completed state. A zero counter alone is insufficient:
+stopped tasks refuse any historical attempt, result, landing, integration, proof reservation/registration, worker
+run/evidence path or known or unknown check custody. Retained metadata with no readable ownership cannot establish
+absence of custody and refuses replacement. The submitted full brief passes ordinary path, risk-area and dependency validation, keeps
+the same Goal and manager, preserves normal priority and its grant/history bytes, and retains frozen acceptance
+blocks unchanged. Operations can deliver this same-priority amendment directly; no owner impersonation or priority
+grant is required. Verification registration continues to use its separate existing proof entry.
+
+Under the task lease and SQLite write transaction, amendment saves an immutable current brief and archives both
+contracts, paths and hashes in the existing task events. Identical input returns `unchanged`; accepted changes return
+`amended`, each with the task, generation and current contract hash. Identical stopped input stays stopped. A changed
+stopped contract records its prior stopped state, retains existing stop history and branch/worktree/base/source,
+and enters `held` while any genuine dependency remains unmet, otherwise `ready`. This explicit authenticated full
+replacement is the only stopped-zero transition added here; it does not restart other stopped tasks. A pending first-start intent and capacity ticket
+remain the same single intent and ticket. Amendment does not dispatch, retry, create an attempt, start a provider or
+bypass capacity. The waiting launcher rereads the accepted task under its lease after capacity admission, so the first
+native prompt contains the full latest canonical contract and current verification policy. Removing a held task's last
+dependency uses that same first-start path. Advanced/live generations refuse with their actual current identity and
+log/process handle, without changing them. This command does not steer an active worker.
+
+Each actual worker prompt boundary records its log offset and accumulated check-wait baseline in the existing
+`worker-run-started` event. Recovery uses that boundary's original timestamp rather than restarting its clock. Silence,
+startup and elapsed-limit accounting exclude earlier-turn output and waits, while retaining the current prompt's
+recorded waits across controller restart, capped to its silent interval for adoption.
 
 ## Shared module workspaces (opt in)
 
