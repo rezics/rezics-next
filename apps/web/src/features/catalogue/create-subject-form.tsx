@@ -44,6 +44,7 @@ export function CreateSubjectForm({
     title: string;
     scope: string;
     hideHeading?: boolean;
+    readOnlyType?: boolean;
     control?: (pointer: string) => string | undefined;
     errorLabel?: (id: string) => string | undefined;
     type?: string;
@@ -82,6 +83,7 @@ export function CreateSubjectForm({
   const locked = busy || uncertain || failure?.reason === 'conflict';
   const disabled = locked || session !== 'signed-in';
   const errors = failure?.errors ?? [];
+  const readOnlyType = !!profile?.type && profile.readOnlyType;
 
   function control(pointer: string): string {
     const profileControl = profile?.control?.(pointer);
@@ -173,23 +175,16 @@ export function CreateSubjectForm({
 
   return (
     <article className="mx-auto w-full max-w-3xl space-y-6 text-foreground">
-      <header hidden={profile?.hideHeading} className="space-y-3">
-        {profile ? (
-          <PageHeading>{profile.title}</PageHeading>
-        ) : (
-          <PageHeading>{m.catalogue_create_title({}, options)}</PageHeading>
-        )}
-        <p className="text-muted-foreground">{profile?.intro ?? m.catalogue_create_intro({}, options)}</p>
-      </header>
-      <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
-        <p>{m.catalogue_create_duplicate_help({}, options)}</p>
-        <a
-          className={buttonVariants({ variant: 'outline' })}
-          href={`/${locale}/search${rows[0]?.label.trim() ? `?q=${encodeURIComponent(rows[0].label.trim())}` : ''}`}
-        >
-          {m.catalogue_create_search({}, options)}
-        </a>
-      </section>
+      {!profile?.hideHeading && (
+        <header className="space-y-3">
+          {profile ? (
+            <PageHeading>{profile.title}</PageHeading>
+          ) : (
+            <PageHeading>{m.catalogue_create_title({}, options)}</PageHeading>
+          )}
+          <p className="text-muted-foreground">{profile?.intro ?? m.catalogue_create_intro({}, options)}</p>
+        </header>
+      )}
       {created ? (
         <section role="status" className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
           <p className="font-medium">{m.catalogue_create_created({}, options)}</p>
@@ -241,53 +236,9 @@ export function CreateSubjectForm({
               </Button>
             </div>
           )}
-          {!profile && (
-            <div className="flex flex-wrap gap-2 [&>a]:h-auto [&>a]:max-w-full [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:whitespace-normal">
-              <LiteraryProfileEntry locale={locale} />
-              <GameProfileEntry locale={locale} />
-              <RecipeEditorEntry locale={locale} />
-              <CharacterProfileEntry locale={locale} />
-              <ScreenProfileEntry locale={locale} />
-              <MangaProfileEntry locale={locale} />
-              <PeopleProfileEntry locale={locale} />
-              <AlbumProfileEntry locale={locale} />
-            </div>
-          )}
           {definitions.data?.ok && types.length === 0 && <p role="status">{m.catalogue_create_empty({}, options)}</p>}
           {definitions.data?.ok && types.length > 0 && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
-              <Field hidden={!!profile?.type && profile.hideHeading} data-invalid={invalid('create-type') || undefined}>
-                <FieldLabel htmlFor="create-type">{m.catalogue_create_type({}, options)}</FieldLabel>
-                <NativeSelect
-                  id="create-type"
-                  value={type}
-                  disabled={disabled}
-                  aria-invalid={invalid('create-type')}
-                  aria-describedby="create-grain create-type-help"
-                  onChange={(event) => {
-                    setType(event.target.value);
-                    setFailure(undefined);
-                  }}
-                >
-                  <NativeSelectOption value="">{m.catalogue_create_choose_type({}, options)}</NativeSelectOption>
-                  {type && !types.some((entry) => entry.id === type) && (
-                    <NativeSelectOption value={type} disabled>
-                      {m.catalogue_create_choose_type({}, options)}
-                    </NativeSelectOption>
-                  )}
-                  {types.map((entry) => (
-                    <NativeSelectOption key={entry.id} value={entry.id} lang={profile?.labelLanguage?.(entry.id)}>
-                      {entry.label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
-                <FieldDescription id="create-type-help" lang={profile?.descriptionLanguage?.(type)}>
-                  {types.find((entry) => entry.id === type)?.description}
-                </FieldDescription>
-                <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/new` }} />
-                {invalid('create-type') && <FieldError>{m.catalogue_create_invalid_field({}, options)}</FieldError>}
-              </Field>
               {rows.map((row, index) => (
                 <fieldset
                   key={index}
@@ -295,7 +246,7 @@ export function CreateSubjectForm({
                   className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
                 >
                   <legend className="px-1 text-sm font-semibold">{m.catalogue_create_terms({}, options)}</legend>
-                  {(['language', 'label', 'description', 'aliases'] as const).map((field) => {
+                  {(['label', 'language', 'description', 'aliases'] as const).map((field) => {
                     const id = `create-${field}-${index}`;
                     const label =
                       field === 'language'
@@ -324,9 +275,23 @@ export function CreateSubjectForm({
                             maxLength={field === 'language' ? 64 : 250}
                             required={field === 'language' || field === 'label'}
                             aria-invalid={invalid(id)}
-                            aria-describedby={field === 'language' ? `${id}-help` : undefined}
+                            aria-describedby={field === 'language' || field === 'label' ? `${id}-help` : undefined}
                             onChange={(event) => update(index, field, event.target.value)}
                           />
+                        )}
+                        {field === 'label' && (
+                          <FieldDescription id={`${id}-help`}>
+                            {m.catalogue_create_duplicate_help({}, options)}{' '}
+                            <a
+                              className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+                              href={`/${locale}/search${row.label.trim() ? `?q=${encodeURIComponent(row.label.trim())}` : ''}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {m.catalogue_create_search({}, options)}
+                              <span className="sr-only"> · {m.guide_new_tab({}, options)}</span>
+                            </a>
+                          </FieldDescription>
                         )}
                         {field === 'language' && (
                           <FieldDescription id={`${id}-help`}>
@@ -364,6 +329,52 @@ export function CreateSubjectForm({
               >
                 {m.catalogue_create_add_language({}, options)}
               </Button>
+              <Field
+                hidden={!!profile?.type && profile.hideHeading && !readOnlyType}
+                data-invalid={invalid('create-type') || undefined}
+              >
+                {readOnlyType ? (
+                  <div id="create-type" tabIndex={-1} aria-describedby="create-type-help">
+                    <p className="text-sm font-medium">{m.catalogue_create_type({}, options)}</p>
+                    <p lang={profile?.labelLanguage?.(type)}>
+                      {types.find((entry) => entry.id === type)?.label} <code>{type}</code>
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <FieldLabel htmlFor="create-type">{m.catalogue_create_type({}, options)}</FieldLabel>
+                    <NativeSelect
+                      id="create-type"
+                      value={type}
+                      disabled={disabled}
+                      aria-invalid={invalid('create-type')}
+                      aria-describedby="create-grain create-type-help"
+                      onChange={(event) => {
+                        setType(event.target.value);
+                        setFailure(undefined);
+                      }}
+                    >
+                      <NativeSelectOption value="">{m.catalogue_create_choose_type({}, options)}</NativeSelectOption>
+                      {type && !types.some((entry) => entry.id === type) && (
+                        <NativeSelectOption value={type} disabled>
+                          {m.catalogue_create_choose_type({}, options)}
+                        </NativeSelectOption>
+                      )}
+                      {types.map((entry) => (
+                        <NativeSelectOption key={entry.id} value={entry.id} lang={profile?.labelLanguage?.(entry.id)}>
+                          {entry.label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
+                  </>
+                )}
+                <FieldDescription id="create-type-help" lang={profile?.descriptionLanguage?.(type)}>
+                  {types.find((entry) => entry.id === type)?.description}
+                </FieldDescription>
+                <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/new` }} />
+                {invalid('create-type') && <FieldError>{m.catalogue_create_invalid_field({}, options)}</FieldError>}
+              </Field>
               {profile?.fields(type, disabled)}
               {failure && (
                 <div role="alert" className="space-y-3 rounded-xl border border-destructive/40 p-4">
@@ -442,6 +453,26 @@ export function CreateSubjectForm({
                 </Button>
               </div>
             </form>
+          )}
+          {!profile && (
+            <details className="rounded-xl border border-border p-4">
+              <summary className="min-h-11 cursor-pointer content-center font-medium">
+                {m.facts_other_editors({}, options)}
+              </summary>
+              <nav
+                aria-label={m.facts_other_editors({}, options)}
+                className="mt-3 flex flex-wrap gap-2 [&>a]:h-auto [&>a]:max-w-full [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:whitespace-normal"
+              >
+                <LiteraryProfileEntry locale={locale} />
+                <GameProfileEntry locale={locale} />
+                <RecipeEditorEntry locale={locale} />
+                <CharacterProfileEntry locale={locale} />
+                <ScreenProfileEntry locale={locale} />
+                <MangaProfileEntry locale={locale} />
+                <PeopleProfileEntry locale={locale} />
+                <AlbumProfileEntry locale={locale} />
+              </nav>
+            </details>
           )}
         </>
       )}

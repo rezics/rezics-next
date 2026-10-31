@@ -138,7 +138,7 @@
   "addon_corrections": "Les modifications ultérieures sont des propositions en attente de validation native. Seule la lecture actuelle établit les faits sélectionnés. Les noms et les textes originaux ont des éditeurs distincts.",
   "addon_relations": "Œuvre de base, créateurs et autres relations",
   "catalogue_create_intro": "Commencez par les noms et de courtes descriptions.",
-  "catalogue_create_duplicate_help": "Cherchez d’abord une fiche existante dans la recherche en haut de page. Ouvrez le résultat correspondant pour conserver son identité.",
+  "catalogue_create_duplicate_help": "Cherchez dans un nouvel onglet avant de créer. Réutilisez une fiche correspondante.",
   "catalogue_create_search": "Trouver une fiche existante",
   "catalogue_create_grain": "Une œuvre, une édition et une version publiée sont des objets distincts. Choisissez celui que vous créez.",
   "catalogue_create_type": "Type",

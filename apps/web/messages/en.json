@@ -167,7 +167,7 @@
   "addon_corrections": "Later changes are candidates awaiting native review. Only the current reader establishes which facts are selected. Names use the terms editor; original text uses the authored editor.",
   "addon_relations": "Base work, creators and other relations",
   "catalogue_create_intro": "Start with names and short descriptions.",
-  "catalogue_create_duplicate_help": "Check for an existing subject first using the header search. Open a matching result to keep its identity.",
+  "catalogue_create_duplicate_help": "Search in a new tab before creating. Reuse a matching subject.",
   "catalogue_create_search": "Find an existing subject",
   "catalogue_create_grain": "A work, an edition and a release describe different objects. Choose the object you are creating.",
   "catalogue_create_type": "Type",

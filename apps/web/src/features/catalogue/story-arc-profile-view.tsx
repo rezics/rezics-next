@@ -71,7 +71,7 @@ export function StoryArcProfile({
   return (
     <article className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6">
       <ViewHeadingActions
-        label={m.story_arc_title({}, o)}
+        label={id ? m.story_arc_title({}, o) : m.story_arc_create({}, o)}
         headingClassName="font-sans"
         actions={
           href &&
@@ -82,7 +82,7 @@ export function StoryArcProfile({
           )
         }
       />
-      <p className="text-muted-foreground">{m.story_arc_intro({}, o)}</p>
+      <p className="text-muted-foreground">{id ? m.story_arc_intro({}, o) : m.story_arc_creation_help({}, o)}</p>
       {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
       {(query.isError || (query.data && !query.data.ok)) && (
         <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
@@ -107,12 +107,12 @@ export function StoryArcProfile({
       {current && (
         <div hidden={!query.data?.ok} className="space-y-8">
           <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
-            <h2 className="text-xl font-semibold">{m.story_arc_identity({}, o)}</h2>
-            <p lang={pageText(current.release.types[storyArcType]!.labels, locale).lang}>
-              {pageText(current.release.types[storyArcType]!.labels, locale).text} <code>{storyArcType}</code>
-            </p>
             {arc ? (
               <>
+                <h2 className="text-xl font-semibold">{m.story_arc_identity({}, o)}</h2>
+                <p lang={pageText(current.release.types[storyArcType]!.labels, locale).lang}>
+                  {pageText(current.release.types[storyArcType]!.labels, locale).text} <code>{storyArcType}</code>
+                </p>
                 <p lang={label.lang} className="text-lg font-medium">
                   {label.text}
                 </p>
@@ -151,6 +151,8 @@ export function StoryArcProfile({
                   onNavigate={setCreatedHref}
                   profile={{
                     scope: 'story-arc',
+                    hideHeading: true,
+                    readOnlyType: true,
                     fields: () => null,
                     prepare: (item) => ({ item, errors: [] }),
                     type: storyArcType,

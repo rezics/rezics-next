@@ -138,7 +138,7 @@
   "addon_corrections": "後續修改是等待原生審核的候選內容。只有目前讀取結果才能確認哪些資訊已被選用。名稱使用名稱編輯器，原創正文使用正文編輯器。",
   "addon_relations": "本體作品、創作者與其他關係",
   "catalogue_create_intro": "先填寫名稱與簡短描述。",
-  "catalogue_create_duplicate_help": "請先使用頁首搜尋確認是否已有條目。開啟相符結果以沿用其身分。",
+  "catalogue_create_duplicate_help": "建立前請在新分頁中搜尋。如有相符條目，請沿用現有條目。",
   "catalogue_create_search": "尋找現有條目",
   "catalogue_create_grain": "作品、版本與發行版本代表不同對象。請選擇要建立的對象。",
   "catalogue_create_type": "類型",

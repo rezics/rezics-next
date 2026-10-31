@@ -54,7 +54,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Synthetic native-shaped responses through production creation, scalar and relation adapters. Use locale, theme and viewport globals. Web visual review and integrated native bindings remain pending.',
+          'Create an arc under one task heading with read-only released Type metadata, or choose an existing arc. Synthetic native-shaped responses use production creation, scalar and relation adapters. Review the same outcome states at phone390 and desktop1280 with locale, theme and viewport globals. Web visual review and integrated native bindings remain pending.',
       },
     },
   },

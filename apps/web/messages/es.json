@@ -138,7 +138,7 @@
   "addon_corrections": "Los cambios posteriores son propuestas pendientes de revisión nativa. Solo la lectura actual determina los datos seleccionados. Los nombres y los textos originales tienen editores separados.",
   "addon_relations": "Obra base, creadores y otras relaciones",
   "catalogue_create_intro": "Empieza con nombres y descripciones breves.",
-  "catalogue_create_duplicate_help": "Busca primero una ficha existente desde la cabecera. Abre un resultado coincidente para conservar su identidad.",
+  "catalogue_create_duplicate_help": "Busca en una pestaña nueva antes de crear. Reutiliza una ficha coincidente.",
   "catalogue_create_search": "Buscar una ficha existente",
   "catalogue_create_grain": "Una obra, una edición y una versión publicada son objetos distintos. Elige el objeto que vas a crear.",
   "catalogue_create_type": "Tipo",

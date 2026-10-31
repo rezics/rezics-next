@@ -138,7 +138,7 @@
   "addon_corrections": "Spätere Änderungen sind Vorschläge für die native Prüfung. Nur die aktuelle Leseansicht bestimmt die ausgewählten Fakten. Namen und eigene Texte haben getrennte Editoren.",
   "addon_relations": "Grundwerk, Urheber und weitere Beziehungen",
   "catalogue_create_intro": "Beginne mit Namen und Kurzbeschreibungen.",
-  "catalogue_create_duplicate_help": "Suche zuerst über die Kopfzeile nach vorhandenen Einträgen. Öffne einen passenden Treffer, um dessen Identität beizubehalten.",
+  "catalogue_create_duplicate_help": "Suche vor dem Erstellen in einem neuen Tab. Verwende einen passenden Eintrag weiter.",
   "catalogue_create_search": "Vorhandenen Eintrag suchen",
   "catalogue_create_grain": "Werk, Ausgabe und Veröffentlichung bezeichnen unterschiedliche Objekte. Wähle das Objekt, das du erstellst.",
   "catalogue_create_type": "Typ",

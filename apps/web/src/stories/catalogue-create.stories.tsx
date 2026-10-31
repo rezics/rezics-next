@@ -45,7 +45,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Initial multilingual terms using released Type metadata and the generated subject request seam. These stories do not establish native API or visual acceptance.',
+          'Start with Name and data language, search for duplicates in a new tab, then choose the released Type. Other catalogue editors are available after the form. Review these same states with the phone390 and desktop1280 viewport globals; these fixtures do not establish native API or visual acceptance.',
       },
     },
   },
