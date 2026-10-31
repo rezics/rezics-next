@@ -164,3 +164,60 @@ test('a selected reply keeps its native intent on retry and the returned relatio
   expect(html.match(/name="idempotency_key"/g)).toHaveLength(1);
   expect(html).toContain(m.thread_reply_to_post());
 });
+
+test('Default thread reading renders the conversation before secondary history and erasure controls while retaining exact revision navigation and mandatory attribution', async () => {
+  const page = await readingPage();
+  const first = page.posts.posts[0]!;
+  if (first.availability !== 'available') throw new Error('The recorded opening post must be readable');
+  const nativeAuthor = page.authors?.[first.authorId];
+  if (!nativeAuthor) throw new Error('The recorded author batch must contain the opening author');
+  const displayName = 'Mira Okabe with a very long unbroken surname ' + 'Okabe'.repeat(10);
+  const handle = 'mira_' + 'reading'.repeat(3);
+  const html = await render(
+    { ...page, authors: { ...page.authors, [first.authorId]: { ...nativeAuthor, displayName, handle } } },
+    { viewerId: first.authorId, reactions: {}, reviewVotes: {}, idempotencyKey: 'reading-composition' },
+  );
+  const column = html.indexOf('data-slot="thread-reading-column"');
+  const header = html.indexOf('<header', column);
+  const conversation = html.indexOf(`id="thread-${page.thread.id}"`);
+  const composer = html.indexOf(`aria-label="${m.thread_reply_label()}"`, conversation);
+  const actions = html.indexOf('data-slot="thread-actions"');
+  expect(column).toBeGreaterThan(-1);
+  expect(header).toBeGreaterThan(column);
+  expect(conversation).toBeGreaterThan(header);
+  expect(composer).toBeGreaterThan(conversation);
+  expect(actions).toBeGreaterThan(composer);
+  expect(html.slice(0, conversation)).not.toContain(m.author_erasure_action());
+  const secondaryActions = html.slice(actions);
+  expect(secondaryActions).toContain(`aria-controls="thread-actions-${page.thread.id}"`);
+  expect(secondaryActions).toContain('aria-expanded="false"');
+  expect(secondaryActions).toMatch(/<div(?=[^>]*data-slot="collapsible-content")(?=[^>]*hidden="")[^>]*>/);
+  expect(secondaryActions).toContain(m.author_erasure_action());
+
+  for (const post of page.posts.posts) {
+    if (post.availability !== 'available') continue;
+    const start = html.indexOf(`id="post-${post.id}"`);
+    const item = html.slice(start, html.indexOf('</footer>', start));
+    const body = item.indexOf('data-slot="document-body"');
+    const footer = item.indexOf('<footer');
+    expect(start).toBeGreaterThan(conversation);
+    expect(body).toBeGreaterThan(-1);
+    expect(footer).toBeGreaterThan(body);
+    for (const text of documentText(post.body).split('\n').filter(Boolean)) expect(item).toContain(text);
+    expect(item).toContain(`href="/en/posts/${post.id}/revisions/${post.revisionId}"`);
+    const controls = item.slice(footer);
+    expect(controls).toContain(`${m.thread_history_licence()}: ${post.licence}`);
+    expect(controls).toContain(m.thread_reading_share());
+    expect(controls).toContain(m.thread_reply_to_post());
+    expect(controls).toContain(m.thread_history_show());
+    expect(controls).toContain(`aria-controls="revision-details-${post.id}"`);
+    expect(controls).toMatch(/<div(?=[^>]*data-slot="collapsible-content")(?=[^>]*hidden="")[^>]*>/);
+    const historyRegion = controls.match(/aria-controls="(post-history-[^"]+)"/);
+    expect(historyRegion).not.toBeNull();
+    expect(controls).toContain(`id="${historyRegion![1]}" hidden=""`);
+  }
+  expect(html).toContain(`title="${displayName} @${handle}"`);
+  expect(html).toContain(`href="/en/@${handle}"`);
+  expect(html).toContain('class="block min-w-0 truncate"');
+  expect(html).toContain(m.thread_post_edited());
+});

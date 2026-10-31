@@ -1,4 +1,5 @@
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { reactionKinds } from '@rezics/ui/reactions';
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import type { ThreadReadingPost } from '../routes/threads/$id_.$slug';
@@ -117,24 +118,16 @@ export function ThreadReading({
   }
 
   return (
-    <article data-slot="thread-reading" className="mx-auto w-full min-w-0 space-y-5 text-foreground">
-      {renderHeader(displayTitle)}
-      {composer.current?.viewerId ? (
-        <div hidden={!currentPersonal?.viewerId} inert={!currentPersonal?.viewerId}>
-          <AuthorErasureEntry
-            key={`${thread.id}:${composer.current.viewerId}`}
-            threadId={thread.id}
-            viewerId={currentPersonal?.viewerId ?? null}
-            {...authorErasure}
-          />
-        </div>
-      ) : null}
+    <article data-slot="thread-reading" className="mx-auto w-full min-w-0 text-foreground [overflow-wrap:anywhere]">
       <div
         className={
-          summary ? 'grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]' : 'mx-auto w-full max-w-3xl'
+          summary
+            ? 'mx-auto grid w-full min-w-0 max-w-[64.5rem] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]'
+            : 'mx-auto w-full max-w-3xl'
         }
       >
-        <div className="min-w-0 space-y-5">
+        <div data-slot="thread-reading-column" className="mx-auto w-full min-w-0 max-w-3xl space-y-5">
+          {renderHeader(displayTitle)}
           <section aria-labelledby="thread-posts-heading" className="min-w-0 space-y-3">
             <h2 id="thread-posts-heading" className="px-1 text-sm font-semibold text-muted-foreground">
               {m.thread_posts_heading()}
@@ -257,6 +250,27 @@ export function ThreadReading({
               {session === 'unavailable' ? m.thread_reading_participation_unavailable() : m.thread_reading_preparing()}
             </p>
           )}
+          {composer.current?.viewerId ? (
+            <div hidden={!currentPersonal?.viewerId} inert={!currentPersonal?.viewerId}>
+              <Collapsible data-slot="thread-actions" className="min-w-0">
+                <CollapsibleTrigger
+                  aria-controls={`thread-actions-${thread.id}`}
+                  render={<Button variant="ghost" size="sm" />}
+                >
+                  {m.thread_content_more_actions()}
+                </CollapsibleTrigger>
+                {/* Closing secondary actions must retain the actor's confirmation and uncertain command intent. */}
+                <CollapsibleContent id={`thread-actions-${thread.id}`} keepMounted className="pt-2">
+                  <AuthorErasureEntry
+                    key={`${thread.id}:${composer.current.viewerId}`}
+                    threadId={thread.id}
+                    viewerId={currentPersonal?.viewerId ?? null}
+                    {...authorErasure}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          ) : null}
         </div>
         {summary && realm ? (
           <aside aria-labelledby="thread-community-heading" className="hidden rounded-xl bg-card p-5 lg:block">

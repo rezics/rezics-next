@@ -64,6 +64,10 @@ export function Byline({
   // Only a summary supplied by the existing identity batch can supply an image. Never read a profile per row.
   const avatar = !deleted && !unknown && author && 'avatar' in author ? author.avatar : null;
   const variant = avatar?.variants.find((item) => item.format === 'webp' && item.width >= 48) ?? avatar?.variants[0];
+  const identityTitle =
+    deleted || unknown
+      ? undefined
+      : [author?.displayName, author?.handle ? `@${author.handle}` : null].filter(Boolean).join(' ');
 
   return (
     <div className={cn('flex min-w-0 items-center gap-2.5 text-sm text-muted-foreground', className)}>
@@ -77,12 +81,11 @@ export function Byline({
           </AvatarFallback>
         </Avatar>
       ) : null}
-      <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-        <MetaLine
-          className="min-w-0 flex-1"
-          items={[
-            showAuthor ? (
-              deleted ? (
+      <p className="min-w-0 flex-1">
+        <span className="block min-w-0">
+          {showAuthor ? (
+            <span className="block min-w-0 truncate" title={identityTitle}>
+              {deleted ? (
                 <span>
                   {author?.kind === 'organization' ? m.thread_author_deleted_organization() : m.thread_author_deleted()}
                 </span>
@@ -102,25 +105,27 @@ export function Byline({
                   {author?.displayName && author.handle ? ' ' : null}
                   {author?.handle ? (
                     !author.displayName && person ? (
-                      <a
-                        className={cn('max-w-full min-w-0 truncate font-medium text-foreground', personLink)}
-                        href={person}
-                      >
+                      <a className={cn('font-medium text-foreground', personLink)} href={person}>
                         @{author.handle}
                       </a>
                     ) : (
-                      <span className="max-w-full min-w-0 truncate">@{author.handle}</span>
+                      <span>@{author.handle}</span>
                     )
                   ) : null}
                 </>
-              )
-            ) : null,
-            <time dateTime={createdAt} title={fullDateTime(createdAt, locale)}>
-              {timeText(createdAt, now, locale)}
-            </time>,
-            children,
-          ]}
-        />
+              )}
+            </span>
+          ) : null}{' '}
+          <MetaLine
+            className="block"
+            items={[
+              <time dateTime={createdAt} title={fullDateTime(createdAt, locale)}>
+                {timeText(createdAt, now, locale)}
+              </time>,
+              children,
+            ]}
+          />
+        </span>
       </p>
     </div>
   );

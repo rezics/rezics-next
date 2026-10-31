@@ -18,6 +18,8 @@ type PostHistoryProps = {
   viewerId?: string;
   readAuthority?: object;
   review?: boolean;
+  /** Allows the same producer's control and expanded region to participate in the post footer. */
+  className?: string;
 };
 
 /** A disclosure belongs to one post and the current reader's existing authority. */
@@ -31,7 +33,7 @@ export function PostHistory(props: PostHistoryProps) {
 }
 
 /** A bounded, cursor-paged view of the immutable revisions returned by the native post history API. */
-function HistoryDisclosure({ postId, viewerId, review = false }: PostHistoryProps) {
+function HistoryDisclosure({ postId, viewerId, review = false, className = 'mt-3' }: PostHistoryProps) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -102,74 +104,73 @@ function HistoryDisclosure({ postId, viewerId, review = false }: PostHistoryProp
   }
 
   return (
-    <div className="mt-3">
+    <div className={className}>
       <Button type="button" variant="ghost" size="sm" aria-expanded={open} aria-controls={regionId} onClick={toggle}>
         {open ? m.thread_history_hide() : m.thread_history_show()}
       </Button>
-      {open ? (
-        <section
-          id={regionId}
-          role="region"
-          aria-label={m.thread_history_heading()}
-          className="mt-3 space-y-4 rounded-xl border border-border/70 bg-card p-4 sm:p-5"
-        >
-          <h3 className="text-base font-semibold">{m.thread_history_heading()}</h3>
-          {loading && !loaded ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {m.thread_history_loading()}
-            </p>
-          ) : null}
-          {!available ? (
-            <div className="space-y-3">
-              <p role="status" className="text-sm text-muted-foreground">
-                {m.thread_history_unavailable()}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={loading}
-                onClick={() => void load(failedCursor)}
-              >
-                {m.exact_revision_retry()}
-              </Button>
-            </div>
-          ) : null}
-          {available && loaded && revisions.length === 0 ? (
+      <section
+        id={regionId}
+        hidden={!open}
+        role="region"
+        aria-label={m.thread_history_heading()}
+        className="order-last mt-3 min-w-0 basis-full space-y-4 rounded-xl border border-border/70 bg-card p-4 sm:p-5"
+      >
+        <h3 className="text-base font-semibold">{m.thread_history_heading()}</h3>
+        {loading && !loaded ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.thread_history_loading()}
+          </p>
+        ) : null}
+        {!available ? (
+          <div className="space-y-3">
             <p role="status" className="text-sm text-muted-foreground">
               {m.thread_history_unavailable()}
             </p>
-          ) : null}
-          {available && revisions.length > 0 ? (
-            <ol className="space-y-5" aria-label={m.thread_history_heading()}>
-              {revisions.map(({ revision, documentMedia }, index) => (
-                <RevisionEntry
-                  key={revision.revisionId}
-                  revision={revision}
-                  number={index + 1}
-                  authors={authors}
-                  mentions={mentions}
-                  documentMedia={documentMedia}
-                  now={now}
-                  subjects={subjects}
-                  currentVote={viewerId === revision.authorId ? reviewVotes[revision.id] : undefined}
-                  review={review}
-                />
-              ))}
-            </ol>
-          ) : null}
-          {loading && loaded ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {m.thread_history_loading()}
-            </p>
-          ) : null}
-          {available && next ? (
-            <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void load(next!)}>
-              {m.thread_history_more()}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              onClick={() => void load(failedCursor)}
+            >
+              {m.exact_revision_retry()}
             </Button>
-          ) : null}
-        </section>
-      ) : null}
+          </div>
+        ) : null}
+        {available && loaded && revisions.length === 0 ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.thread_history_unavailable()}
+          </p>
+        ) : null}
+        {available && revisions.length > 0 ? (
+          <ol className="space-y-5" aria-label={m.thread_history_heading()}>
+            {revisions.map(({ revision, documentMedia }, index) => (
+              <RevisionEntry
+                key={revision.revisionId}
+                revision={revision}
+                number={index + 1}
+                authors={authors}
+                mentions={mentions}
+                documentMedia={documentMedia}
+                now={now}
+                subjects={subjects}
+                currentVote={viewerId === revision.authorId ? reviewVotes[revision.id] : undefined}
+                review={review}
+              />
+            ))}
+          </ol>
+        ) : null}
+        {loading && loaded ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.thread_history_loading()}
+          </p>
+        ) : null}
+        {available && next ? (
+          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void load(next!)}>
+            {m.thread_history_more()}
+          </Button>
+        ) : null}
+      </section>
     </div>
   );
 }

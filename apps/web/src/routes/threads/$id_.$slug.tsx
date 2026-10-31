@@ -5,6 +5,7 @@ import { erasePost, restorePost as restorePostAction, revisePost, type WriteFail
 import type { ThreadSubject } from '../../threads/subjects';
 import type { VoteCitation } from '../../threads/post-writes';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
+import { exactRevisionHref } from '../../threads/exact-revision-href';
 import { PostHistory } from '../../threads/post-history';
 import { ThreadPostActions, ThreadReactions } from '../../threads/thread-reactions';
 import { Byline } from '../../threads/byline';
@@ -16,6 +17,7 @@ import { Share2Icon } from 'lucide-react';
 import type { ReactionKind } from '@rezics/ui/reactions';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { ListRow } from '@rezics/ui/list-row';
 import { DocumentBody, type DocumentMentions } from '../../document-body';
 import { NativeDocumentImage } from '../../threads/document-media';
@@ -76,7 +78,7 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
 
 export function ThreadReadingHeader({ page, title }: { page: ThreadReadingPage; title: string | null }) {
   return (
-    <header className="min-h-8 scroll-mt-24 space-y-3 px-1">
+    <header className="min-w-0 min-h-8 scroll-mt-24 space-y-3 px-1 [overflow-wrap:anywhere]">
       <BoardContext realm={page.realm} board={page.board} prominent />
       {title ? <PageHeading>{title}</PageHeading> : null}
       <ThreadSubjects subjects={page.subjects} />
@@ -518,13 +520,13 @@ export function ThreadReadingPost({
       tabIndex={-1}
       className="min-w-0 scroll-mt-24 rounded-xl bg-card px-4 py-5 target:ring-2 target:ring-ring sm:p-6"
     >
-      <div className="mb-4 flex min-w-0 flex-wrap items-start justify-between gap-3">
+      <div className="mb-4 flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-2">
         <Byline
           author={authorId === undefined ? undefined : authors?.[authorId]}
           createdAt={post.createdAt}
           now={now}
           showAuthor={authorId !== undefined}
-          className="min-h-8 min-w-0 flex-1 basis-48"
+          className="min-h-8 min-w-0 flex-1 basis-40"
         >
           {post.revisedAt && new Date(post.revisedAt).getTime() > new Date(post.createdAt).getTime() ? (
             <time dateTime={post.revisedAt} title={fullDateTime(post.revisedAt)}>
@@ -532,36 +534,38 @@ export function ThreadReadingPost({
             </time>
           ) : null}
         </Byline>
-        <ThreadPostActions>
-          <ThreadReactions
-            counts={counts}
-            returnTo={returnTo}
-            signedIn={signedIn}
-            target={target}
-            value={value}
-            onMutation={onMutation}
-            personalReady={personalReady}
-          />
-          {editing ? null : ownsPost ? (
-            <ContentActions
-              labels={labels}
-              onCopyLink={copyLink}
-              onDelete={deletePost}
-              onEdit={() => {
-                setEditKey(crypto.randomUUID());
-                setEditing(true);
-              }}
-              ownsContent
-              triggerRef={menuButton}
-            />
-          ) : (
-            <PostActions
+        <div className="max-w-full shrink-0">
+          <ThreadPostActions>
+            <ThreadReactions
+              counts={counts}
+              returnTo={returnTo}
+              signedIn={signedIn}
               target={target}
-              {...(post.revisionId ? { revisionId: post.revisionId } : {})}
-              verification={verification}
+              value={value}
+              onMutation={onMutation}
+              personalReady={personalReady}
             />
-          )}
-        </ThreadPostActions>
+            {editing ? null : ownsPost ? (
+              <ContentActions
+                labels={labels}
+                onCopyLink={copyLink}
+                onDelete={deletePost}
+                onEdit={() => {
+                  setEditKey(crypto.randomUUID());
+                  setEditing(true);
+                }}
+                ownsContent
+                triggerRef={menuButton}
+              />
+            ) : (
+              <PostActions
+                target={target}
+                {...(post.revisionId ? { revisionId: post.revisionId } : {})}
+                verification={verification}
+              />
+            )}
+          </ThreadPostActions>
+        </div>
       </div>
       <ReplyContext parentId={post.parentId} parents={replyParents} />
       {editing ? (
@@ -602,21 +606,51 @@ export function ThreadReadingPost({
             locale={getLocale()}
             labels={{ revealSpoiler: m.thread_reveal_spoiler() }}
           />
-          <div className="mt-4">
-            <RevisionProvenance
-              revision={post}
-              subjects={subjects}
-              currentVote={ownsPost ? (currentVote ?? null) : null}
-              review={review}
-            />
-          </div>
-          <div className="mt-3 flex min-w-0 flex-wrap items-center justify-end gap-1">
+          <footer className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="mr-auto min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {m.thread_history_licence()}: {post.licence}
+            </p>
             <SharePost onCopyLink={copyLink} />
             {signedIn && personalReady ? <ReplyButton disabled={replyPending} onReply={onReply} /> : null}
-          </div>
-          {post.revisionId ? (
-            <PostHistory postId={post.id} readAuthority={scope} {...(viewerId ? { viewerId } : {})} review={review} />
-          ) : null}
+            <Collapsible className="contents">
+              <CollapsibleTrigger
+                aria-controls={`revision-details-${post.id}`}
+                render={<Button variant="ghost" size="sm" />}
+              >
+                {m.thread_provenance_heading()}
+              </CollapsibleTrigger>
+              <CollapsibleContent
+                id={`revision-details-${post.id}`}
+                keepMounted
+                className="order-last min-w-0 basis-full space-y-3 pt-3"
+              >
+                <RevisionProvenance
+                  revision={post}
+                  subjects={subjects}
+                  currentVote={ownsPost ? (currentVote ?? null) : null}
+                  review={review}
+                  showLicence={false}
+                />
+                {post.revisionId ? (
+                  <a
+                    href={exactRevisionHref({ postId: post.id, revisionId: post.revisionId }, getLocale())}
+                    className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                  >
+                    {m.exact_revision_heading()}
+                  </a>
+                ) : null}
+              </CollapsibleContent>
+            </Collapsible>
+            {post.revisionId ? (
+              <PostHistory
+                postId={post.id}
+                readAuthority={scope}
+                {...(viewerId ? { viewerId } : {})}
+                review={review}
+                className="contents"
+              />
+            ) : null}
+          </footer>
         </>
       )}
     </ListRow>

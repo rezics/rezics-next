@@ -11,12 +11,15 @@ export function RevisionProvenance({
   subjects,
   currentVote,
   review = false,
+  showLicence = true,
 }: {
   revision: { licence: string; subjectIds: readonly string[]; voteCitation?: VoteCitation | null };
   subjects: readonly ThreadSubject[];
   /** Only supplied from an author-private read while the author is still signed in. */
   currentVote?: VoteCitation | null;
   review?: boolean;
+  /** False when the reader already displays this revision's licence beside its disclosure control. */
+  showLicence?: boolean;
 }) {
   const locale = getLocale();
   const comparison = differingReviewVote(revision.voteCitation, currentVote);
@@ -28,9 +31,11 @@ export function RevisionProvenance({
     });
   return (
     <aside aria-label={m.thread_provenance_heading()} className="min-w-0 space-y-3 text-sm text-muted-foreground">
-      <p className="break-words">
-        <span className="font-medium">{m.thread_history_licence()}:</span> {revision.licence}
-      </p>
+      {showLicence ? (
+        <p className="break-words">
+          <span className="font-medium">{m.thread_history_licence()}:</span> {revision.licence}
+        </p>
+      ) : null}
       {revision.subjectIds.length ? (
         <div className="space-y-1">
           <p className="font-medium">{m.thread_provenance_subjects()}</p>

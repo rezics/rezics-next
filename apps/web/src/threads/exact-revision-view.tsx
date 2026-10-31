@@ -1,5 +1,6 @@
 import { DocumentBody } from '../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -28,7 +29,10 @@ export function ExactRevisionView({
     page = { state: 'unavailable', status: 404 };
   }
   return (
-    <article className="w-full max-w-3xl space-y-6 text-foreground" aria-busy={page.state === 'loading'}>
+    <article
+      className="mx-auto w-full min-w-0 max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]"
+      aria-busy={page.state === 'loading'}
+    >
       <header className="space-y-3">
         {page.state === 'ready' ? (
           <a
@@ -40,16 +44,6 @@ export function ExactRevisionView({
         ) : null}
         <PageHeading>{m.exact_revision_heading()}</PageHeading>
         <p className="text-sm text-muted-foreground">{m.exact_revision_read_only()}</p>
-        <dl className="space-y-2 text-sm [overflow-wrap:anywhere]">
-          <div>
-            <dt className="font-medium">{m.exact_revision_post()}</dt>
-            <dd>{identity.postId}</dd>
-          </div>
-          <div>
-            <dt className="font-medium">{m.exact_revision_id()}</dt>
-            <dd>{identity.revisionId}</dd>
-          </div>
-        </dl>
       </header>
       {page.state === 'loading' ? <p role="status">{m.exact_revision_loading()}</p> : null}
       {page.state === 'unavailable' ? <p role="status">{m.exact_revision_unavailable()}</p> : null}
@@ -73,8 +67,8 @@ export function ExactRevisionView({
             createdAt={page.revision.revisedAt ?? page.revision.createdAt}
             now={page.now}
           />
-          <RevisionProvenance revision={page.revision} subjects={[]} />
           <DocumentBody
+            className="mx-0! w-full overflow-x-auto [overflow-wrap:anywhere]"
             document={page.revision.body}
             mentions={page.mentions}
             locale={locale}
@@ -86,6 +80,30 @@ export function ExactRevisionView({
               />
             )}
           />
+          <Collapsible className="min-w-0">
+            <p className="mb-1 text-xs text-muted-foreground">
+              {m.thread_history_licence()}: {page.revision.licence}
+            </p>
+            <CollapsibleTrigger
+              aria-controls={`revision-details-${identity.revisionId}`}
+              render={<Button variant="ghost" size="sm" />}
+            >
+              {m.thread_provenance_heading()}
+            </CollapsibleTrigger>
+            <CollapsibleContent id={`revision-details-${identity.revisionId}`} keepMounted className="space-y-4 pt-3">
+              <dl className="space-y-2 text-sm [overflow-wrap:anywhere]">
+                <div>
+                  <dt className="font-medium">{m.exact_revision_post()}</dt>
+                  <dd>{identity.postId}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{m.exact_revision_id()}</dt>
+                  <dd>{identity.revisionId}</dd>
+                </div>
+              </dl>
+              <RevisionProvenance revision={page.revision} subjects={[]} showLicence={false} />
+            </CollapsibleContent>
+          </Collapsible>
         </section>
       ) : null}
     </article>
