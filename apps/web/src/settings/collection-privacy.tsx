@@ -268,9 +268,18 @@ export function CollectionPrivacyView({
           {state.loading ? <p role="status">{m.settings_privacy_loading()}</p> : null}
           {state.failure ? (
             <Alert variant="destructive">
-              <AlertTitle>{m.settings_failed_title()}</AlertTitle>
+              <AlertTitle>
+                {state.loaded && state.next !== null && !pager.retryReplacesRows()
+                  ? m.settings_privacy_page_load_failed()
+                  : m.settings_privacy_list_load_failed()}
+              </AlertTitle>
               <AlertDescription className="space-y-3">
-                <p>{failureText(state.failure)}</p>
+                <p>
+                  {state.failure === 'unavailable' && !state.loaded
+                    ? m.settings_privacy_list_retry()
+                    : failureText(state.failure)}
+                </p>
+                {state.nativeFailure?.code === 'invalid_cursor' ? <p>{m.settings_privacy_list_restart()}</p> : null}
                 {waiting ? <p role="status">{m.settings_privacy_page_retry_wait()}</p> : null}
                 <Button
                   type="button"

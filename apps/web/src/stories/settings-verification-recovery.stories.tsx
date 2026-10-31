@@ -1,12 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import collectionsRecording from '../kernel/recorded/library-collections.json';
+import { demoAgentSubjects } from '../kernel/agent-fixtures';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
 import { VerificationCard } from '../settings/verification';
-import { VerificationReadError } from '../settings/verification-core';
+import { VerificationReadError, type AgentVerificationRequest } from '../settings/verification-core';
 import { VerificationRecovery } from '../settings/verification-recovery';
-import { PatternStory } from './page';
+import { PageStory, PatternStory } from './page';
 
 type Scenario = 'empty' | 'failure' | 'recovery';
 
@@ -161,4 +164,172 @@ export const CurrentStatusRecovered: Story = {
 export const CurrentStatusRecoveredPhone: Story = {
   ...CurrentStatusRecovered,
   globals: { viewport: { value: 'phone390' } },
+};
+
+const readRecoveryFixtures = new WeakMap<Element, ReturnType<typeof readRecoveryTransport>>();
+const transportedReadMessage = 'The settings service could not return your preferences.';
+const continuation = 'read-recovery+/page-2==';
+
+/** Native-shaped responses at fetch, with the default Settings route, actions, queries and controllers intact. */
+function readRecoveryTransport(fallback: typeof fetch) {
+  const collections = collectionsRecording.collections;
+  const subject = demoAgentSubjects[0]!;
+  const reads = { collections: [] as (string | null)[], verification: 0 };
+  const commands: Request[] = [];
+  let current: AgentVerificationRequest | null = null;
+  const fetcher: typeof fetch = async (input, init) => {
+    const request = new Request(input instanceof Request ? input : new URL(String(input), window.location.href), init);
+    const url = new URL(request.url);
+    if (url.origin !== 'http://kernel.local') return fallback(input, init);
+    if (request.method !== 'GET' && request.method !== 'HEAD') commands.push(request.clone());
+    if (request.method === 'GET' && url.pathname === '/v1/accounts/story-viewer/collections') {
+      reads.collections.push(url.searchParams.get('cursor'));
+      if (reads.collections.length === 2)
+        return Response.json(
+          { code: 'dependency_unavailable', detail: 'Collection page unavailable', request_id: 'collection-page' },
+          { status: 503, headers: { 'retry-after': '2' } },
+        );
+      return Response.json({
+        collections: [collections[reads.collections.length === 1 ? 0 : 1]],
+        next: reads.collections.length === 1 ? continuation : null,
+      });
+    }
+    if (request.method === 'GET' && url.pathname === '/v1/accounts/story-viewer/verification') {
+      if (++reads.verification === 2)
+        return Response.json(
+          {
+            code: 'dependency_unavailable',
+            detail: transportedReadMessage,
+            request_id: 'verification-status',
+            retryable: true,
+          },
+          { status: 503, headers: { 'retry-after': '2' } },
+        );
+      return Response.json({ verificationRequest: current });
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/accounts/story-viewer:requestVerification') {
+      const draft = await request.json();
+      current = {
+        ...draft,
+        id: 'read-recovery-request',
+        accountId: 'story-viewer',
+        accountKind: 'actor',
+        requestedBy: 'story-viewer',
+        catalogueSubjectId: draft.subject,
+        state: 'pending',
+        reason: null,
+        problem: null,
+        decisionReceiptId: null,
+        decidedBy: null,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
+      // The server accepted the setup request, but its receipt did not reach the client.
+      return Response.json({ code: 'dependency_unavailable', detail: 'Request response lost' }, { status: 503 });
+    }
+    if (request.method === 'GET' && url.pathname === '/v1/subjects:suggest')
+      return Response.json({ subjects: [subject] });
+    if (request.method === 'GET' && url.pathname === `/v1/subjects/${subject.id}`) return Response.json({ subject });
+    return fallback(input, init);
+  };
+  return { fetcher, reads, commands };
+}
+
+function DefaultReadRecoveryPage() {
+  const [fixture, setFixture] = useState<ReturnType<typeof readRecoveryTransport> | null>(null);
+  useEffect(() => {
+    const fallback = globalThis.fetch;
+    const transport = readRecoveryTransport(fallback);
+    globalThis.fetch = transport.fetcher;
+    setFixture(transport);
+    return () => {
+      if (globalThis.fetch === transport.fetcher) globalThis.fetch = fallback;
+    };
+  }, []);
+  return (
+    <div
+      ref={(element) => {
+        if (element && fixture) readRecoveryFixtures.set(element, fixture);
+      }}
+    >
+      {fixture ? <PageStory visitor="Signed In" path="/settings#privacy" /> : null}
+    </div>
+  );
+}
+
+export const DefaultReadRecovery: StoryObj = {
+  name: 'Default Collection and verification read recovery describes the failed read and preserves retained data and command identity',
+  tags: ['!dev'],
+  render: () => <DefaultReadRecoveryPage />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByText(m.settings_verification_read_empty());
+    const retained = await view.findByRole('link', { name: collectionsRecording.collections[0]!.title });
+    const fixture = readRecoveryFixtures.get(canvasElement.firstElementChild!)!;
+    // Establish one unresolved command through the actual form before testing read-only recovery.
+    await userEvent.type(view.getByRole('combobox', { name: m.settings_verification_subject() }), 'Haruka');
+    await within(document.body).findByRole('option');
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    const statement = view.getByRole('textbox', { name: m.settings_verification_statement() });
+    await userEvent.type(statement, 'Original evidence');
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_submit() }));
+    await view.findByText(m.settings_verification_uncertain_request());
+    await expect(fixture.commands).toHaveLength(1);
+    const originalKey = JSON.parse(fixture.commands[0]!.headers.get('idempotency-key')!);
+    await userEvent.click(view.getByText(m.settings_verification_original()));
+    await view.findByText(originalKey);
+    await userEvent.clear(statement);
+    await userEvent.type(statement, 'Later draft');
+
+    const reload = view.getByRole('button', { name: m.settings_verification_read_current() });
+    await userEvent.click(reload);
+    const failure = (await view.findByText(m.settings_verification_load_failed(), { exact: false })).closest(
+      '[role="alert"]',
+    )!;
+    await expect(failure).toHaveTextContent(m.settings_verification_read_unavailable());
+    await expect(failure).toHaveAttribute('data-response-status', '503');
+    await expect(failure).toHaveAttribute('data-response-code', 'dependency_unavailable');
+    await expect(failure).toHaveAttribute('data-request-id', 'verification-status');
+    await expect(failure).toHaveAttribute('data-retry-after', '2');
+    await expect(view.queryByText(transportedReadMessage, { exact: false })).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.settings_privacy_load_more() }));
+    await view.findByText(m.settings_privacy_page_load_failed());
+    await view.findByText(m.settings_privacy_unavailable());
+    await expect(view.queryByText(m.settings_failed_title())).toBeNull();
+    await expect(view.queryByText(m.settings_privacy_empty())).toBeNull();
+    await expect(retained).toBeInTheDocument();
+    const retry = view.getByRole('button', { name: m.settings_retry() });
+    const refresh = view.getByRole('button', { name: m.settings_privacy_refresh_list() });
+    const replay = view.getByRole('button', { name: m.settings_verification_retry_original() });
+    for (const button of [retry, refresh, reload, replay]) {
+      await expect(button).toBeDisabled();
+      await userEvent.click(button);
+    }
+    await expect(fixture.reads).toEqual({ collections: [null, continuation], verification: 2 });
+    await waitFor(
+      async () => {
+        for (const button of [retry, refresh, reload, replay]) await expect(button).toBeEnabled();
+      },
+      { timeout: 5000 },
+    );
+    // Retry-After expiry only enables controls; it sends no read or command.
+    await expect(fixture.reads).toEqual({ collections: [null, continuation], verification: 2 });
+    await expect(fixture.commands).toHaveLength(1);
+    await userEvent.click(retry);
+    await view.findByRole('link', { name: collectionsRecording.collections[1]!.title });
+    await expect(view.getByRole('link', { name: collectionsRecording.collections[0]!.title })).toBe(retained);
+    await userEvent.click(reload);
+    await view.findByText(
+      m.settings_verification_pending({
+        subject: getLocale() === 'ja' ? demoAgentSubjects[0]!.labels.ja! : demoAgentSubjects[0]!.labels.en!,
+      }),
+    );
+    await expect(statement).toHaveValue('Later draft');
+    await expect(view.getByText(originalKey)).toBeVisible();
+    await expect(replay).toBeEnabled();
+    await expect(fixture.reads).toEqual({ collections: [null, continuation, continuation], verification: 3 });
+    // All recovery was GET: no visibility write, request replay, withdrawal or replacement command key.
+    await expect(fixture.commands).toHaveLength(1);
+    await expect(view.queryByRole('button', { name: m.settings_verification_withdraw() })).toBeNull();
+  },
 };

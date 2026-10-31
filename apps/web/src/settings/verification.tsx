@@ -158,8 +158,6 @@ export function VerificationCard({
     else form.current?.ownerDocument.getElementById(target)?.focus();
   }
 
-  if (state.failure?.message === 'rezics-platform-closed') return null;
-
   async function recover(action: () => Promise<void>) {
     const command = action();
     const original = controller.snapshot().attempt;
@@ -205,18 +203,28 @@ export function VerificationCard({
         </div>
         {state.phase === 'sending' ? <p role="status">{m.settings_saving()}</p> : null}
         {state.readStatus === 'error' ? (
-          <p
+          <div
             role="alert"
             data-response-status={state.failure?.status}
             data-response-code={state.failure?.code}
             data-request-id={state.failure?.requestId}
             data-retry-after={state.failure?.retryAfter}
           >
-            {m.settings_verification_load_failed()}{' '}
-            {state.failure
-              ? m.settings_verification_read_error({ status: state.failure.status, message: state.failure.message })
-              : null}
-          </p>
+            <p>
+              {m.settings_verification_load_failed()}{' '}
+              {state.failure?.code === 'platform_closed' || state.failure?.message === 'rezics-platform-closed'
+                ? m.settings_verification_read_closed()
+                : state.failure?.status === 401 || state.failure?.status === 403
+                  ? m.settings_verification_read_denied()
+                  : m.settings_verification_read_unavailable()}
+            </p>
+            {state.failure ? (
+              <details>
+                <summary>{m.settings_verification_read_details()}</summary>
+                <p>{m.settings_verification_read_error({ status: state.failure.status })}</p>
+              </details>
+            ) : null}
+          </div>
         ) : null}
         {canRequest || hasDraft || state.attempt?.kind === 'request' ? (
           <form
