@@ -28,7 +28,7 @@ Simply raising the release ceiling to 200,000 would expose these costs rather th
 
 ## Baseline, method and limits
 
-The inspected worktree was on `worker/22501e06-1c50-44ec-9da4-11bf48d235e0`, at dev revision
+The inspected worktree was on the assigned worker branch, at dev revision
 `6d3f767467c85dbb9d3bb561d12af784407bd92c`. Historical references were old REZICS revision
 `95167ceab7173dc1c5fb0ee70568c5c95f1dba8d` in `/home/edge/projects/rezics/rezics`, and this repository's
 `legacy-final`, `1ac6ed6e0668f04e30025c41e59ceaf3bdee5061`. Historical source was read, not merged or ported.
@@ -102,7 +102,7 @@ but a classification must actually express the vertical rather than rename all t
 renderer hides 204 sections and exposes retry for genuine errors. This is a catalogue section protocol;
 its existence does not imply unseen events, following eligibility, a feed cursor or cross-kind relevance.
 
-Continue is further along than an unavailable story title suggests. `apps/web/src/library/continue-adapter.ts`
+Continue has a real native adapter despite the unavailable home story. `apps/web/src/library/continue-adapter.ts`
 uses the generated `libraryContinue.get` client with `CONTINUE_LIMIT = 6`, FULL summaries, authorization,
 no-store and strict response validation. It does not make one progress HTTP request per returned card.
 `services/kernel/src/library/continue-query.ts` has three bounded candidate rounds, canonical source
@@ -143,7 +143,7 @@ history. Each correction belongs in an owning contract before implementation bey
 | H4: Deferred scope presented as completed ambition | `docs/scope.md` Feeds/Recommendations rows versus the requested Reddit/X home | The public scope and product ambition are not represented as separate delivery milestones | Users cannot follow activity through home despite working follow buttons | Scope owner + future feed owner: explicitly adopt a later mixed-feed slice or retain honest catalogue home wording; do not silently assign a missing ranking backend to web |
 | H5: Defaults remain family-specific | `packages/ui/src/components/cover-model.ts` uses music/other 1:1, recipe 4:3 and person 3:4 alongside work/game 5:7; release presentation can override | Existing variety is protected without a cross-kind default assertion | Mixed cards lack a stable default rhythm; new/unknown kinds get square defaults | UI + definitions + presentation: one portrait default for every kind; keep per-image landscape containment, released override semantics made consistent with the settled default |
 | H6: Shell interaction not accepted across its hosts | Supplied filter overflow image; `search/header-search/header-search.tsx` has outer background, expanded card/popover backgrounds and a focus-within ring | Component-level states and full-shell stories do not demonstrate alignment, containment and interaction on every host | Search looks split or escapes its panel, obscuring the list it should refine | Shared shell/search + host pages: one centred field, scope chip and Filters at its end, phone full-screen panel; verify focus and panel geometry together on home, Collection and Space/Zone |
-| H7: Stale evidence labels | Home story describes Continue as awaiting binding although the adapter exists; design-status-search says some read callbacks absent though registry now contains them | Reports, story labels and composition-root readiness are not reconciled | Managers may commission duplicate work or mistake source existence for completed journeys | Owning modules + web: reconcile status with revisioned evidence; show ready, preparing and unavailable stories separately; retain honest native-binding limitations |
+| H7: Evidence labels obscure the missing layer | Home story says Continue awaits native binding while a native HTTP adapter exists; that label can still describe missing source readiness. Separately, design-status-search says read callbacks are absent though registry now contains them | Adapter, owner source, default runtime and executed evidence are not consistently distinguished in status | Managers may commission duplicate work or mistake source existence for completed journeys | Owning modules + web: name the exact unready layer with revisioned evidence; show ready, preparing and unavailable stories separately; do not rename a genuinely unavailable story as ready |
 | H8: Context multiplicity treated as display multiplicity | Legacy-final `work-page/ratings.tsx` maps all other question contexts; current upper-bound requirement forbids one block per Context | Ordinary-size fixtures do not exercise the choice cardinality | Twenty or hundreds of populations/questions become a wall rather than a useful rating | Rating + presentation: explicit selected population/question, bounded summary, searchable paged picker; never average all memberships into one purported consensus |
 | H9: Test quantity hides outcome gaps | Home heading/card/recording sources described below; kernel home test still expects SearchBox while current JSON has personal slot | Snapshots and local contracts can be internally tidy but stale or irrelevant to the adopted user job | Large suites coexist with unfinished delivery and contradictory status | Web + presentation + owning API: map each accepted journey to source, real API wiring and visual/interaction evidence; keep recordings but stop counting them as native proof |
 | H10: A release-size ceiling substitutes for a scalable kind query | `definitions/src/portable.ts`, `definitions/src/index.ts`; `search/discovery-registry.ts`, `discovery-service.ts`, `discovery-filter.ts`, `discovery-current.ts` | Whole-release registry operations are tolerable under the launch cap; output pagination was not carried through metadata, query construction and current-hit dispatch | 200,000 types are not currently admissible; merely lifting the cap adds request-wide hashing/sorting, huge kind terms and per-kind candidate filtering | Definitions + search: adopt a scalable versioned vocabulary/index contract; precompute release metadata/digests, page ordered kind keys, dispatch by kinds actually present, and preserve registered-producer eligibility without sending the full vocabulary on every query |
@@ -506,6 +506,12 @@ a subject-linked community entry. Put deep metadata, all editions/releases, all 
 review/discussion inventories behind their proper detail route, tab or expansion. The Goodreads images support
 this hierarchy; they do not justify copying its full page into a home card.
 
+A Zone configuration needs a released presentation profile, admitted source locators, selected/default scope,
+bounded module sizes, editorial provenance and a readable unavailable/preparing policy. It consumes the same
+Collection/search/content/rating/progress owner ports as other surfaces. A Realm-backed Space supplies community
+identity, eligible publication/discussion and moderation context; a Zone-backed Space supplies the editorial
+composition. Neither should implement a second books, anime or games permission, progress or ranking engine.
+
 To exceed vertical products, a books home can connect a novel, its adaptation, a themed public Collection and
 a reader community without losing edition/progress identity. An anime home can join a season schedule to
 spoiler-safe episode discussion and source works. A games home can connect compatible releases, reading/play
@@ -537,7 +543,9 @@ API and interface evidence kept separate; they are not claims that a pending cam
    library and Space/Zone use the same scoped header contract and preserve selected scope across navigation.
 7. The same scoped data/filter scenarios work across curated Collections, Everything/state Collections and
    admitted mounted Zones, including absent/threshold properties and unlisted/private visibility. Success on
-   one hand-built home fixture is insufficient.
+   one hand-built home fixture is insufficient. Specifically, light novels tagged harem, books over 1,000,000
+   words and both together must use shared semantics; exactly 1,000,000 and missing word counts do not match
+   “over.” The properties, trusted source and index must exist before a books home promises these filters.
 
 Use API-native owner scenarios first, then recorded responses for deterministic page states, then real browser
 interaction/visual evidence at the established 390 and 1280 widths. Recorded/fake data must remain labelled;
