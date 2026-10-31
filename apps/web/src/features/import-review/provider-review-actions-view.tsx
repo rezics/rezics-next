@@ -451,8 +451,7 @@ export function ProviderReviewActions({
                   !attempt.result.ok &&
                   (attempt.result.reason === 'denied' || attempt.result.reason === 'missing')) ||
                 (reading && !reading.ok && (reading.reason === 'denied' || reading.reason === 'missing'));
-              const missingOutcome =
-                attempt.result && !attempt.result.ok && attempt.result.reason === 'missing';
+              const missingOutcome = attempt.result && !attempt.result.ok && attempt.result.reason === 'missing';
               return (
                 <li key={attempt.command.key} className="space-y-1 break-words">
                   {rowConcealed && !missingOutcome && <p>{m.provider_missing({}, o)}</p>}
