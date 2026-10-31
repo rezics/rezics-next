@@ -1,5 +1,5 @@
 import { platformRegistry } from '@rezics/composition';
-import { Puck, createUsePuck, type Config } from '@puckeditor/core';
+import { Puck, createUsePuck, useGetPuck, type Config } from '@puckeditor/core';
 import { Button } from '@rezics/ui/shadcn/button';
 import '@puckeditor/core/puck.css';
 import { createContext, createElement, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
@@ -16,19 +16,21 @@ const useEditorPuck = createUsePuck();
 
 function CorrectionSelection({ children }: { children: ReactNode }) {
   const target = useContext(CorrectionContext);
-  const dispatch = useEditorPuck((state) => state.dispatch);
-  const getSelectorForId = useEditorPuck((state) => state.getSelectorForId);
-  const applied = useRef<CorrectionTarget | null>(null);
+  const getPuck = useGetPuck();
   useEffect(() => {
-    if (!target || applied.current === target) return;
-    const itemSelector = target.component ? getSelectorForId(target.component.id) : null;
-    if (target.component && !itemSelector) return;
-    applied.current = target;
-    dispatch({
-      type: 'setUi',
-      ui: { itemSelector: itemSelector ?? null, rightSideBarVisible: true, leftSideBarVisible: true, mobilePanelExpanded: true, plugin: { current: 'fields' } },
+    if (!target) return;
+    // Let Puck install its store subscriptions before selecting in a newly mounted editor.
+    const frame = requestAnimationFrame(() => {
+      const { dispatch, getSelectorForId } = getPuck();
+      const itemSelector = target.component ? getSelectorForId(target.component.id) : null;
+      if (target.component && !itemSelector) return;
+      dispatch({
+        type: 'setUi',
+        ui: { itemSelector: itemSelector ?? null, rightSideBarVisible: true, leftSideBarVisible: true, mobilePanelExpanded: true, plugin: { current: 'fields' } },
+      });
     });
-  }, [target, dispatch, getSelectorForId]);
+    return () => cancelAnimationFrame(frame);
+  }, [target, getPuck]);
   return <>{children}</>;
 }
 
