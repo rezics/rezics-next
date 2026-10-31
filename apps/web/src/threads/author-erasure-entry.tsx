@@ -123,9 +123,9 @@ export function AuthorErasureEntry({
             <p role="status" className="text-muted-foreground">
               {unavailable
                 ? m.author_erasure_admission_unavailable()
-                : admission.kind === 'signed-out'
-                  ? m.author_erasure_sign_in()
-                  : m.author_erasure_forbidden()}
+                : admission.kind === 'current'
+                  ? m.author_erasure_forbidden()
+                  : erasureRefusal(admission.kind)}
             </p>
           ) : null}
           {result && result.kind !== 'accepted' ? <p role="alert">{erasureRefusal(result.kind)}</p> : null}

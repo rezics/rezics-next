@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
+import { parseAuthorErasureAdmission } from '../../../threads/author-erasure-admission';
 import { AuthorErasureOperationPage } from '../../../threads/author-erasure-operation';
 import { ThreadReading } from '../../../threads/thread-reading';
 import { ThreadReadingHeader, ThreadReadingPost } from '../../../routes/threads/$id_.$slug';
@@ -96,10 +97,19 @@ function EntryThread({ state, onAccepted }: { state: ErasureStoryState; onAccept
           }
         : {
             authorErasure: {
-              admission:
-                state === 'available-entry' || state === 'denied-entry'
-                  ? { kind: 'current' as const, mayErase: state === 'available-entry' }
-                  : { kind: 'unavailable' as const },
+              ...(state === 'available-entry' || state === 'denied-entry'
+                ? {
+                    readAdmission: async (threadId: string) =>
+                      parseAuthorErasureAdmission(
+                        {
+                          thread: { id: owned.thread.id },
+                          authorErasure: { authorId: owned.thread.authorId, mayErase: state === 'available-entry' },
+                        },
+                        threadId,
+                        owned.thread.authorId,
+                      ),
+                  }
+                : { admission: { kind: 'unavailable' as const } }),
             },
           })}
     />
