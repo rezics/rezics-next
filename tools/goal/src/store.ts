@@ -1361,6 +1361,46 @@ export class WorkerStore implements AttemptFence {
       })
       .immediate();
   }
+  /** Release a held task and record the exact next attempt boundary in the same durable transaction. */
+  releaseHeldRetryTask(ref: AttemptRef, update: (task: Task) => void): Task {
+    const task = this.db
+      .transaction(() => {
+        const current = this.task(ref.taskId);
+        const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
+        const abandonPending = attempt?.state === 'pending' || attempt?.state === 'waiting';
+        if (
+          current.currentAttempt !== ref.attempt ||
+          (attempt && !['stopped', 'exited'].includes(attempt.state) && !abandonPending) ||
+          current.state !== 'held'
+        )
+          throw new Error(
+            `task cannot be released: ${ref.taskId} attempt ${ref.attempt} (task ${current.state} at attempt ${current.currentAttempt}${attempt ? `, attempt ${attempt.state}` : ''})`,
+          );
+        if (abandonPending && attempt) {
+          attempt.state = 'stopped';
+          attempt.endedAt ??= new Date().toISOString();
+          this.saveAttempt(attempt);
+        }
+        update(current);
+        const updatedState = current.state as Task['state'];
+        if (current.id !== ref.taskId || current.currentAttempt !== ref.attempt || updatedState !== 'ready')
+          throw new Error('held task release must preserve identity and move it to ready');
+        this.saveTask(current);
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(
+            ref.taskId,
+            ref.attempt,
+            'held-task-released',
+            new Date().toISOString(),
+            JSON.stringify({ releasedAttempt: ref.attempt + 1 }),
+          );
+        return current;
+      })
+      .immediate();
+    this.invalidateSnapshot();
+    return task;
+  }
   updateAttempt(ref: AttemptRef, update: (attempt: Attempt) => void): Attempt {
     return this.write(ref, () => {
       const attempt = this.attempt(ref);

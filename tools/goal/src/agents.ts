@@ -79,8 +79,22 @@ export function agentReportingEvidence(cli: unknown): { codex: boolean; unknown:
 }
 export function cleanAgentEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const result = { ...env };
+  for (const key of agentEnvironmentKeys(env)) delete result[key];
+  return result;
+}
+/** Provider-owned identities and config markers that a new process must not inherit from its launcher. */
+export function agentEnvironmentKeys(env: NodeJS.ProcessEnv = {}): string[] {
+  const keys = new Set<string>();
   for (const adapter of [...Object.values(adapters), ...allAgentAdapters()])
-    for (const key of adapter.environmentKeys ?? []) delete result[key];
+    for (const key of adapter.environmentKeys ?? []) keys.add(key);
+  for (const key of Object.keys(env)) if (key.startsWith('CLAUDE_')) keys.add(key);
+  return [...keys];
+}
+
+/** Environment for a neutral Goal host or shared provider process; per-task authority is supplied separately. */
+export function cleanManagedProviderEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const result = cleanAgentEnvironment(env);
+  for (const key of ['GOAL_MANAGER', 'GOAL_TASK_ID', 'GOAL_ATTEMPT', 'GOAL_CHECK_WAIT_FILE']) delete result[key];
   return result;
 }
 export function agentAdapter(cli: Cli): AgentAdapter {

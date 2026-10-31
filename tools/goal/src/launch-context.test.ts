@@ -1,0 +1,762 @@
+import { expect, test } from 'bun:test';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
+import { join } from 'node:path';
+import { acquireDirectoryLease } from './lease.ts';
+import { StaleAttemptError } from './contracts.ts';
+import { captureLaunchContext } from './launch-context.ts';
+import { WorkerJob } from './job.ts';
+import { importAttempt } from './import-attempt.ts';
+import { git } from './tasks.ts';
+import { parseBrief, readRiskOwnership } from './briefs.ts';
+import { harness, markdown } from './test-support.ts';
+
+const provider = `#!/usr/bin/env bun
+import { randomUUID } from 'node:crypto';
+import { spawn, spawnSync } from 'node:child_process';
+import { hostname } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const args = process.argv;
+const prompt = args.at(-1) ?? '';
+const attempt = process.env.GOAL_ATTEMPT ?? 'unknown';
+const resumed = args.includes('resume');
+mkdirSync('.temp/goal', { recursive: true });
+writeFileSync(join('.temp/goal', 'launch-' + attempt + '-' + (resumed ? 'resume' : 'start') + '.json'), JSON.stringify({ args, prompt }));
+console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session-' + process.env.GOAL_TASK_ID}));
+if (!resumed && !prompt.includes('"boundary": "wake"') && prompt.includes('BEGIN_WAITING_SESSION')) {
+  const id = randomUUID();
+  const runPath = join('.temp/goal/checks/runs', id + '.json');
+  const resultPath = join('.temp/goal/checks/results', id + '.json');
+  const logPath = join('.temp/goal/checks', id + '.log');
+  mkdirSync('.temp/goal/checks/runs', { recursive: true });
+  mkdirSync('.temp/goal/checks/results', { recursive: true });
+  const releasePath = join('.temp/goal/checks', id + '.release');
+  const failedPhysicalCheck = prompt.includes('RUN_FAILED_PHYSICAL_CHECK');
+  const checkCommand = failedPhysicalCheck ? 'false' : 'true';
+  const checkSummary = failedPhysicalCheck ? 'physical remote acceptance failed' : 'passed';
+  const checkLog = 'remote performance receipt: the old runner exited nonzero before the canonical contract amendment';
+  const childCode = "const {existsSync}=require('node:fs');const {spawnSync}=require('node:child_process');const {writeFileSync}=require('node:fs');const timer=setInterval(()=>{if(!existsSync(" + JSON.stringify(releasePath) + "))return;clearInterval(timer);const result=spawnSync(" + JSON.stringify(checkCommand) + ");if(result.status!==0)writeFileSync(" + JSON.stringify(logPath) + "," + JSON.stringify(checkLog) + ");writeFileSync(" + JSON.stringify(resultPath) + ",JSON.stringify({status:'finished',exitStatus:result.status,summary:" + JSON.stringify(checkSummary) + ",logPath:" + JSON.stringify(logPath) + "}));},10);";
+  const check = spawn(process.execPath, ['-e', childCode], { detached: true, stdio: 'ignore' });
+  writeFileSync(runPath, JSON.stringify({ status: 'running', runnerPid: check.pid, runnerHost: hostname(), logPath }));
+  check.unref();
+  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({status:'waiting',summary:'acceptance check running',checks:[id]})}}));
+} else {
+  writeFileSync('result.txt', 'accepted by attempt ' + attempt + '\\n');
+  spawnSync('git', ['add', 'result.txt']);
+  spawnSync('git', ['commit', '-m', 'Complete launch-context fixture']);
+  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+}
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+`;
+
+function captured(task: { worktree: string }, attempt: number, kind: 'start' | 'resume') {
+  return JSON.parse(readFileSync(join(task.worktree, `.temp/goal/launch-${attempt}-${kind}.json`), 'utf8')) as {
+    args: string[];
+    prompt: string;
+  };
+}
+
+function contextFromPrompt(prompt: string): Record<string, any> {
+  const title = prompt.indexOf('## Current controller launch context');
+  const start = prompt.indexOf('```json\n', title);
+  const end = prompt.indexOf('\n```', start + 8);
+  if (title < 0 || start < 0 || end < 0) throw new Error('current launch-context JSON is missing from the provider argv');
+  return JSON.parse(prompt.slice(start + 8, end)) as Record<string, any>;
+}
+
+function hash(markdownText: string): string {
+  return createHash('sha256').update(markdownText.replace(/\r\n?/g, '\n').trimEnd()).digest('hex');
+}
+
+function initialBrief(root: string, name: string, body: string): string {
+  const path = join(root, `.temp/goal/${name}.md`);
+  writeFileSync(path, markdown.replace('Write the requested result and commit it.', body));
+  return path;
+}
+
+function fullBrief(root: string, name: string, text: string): string {
+  const path = join(root, `.temp/goal/${name}.md`);
+  writeFileSync(path, text);
+  return path;
+}
+
+function amendedBrief(root: string, name: string, after: string, body: string): string {
+  const path = join(root, `.temp/goal/${name}.md`);
+  const text = markdown
+    .replace('waiting: []', `waiting: []\nafter: [${after}]`)
+    .replace('Write the requested result and commit it.', body);
+  writeFileSync(path, text);
+  return path;
+}
+
+function contractRevision(body: string, command: string): string {
+  return markdown
+    .replace('command: [bun, test]', `command: ["sh", "-c", ${JSON.stringify(command)}]`)
+    .replace('Write the requested result and commit it.', body);
+}
+
+function integratedDependency(h: ReturnType<typeof harness>, filename: string): { id: string; commit: string } {
+  const dependency = h.tasks.dispatch(h.briefFile);
+  writeFileSync(join(dependency.worktree, filename), `export const ${filename.replace(/\W/g, '_')} = true;\n`);
+  git(dependency.worktree, ['add', filename]);
+  git(dependency.worktree, ['commit', '-m', `Integrate ${filename}`]);
+  const commit = git(dependency.worktree, ['rev-parse', 'HEAD']);
+  const oldDev = git(h.root, ['rev-parse', 'refs/heads/dev']);
+  git(h.root, ['update-ref', 'refs/heads/dev', commit, oldDev]);
+  h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
+    current.state = 'integrated';
+    current.integratedCommit = commit;
+  });
+  return { id: dependency.id, commit };
+}
+
+function replaceTaskContract(
+  h: ReturnType<typeof harness>,
+  taskId: string,
+  attempt: number,
+  text: string,
+): void {
+  const path = join(h.settings.stateDirectory, 'briefs', `launch-context-${randomUUID()}.md`);
+  writeFileSync(path, text);
+  const brief = parseBrief(text, readRiskOwnership(h.settings.riskAreasFile));
+  h.store.updateTask({ taskId, attempt }, (task) => {
+    task.brief = brief;
+    task.briefPath = path;
+  });
+}
+
+async function waitFor(path: string): Promise<void> {
+  for (let n = 0; n < 200; n++) {
+    try {
+      readFileSync(path);
+      return;
+    } catch {
+      await Bun.sleep(10);
+    }
+  }
+  throw new Error(`timed out waiting for ${path}`);
+}
+
+async function waitForCapacityWaiter(stateDirectory: string, taskId: string): Promise<void> {
+  const queue = join(stateDirectory, 'capacity-queue');
+  for (let n = 0; n < 200; n++) {
+    try {
+      if (readdirSync(queue).some((name) => name.endsWith(`-${taskId}`))) return;
+    } catch {
+      // The first capacity waiter creates the queue.
+    }
+    await Bun.sleep(10);
+  }
+  throw new Error(`timed out waiting for task ${taskId} to queue for host capacity`);
+}
+
+function releaseOwnedCheck(task: { worktree: string }, id: string): void {
+  const directory = join(task.worktree, '.temp/goal/checks');
+  const run = JSON.parse(readFileSync(join(directory, 'runs', `${id}.json`), 'utf8')) as {
+    status: string;
+    runnerPid: number;
+    runnerHost: string;
+  };
+  expect(run).toMatchObject({ status: 'running', runnerHost: hostname() });
+  expect(Number.isSafeInteger(run.runnerPid)).toBe(true);
+  process.kill(run.runnerPid, 0);
+  expect(() => readFileSync(join(directory, 'results', `${id}.json`))).toThrow();
+  writeFileSync(join(directory, `${id}.release`), 'release');
+}
+
+function releaseOutstandingChecks(task: { worktree: string }): void {
+  const runs = join(task.worktree, '.temp/goal/checks/runs');
+  try {
+    for (const file of readdirSync(runs).filter((name) => name.endsWith('.json')))
+      writeFileSync(join(task.worktree, '.temp/goal/checks', `${file.slice(0, -5)}.release`), 'release');
+  } catch {
+    // This task did not start a fixture check.
+  }
+}
+
+function underLease<T>(h: ReturnType<typeof harness>, taskId: string, run: () => T): T {
+  const lease = acquireDirectoryLease(join(h.settings.stateDirectory, 'leases', taskId));
+  try {
+    return run();
+  } finally {
+    lease.release();
+  }
+}
+
+test('fresh and normal retry argv carry current contract identity and supersede historical retry prose', async () => {
+  const h = harness(provider);
+  try {
+    const dependency = integratedDependency(h, 'retry-dependency.ts');
+    const briefPath = amendedBrief(h.root, 'fresh-retry', dependency.id, 'Write the requested result and commit it.');
+    const task = h.tasks.dispatch(briefPath);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.start(task.id);
+
+    const first = captured(h.store.task(task.id), 1, 'start');
+    const fresh = contextFromPrompt(first.prompt);
+    expect(fresh).toMatchObject({ boundary: 'fresh', origin: 'managed' });
+    expect(fresh.task).toMatchObject({
+      id: task.id,
+      attempt: 1,
+      contractSha256: hash(task.brief.markdown),
+      contractProof: 'verified',
+      base: git(task.worktree, ['rev-parse', 'HEAD^']),
+      sourceHead: git(task.worktree, ['rev-parse', 'HEAD^']),
+      sourceBranch: task.branch,
+      sourceProof: 'verified',
+    });
+    expect(fresh.dependencies.receipts[0]).toMatchObject({
+      id: dependency.id,
+      state: 'integrated',
+      commit: dependency.commit,
+      sourcePresence: 'present',
+      precondition: 'satisfied',
+    });
+
+    const evidence = join(h.settings.stateDirectory, 'evidence', 'historical-retry');
+    mkdirSync(evidence, { recursive: true });
+    writeFileSync(
+      join(evidence, 'failure.json'),
+      JSON.stringify({ manifest: 'Historical future-tense retry manifest: cleanup must merge before work; return waiting with checks [].' }),
+    );
+    const amendmentOne = amendedBrief(h.root, 'retry-one', dependency.id, 'Use contract amendment one.');
+    await job.start(task.id, { brief: amendmentOne, evidence });
+    const second = captured(h.store.task(task.id), 2, 'resume');
+    const retry = contextFromPrompt(second.prompt);
+    expect(retry).toMatchObject({ boundary: 'retry', origin: 'managed' });
+    expect(retry.task).toMatchObject({
+      id: task.id,
+      attempt: 2,
+      contractSha256: hash(readFileSync(amendmentOne, 'utf8')),
+      contractProof: 'verified',
+    });
+    expect(retry.dependencies.receipts[0]).toMatchObject({
+      id: dependency.id,
+      commit: dependency.commit,
+      sourcePresence: 'present',
+      precondition: 'satisfied',
+    });
+    expect(second.prompt.indexOf('Historical future-tense retry manifest')).toBeLessThan(
+      second.prompt.indexOf('## Current controller launch context'),
+    );
+
+    const staleResult = 'OLD ATTEMPT RESULT: cleanup must merge before work';
+    h.store.updateAttempt({ taskId: task.id, attempt: 2 }, (attempt) => {
+      attempt.result = staleResult;
+    });
+    const amendmentTwo = amendedBrief(h.root, 'retry-two', dependency.id, 'Use the latest contract amendment.');
+    await job.start(task.id, { brief: amendmentTwo, evidence });
+    const third = captured(h.store.task(task.id), 3, 'resume');
+    const latest = contextFromPrompt(third.prompt);
+    expect(latest.task).toMatchObject({
+      id: task.id,
+      attempt: 3,
+      contractPath: h.store.task(task.id).briefPath,
+      contractSha256: hash(readFileSync(amendmentTwo, 'utf8')),
+      contractProof: 'verified',
+      sourceHead: git(task.worktree, ['rev-parse', 'HEAD^']),
+      sourceProof: 'verified',
+    });
+    expect(latest.dependencies.receipts[0]).toMatchObject({
+      id: dependency.id,
+      commit: dependency.commit,
+      sourcePresence: 'present',
+      precondition: 'satisfied',
+    });
+    expect(JSON.stringify(latest)).not.toContain(staleResult);
+    expect(third.prompt.indexOf('Historical future-tense retry manifest')).toBeLessThan(
+      third.prompt.indexOf('This is a fresh bounded snapshot for the current retry boundary'),
+    );
+  } finally {
+    h.dispose();
+  }
+});
+
+test('held release resumes old sessions once with actual dependency source receipts for every released task', async () => {
+  const h = harness(provider);
+  const waitingTasks: { worktree: string }[] = [];
+  try {
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const firstPath = initialBrief(
+      h.root,
+      'held-first',
+      'BEGIN_WAITING_SESSION\nHistorical future-tense instruction: wait for cleanup to merge before starting.',
+    );
+    const secondPath = initialBrief(
+      h.root,
+      'held-second',
+      'BEGIN_WAITING_SESSION\nHistorical future-tense instruction: wait for cleanup to merge before starting.',
+    );
+    const first = h.tasks.dispatch(firstPath);
+    const second = h.tasks.dispatch(secondPath);
+    waitingTasks.push(first, second);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await Promise.all([job.start(first.id), job.start(second.id)]);
+
+    for (const task of [first, second]) {
+      const waiting = h.store.attempt({ taskId: task.id, attempt: 1 });
+      expect(waiting.state).toBe('waiting');
+      expect(waiting.checks).toHaveLength(1);
+      expect(waiting.checks?.[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      releaseOwnedCheck(task, waiting.checks![0]!);
+      await waitFor(join(task.worktree, '.temp/goal/checks/results', `${waiting.checks![0]}.json`));
+    }
+
+    const firstRevision = amendedBrief(h.root, 'held-first-v1', dependency.id, 'Use the first contract amendment.');
+    const latestRevision = amendedBrief(h.root, 'held-first-v2', dependency.id, 'Use the latest contract after cleanup.');
+    const secondRevision = amendedBrief(h.root, 'held-second-v1', dependency.id, 'Use the released task contract.');
+    h.tasks.queueRetry(first.id, { brief: firstRevision });
+    h.tasks.queueRetry(first.id, { brief: latestRevision });
+    h.tasks.queueRetry(second.id, { brief: secondRevision });
+    expect(h.store.task(first.id).state).toBe('held');
+    expect(h.store.task(second.id).state).toBe('held');
+
+    writeFileSync(join(dependency.worktree, 'cleanup.ts'), 'export const cleanupReady = true;\n');
+    git(dependency.worktree, ['add', 'cleanup.ts']);
+    git(dependency.worktree, ['commit', '-m', 'Complete cleanup dependency']);
+    const dependencyCommit = git(dependency.worktree, ['rev-parse', 'HEAD']);
+    const oldDev = git(h.root, ['rev-parse', 'refs/heads/dev']);
+    git(h.root, ['update-ref', 'refs/heads/dev', dependencyCommit, oldDev]);
+    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
+      current.state = 'integrated';
+      current.integratedCommit = dependencyCommit;
+    });
+
+    await job.recoverOrphans();
+    await job.drain();
+
+    for (const task of [first, second]) {
+      expect(h.store.task(task.id).currentAttempt).toBe(2);
+      const resumed = captured(h.store.task(task.id), 2, 'resume');
+      const context = contextFromPrompt(resumed.prompt);
+      expect(resumed.args).toContain('resume');
+      expect(context).toMatchObject({ boundary: 'held-release', origin: 'managed' });
+      expect(context.task).toMatchObject({
+        id: task.id,
+        attempt: 2,
+        base: dependencyCommit,
+        sourceHead: dependencyCommit,
+        sourceBranch: task.branch,
+        sourceProof: 'verified',
+        contractProof: 'verified',
+      });
+      expect(context.dependencies).toMatchObject({ required: 1, included: 1, omitted: 0, completeness: 'complete' });
+      expect(context.dependencies.receipts[0]).toMatchObject({
+        id: dependency.id,
+        state: 'integrated',
+        completion: 'integrated',
+        commit: dependencyCommit,
+        sourcePresence: 'present',
+        precondition: 'satisfied',
+      });
+      expect(resumed.prompt).toContain('supersedes future-tense or stale instructions');
+      expect(resumed.prompt).not.toContain('Historical future-tense instruction: wait for cleanup to merge');
+      expect(h.store.attempts(task.id).filter((attempt) => attempt.attempt === 2)).toHaveLength(1);
+    }
+    expect(contextFromPrompt(captured(h.store.task(first.id), 2, 'resume').prompt).task.contractSha256).toBe(
+      hash(readFileSync(latestRevision, 'utf8')),
+    );
+    expect(contextFromPrompt(captured(h.store.task(second.id), 2, 'resume').prompt).task.contractSha256).toBe(
+      hash(readFileSync(secondRevision, 'utf8')),
+    );
+  } finally {
+    for (const task of waitingTasks) releaseOutstandingChecks(task);
+    h.dispose();
+  }
+});
+
+test('a same-session check wake carries the current receipt in the actual provider argv', async () => {
+  const h = harness(provider);
+  let task: { id: string; worktree: string } | undefined;
+  try {
+    const dependency = integratedDependency(h, 'wake-dependency.ts');
+    const briefPath = amendedBrief(
+      h.root,
+      'wake-context',
+      dependency.id,
+      'BEGIN_WAITING_SESSION\nComplete the task after the actual acceptance check finishes.',
+    );
+    task = h.tasks.dispatch(briefPath);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.start(task.id);
+
+    const ref = { taskId: task.id, attempt: 1 };
+    const waiting = h.store.attempt(ref);
+    expect(waiting.state).toBe('waiting');
+    expect(waiting.checks).toHaveLength(1);
+    const id = waiting.checks![0]!;
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    releaseOwnedCheck(task, id);
+    await waitFor(join(task.worktree, '.temp/goal/checks/results', `${id}.json`));
+
+    await job.recoverOrphans();
+
+    const resumed = captured(h.store.task(task.id), 1, 'resume');
+    const context = contextFromPrompt(resumed.prompt);
+    expect(resumed.args).toContain('resume');
+    expect(waiting.session).toBeTruthy();
+    expect(resumed.args).toContain(waiting.session!);
+    expect(context).toMatchObject({ boundary: 'wake', origin: 'managed' });
+    expect(context.task).toMatchObject({
+      id: task.id,
+      attempt: 1,
+      contractSha256: hash(h.store.task(task.id).brief.markdown),
+      contractProof: 'verified',
+      base: dependency.commit,
+      sourceProof: 'verified',
+    });
+    expect(context.dependencies.receipts[0]).toMatchObject({
+      id: dependency.id,
+      state: 'integrated',
+      commit: dependency.commit,
+      sourcePresence: 'present',
+      precondition: 'satisfied',
+    });
+    expect(resumed.prompt).toContain(`check ${id}: exit status 0; passed;`);
+  } finally {
+    if (task) releaseOutstandingChecks(task);
+    h.dispose();
+  }
+});
+
+test('a same-session wake replaces stale remote policy with the complete amended canonical contract', async () => {
+  const h = harness(provider);
+  let task: { id: string; worktree: string } | undefined;
+  try {
+    const remoteCommand = 'bun /remote/performance/scripts/worker-check.ts --suite admission';
+    const initialText = contractRevision(
+      [
+        'BEGIN_WAITING_SESSION',
+        'RUN_FAILED_PHYSICAL_CHECK',
+        `The legacy policy requires running the remote campaign: \`${remoteCommand}\`.`,
+        'The native marker timestamp unit is epoch milliseconds.',
+      ].join('\n'),
+      remoteCommand,
+    );
+    const initialPath = fullBrief(h.root, 'wake-canonical-old', initialText);
+    const activeTask = h.tasks.dispatch(initialPath);
+    task = activeTask;
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.start(activeTask.id);
+
+    const ref = { taskId: activeTask.id, attempt: 1 };
+    const waiting = h.store.attempt(ref);
+    expect(waiting.state).toBe('waiting');
+    expect(waiting.checks).toHaveLength(1);
+    const id = waiting.checks![0]!;
+    const originalSession = waiting.session;
+    expect(originalSession).toBeTruthy();
+    const initial = captured(h.store.task(activeTask.id), 1, 'start');
+    expect(initial.prompt).toContain(remoteCommand);
+    expect(initial.prompt).toContain('The native marker timestamp unit is epoch milliseconds.');
+    const originalBriefPath = h.store.task(activeTask.id).briefPath;
+
+    const currentCommand = 'bun scripts/performance/admission-local.ts && bun scripts/performance/native-marker-local.ts';
+    const currentText = contractRevision(
+      [
+        'BEGIN_WAITING_SESSION',
+        'NORMAL direct local scripts-only acceptance. Run only the local scripts in acceptance.command from the task worktree.',
+        'Do not invoke the remote worker-check campaign for this contract.',
+        'Native marker timestamp unit correction: marker timestamps are epoch microseconds; compare epoch seconds by dividing by 1000000.',
+      ].join('\n'),
+      currentCommand,
+    );
+    underLease(h, activeTask.id, () => replaceTaskContract(h, activeTask.id, 1, currentText));
+    const amended = h.store.task(activeTask.id);
+    expect(amended.briefPath).not.toBe(originalBriefPath);
+    expect(amended.briefPath).not.toBe(initialPath);
+
+    releaseOwnedCheck(activeTask, id);
+    await waitFor(join(activeTask.worktree, '.temp/goal/checks/results', `${id}.json`));
+    await job.recoverOrphans();
+
+    const resumed = captured(h.store.task(activeTask.id), 1, 'resume');
+    const context = contextFromPrompt(resumed.prompt);
+    expect(resumed.args).toContain('resume');
+    expect(resumed.args).toContain(originalSession!);
+    expect(h.store.task(activeTask.id).currentAttempt).toBe(1);
+    expect(h.store.attempts(activeTask.id).filter((attempt) => attempt.attempt === 1)).toHaveLength(1);
+    expect(h.store.attempt(ref).checks).toEqual(waiting.checks);
+    expect(resumed.prompt).toContain(currentText);
+    expect(resumed.prompt).not.toContain(initialText);
+    expect(resumed.prompt).toContain('The full canonical contract below');
+    expect(resumed.prompt).toContain('supersedes conflicting saved-session instructions');
+    expect(resumed.prompt).toContain('Native marker timestamp unit correction: marker timestamps are epoch microseconds');
+    expect(resumed.prompt).toContain('Run the acceptance command in the foreground from the worktree root');
+    expect(resumed.prompt).not.toContain(remoteCommand);
+    expect(resumed.prompt).not.toContain('The native marker timestamp unit is epoch milliseconds.');
+    expect(resumed.prompt).not.toContain('Run the remote campaign');
+    expect(resumed.prompt).toContain(`check ${id}: exit status 1; physical remote acceptance failed;`);
+    expect(resumed.prompt).toContain(join('.temp/goal/checks', `${id}.log`));
+    expect(resumed.prompt).not.toContain('Run `bun scripts/worker-check.ts --wait');
+    expect(context).toMatchObject({ boundary: 'wake', task: { id: activeTask.id, attempt: 1 } });
+    expect(context.task).toMatchObject({
+      contractPath: amended.briefPath,
+      contractSha256: hash(currentText),
+      contractProof: 'verified',
+    });
+
+    const runs = join(activeTask.worktree, '.temp/goal/checks/runs');
+    const results = join(activeTask.worktree, '.temp/goal/checks/results');
+    expect(readdirSync(runs).filter((name) => name.endsWith('.json'))).toEqual([`${id}.json`]);
+    expect(readdirSync(results).filter((name) => name.endsWith('.json'))).toEqual([`${id}.json`]);
+    const receipt = JSON.parse(readFileSync(join(results, `${id}.json`), 'utf8')) as {
+      exitStatus: number;
+      summary: string;
+      logPath: string;
+    };
+    expect(receipt).toMatchObject({ exitStatus: 1, summary: 'physical remote acceptance failed' });
+    expect(readFileSync(join(activeTask.worktree, receipt.logPath), 'utf8')).toContain('remote performance receipt');
+  } finally {
+    if (task) releaseOutstandingChecks(task);
+    h.dispose();
+  }
+});
+
+test('a capacity waiter launches from the latest canonical contract snapshot', async () => {
+  const h = harness(provider);
+  const capacityPath = join(h.settings.stateDirectory, 'capacity.json');
+  let launch: Promise<void> | undefined;
+  try {
+    const initialText = contractRevision('Initial contract before capacity admission.', 'bun scripts/initial-local-check.ts');
+    const initialPath = fullBrief(h.root, 'capacity-canonical-old', initialText);
+    const task = h.tasks.dispatch(initialPath);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    writeFileSync(capacityPath, JSON.stringify({ maxWorkers: 0, minAvailableMiB: 0 }));
+    launch = job.start(task.id);
+    await waitForCapacityWaiter(h.settings.stateDirectory, task.id);
+
+    const currentText = contractRevision(
+      'Capacity-admitted contract: use the latest direct local scripts-only acceptance after waiting.',
+      'bun scripts/latest-local-check.ts',
+    );
+    underLease(h, task.id, () => replaceTaskContract(h, task.id, 0, currentText));
+    const currentTask = h.store.task(task.id);
+    expect(currentTask.briefPath).not.toBe(initialPath);
+    writeFileSync(capacityPath, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+    await launch;
+
+    const started = captured(currentTask, 1, 'start');
+    const context = contextFromPrompt(started.prompt);
+    expect(started.prompt).toContain(currentText);
+    expect(started.prompt).not.toContain('Initial contract before capacity admission.');
+    expect(context.task).toMatchObject({
+      contractPath: currentTask.briefPath,
+      contractSha256: hash(currentText),
+      contractProof: 'verified',
+      attempt: 1,
+    });
+  } finally {
+    if (launch) {
+      writeFileSync(capacityPath, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+      await launch.catch(() => {});
+    }
+    h.dispose();
+  }
+});
+
+test('a wake without a resumable session uses a full prompt with the current dependency receipt', async () => {
+  const h = harness(provider);
+  let task: { id: string; worktree: string } | undefined;
+  try {
+    const dependency = integratedDependency(h, 'nonresumable-dependency.ts');
+    const briefPath = amendedBrief(
+      h.root,
+      'nonresumable-wake',
+      dependency.id,
+      'BEGIN_WAITING_SESSION\nComplete the task after the actual acceptance check finishes.',
+    );
+    task = h.tasks.dispatch(briefPath);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.start(task.id);
+
+    const ref = { taskId: task.id, attempt: 1 };
+    const waiting = h.store.attempt(ref);
+    expect(waiting.state).toBe('waiting');
+    const id = waiting.checks![0]!;
+    releaseOwnedCheck(task, id);
+    await waitFor(join(task.worktree, '.temp/goal/checks/results', `${id}.json`));
+    underLease(h, task.id, () =>
+      h.store.updateAttempt(ref, (attempt) => {
+        attempt.session = null;
+      }),
+    );
+
+    await job.recoverOrphans();
+
+    const relaunched = captured(h.store.task(task.id), 1, 'start');
+    const context = contextFromPrompt(relaunched.prompt);
+    expect(relaunched.args).not.toContain('resume');
+    expect(relaunched.prompt).toContain(h.store.task(task.id).brief.markdown);
+    expect(context).toMatchObject({ boundary: 'wake', origin: 'managed' });
+    expect(context.dependencies.receipts[0]).toMatchObject({
+      id: dependency.id,
+      commit: dependency.commit,
+      sourcePresence: 'present',
+      precondition: 'satisfied',
+    });
+  } finally {
+    if (task) releaseOutstandingChecks(task);
+    h.dispose();
+  }
+});
+
+test('unknown, cancelled, missing and absent dependency source proofs are never rendered as installed code', async () => {
+  const h = harness(provider);
+  try {
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.start(task.id);
+
+    writeFileSync(join(dependency.worktree, 'unmerged.ts'), 'export const unmerged = true;\n');
+    git(dependency.worktree, ['add', 'unmerged.ts']);
+    git(dependency.worktree, ['commit', '-m', 'Create unmerged dependency source']);
+    const dependencyCommit = git(dependency.worktree, ['rev-parse', 'HEAD']);
+    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
+      current.state = 'integrated';
+      current.integratedCommit = dependencyCommit;
+    });
+    const afterDependency = amendedBrief(h.root, 'source-proof', dependency.id, 'Inspect current source proof.');
+    replaceTaskContract(h, task.id, 1, readFileSync(afterDependency, 'utf8'));
+
+    const absent = underLease(h, task.id, () => captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'));
+    expect(absent.dependencies.receipts[0]).toMatchObject({
+      state: 'integrated',
+      completion: 'integrated',
+      commit: dependencyCommit,
+      sourcePresence: 'absent',
+      precondition: 'unmet',
+    });
+    expect(absent.task.sourceProof).toBe('verified');
+
+    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
+      current.state = 'cancelled';
+    });
+    const cancelled = underLease(h, task.id, () => captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'));
+    expect(cancelled.dependencies.receipts[0]).toMatchObject({
+      state: 'cancelled',
+      completion: 'not-integrated',
+      sourcePresence: 'not-checked',
+      precondition: 'unmet',
+    });
+
+    const foreign = join(h.root, '.temp/goal/foreign-dependency');
+    mkdirSync(foreign, { recursive: true });
+    git(foreign, ['init', '-b', 'main']);
+    git(foreign, ['config', 'user.email', 'fixture@example.invalid']);
+    git(foreign, ['config', 'user.name', 'Fixture']);
+    writeFileSync(join(foreign, 'foreign.ts'), 'export const foreignDependency = true;\n');
+    git(foreign, ['add', 'foreign.ts']);
+    git(foreign, ['commit', '-m', 'Create unavailable dependency commit']);
+    const unavailableCommit = git(foreign, ['rev-parse', 'HEAD']);
+    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
+      current.state = 'integrated';
+      current.integratedCommit = unavailableCommit;
+    });
+    const unknownCommit = underLease(h, task.id, () =>
+      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
+    );
+    expect(unknownCommit.dependencies.receipts[0]).toMatchObject({
+      state: 'integrated',
+      completion: 'integrated',
+      commit: unavailableCommit,
+      sourcePresence: 'unknown',
+      precondition: 'unknown',
+    });
+
+    const missingContract = amendedBrief(h.root, 'missing-source-proof', 'missing-task', 'Unknown dependency.');
+    replaceTaskContract(h, task.id, 1, readFileSync(missingContract, 'utf8'));
+    const missing = underLease(h, task.id, () => captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'));
+    expect(missing.dependencies.receipts[0]).toMatchObject({
+      id: 'missing-task',
+      state: 'missing',
+      completion: 'unknown',
+      sourcePresence: 'unknown',
+      precondition: 'unknown',
+    });
+    expect(JSON.stringify(missing.dependencies)).not.toContain('"sourcePresence":"present"');
+
+    const taskRef = { taskId: task.id, attempt: 1 };
+    underLease(h, task.id, () =>
+      h.store.updateTask(taskRef, (current) => {
+        current.branch = 'worker/wrong-branch';
+      }),
+    );
+    const badIdentity = underLease(h, task.id, () => captureLaunchContext(h.store, taskRef, 'retry'));
+    expect(badIdentity.task.sourceProof).toBe('unknown');
+    expect(badIdentity.task.sourceBranch).toBe(task.branch);
+    underLease(h, task.id, () =>
+      h.store.updateTask(taskRef, (current) => {
+        current.branch = task.branch;
+      }),
+    );
+
+    const oldRef = { taskId: task.id, attempt: 1 };
+    const previous = h.store.attempt(oldRef);
+    underLease(h, task.id, () =>
+      h.store.nextAttempt(oldRef, (attempt) => ({
+        ...previous,
+        attempt,
+        state: 'pending',
+        startedAt: new Date().toISOString(),
+        endedAt: null,
+        process: null,
+        driver: null,
+        session: null,
+        checks: [],
+        logPath: join(h.settings.stateDirectory, 'runs', task.id, `${attempt}.jsonl`),
+        evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, String(attempt)),
+      })),
+    );
+    expect(() => underLease(h, task.id, () => captureLaunchContext(h.store, oldRef, 'retry'))).toThrow(
+      StaleAttemptError,
+    );
+  } finally {
+    h.dispose();
+  }
+});
+
+test('adopting an imported legacy attempt emits current metadata in the actual resumed argv', async () => {
+  const h = harness(provider);
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const logPath = join(h.settings.stateDirectory, 'legacy-session.jsonl');
+    writeFileSync(
+      logPath,
+      [
+        JSON.stringify({ type: 'thread.started', thread_id: 'legacy-session' }),
+        JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'RESULT: historical completion' } }),
+        JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 4, output_tokens: 1 } }),
+      ].join('\n') + '\n',
+    );
+    const now = Date.now();
+    importAttempt(h.tasks, logPath, {
+      taskId: task.id,
+      startedAt: new Date(now - 1000).toISOString(),
+      endedAt: new Date(now).toISOString(),
+      profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
+      pool: 'fixture',
+      outcome: 'stopped',
+    });
+
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.start(task.id);
+    const resumed = captured(h.store.task(task.id), 2, 'resume');
+    const context = contextFromPrompt(resumed.prompt);
+    expect(context).toMatchObject({ boundary: 'adopted-legacy', origin: 'adopted-legacy' });
+    expect(context.task).toMatchObject({
+      id: task.id,
+      attempt: 2,
+      contractSha256: hash(task.brief.markdown),
+      contractProof: 'verified',
+      sourceProof: 'verified',
+    });
+    expect(JSON.stringify(context)).not.toContain('historical completion');
+  } finally {
+    h.dispose();
+  }
+});

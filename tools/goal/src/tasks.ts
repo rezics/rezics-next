@@ -32,6 +32,7 @@ import type { WorkerStore } from './store.ts';
 import type { Attempt, Brief, Profile, Settings, Task } from './types.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 import { webModule, WorkspaceController } from './workspace.ts';
+import { captureLaunchContext } from './launch-context.ts';
 import { installShared } from './shared-dependencies.ts';
 import {
   authenticatedManager,
@@ -66,6 +67,22 @@ function priorRebaseConflict(store: WorkerStore, taskId: string, attempt: number
 
 function sameBriefText(left: string, right: string): boolean {
   return normalizedBriefText(left) === normalizedBriefText(right);
+}
+
+function applyRetryPriorityTransition(
+  db: WorkerStore['db'],
+  task: Task,
+  previousCritical: boolean,
+  nextCritical: boolean,
+  actor: AuthenticatedManager | null | undefined,
+): boolean {
+  // A corrective retry is still a manager action. A no-op priority restatement keeps the audit and grant untouched,
+  // but it must be authenticated as the task owner just like a real transition. Internal non-priority reshapes may
+  // omit actor; a CLI passes null when caller authentication fails and cannot use this internal seam.
+  if (actor === null || (!actor && (previousCritical || nextCritical)))
+    throw new Error('priority changes require an authenticated manager session');
+  applyPriorityTransition(db, task, previousCritical, nextCritical, actor);
+  return previousCritical !== nextCritical;
 }
 
 export class BriefContractUnchangedError extends Error {
@@ -674,6 +691,7 @@ export class WorkerTasks {
       const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`);
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, reshaped.brief.markdown, { flag: 'wx' });
+      let priorityChanged = false;
       try {
         this.store.updateHeldRetryTask(
           ref,
@@ -686,7 +704,7 @@ export class WorkerTasks {
             current.brief = reshaped.brief;
             current.briefPath = briefPath;
             current.taskClass = reshaped.taskClass;
-            this.applyRetryPriority(current, previousCritical, actor, authorization);
+            priorityChanged = this.applyRetryPriority(current, previousCritical, actor, authorization);
             current.state = 'held';
             current.pendingBriefChange = {
               previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
@@ -715,7 +733,7 @@ export class WorkerTasks {
         rmSync(briefPath, { force: true });
         throw error;
       }
-      if (nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
+      if (priorityChanged && nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
       return;
     }
     const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
@@ -733,6 +751,7 @@ export class WorkerTasks {
     const retryOptions = { ...options };
     delete retryOptions.brief;
     delete retryOptions.expectedAttempt;
+    let priorityChanged = false;
     try {
       this.store.recordExplicitRetry(
         ref,
@@ -748,7 +767,7 @@ export class WorkerTasks {
             current.brief = reshaped.brief;
             current.briefPath = briefPath!;
             current.taskClass = reshaped.taskClass;
-            this.applyRetryPriority(current, previousCritical, actor, authorization);
+            priorityChanged = this.applyRetryPriority(current, previousCritical, actor, authorization);
             current.pendingBriefChange = {
               previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
               newBriefHash: briefHash(reshaped.brief.markdown),
@@ -763,7 +782,7 @@ export class WorkerTasks {
       if (briefPath) rmSync(briefPath, { force: true });
       throw error;
     }
-    if (reshaped && nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
+    if (priorityChanged && nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
   }
   /** A real proof permit also authorizes its required ordinary priority, including an operations conversion. */
   private applyRetryPriority(
@@ -771,19 +790,18 @@ export class WorkerTasks {
     previousCritical: boolean,
     actor: AuthenticatedManager | null | undefined,
     authorization?: ProofAuthorization,
-  ): void {
+  ): boolean {
     if (!authorization) {
-      applyPriorityTransition(
+      return applyRetryPriorityTransition(
         this.store.db,
         task,
         previousCritical,
         criticalPriority(task.brief, task.taskClass),
         actor,
       );
-      return;
     }
     if (criticalPriority(task.brief, task.taskClass)) throw new Error('proof tasks are ordinary priority only');
-    if (!previousCritical) return;
+    if (!previousCritical) return false;
     task.priorityHistory ??= [];
     task.priorityHistory.push({
       value: 'normal',
@@ -792,6 +810,7 @@ export class WorkerTasks {
       at: new Date().toISOString(),
       provenance: { kind: 'manager-session', sessionId: authorization.sessionId },
     });
+    return true;
   }
   setPriority(
     taskId: string,
@@ -898,7 +917,11 @@ export class WorkerTasks {
           .filter(Boolean);
         if (!conflicts.length) throw error;
         git(task.worktree, ['rebase', '--abort']);
-        const worker = await this.retryTask(taskId, { escalation: 'rebase-conflict', conflictFiles: conflicts }, true);
+        const worker = await this.retryTask(
+          taskId,
+          { escalation: 'rebase-conflict', conflictFiles: conflicts },
+          true,
+        );
         if (!worker) throw new Error('released task was unexpectedly held again');
         return worker;
       }
@@ -1132,14 +1155,11 @@ export class WorkerTasks {
         return null;
       }
       if (heldAmendment) {
-        task = this.store.updateHeldRetryTask(
-          { taskId, attempt: task.currentAttempt },
-          (current) => {
-            current.state = 'ready';
-          },
-          { abandonPending: true },
-        );
-        // Persist the amendment before waiting for capacity, and let a newer amendment or stop take the lease.
+        const releaseRef = { taskId, attempt: task.currentAttempt };
+        task = this.store.releaseHeldRetryTask(releaseRef, (current) => {
+          current.state = 'ready';
+        });
+        // Leave the amended task available to stop or reshape while it waits for capacity.
         lease?.release();
         lease = undefined;
         const startOptions = { ...options };
@@ -1153,6 +1173,17 @@ export class WorkerTasks {
         options.escalation === 'rebase-conflict' && old
           ? priorRebaseConflict(this.store, taskId, old.attempt)
           : undefined;
+      const heldRelease = this.store.events(taskId, task.currentAttempt).some((event) => {
+        if (event.kind !== 'held-task-released') return false;
+        try {
+          return (JSON.parse(event.body) as { releasedAttempt?: unknown }).releasedAttempt === task.currentAttempt + 1;
+        } catch {
+          return false;
+        }
+      });
+      const boundary =
+        heldRelease ? 'held-release' : old?.escalation === 'import' ? 'adopted-legacy' : old ? 'retry' : 'fresh';
+      const origin = old?.escalation === 'import' ? 'adopted-legacy' : 'managed';
       const oldConfigDirectory = old
         ? pools.find((candidate) => candidate.name === old.pool)?.configDirectory
         : undefined;
@@ -1226,8 +1257,13 @@ export class WorkerTasks {
             },
       );
       const oldSession = old ? attemptSession(old) : null;
+      // Releasing a contract amended after its worker settled starts a new conversation. A held check waiter is
+      // different: release stops its waiting attempt, but its saved checks still need their original session.
+      // Terminal records take precedence over checks retained from an earlier waiting turn.
+      const continuingCheckWait =
+        old?.state === 'stopped' && Boolean(old.checks?.length) && !this.store.record(old);
       const resumeSession =
-        !briefChange &&
+        !(heldRelease && briefChange && !continuingCheckWait) &&
         oldSession &&
         agentAdapter(profile.cli).canResume &&
         old!.pool === pool.name &&
@@ -1338,13 +1374,22 @@ export class WorkerTasks {
             argv: task.brief.acceptance.command,
             cwd: task.worktree,
           });
+          const context = captureLaunchContext(this.store, next, boundary, origin);
           retryPrepared = true;
           return await this.launcher(
             this.store,
             task,
             next,
             pool,
-            workerPrompt(task, options.evidence, undefined, [], this.settings.mainCheckout),
+            workerPrompt(
+              task,
+              options.evidence,
+              undefined,
+              [],
+              this.settings.mainCheckout,
+              context,
+              this.settings.stateDirectory,
+            ),
             this.settings.codex,
             resumeSession,
           );
@@ -1356,17 +1401,21 @@ export class WorkerTasks {
           return await controller.withLaunch(task.workspace.module, async () => {
             controller.syncIdle(task.workspace!.module, task.id);
             this.prepareSharedFrozen(task);
+            task = this.store.task(taskId);
+            const context = captureLaunchContext(this.store, next, boundary, origin);
             const prompt = workerPrompt(
-              this.store.task(taskId),
+              task,
               options.evidence,
               options.consultation,
               [],
               this.settings.mainCheckout,
+              context,
+              this.settings.stateDirectory,
             );
             retryPrepared = true;
             return await this.launcher(
               this.store,
-              this.store.task(taskId),
+              task,
               next,
               pool,
               prompt,
@@ -1436,7 +1485,16 @@ export class WorkerTasks {
           existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name]))),
         );
         if (!files.length && options.escalation === 'rebase-conflict' && rebasing) files = options.conflictFiles ?? [];
-        const prompt = workerPrompt(task, options.evidence, options.consultation, files, this.settings.mainCheckout);
+        const context = captureLaunchContext(this.store, next, boundary, origin);
+        const prompt = workerPrompt(
+          task,
+          options.evidence,
+          options.consultation,
+          files,
+          this.settings.mainCheckout,
+          context,
+          this.settings.stateDirectory,
+        );
         retryPrepared = true;
         return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);
       } catch (error) {

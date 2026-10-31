@@ -6,10 +6,21 @@ import {
   refreshHistoricalProofAdmission,
 } from './verification.ts';
 import { taskCommits } from './workspace.ts';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+} from 'node:fs';
 import { hostname } from 'node:os';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
 import {
   liveGroups,
@@ -48,10 +59,11 @@ import {
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt, Task } from './types.ts';
 import type { RunningWorker } from './launch.ts';
-import { capacityWaiters, checkWaitMs, launch, workerCheckProtocol, workerPrompt } from './launch.ts';
+import { capacityWaiters, checkWaitMs, launch, workerPrompt } from './launch.ts';
 import { awaitHostCapacity, startsFirst } from './launch.ts';
 import { agentAdapter, agentCommands } from './agents.ts';
 import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetime.ts';
+import { captureLaunchContext } from './launch-context.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -68,6 +80,138 @@ function rebaseConflictFiles(outcome: GateOutcome): string[] {
 
 function loggedCommands(attempt: Attempt): string[] {
   return agentCommands(readLogTail(attempt.logPath), agentAdapter(attempt.profile.cli));
+}
+
+const MAX_CHECK_LOG_EXCERPT_BYTES = 4096;
+const CHECK_LOG_PATH_PREFIX = '.temp/goal/checks/worker-check-';
+const CHECK_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function singleLine(value: unknown, limit: number): string {
+  return String(value).replace(/[\r\n\0]+/g, ' ').slice(0, limit);
+}
+
+function checkCommand(value: Record<string, unknown>): string {
+  const argv = value.argv;
+  if (Array.isArray(argv) && argv.every((part) => typeof part === 'string'))
+    return JSON.stringify(argv).slice(0, 1200);
+  if (typeof value.command === 'string') return singleLine(value.command, 1200);
+  return 'unknown (terminal record did not include argv)';
+}
+
+function ownedTerminalLogPath(task: Task, id: string, value: Record<string, unknown>):
+  | { path: string; original: string }
+  | { path: null; original: string; reason: string } {
+  const raw = value.log ?? value.logPath ?? value.log_path;
+  const original = typeof raw === 'string' ? singleLine(raw, 1000) : 'unknown (terminal record did not include a log path)';
+  const unknown = (reason: string) => ({ path: null, original, reason });
+  if (!CHECK_UUID.test(id)) return unknown('check id is not a bare UUID');
+  if (value.id !== id) return unknown('terminal record identity does not match the owned check UUID');
+  if (
+    typeof value.cwd !== 'string' ||
+    !isAbsolute(value.cwd) ||
+    resolve(value.cwd) !== resolve(task.worktree)
+  )
+    return unknown('terminal record cwd does not match this task worktree');
+  if (
+    String(value.status ?? '').toLowerCase() !== 'finished' ||
+    typeof value.runnerPid !== 'number' ||
+    !Number.isSafeInteger(value.runnerPid) ||
+    Number(value.runnerPid) <= 0 ||
+    typeof value.runnerHost !== 'string' ||
+    !value.runnerHost.length ||
+    !Array.isArray(value.argv) ||
+    !value.argv.every((part) => typeof part === 'string')
+  )
+    return unknown('terminal record is incomplete or is not in the finished state');
+  if (typeof raw !== 'string' || !raw.length) return unknown('terminal record did not include an original log path');
+
+  const normalized = raw.replaceAll('\\', '/');
+  if (
+    isAbsolute(raw) ||
+    normalized.split('/').some((part) => part === '..' || part === '.') ||
+    normalized !== `${CHECK_LOG_PATH_PREFIX}${id}.log`
+  )
+    return unknown('log path is outside this UUID-owned check log prefix');
+  const path = resolve(task.worktree, raw);
+  const checksDirectory = resolve(task.worktree, '.temp/goal/checks');
+  const relativePath = relative(resolve(task.worktree), path).replaceAll('\\', '/');
+  if (
+    dirname(path) !== checksDirectory ||
+    relativePath !== normalized ||
+    basename(path) !== `worker-check-${id}.log`
+  )
+    return unknown('log path is nested or does not match this check UUID');
+
+  try {
+    const components = [
+      task.worktree,
+      join(task.worktree, '.temp'),
+      join(task.worktree, '.temp/goal'),
+      checksDirectory,
+      path,
+    ];
+    for (const [index, component] of components.entries()) {
+      const stat = lstatSync(component);
+      if (stat.isSymbolicLink()) return unknown('log path crosses a symbolic link');
+      if (index < components.length - 1 ? !stat.isDirectory() : !stat.isFile())
+        return unknown('log path is not a regular file under this worktree');
+    }
+  } catch {
+    return unknown('owned terminal log is missing or unreadable');
+  }
+  return { path, original };
+}
+
+function terminalCheckFailureEvidence(
+  task: Task,
+  id: string,
+  value: Record<string, unknown>,
+  status: unknown,
+): string {
+  const command = checkCommand(value);
+  const exitValue = value.exitStatus ?? value.exit_status ?? value.exitCode ?? value.exit_code ?? value.exit ?? value.code;
+  const exitCode = Number(exitValue);
+  const log = ownedTerminalLogPath(task, id, value);
+  const header = `check ${id} failure evidence: command ${command}; exit status ${singleLine(status, 80)}; evidence path ${log.original}`;
+  if (!Number.isSafeInteger(exitCode) || exitCode === 0 || exitCode !== Number(status))
+    return `${header}; excerpt unknown (terminal record exit status is missing or inconsistent).`;
+  if (log.path === null)
+    return `${header}; excerpt unknown (${log.reason}); original path ${log.original}.`;
+
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(log.path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const before = fstatSync(descriptor);
+    if (!before.isFile()) return `${header}; excerpt unknown (owned log is not a regular file).`;
+    const truncated = before.size > MAX_CHECK_LOG_EXCERPT_BYTES;
+    const length = Math.min(before.size, MAX_CHECK_LOG_EXCERPT_BYTES);
+    const offset = truncated ? before.size - length : 0;
+    const bytes = Buffer.alloc(length);
+    const count = readSync(descriptor, bytes, 0, length, offset);
+    const after = fstatSync(descriptor);
+    if (count !== length || before.size !== after.size || before.mtimeMs !== after.mtimeMs)
+      return `${header}; excerpt unknown (owned log changed during the bounded read).`;
+    const excerpt = bytes
+      .subarray(0, count)
+      .toString('utf8')
+      .replace(/\r\n?/g, '\n')
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffd]/g, '?')
+      .trim();
+    if (!excerpt) return `${header}; excerpt unknown (owned terminal log is empty).`;
+    const state = truncated
+      ? `truncated; the complete failure detail is unknown (showing only the final ${MAX_CHECK_LOG_EXCERPT_BYTES} bytes)`
+      : `complete (${length} bytes)`;
+    return [
+      `${header}; excerpt status ${state}.`,
+      `BEGIN OWNED CHECK LOG EXCERPT ${id}`,
+      excerpt,
+      `END OWNED CHECK LOG EXCERPT ${id}`,
+    ].join('\n');
+  } catch {
+    return `${header}; excerpt unknown (owned terminal log is unreadable); original path ${log.original}.`;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
 }
 
 function checkStarted(task: Task, attempt: Attempt): boolean {
@@ -349,6 +493,7 @@ export class WorkerJob implements GateOutcomeSink {
     if (!checks.length) return 'The waiting attempt has no saved check ids; resume and report this recovery issue.';
     const directory = join(task.worktree, '.temp/goal/checks');
     const details: string[] = [];
+    let settledChecks = 0;
     for (const id of checks) {
       const resultPath = join(directory, 'results', `${id}.json`);
       if (!existsSync(resultPath)) {
@@ -362,17 +507,20 @@ export class WorkerJob implements GateOutcomeSink {
             details.push(
               `check ${id}: check host stopped in state ${state}; exit status unavailable; log path ${String(run.logPath ?? run.log_path ?? 'unavailable')}`,
             );
+            settledChecks += 1;
             continue;
           } catch {
             details.push(
               `check ${id}: check host left an unreadable run record; exit status unavailable; log path ${runPath}`,
             );
+            settledChecks += 1;
             continue;
           }
         }
         details.push(
           `check ${id}: run vanished or check host failed before writing a result; exit status unavailable; log path unavailable`,
         );
+        settledChecks += 1;
         continue;
       }
       try {
@@ -394,6 +542,7 @@ export class WorkerJob implements GateOutcomeSink {
           details.push(
             `check ${id}: run vanished (runner ${runner} exited without a result); exit status unavailable; log path ${String(value.log ?? value.logPath ?? 'unavailable')}`,
           );
+          settledChecks += 1;
           continue;
         }
         const status =
@@ -405,6 +554,7 @@ export class WorkerJob implements GateOutcomeSink {
           value.code ??
           value.status ??
           'unknown';
+        const numericStatus = Number(status);
         const summary =
           value.failureSummary ??
           value.failure_summary ??
@@ -412,8 +562,12 @@ export class WorkerJob implements GateOutcomeSink {
           value.summary ??
           value.errorLine ??
           value.error ??
-          (Number(status) === 0 ? 'passed' : 'check failed without a summary');
-        const log = value.logPath ?? value.log_path ?? value.log ?? join(directory, `worker-check-${id}.log`);
+          (Number.isFinite(numericStatus)
+            ? numericStatus === 0
+              ? 'passed'
+              : 'check failed without a summary'
+            : 'summary unavailable');
+        const log = value.logPath ?? value.log_path ?? value.log ?? 'unknown (result record did not name a log path)';
         details.push(
           `check ${id}: exit status ${String(status)}; ${String(summary)
             .replace(/[\r\n]+/g, ' ')
@@ -421,57 +575,31 @@ export class WorkerJob implements GateOutcomeSink {
             .replace(/[\r\n]+/g, ' ')
             .slice(0, 1000)}`,
         );
+        if (Number.isFinite(numericStatus) && numericStatus !== 0)
+          details.push(terminalCheckFailureEvidence(task, id, value, status));
+        settledChecks += 1;
       } catch (error) {
         details.push(
           `check ${id}: check host failed to write a readable result (${String(error)}); log path ${resultPath}`,
         );
+        settledChecks += 1;
       }
     }
     return details.some((line) => line.startsWith('check ') && line.includes('run vanished'))
       ? `The checks completed or failed to run. Resume this same session with their results:\n${details.join('\n')}`
-      : details.length === checks.length
+      : settledChecks === checks.length
         ? `All checks have finished. Resume this same session with their results:\n${details.join('\n')}`
         : null;
   }
   private async resumeWaiting(attempt: Attempt, task: Task, message: string): Promise<void> {
-    const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
-    if (!pool) throw new Error(`Waiting attempt refers to missing pool ${attempt.pool}`);
-    const adapter = agentAdapter(attempt.profile.cli);
-    const canResume = adapter.canResume && !!attempt.session;
-    if (task.brief.kind === 'verification' && !canResume) {
-      await this.endAsEnvironment(
-        attempt,
-        new Error('Original proof session unavailable; no replacement model may rerun it'),
-        false,
-        true,
-      );
-      return;
-    }
-    const prompt = [
-      ...(!canResume
-        ? [workerPrompt(task, attempt.evidencePath, undefined, [], this.tasks.settings.mainCheckout)]
-        : []),
-      `The checks you started have finished or could not be found. ${message}`,
-      ...(canResume
-        ? [
-            workerCheckProtocol(
-              task.worktree,
-              task.brief,
-              this.tasks.settings.stateDirectory,
-              task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined,
-              task.proofAuthorization,
-            ),
-          ]
-        : []),
-      'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
-    ].join('\n\n');
+    const ref = { taskId: attempt.taskId, attempt: attempt.attempt };
     const failureCount = () =>
       this.tasks.store
-        .events(attempt.taskId, attempt.attempt)
+        .events(ref.taskId, ref.attempt)
         .filter((event) => event.kind === 'waiting-resume-launch-failed').length;
     const lastFailure = () => {
       const event = this.tasks.store
-        .events(attempt.taskId, attempt.attempt)
+        .events(ref.taskId, ref.attempt)
         .filter((value) => value.kind === 'waiting-resume-launch-failed')
         .at(-1);
       if (!event) return 'Worker CLI failed to resume the waiting session';
@@ -493,35 +621,79 @@ export class WorkerJob implements GateOutcomeSink {
         this.tasks.settings.stateDirectory,
         startsFirst(task),
         task.id,
-        attempt.attempt,
+        ref.attempt,
       );
       let worker: RunningWorker | undefined;
+      let lease: DirectoryLease | undefined;
       try {
+        // Capacity may take time. Reacquire the task lease only after it, then take the current store and Git
+        // snapshot with no SQLite transaction open. A replacement attempt or reshape wins before this launch.
+        lease = acquireDirectoryLeaseWaiting(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
+        const currentTask = this.tasks.store.task(ref.taskId);
+        const currentAttempt = this.tasks.store.attempt(ref);
+        if (
+          currentTask.currentAttempt !== ref.attempt ||
+          currentTask.state !== 'running' ||
+          currentAttempt.state !== 'waiting'
+        )
+          return;
+        const pool = this.tasks.settings.pools.find((candidate) => candidate.name === currentAttempt.pool);
+        if (!pool) throw new Error(`Waiting attempt refers to missing pool ${currentAttempt.pool}`);
+        const canResume = agentAdapter(currentAttempt.profile.cli).canResume && !!currentAttempt.session;
+        if (currentTask.brief.kind === 'verification' && !canResume) {
+          await this.endAsEnvironment(
+            ref,
+            new Error('Original proof session unavailable; no replacement model may rerun it'),
+            true,
+            true,
+          );
+          return;
+        }
+        const context = captureLaunchContext(
+          this.tasks.store,
+          ref,
+          'wake',
+          currentAttempt.escalation === 'import' ? 'adopted-legacy' : 'managed',
+        );
+        const prompt = [
+          workerPrompt(
+            currentTask,
+            canResume ? undefined : currentAttempt.evidencePath,
+            undefined,
+            [],
+            this.tasks.settings.mainCheckout,
+            context,
+            this.tasks.settings.stateDirectory,
+          ),
+          `The checks you started have finished or could not be found. ${message}`,
+          'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
+        ].join('\n\n');
         worker = await launch(
           this.tasks.store,
-          task,
-          attempt,
+          currentTask,
+          currentAttempt,
           pool,
           prompt,
           this.tasks.settings.codex,
-          canResume ? attempt.session! : undefined,
+          canResume ? currentAttempt.session! : undefined,
         );
       } catch (error) {
+        if (error instanceof StaleAttemptError) return;
         const detail = (error instanceof Error ? `${error.name}: ${error.message}` : String(error))
           .replace(/[\r\n]+/g, ' ')
           .slice(0, 4000);
         const errorLine = detail.split(/\r?\n/, 1)[0]!.slice(0, 1000);
         let count = 0;
-        this.tasks.store.write({ taskId: attempt.taskId, attempt: attempt.attempt }, () => {
+        this.tasks.store.write(ref, () => {
           count = failureCount() + 1;
-          this.tasks.store.updateAttempt({ taskId: attempt.taskId, attempt: attempt.attempt }, (current) => {
+          this.tasks.store.updateAttempt(ref, (current) => {
             current.state = 'waiting';
             current.process = null;
             current.driver = null;
             current.result = detail;
             current.failureKind = null;
           });
-          this.tasks.store.event({ taskId: attempt.taskId, attempt: attempt.attempt }, 'waiting-resume-launch-failed', {
+          this.tasks.store.event(ref, 'waiting-resume-launch-failed', {
             count,
             detail,
             errorLine,
@@ -529,15 +701,16 @@ export class WorkerJob implements GateOutcomeSink {
         });
         if (task.brief.kind === 'verification' || count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
           await this.endAsEnvironment(
-            { taskId: attempt.taskId, attempt: attempt.attempt },
+            ref,
             new Error(errorLine),
-            false,
+            lease !== undefined,
             true,
           );
           return;
         }
         continue;
       } finally {
+        lease?.release();
         releaseCapacity();
       }
 
@@ -547,7 +720,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (count === before) return;
       if (task.brief.kind === 'verification' || count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
         await this.endAsEnvironment(
-          { taskId: attempt.taskId, attempt: attempt.attempt },
+          ref,
           new Error(lastFailure()),
           false,
           true,
@@ -856,18 +1029,12 @@ export class WorkerJob implements GateOutcomeSink {
         const candidate = store.task(taskId);
         if (candidate.state !== 'held' || !this.tasks.dependenciesMet(candidate)) continue;
         const ref = { taskId, attempt: candidate.currentAttempt };
-        if (candidate.currentAttempt)
-          store.updateHeldRetryTask(
-            ref,
-            (current) => {
-              current.state = 'ready';
-            },
-            { abandonPending: true },
-          );
-        else
-          store.updateTask(ref, (current) => {
-            current.state = 'ready';
-          });
+        // A held amendment may retain an old writer. Integration satisfies the dependency, but only settlement
+        // relinquishes that writer's ownership; leave the store's terminal-attempt release fence intact.
+        if (ref.attempt > 0 && store.attempt(ref).state === 'running') continue;
+        store.releaseHeldRetryTask(ref, (current) => {
+          current.state = 'ready';
+        });
         released.push(taskId);
       } finally {
         lease.release();

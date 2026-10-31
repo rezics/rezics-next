@@ -7,6 +7,49 @@ import { WorkerJob } from './job.ts';
 import { git } from './merge.ts';
 import { harness, integrationHarness, markdown } from './test-support.ts';
 import { runWorkerCommand } from './worker-commands.ts';
+import { StdioAppServer } from './app-server.ts';
+import { SqliteManagerInbox } from './inbox.ts';
+import { ManagerSessions } from './managers.ts';
+import { authenticatedManager } from './priority-authority.ts';
+
+async function startOwner(h: ReturnType<typeof harness>, manager: string) {
+  const inbox = new SqliteManagerInbox(h.store.db, h.settings.stateDirectory);
+  const sessions = new ManagerSessions(h.store.db, inbox, {
+    command: ['goal'],
+    connect: async () => {
+      const client = new StdioAppServer(
+        [process.execPath, join(import.meta.dir, 'fixtures/fake-app-server.ts')],
+        { ...process.env, FAKE_RPC_LOG: join(h.settings.stateDirectory, 'owner-rpc.jsonl') },
+      );
+      await client.initialize();
+      return client;
+    },
+    windows: { register: () => '@owner', unregister() {} },
+    checkCompletion: async () => ({ passed: false, evidencePath: 'unused', summary: 'not complete' }),
+  });
+  try {
+    const state = await sessions.start({
+      id: manager,
+      goal: manager,
+      objective: 'Own the held retry fixture',
+      brief: 'Amend the held worker contract through its authenticated owner.',
+      cwd: h.root,
+      engine: 'codex',
+      pool: { id: 'owner', codexHome: h.settings.stateDirectory },
+      budget: 1000,
+      effort: 'low',
+      supermanager: 'supermanager',
+      limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
+    });
+    if (!state.threadId) throw new Error('owner fixture did not establish a provider session');
+    const env = { CODEX_THREAD_ID: state.threadId, GOAL_MANAGER: manager };
+    expect(authenticatedManager(h.store.db, env)).toEqual({ id: manager, sessionId: state.threadId });
+    return { env, close: () => sessions.close() };
+  } catch (error) {
+    await sessions.close();
+    throw error;
+  }
+}
 
 async function holdAndReleaseAfterDependencyReturns(taskState: 'landing' | 'running'): Promise<void> {
   const h = integrationHarness();
@@ -220,12 +263,14 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
 
 test('CLI reshape of a held task preserves every attempt and retry-intent state without starting a worker', async () => {
   const h = harness();
+  let owner: Awaited<ReturnType<typeof startOwner>> | undefined;
   // Seed historical states through another connection, as a controller restart would observe them. Direct writes on
   // the store's own connection bypass its write methods and do not advance SQLite's data_version for its read cache.
   const fixtureDb = openDb(join(h.settings.stateDirectory, 'goal.sqlite'));
   try {
     const dependency = h.tasks.dispatch(h.briefFile);
     const task = h.tasks.dispatch(h.briefFile);
+    owner = await startOwner(h, task.brief.manager);
     const worker = await h.tasks.retry(task.id);
     await worker.exited;
     const ref = worker.attempt;
@@ -270,7 +315,7 @@ test('CLI reshape of a held task preserves every attempt and retry-intent state 
           settings: h.settings,
           store: h.store,
           tasks: h.tasks,
-          env: {},
+          env: owner.env,
           print() {},
         });
 
@@ -328,7 +373,7 @@ test('CLI reshape of a held task preserves every attempt and retry-intent state 
         settings: h.settings,
         store: h.store,
         tasks: h.tasks,
-        env: {},
+        env: owner.env,
         print: (line) => output.push(line),
       }),
     ).toBe(0);
@@ -349,6 +394,7 @@ test('CLI reshape of a held task preserves every attempt and retry-intent state 
     expect(h.store.attempt(ref).state).toBe('waiting');
     expect(h.store.attempts(task.id)).toHaveLength(1);
   } finally {
+    await owner?.close();
     fixtureDb.close();
     h.dispose();
   }
@@ -356,6 +402,7 @@ test('CLI reshape of a held task preserves every attempt and retry-intent state 
 
 test('a live held attempt keeps ownership through reshape and releases once on the amended dependency base without resuming its old prompt', async () => {
   const h = integrationHarness();
+  let owner: Awaited<ReturnType<typeof startOwner>> | undefined;
   try {
     h.ensureDev();
     const dependency = h.dispatch('dependency.txt');
@@ -372,6 +419,7 @@ test('a live held attempt keeps ownership through reshape and releases once on t
     expect(h.store.task(dependency.id).state).toBe('landing');
 
     const target = h.dispatch('target.txt');
+    owner = await startOwner(h, target.brief.manager);
     writeFileSync(
       h.settings.pools[0]!.command,
       `#!/usr/bin/env bun
@@ -416,7 +464,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
         settings: h.settings,
         store: h.store,
         tasks: h.tasks,
-        env: {},
+        env: owner.env,
         print() {},
       }),
     ).toBe(0);
@@ -475,6 +523,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     expect(h.store.task(target.id).state).toBe('integrated');
     expect(backgroundErrors(h.inbox)).toHaveLength(0);
   } finally {
+    await owner?.close();
     h.dispose();
   }
 });
@@ -562,9 +611,11 @@ test('a terminal held amendment joins capacity without its lease and honors a ne
 test('CLI removal of the last dependency retains a host retry without starting an attempt during reshape', async () => {
   const h = harness();
   const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+  let owner: Awaited<ReturnType<typeof startOwner>> | undefined;
   try {
     const dependency = h.tasks.dispatch(h.briefFile);
     const task = h.tasks.dispatch(h.briefFile);
+    owner = await startOwner(h, task.brief.manager);
     await job.start(task.id);
     const ref = { taskId: task.id, attempt: 1 };
     h.store.updateTask(ref, (current) => {
@@ -579,7 +630,7 @@ test('CLI removal of the last dependency retains a host retry without starting a
         settings: h.settings,
         store: h.store,
         tasks: h.tasks,
-        env: {},
+        env: owner.env,
         print() {},
       }),
     ).toBe(0);
@@ -601,6 +652,7 @@ test('CLI removal of the last dependency retains a host retry without starting a
     await job.drain();
     expect(h.store.attempts(task.id)).toHaveLength(2);
   } finally {
+    await owner?.close();
     h.dispose();
   }
 });

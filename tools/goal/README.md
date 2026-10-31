@@ -38,6 +38,21 @@ does not name another existing wrapper path, the worker runs the command in the 
 does not add a wrapper. Workers do not run the root typecheck, affected checks or other
 regression checks. The task's acceptance command defines when its work is done.
 
+When the configured state directory's `verification-mode` file contains `minimal`, every launch and continuation
+receives the current source-completion policy alongside its canonical contract. Workers finish their own implementation
+and required changed-workspace typing, then commit and return `success`, `blocker:null`, `checks:[]`, naming the code
+completed and the original acceptance/native obligations deferred until after integration. This source result does not
+claim whole-feature, native or Goal completion. Typing alone does not establish product completion: unfinished own
+implementation or absent authority requires an exact blocker. Deferred acceptance alone is neither blocked nor waiting.
+Waiting requires genuinely running registered bare UUID checks owned by that task and attempt; an empty list, completed
+command or product blocker cannot justify it. Normal mode retains the wrapper continuation protocol above.
+
+Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking, with
+its real leases, results and terminal status preserved. It grants no acceptance, native, browser, root or worker-check
+permission. A foreground compiler must finish through its already-open tool command/session handle; workers must not
+invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or interrupt
+live compilers. The controller forwards this policy through its existing prompt seam; it does not steer live sessions.
+
 The dev landing train runs regression checks against the combined batch candidate. It runs the root typecheck once,
 each configured affected check whose path patterns match any changed path once, and matching sibling tests once. The
 sibling command prefix is configured by `siblingTests.command` in `defaults.json`; it receives the selected test paths.
@@ -105,6 +120,18 @@ the current run from that offset, so a resumed CLI that fails before writing a n
 previous turn's `waiting` result. Attempt measurements still include the available log history. A waiting attempt gets
 up to three resume launch attempts; if all fail before opening a session, Goal stops the attempt and sends one
 environment notice with the launch error line to the supermanager.
+
+Every fresh launch, retry, held-task release and check wake renders a bounded controller receipt from the current task
+generation under its lease. It records the current contract hash and path, task base and worktree identity, plus only the
+declared `after:` dependencies and their integrated commit and Git ancestry proof when available. Lifecycle completion
+does not prove that dependency code is in the task source. Missing, stale, cancelled, truncated or unverifiable facts
+stay unknown in the prompt. A new receipt supersedes future-tense instructions in an older prompt, retry manifest or
+attempt result; recovery does not reuse an older attempt's context.
+
+When a waiting session wakes on a finished failed check, Goal includes the exact result identity, command, exit status
+and original log path. It reads only a UUID-owned log in that task's check directory and includes at most 4 KiB of its
+tail. Missing, unreadable, mismatched or truncated evidence is identified as unknown; other check logs and the worker's
+attempt log are not used as substitutes.
 
 ## Shared module workspaces (opt in)
 
@@ -378,7 +405,10 @@ app-server, pool reservation or token budget. The supermanager grants with
 `bun tools/goal/src/cli.ts priority revoke <task> <grant-id>` revokes an unused grant by its grantor. The owner may
 demote with `bun tools/goal/src/cli.ts priority <task> normal` without a grant. Priority history records setter,
 grantor, timestamp and manager-session provenance; older tasks without history remain unknown rather than receiving a
-fabricated setter. Priority commands require the caller's Codex or Claude session ID to match a running persisted
+fabricated setter. Every retry with an amended brief requires the authenticated task owner, even when the effective
+priority stays the same. Repeating the current priority preserves its history and any consumed grant without creating
+another priority decision. A retry that changes priority uses the existing transition and grant rules. Priority
+commands and amended-brief retries require the caller's Codex or Claude session ID to match a running persisted
 manager session; `GOAL_MANAGER` alone is not authorization. Performance's `worker-check` reads this file and passes
 `REMOTE_CHECK_PRIORITY=critical` for remaining checks when its contents are `critical`.
 It writes command output to `.temp/goal/checks/`, records the check duration for the worker deadline and silence monitor,
@@ -427,12 +457,16 @@ requires waiting tasks and `inseparable`.
 ### Acceptance placement
 
 `acceptance.placement` is an optional brief field. Omit it, or set it to `default`, to keep the existing remote-capable
-check policy. Set it to `local` only for the audited local command boundary: `bun run --cwd apps/web typecheck` or
-explicit Bun unit/component test files under `apps/web/tests/`. Local Bun tests may use `-t`/`--test-name-pattern`;
-shell composition is limited to these supported commands joined with `&&` through `sh -c`. Globs, broad test runs,
-scripts, host/integration/database tests, native
-routes, shell expansion and other commands are rejected. The Web boundary is typechecking and individually named
-component tests; it does not include the Web host or native check routes.
+check policy. Set it to `local` only for the audited Web commands: `bun run --cwd apps/web typecheck`, explicitly
+named Bun unit/component test files under `apps/web/tests/`, or the focused runner form
+`bun apps/web/scripts/focused.ts --private-network -- bun test tests/<named-test>.test.ts` from its known `apps/web`
+working directory. The focused runner may have the exact `env -u KERNEL_ORIGIN` and
+`PUBLIC_ORIGIN=http://127.0.0.1:3000` prefix used by the Web command. `sh -c` may join supported commands with `&&`,
+and only the audited `timeout 590 sh -c ...` wrapper is recognized. Local Bun tests may use `-t` or
+`--test-name-pattern` with an explicit selector. Globs, broad test runs, unknown scripts, preloads, browsers, stack
+wrappers, host/integration/database tests, native routes, shell expansion and unrecognized flags are rejected. The
+focused runner uses `apps/web` as its working directory and prepares its local test runtime; it does not enter the Web
+host or native check routes.
 
 ```yaml
 acceptance:
@@ -917,6 +951,11 @@ after it remain held because cancellation does not satisfy `after`; each manager
 instruction naming the held tasks and cancelled dependency. During host recovery, a held task with a cancelled
 dependency that predates this notification is reported once to its manager. The manager decides whether to revise the
 dependency.
+A held amendment keeps its old live attempt's ownership until settlement, even if its dependencies integrate first.
+The next host sweep can then release it under the task lease and start the amended contract from the updated base.
+An amended held contract starts a fresh provider session after its old worker settles. A check waiter with saved checks
+and no terminal attempt record can continue its original session with the current contract; retained check IDs on a
+terminal attempt do not make it a check continuation. An unchanged held retry retains its supported session resume.
 
 `inbox send` delivers a one-line decision event to another manager and records the sending manager as its source.
 
@@ -927,8 +966,16 @@ otherwise scoped task briefs and a matching local manager pool supply the defaul
 Each manager host starts a loopback WebSocket app-server for its Codex pool and records the process identity. The host
 stops those app-servers on shutdown, and a replacement host stops any surviving app-server before resuming persisted
 threads. Recovery reopens each Codex viewer on the current endpoint with `codex resume <thread> --remote <endpoint>`.
-Codex managers use a goal budget. Claude uses its configured executable and configuration directory, interactive
-window and turn-accounting hooks.
+The neutral host and shared app-server start with inherited provider session markers removed. Each manager launch then
+uses its selected provider account: Codex pool processes receive that pool's `CODEX_HOME`, while Claude receives its
+configured `CLAUDE_CONFIG_DIR`. Managed manager recovery follows the normal host code-version handoff: after Goal code
+changes, the host reexecutes from the current checkout, reopens persisted sessions, and resumes each stored provider
+session while keeping its manager history and budget. An already-running provider keeps its original environment until
+that handoff; the host does not edit a live process environment. A resident supermanager remains an external session
+and is never launched or resumed by host recovery. Codex managers use a goal budget. Claude uses its configured
+executable and configuration directory, interactive window and turn-accounting hooks.
+Codex manager recovery and turn-race rejoins forward the manager's configured effort and `compactTokens` through
+`thread/resume.config`, as thread creation does. Forwarding the threshold does not prove that compaction occurred.
 
 The host listens before it resumes persisted managers, and recovers managers independently so one provider request
 cannot prevent another manager from using the socket. Commands from a recorded manager session store a deduplicated
@@ -1096,6 +1143,8 @@ host survival. Detection polls once a second. Host startup errors remain in `man
 `manager-host-supervisor.log`. Graceful shutdown disables restart, state-directory removal ends supervision, and code
 handoff uses the same fenced launch path. Provider recovery and app-server cleanup remain owned by the host.
 Supervisor launch waits for fenced ownership before host readiness; a late launcher leaves removed state absent.
+Host startup, supervisor launch and code handoff remove inherited provider and task session markers through the same
+neutral environment sanitizer, preserving configured Goal paths and the invoking working directory.
 
 Integration, cancellation and stopping explicitly close pending flow stages without fabricating successful stage
 completion or duration. Reporting also uses stored terminal task state to exclude legacy stale queue entries. An
