@@ -211,9 +211,12 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (task.currentAttempt !== ref.attempt) return;
       if (task.state === 'held') return;
-      this.tasks.assertProofStart(task);
-      await this.tasks.refreshProofAdmission(task);
-      if (task.brief.kind === 'verification' && !store.proofCapacityAvailable(task.brief.goal, task.id)) return;
+      // Ordinary recovery publishes its retry generation without waiting on proof-only preparation.
+      if (task.brief.kind === 'verification') {
+        this.tasks.assertProofStart(task);
+        await this.tasks.refreshProofAdmission(task);
+        if (!store.proofCapacityAvailable(task.brief.goal, task.id)) return;
+      }
       if (!['landing', 'ready', 'running', 'stopped'].includes(task.state)) {
         store.updateRetryIntent(ref, (value) => {
           value.status = 'started';
@@ -903,7 +906,7 @@ export class WorkerJob implements GateOutcomeSink {
     if (adoptRunning) {
       try {
         await refreshHistoricalProofAdmission(store, join(this.tasks.settings.stateDirectory, 'check-registry'), {
-          root: this.tasks.settings.integration.checkScriptReaderRoot ?? resolve(import.meta.dir, '../../..'),
+          root: this.tasks.settings.integration?.checkScriptReaderRoot ?? resolve(import.meta.dir, '../../..'),
           integrationRoot: this.tasks.settings.mainCheckout,
           integrationBranch: this.tasks.settings.integrationBranch,
         });
@@ -913,8 +916,10 @@ export class WorkerJob implements GateOutcomeSink {
       }
     }
     if (adoptRunning) {
-      for (const task of store.tasks()) {
-        if (task.currentAttempt && !['running', 'landing'].includes(task.state) &&
+      // Settled task history is not recovery work; only active permits need logical reconciliation.
+      for (const run of store.activeProofReservations()) {
+        const task = store.task(run.binding.taskId);
+        if (task.currentAttempt === run.binding.attempt && !['running', 'landing'].includes(task.state) &&
             ['stopped', 'exited', 'cancelled', 'superseded'].includes(store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state))
           store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
       }

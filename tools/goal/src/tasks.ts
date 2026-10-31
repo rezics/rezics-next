@@ -968,8 +968,10 @@ export class WorkerTasks {
       this.assertLocalAcceptanceCustody(current, nextBrief);
       if (current.brief.kind === 'verification' && nextBrief.kind !== 'verification')
         throw new Error('registered proof contracts cannot become product retries');
-      this.assertProofStart({ ...current, brief: nextBrief });
-      await this.refreshProofAdmission({ ...current, brief: nextBrief });
+      if (nextBrief.kind === 'verification') {
+        this.assertProofStart({ ...current, brief: nextBrief });
+        await this.refreshProofAdmission({ ...current, brief: nextBrief });
+      }
     }
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
     const plan = leased ? undefined : this.retryPlan(taskId, options);
@@ -1002,14 +1004,16 @@ export class WorkerTasks {
       const nextBrief = reshaped?.brief ?? task.brief;
       if (task.brief.kind === 'verification' && nextBrief.kind !== 'verification')
         throw new Error('registered proof contracts cannot become product retries');
-      this.assertProofStart({ ...task, brief: nextBrief });
-      await this.refreshProofAdmission({ ...task, brief: nextBrief });
-      if (nextBrief.kind === 'verification' && !this.store.proofCapacityAvailable(nextBrief.goal, task.id)) {
-        this.store.saveRetryIntent({ taskId, attempt: task.currentAttempt }, {});
-        this.store.event({ taskId, attempt: task.currentAttempt }, 'proof-capacity-queued', {
-          goal: nextBrief.goal, reason: this.store.proofCapacityReason(nextBrief.goal, task.id),
-        });
-        throw new ProofCapacityQueuedError();
+      if (nextBrief.kind === 'verification') {
+        this.assertProofStart({ ...task, brief: nextBrief });
+        await this.refreshProofAdmission({ ...task, brief: nextBrief });
+        if (!this.store.proofCapacityAvailable(nextBrief.goal, task.id)) {
+          this.store.saveRetryIntent({ taskId, attempt: task.currentAttempt }, {});
+          this.store.event({ taskId, attempt: task.currentAttempt }, 'proof-capacity-queued', {
+            goal: nextBrief.goal, reason: this.store.proofCapacityReason(nextBrief.goal, task.id),
+          });
+          throw new ProofCapacityQueuedError();
+        }
       }
       this.assertLocalAcceptanceCustody(task, nextBrief);
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;

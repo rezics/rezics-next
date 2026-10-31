@@ -1369,7 +1369,13 @@ test('unavailable optional historical reader records one diagnostic while ordina
     const ordinary = h.store.createTask(brief(),
       { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
     const ref = h.store.nextAttempt({ taskId: ordinary.id, attempt: 0 }, (n) => attempt(ordinary.id, n, h.settings.stateDirectory));
+    h.store.updateAttempt(ref, (current) => {
+      current.state = 'exited'; current.endedAt = new Date().toISOString();
+      current.exitCode = 0; current.result = 'RESULT: success';
+    });
     h.store.updateTask(ref, (current) => { current.state = 'landing'; });
+    h.store.landing({ ...ref, branch: ordinary.branch, worktree: ordinary.worktree,
+      declaredPaths: ordinary.brief.paths, gate: ordinary.brief.acceptance.command }, () => {});
     const inbox: ManagerEvent[] = [];
     const job = new WorkerJob(h.tasks, new SqliteLandingQueue(h.store.db, h.store), { deliver: (event) => inbox.push(event) });
     let retrySweeps = 0;
@@ -1608,11 +1614,14 @@ test('authenticated stopped UNKNOWN proof retry captures fresh SAME-ID source wi
     const changedArgv = submittedProof(h, { proof: fresh.brief.proof!,
       acceptance: { ...fresh.brief.acceptance, command: [...fresh.brief.acceptance.command, '--changed'] } });
     expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: changedArgv.path }, h.actor))
-      .toThrow('retain every whole original argv');
+      .toThrow('proof cannot register a broad root or gate campaign');
     expect(() => h.store.assertProofRegistration(h.current, changedArgv.brief)).toThrow('exact original acceptance');
     const changedOriginal = submittedProof(h, { proof: { ...fresh.brief.proof!, journey: 'Different journey' } });
     expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: changedOriginal.path }, h.actor))
       .toThrow('exact original metadata');
+    expect(h.store.retryIntent(h.current)).toBeUndefined();
+    expect(h.store.task(h.proof.id).brief).toEqual(oldBrief);
+    expect(h.store.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=? AND attempt=1').get(h.proof.id)).toEqual(retainedRow);
     expect(await runWorkerCommand('retry', [h.proof.id, '--proof-start', '--expected-attempt', '1', '--brief', fresh.path], {
       runtime, env: { CODEX_THREAD_ID: h.actor.sessionId }, print: (value) => output.push(value),
     })).toBe(0);
