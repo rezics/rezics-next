@@ -3,14 +3,7 @@
   "$id": "https://rezics.com/definitions/kind/1",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "format",
-    "id",
-    "labels",
-    "auto",
-    "condition",
-    "presentation"
-  ],
+  "required": ["format", "id", "labels", "auto", "condition", "presentation"],
   "properties": {
     "format": {
       "const": "https://rezics.com/definitions/kind/1"
@@ -29,9 +22,7 @@
           "maxLength": 256
         }
       },
-      "required": [
-        "en"
-      ]
+      "required": ["en"]
     },
     "descriptions": {
       "type": "object",
@@ -47,10 +38,7 @@
     "auto": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "eligible",
-        "precedence"
-      ],
+      "required": ["eligible", "precedence"],
       "properties": {
         "eligible": {
           "type": "boolean"
@@ -67,10 +55,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "op",
-            "type"
-          ],
+          "required": ["op", "type"],
           "properties": {
             "op": {
               "const": "exact-type"
@@ -78,10 +63,7 @@
             "type": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "releaseDigest",
-                "typeId"
-              ],
+              "required": ["releaseDigest", "typeId"],
               "properties": {
                 "releaseDigest": {
                   "type": "string",
@@ -98,12 +80,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "op",
-            "language",
-            "document",
-            "vocabulary"
-          ],
+          "required": ["op", "language", "document", "vocabulary"],
           "properties": {
             "op": {
               "const": "filter"
@@ -117,20 +94,14 @@
             "vocabulary": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "types",
-                "properties"
-              ],
+              "required": ["types", "properties"],
               "properties": {
                 "types": {
                   "type": "array",
                   "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "releaseDigest",
-                      "typeId"
-                    ],
+                    "required": ["releaseDigest", "typeId"],
                     "properties": {
                       "releaseDigest": {
                         "type": "string",
@@ -149,10 +120,7 @@
                   "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "releaseDigest",
-                      "propertyId"
-                    ],
+                    "required": ["releaseDigest", "propertyId"],
                     "properties": {
                       "releaseDigest": {
                         "type": "string",
@@ -175,17 +143,12 @@
     "presentation": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "type"
-      ],
+      "required": ["type"],
       "properties": {
         "type": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "releaseDigest",
-            "typeId"
-          ],
+          "required": ["releaseDigest", "typeId"],
           "properties": {
             "releaseDigest": {
               "type": "string",
@@ -216,9 +179,7 @@
               }
             }
           },
-          "required": [
-            "and"
-          ]
+          "required": ["and"]
         },
         {
           "type": "object",
@@ -233,9 +194,7 @@
               "maxItems": 16
             }
           },
-          "required": [
-            "or"
-          ]
+          "required": ["or"]
         },
         {
           "type": "object",
@@ -245,9 +204,7 @@
               "$ref": "#/$defs/filterDocument"
             }
           },
-          "required": [
-            "not"
-          ]
+          "required": ["not"]
         },
         {
           "type": "object",
@@ -268,14 +225,10 @@
                   "maxItems": 64
                 }
               },
-              "required": [
-                "in"
-              ]
+              "required": ["in"]
             }
           },
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -325,18 +278,12 @@
                             "maxItems": 64
                           }
                         },
-                        "required": [
-                          "property",
-                          "in"
-                        ]
+                        "required": ["property", "in"]
                       },
                       "maxItems": 4
                     }
                   },
-                  "required": [
-                    "property",
-                    "in"
-                  ]
+                  "required": ["property", "in"]
                 },
                 {
                   "type": "object",
@@ -366,14 +313,10 @@
                       "required": [],
                       "anyOf": [
                         {
-                          "required": [
-                            "gte"
-                          ]
+                          "required": ["gte"]
                         },
                         {
-                          "required": [
-                            "lte"
-                          ]
+                          "required": ["lte"]
                         }
                       ]
                     },
@@ -400,25 +343,17 @@
                             "maxItems": 64
                           }
                         },
-                        "required": [
-                          "property",
-                          "in"
-                        ]
+                        "required": ["property", "in"]
                       },
                       "maxItems": 4
                     }
                   },
-                  "required": [
-                    "property",
-                    "range"
-                  ]
+                  "required": ["property", "range"]
                 }
               ]
             }
           },
-          "required": [
-            "statement"
-          ]
+          "required": ["statement"]
         }
       ]
     }

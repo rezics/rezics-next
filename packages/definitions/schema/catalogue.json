@@ -3,12 +3,7 @@
   "$id": "https://rezics.com/definitions/catalogue/2",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "format",
-    "kindSpec",
-    "reduction",
-    "directoryDigest"
-  ],
+  "required": ["format", "kindSpec", "reduction", "directoryDigest"],
   "properties": {
     "format": {
       "const": "https://rezics.com/definitions/catalogue/2"

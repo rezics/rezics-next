@@ -12,29 +12,47 @@ export const KIND_FORMAT = 'https://rezics.com/definitions/kind/1';
 export const KIND_REDUCTION = 'https://rezics.com/definitions/kind-reduction/1';
 export const CATALOGUE_FORMAT = 'https://rezics.com/definitions/catalogue/2';
 export const CATALOGUE_NODE_FORMAT = 'https://rezics.com/definitions/catalogue-node/1';
-export const CATALOGUE_LIMITS = Object.freeze({ declarationBytes: 65536, vocabulary: 256, nodeBytes: 262144, entries: 256 });
+export const CATALOGUE_LIMITS = Object.freeze({
+  declarationBytes: 65536,
+  vocabulary: 256,
+  nodeBytes: 262144,
+  entries: 256,
+});
 export type DefinitionTypePin = Readonly<{ releaseDigest: string; typeId: string }>;
 export type DefinitionPropertyPin = Readonly<{ releaseDigest: string; propertyId: string }>;
 export type KindConditionV1 =
   | Readonly<{ op: 'exact-type'; type: DefinitionTypePin }>
   | Readonly<{
-      op: 'filter'; language: 'https://rezics.com/filter/1'; document: FilterDocument;
+      op: 'filter';
+      language: 'https://rezics.com/filter/1';
+      document: FilterDocument;
       vocabulary: Readonly<{ types: readonly DefinitionTypePin[]; properties: readonly DefinitionPropertyPin[] }>;
     }>;
 export type KindDeclarationV1 = Readonly<{
-  format: typeof KIND_FORMAT; id: string; labels: Readonly<Record<string, string>>;
+  format: typeof KIND_FORMAT;
+  id: string;
+  labels: Readonly<Record<string, string>>;
   descriptions?: Readonly<Record<string, string>>;
   auto: Readonly<{ eligible: boolean; precedence: number }>;
-  condition: KindConditionV1; presentation: Readonly<{ type: DefinitionTypePin }>;
+  condition: KindConditionV1;
+  presentation: Readonly<{ type: DefinitionTypePin }>;
 }>;
 export type KindCataloguePin = Readonly<{
-  format: typeof CATALOGUE_FORMAT; rootDigest: string; kindSpec: typeof KIND_FORMAT; reduction: typeof KIND_REDUCTION;
+  format: typeof CATALOGUE_FORMAT;
+  rootDigest: string;
+  kindSpec: typeof KIND_FORMAT;
+  reduction: typeof KIND_REDUCTION;
 }>;
 export type PinnedKindDeclaration = Readonly<{
-  catalogue: KindCataloguePin; declarationDigest: string; declaration: KindDeclarationV1;
+  catalogue: KindCataloguePin;
+  declarationDigest: string;
+  declaration: KindDeclarationV1;
 }>;
 export type CatalogueRootV2 = Readonly<{
-  format: typeof CATALOGUE_FORMAT; kindSpec: typeof KIND_FORMAT; reduction: typeof KIND_REDUCTION; directoryDigest: string;
+  format: typeof CATALOGUE_FORMAT;
+  kindSpec: typeof KIND_FORMAT;
+  reduction: typeof KIND_REDUCTION;
+  directoryDigest: string;
 }>;
 export type CatalogueEntry = Readonly<{ key: string; kind: 'release' | 'declaration'; digest: string }>;
 export type CatalogueRange = Readonly<{ first: string; last: string; digest: string }>;
@@ -43,12 +61,17 @@ export type CatalogueNodeV1 =
   | Readonly<{ format: typeof CATALOGUE_NODE_FORMAT; node: 'branch'; children: readonly CatalogueRange[] }>;
 /** A reader supplies addressed inert bytes, not authority, capabilities or a URI loader. */
 export type CatalogueArtifactReader = Readonly<{ read(digest: string): Promise<Uint8Array | undefined> }>;
-export type CatalogueArtifactStore = CatalogueArtifactReader & Readonly<{
-  put(digest: string, bytes: Uint8Array): Promise<void>;
-}>;
+export type CatalogueArtifactStore = CatalogueArtifactReader &
+  Readonly<{
+    put(digest: string, bytes: Uint8Array): Promise<void>;
+  }>;
 export class CatalogueArtifactError extends Error {
-  constructor(readonly code: 'invalid' | 'missing' | 'corrupt' | 'conflict' | 'unsupported', message: string) {
-    super(message); this.name = 'CatalogueArtifactError';
+  constructor(
+    readonly code: 'invalid' | 'missing' | 'corrupt' | 'conflict' | 'unsupported',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'CatalogueArtifactError';
   }
 }
 export function catalogueFail(code: CatalogueArtifactError['code'], message: string): never {
@@ -62,9 +85,15 @@ export function assertKindId(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !/^[a-z][a-z0-9_]*:[^\s]+$(?![\s\S])/u.test(value))
     catalogueFail('invalid', 'Expected exact CURIE stable ID');
 }
-export const compareCatalogueKeys = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
-export const declarationKey = (id: string) => { assertKindId(id); return `declaration:${id}`; };
-export const releaseKey = (digest: string) => { assertCatalogueDigest(digest); return `release:${digest}`; };
+export const compareCatalogueKeys = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+export const declarationKey = (id: string) => {
+  assertKindId(id);
+  return `declaration:${id}`;
+};
+export const releaseKey = (digest: string) => {
+  assertCatalogueDigest(digest);
+  return `release:${digest}`;
+};
 
 /** Reject accessors/toJSON, prototypes, holes and non-JSON values before any ordinary property read. */
 function ownJson(value: unknown, ancestors = new Set<object>()): void {
@@ -91,8 +120,10 @@ function ownJson(value: unknown, ancestors = new Set<object>()): void {
   ancestors.delete(value);
 }
 export function catalogueBytes(value: unknown): Uint8Array {
-  try { ownJson(value); return new TextEncoder().encode(canonicalize(value)!); }
-  catch (error) {
+  try {
+    ownJson(value);
+    return new TextEncoder().encode(canonicalize(value)!);
+  } catch (error) {
     if (error instanceof CatalogueArtifactError) throw error;
     return catalogueFail('invalid', 'Invalid canonical JSON');
   }
@@ -105,18 +136,27 @@ export function catalogueDigest(bytes: Uint8Array): string {
 export function parseCatalogueJson(bytes: Uint8Array, maximum: number): unknown {
   if (bytes.length > maximum) catalogueFail('invalid', `Artifact exceeds ${maximum} bytes`);
   let source: string;
-  try { source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
-  catch { return catalogueFail('invalid', 'Invalid UTF-8'); }
+  try {
+    source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    return catalogueFail('invalid', 'Invalid UTF-8');
+  }
   let offset = 0;
   const fail = (): never => catalogueFail('invalid', `Invalid or duplicate-key JSON at byte text offset ${offset}`);
-  const space = () => { while (/[\x20\x09\x0a\x0d]/.test(source[offset] ?? '\0')) offset++; };
+  const space = () => {
+    while (/[\x20\x09\x0a\x0d]/.test(source[offset] ?? '\0')) offset++;
+  };
   function string(): string {
     const start = offset++;
     while (offset < source.length) {
       const ch = source[offset++];
       if (ch === '\\') offset++;
       else if (ch === '"') {
-        try { return JSON.parse(source.slice(start, offset)); } catch { return fail(); }
+        try {
+          return JSON.parse(source.slice(start, offset));
+        } catch {
+          return fail();
+        }
       }
     }
     return fail();
@@ -126,16 +166,21 @@ export function parseCatalogueJson(bytes: Uint8Array, maximum: number): unknown 
     const ch = source[offset];
     if (ch === '"') return string();
     if (ch === '{' || ch === '[') {
-      offset++; space();
+      offset++;
+      space();
       const end = ch === '{' ? '}' : ']';
       const result: Record<string, unknown> = Object.create(null);
       const items: unknown[] = [];
-      if (source[offset] === end) { offset++; return ch === '{' ? result : items; }
+      if (source[offset] === end) {
+        offset++;
+        return ch === '{' ? result : items;
+      }
       while (true) {
         space();
         if (ch === '{') {
           if (source[offset] !== '"') return fail();
-          const key = string(); space();
+          const key = string();
+          space();
           if (Object.hasOwn(result, key) || source[offset++] !== ':') return fail();
           result[key] = value();
         } else items.push(value());
@@ -145,12 +190,15 @@ export function parseCatalogueJson(bytes: Uint8Array, maximum: number): unknown 
         if (delimiter !== ',') return fail();
       }
     }
-    const match = /^(?:true|false|null|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)/.exec(source.slice(offset));
+    const match = /^(?:true|false|null|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)/.exec(
+      source.slice(offset),
+    );
     if (!match) return fail();
     offset += match[0].length;
     return JSON.parse(match[0]);
   }
-  const result = value(); space();
+  const result = value();
+  space();
   if (offset !== source.length) return fail();
   catalogueBytes(result); // Enforce finite numbers and Unicode scalar strings as well.
   return result;
@@ -165,14 +213,24 @@ function checked<T>(value: unknown, validator: { Check(value: unknown): boolean 
   return parseCatalogueJson(bytes, limit) as T;
 }
 export function parseKindDeclaration(value: unknown): KindDeclarationV1 {
-  const result = checked<KindDeclarationV1>(value, kindValidator, CATALOGUE_LIMITS.declarationBytes, 'Kind declaration');
+  const result = checked<KindDeclarationV1>(
+    value,
+    kindValidator,
+    CATALOGUE_LIMITS.declarationBytes,
+    'Kind declaration',
+  );
   if (result.condition.op === 'filter') {
     parseFilter(result.condition.document); // Original parser and all its existing bounds, never a replacement grammar.
     for (const node of walkFilter(result.condition.document))
-      if ('owner' in node || 'saved' in node) catalogueFail('unsupported', 'Catalogue filters require public immutable expanded meaning');
+      if ('owner' in node || 'saved' in node)
+        catalogueFail('unsupported', 'Catalogue filters require public immutable expanded meaning');
     const { types, properties } = result.condition.vocabulary;
-    if (types.length + properties.length > CATALOGUE_LIMITS.vocabulary) catalogueFail('invalid', 'Vocabulary exceeds 256 references');
-    for (const [pins, field] of [[types, 'typeId'], [properties, 'propertyId']] as const) {
+    if (types.length + properties.length > CATALOGUE_LIMITS.vocabulary)
+      catalogueFail('invalid', 'Vocabulary exceeds 256 references');
+    for (const [pins, field] of [
+      [types, 'typeId'],
+      [properties, 'propertyId'],
+    ] as const) {
       const seen = new Set<string>();
       for (const pin of pins) {
         const id = field === 'typeId' ? (pin as DefinitionTypePin).typeId : (pin as DefinitionPropertyPin).propertyId;
@@ -187,7 +245,10 @@ export function parseKindDeclaration(value: unknown): KindDeclarationV1 {
 export const CATALOGUE_CONDITION_OPERATORS = Object.freeze(['exact-type'] as const);
 export function requireConstructibleKind(declaration: KindDeclarationV1): void {
   if (declaration.condition.op !== CATALOGUE_CONDITION_OPERATORS[0])
-    catalogueFail('unsupported', 'Filter catalogue construction requires the actual native producer; offline activation-ready publication is unsupported');
+    catalogueFail(
+      'unsupported',
+      'Filter catalogue construction requires the actual native producer; offline activation-ready publication is unsupported',
+    );
 }
 export function parseCatalogueRoot(value: unknown): CatalogueRootV2 {
   return checked<CatalogueRootV2>(value, rootValidator, CATALOGUE_LIMITS.nodeBytes, 'catalogue root');
@@ -197,7 +258,12 @@ export function parseCataloguePin(value: unknown): KindCataloguePin {
   const pin = parseCatalogueJson(bytes, CATALOGUE_LIMITS.nodeBytes);
   if (!pin || typeof pin !== 'object' || Array.isArray(pin)) catalogueFail('invalid', 'Invalid catalogue pin');
   const fields = pin as Record<string, unknown>;
-  if (Object.keys(fields).sort().join(',') !== 'format,kindSpec,reduction,rootDigest' || fields.format !== CATALOGUE_FORMAT || fields.kindSpec !== KIND_FORMAT || fields.reduction !== KIND_REDUCTION)
+  if (
+    Object.keys(fields).sort().join(',') !== 'format,kindSpec,reduction,rootDigest' ||
+    fields.format !== CATALOGUE_FORMAT ||
+    fields.kindSpec !== KIND_FORMAT ||
+    fields.reduction !== KIND_REDUCTION
+  )
     catalogueFail('invalid', 'Invalid closed catalogue pin or version');
   assertCatalogueDigest(fields.rootDigest);
   return fields as KindCataloguePin;
@@ -206,15 +272,17 @@ export function parseCatalogueNode(value: unknown): CatalogueNodeV1 {
   const result = checked<CatalogueNodeV1>(value, nodeValidator, CATALOGUE_LIMITS.nodeBytes, 'directory node');
   let previous: string | undefined;
   for (const range of result.node === 'leaf'
-    ? result.entries.map(e => ({ first: e.key, last: e.key })) : result.children) {
+    ? result.entries.map((e) => ({ first: e.key, last: e.key }))
+    : result.children) {
     if (range.first > range.last || (previous !== undefined && previous >= range.first))
       catalogueFail('conflict', 'Directory ranges must be sorted, disjoint and nonempty');
     previous = range.last;
   }
-  if (result.node === 'leaf') for (const entry of result.entries) {
-    if (entry.kind === 'release' ? entry.key !== releaseKey(entry.digest) : !entry.key.startsWith('declaration:'))
-      catalogueFail('invalid', `Mismatched typed directory key ${entry.key}`);
-  }
+  if (result.node === 'leaf')
+    for (const entry of result.entries) {
+      if (entry.kind === 'release' ? entry.key !== releaseKey(entry.digest) : !entry.key.startsWith('declaration:'))
+        catalogueFail('invalid', `Mismatched typed directory key ${entry.key}`);
+    }
   return result;
 }
 export function catalogueNodeRange(node: CatalogueNodeV1): { first: string; last: string } {

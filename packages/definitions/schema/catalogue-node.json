@@ -5,11 +5,7 @@
     {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "format",
-        "node",
-        "children"
-      ],
+      "required": ["format", "node", "children"],
       "properties": {
         "format": {
           "const": "https://rezics.com/definitions/catalogue-node/1"
@@ -22,11 +18,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "first",
-              "last",
-              "digest"
-            ],
+            "required": ["first", "last", "digest"],
             "properties": {
               "first": {
                 "type": "string",
@@ -50,11 +42,7 @@
     {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "format",
-        "node",
-        "entries"
-      ],
+      "required": ["format", "node", "entries"],
       "properties": {
         "format": {
           "const": "https://rezics.com/definitions/catalogue-node/1"
@@ -67,21 +55,14 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "key",
-              "kind",
-              "digest"
-            ],
+            "required": ["key", "kind", "digest"],
             "properties": {
               "key": {
                 "type": "string",
                 "pattern": "^(?:declaration:[a-z][a-z0-9_]*:[^\\s]+|release:sha256:[0-9a-f]{64})$(?![\\s\\S])"
               },
               "kind": {
-                "enum": [
-                  "release",
-                  "declaration"
-                ]
+                "enum": ["release", "declaration"]
               },
               "digest": {
                 "type": "string",
