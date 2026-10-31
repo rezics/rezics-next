@@ -323,7 +323,7 @@ async function authorizeDownload(
                     // convenience wrapper may perform catalogue freshness reads.
                     const result = await client.query<{ found: number }>(
                       subjectExists.sql,
-                      subjectExists.params.map((name) => input[name]),
+                      subjectExists.params.map((name) => input[name as keyof typeof input]),
                     );
                     return result.rows[0] ?? null;
                   }))

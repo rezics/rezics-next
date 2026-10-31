@@ -44,7 +44,8 @@ const sum = (values: readonly AccessWork[]): AccessWork =>
   Object.fromEntries(
     ACCESS_WORK_AXES.map((axis) => [axis, values.reduce((total, value) => total + value[axis], 0)]),
   ) as AccessWork;
-function context(work?: AccessWorkAccounting): CoverVerifyContext {
+type Context = CoverVerifyContext & Readonly<{ evidence: null }>;
+function context(work?: AccessWorkAccounting): Context {
   return {
     client: {
       query: async () => {
@@ -218,7 +219,7 @@ describe.skipIf(!process.env.DATABASE_URL)('cover nested prepared native Access'
         const bridge = coverPreparedAccessWork(subject, anonymous, preparation);
         const before = admitted.length;
         await withConnection(pool, async (client) => {
-          const input: CoverVerifyContext = {
+          const input: Context = {
             ...context(work),
             resource: f.media,
             client,
