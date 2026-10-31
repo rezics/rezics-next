@@ -4,15 +4,7 @@
     "capturedAt": "2026-10-31T14:07:02.242432+00:00",
     "baseCommit": "6d3f767467c85dbb9d3bb561d12af784407bd92c",
     "snapshot": "/home/edge/projects/rezics/worktrees/58f8b5db-81ac-42eb-bf48-e365bec9aa5e/.temp/daily-step-audit/goal.sqlite",
-    "command": [
-      "bun",
-      "tools/goal/src/cli.ts",
-      "report",
-      "--flow",
-      "--since",
-      "2026-10-30T00:00:00.000Z",
-      "--json"
-    ],
+    "command": ["bun", "tools/goal/src/cli.ts", "report", "--flow", "--since", "2026-10-30T00:00:00.000Z", "--json"],
     "execution": "Production runWorkerCommand report handler; private SQLite backup; runtime orphan recovery and manager-command recording bypassed to avoid live control-plane writes. Not an acceptance check.",
     "commandGeneratedAt": "2026-10-31T14:08:08.487Z",
     "window": {
@@ -27141,117 +27133,91 @@
           {
             "taskId": "041ee00e-97b6-45b5-af6e-7c72a87aea7b",
             "launches": 1,
-            "attempts": [
-              4
-            ],
+            "attempts": [4],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "0ba65626-5dbf-4d62-9f7a-7fac7c90bda8",
             "launches": 1,
-            "attempts": [
-              6
-            ],
+            "attempts": [6],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "35dc53de-1c6d-44bd-abbf-a69552b3a8a3",
             "launches": 1,
-            "attempts": [
-              6
-            ],
+            "attempts": [6],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "3c2d63c5-134b-4ec2-b938-059d4fcebb48",
             "launches": 1,
-            "attempts": [
-              14
-            ],
+            "attempts": [14],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "56f5f321-0e99-4d22-8940-20c7ab205813",
             "launches": 1,
-            "attempts": [
-              7
-            ],
+            "attempts": [7],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "58f8b5db-81ac-42eb-bf48-e365bec9aa5e",
             "launches": 1,
-            "attempts": [
-              1
-            ],
+            "attempts": [1],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "77496c7e-d57e-485c-957b-0caadcc674eb",
             "launches": 1,
-            "attempts": [
-              4
-            ],
+            "attempts": [4],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "7d045cdf-eb7a-4ea2-a33a-4f9d372a123c",
             "launches": 1,
-            "attempts": [
-              6
-            ],
+            "attempts": [6],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "a1c2143b-032d-4290-bb09-120990929096",
             "launches": 1,
-            "attempts": [
-              12
-            ],
+            "attempts": [12],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "cdcd207f-68da-4023-947b-9df51d2cdc03",
             "launches": 1,
-            "attempts": [
-              3
-            ],
+            "attempts": [3],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "de871bcb-2602-4f07-a035-5eaad81612c6",
             "launches": 1,
-            "attempts": [
-              3
-            ],
+            "attempts": [3],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "dfc7c771-80ff-4255-b47b-992f052bb276",
             "launches": 1,
-            "attempts": [
-              5
-            ],
+            "attempts": [5],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           },
           {
             "taskId": "ee4ec20e-7ebf-4a95-836a-45460f937f35",
             "launches": 1,
-            "attempts": [
-              8
-            ],
+            "attempts": [8],
             "sameAttemptResumes": 0,
             "launchesPerHour": 1
           }
@@ -54609,14 +54575,7 @@
       "count": 707,
       "passed": 315,
       "failed": 392,
-      "timingKeys": [
-        "command",
-        "commit",
-        "logPath",
-        "output",
-        "passed",
-        "timedOut"
-      ]
+      "timingKeys": ["command", "commit", "logPath", "output", "passed", "timedOut"]
     },
     "startPending": {
       "requests": 304,
