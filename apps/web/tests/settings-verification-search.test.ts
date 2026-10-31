@@ -11,8 +11,10 @@ mock.module('@tanstack/react-start', () => ({
   createServerFn: () => ({
     validator(validate: (input: unknown) => unknown) {
       return {
-        handler: (handle: (context: { data: unknown }) => unknown) =>
-          ({ data }: { data: unknown }) => handle({ data: validate(data) }),
+        handler:
+          (handle: (context: { data: unknown }) => unknown) =>
+          ({ data }: { data: unknown }) =>
+            handle({ data: validate(data) }),
       };
     },
   }),
