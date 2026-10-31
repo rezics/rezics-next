@@ -833,6 +833,26 @@ BEGIN
 END; $$;
 
 
+--
+-- Name: track_publication_staging_evidence(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.track_publication_staging_evidence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP<>'INSERT' THEN
+    UPDATE library.collection_publication_staging SET evidence_count=evidence_count-1,evidence_fence=evidence_fence+1
+    WHERE route=OLD.route AND collection_id=OLD.collection_id AND generation=OLD.generation;
+  END IF;
+  IF TG_OP<>'DELETE' THEN
+    UPDATE library.collection_publication_staging SET evidence_count=evidence_count+1,evidence_fence=evidence_fence+1
+    WHERE route=NEW.route AND collection_id=NEW.collection_id AND generation=NEW.generation;
+  END IF;
+  RETURN NULL;
+END; $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -1332,6 +1352,74 @@ CREATE TABLE library.collection_publication_source (
 
 
 --
+-- Name: collection_publication_staging; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_publication_staging (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    generation uuid NOT NULL,
+    publication_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    definition_digest text NOT NULL,
+    binding jsonb NOT NULL,
+    scope_basis jsonb NOT NULL,
+    canonical_generation uuid NOT NULL,
+    canonical_basis_digest text NOT NULL,
+    fact_fence bigint NOT NULL,
+    public_inputs boolean NOT NULL,
+    frontier jsonb NOT NULL,
+    version bigint DEFAULT 0 NOT NULL,
+    evidence_count bigint DEFAULT 0 NOT NULL,
+    evidence_fence bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT collection_publication_staging_binding_check CHECK ((octet_length((binding)::text) <= 16384)),
+    CONSTRAINT collection_publication_staging_canonical_basis_digest_check CHECK ((canonical_basis_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT collection_publication_staging_definition_digest_check CHECK ((definition_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT collection_publication_staging_evidence_count_check CHECK ((evidence_count >= 0)),
+    CONSTRAINT collection_publication_staging_evidence_fence_check CHECK ((evidence_fence >= 0)),
+    CONSTRAINT collection_publication_staging_fact_fence_check CHECK ((fact_fence >= 0)),
+    CONSTRAINT collection_publication_staging_frontier_check CHECK ((octet_length((frontier)::text) <= 4096)),
+    CONSTRAINT collection_publication_staging_scope_basis_check CHECK ((octet_length((scope_basis)::text) <= 8192)),
+    CONSTRAINT collection_publication_staging_version_check CHECK ((version >= 0))
+);
+
+
+--
+-- Name: collection_publication_staging_evidence; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_publication_staging_evidence (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    generation uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    included boolean NOT NULL,
+    evidence jsonb NOT NULL,
+    CONSTRAINT collection_publication_staging_evidence_evidence_check CHECK ((octet_length((evidence)::text) <= 16384))
+);
+
+
+--
+-- Name: collection_publication_staging_seal; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_publication_staging_seal (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    generation uuid NOT NULL,
+    version bigint NOT NULL,
+    member_fence bigint NOT NULL,
+    members bigint NOT NULL,
+    evidence_count bigint NOT NULL,
+    evidence_fence bigint NOT NULL,
+    owner_epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    CONSTRAINT collection_publication_staging_seal_position_check CHECK (("position" > 0))
+);
+
+
+--
 -- Name: collection_source_output; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -1347,14 +1435,14 @@ CREATE TABLE library.collection_source_output (
     account_id uuid,
     member_count bigint DEFAULT 0 NOT NULL,
     member_fence bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT collection_output_complete_cardinality CHECK (((state <> 'complete'::text) OR (expected_members IS NOT NULL))),
+    output_mode text DEFAULT 'selected'::text NOT NULL,
+    CONSTRAINT collection_output_cardinality CHECK ((((expected_members IS NOT NULL) AND (expected_members >= 0) AND (written_members <= expected_members)) OR ((output_mode = 'whole_query'::text) AND (expected_members IS NULL) AND (state <> 'complete'::text)))),
+    CONSTRAINT collection_output_complete_cardinality CHECK (((state <> 'complete'::text) OR ((expected_members IS NOT NULL) AND (written_members = expected_members)))),
     CONSTRAINT collection_source_output_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
-    CONSTRAINT collection_source_output_check1 CHECK ((written_members <= expected_members)),
     CONSTRAINT collection_source_output_check2 CHECK (((written_members = 0) = (after_subject_id IS NULL))),
-    CONSTRAINT collection_source_output_check3 CHECK (((state <> 'complete'::text) OR (written_members = expected_members))),
-    CONSTRAINT collection_source_output_expected_members_check CHECK ((expected_members >= 0)),
     CONSTRAINT collection_source_output_member_count_check CHECK ((member_count >= 0)),
     CONSTRAINT collection_source_output_member_fence_check CHECK ((member_fence >= 0)),
+    CONSTRAINT collection_source_output_output_mode_check CHECK ((output_mode = ANY (ARRAY['selected'::text, 'whole_query'::text]))),
     CONSTRAINT collection_source_output_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT collection_source_output_source_generation_check CHECK ((source_generation >= 0)),
     CONSTRAINT collection_source_output_state_check CHECK ((state = ANY (ARRAY['building'::text, 'complete'::text, 'cancelled'::text]))),
@@ -2968,6 +3056,38 @@ ALTER TABLE ONLY library.collection_publication_source
 
 
 --
+-- Name: collection_publication_staging collection_publication_stagin_route_collection_id_publicati_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging
+    ADD CONSTRAINT collection_publication_stagin_route_collection_id_publicati_key UNIQUE (route, collection_id, publication_id);
+
+
+--
+-- Name: collection_publication_staging_evidence collection_publication_staging_evidence_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging_evidence
+    ADD CONSTRAINT collection_publication_staging_evidence_pkey PRIMARY KEY (route, collection_id, generation, subject_id);
+
+
+--
+-- Name: collection_publication_staging collection_publication_staging_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging
+    ADD CONSTRAINT collection_publication_staging_pkey PRIMARY KEY (route, collection_id, generation);
+
+
+--
+-- Name: collection_publication_staging_seal collection_publication_staging_seal_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging_seal
+    ADD CONSTRAINT collection_publication_staging_seal_pkey PRIMARY KEY (route, collection_id, generation);
+
+
+--
 -- Name: collection_source_output_head collection_source_output_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -3758,6 +3878,13 @@ CREATE INDEX collection_publication_operation_collection ON library.collection_p
 --
 
 CREATE INDEX collection_publication_operation_owner ON library.collection_publication_operation USING btree (route, owner_account_id, publication_id);
+
+
+--
+-- Name: collection_publication_staging_account; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_publication_staging_account ON library.collection_publication_staging USING btree (route, account_id, collection_id, generation);
 
 
 --
@@ -4678,6 +4805,20 @@ CREATE TRIGGER progress_session_fact_source_update AFTER UPDATE ON library.progr
 
 
 --
+-- Name: collection_publication_staging_evidence publication_staging_evidence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER publication_staging_evidence AFTER INSERT OR DELETE OR UPDATE ON library.collection_publication_staging_evidence FOR EACH ROW EXECUTE FUNCTION library.track_publication_staging_evidence();
+
+
+--
+-- Name: collection_publication_staging_seal publication_staging_seal_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER publication_staging_seal_immutable BEFORE UPDATE ON library.collection_publication_staging_seal FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
+
+
+--
 -- Name: published_log published_log_fact_delete; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -4918,6 +5059,30 @@ ALTER TABLE ONLY library.collection_publication_source
 
 ALTER TABLE ONLY library.collection_publication_source
     ADD CONSTRAINT collection_publication_source_route_source_id_fkey FOREIGN KEY (route, source_id) REFERENCES library.collection_publication_operation(route, source_id);
+
+
+--
+-- Name: collection_publication_staging_evidence collection_publication_stagi_route_collection_id_generati_fkey1; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging_evidence
+    ADD CONSTRAINT collection_publication_stagi_route_collection_id_generati_fkey1 FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_publication_staging(route, collection_id, generation);
+
+
+--
+-- Name: collection_publication_staging_seal collection_publication_stagi_route_collection_id_generati_fkey2; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging_seal
+    ADD CONSTRAINT collection_publication_stagi_route_collection_id_generati_fkey2 FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_publication_staging(route, collection_id, generation);
+
+
+--
+-- Name: collection_publication_staging collection_publication_stagin_route_collection_id_generati_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging
+    ADD CONSTRAINT collection_publication_stagin_route_collection_id_generati_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_source_output(route, collection_id, generation);
 
 
 --

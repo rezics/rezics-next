@@ -20,6 +20,11 @@ import provenance from './scope-leaf-selection-provenance.sql';
 import privacy from './scope-leaf-selection-privacy.sql';
 import releaseLength from './scope-leaf-selection-release-length.sql';
 import releaseBody from './scope-leaf-selection-release.sql';
+import kindTypeAnchor from './scope-leaf-selection-kind-type.sql';
+import kindTypeLock from './scope-leaf-selection-kind-type-lock.sql';
+import type { NativeCollectionWork } from '../library/collection-source-work.ts';
+import type { WorkDimensions } from '../library/collection-source.ts';
+import { isDeepStrictEqual } from 'node:util';
 
 export const sourceObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -34,6 +39,136 @@ export function selectedCandidate(value: unknown): { candidate: string; rank: 'n
 }
 export const sourceBytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value) ?? 'null');
 export class LeafReservationUnavailable extends Error {}
+
+/** The narrow native projection shared by Source Type evidence. This is raw
+ * dependency data, not permission, admission, EOF or a transferable certificate.
+ * Its caller must already hold this exact admitted native home; it never checks
+ * out a connection or retains a transaction across foreign preparation.
+ */
+export type NativeKindTypeAnchor = Readonly<{
+  subject_id: string;
+  present: boolean;
+  writer_enrolled: boolean;
+  writer_version: string;
+  visibility: string | null;
+  security_revision: string | null;
+  current_release: string | null;
+  type: string | null;
+  type_oversized: boolean;
+  revision: number | null;
+  revision_transaction: string | null;
+  revision_epoch: number | null;
+  revision_position: string | null;
+  redirect: string | null;
+  redirect_sequence: number | null;
+  redirect_transaction: string | null;
+  redirect_epoch: number | null;
+  redirect_position: string | null;
+  account_id: string | null;
+}>;
+
+export const KIND_TYPE_MAX_BYTES = 4096;
+/** Eight exact/indexed head points: subject, fence, revision, revision write
+ * basis, redirect, redirect write basis and agent link (seven), plus the wanted
+ * key. No history payload, candidate, label, account or tuple hydration.
+ */
+export function kindTypeAnchorFootprint(inputBytes: number): WorkDimensions {
+  return {
+    candidateKeys: 1,
+    nativeRows: 8,
+    identityMetadataRows: 0,
+    nativePoints: 8,
+    witnessKeys: 0,
+    statements: 1,
+    bytes: inputBytes + KIND_TYPE_MAX_BYTES + 2048,
+    emptySeeks: 1,
+  };
+}
+
+export async function readNativeKindTypeAnchor(
+  client: Pick<PoolClient, 'query'>,
+  input: Readonly<{ route: number; subjectId: string; includeType: boolean }>,
+  work: NativeCollectionWork,
+  deadline: number,
+): Promise<NativeKindTypeAnchor> {
+  const lockInput = { route: input.route, subject_id: input.subjectId };
+  const lockValues = kindTypeLock.params.map((name) => lockInput[name]);
+  const lockBytes = sourceBytes(lockValues);
+  const lockReservation = work.reserve({
+    candidateKeys: 1,
+    nativeRows: 3,
+    identityMetadataRows: 0,
+    nativePoints: 3,
+    witnessKeys: 0,
+    statements: 1,
+    bytes: lockBytes + 128,
+    emptySeeks: 1,
+  });
+  lockReservation.dispatch();
+  try {
+    const locked = await client.query<{ version: string }>({
+      text: kindTypeLock.sql,
+      values: lockValues,
+      query_timeout: Math.max(1, deadline - Date.now()),
+    });
+    if (locked.rows.length !== 1) throw new AccessUnavailableError('contention');
+    lockReservation.settle({ bytes: lockBytes + sourceBytes(locked.rows), emptySeeks: 0 });
+  } catch (error) {
+    lockReservation.settle();
+    if (error instanceof Error)
+      Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
+    throw error;
+  }
+  const parameters = {
+    route: input.route,
+    subject_id: input.subjectId,
+    include_type: input.includeType,
+    max_type_bytes: KIND_TYPE_MAX_BYTES,
+  };
+  const values = kindTypeAnchor.params.map((name) => parameters[name]);
+  const inputBytes = sourceBytes(values);
+  const reservation = work.reserve(kindTypeAnchorFootprint(inputBytes));
+  reservation.dispatch();
+  try {
+    const result = await client.query<NativeKindTypeAnchor>({
+      text: kindTypeAnchor.sql,
+      values,
+      query_timeout: Math.max(1, deadline - Date.now()),
+    });
+    const row = result.rows[0];
+    if (result.rows.length !== 1 || !row || !row.writer_enrolled || row.subject_id !== input.subjectId)
+      throw new AccessUnavailableError('contention');
+    // Rows always charge the full native plan, including absent and denied keys.
+    reservation.settle({ bytes: inputBytes + sourceBytes(result.rows), emptySeeks: row.present ? 0 : 1 });
+    return row;
+  } catch (error) {
+    // A failure after dispatch burns the whole declared native footprint.
+    reservation.settle();
+    if (error instanceof Error)
+      Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
+    throw error;
+  }
+}
+
+/** Local native comparison only. Both the original and terminal, including a
+ * negative key, must pass this under their actual home fence. A foreign expected
+ * key requires its own admitted invocation; it cannot be checked from Source by
+ * opening another pool. This comparison alone grants no audience authority.
+ */
+export async function verifyNativeKindTypeAnchor(
+  client: Pick<PoolClient, 'query'>,
+  input: Readonly<{ route: number; expected: NativeKindTypeAnchor; includeType: boolean }>,
+  work: NativeCollectionWork,
+  deadline: number,
+): Promise<boolean> {
+  const current = await readNativeKindTypeAnchor(
+    client,
+    { route: input.route, subjectId: input.expected.subject_id, includeType: input.includeType },
+    work,
+    deadline,
+  );
+  return current.writer_enrolled && isDeepStrictEqual(current, input.expected);
+}
 
 /** One ledger, including Access and every failed/discarded native operation. */
 export class LeafNativeWork {

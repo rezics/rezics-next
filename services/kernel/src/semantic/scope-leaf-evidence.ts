@@ -25,6 +25,19 @@ import type { FactClause } from '../search/disclosure/check.ts';
 import type { IndexedStatement } from '../search/source.ts';
 import { admitScopeWork, type ScopeWorkContext } from '../search/scope-work-context.ts';
 
+// The dedicated Kind producer retains its own closed native boundary. The
+// generic actorless leaf path below does not acquire Type/audience authority.
+export { createNativeKindTypeEvidence } from './kind-type-evidence.ts';
+export type {
+  NativeKindTypeEvidence,
+  KindTypeEvidenceReference,
+  KindTypeEvidenceProgress,
+  KindTypeEvidenceReadInput,
+  KindTypeEvidenceReadResult,
+  KindTypeEvidenceVerifyInput,
+  KindTypeEvidenceVerifyResult,
+} from './kind-type-evidence.ts';
+
 export type LeafWork = Readonly<{
   keys: number;
   points: number;
