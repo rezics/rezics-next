@@ -220,8 +220,8 @@ return private domain data on the supplied client. Missing/collected evidence ha
 rule use compares incarnation, Collection/rule revision, source generation, accepted release and canonical rule digest.
 `advanceCollectionPublicationEpisodePhase` delegates mechanical admission to the existing live Core work-step port
 and performs version CAS; it cannot complete output. `collection-publication-service.ts` binds begin and owner-private
-status to those readers, while `collection-publication-work.ts` registers staging and final activation on the existing
-Library workflow. `builtin-materialization.ts` uses the existing parent-creation capability and native
+status to those readers, while `collection-publication-work.ts` registers staging and delegates activation to the
+single restored-initiator body in `collection-publication-final.ts`. `builtin-materialization.ts` uses the existing parent-creation capability and native
 and performs version CAS; it cannot complete output. The final human command and output-selection body are exported;
 the owning work-admission/getter, bounded query staging and default receiving composition remain independent
 dependencies. Their unavailable implementations are not successful empty results. `builtin-materialization.ts` uses the existing parent-creation capability and native
