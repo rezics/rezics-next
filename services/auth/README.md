@@ -992,11 +992,10 @@ even in the creation transaction; current relations never refill a request. Exis
 rows retain version zero and unknown pending provenance. Request scope reads only
 original typed columns. A request locator does not establish SDK copy coverage.
 The copy retirement transaction minimizes a private request through the exact native
-registration consumer closure in `nativeRequestTerminal`, while its existing copy
-work and roles still anchor SDK history cleanup. The SDK deletion trigger uses
-the same native closure. Terminal SDK status or `terminal_at` alone cannot retire
-the request. Other requests remain pending until their owning native consumer
-provides its closure.
+registration closure or consumed non-stage result in `nativeRequestTerminal`, while
+its existing copy work and roles still anchor SDK history cleanup. The SDK deletion
+trigger uses the same native closure. Terminal SDK status or `terminal_at` alone
+cannot retire the request. Missing original result consumption remains pending.
 
 The two request producers are `workflows.ts`'s `runOperation` and
 `reduceClientScopes`; the atomic source callback is in `erasure-copy.ts`. The Access
