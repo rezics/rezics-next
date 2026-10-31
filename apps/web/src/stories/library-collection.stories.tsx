@@ -604,6 +604,14 @@ export const UnlistedVisitor: Story = {
 export const PublicVisitor: Story = {
   name: 'Signed out, public collection',
   tags: ['!dev'],
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Constructed own-cover DTO using the existing imported-cover fixture through the default page caller; not a newly recorded Collection cover response or native evidence.',
+      },
+    },
+  },
   render: () => render('presentation', 'Signed Out'),
   play: async (context) => {
     const view = await detailReady(context);
