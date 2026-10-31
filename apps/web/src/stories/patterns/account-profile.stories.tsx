@@ -200,7 +200,7 @@ export const TransportUnavailable: Story = {
   args: { scenario: 'unavailable' },
   play: async ({ canvasElement }) => {
     const view = await profileView(canvasElement);
-    await view.findByText(m.settings_profile_self_unavailable());
+    await view.findByText(m.settings_profile_read_failed());
     await expect(view.queryByRole('textbox')).toBeNull();
     await userEvent.click(view.getByRole('button', { name: m.settings_profile_reload_current() }));
     await view.findByRole('textbox', { name: m.settings_profile_display_name() });
@@ -219,7 +219,7 @@ export const LostResponse: Story = {
   args: { scenario: 'lost' },
   play: async ({ canvasElement }) => {
     const view = await editName(canvasElement);
-    await view.findByText(m.settings_profile_network_error());
+    await view.findByText(m.settings_profile_save_unknown());
     const input = view.getByRole('textbox', { name: m.settings_profile_display_name() });
     await userEvent.clear(input);
     await userEvent.type(input, 'Later draft');
@@ -378,7 +378,7 @@ export const UnresolvedNavigation: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const view = await editName(canvasElement);
-    await view.findByText(m.settings_profile_network_error());
+    await view.findByText(m.settings_profile_save_unknown());
     const input = view.getByRole('textbox', { name: m.settings_profile_display_name() });
     await userEvent.clear(input);
     await userEvent.type(input, 'Later draft');
@@ -544,7 +544,7 @@ export const PublicActivityRetryDate: Story = {
     const activity = within(within(canvasElement).getByRole('region', { name: m.settings_public_activity_heading() }));
     await userEvent.click(await activity.findByRole('switch', { name: m.settings_public_reviews() }));
     await activity.findByText(m.settings_retry_wait());
-    await expect(activity.getByRole('button', { name: m.settings_profile_retry_save() })).toBeDisabled();
+    await expect(activity.getByRole('button', { name: m.settings_public_activity_retry() })).toBeDisabled();
     await expect(activity.getByRole('button', { name: m.settings_profile_reload_current() })).toBeDisabled();
     await expect(activity.getByRole('button', { name: m.settings_profile_review_draft() })).toBeEnabled();
     const view = await profileView(canvasElement);
@@ -588,7 +588,7 @@ export const MalformedRetryAfter: Story = {
   globals: { viewport: { value: 'desktop1280' } },
   play: async ({ canvasElement }) => {
     const view = await editName(canvasElement);
-    await view.findByText(m.settings_profile_network_error());
+    await view.findByText(m.settings_profile_save_unknown());
     await expect(view.queryByText(m.settings_retry_wait())).toBeNull();
     await expect(view.getByRole('button', { name: m.settings_profile_retry_save() })).toBeEnabled();
     for (const reload of view.getAllByRole('button', { name: m.settings_profile_reload_current() }))

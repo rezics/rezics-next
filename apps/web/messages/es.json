@@ -1523,7 +1523,6 @@
   "settings_public_activity_unavailable": "La actualización de la actividad pública no está disponible. Comprueba el perfil actual antes de volver a intentarlo.",
   "settings_public_activity_conflict": "Las opciones de actividad pública han cambiado en otro lugar. Vuelve a cargar el perfil actual y revisa tus opciones antes de guardar de nuevo.",
   "settings_public_activity_unknown": "Tu actualización de actividad pública sigue sin confirmarse. Comprobar el perfil actual no envía cambios. Reintentar solo envía las opciones de actividad originales; las modificaciones posteriores se quedan en tu borrador.",
-  "settings_public_activity_review_needed": "Compara tus opciones de actividad con el perfil actual antes de guardar de nuevo.",
   "settings_public_activity_retry": "Reintentar la actualización de actividad original",
   "settings_profile_retry_save": "Reintentar el guardado original",
   "settings_profile_reload_current": "Recargar el perfil actual",

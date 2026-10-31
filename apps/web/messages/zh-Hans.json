@@ -1524,7 +1524,6 @@
   "settings_public_activity_unavailable": "公开动态更新暂不可用。请先检查当前个人资料，再重试。",
   "settings_public_activity_conflict": "公开动态选项已在别处更改。请重新加载当前个人资料，检查选项后再保存。",
   "settings_public_activity_unknown": "公开动态的更新结果尚未确认。检查当前个人资料不会发送更改。重试只会发送最初的动态选项，后续编辑仍保留在草稿中。",
-  "settings_public_activity_review_needed": "请对照当前个人资料检查动态选项后再保存。",
   "settings_public_activity_retry": "重试最初的动态更新",
   "settings_profile_retry_save": "重试原保存请求",
   "settings_profile_reload_current": "重新加载当前资料",

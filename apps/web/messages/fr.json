@@ -1523,7 +1523,6 @@
   "settings_public_activity_unavailable": "La mise à jour de l’activité publique est indisponible. Vérifiez le profil actuel avant de réessayer.",
   "settings_public_activity_conflict": "Les choix d’activité publique ont été modifiés ailleurs. Rechargez le profil actuel, puis vérifiez vos choix avant de les enregistrer à nouveau.",
   "settings_public_activity_unknown": "La mise à jour de votre activité publique reste non confirmée. Vérifier le profil actuel n’envoie aucune modification. Réessayer renvoie uniquement les choix d’activité initiaux ; les modifications suivantes restent dans votre brouillon.",
-  "settings_public_activity_review_needed": "Comparez vos choix d’activité au profil actuel avant de les enregistrer à nouveau.",
   "settings_public_activity_retry": "Réessayer la mise à jour d’activité initiale",
   "settings_profile_retry_save": "Réessayer l’enregistrement initial",
   "settings_profile_reload_current": "Recharger le profil actuel",

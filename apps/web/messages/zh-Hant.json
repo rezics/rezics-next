@@ -1523,7 +1523,6 @@
   "settings_public_activity_unavailable": "公開動態更新暫時無法使用。請先檢查目前的個人資料，再重試。",
   "settings_public_activity_conflict": "公開動態選項已在別處變更。請重新載入目前的個人資料，檢查選項後再儲存。",
   "settings_public_activity_unknown": "公開動態的更新結果尚未確認。檢查目前的個人資料不會傳送變更。重試只會傳送最初的動態選項，後續編輯仍保留在草稿中。",
-  "settings_public_activity_review_needed": "請對照目前的個人資料檢查動態選項後再儲存。",
   "settings_public_activity_retry": "重試最初的動態更新",
   "settings_profile_retry_save": "重試原儲存請求",
   "settings_profile_reload_current": "重新載入目前資料",

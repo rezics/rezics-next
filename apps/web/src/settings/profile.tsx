@@ -83,9 +83,7 @@ export function ProfileFeedback({
                   ? profileError(scope, state.failure)
                   : state.phase === 'uncertain'
                     ? uncertain
-                    : scope === 'views'
-                      ? m.settings_public_activity_review_needed()
-                      : m.settings_profile_review_needed()}
+                    : m.settings_profile_review_needed()}
             </p>
             {state.attempt && (unavailable || state.failure) ? <p>{uncertain}</p> : null}
             {waiting ? <p>{m.settings_retry_wait()}</p> : null}

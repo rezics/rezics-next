@@ -1548,7 +1548,6 @@
   "settings_public_activity_unavailable": "Updating public activity is unavailable. Check the current profile before trying again.",
   "settings_public_activity_conflict": "Public activity choices changed elsewhere. Reload the current profile, then review your choices before saving again.",
   "settings_public_activity_unknown": "Your public activity update is still unconfirmed. Checking the current profile sends no changes. Retrying sends only the original activity choices; later edits stay in your draft.",
-  "settings_public_activity_review_needed": "Review your activity choices against the current profile before saving again.",
   "settings_public_activity_retry": "Retry original activity update",
   "settings_profile_retry_save": "Retry original save",
   "settings_profile_reload_current": "Reload current profile",

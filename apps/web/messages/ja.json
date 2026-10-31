@@ -1523,7 +1523,6 @@
   "settings_public_activity_unavailable": "公開アクティビティを更新できない状態です。再試行する前に現在のプロフィールを確認してください。",
   "settings_public_activity_conflict": "公開アクティビティの設定が別の場所で変更されました。現在のプロフィールを再読み込みし、設定を確認してから保存してください。",
   "settings_public_activity_unknown": "公開アクティビティの更新結果はまだ確認できていません。現在のプロフィールを確認しても変更は送信されません。再試行では最初のアクティビティ設定だけを送信し、その後の編集は下書きに残ります。",
-  "settings_public_activity_review_needed": "現在のプロフィールとアクティビティの設定を照らし合わせ、確認してから保存してください。",
   "settings_public_activity_retry": "最初のアクティビティ更新を再試行",
   "settings_profile_retry_save": "元の保存を再試行",
   "settings_profile_reload_current": "最新のプロフィールを読み込む",

@@ -1523,7 +1523,6 @@
   "settings_public_activity_unavailable": "Die Aktualisierung öffentlicher Aktivitäten ist nicht verfügbar. Prüfe das aktuelle Profil vor einem erneuten Versuch.",
   "settings_public_activity_conflict": "Die Auswahl öffentlicher Aktivitäten wurde an anderer Stelle geändert. Lade das aktuelle Profil und prüfe deine Auswahl, bevor du erneut speicherst.",
   "settings_public_activity_unknown": "Die Aktualisierung deiner öffentlichen Aktivitäten ist noch unbestätigt. Beim Prüfen des aktuellen Profils werden keine Änderungen gesendet. Ein erneuter Versuch sendet nur die ursprüngliche Aktivitätsauswahl; spätere Änderungen bleiben im Entwurf.",
-  "settings_public_activity_review_needed": "Vergleiche deine Aktivitätsauswahl mit dem aktuellen Profil, bevor du erneut speicherst.",
   "settings_public_activity_retry": "Ursprüngliche Aktivitätsaktualisierung erneut versuchen",
   "settings_profile_retry_save": "Ursprünglichen Speicherversuch wiederholen",
   "settings_profile_reload_current": "Aktuelles Profil neu laden",
