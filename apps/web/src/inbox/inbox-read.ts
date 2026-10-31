@@ -189,7 +189,7 @@ export async function resolveInboxItems(page: NoticePage, reads: InboxReads): Pr
   return { items, next: page.next };
 }
 
-type ReadResult = { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit };
+type ReadResult = { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit | undefined };
 type InboxKernelClient = {
   accounts: (params: { accountId: string }) => {
     notifications: {
