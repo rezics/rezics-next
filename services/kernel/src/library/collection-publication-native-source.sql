@@ -12,7 +12,7 @@ SELECT scope.identity,scope.frontier,scope.capture_id::text AS "sourceCaptureId"
          AND capture_receipt.xmin=capture.xmin AS "nativeCaptureCommitted",
        owner_basis.transaction_id::text AS "repairTransactionId",owner_basis.epoch AS "repairEpoch",
        owner_basis.position::text AS "repairPosition",
-       owner_basis.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()
+       owner_basis.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
          AND partition.position>=owner_basis.position AND partition.epoch=owner_basis.epoch AS "repairCommitted",
        identity_scope.source AS "identitySource",identity_scope.registration::text AS "holdId",
        identity_scope.capture_id::text AS "identityCaptureId",identity_scope.state AS "identityState",
