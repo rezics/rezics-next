@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { JSON5 } from 'bun';
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -748,6 +749,7 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
         name?: string;
         version?: string;
         bin?: { bun?: string };
+        optionalDependencies?: Record<string, string>;
       };
       const installedPlatform = JSON.parse(readFileSync(platformManifest, 'utf8')) as {
         name?: string;
@@ -757,6 +759,7 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
         installed.name === 'bun' &&
         installed.version === artifact.packageVersion &&
         installed.bin?.bun === 'bin/bun.exe' &&
+        installed.optionalDependencies?.[binary.package] === artifact.packageVersion &&
         installedPlatform.name === binary.package &&
         installedPlatform.version === artifact.packageVersion;
       pushCheck(
@@ -770,14 +773,23 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
         { package: installed, platformPackage: installedPlatform },
       );
       const resolved = realpathSync(lookup);
-      const installedBinary = realpathSync(join(platformRoot, binary.executable));
-      const packageBinary = realpathSync(join(packageRoot, 'bin/bun.exe'));
+      const platformBinaryPath = join(platformRoot, binary.executable);
+      // This pinned package's install.js optimizeBun renames the platform executable
+      // into bun/bin/bun.exe, retaining the optional package's metadata and edge.
+      // Only absence permits that layout; a present broken link or wrong copy fails.
+      const platformBinaryPresent = lstatSync(platformBinaryPath, { throwIfNoEntry: false }) !== undefined;
+      const installedBinary = platformBinaryPresent ? realpathSync(platformBinaryPath) : undefined;
+      const packageBinaryPath = join(dirname(packageManifest), 'bin/bun.exe');
+      const packageBinary = realpathSync(packageBinaryPath);
       const actualSha256 = createHash('sha256').update(readFileSync(resolved)).digest('hex');
-      const platformSha256 = createHash('sha256').update(readFileSync(installedBinary)).digest('hex');
+      const platformSha256 = installedBinary === undefined
+        ? undefined
+        : createHash('sha256').update(readFileSync(installedBinary)).digest('hex');
+      const layoutOk = platformBinaryPresent
+        ? (resolved === packageBinary || resolved === installedBinary) && platformSha256 === binary.executableSha256
+        : resolved === packageBinaryPath && packageBinary === packageBinaryPath && lstatSync(packageBinaryPath).isFile();
       const executableOk =
-        (resolved === packageBinary || resolved === installedBinary) &&
-        actualSha256 === binary.executableSha256 &&
-        platformSha256 === binary.executableSha256;
+        layoutOk && actualSha256 === binary.executableSha256;
       pushCheck(
         checks,
         'workerCheck.bun.executable',
@@ -789,11 +801,12 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
         {
           lookup,
           resolved,
-          installedBinary,
+          installedBinary: installedBinary ?? null,
           packageBinary,
+          layout: platformBinaryPresent ? 'retained' : 'moved',
           expectedSha256: binary.executableSha256,
           actualSha256,
-          platformSha256,
+          platformSha256: platformSha256 ?? null,
         },
       );
     }

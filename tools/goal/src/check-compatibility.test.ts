@@ -519,3 +519,98 @@ test('a valid hoisted Bun copy cannot hide invalid metadata on the installed pri
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+import { copyFileSync } from 'node:fs';
+
+/** Reproduce optimizeBun's move using private files and the genuine pinned artifact bytes. */
+function movedBunInstallation(directory: string, nested = true) {
+  const fixture = nested ? nonhoistedBunInstallation(directory) : completeScriptsRoot(directory);
+  const platform = fixture.artifact.platforms[`${process.platform}-${process.arch}`]!;
+  const platformRoot = 'platformRoot' in fixture ? fixture.platformRoot : join(directory, 'moved-platform');
+  if (!('platformRoot' in fixture)) {
+    mkdirSync(join(platformRoot, 'bin'), { recursive: true });
+    writeFileSync(
+      join(platformRoot, 'package.json'),
+      readFileSync(join(fixture.installation, platform.package, 'package.json')),
+    );
+    rmSync(join(fixture.installation, platform.package));
+    symlinkSync(platformRoot, join(fixture.installation, platform.package), 'dir');
+  } else {
+    rmSync(join(platformRoot, platform.executable));
+  }
+  const packageBinary = join(fixture.installation, 'bun/bin/bun.exe');
+  rmSync(packageBinary);
+  copyFileSync(fixture.executable, packageBinary);
+  return { ...fixture, platform, platformRoot, packageBinary };
+}
+
+test('moved Bun executable retains exact artifact custody in hoisted and nested optional layouts', () => {
+  const directory = temporaryDirectory();
+  try {
+    for (const nested of [false, true]) {
+      const { root, packageBinary } = movedBunInstallation(join(directory, String(nested)), nested);
+      const checks = checkPinnedBunInstallation(root);
+      expect(checks.filter((check) => check.status === 'incompatible')).toEqual([]);
+      expect(checks.find((check) => check.field === 'workerCheck.bun.executable')?.evidence).toMatchObject({
+        layout: 'moved',
+        installedBinary: null,
+        platformSha256: null,
+        resolved: realpathSync(packageBinary),
+      });
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('moved Bun custody refuses invalid retained metadata, dependency edge and any wrong present executable', () => {
+  const directory = temporaryDirectory();
+  try {
+    const { root, installation, platformRoot, platform, packageBinary } = movedBunInstallation(directory);
+    const requireRefusal = (field: string) => {
+      const checks = checkPinnedBunInstallation(root);
+      expect(checks.find((check) => check.field === field)?.status).toBe('incompatible');
+      for (const probe of ['version', 'revision'])
+        expect(checks.find((check) => check.field === `workerCheck.bun.${probe}`)?.status).toBe('compatible');
+    };
+    const metadataPath = join(platformRoot, 'package.json');
+    const metadata = readFileSync(metadataPath, 'utf8');
+    rmSync(metadataPath);
+    requireRefusal('workerCheck.bun.custody');
+    const original = JSON.parse(metadata) as { name: string; version: string };
+    for (const change of [{ name: 'wrong-package' }, { version: '0.0.0-incompatible' }]) {
+      writeFileSync(metadataPath, JSON.stringify({ ...original, ...change }));
+      requireRefusal('workerCheck.bun.packages');
+    }
+    writeFileSync(metadataPath, metadata);
+
+    const packagePath = join(installation, 'bun/package.json');
+    const packageMetadata = readFileSync(packagePath, 'utf8');
+    const installed = JSON.parse(packageMetadata) as { optionalDependencies: Record<string, string> };
+    delete installed.optionalDependencies[platform.package];
+    writeFileSync(packagePath, JSON.stringify(installed));
+    requireRefusal('workerCheck.bun.packages');
+    writeFileSync(packagePath, packageMetadata);
+
+    const platformBinary = join(platformRoot, platform.executable);
+    writeFileSync(platformBinary, 'wrong retained executable');
+    requireRefusal('workerCheck.bun.executable');
+    rmSync(platformBinary);
+    symlinkSync(join(platformRoot, 'missing'), platformBinary);
+    requireRefusal('workerCheck.bun.custody');
+    rmSync(platformBinary);
+
+    // A moved executable must live at the package-owned target, even with genuine bytes.
+    rmSync(packageBinary);
+    symlinkSync(join(directory, 'private-copy'), packageBinary);
+    const { executable } = completeScriptsRoot(join(directory, 'other'));
+    copyFileSync(executable, join(directory, 'private-copy'));
+    requireRefusal('workerCheck.bun.executable');
+    rmSync(packageBinary);
+    expect(checkPinnedBunInstallation(root).find((check) => check.field === 'workerCheck.bun.lookup')?.status).toBe(
+      'incompatible',
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
