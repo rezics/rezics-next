@@ -188,7 +188,7 @@ export function DeleteAccountContent({
 
   if (loadState === 'signed-out')
     return (
-      <AuthPage heading={m.auth_account_delete_heading()}>
+      <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
         <div className="auth-login-form">
           <p>{m.auth_account_operation_sign_in_required()}</p>
           <a href="/login">{m.auth_security_sign_in()}</a>
@@ -198,14 +198,14 @@ export function DeleteAccountContent({
 
   if (loadState === 'failure')
     return (
-      <AuthPage heading={m.auth_account_delete_heading()}>
+      <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
         <ErrorAlert>{loadMessage}</ErrorAlert>
       </AuthPage>
     );
 
   if (loadState === 'loading')
     return (
-      <AuthPage heading={m.auth_account_delete_heading()}>
+      <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
         <p role="status">{m.auth_inventory_loading()}</p>
       </AuthPage>
     );
@@ -224,7 +224,7 @@ export function DeleteAccountContent({
     );
 
   return (
-    <AuthPage heading={m.auth_account_delete_heading()}>
+    <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
       <div className="auth-account-operation-copy">
         <p>{m.auth_account_delete_description()}</p>
         <p>{m.auth_account_delete_cleanup_explanation()}</p>
@@ -261,11 +261,31 @@ export function DeleteAccountContent({
         ) : (
           <ErrorAlert>{m.auth_account_delete_unavailable()}</ErrorAlert>
         )}
-        <ul className="auth-account-operation-requirements">
-          <li>{m.auth_account_delete_no_automated_accounts()}</li>
-          <li>{m.auth_account_delete_not_last_owner()}</li>
-          <li>{m.auth_account_delete_no_pending_transfer()}</li>
-        </ul>
+        <section
+          id="account-delete-prerequisites"
+          aria-labelledby="account-delete-prerequisites-heading"
+          className="grid gap-2"
+        >
+          <h2 id="account-delete-prerequisites-heading" className="font-semibold">
+            {m.auth_account_delete_prerequisites_heading()}
+          </h2>
+          <p>{m.auth_account_delete_prerequisites_description()}</p>
+          <ul className="auth-account-operation-requirements">
+            <li>
+              <p>{m.auth_account_delete_no_automated_accounts()}</p>
+              <a href="/operators/transfer">{m.auth_transfer_heading()}</a>
+            </li>
+            <li>
+              <p>{m.auth_account_delete_not_last_owner()}</p>
+              <p>{m.auth_account_delete_ownership_navigation()}</p>
+              <a href="/security">{m.auth_account_operation_return()}</a>
+            </li>
+            <li>
+              <p>{m.auth_account_delete_no_pending_transfer()}</p>
+              <a href="/operators/transfer">{m.auth_transfer_heading()}</a>
+            </li>
+          </ul>
+        </section>
       </div>
       <div className="mt-8">
         <SecurityInventory preflight {...(inventorySource ? { source: inventorySource } : {})} />
@@ -305,6 +325,9 @@ export function DeleteAccountContent({
         {message ? (
           <ErrorAlert tabIndex={-1} ref={alert}>
             <p>{message}</p>
+            <a href="#account-delete-prerequisites" className="underline underline-offset-4">
+              {m.auth_account_delete_prerequisites_heading()}
+            </a>
             {showRetry ? (
               <Button
                 type="button"

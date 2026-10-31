@@ -26,6 +26,7 @@ import {
   type AccountSessionResult,
 } from '../account-operations';
 import { normalizeSignupHandle } from '../signup';
+import { membershipId } from '../organization-membership';
 
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 
@@ -49,6 +50,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const [message, setMessage] = useState('');
   const [showRetry, setShowRetry] = useState(false);
   const [createdHandle, setCreatedHandle] = useState('');
+  const [createdAccountId, setCreatedAccountId] = useState('');
   const [loadMessage, setLoadMessage] = useState('');
   const submitting = useRef(false);
   const handleInput = useRef<HTMLInputElement>(null);
@@ -136,6 +138,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       storePendingOrganizationHandle('');
       clearPendingAccountOperationStepUp();
       setCreatedHandle(normalizedHandle);
+      setCreatedAccountId(result.accountId);
       submitting.current = false;
       setPending(false);
       return;
@@ -176,7 +179,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
 
   if (loadState === 'signed-out')
     return (
-      <AuthPage heading={m.auth_organization_heading()}>
+      <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         <div className="auth-login-form">
           <p>{m.auth_account_operation_sign_in_required()}</p>
           <a href="/login">{m.auth_security_sign_in()}</a>
@@ -186,30 +189,37 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
 
   if (loadState === 'failure')
     return (
-      <AuthPage heading={m.auth_organization_heading()}>
+      <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         <ErrorAlert>{loadMessage}</ErrorAlert>
       </AuthPage>
     );
 
   if (loadState === 'loading')
     return (
-      <AuthPage heading={m.auth_organization_heading()}>
+      <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         <p role="status">{m.auth_inventory_loading()}</p>
       </AuthPage>
     );
 
   if (createdHandle)
     return (
-      <AuthPage heading={m.auth_organization_heading()}>
+      <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         <div className="auth-account-operation-success" role="status">
           <p>{m.auth_organization_created({ handle: createdHandle })}</p>
+          {membershipId(createdAccountId) ? (
+            <p>
+              <a href={`/organizations/members?${new URLSearchParams({ organizationId: createdAccountId })}`}>
+                {m.auth_members_heading()}
+              </a>
+            </p>
+          ) : null}
           <a href="/security">{m.auth_security_heading()}</a>
         </div>
       </AuthPage>
     );
 
   return (
-    <AuthPage heading={m.auth_organization_heading()}>
+    <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
       <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
         <p>{m.auth_organization_explanation()}</p>
         {returned ? (
@@ -219,6 +229,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
         ) : null}
         <Field data-invalid={Boolean(handleError)}>
           <FieldLabel htmlFor={handleId}>{m.auth_signup_handle()}</FieldLabel>
+          <p id="organization-handle-help">{m.auth_organization_handle_invalid()}</p>
           <Input
             ref={handleInput}
             id={handleId}
@@ -235,7 +246,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
               storePendingOrganizationHandle(event.target.value);
             }}
             aria-invalid={handleError ? true : undefined}
-            aria-describedby={handleError ? handleErrorId : undefined}
+            aria-describedby={handleError ? `organization-handle-help ${handleErrorId}` : 'organization-handle-help'}
             readOnly={pending || unknown}
             required
           />

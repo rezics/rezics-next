@@ -21,10 +21,10 @@ export function AuthButton({ children, disabled, type = 'button', className, ...
       {...props}
       type={type}
       disabled={disabled || (type === 'button' && !hydrated)}
-      className={cn('h-auto min-h-9 whitespace-normal py-2', className)}
+      className={cn('h-auto min-h-11 min-w-0 max-w-full shrink whitespace-normal py-2', className)}
     >
       {props['aria-busy'] ? <Spinner aria-hidden="true" aria-label={undefined} role={undefined} /> : null}
-      {children}
+      <span className="min-w-0 wrap-anywhere">{children}</span>
     </Button>
   );
 }

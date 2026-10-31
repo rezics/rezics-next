@@ -312,8 +312,18 @@ function InventoryList<V extends InventoryView>({
                     </ItemDescription>
                     {'granted' in row && row.granted.length > 0 ? (
                       <>
-                        <Badge variant="secondary">{m.auth_inventory_permissions({ count: row.granted.length })}</Badge>
-                        <ul aria-label={m.auth_inventory_permissions({ count: row.granted.length })}>
+                        <Badge variant="secondary">
+                          {row.granted.length === 1
+                            ? m.auth_inventory_permission({ count: 1 })
+                            : m.auth_inventory_permissions({ count: row.granted.length })}
+                        </Badge>
+                        <ul
+                          aria-label={
+                            row.granted.length === 1
+                              ? m.auth_inventory_permission({ count: 1 })
+                              : m.auth_inventory_permissions({ count: row.granted.length })
+                          }
+                        >
                           {row.granted.map((scope) => (
                             <li key={scope}>
                               <Permission scope={scope} />

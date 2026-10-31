@@ -1,5 +1,6 @@
 import { Card } from '@rezics/ui/shadcn/card';
 import type { ReactNode } from 'react';
+import { m } from './paraglide/messages.js';
 
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
@@ -19,11 +20,25 @@ export function AuthShell({ children }: { children: ReactNode }) {
   );
 }
 
-export function AuthPage({ heading, children }: { heading: string; children?: ReactNode }) {
+export function AuthPage({
+  heading,
+  children,
+  returnToSecurity = false,
+}: {
+  heading: string;
+  children?: ReactNode;
+  returnToSecurity?: boolean;
+}) {
   return (
     <main className="auth-main">
       <Card role="region" className="auth-card" aria-labelledby="auth-heading">
         <h1 id="auth-heading">{heading}</h1>
+        {returnToSecurity ? (
+          <nav className="auth-operation-exit" aria-label={m.auth_security_heading()}>
+            <a href="/security">{m.auth_account_operation_return()}</a>
+            <p>{m.auth_account_operation_leave_notice()}</p>
+          </nav>
+        ) : null}
         {children}
       </Card>
     </main>

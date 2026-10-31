@@ -405,6 +405,9 @@ export function SecurityPage({
               >
                 <Field data-invalid={Boolean(passwordFieldError)}>
                   <FieldLabel htmlFor="security-new-password">{m.auth_security_new_password()}</FieldLabel>
+                  <p id="security-password-help" className="auth-security-hint">
+                    {m.auth_security_password_invalid()}
+                  </p>
                   <PasswordInput
                     name="password"
                     autoComplete="new-password"
@@ -418,7 +421,9 @@ export function SecurityPage({
                       setPasswordFieldError('');
                     }}
                     aria-invalid={passwordFieldError ? true : undefined}
-                    aria-describedby={passwordFieldError ? 'security-password-error' : undefined}
+                    aria-describedby={
+                      passwordFieldError ? 'security-password-help security-password-error' : 'security-password-help'
+                    }
                   />
                   {passwordFieldError ? (
                     <FieldError id="security-password-error">{passwordFieldError}</FieldError>

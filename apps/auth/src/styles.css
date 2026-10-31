@@ -81,6 +81,7 @@ body {
 
 .auth-main {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-height: calc(100vh - 4rem);
   min-height: calc(100svh - 4rem);
   place-items: center;
@@ -90,6 +91,8 @@ body {
 .auth-card {
   display: block;
   overflow: visible;
+  min-width: 0;
+  max-width: 100%;
   width: min(100%, 34rem);
   padding: 3.25rem 2rem;
   border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
@@ -97,6 +100,112 @@ body {
   background: color-mix(in oklab, var(--card) 92%, transparent);
   box-shadow: var(--aura-shadow-card);
   text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* Bound nested grid and flex items at the caller, without hiding content or focus rings. */
+.auth-card :where(form, section, div, fieldset, label, nav, ul, li, dl, dd, p, h2, h3) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.auth-card :where(input, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.auth-card :where([data-slot='button'], a[data-slot='button'], nav a) {
+  height: auto;
+  min-height: 2.75rem;
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.auth-card :where([data-slot='badge'], [data-slot='field-label']) {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.auth-card [data-slot='field-label']:has(input[type='checkbox']) {
+  min-height: 2.75rem;
+  align-items: flex-start;
+  padding-block: 0.625rem;
+}
+
+.auth-card input[type='checkbox'] {
+  flex-shrink: 0;
+}
+
+.auth-card dd {
+  margin-inline-start: 0;
+}
+
+.auth-card textarea {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.auth-operation-exit {
+  margin-top: 1rem;
+  text-align: start;
+}
+
+.auth-operation-exit a {
+  display: inline-flex;
+  align-items: center;
+  padding-block: 0.625rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.auth-account-operation-success a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-block: 0.625rem;
+}
+
+.auth-operation-exit a:focus-visible,
+.auth-account-operation-requirements a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+
+.auth-operation-exit p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.auth-account-operation-requirements a {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-block: 0.625rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+@media (max-width: 639px) {
+  .auth-card :where([data-slot='input'], [data-slot='input-group']) {
+    min-height: 2.75rem;
+  }
+
+  .auth-card [data-slot='input-group'] button {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  .auth-card [data-slot='input-group-addon'][data-align='inline-end'] {
+    padding-inline-end: 0;
+  }
+
+  .auth-card [data-slot='input-group-control'] {
+    min-height: 2.625rem;
+  }
 }
 
 .auth-card:has(.auth-security-page) {

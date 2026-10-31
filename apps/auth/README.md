@@ -156,7 +156,12 @@ The page heading has the same space below it as the sections have between them.
 signs the person out everywhere and cannot be undone. Before submitting, the person must type the localized confirmation
 phrase shown above the input (ignoring letter case, trimming surrounding whitespace and normalizing Unicode to NFC) and
 review the three prerequisites: no operated automated accounts, not the last owner of an organization, and no pending
-transfer. The server does not identify which precondition failed.
+transfer. These are requirements to resolve, never static verified results; the application and consent inventories
+do not establish deletion eligibility. The server does not identify which precondition failed. Operated-account and
+pending-transfer requirements link to the existing operator-transfer page. Organization ownership is managed from the
+website's managed-account settings: Auth has neither a trusted website destination nor an owned organization ID in
+its session/security inventories, so it keeps the local Security fallback rather than inventing a list target or
+opening membership management without a valid organization ID.
 
 Each attempt uses one operation key for `POST /account-operations/approve` and
 `POST /account-operations/execute`. A 401 `step_up_required` goes to `/step-up?return_to=%2Faccount%2Fdelete`; the page
@@ -172,8 +177,18 @@ organizations or operated accounts.
 lowercase normalization as sign-up. Creation uses one operation key for the
 approve and execute requests. The `organizations` gate is checked by Auth; a closed gate keeps the handle and shows a
 localized message without exposing gate details. A 409 says the handle may be taken, leaves it in the field and focuses
-it. Success names `@<handle>` and links back to Security. The page uses at most three Auth requests regardless of the
+it. Handle format guidance appears before entry. Success names `@<handle>` and links to the created organization's
+membership page using the native result's account ID and the existing membership-ID validator. A result that cannot
+represent that destination keeps the Security fallback. Navigation grants no membership authority; the destination
+retains its own current-session and permission checks. The page uses at most three Auth requests regardless of the
 person's existing sessions or organizations.
+
+Deletion, creation, rename and operator-transfer pages provide a fixed local return to `/security`, including their
+loading and refusal states. Query parameters and response text cannot replace that return target. Leaving performs
+no cancellation, approval or operation-key cleanup; a submitted or uncertain operation still needs its original
+review/reconciliation flow. Completed deletion offers no session-dependent action. Auth bounds the page grid, nested
+form/card items and wrapping actions at phone widths without clipping details or focus. Rename confirmation appears
+only after a valid handle is entered; password guidance is shown before the Security password field.
 
 ## Step-up
 

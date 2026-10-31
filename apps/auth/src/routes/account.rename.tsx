@@ -145,16 +145,18 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
     }
   }
 
+  const candidate = normalizeSignupHandle(handle);
+
   if (renamed)
     return (
-      <AuthPage heading={m.auth_rename_heading()}>
+      <AuthPage returnToSecurity heading={m.auth_rename_heading()}>
         <Alert role="status">
           <AlertDescription>{m.auth_rename_success({ handle: renamed })}</AlertDescription>
         </Alert>
       </AuthPage>
     );
   return (
-    <AuthPage heading={m.auth_rename_heading()}>
+    <AuthPage returnToSecurity heading={m.auth_rename_heading()}>
       <div className="auth-account-operation-copy">
         <p>{m.auth_rename_description()}</p>
         <p>{m.auth_rename_forwarding()}</p>
@@ -193,6 +195,7 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
           ) : null}
           <Field data-invalid={Boolean(inputError)}>
             <FieldLabel htmlFor="rename-handle">{m.auth_rename_handle()}</FieldLabel>
+            <p id="rename-handle-help">{m.auth_organization_handle_invalid()}</p>
             <Input
               ref={input}
               id="rename-handle"
@@ -202,7 +205,7 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
               value={handle}
               disabled={pending || locked}
               aria-invalid={Boolean(inputError)}
-              aria-describedby={inputError ? 'rename-handle-error' : 'rename-handle-help'}
+              aria-describedby={inputError ? 'rename-handle-help rename-handle-error' : 'rename-handle-help'}
               onChange={(event) => {
                 setHandle(event.target.value);
                 setConfirmed(false);
@@ -212,27 +215,28 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
                 clearRenameContinuation();
               }}
             />
-            <p id="rename-handle-help">{m.auth_organization_handle_invalid()}</p>
             {inputError ? <FieldError id="rename-handle-error">{inputError}</FieldError> : null}
           </Field>
-          <Field>
-            <label className="flex items-start gap-3" htmlFor="rename-confirm">
-              <input
-                id="rename-confirm"
-                type="checkbox"
-                checked={confirmed}
-                disabled={pending}
-                onChange={(event) => setConfirmed(event.target.checked)}
-              />
-              {m.auth_rename_confirm({ handle: normalizeSignupHandle(handle) ?? handle })}
-            </label>
-          </Field>
+          {candidate ? (
+            <Field>
+              <FieldLabel className="items-start gap-3" htmlFor="rename-confirm">
+                <input
+                  id="rename-confirm"
+                  type="checkbox"
+                  checked={confirmed}
+                  disabled={pending}
+                  onChange={(event) => setConfirmed(event.target.checked)}
+                />
+                {m.auth_rename_confirm({ handle: candidate })}
+              </FieldLabel>
+            </Field>
+          ) : null}
           {message ? (
             <ErrorAlert tabIndex={-1} ref={alert}>
               {message}
             </ErrorAlert>
           ) : null}
-          <Button type="submit" className="w-full" disabled={pending || !confirmed} aria-busy={pending}>
+          <Button type="submit" className="w-full" disabled={pending || !confirmed || !candidate} aria-busy={pending}>
             {locked ? m.auth_rename_retry() : m.auth_rename_submit()}
           </Button>
         </form>

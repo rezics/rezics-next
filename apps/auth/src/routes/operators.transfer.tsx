@@ -189,7 +189,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   }
 
   return (
-    <AuthPage heading={m.auth_transfer_heading()}>
+    <AuthPage returnToSecurity heading={m.auth_transfer_heading()}>
       <div className="auth-login-form">
         <p>{m.auth_transfer_explanation()}</p>
         {!session ? <p role="status">{m.auth_inventory_loading()}</p> : null}
