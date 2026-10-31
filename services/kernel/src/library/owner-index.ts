@@ -38,7 +38,11 @@ export async function readOwnerNativeFactPage(
   // The native assignment PK includes legacy/unreserved and retained excluded originals too. Its label
   // key is structural coverage only; the filter later reads current full-key label truth independently.
   const rows = driver === 'label' ? await labelOriginals.run(client, input) : await nativeFacts.run(client, input);
-  const keys = rows.map((row): CanonicalRawKey => ({ driver, ...row }));
+  const keys = rows.map(({ storedSubjectId, factId }): CanonicalRawKey => {
+    if (storedSubjectId === null || factId === null || routeOf(storedSubjectId) === null || routeOf(factId) === null)
+      throw new TypeError('Invalid native owner fact key');
+    return { driver, storedSubjectId, factId };
+  });
   return { rows: keys.map((key) => ({ key })), after: keys.at(-1) ?? after, exhausted: keys.length < limit };
 }
 export type OwnerIndexPhase = 'entry' | 'session' | 'copy' | 'label' | 'ready';

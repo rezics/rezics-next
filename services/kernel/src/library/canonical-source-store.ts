@@ -645,7 +645,8 @@ export async function repairCanonicalSourceStep(
     if (row.driver === 'done') return notReady(l, 'incomplete');
     const limit = Math.min(100, l.allowance().remaining.candidateKeys);
     if (!limit) return notReady(l, 'allowance');
-    const independentState = observed.metadata.authority === 'private_builtin' && observed.metadata.builtinKind === 'state';
+    const independentState =
+      observed.metadata.authority === 'private_builtin' && observed.metadata.builtinKind === 'state';
     // Retained preparation closes the independent OWNER population, not the chosen state's entry slice.
     // The ordinary Source raw API deliberately keeps its entry-only state semantics. No Everything Source
     // or positive alias supplies permission/coverage here. Every range is a native indexed raw100 seek.
@@ -659,13 +660,16 @@ export async function repairCanonicalSourceStep(
             emptySeeks: 1,
             bytes: Buffer.byteLength(ownerFacts.sql) + 1024 + 256 * limit,
           },
-          () => withConnection(pool, (client) => readOwnerNativeFactPage(
-            deadlineClient(client, input.deadline),
-            observed.metadata.curatorAccountId!,
-            row.driver as OwnerNativeFactDriver,
-            input.repair.after,
-            limit,
-          )),
+          () =>
+            withConnection(pool, (client) =>
+              readOwnerNativeFactPage(
+                deadlineClient(client, input.deadline),
+                observed.metadata.curatorAccountId!,
+                row.driver as OwnerNativeFactDriver,
+                input.repair.after,
+                limit,
+              ),
+            ),
           (page) => ({ candidateKeys: page.rows.length, emptySeeks: page.rows.length === 0 ? 1 : 0 }),
         )
       : await l.run((allowance) =>
