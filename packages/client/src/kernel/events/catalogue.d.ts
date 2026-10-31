@@ -1,6 +1,640 @@
 import { Type, type TSchema } from 'typebox';
 import { type Validator } from 'typebox/compile';
 declare const productEventTypes: {
+    readonly 'com.rezics.semantic.public-source.advanced.v1': Type.TObject<{
+        id: Type.TString;
+        bootstrap: Type.TString;
+        execution: Type.TString;
+    }>;
+    readonly 'com.rezics.semantic.context-directory.changed.v1': Type.TObject<{}>;
+    readonly 'com.rezics.semantic.provider-review.projected.v1': Type.TObject<{}>;
+    readonly 'com.rezics.semantic.composite.registered.v1': Type.TObject<{
+        context: Type.TString;
+        digest: Type.TString;
+    }>;
+    readonly 'com.rezics.semantic.erasure.scheduled.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
+    readonly 'com.rezics.semantic.erasure.locator-scheduled.v1': Type.TObject<{
+        position: Type.TString;
+    }>;
+    readonly 'com.rezics.semantic.erasure.locator-advanced.v1': Type.TObject<{
+        position: Type.TString;
+    }>;
+    readonly 'com.rezics.semantic.erasure.progress.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.identity-epoch.home-available.v1": Type.TObject<{
+        partition: Type.TInteger;
+        after: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.identity-epoch.bootstrap-scheduled.v1": Type.TObject<{
+        partition: Type.TInteger;
+    }>;
+    readonly "com.rezics.semantic.identity-epoch.admitted.v1": Type.TObject<{
+        jobId: Type.TString;
+        epoch: Type.TString;
+        partition: Type.TInteger;
+    }>;
+    readonly "com.rezics.semantic.identity-epoch.progress.v1": Type.TObject<{
+        partition: Type.TInteger;
+        generation: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.identity-epoch.bootstrap.v1": Type.TObject<{
+        partition: Type.TInteger;
+        generation: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.record.deleted.v1": Type.TUnion<[Type.TObject<{
+        kind: Type.TLiteral<"context">;
+        id: Type.TString;
+        version: Type.TString;
+    }>, Type.TObject<{
+        kind: Type.TLiteral<"candidate">;
+        id: Type.TString;
+        subject: Type.TString;
+        version: Type.TString;
+        deletedAt: Type.TUnion<[Type.TString, Type.TNull]>;
+        purgeAfter: Type.TUnion<[Type.TString, Type.TNull]>;
+    }>]>;
+    readonly "com.rezics.semantic.record.restored.v1": Type.TUnion<[Type.TObject<{
+        kind: Type.TLiteral<"context">;
+        id: Type.TString;
+        version: Type.TString;
+    }>, Type.TObject<{
+        kind: Type.TLiteral<"candidate">;
+        id: Type.TString;
+        subject: Type.TString;
+        version: Type.TString;
+        deletedAt: Type.TUnion<[Type.TString, Type.TNull]>;
+        purgeAfter: Type.TUnion<[Type.TString, Type.TNull]>;
+    }>]>;
+    readonly 'com.rezics.source-record.metadata-changed.v1': Type.TObject<{
+        source: Type.TString;
+        external_id: Type.TString;
+        metadata_revision: Type.TInteger;
+    }>;
+    readonly "com.rezics.semantic.subject_page.work_committed.v1": Type.TObject<{
+        partition: Type.TInteger;
+        kind: Type.TUnion<Type.TLiteral<string>[]>;
+    }>;
+    readonly "com.rezics.semantic.subject_page.repair_queued.v1": Type.TObject<{
+        subject: Type.TObject<{
+            route: Type.TInteger;
+            id: Type.TString;
+        }>;
+        cause: Type.TUnion<[Type.TLiteral<"missing-proof">, Type.TLiteral<"explicit">]>;
+    }>;
+    readonly "com.rezics.semantic.subject_page.dependencies_changed.v1": Type.TObject<{
+        deltas: Type.TArray<Type.TObject<{
+            subject: Type.TObject<{
+                route: Type.TInteger;
+                id: Type.TString;
+            }>;
+            component: Type.TObject<{
+                kind: Type.TUnion<Type.TLiteral<string>[]>;
+                key: Type.TString;
+            }>;
+            owner: Type.TObject<{
+                kind: Type.TUnion<[Type.TLiteral<"subject">, Type.TLiteral<"source-fence">]>;
+                route: Type.TInteger;
+                key: Type.TString;
+            }>;
+            sourceVersion: Type.TString;
+            eventId: Type.TString;
+            changeId: Type.TString;
+            present: Type.TBoolean;
+            time: Type.TObject<{
+                effectiveAt: Type.TUnion<[Type.TString, Type.TNull]>;
+                evidence: Type.TUnion<[Type.TLiteral<"known">, Type.TLiteral<"missing">]>;
+            }>;
+        }>>;
+    }>;
+    readonly "com.rezics.semantic.subject_page.repair_requested.v1": Type.TObject<{
+        subject: Type.TObject<{
+            route: Type.TInteger;
+            id: Type.TString;
+        }>;
+        owner: Type.TObject<{
+            kind: Type.TUnion<[Type.TLiteral<"subject">, Type.TLiteral<"source-fence">]>;
+            route: Type.TInteger;
+            key: Type.TString;
+        }>;
+        changeId: Type.TString;
+        eventId: Type.TString;
+        time: Type.TObject<{
+            effectiveAt: Type.TUnion<[Type.TString, Type.TNull]>;
+            evidence: Type.TUnion<[Type.TLiteral<"known">, Type.TLiteral<"missing">]>;
+        }>;
+    }>;
+    readonly "com.rezics.subject.merged.v1": Type.TObject<{
+        id: Type.TString;
+        survivor: Type.TString;
+    }>;
+    readonly "com.rezics.subject.revised.v1": Type.TObject<{
+        id: Type.TString;
+        revision: Type.TInteger;
+        kind: Type.TUnion<[Type.TLiteral<"create">, Type.TLiteral<"terms">, Type.TLiteral<"propose">, Type.TLiteral<"accept">, Type.TLiteral<"reject">, Type.TLiteral<"adopt">, Type.TLiteral<"merge">, Type.TLiteral<"retract">, Type.TLiteral<"identity">]>;
+    }>;
+    readonly "com.rezics.semantic.links.moving.v1": Type.TObject<{
+        id: Type.TString;
+        survivor: Type.TString;
+        cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
+        verification: Type.TOptional<Type.TObject<{
+            account: Type.TString;
+            receipt: Type.TString;
+        }>>;
+    }>;
+    readonly "com.rezics.semantic.links.keys-changed.v1": Type.TObject<{
+        subject: Type.TString;
+        direction: Type.TUnion<[Type.TLiteral<"holder">, Type.TLiteral<"target">]>;
+        revision: Type.TInteger;
+        security_revision: Type.TInteger;
+        cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
+    }>;
+    readonly "com.rezics.semantic.links.visibility-changed.v1": Type.TObject<{
+        subject: Type.TString;
+        revision: Type.TInteger;
+        security_revision: Type.TInteger;
+        release: Type.TString;
+        visible: Type.TBoolean;
+        cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
+    }>;
+    readonly 'com.rezics.subject.statement_disclosed.v1': Type.TObject<{
+        id: Type.TString;
+        candidate: Type.TString;
+    }>;
+    readonly 'com.rezics.statement.retracted.v1': Type.TObject<{
+        candidate: Type.TString;
+        revision: Type.TInteger;
+    }>;
+    readonly 'com.rezics.statement.proposed.v1': Type.TObject<{
+        candidate: Type.TString;
+        revision: Type.TInteger;
+    }>;
+    readonly 'com.rezics.statement.accepted.v1': Type.TObject<{
+        candidate: Type.TString;
+        context: Type.TString;
+        revision: Type.TInteger;
+        head: Type.TInteger;
+    }>;
+    readonly 'com.rezics.statement.rejected.v1': Type.TObject<{
+        candidate: Type.TString;
+        context: Type.TString;
+        revision: Type.TInteger;
+        head: Type.TInteger;
+    }>;
+    readonly 'com.rezics.subject.adopted.v1': Type.TObject<{
+        context: Type.TString;
+        property: Type.TString;
+        mode: Type.TUnion<[Type.TLiteral<"inherit">, Type.TLiteral<"replace">, Type.TLiteral<"suppress">]>;
+        revision: Type.TInteger;
+        head: Type.TInteger;
+    }>;
+    readonly 'com.rezics.semantic.links.changed.v1': Type.TObject<{
+        subject: Type.TString;
+        revision: Type.TInteger;
+        security_revision: Type.TInteger;
+        changes: Type.TArray<Type.TObject<{
+            context_id: Type.TOptional<Type.TString>;
+            suppressed: Type.TOptional<Type.TBoolean>;
+            property: Type.TString;
+            statement: Type.TString;
+            target: Type.TUnion<[Type.TString, Type.TNull]>;
+            present: Type.TBoolean;
+            project_outbound: Type.TOptional<Type.TBoolean>;
+            relation: Type.TOptional<Type.TBoolean>;
+            slot_id: Type.TOptional<Type.TString>;
+            external: Type.TOptional<Type.TUnion<[Type.TString, Type.TNull]>>;
+            value: Type.TOptional<Type.TUnion<[Type.TLiteral<"value">, Type.TLiteral<"somevalue">, Type.TLiteral<"novalue">]>>;
+            outbound_order: Type.TOptional<Type.TUnion<[Type.TLiteral<"position">, Type.TLiteral<"date">, Type.TLiteral<"name">, Type.TNull]>>;
+            outbound_order_key: Type.TOptional<Type.TString>;
+            source_type: Type.TOptional<Type.TString>;
+            order_key: Type.TOptional<Type.TString>;
+            filter_value: Type.TOptional<Type.TString>;
+        }>>;
+    }>;
+    readonly 'com.rezics.semantic.links.projected.v1': Type.TObject<{
+        subjects: Type.TArray<Type.TString>;
+    }>;
+    readonly "com.rezics.search.identity_writer.changed.v1": Type.TObject<{}>;
+    readonly "com.rezics.content.realm-discovery.changed.v1": Type.TObject<{
+        realmId: Type.TString;
+        realmEpoch: Type.TString;
+        spaceId: Type.TString;
+        boardId: Type.TString;
+        threadId: Type.TString;
+        sourceRoute: Type.TInteger;
+        creationDay: Type.TString;
+        sourceVersion: Type.TString;
+        contributing: Type.TBoolean;
+        change: Type.TUnion<[Type.TLiteral<1>, Type.TLiteral<-1>]>;
+    }>;
+    readonly "com.rezics.content.realm-discovery.prepared.v1": Type.TObject<{
+        route: Type.TInteger;
+        intent: Type.TString;
+        generation: Type.TString;
+    }>;
+    readonly "com.rezics.content.realm-discovery.outcome.v1": Type.TObject<{
+        route: Type.TInteger;
+        intent: Type.TString;
+        generation: Type.TString;
+    }>;
+    readonly 'com.rezics.content.board-thread.projected.v1': Type.TObject<{
+        boardId: Type.TString;
+        threadId: Type.TString;
+        sourceEpoch: Type.TInteger;
+        sourcePosition: Type.TString;
+    }>;
+    readonly 'com.rezics.content.media.reserved.v1': Type.TObject<{
+        mediaId: Type.TString;
+        containerId: Type.TString;
+        actorId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.media.uploaded.v1': Type.TObject<{
+        mediaId: Type.TString;
+        containerId: Type.TString;
+        actorId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.media.available.v1': Type.TObject<{
+        mediaId: Type.TString;
+        containerId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.media.rejected.v1': Type.TObject<{
+        mediaId: Type.TString;
+        containerId: Type.TString;
+        decisionId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.media.erased.v1': Type.TObject<{
+        mediaId: Type.TString;
+        containerId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.media.collection-pending.v1': Type.TObject<{
+        mediaId: Type.TString;
+        containerId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.media.collected.v1': Type.TObject<{
+        mediaId: Type.TString;
+        containerId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.media.import-requested.v1': Type.TObject<{
+        mediaId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.media.taken-down.v1': Type.TObject<{
+        mediaId: Type.TString;
+        securityRevision: Type.TString;
+    }>;
+    readonly 'com.rezics.content.moderation.appeal-created.v1': Type.TObject<{
+        appealId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.moderation.appeal-resolved.v1': Type.TObject<{
+        appealId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.moderation.takedown.v1': Type.TObject<{
+        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        targetId: Type.TString;
+        securityRevision: Type.TString;
+    }>;
+    readonly 'com.rezics.content.moderation.restored.v1': Type.TObject<{
+        targetKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        targetId: Type.TString;
+        securityRevision: Type.TString;
+    }>;
+    readonly 'com.rezics.content.post.erased.v1': Type.TObject<{
+        postId: Type.TString;
+        securityRevision: Type.TString;
+        accountErasure: Type.TOptional<Type.TLiteral<true>>;
+    }>;
+    readonly 'com.rezics.content.moderation.erasure.v1': Type.TObject<{
+        threadId: Type.TString;
+        postIds: Type.TArray<Type.TString>;
+        mediaIds: Type.TArray<Type.TString>;
+    }>;
+    readonly 'com.rezics.content.author-erasure.requested.v1': Type.TObject<{
+        operationId: Type.TString;
+        threadId: Type.TString;
+        authorId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.report.resolved.v1': Type.TObject<{
+        reportId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.report.created.v1': Type.TObject<{
+        reportId: Type.TString;
+        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        targetId: Type.TString;
+        revisionId: Type.TOptional<Type.TString>;
+    }>;
+    readonly 'com.rezics.content.report-target.projected.v1': Type.TObject<{
+        reportId: Type.TString;
+        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        targetId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.source_fence.taken_down.v1': Type.TObject<{
+        route: Type.TInteger;
+        source: Type.TString;
+        external_id: Type.TString;
+        field_group: Type.TUnion<[Type.TLiteral<"facts">, Type.TLiteral<"summary">, Type.TLiteral<"cover">]>;
+        securityRevision: Type.TString;
+        takenDownAt: Type.TOptional<Type.TString>;
+        takedownId: Type.TOptional<Type.TString>;
+    }>;
+    readonly 'com.rezics.content.edition.creator-indexed.v1': Type.TObject<{
+        editionId: Type.TString;
+        creatorAccountId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.edition.created.v1': Type.TObject<{
+        editionId: Type.TString;
+        editionRevision: Type.TString;
+    }>;
+    readonly 'com.rezics.content.edition.published.v1': Type.TObject<{
+        editionId: Type.TString;
+        editionRevision: Type.TString;
+    }>;
+    readonly 'com.rezics.content.edition.unpublished.v1': Type.TObject<{
+        editionId: Type.TString;
+        editionRevision: Type.TString;
+    }>;
+    readonly 'com.rezics.content.thread.created.v1': Type.TObject<{
+        placeId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
+        subjectIds: Type.TArray<Type.TString>;
+        activityAt: Type.TString;
+        threadId: Type.TString;
+        itemId: Type.TString;
+        revisionId: Type.TString;
+        actorId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.post.created.v1': Type.TObject<{
+        placeId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
+        subjectIds: Type.TArray<Type.TString>;
+        activityAt: Type.TString;
+        threadId: Type.TString;
+        itemId: Type.TString;
+        revisionId: Type.TString;
+        actorId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.revision.created.v1': Type.TObject<{
+        placeId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
+        subjectIds: Type.TArray<Type.TString>;
+        activityAt: Type.TString;
+        threadId: Type.TString;
+        itemId: Type.TString;
+        revisionId: Type.TString;
+        actorId: Type.TString;
+        previousSubjectIds: Type.TOptional<Type.TArray<Type.TString>>;
+    }>;
+    readonly 'com.rezics.content.board.created.v1': Type.TObject<{
+        boardId: Type.TString;
+        realmId: Type.TUnion<[Type.TString, Type.TNull]>;
+        conceptId: Type.TString;
+        actorId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.authored-field.created.v1': Type.TObject<{
+        id: Type.TString;
+        subject: Type.TString;
+        candidate: Type.TString;
+        authorId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.authored-field.erased.v1': Type.TObject<{
+        id: Type.TString;
+        subject: Type.TString;
+        authorId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.post.restored.v1': Type.TObject<{
+        postId: Type.TString;
+        securityRevision: Type.TString;
+    }>;
+    readonly 'com.rezics.content.reaction.changed.v1': Type.TObject<{
+        actorId: Type.TString;
+        targetKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">, Type.TLiteral<"subject">]>;
+        targetId: Type.TString;
+        previousKind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
+        kind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
+    }>;
+    readonly 'com.rezics.content.author-item.projected.v1': Type.TObject<{
+        authorAccountId: Type.TString;
+        itemKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        itemId: Type.TString;
+        sourceEpoch: Type.TInteger;
+        sourcePosition: Type.TString;
+    }>;
+    readonly 'com.rezics.content.subject-thread.projected.v1': Type.TObject<{
+        subjectId: Type.TString;
+        threadId: Type.TString;
+        sourceEpoch: Type.TInteger;
+        sourcePosition: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm-discovery.changed.v1': Type.TObject<{
+        realmId: Type.TString;
+        realmEpoch: Type.TString;
+    }>;
+    readonly 'com.rezics.community.space.removed.v1': Type.TObject<{
+        kind: Type.TLiteral<"realm" | "space">;
+        id: Type.TString;
+        state: Type.TLiteral<"active" | "removed">;
+        headRevisionId: Type.TString;
+        version: Type.TString;
+        at: Type.TString;
+    }>;
+    readonly 'com.rezics.community.space.restored.v1': Type.TObject<{
+        kind: Type.TLiteral<"realm" | "space">;
+        id: Type.TString;
+        state: Type.TLiteral<"active" | "removed">;
+        headRevisionId: Type.TString;
+        version: Type.TString;
+        at: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.removed.v1': Type.TObject<{
+        kind: Type.TLiteral<"realm" | "space">;
+        id: Type.TString;
+        state: Type.TLiteral<"active" | "removed">;
+        headRevisionId: Type.TString;
+        version: Type.TString;
+        at: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.restored.v1': Type.TObject<{
+        kind: Type.TLiteral<"realm" | "space">;
+        id: Type.TString;
+        state: Type.TLiteral<"active" | "removed">;
+        headRevisionId: Type.TString;
+        version: Type.TString;
+        at: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.membership.cancelled.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        reservationId: Type.TString;
+        transactionId: Type.TString;
+        publicationTransactionId: Type.TUnion<[Type.TString, Type.TNull]>;
+        transition: Type.TObject<{
+            generationId: Type.TString;
+            operationId: Type.TString;
+            outcome: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>;
+        }>;
+        at: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.membership.certified.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        reservationId: Type.TString;
+        transactionId: Type.TString;
+        publicationTransactionId: Type.TUnion<[Type.TString, Type.TNull]>;
+        transition: Type.TObject<{
+            generationId: Type.TString;
+            operationId: Type.TString;
+            outcome: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>;
+        }>;
+        state: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>;
+    }>;
+    readonly 'com.rezics.community.party-locator.projected.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.account-records.erased.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.revision-locator.indexed.v1': Type.TObject<{
+        accountId: Type.TString;
+        found: Type.TInteger;
+    }>;
+    readonly 'com.rezics.community.revision-locators.removed.v1': Type.TObject<{
+        accountId: Type.TString;
+        found: Type.TInteger;
+    }>;
+    readonly 'com.rezics.community.revisions.erased.v1': Type.TObject<{
+        accountId: Type.TString;
+        found: Type.TInteger;
+    }>;
+    readonly 'com.rezics.community.space.created.v1': Type.TObject<{
+        spaceId: Type.TString;
+        revisionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.space.updated.v1': Type.TObject<{
+        spaceId: Type.TString;
+        revisionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.space.address-claim-pending.v1': Type.TObject<{
+        spaceId: Type.TString;
+        address: Type.TString;
+    }>;
+    readonly 'com.rezics.community.space.address-claim-accepted.v1': Type.TUnion<[Type.TObject<{
+        spaceId: Type.TString;
+        address: Type.TString;
+    }>, Type.TObject<{
+        spaceId: Type.TString;
+        revisionId: Type.TString;
+        address: Type.TString;
+    }>]>;
+    readonly 'com.rezics.community.space.address-changed.v1': Type.TObject<{
+        spaceId: Type.TString;
+        revisionId: Type.TString;
+        address: Type.TString;
+    }>;
+    readonly 'com.rezics.community.space.address-activated.v1': Type.TObject<{
+        spaceId: Type.TString;
+        address: Type.TString;
+    }>;
+    readonly 'com.rezics.community.space.address-reservation-skipped.v1': Type.TObject<{
+        spaceId: Type.TString;
+        address: Type.TString;
+    }>;
+    readonly 'com.rezics.community.space.address-reserved.v1': Type.TObject<{
+        spaceId: Type.TString;
+        address: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.claim-requested.v1': Type.TObject<{
+        realmId: Type.TString;
+        requestId: Type.TString;
+        state: Type.TLiteral<"pending">;
+        orphanedAt: Type.TString;
+        claimEligibleAt: Type.TString;
+        requestedAt: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.created.v1': Type.TObject<{
+        realmId: Type.TString;
+        revisionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.updated.v1': Type.TObject<{
+        realmId: Type.TString;
+        revisionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.ban.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        reason: Type.TString;
+        actor: Type.TUnion<[Type.TString, Type.TNull]>;
+        at: Type.TString;
+        transactionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.unban.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        at: Type.TString;
+        transactionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.membership.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        reservationId: Type.TString;
+        role: Type.TUnion<[Type.TLiteral<"member">, Type.TNull]>;
+        at: Type.TString;
+        transactionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.membership.requested.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        operationId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"join">, Type.TLiteral<"leave">, Type.TLiteral<"removal">]>;
+        at: Type.TString;
+        transactionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.membership.terminalized.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        reservationId: Type.TString;
+        transactionId: Type.TString;
+        at: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.board-scheme.v1': Type.TObject<{
+        realmId: Type.TString;
+        revisionId: Type.TString;
+        schemeId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.publication.adopted.v1': Type.TObject<{
+        publicationId: Type.TString;
+        realmId: Type.TString;
+        subjectId: Type.TString;
+        verdict: Type.TLiteral<"adopt" | "reject" | "withdraw">;
+        predecessor: Type.TUnion<[Type.TString, Type.TNull]>;
+        subjectRevisionId: Type.TNull;
+        publishedAt: Type.TString;
+    }>;
+    readonly 'com.rezics.community.publication.withdrawn.v1': Type.TObject<{
+        publicationId: Type.TString;
+        realmId: Type.TString;
+        subjectId: Type.TString;
+        verdict: Type.TLiteral<"adopt" | "reject" | "withdraw">;
+        predecessor: Type.TUnion<[Type.TString, Type.TNull]>;
+        subjectRevisionId: Type.TNull;
+        publishedAt: Type.TString;
+    }>;
+    readonly 'com.rezics.community.publication.rejected.v1': Type.TObject<{
+        publicationId: Type.TString;
+        realmId: Type.TString;
+        subjectId: Type.TString;
+        verdict: Type.TLiteral<"adopt" | "reject" | "withdraw">;
+        predecessor: Type.TUnion<[Type.TString, Type.TNull]>;
+        subjectRevisionId: Type.TNull;
+        publishedAt: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm-discovery.applied.v1': Type.TObject<{
+        realmId: Type.TString;
+        generation: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm-discovery.expired.v1': Type.TObject<{
+        realmId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"realm">, Type.TLiteral<"bucket">, Type.TLiteral<"thread">, Type.TLiteral<"board">]>;
+    }>;
     readonly 'com.rezics.zone.created.v1': Type.TObject<{
         id: Type.TString;
         revision: Type.TString;
@@ -638,424 +1272,6 @@ declare const productEventTypes: {
         entitlementId: Type.TString;
         orderId: Type.TString;
     }>;
-    readonly 'com.rezics.community.realm-discovery.changed.v1': Type.TObject<{
-        realmId: Type.TString;
-        realmEpoch: Type.TString;
-    }>;
-    readonly 'com.rezics.community.space.removed.v1': Type.TObject<{
-        kind: Type.TLiteral<"realm" | "space">;
-        id: Type.TString;
-        state: Type.TLiteral<"active" | "removed">;
-        headRevisionId: Type.TString;
-        version: Type.TString;
-        at: Type.TString;
-    }>;
-    readonly 'com.rezics.community.space.restored.v1': Type.TObject<{
-        kind: Type.TLiteral<"realm" | "space">;
-        id: Type.TString;
-        state: Type.TLiteral<"active" | "removed">;
-        headRevisionId: Type.TString;
-        version: Type.TString;
-        at: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.removed.v1': Type.TObject<{
-        kind: Type.TLiteral<"realm" | "space">;
-        id: Type.TString;
-        state: Type.TLiteral<"active" | "removed">;
-        headRevisionId: Type.TString;
-        version: Type.TString;
-        at: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.restored.v1': Type.TObject<{
-        kind: Type.TLiteral<"realm" | "space">;
-        id: Type.TString;
-        state: Type.TLiteral<"active" | "removed">;
-        headRevisionId: Type.TString;
-        version: Type.TString;
-        at: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.membership.cancelled.v1': Type.TObject<{
-        realmId: Type.TString;
-        accountId: Type.TString;
-        reservationId: Type.TString;
-        transactionId: Type.TString;
-        publicationTransactionId: Type.TUnion<[Type.TString, Type.TNull]>;
-        transition: Type.TObject<{
-            generationId: Type.TString;
-            operationId: Type.TString;
-            outcome: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>;
-        }>;
-        at: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.membership.certified.v1': Type.TObject<{
-        realmId: Type.TString;
-        accountId: Type.TString;
-        reservationId: Type.TString;
-        transactionId: Type.TString;
-        publicationTransactionId: Type.TUnion<[Type.TString, Type.TNull]>;
-        transition: Type.TObject<{
-            generationId: Type.TString;
-            operationId: Type.TString;
-            outcome: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>;
-        }>;
-        state: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>;
-    }>;
-    readonly 'com.rezics.community.party-locator.projected.v1': Type.TObject<{
-        accountId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.account-records.erased.v1': Type.TObject<{
-        accountId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.revision-locator.indexed.v1': Type.TObject<{
-        accountId: Type.TString;
-        found: Type.TInteger;
-    }>;
-    readonly 'com.rezics.community.revision-locators.removed.v1': Type.TObject<{
-        accountId: Type.TString;
-        found: Type.TInteger;
-    }>;
-    readonly 'com.rezics.community.revisions.erased.v1': Type.TObject<{
-        accountId: Type.TString;
-        found: Type.TInteger;
-    }>;
-    readonly 'com.rezics.community.space.created.v1': Type.TObject<{
-        spaceId: Type.TString;
-        revisionId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.space.updated.v1': Type.TObject<{
-        spaceId: Type.TString;
-        revisionId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.space.address-claim-pending.v1': Type.TObject<{
-        spaceId: Type.TString;
-        address: Type.TString;
-    }>;
-    readonly 'com.rezics.community.space.address-claim-accepted.v1': Type.TUnion<[Type.TObject<{
-        spaceId: Type.TString;
-        address: Type.TString;
-    }>, Type.TObject<{
-        spaceId: Type.TString;
-        revisionId: Type.TString;
-        address: Type.TString;
-    }>]>;
-    readonly 'com.rezics.community.space.address-changed.v1': Type.TObject<{
-        spaceId: Type.TString;
-        revisionId: Type.TString;
-        address: Type.TString;
-    }>;
-    readonly 'com.rezics.community.space.address-activated.v1': Type.TObject<{
-        spaceId: Type.TString;
-        address: Type.TString;
-    }>;
-    readonly 'com.rezics.community.space.address-reservation-skipped.v1': Type.TObject<{
-        spaceId: Type.TString;
-        address: Type.TString;
-    }>;
-    readonly 'com.rezics.community.space.address-reserved.v1': Type.TObject<{
-        spaceId: Type.TString;
-        address: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.claim-requested.v1': Type.TObject<{
-        realmId: Type.TString;
-        requestId: Type.TString;
-        state: Type.TLiteral<"pending">;
-        orphanedAt: Type.TString;
-        claimEligibleAt: Type.TString;
-        requestedAt: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.created.v1': Type.TObject<{
-        realmId: Type.TString;
-        revisionId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.updated.v1': Type.TObject<{
-        realmId: Type.TString;
-        revisionId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.ban.v1': Type.TObject<{
-        realmId: Type.TString;
-        accountId: Type.TString;
-        reason: Type.TString;
-        actor: Type.TUnion<[Type.TString, Type.TNull]>;
-        at: Type.TString;
-        transactionId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.unban.v1': Type.TObject<{
-        realmId: Type.TString;
-        accountId: Type.TString;
-        at: Type.TString;
-        transactionId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.membership.v1': Type.TObject<{
-        realmId: Type.TString;
-        accountId: Type.TString;
-        reservationId: Type.TString;
-        role: Type.TUnion<[Type.TLiteral<"member">, Type.TNull]>;
-        at: Type.TString;
-        transactionId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.membership.requested.v1': Type.TObject<{
-        realmId: Type.TString;
-        accountId: Type.TString;
-        operationId: Type.TString;
-        kind: Type.TUnion<[Type.TLiteral<"join">, Type.TLiteral<"leave">, Type.TLiteral<"removal">]>;
-        at: Type.TString;
-        transactionId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.membership.terminalized.v1': Type.TObject<{
-        realmId: Type.TString;
-        accountId: Type.TString;
-        reservationId: Type.TString;
-        transactionId: Type.TString;
-        at: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm.board-scheme.v1': Type.TObject<{
-        realmId: Type.TString;
-        revisionId: Type.TString;
-        schemeId: Type.TString;
-    }>;
-    readonly 'com.rezics.community.publication.adopted.v1': Type.TObject<{
-        publicationId: Type.TString;
-        realmId: Type.TString;
-        subjectId: Type.TString;
-        verdict: Type.TLiteral<"adopt" | "reject" | "withdraw">;
-        predecessor: Type.TUnion<[Type.TString, Type.TNull]>;
-        subjectRevisionId: Type.TNull;
-        publishedAt: Type.TString;
-    }>;
-    readonly 'com.rezics.community.publication.withdrawn.v1': Type.TObject<{
-        publicationId: Type.TString;
-        realmId: Type.TString;
-        subjectId: Type.TString;
-        verdict: Type.TLiteral<"adopt" | "reject" | "withdraw">;
-        predecessor: Type.TUnion<[Type.TString, Type.TNull]>;
-        subjectRevisionId: Type.TNull;
-        publishedAt: Type.TString;
-    }>;
-    readonly 'com.rezics.community.publication.rejected.v1': Type.TObject<{
-        publicationId: Type.TString;
-        realmId: Type.TString;
-        subjectId: Type.TString;
-        verdict: Type.TLiteral<"adopt" | "reject" | "withdraw">;
-        predecessor: Type.TUnion<[Type.TString, Type.TNull]>;
-        subjectRevisionId: Type.TNull;
-        publishedAt: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm-discovery.applied.v1': Type.TObject<{
-        realmId: Type.TString;
-        generation: Type.TString;
-    }>;
-    readonly 'com.rezics.community.realm-discovery.expired.v1': Type.TObject<{
-        realmId: Type.TString;
-        kind: Type.TUnion<[Type.TLiteral<"realm">, Type.TLiteral<"bucket">, Type.TLiteral<"thread">, Type.TLiteral<"board">]>;
-    }>;
-    readonly "com.rezics.content.realm-discovery.changed.v1": Type.TObject<{
-        realmId: Type.TString;
-        realmEpoch: Type.TString;
-        spaceId: Type.TString;
-        boardId: Type.TString;
-        threadId: Type.TString;
-        sourceRoute: Type.TInteger;
-        creationDay: Type.TString;
-        sourceVersion: Type.TString;
-        contributing: Type.TBoolean;
-        change: Type.TUnion<[Type.TLiteral<1>, Type.TLiteral<-1>]>;
-    }>;
-    readonly "com.rezics.content.realm-discovery.prepared.v1": Type.TObject<{
-        route: Type.TInteger;
-        intent: Type.TString;
-        generation: Type.TString;
-    }>;
-    readonly "com.rezics.content.realm-discovery.outcome.v1": Type.TObject<{
-        route: Type.TInteger;
-        intent: Type.TString;
-        generation: Type.TString;
-    }>;
-    readonly 'com.rezics.content.board-thread.projected.v1': Type.TObject<{
-        boardId: Type.TString;
-        threadId: Type.TString;
-        sourceEpoch: Type.TInteger;
-        sourcePosition: Type.TString;
-    }>;
-    readonly 'com.rezics.content.media.reserved.v1': Type.TObject<{
-        mediaId: Type.TString;
-        containerId: Type.TString;
-        actorId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.media.uploaded.v1': Type.TObject<{
-        mediaId: Type.TString;
-        containerId: Type.TString;
-        actorId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.media.available.v1': Type.TObject<{
-        mediaId: Type.TString;
-        containerId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.media.rejected.v1': Type.TObject<{
-        mediaId: Type.TString;
-        containerId: Type.TString;
-        decisionId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.media.erased.v1': Type.TObject<{
-        mediaId: Type.TString;
-        containerId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.media.collection-pending.v1': Type.TObject<{
-        mediaId: Type.TString;
-        containerId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.media.collected.v1': Type.TObject<{
-        mediaId: Type.TString;
-        containerId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.media.import-requested.v1': Type.TObject<{
-        mediaId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.media.taken-down.v1': Type.TObject<{
-        mediaId: Type.TString;
-        securityRevision: Type.TString;
-    }>;
-    readonly 'com.rezics.content.moderation.appeal-created.v1': Type.TObject<{
-        appealId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.moderation.appeal-resolved.v1': Type.TObject<{
-        appealId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.moderation.takedown.v1': Type.TObject<{
-        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
-        targetId: Type.TString;
-        securityRevision: Type.TString;
-    }>;
-    readonly 'com.rezics.content.moderation.restored.v1': Type.TObject<{
-        targetKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
-        targetId: Type.TString;
-        securityRevision: Type.TString;
-    }>;
-    readonly 'com.rezics.content.post.erased.v1': Type.TObject<{
-        postId: Type.TString;
-        securityRevision: Type.TString;
-        accountErasure: Type.TOptional<Type.TLiteral<true>>;
-    }>;
-    readonly 'com.rezics.content.moderation.erasure.v1': Type.TObject<{
-        threadId: Type.TString;
-        postIds: Type.TArray<Type.TString>;
-        mediaIds: Type.TArray<Type.TString>;
-    }>;
-    readonly 'com.rezics.content.author-erasure.requested.v1': Type.TObject<{
-        operationId: Type.TString;
-        threadId: Type.TString;
-        authorId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.report.resolved.v1': Type.TObject<{
-        reportId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.report.created.v1': Type.TObject<{
-        reportId: Type.TString;
-        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
-        targetId: Type.TString;
-        revisionId: Type.TOptional<Type.TString>;
-    }>;
-    readonly 'com.rezics.content.report-target.projected.v1': Type.TObject<{
-        reportId: Type.TString;
-        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
-        targetId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.source_fence.taken_down.v1': Type.TObject<{
-        route: Type.TInteger;
-        source: Type.TString;
-        external_id: Type.TString;
-        field_group: Type.TUnion<[Type.TLiteral<"facts">, Type.TLiteral<"summary">, Type.TLiteral<"cover">]>;
-        securityRevision: Type.TString;
-        takenDownAt: Type.TOptional<Type.TString>;
-        takedownId: Type.TOptional<Type.TString>;
-    }>;
-    readonly 'com.rezics.content.edition.creator-indexed.v1': Type.TObject<{
-        editionId: Type.TString;
-        creatorAccountId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.edition.created.v1': Type.TObject<{
-        editionId: Type.TString;
-        editionRevision: Type.TString;
-    }>;
-    readonly 'com.rezics.content.edition.published.v1': Type.TObject<{
-        editionId: Type.TString;
-        editionRevision: Type.TString;
-    }>;
-    readonly 'com.rezics.content.edition.unpublished.v1': Type.TObject<{
-        editionId: Type.TString;
-        editionRevision: Type.TString;
-    }>;
-    readonly 'com.rezics.content.thread.created.v1': Type.TObject<{
-        placeId: Type.TString;
-        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
-        subjectIds: Type.TArray<Type.TString>;
-        activityAt: Type.TString;
-        threadId: Type.TString;
-        itemId: Type.TString;
-        revisionId: Type.TString;
-        actorId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.post.created.v1': Type.TObject<{
-        placeId: Type.TString;
-        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
-        subjectIds: Type.TArray<Type.TString>;
-        activityAt: Type.TString;
-        threadId: Type.TString;
-        itemId: Type.TString;
-        revisionId: Type.TString;
-        actorId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.revision.created.v1': Type.TObject<{
-        placeId: Type.TString;
-        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
-        subjectIds: Type.TArray<Type.TString>;
-        activityAt: Type.TString;
-        threadId: Type.TString;
-        itemId: Type.TString;
-        revisionId: Type.TString;
-        actorId: Type.TString;
-        previousSubjectIds: Type.TOptional<Type.TArray<Type.TString>>;
-    }>;
-    readonly 'com.rezics.content.board.created.v1': Type.TObject<{
-        boardId: Type.TString;
-        realmId: Type.TUnion<[Type.TString, Type.TNull]>;
-        conceptId: Type.TString;
-        actorId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.authored-field.created.v1': Type.TObject<{
-        id: Type.TString;
-        subject: Type.TString;
-        candidate: Type.TString;
-        authorId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.authored-field.erased.v1': Type.TObject<{
-        id: Type.TString;
-        subject: Type.TString;
-        authorId: Type.TString;
-    }>;
-    readonly 'com.rezics.content.post.restored.v1': Type.TObject<{
-        postId: Type.TString;
-        securityRevision: Type.TString;
-    }>;
-    readonly 'com.rezics.content.reaction.changed.v1': Type.TObject<{
-        actorId: Type.TString;
-        targetKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">, Type.TLiteral<"subject">]>;
-        targetId: Type.TString;
-        previousKind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
-        kind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
-    }>;
-    readonly 'com.rezics.content.author-item.projected.v1': Type.TObject<{
-        authorAccountId: Type.TString;
-        itemKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
-        itemId: Type.TString;
-        sourceEpoch: Type.TInteger;
-        sourcePosition: Type.TString;
-    }>;
-    readonly 'com.rezics.content.subject-thread.projected.v1': Type.TObject<{
-        subjectId: Type.TString;
-        threadId: Type.TString;
-        sourceEpoch: Type.TInteger;
-        sourcePosition: Type.TString;
-    }>;
     readonly 'com.rezics.content.report-reporter.projected.v1': Type.TObject<{
         reportId: Type.TString;
     }>;
@@ -1243,222 +1459,6 @@ declare const productEventTypes: {
         survivor: Type.TString;
         voters: Type.TInteger;
     }>;
-    readonly 'com.rezics.semantic.public-source.advanced.v1': Type.TObject<{
-        id: Type.TString;
-        bootstrap: Type.TString;
-        execution: Type.TString;
-    }>;
-    readonly 'com.rezics.semantic.context-directory.changed.v1': Type.TObject<{}>;
-    readonly 'com.rezics.semantic.provider-review.projected.v1': Type.TObject<{}>;
-    readonly 'com.rezics.semantic.composite.registered.v1': Type.TObject<{
-        context: Type.TString;
-        digest: Type.TString;
-    }>;
-    readonly 'com.rezics.semantic.erasure.scheduled.v1': Type.TObject<{
-        accountId: Type.TString;
-    }>;
-    readonly 'com.rezics.semantic.erasure.locator-scheduled.v1': Type.TObject<{
-        position: Type.TString;
-    }>;
-    readonly 'com.rezics.semantic.erasure.locator-advanced.v1': Type.TObject<{
-        position: Type.TString;
-    }>;
-    readonly 'com.rezics.semantic.erasure.progress.v1': Type.TObject<{
-        accountId: Type.TString;
-    }>;
-    readonly "com.rezics.semantic.identity-epoch.home-available.v1": Type.TObject<{
-        partition: Type.TInteger;
-        after: Type.TString;
-    }>;
-    readonly "com.rezics.semantic.identity-epoch.bootstrap-scheduled.v1": Type.TObject<{
-        partition: Type.TInteger;
-    }>;
-    readonly "com.rezics.semantic.identity-epoch.admitted.v1": Type.TObject<{
-        jobId: Type.TString;
-        epoch: Type.TString;
-        partition: Type.TInteger;
-    }>;
-    readonly "com.rezics.semantic.identity-epoch.progress.v1": Type.TObject<{
-        partition: Type.TInteger;
-        generation: Type.TString;
-    }>;
-    readonly "com.rezics.semantic.identity-epoch.bootstrap.v1": Type.TObject<{
-        partition: Type.TInteger;
-        generation: Type.TString;
-    }>;
-    readonly "com.rezics.semantic.record.deleted.v1": Type.TUnion<[Type.TObject<{
-        kind: Type.TLiteral<"context">;
-        id: Type.TString;
-        version: Type.TString;
-    }>, Type.TObject<{
-        kind: Type.TLiteral<"candidate">;
-        id: Type.TString;
-        subject: Type.TString;
-        version: Type.TString;
-        deletedAt: Type.TUnion<[Type.TString, Type.TNull]>;
-        purgeAfter: Type.TUnion<[Type.TString, Type.TNull]>;
-    }>]>;
-    readonly "com.rezics.semantic.record.restored.v1": Type.TUnion<[Type.TObject<{
-        kind: Type.TLiteral<"context">;
-        id: Type.TString;
-        version: Type.TString;
-    }>, Type.TObject<{
-        kind: Type.TLiteral<"candidate">;
-        id: Type.TString;
-        subject: Type.TString;
-        version: Type.TString;
-        deletedAt: Type.TUnion<[Type.TString, Type.TNull]>;
-        purgeAfter: Type.TUnion<[Type.TString, Type.TNull]>;
-    }>]>;
-    readonly 'com.rezics.source-record.metadata-changed.v1': Type.TObject<{
-        source: Type.TString;
-        external_id: Type.TString;
-        metadata_revision: Type.TInteger;
-    }>;
-    readonly "com.rezics.semantic.subject_page.work_committed.v1": Type.TObject<{
-        partition: Type.TInteger;
-        kind: Type.TUnion<Type.TLiteral<string>[]>;
-    }>;
-    readonly "com.rezics.semantic.subject_page.repair_queued.v1": Type.TObject<{
-        subject: Type.TObject<{
-            route: Type.TInteger;
-            id: Type.TString;
-        }>;
-        cause: Type.TUnion<[Type.TLiteral<"missing-proof">, Type.TLiteral<"explicit">]>;
-    }>;
-    readonly "com.rezics.semantic.subject_page.dependencies_changed.v1": Type.TObject<{
-        deltas: Type.TArray<Type.TObject<{
-            subject: Type.TObject<{
-                route: Type.TInteger;
-                id: Type.TString;
-            }>;
-            component: Type.TObject<{
-                kind: Type.TUnion<Type.TLiteral<string>[]>;
-                key: Type.TString;
-            }>;
-            owner: Type.TObject<{
-                kind: Type.TUnion<[Type.TLiteral<"subject">, Type.TLiteral<"source-fence">]>;
-                route: Type.TInteger;
-                key: Type.TString;
-            }>;
-            sourceVersion: Type.TString;
-            eventId: Type.TString;
-            changeId: Type.TString;
-            present: Type.TBoolean;
-            time: Type.TObject<{
-                effectiveAt: Type.TUnion<[Type.TString, Type.TNull]>;
-                evidence: Type.TUnion<[Type.TLiteral<"known">, Type.TLiteral<"missing">]>;
-            }>;
-        }>>;
-    }>;
-    readonly "com.rezics.semantic.subject_page.repair_requested.v1": Type.TObject<{
-        subject: Type.TObject<{
-            route: Type.TInteger;
-            id: Type.TString;
-        }>;
-        owner: Type.TObject<{
-            kind: Type.TUnion<[Type.TLiteral<"subject">, Type.TLiteral<"source-fence">]>;
-            route: Type.TInteger;
-            key: Type.TString;
-        }>;
-        changeId: Type.TString;
-        eventId: Type.TString;
-        time: Type.TObject<{
-            effectiveAt: Type.TUnion<[Type.TString, Type.TNull]>;
-            evidence: Type.TUnion<[Type.TLiteral<"known">, Type.TLiteral<"missing">]>;
-        }>;
-    }>;
-    readonly "com.rezics.subject.merged.v1": Type.TObject<{
-        id: Type.TString;
-        survivor: Type.TString;
-    }>;
-    readonly "com.rezics.subject.revised.v1": Type.TObject<{
-        id: Type.TString;
-        revision: Type.TInteger;
-        kind: Type.TUnion<[Type.TLiteral<"create">, Type.TLiteral<"terms">, Type.TLiteral<"propose">, Type.TLiteral<"accept">, Type.TLiteral<"reject">, Type.TLiteral<"adopt">, Type.TLiteral<"merge">, Type.TLiteral<"retract">, Type.TLiteral<"identity">]>;
-    }>;
-    readonly "com.rezics.semantic.links.moving.v1": Type.TObject<{
-        id: Type.TString;
-        survivor: Type.TString;
-        cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
-        verification: Type.TOptional<Type.TObject<{
-            account: Type.TString;
-            receipt: Type.TString;
-        }>>;
-    }>;
-    readonly "com.rezics.semantic.links.keys-changed.v1": Type.TObject<{
-        subject: Type.TString;
-        direction: Type.TUnion<[Type.TLiteral<"holder">, Type.TLiteral<"target">]>;
-        revision: Type.TInteger;
-        security_revision: Type.TInteger;
-        cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
-    }>;
-    readonly "com.rezics.semantic.links.visibility-changed.v1": Type.TObject<{
-        subject: Type.TString;
-        revision: Type.TInteger;
-        security_revision: Type.TInteger;
-        release: Type.TString;
-        visible: Type.TBoolean;
-        cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
-    }>;
-    readonly 'com.rezics.subject.statement_disclosed.v1': Type.TObject<{
-        id: Type.TString;
-        candidate: Type.TString;
-    }>;
-    readonly 'com.rezics.statement.retracted.v1': Type.TObject<{
-        candidate: Type.TString;
-        revision: Type.TInteger;
-    }>;
-    readonly 'com.rezics.statement.proposed.v1': Type.TObject<{
-        candidate: Type.TString;
-        revision: Type.TInteger;
-    }>;
-    readonly 'com.rezics.statement.accepted.v1': Type.TObject<{
-        candidate: Type.TString;
-        context: Type.TString;
-        revision: Type.TInteger;
-        head: Type.TInteger;
-    }>;
-    readonly 'com.rezics.statement.rejected.v1': Type.TObject<{
-        candidate: Type.TString;
-        context: Type.TString;
-        revision: Type.TInteger;
-        head: Type.TInteger;
-    }>;
-    readonly 'com.rezics.subject.adopted.v1': Type.TObject<{
-        context: Type.TString;
-        property: Type.TString;
-        mode: Type.TUnion<[Type.TLiteral<"inherit">, Type.TLiteral<"replace">, Type.TLiteral<"suppress">]>;
-        revision: Type.TInteger;
-        head: Type.TInteger;
-    }>;
-    readonly 'com.rezics.semantic.links.changed.v1': Type.TObject<{
-        subject: Type.TString;
-        revision: Type.TInteger;
-        security_revision: Type.TInteger;
-        changes: Type.TArray<Type.TObject<{
-            context_id: Type.TOptional<Type.TString>;
-            suppressed: Type.TOptional<Type.TBoolean>;
-            property: Type.TString;
-            statement: Type.TString;
-            target: Type.TUnion<[Type.TString, Type.TNull]>;
-            present: Type.TBoolean;
-            project_outbound: Type.TOptional<Type.TBoolean>;
-            relation: Type.TOptional<Type.TBoolean>;
-            slot_id: Type.TOptional<Type.TString>;
-            external: Type.TOptional<Type.TUnion<[Type.TString, Type.TNull]>>;
-            value: Type.TOptional<Type.TUnion<[Type.TLiteral<"value">, Type.TLiteral<"somevalue">, Type.TLiteral<"novalue">]>>;
-            outbound_order: Type.TOptional<Type.TUnion<[Type.TLiteral<"position">, Type.TLiteral<"date">, Type.TLiteral<"name">, Type.TNull]>>;
-            outbound_order_key: Type.TOptional<Type.TString>;
-            source_type: Type.TOptional<Type.TString>;
-            order_key: Type.TOptional<Type.TString>;
-            filter_value: Type.TOptional<Type.TString>;
-        }>>;
-    }>;
-    readonly 'com.rezics.semantic.links.projected.v1': Type.TObject<{
-        subjects: Type.TArray<Type.TString>;
-    }>;
-    readonly "com.rezics.search.identity_writer.changed.v1": Type.TObject<{}>;
     readonly 'com.rezics.history.erasure-acknowledged.v1': Type.TObject<{
         version: Type.TInteger;
         outcome: Type.TUnion<[Type.TLiteral<"erased">, Type.TLiteral<"none">]>;

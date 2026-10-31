@@ -95,12 +95,13 @@ function createKindAudienceAccess(): KindAudienceAccess {
         throw new AccessWorkUnavailableError(`Collection Kind audience ${phase} native body`);
       },
     });
-  return Object.freeze({
+  const operations: KindAudienceAccess = {
     capture: unavailable('origin capture'),
     resolveInput: unavailable('committed input lookup'),
     prepare: unavailable('evidence preparation'),
     verifySource: unavailable('Source-local currentness'),
-  });
+  };
+  return Object.freeze(operations);
 }
 
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.

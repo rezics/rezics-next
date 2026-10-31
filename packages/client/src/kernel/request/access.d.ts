@@ -4,6 +4,8 @@ import type { Pool, PoolClient } from 'pg';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
 import { type AuthoritativeTime, type CommandAuthorization } from '../command/command.ts';
 import type { ResourceEligibility } from '../access/eligibility.ts';
+import type { KindAudienceAccess } from '../access/kind-audience.ts';
+export type * from '../access/kind-audience.ts';
 export type AccountActor = {
     kind: 'account';
     accountId: string;
@@ -182,6 +184,10 @@ export type AccessCommandAuthorization = CommandAuthorization & {
     readonly check: AccessCheck;
 };
 export interface Access {
+    /** Native Kind origin/evidence only; optional for existing mocks/adapters.
+     * The original factory is staged unavailable before IO until owner bodies exist.
+     */
+    readonly kindAudience?: KindAudienceAccess;
     /** Authentication has no authorization-time input; preserve its native request contract. */
     authenticate(token: string, context: {
         pool: Pool;
@@ -219,4 +225,3 @@ export declare class AuthenticationError extends Error {
 }
 export declare function actorOf(access: Access, request: Request, context: AccessContext): Promise<Actor>;
 export declare const anonymousAccess: Access;
-export {};

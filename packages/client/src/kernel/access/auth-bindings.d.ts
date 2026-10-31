@@ -1,5 +1,5 @@
 import type { Access } from '../request/access.ts';
-import type { AuthErasureProofPorts, AuthErasureObligationPorts, AccessAccount, ProvisioningReceiptMetadata, EffectAuthorization, CredentialEffectAuthorization, CredentialFloorPurpose, CredentialPurpose, PasskeyAuthorizationInput, PasskeyTrustedAccessPorts, TrustedAccessPorts } from '@rezics/auth-contract';
+import type { AuthErasureProofPorts, AuthErasureLivePorts, AuthErasureLiveReceiver, AuthErasureObligationPorts, AccessAccount, ProvisioningReceiptMetadata, EffectAuthorization, CredentialEffectAuthorization, CredentialFloorPurpose, CredentialPurpose, PasskeyAuthorizationInput, PasskeyTrustedAccessPorts, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
 import type { OperatorOpening } from './operator.ts';
@@ -43,8 +43,13 @@ export declare class AuthBindingDeniedError extends Error {
  * account cache, policy evaluator, fence clearing or cross-account workflow runs here.
  * Callback fixtures establish this structural contract only, not product authorization.
  */
-export declare function createAuthBindings(config: {
+type AuthBindingConfig = {
     pool: Pool;
     access?: Access;
-} & AuthBindingCapabilities): PasskeyTrustedAccessPorts & AuthErasureObligationPorts;
+    authErasureLiveReceiver?: AuthErasureLiveReceiver;
+} & AuthBindingCapabilities;
+export declare function createAuthBindings(config: AuthBindingConfig & {
+    authErasureLiveReceiver: AuthErasureLiveReceiver;
+}): PasskeyTrustedAccessPorts & AuthErasureObligationPorts & AuthErasureLivePorts;
+export declare function createAuthBindings(config: AuthBindingConfig): PasskeyTrustedAccessPorts & AuthErasureObligationPorts & Partial<AuthErasureLivePorts>;
 export {};
