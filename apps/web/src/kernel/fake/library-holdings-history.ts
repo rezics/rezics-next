@@ -1,5 +1,5 @@
 import type { FakeRoute } from '../fake-modules';
-import { storyViewerId } from '../fake';
+import { storyViewerId } from './identities';
 import recording from '../recorded/library-published-log.json';
 
 let enabled = false;

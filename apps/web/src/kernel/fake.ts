@@ -13,6 +13,7 @@ import type { Related, Subject, Summary } from '../subject/types';
 import { demoAgentAccounts, demoAgentSubjects } from './agent-fixtures';
 import { answerFakeRoute, discoveredRecordings, mergeFakeFixtures } from './fake-modules.ts';
 import defaultFixtures from './fixtures.json' with { type: 'json' };
+import { storyViewerId } from './fake/identities.ts';
 import { languageList, localizeRecording } from './fake/languages.ts';
 import { recordedBookState } from './fake/library-entry-states.ts';
 import homePageRecording from './recorded/home-page.json';
@@ -251,8 +252,7 @@ function recordingsWithId(
   )?.[1];
 }
 
-/** The account the story session signs in as. */
-export const storyViewerId = 'story-viewer';
+export { storyViewerId } from './fake/identities.ts';
 
 /** Library reads by path. The member, change and unit pages hang off their parent's recorded id. */
 function libraryRecording(
