@@ -126,3 +126,8 @@ export function pinnedModelProfile(model: string, effort: string | undefined, ro
   const pin = agentAdapter('codex').pinProfile ?? codexAdapter.pinProfile!;
   return pin(model, effort, route);
 }
+
+/** Original proofs use the normal Codex worker; provider eligibility belongs at this boundary. */
+export function requireOriginalProofProfile(profile: Profile): void {
+  if (profile.cli !== 'codex') throw new Error('verification requires the ordinary Codex worker route');
+}

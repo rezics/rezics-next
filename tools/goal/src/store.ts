@@ -1,3 +1,4 @@
+import { proofFingerprint } from './verification.ts';
 import type { Database } from 'bun:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { CheckResults, checkResultsMigration } from './check-results.ts';
@@ -19,8 +20,16 @@ import type {
   Task,
 } from './types.ts';
 import { recordFlow, ensureFlow } from './flow.ts';
+import type { ProofBinding, ProofReservation, ProofBindResult, ProofObservation, HistoricalProofCheck } from './verification.ts';
 
 export const workerMigrations = [
+  {
+    module: 'proof-admission', version: 1,
+    sql: `CREATE TABLE worker_proof_reservations (
+      token TEXT PRIMARY KEY, goal TEXT NOT NULL, task_id TEXT NOT NULL, attempt INTEGER NOT NULL,
+      status TEXT NOT NULL, body TEXT NOT NULL, UNIQUE(task_id, attempt));
+      CREATE INDEX worker_proof_active ON worker_proof_reservations(goal, status);`,
+  },
   {
     module: 'worker',
     version: 1,
@@ -345,6 +354,108 @@ export class WorkerStore implements AttemptFence {
       .query("SELECT count(*) AS count FROM worker_attempts WHERE json_extract(body, '$.state') = 'running'")
       .get() as { count: number };
     return row.count;
+  }
+  /** Unbound detached checks remain quarantine only: never retrofit a token, source, or task kind. */
+  historicalProofChecks(goal?: string): HistoricalProofCheck[] {
+    return this.db.query(`SELECT a.task_id, a.attempt, a.body, t.body AS task FROM worker_attempts a JOIN worker_tasks t ON t.id=a.task_id
+      WHERE json_array_length(json_extract(a.body,'$.checks')) > 0
+      AND (? IS NULL OR json_extract(t.body,'$.brief.goal')=?)
+      AND NOT EXISTS (SELECT 1 FROM worker_proof_reservations p WHERE p.task_id=a.task_id AND p.attempt=a.attempt)`)
+      .all(goal ?? null, goal ?? null).flatMap((raw) => {
+        const row = raw as { task_id: string; attempt: number; body: string; task: string };
+        const attempt = decode<Attempt>(row)!;
+        const task = decode<Task>({ body: row.task })!;
+        return [...new Set(attempt.checks ?? [])].filter((checkId) => !this.db.query(`SELECT 1 FROM worker_events
+          WHERE task_id=? AND attempt=? AND kind='historical-proof-terminal' AND json_extract(body,'$.checkId')=?`).get(row.task_id, row.attempt, checkId))
+          .map((checkId) => ({ taskId: row.task_id, attempt: row.attempt, checkId, cwd: task.worktree }));
+      });
+  }
+  observeHistoricalProof(check: HistoricalProofCheck, observation: ProofObservation): void {
+    if (observation.status !== 'terminal' || observation.passed) throw new Error('Historical custody cannot authorize proof');
+    this.db.transaction(() => {
+      if (!this.historicalProofChecks().some((entry) => isDeepStrictEqual(entry, check))) return;
+      this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+        .run(check.taskId, check.attempt, 'historical-proof-terminal', new Date().toISOString(), JSON.stringify({ checkId: check.checkId, observation }));
+    }).immediate();
+  }
+  proofCapacityAvailable(goal: string, taskId: string): boolean {
+    const row = this.db.query("SELECT count(*) AS count, coalesce(max(task_id=?),0) AS own FROM worker_proof_reservations WHERE status != 'released' AND (goal=? OR task_id=?)").get(taskId, goal, taskId) as { count: number; own: number };
+    const historical = this.historicalProofChecks(goal);
+    return row.count + historical.length < 3 && row.own === 0 && !this.historicalProofChecks().some((check) => check.taskId === taskId);
+  }
+  /** The existing store write transaction owns admission across every controller and detached model exit. */
+  reserveProof(binding: ProofBinding): ProofReservation | null {
+    return this.write(binding, () => {
+      const task = this.task(binding.taskId);
+      if (task.brief.kind !== 'verification' || binding.attempt < 1 || task.proofAuthorization?.fingerprint !== proofFingerprint(task.brief) ||
+          binding.goal !== task.brief.goal || binding.sourceCommit !== task.brief.proof?.sourceCommit ||
+          binding.sourceTree !== task.proofAuthorization.sourceTree || binding.cwd !== task.worktree ||
+          !isDeepStrictEqual(binding.argv, task.brief.acceptance.command)) throw new Error('proof admission requires registered exact source and command');
+      const existing = this.proofReservation(binding.taskId, binding.attempt);
+      if (existing) return existing;
+      const active = this.db.query("SELECT body FROM worker_proof_reservations WHERE status != 'released' AND (goal=? OR task_id=?)")
+        .all(binding.goal, binding.taskId).map((row) => decode<ProofReservation>(row)!);
+      if (active.some((run) => run.binding.taskId === binding.taskId) || active.length + this.historicalProofChecks(binding.goal).length >= 3 ||
+          this.historicalProofChecks().some((check) => check.taskId === binding.taskId)) return null;
+      const run: ProofReservation = { binding: structuredClone(binding), status: 'reserved' };
+      this.db.query('INSERT INTO worker_proof_reservations VALUES (?,?,?,?,?,?)')
+        .run(binding.reservationToken, binding.goal, binding.taskId, binding.attempt, run.status, JSON.stringify(run));
+      this.event(binding, 'proof-reserved', run);
+      return run;
+    });
+  }
+  proofReservation(taskId: string, attempt: number): ProofReservation | undefined {
+    return decode<ProofReservation>(this.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=? AND attempt=?').get(taskId, attempt));
+  }
+  bindProof(binding: ProofBinding, outcome: ProofBindResult): ProofReservation {
+    return this.write(binding, () => {
+      const run = this.proofReservation(binding.taskId, binding.attempt);
+      if (!run || !isDeepStrictEqual(run.binding, binding)) throw new Error('proof reservation identity changed');
+      if (run.status !== 'reserved') throw new Error('proof binding may be attempted only once; recover its durable result');
+      if (outcome.status === 'bound' && isDeepStrictEqual(outcome.binding, binding)) {
+        run.status = 'bound';
+        if (outcome.native) run.native = structuredClone(outcome.native);
+      }
+      else if (outcome.status === 'refused' && outcome.provenNeverStarted) run.status = 'released';
+      else run.status = 'unknown';
+      if (outcome.status !== 'bound') run.cause = outcome.cause;
+      this.saveProof(run);
+      this.event(binding, 'proof-binding', { outcome, run });
+      return run;
+    });
+  }
+  activeProofReservations(): ProofReservation[] {
+    return this.db.query("SELECT body FROM worker_proof_reservations WHERE status!='released'").all().map((row) => decode<ProofReservation>(row)!);
+  }
+  boundProofReservations(): ProofReservation[] {
+    return this.db.query("SELECT body FROM worker_proof_reservations WHERE status='bound'").all()
+      .map((row) => decode<ProofReservation>(row)!);
+  }
+  observeProof(binding: ProofBinding, observation: ProofObservation): void {
+    // Native ownership survives task cancellation/supersession. Reconcile its token without advancing source state.
+    this.db.transaction(() => {
+      const run = this.proofReservation(binding.taskId, binding.attempt);
+      if (!run || !isDeepStrictEqual(run.binding, binding) || !['bound', 'released', ...(observation.status === 'terminal' ? ['reserved', 'unknown'] : [])].includes(run.status))
+        throw new Error('proof observation has no owned binding');
+      if (run.status === 'released') {
+        if (!isDeepStrictEqual(run.observation, observation)) throw new Error('terminal proof evidence is immutable');
+        return;
+      }
+      run.observation = observation;
+      if (observation.status === 'terminal') run.status = 'released';
+      this.saveProof(run);
+      this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+        .run(binding.taskId, binding.attempt, 'proof-observed', new Date().toISOString(), JSON.stringify(observation));
+    }).immediate();
+  }
+  private saveProof(run: ProofReservation): void {
+    this.db.query('UPDATE worker_proof_reservations SET status=?,body=? WHERE token=?')
+      .run(run.status, JSON.stringify(run), run.binding.reservationToken);
+    const task = this.task(run.binding.taskId);
+    if (task.currentAttempt === run.binding.attempt) {
+      task.proofRun = run;
+      this.saveTask(task);
+    }
   }
   /** Attempts that ended within a time window, using an index so older attempt bodies are not read. */
   attemptsEndedBetween(start: string, end: string): Attempt[] {
@@ -777,6 +888,8 @@ export class WorkerStore implements AttemptFence {
     return task;
   }
   private saveTask(task: Task): void {
+    if (task.brief.kind === 'verification' && ['landing', 'integrated', 'merged'].includes(task.state))
+      throw new Error('proof tasks cannot land or publish source integration');
     this.db
       .query('UPDATE worker_tasks SET current_attempt=?, body=? WHERE id=?')
       .run(task.currentAttempt, JSON.stringify(task), task.id);
@@ -945,7 +1058,7 @@ export class WorkerStore implements AttemptFence {
   nextAttempt(ref: AttemptRef, make: (n: number) => Attempt, configDirectory?: string): Attempt {
     return this.write(ref, () => {
       const task = this.task(ref.taskId);
-      if (task.state === 'integrated' || task.state === 'merged' || task.state === 'cancelled')
+      if (task.state === 'integrated' || task.state === 'merged' || task.state === 'verified' || task.state === 'cancelled')
         throw new Error(`cannot retry ${task.state} task`);
       if (ref.attempt) {
         const old = this.attempt(ref);
@@ -1048,6 +1161,8 @@ export class WorkerStore implements AttemptFence {
   }
   landing(request: LandingRequest, enqueue: (request: LandingRequest) => void): void {
     this.write(request, () => {
+      if (this.task(request.taskId).brief.kind === 'verification')
+        throw new Error('verification proof cannot enter source landing');
       const sent = this.db
         .query("SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='landing-requested'")
         .get(request.taskId, request.attempt);

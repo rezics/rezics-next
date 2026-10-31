@@ -224,7 +224,7 @@ function pendingQueueWaits(db: Database, nowMs: number): LifecycleMetricEntry[] 
     if (
       !current ||
       current.current_attempt !== wait.attempt ||
-      ['integrated', 'merged', 'stopped', 'cancelled'].includes(current.state)
+      ['integrated', 'merged', 'stopped', 'cancelled', 'verified'].includes(current.state)
     )
       return false;
     if (wait.stage === 'landing' && hasTable(db, 'landing_queue')) {
@@ -255,7 +255,7 @@ function currentStateWaits(db: Database, nowMs: number, hasTransitions: boolean)
       FROM worker_attempts AS a
       JOIN worker_tasks AS t ON t.id = a.task_id AND t.current_attempt = a.attempt
       WHERE json_extract(a.body, '$.state') = 'waiting'
-        AND json_extract(t.body, '$.state') NOT IN ('integrated', 'merged', 'stopped', 'cancelled')
+        AND json_extract(t.body, '$.state') NOT IN ('integrated', 'merged', 'stopped', 'cancelled', 'verified')
       UNION ALL
       SELECT t.id AS task_id, t.current_attempt AS attempt, 'task' AS kind
       FROM worker_tasks AS t

@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { git as repositoryGit } from './merge.ts';
 
@@ -14,6 +15,43 @@ import { MergeTrain } from './merge-train.ts';
 import { PROMOTION_GATE_TIMEOUT_MS, promote } from './promotion.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
+
+/** Copy the actual worker-check runtime closure from one immutable development commit. */
+export function checkScriptFixture(ref = 'refs/heads/dev') {
+  const repositoryRoot = resolve(import.meta.dir, '../../..');
+  const commit = repositoryGit(repositoryRoot, 'rev-parse', '--verify', `${ref}^{commit}`);
+  function read(path: string): string {
+    const result = spawnSync('git', ['show', `${commit}:${path}`], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    if (result.status !== 0)
+      throw new Error(result.stderr?.trim() || result.error?.message || `Could not read ${commit}:${path}`);
+    return result.stdout;
+  }
+  return {
+    read,
+    install(root: string, transform: (path: string, source: string) => string = (_path, source) => source) {
+      for (const path of [
+        'scripts/worker-check.ts',
+        'scripts/remote-check.ts',
+        'scripts/check-git.ts',
+        'scripts/check-ledger.ts',
+        'scripts/stack-run.ts',
+        'scripts/stack-lease.ts',
+        'scripts/check-custody.ts',
+        'scripts/check-artifacts.ts',
+        'scripts/check-memory.ts',
+        'scripts/check-host/docker',
+      ]) {
+        const target = join(root, path);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, transform(path, read(path)));
+      }
+    },
+  };
+}
 
 export function temporaryDirectory(): { path: string; close(): void } {
   const root = resolve(import.meta.dir, '../../../.temp/goal-tests');

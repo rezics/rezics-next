@@ -3,10 +3,11 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join, resolve } from 'node:path';
-import { harness, reading } from './test-support.ts';
+import { checkScriptFixture, harness, reading } from './test-support.ts';
 import { git, WorkerTasks } from './tasks.ts';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
+const devScripts = checkScriptFixture();
 
 function briefText(command: string[], options: { placement?: string; after?: string[] } = {}): string {
   return `---
@@ -30,29 +31,8 @@ Run the acceptance command.
 `;
 }
 
-function sourceFromIntegration(path: string): string {
-  const result = spawnSync('git', ['show', `refs/heads/dev:${path}`], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-    maxBuffer: 8 * 1024 * 1024,
-  });
-  if (result.status !== 0) throw new Error(result.stderr.trim() || `Could not read dev:${path}`);
-  return result.stdout;
-}
-
 function installWorkerCheck(root: string, interceptRemote = false): void {
-  const files = [
-    'scripts/worker-check.ts',
-    'scripts/remote-check.ts',
-    'scripts/check-ledger.ts',
-    'scripts/stack-lease.ts',
-    'scripts/check-memory.ts',
-    'scripts/check-host/docker',
-  ];
-  for (const file of files) {
-    const target = join(root, file);
-    mkdirSync(resolve(target, '..'), { recursive: true });
-    const source = sourceFromIntegration(file);
+  devScripts.install(root, (file, source) => {
     const instrumented =
       interceptRemote && file === 'scripts/remote-check.ts'
         ? source.replace(
@@ -62,8 +42,8 @@ function installWorkerCheck(root: string, interceptRemote = false): void {
         : source;
     if (instrumented === source && interceptRemote && file === 'scripts/remote-check.ts')
       throw new Error('Could not instrument the worker-check remote boundary');
-    writeFileSync(target, instrumented);
-  }
+    return instrumented;
+  });
 }
 
 function localCheckEnvironment(root: string, remoteMarker?: string): NodeJS.ProcessEnv {

@@ -17,6 +17,8 @@ export type LandedUsageReport = {
 };
 
 export type Report = {
+  verifiedProofs: number;
+  proofAttempts: number;
   attempts: number;
   tasks: number;
   passedTasks: number;
@@ -49,6 +51,7 @@ export function report(records: AttemptRecord[]): Report {
   const measured = records.filter((record) => record.outcome !== 'pending-gate');
   const byTask = new Map<string, AttemptRecord[]>();
   for (const record of measured) {
+    if (record.taskKind === 'verification') continue;
     const group = byTask.get(record.taskId) ?? [];
     group.push(record);
     byTask.set(record.taskId, group);
@@ -171,6 +174,8 @@ export function report(records: AttemptRecord[]): Report {
   ) as Report['stepShare'];
 
   return {
+    proofAttempts: records.filter((record) => record.taskKind === 'verification').length,
+    verifiedProofs: new Set(measured.filter((record) => record.outcome === 'verified').map((record) => record.taskId)).size,
     attempts: records.length,
     tasks: byTask.size,
     passedTasks: passedTasks.length,

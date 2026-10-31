@@ -731,7 +731,16 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
       // Bun may keep optional dependencies on the installed package's private edge.
       // Follow that graph from the real manifest, using only the contract's package name.
       const packageManifest = realpathSync(join(packageRoot, 'package.json'));
-      const platformManifest = createRequire(packageManifest).resolve(`${binary.package}/package.json`);
+      let platformManifest: string;
+      try {
+        platformManifest = createRequire(packageManifest).resolve(`${binary.package}/package.json`);
+      } catch (error) {
+        // A linked installation can expose a hoisted dependency at the checkout edge
+        // without placing it among the real package's ancestors. Inspect only that edge.
+        const hoistedManifest = join(scriptsRoot, 'node_modules', binary.package, 'package.json');
+        if (!commandExists(hoistedManifest)) throw error;
+        platformManifest = realpathSync(hoistedManifest);
+      }
       const platformRoot = dirname(platformManifest);
       const installed = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as {
         name?: string;

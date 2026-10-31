@@ -3,7 +3,7 @@ import type { AttemptRef, FirstFailure, ManagerEventKind } from './contracts.ts'
 
 export type Cli = 'codex' | 'grok' | 'cursor' | 'claude';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-export type TaskState = 'ready' | 'held' | 'running' | 'landing' | 'integrated' | 'merged' | 'stopped' | 'cancelled';
+export type TaskState = 'ready' | 'held' | 'running' | 'landing' | 'integrated' | 'merged' | 'stopped' | 'cancelled' | 'verified';
 export type TaskKind =
   | 'implementation'
   | 'interface'
@@ -11,10 +11,17 @@ export type TaskKind =
   | 'claim'
   | 'specification'
   | 'research'
+  | 'verification'
   | 'mechanical';
 export type IntegrationTarget = 'main' | 'integration' | 'stabilize';
-export type TaskClass = TaskKind | 'critical-path';
+export type TaskClass = Exclude<TaskKind, 'verification'> | 'critical-path';
 export type AcceptancePlacement = 'local' | 'default';
+/** Original integrated acceptance identity; metadata alone never authorizes native execution. */
+export type ProofMetadata = {
+  journey: string;
+  sourceTasks: string[];
+  sourceCommit: string;
+};
 /** serviceTier is ignored at launch (the Codex tier is the codex.serviceTier setting); kept so older attempts still parse. */
 export type Profile = { cli: Cli; model: string; effort: Effort; poolClass: string; serviceTier?: 'default' | 'fast' };
 export type Pool = {
@@ -101,6 +108,8 @@ export type Settings = {
     tmuxSocket: string;
     termspacesCommand: string;
     supermanager: string;
+    /** Authenticated operations manager allowed to register original proofs for another owner. */
+    operationsManager?: string;
     managerLimits: { turns: number; turnsWithoutDecision: number; wallMs: number };
     tmuxCommand: string;
     tmuxSession: string;
@@ -109,6 +118,7 @@ export type Settings = {
   };
 };
 export type Brief = {
+  proof?: ProofMetadata;
   goal: string;
   manager: string;
   kind: TaskKind;
@@ -145,6 +155,8 @@ export type PoolReading = {
   error: string | null;
 };
 export type Task = {
+  proofAuthorization?: import('./verification.ts').ProofAuthorization;
+  proofRun?: import('./verification.ts').ProofReservation;
   id: string;
   sequence: number;
   brief: Brief;
@@ -336,6 +348,8 @@ export type AttemptUsage = {
   source: 'codex-session' | 'attempt-profile';
 };
 export type AttemptRecord = AttemptRef & {
+  /** Absent on historical records. Verification uses the implementation route but remains a separate record kind. */
+  taskKind?: TaskKind;
   taskClass: TaskClass;
   profile: Profile;
   pool: string;
@@ -348,7 +362,8 @@ export type AttemptRecord = AttemptRef & {
   tokens: Tokens;
   before: PoolReading | null;
   after: PoolReading | null;
-  outcome: 'passed' | 'gate-failed' | 'stopped' | 'cancelled' | 'pending-gate' | 'superseded';
+  outcome: 'passed' | 'gate-failed' | 'stopped' | 'cancelled' | 'pending-gate' | 'superseded' | 'verified';
+  proof?: import('./verification.ts').ProofObservation;
   firstFailure: string | null;
   escalation: string | null;
   consulted: boolean;

@@ -1,4 +1,6 @@
-import { agentAdapter } from './agents.ts';
+import { ProofCapacityQueuedError, authorizeProof, proofFingerprint, preflightProof, newProofBinding, productionProofProducer, readProofObservation, type ProofProducer } from './verification.ts';
+import { remoteCheckEnvironment } from './merge.ts';
+import { agentAdapter, requireOriginalProofProfile } from './agents.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -22,6 +24,7 @@ import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 import { webModule, WorkspaceController } from './workspace.ts';
 import { installShared } from './shared-dependencies.ts';
 import {
+  authenticatedManager,
   applyPriorityTransition,
   criticalPriority,
   grantCriticalPriority,
@@ -228,6 +231,7 @@ export class WorkerTasks {
     readonly store: WorkerStore,
     readonly reader: PoolReader = readPool,
     readonly launcher: typeof launch = launch,
+    readonly proofProducer: ProofProducer = productionProofProducer(store, join(settings.stateDirectory, 'check-registry'), { ...process.env, ...remoteCheckEnvironment(settings.stateDirectory) }),
   ) {
     this.poolPolicies = new PoolPolicyReloader(settings.localFile, settings.pools, (summary) => {
       new SqliteManagerInbox(store.db, settings.integration.inboxDirectory).deliver({
@@ -335,6 +339,7 @@ export class WorkerTasks {
   }
   /** A worker's acceptance runs on its worktree, so what lands is that worktree: commit what the worker left out. */
   commitFinishedWork(task: Task, attempt: number): boolean {
+    if (task.brief.kind === 'verification') return false;
     if (task.workspace) return false;
     for (const state of ['rebase-merge', 'rebase-apply', 'MERGE_HEAD'])
       if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state])))) return false;
@@ -346,6 +351,7 @@ export class WorkerTasks {
   private validateBrief(
     briefFile: string,
     excludingTask?: string,
+    actor?: AuthenticatedManager | null,
   ): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
     const markdown = readFileSync(briefFile, 'utf8');
     const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
@@ -355,6 +361,11 @@ export class WorkerTasks {
         throw new Error(
           `control-plane tasks may declare only tools/goal paths; split outside paths into a dev task: ${outside.join(', ')}`,
         );
+    }
+    if (brief.kind === 'verification') {
+      const prior = excludingTask ? this.store.task(excludingTask).proofAuthorization : undefined;
+      if (prior?.fingerprint !== proofFingerprint(brief))
+        authorizeProof(this.store, this.settings.mainCheckout, brief, actor ?? authenticatedManager(this.store.db), this.settings.integration.operationsManager, this.settings.integrationBranch);
     }
     const taskClass = classifyTask(brief);
     if (taskClass === 'mechanical') throw new Error('run mechanical commands directly without a worker');
@@ -373,8 +384,11 @@ export class WorkerTasks {
         `Cannot start the local acceptance retry while prior check custody is unresolved (check ${unresolved.join(', ')}): no supported worker-check teardown-intent/receipt API is available; no check was cancelled.`,
       );
   }
-  dispatch(briefFile: string): Task {
-    const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile);
+  dispatch(briefFile: string, actor?: AuthenticatedManager | null): Task {
+    const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile, undefined, actor);
+    const authorization = submittedBrief.kind === 'verification'
+      ? authorizeProof(this.store, this.settings.mainCheckout, submittedBrief, actor ?? authenticatedManager(this.store.db), this.settings.integration.operationsManager, this.settings.integrationBranch) : undefined;
+    if (authorization) authorization.integrationBranch = this.settings.integrationBranch;
     requireNormalDispatch(submittedBrief, taskClass);
     const id = crypto.randomUUID();
     const branch = `${this.settings.branchPrefix}${id}`;
@@ -406,17 +420,18 @@ export class WorkerTasks {
         return this.store.task(id);
       }
       const brief = submittedBrief;
-      const base = this.taskBaseHead(brief);
+      const base = brief.proof?.sourceCommit ?? this.taskBaseHead(brief);
       const files = parseFrozenFiles(brief.markdown, brief.paths);
       mkdirSync(dirname(worktree), { recursive: true });
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, brief.markdown, { flag: 'wx' });
       git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]);
-      installWorktreeDependencies(worktree);
+      if (brief.kind !== 'verification') installWorktreeDependencies(worktree);
       const frozen = commitFrozenFiles(worktree, files, this.settings.formatCommand);
       const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
       const held = created.state === 'ready' && brief.after.length > 0 && !this.dependenciesMet(created);
       this.store.updateTask({ taskId: id, attempt: 0 }, (current) => {
+        if (authorization) current.proofAuthorization = authorization;
         (current as FrozenTask).frozenFiles = frozen.files.map(({ path, hash }) => ({ path, hash }));
         if (held) current.state = 'held';
       });
@@ -462,7 +477,12 @@ export class WorkerTasks {
     if (!task.currentAttempt) throw new Error('cannot queue a retry before the first attempt');
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
-    const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId).brief;
+    const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;
+    if (nextBrief.kind === 'verification') {
+      const authorization = authorizeProof(this.store, this.settings.mainCheckout, nextBrief, actor ?? authenticatedManager(this.store.db), this.settings.integration.operationsManager, this.settings.integrationBranch);
+      authorization.integrationBranch = this.settings.integrationBranch;
+      this.store.updateTask({ taskId, attempt: task.currentAttempt }, (current) => { current.proofAuthorization = authorization; });
+    }
     this.assertLocalAcceptanceCustody(task, nextBrief);
     const ref = { taskId, attempt: task.currentAttempt };
     // A held task's brief can change while its retry waits for dependencies: refusing it made managers cancel held
@@ -578,6 +598,7 @@ export class WorkerTasks {
   ): Task {
     const task = this.store.task(taskId);
     const nextCritical = priority === 'critical';
+    if (task.brief.kind === 'verification' && nextCritical) throw new Error('proof tasks are ordinary priority only');
     const updated = this.store.updatePriorityMetadata({ taskId, attempt: task.currentAttempt }, (current) => {
       applyPriorityTransition(
         this.store.db,
@@ -776,6 +797,11 @@ export class WorkerTasks {
           }
         : task.pendingBriefChange;
       const nextBrief = reshaped?.brief ?? task.brief;
+      if (nextBrief.kind === 'verification' && !this.store.proofCapacityAvailable(nextBrief.goal, task.id)) {
+        this.store.saveRetryIntent({ taskId, attempt: task.currentAttempt }, {});
+        this.store.event({ taskId, attempt: task.currentAttempt }, 'proof-capacity-queued', { goal: nextBrief.goal });
+        throw new ProofCapacityQueuedError();
+      }
       this.assertLocalAcceptanceCustody(task, nextBrief);
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
       if (!nextBrief.acceptance.command.length)
@@ -855,7 +881,7 @@ export class WorkerTasks {
           ...table.experiments.filter((e) => e.open && e.class === nextTaskClass).flatMap((e) => e.profiles),
         ].some((offered) => offered.cli === candidate.cli && offered.model === candidate.model);
       const route =
-        !pinned && old && routable(old.profile)
+        nextBrief.kind !== 'verification' && !pinned && old && routable(old.profile)
           ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
           : routeTask(nextBrief, task.sequence, table);
       const readings = pools.map((pool) =>
@@ -866,7 +892,7 @@ export class WorkerTasks {
         .flatMap((a) => [a.before, a.after])
         .filter((r) => r !== null);
       const routing = readRouting(this.settings.routingFile);
-      let fallbacks = options.profile || pinned ? [] : retryFallbacks(routing, nextTaskClass);
+      let fallbacks = options.profile || pinned || nextBrief.kind === 'verification' ? [] : retryFallbacks(routing, nextTaskClass);
       const paced = nextTaskClass === 'mechanical' || routing.classes[nextTaskClass]?.paced !== false;
       // A retry keeps its engine, but three failed attempts in a row on one model say the model is the problem: the
       // next attempt goes to the route's first other model. Failures no model change can fix do not count.
@@ -993,6 +1019,32 @@ export class WorkerTasks {
       let setupStep = 'checking worktree leftovers';
       let retryPrepared = false;
       try {
+        if (task.brief.kind === 'verification') {
+          setupStep = 'preflighting original proof';
+          requireOriginalProofProfile(profile);
+          if (task.brief.criticalPath) throw new Error('proof requires ordinary Codex routing');
+          const missing = preflightProof(task.worktree, task.brief);
+          if (missing.length) throw new Error(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
+          const captured = task.brief.proof!.sourceCommit;
+          if (git(task.worktree, ['rev-parse', 'HEAD']) !== captured && git(task.worktree, ['rev-parse', 'HEAD']) === task.base && !git(task.worktree, ['status', '--porcelain'])) {
+            git(task.worktree, ['reset', '--hard', captured]);
+            task = this.store.updateTask(next, (current) => { current.base = captured; });
+          }
+          if (git(task.worktree, ['rev-parse', 'HEAD']) !== captured || git(task.worktree, ['status', '--porcelain']))
+            throw new Error('Proof source is read-only; worktree differs from captured commit');
+          if (this.branchHead(this.settings.integrationBranch, false) !== captured)
+            throw new Error('Proof pending/unavailable: integration source advanced; register a new captured source');
+          const reserved = this.store.reserveProof(newProofBinding(task, next.attempt));
+          if (!reserved) throw new ProofCapacityQueuedError();
+          const run = reserved.status === 'reserved'
+            ? this.store.bindProof(reserved.binding, await this.proofProducer.bind(reserved.binding)) : reserved;
+          if (run.status !== 'bound') throw new Error(`Proof pending/unavailable: ${run.cause ?? run.status}`);
+          task = this.store.task(taskId);
+          this.store.observeProof(run.binding, await readProofObservation(task));
+          task = this.store.task(taskId);
+          retryPrepared = true;
+          return await this.launcher(this.store, task, next, pool, workerPrompt(task, options.evidence, undefined, [], this.settings.mainCheckout), this.settings.codex, resumeSession);
+        }
         if (task.workspace) {
           if (webModule(task.brief, this.settings) !== task.workspace.module)
             throw new Error('reshape outside a shared module requires a new isolated task');
@@ -1104,7 +1156,10 @@ export class WorkerTasks {
         this.store.updateTask(next, (t) => {
           t.state = 'stopped';
         });
-        if (!retryPrepared) {
+        if (error instanceof ProofCapacityQueuedError) {
+          this.store.saveRetryIntent(next, {});
+          this.store.event(next, 'proof-capacity-queued', { goal: task.brief.goal });
+        } else if (!retryPrepared) {
           const detail = String(error)
             .replace(/[\r\n]+/g, ' ')
             .slice(0, 800);
@@ -1221,7 +1276,7 @@ export class WorkerTasks {
   completionScope(goal: string): string[] {
     return this.store.db
       .query(
-        "SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal')=? AND json_extract(body, '$.state') != 'cancelled' ORDER BY sequence",
+        "SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal')=? AND json_extract(body, '$.state') != 'cancelled' AND json_extract(body, '$.brief.kind') != 'verification' ORDER BY sequence",
       )
       .all(goal)
       .map((row) => (row as { id: string }).id);

@@ -58,7 +58,7 @@ export async function runWorkerCommand(
     const [arg] = argv;
     if (command === 'dispatch') {
       if (!arg || argv.length !== 1) throw new Error('usage: dispatch <brief>');
-      const task = tasks.dispatch(arg);
+      const task = tasks.dispatch(arg, priorityActor);
       print(task.id);
       if (task.state === 'held') return 0;
       // The first start only: if the host already started the task, this command leaves it alone.

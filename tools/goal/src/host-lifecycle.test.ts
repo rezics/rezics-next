@@ -122,8 +122,18 @@ test('a host that finds a recorded app-server of a dead host stops it before res
     const recovery = startHost({ ...f.env, FAKE_APP_SERVER_MUST_STOP_PID: String(oldServer!.pid) });
     second = recovery;
     await second.ready;
-    const rpc = readFileSync(join(f.path, 'rpc.jsonl'), 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
-    const resumed = rpc.findLast(message => message.method === 'thread/resume');
+    // Socket readiness can precede asynchronous manager recovery.
+    const deadline = Date.now() + 5000;
+    let resumed: { method: string; oldProcessAlive?: boolean } | undefined;
+    while (!resumed) {
+      const rpc = readFileSync(join(f.path, 'rpc.jsonl'), 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
+      resumed = rpc.findLast(message => message.method === 'thread/resume');
+      if (resumed) break;
+      if (second.child.exitCode !== null || second.child.signalCode !== null)
+        throw new Error('Recovery host exited before thread/resume.');
+      if (Date.now() >= deadline) throw new Error('Timed out waiting for recovered thread/resume RPC.');
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
     expect(resumed?.oldProcessAlive).toBe(false);
     expect(sameProcess(oldServer!)).toBe(false);
   } finally {

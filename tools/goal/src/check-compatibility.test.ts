@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { checkScriptFixture } from './test-support.ts';
 import {
   CHECK_COMPATIBILITY_CONTRACT,
   checkPinnedBunRuntime,
@@ -10,29 +11,13 @@ import {
 } from './check-compatibility.ts';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
-const realScriptPaths = [
-  'scripts/worker-check.ts',
-  'scripts/remote-check.ts',
-  'scripts/check-ledger.ts',
-  'scripts/stack-lease.ts',
-  'scripts/check-memory.ts',
-  'scripts/check-host/docker',
-];
+const devScripts = checkScriptFixture();
+const devFile = devScripts.read;
 
 function temporaryDirectory(): string {
   const base = join(repositoryRoot, '.temp/goal');
   mkdirSync(base, { recursive: true });
   return mkdtempSync(join(base, 'check-compatibility-test-'));
-}
-
-function devFile(path: string): string {
-  const result = spawnSync('git', ['show', `dev:${path}`], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-    maxBuffer: 4 * 1024 * 1024,
-  });
-  if (result.status !== 0) throw new Error(result.stderr || `git show dev:${path} failed`);
-  return result.stdout;
 }
 
 function scriptsRoot(
@@ -41,13 +26,7 @@ function scriptsRoot(
   packageManager = (JSON.parse(devFile('package.json')) as { packageManager: string }).packageManager,
 ): string {
   const root = join(directory, 'scripts-root');
-  for (const path of realScriptPaths) {
-    const file = join(root, path);
-    mkdirSync(join(file, '..'), { recursive: true });
-    let source = devFile(path);
-    if (changed[path]) source = changed[path]!(source);
-    writeFileSync(file, source);
-  }
+  devScripts.install(root, (path, source) => (changed[path] ? changed[path]!(source) : source));
   writeFileSync(
     join(root, 'package.json'),
     `${JSON.stringify({ name: 'check-compatibility-fixture', private: true, packageManager }, null, 2)}\n`,
@@ -143,9 +122,20 @@ test('incompatible worker result fields and missing remote options identify the 
   try {
     const root = scriptsRoot(directory, {
       'scripts/worker-check.ts': (source) => {
-        const incompatible = source.replaceAll('record.runnerHost = hostname();\n', '');
-        if (incompatible === source) throw new Error('Could not construct the incompatible worker-check fixture.');
-        return incompatible;
+        const writer = `function writeRecord(record: CheckRecord): void {
+  const file = recordPath(record.cwd, record.id);
+  writeAtomicJson(file, record);
+}`;
+        if (source.split(writer).length !== 2)
+          throw new Error('Could not identify the unique worker-check result serialization boundary.');
+        // Corrupt every serialized consumer result, including custody-populated fields, while retaining physical records.
+        return source.replace(
+          writer,
+          writer.replace(
+            'writeAtomicJson(file, record);',
+            'writeAtomicJson(file, { ...record, runnerHost: undefined });',
+          ),
+        );
       },
       'scripts/remote-check.ts': (source) => {
         const incompatible = source.replace("if (flag === '--returns') {", "if (flag === '--returns-incompatible') {");
@@ -161,6 +151,24 @@ test('incompatible worker result fields and missing remote options identify the 
       throw new Error(
         `Expected workerCheck.record.runnerHost to be incompatible; received ${JSON.stringify(report.checks)}.`,
       );
+    const records = runnerHost.map((check) => {
+      expect(check.status).toBe('incompatible');
+      const record = check.evidence?.record as Record<string, unknown>;
+      expect(record).toBeDefined();
+      expect(Object.hasOwn(record, 'runnerHost')).toBe(false);
+      return record;
+    });
+    expect([...new Set(records.map((record) => record.status))].sort()).toEqual(['finished', 'running']);
+    expect([
+      ...new Set(records.filter((record) => record.status === 'finished').map((record) => record.exitCode)),
+    ].sort()).toEqual([0, 7]);
+    for (const field of [
+      'workerCheck.start',
+      'workerCheck.foreground',
+      'workerCheck.failureStart',
+      'workerCheck.failureForeground',
+    ])
+      expect(reportCheck(report, field).map((check) => check.status)).toEqual(['compatible']);
     const missingReturns = reportCheck(report, 'remoteCheck.options.--returns');
     if (!missingReturns.some((check) => check.status === 'incompatible'))
       throw new Error(
