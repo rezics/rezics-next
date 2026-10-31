@@ -156,7 +156,9 @@ describe('native request producer', () => {
   test('Bind actual original creation-context ABI to request custody', async () => {
     const person = await f.person('original-request-context');
     const account = await f.bindings.workflowPorts.readAccount(person.accountId);
-    const operationKey = randomUUID();
+    // Existing workflow keys are bounded by characters; preserve their original
+    // UTF-8 bytes when sharing the stage's context reader.
+    const operationKey = 'request-\u00e9'.repeat(10) + randomUUID();
     const operation = {
       kind: 'rename' as const,
       accountId: person.accountId,

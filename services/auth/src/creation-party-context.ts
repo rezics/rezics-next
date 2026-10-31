@@ -40,7 +40,9 @@ export async function readApprovedCreationContext(
     !bounded(c.sourceClientId) ||
     !bounded(c.approvalReference, 4096) ||
     !bounded(c.commandKey, 4096) ||
-    !bounded(c.operationKey, 128) ||
+    // Preserve automation's original byte bound and workflow requests' existing
+    // character-bounded keys, which may contain multiple UTF-8 bytes per character.
+    !bounded(c.operationKey, input.operation.kind === 'automated' ? 128 : 1024) ||
     !/^[a-f0-9]{64}$/.test(c.operationDigest) ||
     c.approvalReference !== input.approvalReference ||
     c.operationKey !== input.operationKey ||
