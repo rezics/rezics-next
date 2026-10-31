@@ -1987,3 +1987,42 @@ test('technical identity receiver rejects mismatched originals without callbacks
   })).rejects.toThrow('technical receiver mismatch after write');
   expect(await rows()).toEqual({ sources: 0, roles: 0 });
 });
+
+test('accepted reversal technical custody binds its current accepted job independently of intent undoJob', async () => {
+  const { acceptAccountIdentityTechnicalSource, verifyAccountIdentityTechnicalSource } =
+    await import('../../src/access/agent-verification-identity.ts');
+  const { account, token } = await verified();
+  const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
+  expect(released.response.status).toBe(200);
+  const reversal = released.body.reversal as AgentVerificationReversal;
+  await finish(reversal);
+  const receipt = { kind: 'account-agent.unverify' as const, account: account.id, receipt: reversal.receiptId };
+  const source = await loadAccountIdentitySource(pool, receipt);
+  const job = await probeAccountIdentityPublication(pool, receipt);
+  if (source.input.intent.kind !== 'unmerge') throw new Error('Expected actual closed reversal input');
+  const priorJob = source.input.intent.undoJob;
+  expect(job.jobId).not.toBe(priorJob.jobId);
+  const erased = (await pool.query(
+    'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
+    [accountRoute, account.id],
+  )).rows[0];
+  const reference = {
+    receipt, job,
+    source: { partition: source.partition, epoch: source.epoch, position: source.position, transactionId: source.transactionId },
+    sourceDigest: source.digest,
+    barrier: { accountId: account.id, accountRoute, version: erased.version, at: erased.at },
+    erasedRole: 'subject' as const,
+  };
+  expect((await runCommand(pool, { partition: source.partition }, async (tx) =>
+    noEffect(await acceptAccountIdentityTechnicalSource(tx, { ...reference, job: priorJob })))).value).toBeNull();
+  const native = (await runCommand(pool, { partition: source.partition }, async (tx) => {
+    const accepted = await acceptAccountIdentityTechnicalSource(tx, reference);
+    expect(accepted).not.toBeNull();
+    return { value: accepted, events: technicalWake(account.id) };
+  })).value;
+  if (!native) throw new Error('Expected actual reversal receiving custody');
+  expect((await runCommand(pool, { partition: source.partition }, async (tx) =>
+    noEffect(await verifyAccountIdentityTechnicalSource(tx, reference, native)))).value).toBe(true);
+  expect((await runCommand(pool, { partition: source.partition }, async (tx) =>
+    noEffect(await verifyAccountIdentityTechnicalSource(tx, { ...reference, job: priorJob }, native)))).value).toBe(false);
+});

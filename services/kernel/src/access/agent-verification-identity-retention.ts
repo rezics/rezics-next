@@ -114,11 +114,13 @@ async function inventory(tx: CommandTransaction, receipt: AccountReceipt) {
     [routeOf(receipt.account), receipt.account, receipt.kind, receipt.receipt],
   )).rows;
   if (!rows.length || rows.length > 64) return [];
-  return rows.flatMap((row) => [
+  const roles = rows.flatMap((row) => [
     ...(row.source_roles & 1 ? [{ account_id: row.account_id, role: 'subject' }] : []),
     ...(row.source_roles & 2 ? [{ account_id: row.account_id, role: 'actor' }] : []),
     ...(row.source_roles & 4 ? [{ account_id: row.account_id, role: 'editor' }] : []),
   ]);
+  const order = ['subject', 'actor', 'editor'];
+  return roles.sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || a.account_id.localeCompare(b.account_id));
 }
 
 /** Read the genuine bounded serializer role union; source.roles alone omits inherited undo,
@@ -158,7 +160,10 @@ export async function readAccountIdentityTechnicalSource(
 ): Promise<AccountIdentitySource | null> {
   if (!live(tx, receipt) || !acceptedReader()) return null;
   const row = await receiver(tx, receipt);
-  if (!row) return null;
+  return row ? decodeTechnicalSource(tx, receipt, row) : null;
+}
+
+async function decodeTechnicalSource(tx: CommandTransaction, receipt: AccountReceipt, row: Receiver) {
   const intent = technicalIntent(row.intent as IdentityIntent, receipt);
   if (!intent) return null;
   const input = Object.freeze({ intent: Object.freeze(intent), receipt: Object.freeze({ ...receipt }) });
@@ -256,7 +261,7 @@ export async function verifyTechnicalSource(
     return false;
   }
   const row = await receiver(tx, reference.receipt);
-  const source = await readAccountIdentityTechnicalSource(tx, reference.receipt);
+  const source = row ? await decodeTechnicalSource(tx, reference.receipt, row) : null;
   const valid = !!row && !!source && matches(reference, source) &&
     row.accepted_job_id === reference.job.jobId && BigInt(row.accepted_job_epoch) === reference.job.epoch &&
     sameReceipt(receiving(row), native);
