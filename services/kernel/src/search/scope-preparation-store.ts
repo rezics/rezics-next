@@ -19,7 +19,12 @@ export type ScopeCaptureDefinition = (
       definition: Omit<PublicFilterSourceDefinition, 'meaning'> & {
         meaning: Omit<PublicFilterSourceDefinition['meaning'], 'release'>;
       };
-    }>) & Readonly<{ ordered?: ScopeOrderedDefinition; nativeOutput?: Readonly<{ nativeOrder: 'name' | 'collections'; pageSize: number }> }>;
+    }>
+) &
+  Readonly<{
+    ordered?: ScopeOrderedDefinition;
+    nativeOutput?: Readonly<{ nativeOrder: 'name' | 'collections'; pageSize: number }>;
+  }>;
 export type ScopeCaptureFrontier =
   | Readonly<{ kind: 'library'; value: NativeSourceFrontier | null }>
   | Readonly<{ kind: 'public'; value: string | null }>;

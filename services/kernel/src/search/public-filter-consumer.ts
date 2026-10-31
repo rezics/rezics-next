@@ -263,8 +263,7 @@ export async function readPublicFilterConsumerIncarnation(
 
 function iteratorSteps(body: unknown): number {
   const malformed = () => new SearchUnavailableError('Native consumer query profile is missing or malformed');
-  if (!record(body) || !record(body.profile) || !Array.isArray(body.profile.shards))
-    throw malformed();
+  if (!record(body) || !record(body.profile) || !Array.isArray(body.profile.shards)) throw malformed();
   // Completion is checked before profiling. Every executed shard must still have cost evidence;
   // skipped shards may have no query profile, but duplicates cannot stand in for another shard.
   if (
@@ -437,20 +436,35 @@ export async function queryScopeOrderedKeys(
   for (const key of keys) subjectPartition(key);
   const { prefix, generation } = targetParts(queried.consumer.physicalTarget);
   if (plan.generation !== generation) throw new TypeError('Ordered preparation generation changed');
-  const sort = plan.sort === 'name'
-    ? [{ name_sort: { order: 'asc', missing: '_last' } }, { id: 'asc' }]
-    : [{ public_collection_count: { order: 'desc', missing: 0 } },
-       { name_sort: { order: 'asc', missing: '_last' } }, { id: 'asc' }];
-  const { status, body } = await search.request<unknown>('POST', '/_search/template', {
-    id: `${prefix}${SCOPE_HIT_TEMPLATE}`,
-    params: {
-      pit: { id: queried.snapshot.pit, keep_alive: '5m' },
-      query: plan.query, has_query: plan.query !== undefined,
-      filter: { bool: { filter: [{ ids: { values: keys } }, ...(plan.filter ? [plan.filter] : [])] } },
-      has_filter: true, has_boost: false, sort, size: keys.length,
-      has_after: false, has_overflow: !!plan.overflowProperties?.length, overflow_properties: plan.overflowProperties,
+  const sort =
+    plan.sort === 'name'
+      ? [{ name_sort: { order: 'asc', missing: '_last' } }, { id: 'asc' }]
+      : [
+          { public_collection_count: { order: 'desc', missing: 0 } },
+          { name_sort: { order: 'asc', missing: '_last' } },
+          { id: 'asc' },
+        ];
+  const { status, body } = await search.request<unknown>(
+    'POST',
+    '/_search/template',
+    {
+      id: `${prefix}${SCOPE_HIT_TEMPLATE}`,
+      params: {
+        pit: { id: queried.snapshot.pit, keep_alive: '5m' },
+        query: plan.query,
+        has_query: plan.query !== undefined,
+        filter: { bool: { filter: [{ ids: { values: keys } }, ...(plan.filter ? [plan.filter] : [])] } },
+        has_filter: true,
+        has_boost: false,
+        sort,
+        size: keys.length,
+        has_after: false,
+        has_overflow: !!plan.overflowProperties?.length,
+        overflow_properties: plan.overflowProperties,
+      },
     },
-  }, { timeoutMs: remaining(context), query: { allow_partial_search_results: false } });
+    { timeoutMs: remaining(context), query: { allow_partial_search_results: false } },
+  );
   if (record(body) && typeof body.pit_id === 'string') await retainPit(body.pit_id);
   if (status !== 200) throw new SearchUnavailableError('Ordered Scope native query did not complete');
   assertCompleteSearch(body);
@@ -464,9 +478,14 @@ export async function queryScopeOrderedKeys(
     if (!record(value) || value._index !== queried.consumer.physicalTarget || !keys.includes(value._id as string))
       throw new SearchUnavailableError('Ordered Scope returned another native input or index');
     const source = value._source as { partition: number; security_revision: number };
-    return { id: value._id as string, index: value._index as string,
-      partition: source.partition, securityRevision: source.security_revision,
-      matched: (value.matched_queries ?? []) as string[], sort: value.sort as (string | number | null)[] };
+    return {
+      id: value._id as string,
+      index: value._index as string,
+      partition: source.partition,
+      securityRevision: source.security_revision,
+      matched: (value.matched_queries ?? []) as string[],
+      sort: value.sort as (string | number | null)[],
+    };
   });
   for (const hit of hits) validateScopeOrderedHit(plan.sort, hit, queried.consumer.physicalTarget);
   return { hits, engineIteratorSteps: iteratorSteps(body) };

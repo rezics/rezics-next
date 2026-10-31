@@ -16,15 +16,22 @@ import { sameScopeObservation } from './service-scope-order.ts';
 /** One bounded structural step under the existing Search WorkModule. No native receiving receipts
  * are constructed here. Expiry stops scheduling but retains unknown native custody for its owner.
  */
-export function createScopePreparation(config: Parameters<PublicFilterSourceFactory>[0] & { prefix: string; search?: OpenSearch }) {
+export function createScopePreparation(
+  config: Parameters<PublicFilterSourceFactory>[0] & { prefix: string; search?: OpenSearch },
+) {
   const store = createScopePreparationStore(config.pool, config.prefix);
   const observations = createIdentityScopedObservations(config.pool);
   const publicCapture = createPublicIdentitySourceCapture(config);
   const library = createNativeLibrarySourceCustody({ pool: config.pool, clock: config.clock });
   const ordered = config.search ? createOrderedScopePreparation({ ...config, search: config.search }) : null;
   const population = createFacetPopulationSource(config);
-  async function orderedStep(record: ScopePreparationRecord, observation: IdentityScopeObservation,
-    frontier: ScopePreparationRecord['frontier'], deadline: number, work: ScopeWork) {
+  async function orderedStep(
+    record: ScopePreparationRecord,
+    observation: IdentityScopeObservation,
+    frontier: ScopePreparationRecord['frontier'],
+    deadline: number,
+    work: ScopeWork,
+  ) {
     const definition = record.definition;
     if (!ordered || definition.kind !== 'public' || !definition.ordered)
       throw new ProblemError('dependency_unavailable');
@@ -47,16 +54,19 @@ export function createScopePreparation(config: Parameters<PublicFilterSourceFact
     // This existing Source producer retains immutable replayable windows, including empty
     // home/bridge/seal progress. Structural capture originals are not a population cursor.
     const input = await population.readFacetPopulationPage({
-      population: nativeDefinition.readDefinition, frontier: previous.populationFrontier ?? null,
+      population: nativeDefinition.readDefinition,
+      frontier: previous.populationFrontier ?? null,
       inputLimit: Math.min(8, work.remaining().remaining.candidateKeys),
       capture: { kind: 'population', queried: q, start: null, context: { deadline } },
     });
     work.public(input.cost);
-    if ((input.status !== 'progress' && input.status !== 'complete') ||
+    if (
+      (input.status !== 'progress' && input.status !== 'complete') ||
       input.observation !== q.snapshot.observation ||
-      (input.status === 'progress' && input.frontier === previous.populationFrontier))
+      (input.status === 'progress' && input.frontier === previous.populationFrontier)
+    )
       throw new ProblemError('semantic_not_ready');
-    const keys = [...new Set(input.subjects.map(row => row.subject))];
+    const keys = [...new Set(input.subjects.map((row) => row.subject))];
     const result = await native.keys(capture.state, keys, work, deadline, keys.length ? undefined : []);
     if (!keys.length) {
       work.consume({ ...zeroScopeWork(), emptySeeks: 1 });
@@ -65,9 +75,19 @@ export function createScopePreparation(config: Parameters<PublicFilterSourceFact
     work.identity(final.work);
     if (final.status !== 'current' || !sameScopeObservation(final.observation, observation))
       throw new ProblemError('semantic_not_ready');
-    await ordered.save(record, frontier, { ...(result?.state ?? capture.state),
-      populationFrontier: input.frontier, populationComplete: input.status === 'complete' },
-      observation, result?.hits ?? [], work, input.status === 'complete');
+    await ordered.save(
+      record,
+      frontier,
+      {
+        ...(result?.state ?? capture.state),
+        populationFrontier: input.frontier,
+        populationComplete: input.status === 'complete',
+      },
+      observation,
+      result?.hits ?? [],
+      work,
+      input.status === 'complete',
+    );
   }
   async function step(record: ScopePreparationRecord, deadline: number, work: ScopeWork): Promise<void> {
     async function advance(
@@ -80,7 +100,13 @@ export function createScopePreparation(config: Parameters<PublicFilterSourceFact
     }
     if (Number(record.expires_at) <= Date.now()) return advance(record.frontier, null, 0);
     if (record.definition.ordered && record.observation) {
-      await orderedStep(record, { ...record.observation, committedRevision: BigInt(record.observation.committedRevision) }, record.frontier, deadline, work);
+      await orderedStep(
+        record,
+        { ...record.observation, committedRevision: BigInt(record.observation.committedRevision) },
+        record.frontier,
+        deadline,
+        work,
+      );
       return;
     }
     let registration: IdentityScopeRegistration;
@@ -152,7 +178,11 @@ export function createScopePreparation(config: Parameters<PublicFilterSourceFact
       return advance(capturedFrontier, null, 1000);
     const final = await observations.revalidate({ key: first.observation.key, expected: first.observation, deadline });
     work.identity(final.work);
-    if (record.definition.ordered && final.status === 'current' && sameScopeObservation(final.observation, first.observation)) {
+    if (
+      record.definition.ordered &&
+      final.status === 'current' &&
+      sameScopeObservation(final.observation, first.observation)
+    ) {
       await orderedStep(record, final.observation, capturedFrontier, deadline, work);
       return;
     }

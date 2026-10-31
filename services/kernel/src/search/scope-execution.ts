@@ -97,7 +97,9 @@ export class ScopeWork {
       ...zeroScopeWork(),
       candidateKeys: cost.inputKeys,
       nativePoints: cost.accessPoints + cost.dependencyPoints,
-      statements: (cost as PublicFilterCost & { statements?: number }).statements ?? cost.engineSearches + cost.resultWrites + cost.frontierWrites,
+      statements:
+        (cost as PublicFilterCost & { statements?: number }).statements ??
+        cost.engineSearches + cost.resultWrites + cost.frontierWrites,
       nativeRows: (cost as PublicFilterCost & { rows?: number }).rows ?? 0,
       bytes: (cost as PublicFilterCost & { bytes?: number }).bytes ?? 0,
     });

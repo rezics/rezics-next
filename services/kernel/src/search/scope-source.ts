@@ -198,8 +198,11 @@ type ScopeState = {
   publicObservation: IdentityScopeObservation | null;
   collection: SearchScopeCollection | null;
   readOnly: boolean;
-  ordered?: { definition: ScopeOrderedDefinition; publicDefinition: PublicFilterSourceDefinition;
-    state: ScopeOrderedPreparation };
+  ordered?: {
+    definition: ScopeOrderedDefinition;
+    publicDefinition: PublicFilterSourceDefinition;
+    state: ScopeOrderedPreparation;
+  };
   workDefinition?: CollectionKindWorkDefinition | CollectionPublicationWorkDefinition;
   workResume?: ScopeLeafResume | null;
 };
@@ -528,16 +531,26 @@ export function createSearchScopeSource({
       let definition: ScopeCaptureDefinition;
       let nativeBasis: unknown;
       let orderedPublicDefinition: PublicFilterSourceDefinition | undefined;
-      const outputDefinition: ScopeOrderedDefinition | undefined = options?.nativeOrder && indexed ? {
-        nativeOrder: options.nativeOrder, pageSize: options.pageSize!, ...indexed,
-      } : undefined;
+      const outputDefinition: ScopeOrderedDefinition | undefined =
+        options?.nativeOrder && indexed
+          ? {
+              nativeOrder: options.nativeOrder,
+              pageSize: options.pageSize!,
+              ...indexed,
+            }
+          : undefined;
       if (sort.source) {
         const prepared = await order!.prepare(sort, work.remaining());
         work.native(prepared.work);
         collection = prepared.collection;
         profile = collection.observation.basis.digest;
-        definition = { kind: 'library', identity: sort.source,
-          ...(outputDefinition ? { nativeOutput: { nativeOrder: outputDefinition.nativeOrder, pageSize: outputDefinition.pageSize } } : {}) };
+        definition = {
+          kind: 'library',
+          identity: sort.source,
+          ...(outputDefinition
+            ? { nativeOutput: { nativeOrder: outputDefinition.nativeOrder, pageSize: outputDefinition.pageSize } }
+            : {}),
+        };
         nativeBasis = {
           ...collection.observation,
           stamp: {
@@ -607,18 +620,26 @@ export function createSearchScopeSource({
         if (!type || !Object.hasOwn(nativeRelease.types, type) || !indexed) unavailable();
         // This metadata capture includes every expanded catalogue dependency, including
         // negated/excluded branches. It cannot assert the private predicate's membership.
-        const catalogueLeaves: FilterDocument[] = plan.leaves.flatMap(leaf => {
+        const catalogueLeaves: FilterDocument[] = plan.leaves.flatMap((leaf) => {
           if (leaf.kind !== 'catalogue') return [];
           const clause = leaf.clause;
-          return [clause.facet === 'type' ? { type: { in: [...clause.values] } } : {
-            statement: { property: clause.property,
-              ...('values' in clause ? { in: [...clause.values] } : { range: clause.range }),
-              ...(clause.qualifiers ? { qualifiers: [...clause.qualifiers] } : {}) },
-          }];
+          return [
+            clause.facet === 'type'
+              ? { type: { in: [...clause.values] } }
+              : {
+                  statement: {
+                    property: clause.property,
+                    ...('values' in clause ? { in: [...clause.values] } : { range: clause.range }),
+                    ...(clause.qualifiers ? { qualifiers: [...clause.qualifiers] } : {}),
+                  },
+                },
+          ];
         });
-        const publicFilter: FilterDocument = !hasOwner ? admitted : catalogueLeaves.length
-          ? { or: [{ type: { in: [type] } }, ...catalogueLeaves] }
-          : { type: { in: [type] } };
+        const publicFilter: FilterDocument = !hasOwner
+          ? admitted
+          : catalogueLeaves.length
+            ? { or: [{ type: { in: [type] } }, ...catalogueLeaves] }
+            : { type: { in: [type] } };
         const publicQuery = compileFilter(publicFilter, { prefix: 'f', relationOverflow: true });
         const binding = createPublicFilterSourceBinding(pool, reader.routeKey, reader.access);
         const resolved = await binding.resolve(
@@ -748,10 +769,15 @@ export function createSearchScopeSource({
         publicObservation,
         collection,
         readOnly: options?.readOnly === true,
-        ...(outputDefinition && orderedPublicDefinition ? { ordered: {
-          definition: outputDefinition, publicDefinition: orderedPublicDefinition,
-          state: { queried: null, repair: null, execution: null },
-        } } : {}),
+        ...(outputDefinition && orderedPublicDefinition
+          ? {
+              ordered: {
+                definition: outputDefinition,
+                publicDefinition: orderedPublicDefinition,
+                state: { queried: null, repair: null, execution: null },
+              },
+            }
+          : {}),
         ...(workDefinition ? { workDefinition, workResume: null } : {}),
       };
       await current(value, work);
@@ -772,18 +798,38 @@ export function createSearchScopeSource({
       validateScopeOrderedPrefix(request);
       const value = state(prepared);
       const captured = value.ordered;
-      if (!captured || captured.definition.nativeOrder !== request.order ||
-        request.quota > captured.definition.pageSize || value.basis.nativeOwner) unavailable();
-      const work = new ScopeWork({ ...request.allowance, remaining: { ...request.allowance.remaining,
-        candidateKeys: Math.min(request.budget,
-          value.collection ? Math.min(600, 6 * captured.definition.pageSize + 3) : 2 * captured.definition.pageSize + 2,
-          request.allowance.remaining.candidateKeys) } });
+      if (
+        !captured ||
+        captured.definition.nativeOrder !== request.order ||
+        request.quota > captured.definition.pageSize ||
+        value.basis.nativeOwner
+      )
+        unavailable();
+      const work = new ScopeWork({
+        ...request.allowance,
+        remaining: {
+          ...request.allowance.remaining,
+          candidateKeys: Math.min(
+            request.budget,
+            value.collection
+              ? Math.min(600, 6 * captured.definition.pageSize + 3)
+              : 2 * captured.definition.pageSize + 2,
+            request.allowance.remaining.candidateKeys,
+          ),
+        },
+      });
       let publicCost = emptyScopePublicCost();
       const reader = context();
-      const native = createScopeOrderedNative({ pool, search: client, prefix, clock,
+      const native = createScopeOrderedNative({
+        pool,
+        search: client,
+        prefix,
+        clock,
         source: publicFilterSource({ pool, routeKey: reader.routeKey, access: reader.access, clock }),
         binding: createPublicFilterSourceBinding(pool, reader.routeKey, reader.access),
-        meaning: captured.publicDefinition.meaning, definition: captured.definition });
+        meaning: captured.publicDefinition.meaning,
+        definition: captured.definition,
+      });
       try {
         await current(value, work);
         let rows: readonly SearchHit[];
@@ -803,40 +849,77 @@ export function createSearchScopeSource({
           const population = await order!.prefix(value.collection, null, work.remaining());
           work.native(population.work);
           if (!population.exhausted || population.candidates.length > 99) unavailable();
-          const capture = await native.capture(captured.publicDefinition.capture, captured.state, work, reader.deadline);
+          const capture = await native.capture(
+            captured.publicDefinition.capture,
+            captured.state,
+            work,
+            reader.deadline,
+          );
           publicCost = addScopePublicCost(publicCost, capture.cost);
           captured.state = capture.state;
           if (!capture.ready) unavailable();
-          const keys = population.candidates.map(row => row.subjectId);
+          const keys = population.candidates.map((row) => row.subjectId);
           const checked = await native.keys(captured.state, keys, work, reader.deadline, keys.length ? undefined : []);
           if (checked) {
             captured.state = checked.state;
             publicCost = addScopePublicCost(publicCost, checked.cost);
           }
           const hits = checked?.hits ?? [];
-          const evaluated = await evaluateScopeSubjects({ pool, options: reader,
-            owner: await ownerContext(value, work), plan: value.plan, basis: value.basis.query,
-            subjects: hits.map(hit => hit.id),
-            reservation: { rawKeys: work.remaining().remaining.candidateKeys, native: {
-              points: work.remaining().remaining.nativePoints, witnesses: work.remaining().remaining.witnessKeys,
-              rows: work.remaining().remaining.nativeRows, bytes: work.remaining().remaining.bytes,
-              emptySeeks: work.remaining().remaining.emptySeeks } }, work });
-          if (evaluated.values.some(match => match === 'not_proven')) unavailable();
+          const evaluated = await evaluateScopeSubjects({
+            pool,
+            options: reader,
+            owner: await ownerContext(value, work),
+            plan: value.plan,
+            basis: value.basis.query,
+            subjects: hits.map((hit) => hit.id),
+            reservation: {
+              rawKeys: work.remaining().remaining.candidateKeys,
+              native: {
+                points: work.remaining().remaining.nativePoints,
+                witnesses: work.remaining().remaining.witnessKeys,
+                rows: work.remaining().remaining.nativeRows,
+                bytes: work.remaining().remaining.bytes,
+                emptySeeks: work.remaining().remaining.emptySeeks,
+              },
+            },
+            work,
+          });
+          if (evaluated.values.some((match) => match === 'not_proven')) unavailable();
           rows = hits.filter((_, i) => evaluated.values[i] === true);
           // Native keys are already sorted. The cursor is applied only after the complete
           // bounded population and current predicate have settled, never after a UUID LIMIT.
-          if (request.after) rows = rows.filter(hit => compareScopeOrderedTuple(request.order, hit.sort, request.after!) > 0);
+          if (request.after)
+            rows = rows.filter((hit) => compareScopeOrderedTuple(request.order, hit.sort, request.after!) > 0);
           rows = rows.slice(0, request.quota + 1);
         } else {
-          const retained = createOrderedScopePreparation({ pool, prefix, search: client,
-            routeKey: reader.routeKey, access: reader.access, clock });
+          const retained = createOrderedScopePreparation({
+            pool,
+            prefix,
+            search: client,
+            routeKey: reader.routeKey,
+            access: reader.access,
+            clock,
+          });
           const nativeState = await retained.state(value.basis.query, work);
           if (!nativeState.queried || !nativeState.populationComplete) unavailable();
           captured.state = nativeState;
           publicCost = addScopePublicCost(publicCost, await native.validate(nativeState, work, reader.deadline));
-          rows = await readOrderedScopeRows(pool, prefix, value.basis.query, request.order,
-            request.after, request.quota + 1, work);
-          const checked = await native.keys(nativeState, rows.map(hit => hit.id), work, reader.deadline, rows);
+          rows = await readOrderedScopeRows(
+            pool,
+            prefix,
+            value.basis.query,
+            request.order,
+            request.after,
+            request.quota + 1,
+            work,
+          );
+          const checked = await native.keys(
+            nativeState,
+            rows.map((hit) => hit.id),
+            work,
+            reader.deadline,
+            rows,
+          );
           publicCost = addScopePublicCost(publicCost, checked.cost);
           captured.state = checked.state;
           if (checked.hits.length !== rows.length) unavailable();
@@ -848,15 +931,27 @@ export function createSearchScopeSource({
         publicCost = addScopePublicCost(publicCost, { ...emptyScopePublicCost(), outputSlots: selected.length });
         const usage = { candidates: work.receipt().used.candidateKeys, work: work.receipt(), public: publicCost };
         // Keep native Hits intact and expose the discriminated exact tuple only after validation.
-        if (request.order === 'name') return { order: 'name', hits: selected as unknown as (Omit<SearchHit, 'sort'> & { sort: ScopeNameSortTuple })[],
-          basis: value.basis, coveredThrough: selected.at(-1)?.sort as unknown as ScopeNameSortTuple ?? request.after,
-          exhausted: rows.length <= request.quota, usage };
-        return { order: 'collections', hits: selected as unknown as (Omit<SearchHit, 'sort'> & { sort: ScopeCollectionsSortTuple })[],
-          basis: value.basis, coveredThrough: selected.at(-1)?.sort as unknown as ScopeCollectionsSortTuple ?? request.after,
-          exhausted: rows.length <= request.quota, usage };
+        if (request.order === 'name')
+          return {
+            order: 'name',
+            hits: selected as unknown as (Omit<SearchHit, 'sort'> & { sort: ScopeNameSortTuple })[],
+            basis: value.basis,
+            coveredThrough: (selected.at(-1)?.sort as unknown as ScopeNameSortTuple) ?? request.after,
+            exhausted: rows.length <= request.quota,
+            usage,
+          };
+        return {
+          order: 'collections',
+          hits: selected as unknown as (Omit<SearchHit, 'sort'> & { sort: ScopeCollectionsSortTuple })[],
+          basis: value.basis,
+          coveredThrough: (selected.at(-1)?.sort as unknown as ScopeCollectionsSortTuple) ?? request.after,
+          exhausted: rows.length <= request.quota,
+          usage,
+        };
       } catch (error) {
         // Dispatched work is settled once by the caller even when Source refuses disclosure.
-        if (error && typeof error === 'object') Object.defineProperty(error, 'work', { value: work.receipt(), configurable: true });
+        if (error && typeof error === 'object')
+          Object.defineProperty(error, 'work', { value: work.receipt(), configurable: true });
         throw error;
       }
     },

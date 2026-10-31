@@ -115,11 +115,16 @@ export function scopeOrderedNameKey(name: string | null): Buffer {
 }
 
 /** Native Lucene keyword order, including supplementary scalars and missing-last. */
-export function compareScopeOrderedTuple(order: ScopeNativeOrder, left: readonly (string | number | null)[],
-  right: readonly (string | number | null)[]): number {
+export function compareScopeOrderedTuple(
+  order: ScopeNativeOrder,
+  left: readonly (string | number | null)[],
+  right: readonly (string | number | null)[],
+): number {
   if (order === 'collections' && left[0] !== right[0]) return (right[0] as number) - (left[0] as number);
-  const name = Buffer.compare(scopeOrderedNameKey(left[left.length - 2] as string | null),
-    scopeOrderedNameKey(right[right.length - 2] as string | null));
+  const name = Buffer.compare(
+    scopeOrderedNameKey(left[left.length - 2] as string | null),
+    scopeOrderedNameKey(right[right.length - 2] as string | null),
+  );
   if (name !== 0) return name;
   return Buffer.compare(Buffer.from(left.at(-1) as string), Buffer.from(right.at(-1) as string));
 }
@@ -137,8 +142,17 @@ export function validateScopeOrderedHit(order: ScopeNativeOrder, hit: SearchHit,
 }
 
 export function emptyScopePublicCost(): PublicFilterCost {
-  return { inputKeys: 0, candidates: 0, accessPoints: 0, dependencyPoints: 0, engineSearches: 0,
-    engineIteratorSteps: 0, outputSlots: 0, resultWrites: 0, frontierWrites: 0 };
+  return {
+    inputKeys: 0,
+    candidates: 0,
+    accessPoints: 0,
+    dependencyPoints: 0,
+    engineSearches: 0,
+    engineIteratorSteps: 0,
+    outputSlots: 0,
+    resultWrites: 0,
+    frontierWrites: 0,
+  };
 }
 
 export function addScopePublicCost(a: PublicFilterCost, b: PublicFilterCost): PublicFilterCost {
