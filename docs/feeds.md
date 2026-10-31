@@ -94,6 +94,9 @@ and its current terminal/epoch/readiness are candidate support only. Every posit
 disclosure independently reads current actor-home follows, explicit negatives, lifecycle
 and identity. Redirected support is positive only with a complete bounded native witness;
 unknown or oversized support is unavailable. No truncated authority page grants access.
+The native identity reader accepts 100 originals; an alias witness exceeding that bound
+is unavailable rather than truncated. A recipient cursor whose current terminal/epoch
+changed restarts its bounded inverse walk; idempotent inbox writes absorb repeated candidates.
 
 Each fanout step reads at most 128 inverse candidates, releases the source home, and
 delivers to one viewer home per transaction. Work is O(targets × recipients) overall,
@@ -103,6 +106,8 @@ backfill beside its existing work. Before reading recent inventory it delivers t
 existing native follow-count replacement and confirms candidate coverage, closing the
 race between new-follow backfill and concurrent activity fanout. Backfill examines at
 most 2000 references, in resumable pages of 128, within the same 30-day inventory.
+The inventory key remains the followed native original reason, including after a redirect;
+the inverse destination is resolved independently and never substitutes that inventory key.
 
 Following is a candidate inbox. Before returning each item, the feed checks genuine
 current follow support, calls the original native current owner read, checks current

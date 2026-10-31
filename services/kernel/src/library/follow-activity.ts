@@ -11,7 +11,7 @@ import type { WorkClient } from '../work/client.ts';
 import type { FeedActivityStore, FeedActivityTarget } from '../content/feed-activity.ts';
 import { feedPageLimit, feedRoute } from '../content/feed-activity.ts';
 import { feedSnapshot } from '../content/feed-snapshot.ts';
-import { resolveCountDestination, FollowCountUnavailableError } from './follow-count-target.ts';
+import { resolveCountDestination, FollowCountTargetAbsentError, FollowCountUnavailableError } from './follow-count-target.ts';
 import { requireFollowCountHealth } from './follow-count-health.ts';
 
 export type FollowActivitySupport = Readonly<{ target: FeedActivityTarget; status: 'following' | 'not_following' | 'unavailable' }>;
@@ -26,15 +26,25 @@ export function createFollowActivitySource(deps: {
   return {
     async pageRecipients(target: FeedActivityTarget, query: { cursor?: string; limit?: number }, deadline: number): Promise<FollowRecipientPage> {
       const limit = feedPageLimit(query.limit);
-      const destination = await within(deadline, () => resolveCountDestination({ pool: deps.pool }, {
+      const resolve = () => within(deadline, () => resolveCountDestination({ pool: deps.pool }, {
         targetType: target.type, targetId: target.id,
       }));
+      let destination;
+      try { destination = await resolve(); }
+      catch (error) {
+        if (error instanceof FollowCountTargetAbsentError) return { recipients: [], next: null };
+        throw error;
+      }
       const binding = { operation: 'library.follow.activity.recipients', parameters: {
-        id: target.id, type: target.type, terminal: destination.targetId, epoch: destination.epoch?.toString() ?? '', limit,
+        id: target.id, type: target.type, limit,
       } };
       const cursor = query.cursor === undefined ? null : decodeCursor(deps.tokens, binding, query.cursor, clock().getTime());
-      if (cursor && (!cursor.ok || cursor.after.length !== 1 || typeof cursor.after[0] !== 'string'))
+      if (cursor && (!cursor.ok || cursor.epoch !== 1 || cursor.after.length !== 3 || cursor.after.some((value) => typeof value !== 'string')))
         throw new ProblemError('invalid_cursor');
+      // A current identity change restarts this bounded candidate walk. Keeping the old account
+      // frontier against a new inverse would skip recipients; repeated deliveries are idempotent.
+      const after = cursor?.ok && cursor.after[0] === destination.targetId && cursor.after[1] === (destination.epoch?.toString() ?? '')
+        ? cursor.after[2] : '00000000-0000-0000-0000-000000000000';
       // Readiness is owner-maintained constant metadata, never a recipient/partition census.
       await within(deadline, () => requireFollowCountHealth(deps.pool));
       const rows = await feedSnapshot(deps.pool, destination.route, deadline, async (client) =>
@@ -42,11 +52,11 @@ export function createFollowActivitySource(deps: {
           `SELECT account_id FROM library.follow_count_support WHERE route=$1 AND target_type=$2 AND target_id=$3
            AND account_id>$4 AND support>0 ORDER BY account_id LIMIT $5`,
           [destination.route, target.type, destination.targetId,
-            cursor?.ok ? cursor.after[0] : '00000000-0000-0000-0000-000000000000', limit])).rows);
-      const current = await within(deadline, () => resolveCountDestination({ pool: deps.pool }, { targetType: target.type, targetId: target.id }));
+            after, limit])).rows);
+      const current = await resolve();
       if (destination.targetId !== current.targetId || destination.epoch !== current.epoch) throw new FollowCountUnavailableError();
       return { recipients: rows.map((row) => ({ accountId: row.account_id })), next: rows.length === limit
-        ? encodeCursor(deps.tokens, binding, { epoch: 1, after: [rows.at(-1)!.account_id] }, clock().getTime()) : null };
+        ? encodeCursor(deps.tokens, binding, { epoch: 1, after: [destination.targetId, destination.epoch?.toString() ?? '', rows.at(-1)!.account_id] }, clock().getTime()) : null };
     },
     async checkCurrentFollowSupport(actor: Actor, input: { targets: readonly FeedActivityTarget[] }, deadline: number): Promise<readonly FollowActivitySupport[]> {
       if (actor.kind !== 'account' || !actor.scopes.includes('follow:list')) throw new ProblemError('forbidden');
@@ -92,9 +102,9 @@ export function createFollowActivitySource(deps: {
         const pairs = await feedSnapshot(deps.pool, feedRoute(mapping.terminal), deadline, async (client) =>
           (await client.query<{ original_id: string }>(
             `SELECT original_id FROM library.follow_count_pair WHERE route=$1 AND target_type='subject'
-             AND target_id=$2 AND account_id=$3 ORDER BY original_id LIMIT 129`,
+             AND target_id=$2 AND account_id=$3 ORDER BY original_id LIMIT 101`,
             [feedRoute(mapping.terminal), mapping.terminal, actor.accountId])).rows);
-        if (pairs.length > 128 || pairs.length === 0) { result.push({ target, status: 'unavailable' }); continue; }
+        if (pairs.length > 100 || pairs.length === 0) { result.push({ target, status: 'unavailable' }); continue; }
         const ids = pairs.map((pair) => pair.original_id);
         const mappings = await within(deadline, () => identityEpochStore.readMappings(deps.pool, ids));
         const originalRows = await ownerRows(ids);

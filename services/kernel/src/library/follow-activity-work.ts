@@ -53,7 +53,9 @@ export function registerFollowActivityWork(context: WorkContext): void {
         target_id=$3 AND account_id=$4 AND original_id=$5`,
         [feedRoute(target.id), target.type, target.id, input.accountId, input.target.id])).rows[0]?.eligible === true);
     if (!covered) throw new FollowCountUnavailableError();
-    const inventory = await activityStore.pageTargetActivity(target, { limit: 128,
+    // Inventory is indexed by the immutable native reason, not a substituted terminal. The
+    // destination above is only the current candidate inverse used to close the fanout race.
+    const inventory = await activityStore.pageTargetActivity(input.target, { limit: 128,
       ...(input.cursor ? { cursor: input.cursor } : {}) }, workStepDeadline());
     for (const activity of inventory.activities.slice(0, 2000 - input.examined)) {
       // Terminal accounts are fenced again by the viewer-home delivery command. Current follow and
