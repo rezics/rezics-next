@@ -53,12 +53,10 @@ function storyFacets(body: Record<string, unknown>): KernelRecording | undefined
       const size = typeof facet.size === 'number' ? Math.max(1, Math.min(facet.size, 20)) : 10;
       return {
         property,
-        values: (storyValues[property] ?? [])
-          .slice(0, size)
-          .map((value) => ({
-            ...value,
-            labels: languages.length ? chosenLabels(value.labels, languages) : value.labels,
-          })),
+        values: (storyValues[property] ?? []).slice(0, size).map((value) => ({
+          ...value,
+          labels: languages.length ? chosenLabels(value.labels, languages) : value.labels,
+        })),
         next: null,
       };
     }),
