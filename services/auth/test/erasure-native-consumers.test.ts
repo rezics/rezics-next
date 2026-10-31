@@ -285,6 +285,115 @@ test('Consume genuine original lifecycle result for terminal Auth continuation',
   }
 }, 180_000);
 
+test('terminal activation consumption preserves the exact original native outcome and receipt provenance', async () => {
+  const key = randomUUID();
+  const email = `${key}@consumer.test`;
+  const ports = f.bindings.workflowPorts;
+  const activate = ports.activate;
+  let committed: Awaited<ReturnType<typeof activate>> | undefined;
+  ports.activate = async (input) => {
+    committed = await activate(input);
+    throw new Error('Lost activation reply before native terminal consumption');
+  };
+  try {
+    await expect(
+      f.host.workflows.register({ key, handle: `receipt_${key.replaceAll('-', '')}`, email, password }),
+    ).rejects.toThrow();
+  } finally {
+    ports.activate = activate;
+  }
+  if (!committed) throw new Error('Missing actual native activation');
+  const accountId = committed.value.accountId;
+  const stage = (
+    await f.pool.query<{
+      registration_id: string;
+      activation_key: string;
+      reservation_id: string;
+    }>('SELECT registration_id,activation_key,reservation_id FROM auth_registration_stage WHERE account_id=$1', [
+      accountId,
+    ])
+  ).rows[0]!;
+  const request: OriginalLifecycleRequest = {
+    kind: 'activation',
+    accountId,
+    reservationId: stage.reservation_id,
+    operationKey: stage.activation_key,
+    source: {
+      registrationId: stage.registration_id,
+      provisioningReceiptKey: `registration:${stage.registration_id}`,
+    },
+  };
+  const read = ports.readOriginalLifecycleResult;
+  if (!read) throw new Error('Missing installed original lifecycle result reader');
+  const original = await read(request);
+  if (!original || original.kind !== 'activation') throw new Error('Missing genuine original activation result');
+  const receipt = (
+    await f.kernel.query<{
+      epoch: number;
+      position: string;
+      transaction_id: string;
+      response: unknown;
+    }>(
+      `SELECT epoch,position::text,transaction_id,response FROM core.receipt
+       WHERE partition_no=$1 AND transaction_id=$2 AND command_kind='access.actor-activated'`,
+      [original.outcome.partition, original.outcome.transactionId],
+    )
+  ).rows[0]!;
+  expect(original).toEqual({
+    kind: 'activation',
+    accountId,
+    reservationId: stage.reservation_id,
+    authnEpoch: 1,
+    outcome: {
+      partition: original.outcome.partition,
+      epoch: receipt.epoch,
+      position: receipt.position,
+      transactionId: receipt.transaction_id,
+      value: receipt.response,
+    },
+  });
+  expect(original.outcome.value).toEqual(committed.value);
+  expect(await read({ ...request, operationKey: `${stage.activation_key}:foreign` })).toBeNull();
+  expect(
+    await read({ ...request, source: { ...request.source, provisioningReceiptKey: `registration:${randomUUID()}` } }),
+  ).toBeNull();
+  const person = await f.login({ accountId, email });
+  const evidence = ports.provisioningEvidence;
+  let activationAttempts = 0;
+  ports.provisioningEvidence = async () => null;
+  ports.activate = async () => {
+    activationAttempts++;
+    throw new Error('Original outcome consumption must execute no activation');
+  };
+  try {
+    expect(await read(request)).toEqual(original);
+    void f.delete(person).catch(() => {});
+    await eventually(
+      async () =>
+        !(await f.pool.query('SELECT 1 FROM auth_registration_stage WHERE registration_id=$1', [stage.registration_id]))
+          .rowCount,
+    );
+    const proof = (
+      await f.pool.query("SELECT binding,result FROM auth_native_consumer_proof WHERE store='registration' AND key=$1", [
+        stage.registration_id,
+      ])
+    ).rows[0]!;
+    expect(proof.binding[2]).toBe(request.operationKey);
+    expect(proof.result).toEqual({ outcome: 'activated', sourceResult: receipt.response });
+    expect(activationAttempts).toBe(0);
+    const after = (
+      await f.kernel.query(
+        'SELECT epoch,position::text,transaction_id,response FROM core.receipt WHERE partition_no=$1 AND transaction_id=$2 AND command_kind=$3',
+        [original.outcome.partition, receipt.transaction_id, 'access.actor-activated'],
+      )
+    ).rows[0];
+    expect(after).toEqual(receipt);
+  } finally {
+    ports.provisioningEvidence = evidence;
+    ports.activate = activate;
+  }
+}, 180_000);
+
 test('a lost activation reply is replayed with its original key, unavailable evidence remains pending, and default restart removes the actual release witness', async () => {
   const key = randomUUID();
   const email = `${key}@consumer.test`;
@@ -314,28 +423,37 @@ test('a lost activation reply is replayed with its original key, unavailable evi
   expect(stage.activation_key).toBe(originalInput!.key);
   const person = await f.login({ accountId, email });
   const evidence = f.bindings.workflowPorts.provisioningEvidence;
+  const readOriginal = f.bindings.workflowPorts.readOriginalLifecycleResult;
   f.bindings.workflowPorts.provisioningEvidence = async () => null;
+  f.bindings.workflowPorts.readOriginalLifecycleResult = async (input) =>
+    input.kind === 'activation' && input.source.registrationId === stage.registration_id
+      ? null
+      : (readOriginal?.(input) ?? null);
   const deletion = f.delete(person);
-  await eventually(
-    async () =>
-      (await f.pool.query('SELECT pending_code FROM auth_erasure WHERE account_id=$1', [accountId])).rows[0]
-        ?.pending_code === 'native-release',
-  );
-  expect(
-    (
-      await f.pool.query("SELECT 1 FROM auth_native_consumer_proof WHERE store='registration' AND key=$1", [
-        stage.registration_id,
-      ])
-    ).rowCount,
-  ).toBe(0);
-  expect(
-    (
-      await f.pool.query('SELECT 1 FROM auth_provisioning_receipt WHERE idempotency_key=$1', [
-        `registration:${stage.registration_id}`,
-      ])
-    ).rowCount,
-  ).toBe(1);
-  f.bindings.workflowPorts.provisioningEvidence = evidence;
+  try {
+    await eventually(
+      async () =>
+        (await f.pool.query('SELECT pending_code FROM auth_erasure WHERE account_id=$1', [accountId])).rows[0]
+          ?.pending_code === 'native-release',
+    );
+    expect(
+      (
+        await f.pool.query("SELECT 1 FROM auth_native_consumer_proof WHERE store='registration' AND key=$1", [
+          stage.registration_id,
+        ])
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await f.pool.query('SELECT 1 FROM auth_provisioning_receipt WHERE idempotency_key=$1', [
+          `registration:${stage.registration_id}`,
+        ])
+      ).rowCount,
+    ).toBe(1);
+  } finally {
+    f.bindings.workflowPorts.provisioningEvidence = evidence;
+    f.bindings.workflowPorts.readOriginalLifecycleResult = readOriginal;
+  }
   // Default maintenance has no live caller and no new approval after restart.
   void deletion.catch(() => {});
   await f.host.workflows.close();

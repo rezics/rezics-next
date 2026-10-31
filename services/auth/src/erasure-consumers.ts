@@ -1,5 +1,10 @@
 import type { Pool, PoolClient } from 'pg';
-import type { AccountWorkflowPorts } from '@rezics/auth-contract';
+import type {
+  AccountWorkflowPorts,
+  OriginalLifecycleRequest,
+  OriginalLifecycleResult,
+  OriginalLifecycleResultPort,
+} from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { isRefusal } from './workflows.ts';
 import { registrationActivationResult, registrationExpiryResult } from './native-proof-minimization.ts';
@@ -56,6 +61,7 @@ export type NativeConsumerRuntime = {
   access: Pick<
     AccountWorkflowPorts<never>,
     | 'readAccount'
+    | 'readOriginalLifecycleResult'
     | 'provisioningEvidence'
     | 'activate'
     | 'expireRegistration'
@@ -112,7 +118,7 @@ export async function registrationTerminal(connection: PoolClient, stageId: stri
 /** Called only with the actual return from Access.activate, before the ordinary
  * completion marker. The original source key is fixed before any source command. */
 export async function recordRegistrationActivation(
-  pool: Pool,
+  pool: Pool | PoolClient,
   stageId: string,
   activationKey: string,
   result: unknown,
@@ -141,7 +147,54 @@ export async function recordRegistrationActivation(
   );
 }
 
-async function continueRegistration(pool: Pool, stageId: string, runtime: NativeConsumerRuntime): Promise<boolean> {
+/** Foreign reads run before this transaction. Reacquire the native erasure
+ * lock and original row locks before transferring a source's responsibility.
+ * Original command provenance never becomes this consumer's transaction ID. */
+async function consumeOriginal(
+  pool: Pool,
+  obligationId: string,
+  consume: (connection: PoolClient) => Promise<boolean>,
+): Promise<boolean> {
+  const connection = await pool.connect();
+  try {
+    await connection.query('BEGIN');
+    const owner = (
+      await connection.query<{ account_id: string }>('SELECT account_id FROM auth_erasure WHERE id=$1', [obligationId])
+    ).rows[0];
+    let consumed = false;
+    if (owner) {
+      await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+        `auth-erasure:${owner.account_id}`,
+      ]);
+      const locked = await connection.query('SELECT 1 FROM auth_erasure WHERE id=$1 AND account_id=$2 FOR UPDATE', [
+        obligationId,
+        owner.account_id,
+      ]);
+      if (locked.rowCount) consumed = await consume(connection);
+    }
+    await connection.query('COMMIT');
+    return consumed;
+  } catch (error) {
+    await connection.query('ROLLBACK');
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function readOriginal(
+  access: Partial<OriginalLifecycleResultPort>,
+  request: OriginalLifecycleRequest,
+): Promise<OriginalLifecycleResult | null> {
+  return access.readOriginalLifecycleResult?.(request) ?? null;
+}
+
+async function continueRegistration(
+  pool: Pool,
+  obligationId: string,
+  stageId: string,
+  runtime: NativeConsumerRuntime,
+): Promise<boolean> {
   const row = (
     await pool.query<Registration>(
       `SELECT ${registrationColumns}
@@ -151,25 +204,54 @@ async function continueRegistration(pool: Pool, stageId: string, runtime: Native
   ).rows[0];
   if (!row?.consumer_workflow_id || !row.activation_key || !row.reservation_id || !row.expires_at) return false;
   if (row.erasure_operator_id && !row.operator_reservation_id) return false;
-  const current = await runtime.access.readAccount(row.account_id);
-  if (!current || current.accountId !== row.account_id) return false;
-  if (current.state !== 'pending') {
-    // A nonpending source cannot newly activate. Only the original immutable
-    // command's replay can return a result, including after later deletion.
-    const evidence = await runtime.access.provisioningEvidence({
+  // The receipt's actual key belongs to the original source; it is not derived
+  // from a new caller, workflow retry, current account or transient verifier.
+  const receipt = (
+    await pool.query<{ idempotency_key: string }>(
+      'SELECT idempotency_key FROM auth_provisioning_receipt WHERE account_id=$1 AND erasure_stage_id=$2',
+      [row.account_id, stageId],
+    )
+  ).rows[0];
+  if (receipt) {
+    const request: OriginalLifecycleRequest = {
+      kind: 'activation',
       accountId: row.account_id,
       reservationId: row.reservation_id,
-    });
-    if (evidence) {
-      try {
-        const result = (await runtime.access.activate({ accountId: row.account_id, key: row.activation_key, evidence }))
-          .value;
-        return await recordRegistrationActivation(pool, stageId, row.activation_key, result);
-      } catch (error) {
-        if (!isRefusal(error)) throw error;
-      }
+      operationKey: row.activation_key,
+      source: { registrationId: stageId, provisioningReceiptKey: receipt.idempotency_key },
+    };
+    const original = await readOriginal(runtime.access, request);
+    if (original) {
+      if (
+        original.kind !== 'activation' ||
+        original.accountId !== row.account_id ||
+        original.reservationId !== row.reservation_id ||
+        original.authnEpoch !== 1 ||
+        original.outcome.value.accountId !== row.account_id
+      )
+        return false;
+      return consumeOriginal(pool, obligationId, async (connection) => {
+        const stage = await connection.query(
+          `SELECT 1 FROM auth_registration_stage s WHERE s.registration_id=$1
+           AND ${registrationBindingSql}=$2::jsonb AND s.expires_at=$3 FOR UPDATE`,
+          [stageId, JSON.stringify(registrationBinding(row)), row.expires_at],
+        );
+        if (!stage.rowCount) return false;
+        const source = await connection.query(
+          `SELECT 1 FROM auth_provisioning_receipt WHERE idempotency_key=$1 AND erasure_stage_id=$2
+           AND account_id=$3 AND registration_id=$4 AND reservation_id=$4 AND authn_epoch=$5
+           AND expires_at=$6 FOR UPDATE`,
+          [receipt.idempotency_key, stageId, row.account_id, row.reservation_id, original.authnEpoch, row.expires_at],
+        );
+        return (
+          !!source.rowCount &&
+          recordRegistrationActivation(connection, stageId, request.operationKey, original.outcome.value)
+        );
+      });
     }
   }
+  const current = await runtime.access.readAccount(row.account_id);
+  if (!current || current.accountId !== row.account_id) return false;
   if (current.state !== 'pending' && current.state !== 'deleted') return false;
   // Kernel owns the pending deadline. A not-yet-due source refuses and stays
   // pending; Auth never synthesizes Kernel T or expires a caller's authority.
@@ -277,7 +359,8 @@ export async function continueNativeConsumer(
   runtime: NativeConsumerRuntime,
 ): Promise<boolean> {
   try {
-    if (locator.store === 'auth_registration_stage') return await continueRegistration(pool, locator.key, runtime);
+    if (locator.store === 'auth_registration_stage')
+      return await continueRegistration(pool, obligationId, locator.key, runtime);
     if (locator.store === 'auth_provisioning_receipt') {
       const row = (
         await pool.query<{ erasure_stage_id: string | null }>(
@@ -285,7 +368,7 @@ export async function continueNativeConsumer(
           [locator.key],
         )
       ).rows[0];
-      return row?.erasure_stage_id ? await continueRegistration(pool, row.erasure_stage_id, runtime) : false;
+      return row?.erasure_stage_id ? await continueRegistration(pool, obligationId, row.erasure_stage_id, runtime) : false;
     }
     if (locator.store === 'auth_client_reduction_progress')
       return await runtime.auth.internal.continueNativeClientReduction(

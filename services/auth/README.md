@@ -2182,8 +2182,15 @@ remains refused; this path never restores its former authority.
 - Registration records its original workflow/activation keys before source work,
   and its actual operator reservation when that command returns. Erasure removes
   ciphertext and credential digest while retaining this release witness. A lost
-  activation reply replays the original Access command with actual provisioning
-  evidence; a committed activation wins without another activation. Otherwise the
+  activation reply consumes the private `OriginalLifecycleResultPort` reader's
+  actual committed result without invoking activation or transient provisioning
+  evidence. The exact original stage, provisioning receipt, reservation and
+  activation key form its `OriginalLifecycleRequest`. Auth releases its checkout
+  before the reader, then independently reacquires its erasure/obligation and
+  stage/receipt locks and compares the original bindings before recording the
+  existing terminal activation proof from the returned outcome. The producer's
+  native transaction, epoch and position describe the original source command;
+  Auth's consumption commits in a separate transaction. Otherwise the
   existing source expiry command decides whether its original thirty-minute
   deadline is due. Only actual expiry, handle release, operator retirement/release
   and child Auth obligation acceptance establish release completion. Full native
@@ -2202,11 +2209,12 @@ remains refused; this path never restores its former authority.
   Completed/expired timestamps alone cannot close a registration consumer.
   Activation drops its handle, reservation and operator links after the same
   final-reader boundary, retaining only `[registrationId, workflowId,
-  activationKey, accountId]` and the exact actual activation result. Access does
-  not export a committed activation-result read bound to the original command,
-  account and reservation after provisioning evidence expires. In the lost-reply
-  branch, unavailable evidence therefore remains `native-release`; the actual
-  current account state never reconstructs an activation result. The retained
+  activationKey, accountId]` and the exact actual activation result. The original
+  result reader remains usable after transient provisioning evidence expires,
+  without renewing its deadline or supplying caller disclosure/session authority.
+  Missing, imported, minimized or mismatched originals remain
+  `native-stage`/`native-release`; the actual current account state never
+  reconstructs an activation result. The retained
   actual result must not be nulled to pretend that missing reader is delivered.
 - Credential consumers lock the actual receipt under the existing permanent
   account/client fence. A real committed CAS result is retained with its original
