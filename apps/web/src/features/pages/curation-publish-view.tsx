@@ -13,7 +13,7 @@ export type ValidationCorrection = { describe: (pointer: string) => string; corr
 
 export function CurationFailureNotice({ failure, correction }: {
   failure: Exclude<PublicationRead, { ok: true }>;
-  correction?: ValidationCorrection;
+  correction?: ValidationCorrection | undefined;
 }) {
   return (
     <div role="alert" className="space-y-2 rounded-lg border border-destructive/40 bg-card p-4">

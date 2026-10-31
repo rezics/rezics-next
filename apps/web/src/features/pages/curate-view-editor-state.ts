@@ -78,7 +78,10 @@ export function resolveCorrection(profile: PresentationProfile, pointer: string,
       const path = segments.slice(prefix.length);
       const document = viewOf(profile, template, view)!;
       if (path[0] === 'root' && path[1] === 'props' && path[2] === 'appearance') {
-        const field = editableField(null, path.slice(3), locale, document.root.props.appearance ?? {});
+        const appearance = document.root.props.appearance;
+        const field = editableField(null, path.slice(3), locale,
+          appearance !== null && typeof appearance === 'object' && !Array.isArray(appearance)
+            ? appearance as Record<string, unknown> : {});
         return field ? { template, view, component: null, ...field } : null;
       }
       if (path.shift() !== 'content') return null;

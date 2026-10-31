@@ -22,10 +22,10 @@ function CorrectionSelection({ children }: { children: ReactNode }) {
     if (target.component && !itemSelector) return;
     dispatch({
       type: 'setUi',
-      ui: { itemSelector, rightSideBarVisible: true, leftSideBarVisible: true, mobilePanelExpanded: true, plugin: { current: 'fields' } },
+      ui: { itemSelector: itemSelector ?? null, rightSideBarVisible: true, leftSideBarVisible: true, mobilePanelExpanded: true, plugin: { current: 'fields' } },
     });
   }, [target, dispatch, getSelectorForId]);
-  return children;
+  return <>{children}</>;
 }
 
 function CorrectionFields({ children, isLoading }: { children: ReactNode; isLoading: boolean }) {
@@ -39,11 +39,11 @@ function CorrectionFields({ children, isLoading }: { children: ReactNode; isLoad
     if ((selectedItem?.props.id ?? null) !== (target.component?.id ?? null)) return;
     function focus() {
       // Compare owned input names; never interpolate a server pointer into a selector or HTML.
-      const control = Array.from(element!.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select'))
-        .find((input) => input.name === target!.field.join('.') && !input.disabled && !('readOnly' in input && input.readOnly));
+      const control = Array.from(element!.querySelectorAll('input, textarea, select'))
+        .find((input) => input.getAttribute('name') === target!.field.join('.') && !input.hasAttribute('disabled') && !input.hasAttribute('readonly'));
       if (control) {
         focused.current = target;
-        control.focus();
+        (control as HTMLElement).focus();
         return true;
       }
       return false;
