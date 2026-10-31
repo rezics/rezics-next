@@ -330,8 +330,9 @@ export const DefaultReadRecovery: StoryObj = {
       }),
     );
     await expect(statement).toHaveValue('Later draft');
+    await userEvent.click(view.getByText(m.settings_verification_original()));
     await expect(view.getByText(originalKey)).toBeVisible();
-    await expect(replay).toBeEnabled();
+    await expect(view.getByRole('button', { name: m.settings_verification_retry_original() })).toBeEnabled();
     await expect(fixture.reads).toEqual({ collections: [null, continuation, continuation], verification: 3 });
     // All recovery was GET: no visibility write, request replay, withdrawal or replacement command key.
     await expect(fixture.commands).toHaveLength(1);
