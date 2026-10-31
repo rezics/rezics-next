@@ -201,4 +201,3 @@ function buildValueSchema(datatype: DataType, options: ValueOptions) {
       throw new TypeError(`Unknown data type: ${datatype}`);
   }
 }
-
