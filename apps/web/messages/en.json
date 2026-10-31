@@ -1306,6 +1306,8 @@
   "library_labels_heading": "Labels",
   "library_label_name": "Name",
   "library_label_create": "Create label",
+  "library_label_actions": "Actions for {name}",
+  "library_label_delete_confirmation": "Delete “{name}”?",
   "library_label_rename": "Rename",
   "library_label_delete": "Delete",
   "library_labels_empty": "You have no labels yet.",

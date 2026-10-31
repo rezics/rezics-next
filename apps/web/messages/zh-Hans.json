@@ -1224,6 +1224,8 @@
   "library_labels_heading": "标签",
   "library_label_name": "名称",
   "library_label_create": "创建标签",
+  "library_label_actions": "{name}的操作",
+  "library_label_delete_confirmation": "删除“{name}”？",
   "library_label_rename": "重命名",
   "library_label_delete": "删除",
   "library_labels_empty": "你还没有标签。",

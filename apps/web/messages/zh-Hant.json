@@ -1223,6 +1223,8 @@
   "library_labels_heading": "標籤",
   "library_label_name": "名稱",
   "library_label_create": "建立標籤",
+  "library_label_actions": "{name}的操作",
+  "library_label_delete_confirmation": "刪除「{name}」？",
   "library_label_rename": "重新命名",
   "library_label_delete": "刪除",
   "library_labels_empty": "你還沒有標籤。",

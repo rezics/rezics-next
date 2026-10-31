@@ -23,14 +23,46 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+async function openAction(
+  context: { canvasElement: HTMLElement },
+  operation: 'rename' | 'delete',
+  name = 'Winter reads',
+) {
+  const view = within(context.canvasElement);
+  await userEvent.click(await view.findByRole('button', { name: m.library_label_actions({ name }) }));
+  const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+  const menu = await within(document.body).findByRole(
+    sheet ? 'dialog' : 'menu',
+    sheet ? { name: m.library_labels_heading() } : undefined,
+  );
+  const title = operation === 'rename' ? m.library_label_rename() : m.library_label_delete();
+  await userEvent.click(within(menu).getByRole(sheet ? 'button' : 'menuitem', { name: title }));
+  return within(await within(document.body).findByRole('dialog', { name: title }));
+}
+
 export const SignedIn: Story = {
   name: 'Signed In',
-  play: pageReady,
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(context.canvasElement);
+    const link = await view.findByRole('link', { name: 'Winter reads' });
+    await expect(link.closest('li')!.querySelector('input')).toBeNull();
+    await expect(view.getByRole('button', { name: m.library_label_actions({ name: 'Winter reads' }) })).toBeVisible();
+  },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="catalogue" />,
 };
 export const SignedOut: Story = {
   name: 'Signed Out',
-  play: pageReady,
+  play: async (context) => {
+    await pageReady(context);
+    const main = within(context.canvasElement).getByRole('main');
+    await expect(within(main).getAllByText(m.library_sign_in(), { exact: true })).toHaveLength(1);
+    await expect(within(main).getByRole('link', { name: m.library_sign_in() })).toHaveAttribute(
+      'href',
+      '/auth/sign-in?return_to=%2Fen%2Flibrary%2Flabels',
+    );
+  },
   render: () => <PageStory visitor="Signed Out" path={pagePaths['library-labels']} />,
 };
 export const Empty: Story = {
@@ -52,13 +84,15 @@ export const RenameConflict: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(context.canvasElement);
-    const rename = (await view.findAllByRole('button', { name: m.library_label_rename() }))[0]!;
-    const field = within(rename.closest('form')!).getByRole('textbox');
+    const dialog = await openAction(context, 'rename');
+    const rename = dialog.getByRole('button', { name: m.library_label_rename() });
+    const field = dialog.getByRole('textbox');
     await userEvent.clear(field);
     await userEvent.type(field, 'Outdated draft');
     await userEvent.click(rename);
-    await expect(await view.findByRole('alert')).toHaveTextContent(m.library_label_stale());
-    await expect(view.getByDisplayValue('Winter reads')).toBeVisible();
+    await expect(await dialog.findByRole('alert')).toHaveTextContent(m.library_label_stale());
+    await expect(field).toHaveValue('Outdated draft');
+    await expect(view.getByRole('link', { name: 'Winter reads' })).toBeVisible();
   },
 };
 export const Undo: Story = {
@@ -66,7 +100,8 @@ export const Undo: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(context.canvasElement);
-    await userEvent.click((await view.findAllByRole('button', { name: m.library_label_delete() }))[0]!);
+    const confirmation = await openAction(context, 'delete');
+    await userEvent.click(confirmation.getByRole('button', { name: m.library_label_delete() }));
     await expect(await view.findByRole('status')).toHaveTextContent(m.library_label_deleted({ name: 'Winter reads' }));
     await expect(within(view.getByRole('status')).getByRole('button', { name: m.library_label_undo() })).toBeEnabled();
   },
@@ -117,21 +152,25 @@ export const RetainedUndoAfterStale: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(context.canvasElement);
-    await userEvent.click((await view.findAllByRole('button', { name: m.library_label_delete() }))[0]!);
+    const confirmation = await openAction(context, 'delete');
+    await userEvent.click(confirmation.getByRole('button', { name: m.library_label_delete() }));
     await waitFor(() => expect(context.canvasElement.querySelector('form[role="status"]')).not.toBeNull());
     const undo = context.canvasElement.querySelector<HTMLFormElement>('form[role="status"]')!;
     const guard = new FormData(undo);
-    const rename = view.getByRole('button', { name: m.library_label_rename() });
-    const field = within(rename.closest('form')!).getByRole('textbox');
+    const dialog = await openAction(context, 'rename', '読み返したい本 · Books to revisit');
+    const rename = dialog.getByRole('button', { name: m.library_label_rename() });
+    const field = dialog.getByRole('textbox');
     await userEvent.clear(field);
     await userEvent.type(field, 'Changed while open');
     await userEvent.click(rename);
-    await expect(await view.findByRole('alert')).toHaveTextContent(m.library_label_stale());
+    await expect(await dialog.findByRole('alert')).toHaveTextContent(m.library_label_stale());
+    await expect(field).toHaveValue('Changed while open');
+    await userEvent.click(dialog.getByRole('button', { name: m.action_cancel() }));
     const retained = context.canvasElement.querySelector<HTMLFormElement>('form[role="status"]')!;
     for (const key of ['id', 'library_label_revision', 'idempotencyKey'])
       await expect(new FormData(retained).get(key)).toBe(guard.get(key));
     await userEvent.click(within(retained).getByRole('button', { name: m.library_label_undo() }));
-    await expect(await view.findByDisplayValue('Winter reads')).toBeVisible();
+    await expect(await view.findByRole('link', { name: 'Winter reads' })).toBeVisible();
   },
 };
 
@@ -280,5 +319,30 @@ export const PhoneCapacity: Story = {
     await expect(context.canvasElement.querySelectorAll('[data-subject-label-chip]')).toHaveLength(32);
     await expect(input).toBeVisible();
     await expect(input).toHaveValue('One more label');
+  },
+};
+
+export const RenameSelected: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="catalogue" />,
+  play: async (context) => {
+    await pageReady(context);
+    const dialog = await openAction(context, 'rename');
+    const input = dialog.getByRole('textbox', { name: m.library_label_name() });
+    await expect(input).toHaveValue('Winter reads');
+    await userEvent.clear(input);
+    await expect(input).toBeInvalid();
+    await userEvent.click(dialog.getByRole('button', { name: m.action_cancel() }));
+    await expect(within(document.body).queryByRole('dialog', { name: m.library_label_rename() })).toBeNull();
+  },
+};
+
+export const DeleteConfirmation: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="catalogue" />,
+  play: async (context) => {
+    await pageReady(context);
+    const dialog = await openAction(context, 'delete');
+    await expect(dialog.getByText(m.library_label_delete_confirmation({ name: 'Winter reads' }))).toBeVisible();
+    await userEvent.click(dialog.getByRole('button', { name: m.action_cancel() }));
+    await expect(within(context.canvasElement).getByRole('link', { name: 'Winter reads' })).toBeVisible();
   },
 };

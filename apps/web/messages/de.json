@@ -1223,6 +1223,8 @@
   "library_labels_heading": "Schlagwörter",
   "library_label_name": "Name",
   "library_label_create": "Schlagwort erstellen",
+  "library_label_actions": "Aktionen für {name}",
+  "library_label_delete_confirmation": "„{name}“ löschen?",
   "library_label_rename": "Umbenennen",
   "library_label_delete": "Löschen",
   "library_labels_empty": "Du hast noch keine Schlagwörter.",

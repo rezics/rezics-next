@@ -1223,6 +1223,8 @@
   "library_labels_heading": "ラベル",
   "library_label_name": "名前",
   "library_label_create": "ラベルを作成",
+  "library_label_actions": "{name}の操作",
+  "library_label_delete_confirmation": "「{name}」を削除しますか？",
   "library_label_rename": "名前を変更",
   "library_label_delete": "削除",
   "library_labels_empty": "ラベルはまだありません。",

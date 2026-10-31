@@ -182,6 +182,9 @@ export const Unavailable: Story = {
   play: async (context) => {
     await pageReady(context);
     await expect(within(context.canvasElement).getByRole('heading', { name: m.error_heading() })).toBeVisible();
+    await expect(
+      within(context.canvasElement).getAllByText(m.library_collections_unavailable(), { exact: true }),
+    ).toHaveLength(1);
   },
 };
 
@@ -510,5 +513,23 @@ export const CreateFailed: Story = {
     await userEvent.click(view.getByRole('radio', { name: new RegExp(m.library_visibility_public()) }));
     await userEvent.click(view.getByRole('button', { name: m.library_collection_create() }));
     await expect(view.getByRole('alert')).toBeVisible();
+  },
+};
+
+export const CollectionsAndPinsUnavailable: Story = {
+  render: () =>
+    render('many', pagePaths['library-collections'], {
+      pinCount: 3,
+      builtins: 'none',
+      collectionCount: 3,
+      collectionsUnavailable: true,
+      failPins: true,
+    }),
+  play: async (context) => {
+    await pageReady(context);
+    const main = within(within(context.canvasElement).getByRole('main'));
+    await expect(main.getAllByText(m.library_collections_unavailable(), { exact: true })).toHaveLength(1);
+    await expect(main.getAllByText(m.library_pin_read_failed(), { exact: true })).toHaveLength(1);
+    await expect(main.getByRole('link', { name: m.library_follow_retry() })).toBeVisible();
   },
 };

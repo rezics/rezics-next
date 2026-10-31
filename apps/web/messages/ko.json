@@ -1223,6 +1223,8 @@
   "library_labels_heading": "라벨",
   "library_label_name": "이름",
   "library_label_create": "라벨 만들기",
+  "library_label_actions": "{name} 작업",
+  "library_label_delete_confirmation": "“{name}”을(를) 삭제할까요?",
   "library_label_rename": "이름 변경",
   "library_label_delete": "삭제",
   "library_labels_empty": "아직 라벨이 없습니다.",

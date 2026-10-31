@@ -1223,6 +1223,8 @@
   "library_labels_heading": "Etiquetas",
   "library_label_name": "Nombre",
   "library_label_create": "Crear etiqueta",
+  "library_label_actions": "Acciones para {name}",
+  "library_label_delete_confirmation": "¿Eliminar «{name}»?",
   "library_label_rename": "Cambiar nombre",
   "library_label_delete": "Eliminar",
   "library_labels_empty": "Aún no tienes etiquetas.",

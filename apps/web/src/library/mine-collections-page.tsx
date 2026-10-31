@@ -64,9 +64,7 @@ export function MineCollectionsPageView({
           current="collections"
           pins={pins}
           collections={navigationCollections}
-          collectionsState={
-            page.state === 'preparing' ? 'preparing' : page.state && page.state !== 'loaded' ? 'unavailable' : 'loaded'
-          }
+          collectionsState={page.state === 'preparing' ? 'preparing' : 'loaded'}
         />
         <CollectionBrowseToolbar layout={layout} onLayoutChange={setLayout} />
         {!page.signedIn ? (
