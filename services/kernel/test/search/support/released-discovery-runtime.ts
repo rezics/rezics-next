@@ -169,11 +169,7 @@ export function releasedDiscoveryRuntime(
     const now = Date.now();
     const expiresAt = options === undefined ? now + 24 * 60 * 60 * 1000 : options.expiresAt;
     if (options !== undefined) {
-      if (
-        !Number.isSafeInteger(expiresAt) ||
-        expiresAt <= now ||
-        expiresAt > now + 24 * 60 * 60 * 1000
-      )
+      if (!Number.isSafeInteger(expiresAt) || expiresAt <= now || expiresAt > now + 24 * 60 * 60 * 1000)
         throw new RangeError('Preparation expiresAt must be a safe future instant within 24 hours');
     }
     return createPublicPreparationStore(config.pool, client, prefix).retain(

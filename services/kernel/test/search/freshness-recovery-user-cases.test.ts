@@ -82,8 +82,14 @@ test('a genuine explicit retain expiry releases native work without claiming the
       expect(Number(ordinaryRecord!.expires_at)).toBeLessThanOrEqual(afterDefault + DAY_MS);
 
       for (const expiresAt of [
-        NaN, Infinity, -Infinity, 0, Date.now() - 1, Date.now() + 0.5,
-        Number.MAX_SAFE_INTEGER + 1, Date.now() + DAY_MS + 60_000,
+        NaN,
+        Infinity,
+        -Infinity,
+        0,
+        Date.now() - 1,
+        Date.now() + 0.5,
+        Number.MAX_SAFE_INTEGER + 1,
+        Date.now() + DAY_MS + 60_000,
       ]) {
         await expect(native.preparePublic(short, { expiresAt })).rejects.toThrow('safe future instant within 24 hours');
       }
@@ -135,66 +141,70 @@ test('a genuine explicit retain expiry releases native work without claiming the
   }
 }, 60_000);
 
-test('actual PostgreSQL Source lag over five minutes gives readiness and recovers through the same native worker', async () => {
-  const native = fixture.search!;
-  const prefix = native.indexPrefix;
-  await caughtUp();
-  await native.indexing('paused');
-  let committed: CreatedSubject;
-  try {
-    const beforeCommit = await databaseNow();
-    committed = await fixture.createSubject('schema:Book', `${marker} delayed`);
-    const partition = partitionOf(routeOf(committed.id)!);
-    const head = await fixture.inspect<{ position: string }>(
-      'SELECT position::text FROM core.partition WHERE partition_no = $1',
-      [partition],
-    );
-    const envelope = await fixture.inspect<{ recorded_at: Date }>(
-      'SELECT recorded_at FROM core.outbox WHERE partition_no = $1 AND position = $2 AND event_seq = 0',
-      [partition, head.rows[0]!.position],
-    );
-    const recordedAt = envelope.rows[0]!.recorded_at.getTime();
-    expect(recordedAt).toBeGreaterThanOrEqual(beforeCommit);
-    expect(recordedAt).toBeLessThanOrEqual(await databaseNow());
-    const initial = await native.freshness();
-    expect(initial.behind).toBeGreaterThan(0);
-    expect(initial.asOf.getTime()).toBeLessThanOrEqual(recordedAt);
+test(
+  'actual PostgreSQL Source lag over five minutes gives readiness and recovers through the same native worker',
+  async () => {
+    const native = fixture.search!;
+    const prefix = native.indexPrefix;
+    await caughtUp();
+    await native.indexing('paused');
+    let committed: CreatedSubject;
+    try {
+      const beforeCommit = await databaseNow();
+      committed = await fixture.createSubject('schema:Book', `${marker} delayed`);
+      const partition = partitionOf(routeOf(committed.id)!);
+      const head = await fixture.inspect<{ position: string }>(
+        'SELECT position::text FROM core.partition WHERE partition_no = $1',
+        [partition],
+      );
+      const envelope = await fixture.inspect<{ recorded_at: Date }>(
+        'SELECT recorded_at FROM core.outbox WHERE partition_no = $1 AND position = $2 AND event_seq = 0',
+        [partition, head.rows[0]!.position],
+      );
+      const recordedAt = envelope.rows[0]!.recorded_at.getTime();
+      expect(recordedAt).toBeGreaterThanOrEqual(beforeCommit);
+      expect(recordedAt).toBeLessThanOrEqual(await databaseNow());
+      const initial = await native.freshness();
+      expect(initial.behind).toBeGreaterThan(0);
+      expect(initial.asOf.getTime()).toBeLessThanOrEqual(recordedAt);
 
-    const preconditionDeadline = Date.now() + SOURCE_LAG_PRECONDITION_GUARD_MS;
-    for (;;) {
-      const observed = await native.freshness();
-      const now = await databaseNow();
-      expect(observed.behind).toBeGreaterThan(0);
-      expect(observed.asOf).toEqual(initial.asOf);
-      if (now - recordedAt > SOURCE_LAG_THRESHOLD_MS && Date.now() - recordedAt > SOURCE_LAG_THRESHOLD_MS) {
-        expect(now - observed.asOf.getTime()).toBeGreaterThan(SOURCE_LAG_THRESHOLD_MS);
-        expect(observed.catchingUp).toBe(true);
-        break;
+      const preconditionDeadline = Date.now() + SOURCE_LAG_PRECONDITION_GUARD_MS;
+      for (;;) {
+        const observed = await native.freshness();
+        const now = await databaseNow();
+        expect(observed.behind).toBeGreaterThan(0);
+        expect(observed.asOf).toEqual(initial.asOf);
+        if (now - recordedAt > SOURCE_LAG_THRESHOLD_MS && Date.now() - recordedAt > SOURCE_LAG_THRESHOLD_MS) {
+          expect(now - observed.asOf.getTime()).toBeGreaterThan(SOURCE_LAG_THRESHOLD_MS);
+          expect(observed.catchingUp).toBe(true);
+          break;
+        }
+        if (Date.now() >= preconditionDeadline)
+          throw new Error(`Real database Source lag did not age past its threshold: ${JSON.stringify(observed)}`);
+        await Bun.sleep(Math.min(1_000, Math.max(1, recordedAt + SOURCE_LAG_THRESHOLD_MS + 1 - now)));
       }
-      if (Date.now() >= preconditionDeadline)
-        throw new Error(`Real database Source lag did not age past its threshold: ${JSON.stringify(observed)}`);
-      await Bun.sleep(Math.min(1_000, Math.max(1, recordedAt + SOURCE_LAG_THRESHOLD_MS + 1 - now)));
+      const stale = await fixture.request('anonymous', 'POST', '/v1/subjects:search', { text: marker, limit: 10 });
+      expect(stale.status).toBe(503);
+      expect(stale.body.code).toBe('index_not_ready');
+      expect(stale.headers.get('retry-after')).toBeTruthy();
+      expect(stale.body).not.toHaveProperty('subjects');
+      expect(stale.body).not.toHaveProperty('as_of');
+    } finally {
+      await native.indexing('running');
     }
-    const stale = await fixture.request('anonymous', 'POST', '/v1/subjects:search', { text: marker, limit: 10 });
-    expect(stale.status).toBe(503);
-    expect(stale.body.code).toBe('index_not_ready');
-    expect(stale.headers.get('retry-after')).toBeTruthy();
-    expect(stale.body).not.toHaveProperty('subjects');
-    expect(stale.body).not.toHaveProperty('as_of');
-  } finally {
-    await native.indexing('running');
-  }
-  await native.converge([witness, committed!]);
-  await caughtUp();
-  const beforeRead = await databaseNow();
-  const recovered = await native.freshness();
-  expect(recovered).toMatchObject({ behind: 0, catchingUp: false });
-  expect(recovered.asOf.getTime()).toBeGreaterThanOrEqual(beforeRead);
-  expect(recovered.asOf.getTime()).toBeLessThanOrEqual(await databaseNow());
-  expect(native.indexPrefix).toBe(prefix);
-  const response = await fixture.request('anonymous', 'POST', '/v1/subjects:search', { text: marker, limit: 10 });
-  expect(response.status).toBe(200);
-  expect((response.body.subjects as { id: string }[]).map(({ id }) => id).sort()).toEqual(
-    [witness.id, committed!.id].sort(),
-  );
-}, SOURCE_LAG_PRECONDITION_GUARD_MS + 60_000);
+    await native.converge([witness, committed!]);
+    await caughtUp();
+    const beforeRead = await databaseNow();
+    const recovered = await native.freshness();
+    expect(recovered).toMatchObject({ behind: 0, catchingUp: false });
+    expect(recovered.asOf.getTime()).toBeGreaterThanOrEqual(beforeRead);
+    expect(recovered.asOf.getTime()).toBeLessThanOrEqual(await databaseNow());
+    expect(native.indexPrefix).toBe(prefix);
+    const response = await fixture.request('anonymous', 'POST', '/v1/subjects:search', { text: marker, limit: 10 });
+    expect(response.status).toBe(200);
+    expect((response.body.subjects as { id: string }[]).map(({ id }) => id).sort()).toEqual(
+      [witness.id, committed!.id].sort(),
+    );
+  },
+  SOURCE_LAG_PRECONDITION_GUARD_MS + 60_000,
+);
