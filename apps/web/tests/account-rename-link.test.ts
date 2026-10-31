@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { authManagementPageHref } from '../src/session/auth-page-routes';
 import { accountRenameNavigation } from '../src/settings/account-rename-actions';
-import { readAccountRenameContext } from '../src/settings/account-rename-data';
+import { readAccountRenameContext, readAccountRenameContextResult } from '../src/settings/account-rename-data';
 import { AccountSafetyCard } from '../src/settings/account-safety';
 import { accountRenameHref, securityHrefFromIssuer } from '../src/settings/account-safety-links';
 import { m } from '../src/paraglide/messages.js';
@@ -145,4 +145,121 @@ test('rename navigation allowlists the configured issuer route without callbacks
   ])
     expect(accountRenameHref(input)).toBeNull();
   expect(accountRenameHref('http://localhost:3001/security')).toBe('http://localhost:3001/account/rename');
+});
+
+test('native profile and capability failures retain bounded status/problem/delay metadata in a serializable region result', async () => {
+  for (const failedMethod of ['GET', 'POST']) {
+    for (const [status, retryAfter] of [
+      [429, '7'],
+      [503, new Date(Date.now() + 60_000).toUTCString()],
+    ] as const) {
+      const requests: Request[] = [];
+      const problem = {
+        type: 'https://rezics.com/problems/dependency_unavailable',
+        title: 'Unavailable',
+        code: 'dependency_unavailable',
+        retryable: true,
+        request_id: 'native-account-read',
+        detail: 'private-website-token',
+        arbitrary: 'not-for-transport',
+      };
+      const client = createKernelClient('https://kernel.example.test', {
+        fetch: (async (input, init) => {
+          const request = new Request(input, init);
+          requests.push(request);
+          expect(request.headers.get('authorization')).toBe('Bearer private-website-token');
+          expect(request.headers.get('cache-control')).toBe('no-store');
+          expect(request.cache).toBe('no-store');
+          if (request.method === failedMethod)
+            return Response.json(problem, { status, headers: { 'retry-after': retryAfter } });
+          return request.method === 'POST'
+            ? Response.json({
+                resources: [
+                  {
+                    type: 'access.account',
+                    id: accountId,
+                    viewerActions: [{ action: 'account:update', operations: ['account.update'] }],
+                  },
+                ],
+              })
+            : Response.json({
+                profile: {
+                  id: accountId,
+                  kind: 'actor',
+                  handle: 'alice',
+                  displayName: null,
+                  bio: null,
+                  links: [],
+                  avatar: null,
+                  publicViews: { posts: true, reviews: true, collections: true, realms: true },
+                },
+              });
+        }) as typeof fetch,
+      });
+      const result = JSON.parse(
+        JSON.stringify(await readAccountRenameContextResult(client, 'Bearer private-website-token', accountId)),
+      );
+      expect(requests).toHaveLength(2);
+      expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`).sort()).toEqual([
+        `GET /v1/accounts/${accountId}/profile`,
+        'POST /v1/viewerActions',
+      ]);
+      expect(result.failures).toEqual([
+        { kind: 'failed', status, code: problem.code, retryable: true, requestId: 'native-account-read', retryAfter },
+      ]);
+      expect(result.context).toEqual(failedMethod === 'GET' ? null : { accountId, handle: 'alice', available: false });
+      expect(JSON.stringify(result)).not.toContain(problem.detail);
+      expect(JSON.stringify(result)).not.toContain(problem.arbitrary);
+      const html = renderToStaticMarkup(
+        createElement(AccountSafetyCard, {
+          state: 'signed-in',
+          securityHref,
+          csrfToken: 'current-csrf',
+          onReload() {},
+          renameAccount: accountRenameNavigation(deployment, result.context),
+          renameRead: { loading: false, reload() {}, failures: result.failures },
+        }),
+      );
+      expect(html).toContain(m.settings_account_rename_failed());
+      expect(html).toContain(m.settings_retry_wait());
+      expect(html).not.toContain('/account/rename');
+      expect(html).not.toContain(problem.detail);
+      if (failedMethod === 'POST') expect(html).toContain('@alice');
+    }
+  }
+});
+
+test('explicit native denial differs from unavailable capability and absent deployment without enabling navigation', async () => {
+  for (const [status, code, message] of [
+    [403, 'forbidden', m.settings_account_rename_denied()],
+    [403, 'platform_closed', m.settings_account_rename_unavailable()],
+    [404, 'not_found', m.settings_account_rename_unavailable()],
+  ] as const) {
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async () =>
+        Response.json(
+          { type: 'https://rezics.com/problems/' + code, title: 'Unavailable', code },
+          { status },
+        )) as typeof fetch,
+    });
+    const result = await readAccountRenameContextResult(client, 'Bearer private-website-token', accountId);
+    expect(result.failures).toHaveLength(2);
+    const html = renderToStaticMarkup(
+      createElement(AccountSafetyCard, {
+        state: 'signed-in',
+        securityHref,
+        csrfToken: 'current-csrf',
+        onReload() {},
+        renameAccount: null,
+        renameRead: { loading: false, reload() {}, failures: result.failures },
+      }),
+    );
+    expect(html).toContain(message);
+    expect(html).not.toContain('/account/rename');
+    expect(html).not.toContain(m.settings_retry_wait());
+  }
+  expect(accountRenameNavigation(deployment, null)).toBeNull();
+  expect(
+    accountRenameNavigation({ AUTH_ISSUER: deployment.AUTH_ISSUER }, { accountId, handle: 'alice', available: true }),
+  ).toEqual({ accountId, handle: 'alice', available: true, href: null });
 });

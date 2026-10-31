@@ -3200,5 +3200,7 @@
   "settings_privacy_leave_title": "コレクションの公開設定を離れますか？",
   "settings_verification_leave_title": "エージェント認証を離れますか？",
   "settings_all_drafts_leave_title": "これらの設定を離れますか？",
-  "settings_other_drafts_leave_description": "このページに保持されているローカルの下書きと復旧用キーは失われます。送信済みのコマンドは、その後も完了する可能性があります。"
+  "settings_other_drafts_leave_description": "このページに保持されているローカルの下書きと復旧用キーは失われます。送信済みのコマンドは、その後も完了する可能性があります。",
+  "settings_account_rename_failed": "ハンドル名の変更を読み込めませんでした。再読み込みして、もう一度確認してください。",
+  "settings_account_rename_denied": "現在のセッションではハンドル名の変更を読み込む権限がありません。再読み込みして現在のアクセス権を確認してください。"
 }

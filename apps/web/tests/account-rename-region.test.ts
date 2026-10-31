@@ -1,11 +1,12 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
 import { loadAccountRenameRegion } from '../src/settings/account-rename-data';
-import { AccountSafetySection } from '../src/settings/account-safety';
+import type { AccountRenameResult } from '../src/settings/account-rename-actions';
+import { AccountRenameRegion, AccountSafetySection } from '../src/settings/account-safety';
 import { loadSettingsPage } from '../src/settings/preferences';
 
 const accountId = '123e4567-e89b-42d3-a456-426614174000';
@@ -114,4 +115,95 @@ test('account safety server render starts loading without treating a historical 
   expect(html).not.toContain('/account/rename');
   expect(html).not.toContain('@old');
   expect(html).not.toContain('current-token');
+});
+
+test('Preserve native failure guidance while loading account safety preserving native identity and exact recovery bounds', async () => {
+  const clock = spyOn(Date, 'now').mockReturnValue(10_000);
+  let calls = 0;
+  const ready: AccountRenameResult = {
+    context: { accountId, handle: 'alice', available: true, href: 'https://auth.example.test/account/rename' },
+  };
+  let resolve!: (value: AccountRenameResult) => void;
+  const region = new AccountRenameRegion(() => {
+    calls++;
+    return new Promise((done) => {
+      resolve = done;
+    });
+  }, accountId);
+  let unmount = region.mount();
+  try {
+    unmount();
+    unmount = region.mount(); // Strict Mode effect replay shares the pending read.
+    const initial = region.reload();
+    await Promise.resolve();
+    expect(calls).toBe(1);
+    resolve({
+      context: null,
+      failures: [
+        { kind: 'failed', status: 503, retryAfter: '2' },
+        { kind: 'failed', status: 429, retryAfter: '7' },
+      ],
+    });
+    await initial;
+    expect(region.snapshot().retryAt).toBe(17_000);
+    clock.mockReturnValue(16_999);
+    await region.reload(); // The actual handler enforces the longest real native wait.
+    expect(calls).toBe(1);
+    clock.mockReturnValue(17_000);
+    await Promise.resolve();
+    expect(calls).toBe(1); // Expiry performs no IO.
+    const explicit = region.reload();
+    const coalesced = region.reload();
+    expect(explicit).toBe(coalesced);
+    expect(region.snapshot()).toEqual({ loading: true, context: null, retryAt: 0 });
+    await Promise.resolve();
+    expect(calls).toBe(2);
+    resolve(ready);
+    await explicit;
+    expect(region.snapshot().context).toEqual(ready.context);
+    const refresh = region.reload();
+    expect(region.snapshot().context).toBeNull(); // Remove the old identity/link before awaiting.
+    await Promise.resolve();
+    unmount(); // An actor or CSRF lifetime change unmounts this keyed region.
+    resolve(ready);
+    await refresh;
+    expect(region.snapshot().context).toBeNull();
+    await region.reload();
+    expect(calls).toBe(3);
+    const nextActor = new AccountRenameRegion(async () => ready, 'another-actor');
+    const leaveNext = nextActor.mount();
+    await nextActor.reload();
+    expect(nextActor.snapshot().context).toBeNull();
+    leaveNext();
+    const nextCsrf = new AccountRenameRegion(async () => ready, accountId);
+    const leaveCsrf = nextCsrf.mount();
+    await nextCsrf.reload();
+    expect(nextCsrf.snapshot().context).toEqual(ready.context);
+    leaveCsrf();
+  } finally {
+    unmount();
+    clock.mockRestore();
+  }
+});
+
+test('account safety honors HTTP-date waits exactly and never invents a wait for invalid or missing Retry-After', async () => {
+  const clock = spyOn(Date, 'now').mockReturnValue(Date.UTC(2030, 0, 1));
+  try {
+    for (const retryAfter of [new Date(Date.now() + 60_000).toUTCString(), 'invalid', undefined]) {
+      let calls = 0;
+      const region = new AccountRenameRegion(async () => {
+        calls++;
+        return { context: null, failures: [{ kind: 'failed', status: 503, ...(retryAfter ? { retryAfter } : {}) }] };
+      }, accountId);
+      const leave = region.mount();
+      await region.reload();
+      const deadline = retryAfter?.endsWith('GMT') ? Date.now() + 60_000 : 0;
+      expect(region.snapshot().retryAt).toBe(deadline);
+      await region.reload();
+      expect(calls).toBe(deadline ? 1 : 2);
+      leave();
+    }
+  } finally {
+    clock.mockRestore();
+  }
 });

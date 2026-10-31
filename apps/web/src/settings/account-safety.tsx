@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore, useMemo } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Separator } from '@rezics/ui/shadcn/separator';
@@ -7,63 +7,128 @@ import { m } from '../paraglide/messages.js';
 import { SignInPrompt } from '../threads/write-prompts';
 import { accountSafetyLinks } from './account-safety-links';
 import { AccountRenameLink } from './account-rename-link';
-import type { AccountRenameNavigation } from './account-rename-actions';
+import type { AccountRenameNavigation, AccountRenameResult } from './account-rename-actions';
+import type { AccountRenameFailure } from './account-rename-data';
+import { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
 
 export type AccountSafetyProps =
   | {
       state: 'signed-in';
+      accountId?: string | null;
       securityHref: string | null;
       csrfToken: string | null;
       onReload: () => void;
       renameAccount?: AccountRenameNavigation | null;
-      renameRead?: { loading: boolean; reload: () => void };
+      renameRead?: { loading: boolean; reload: () => void; failures?: AccountRenameFailure[]; retryAt?: number };
     }
   | { state: 'signed-out'; returnTo: string };
 
 /** This mounted region never seeds capability from a historical settings response. */
 export function AccountSafetySection(props: AccountSafetyProps) {
   return props.state === 'signed-in' ? (
-    <CurrentAccountSafety key={props.csrfToken} {...props} />
+    <CurrentAccountSafety key={JSON.stringify([props.accountId, props.csrfToken])} {...props} />
   ) : (
     <AccountSafetyCard {...props} />
   );
 }
 
-function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signed-in' }>) {
-  const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<{ loading: boolean; context: AccountRenameNavigation | null }>({
-    loading: true,
-    context: null,
-  });
-  const pending = useRef<Promise<AccountRenameNavigation | null> | null>(null);
-  useEffect(() => {
-    let current = true;
-    // Reuse the pending read during effect replay, but never across mounts or explicit reloads.
-    pending.current ??= props.csrfToken
-      ? import('./account-rename-actions')
-          .then(({ readAccountRename }) => readAccountRename({ headers: { 'X-CSRF-Token': props.csrfToken! } }))
-          .catch(() => null)
-      : Promise.resolve(null);
-    void pending.current.then((context) => {
-      if (current) setResult({ loading: false, context });
-    });
+type RenameSnapshot = AccountRenameResult & { loading: boolean; retryAt: number };
+
+/** One mount/reload read, coalesced during effect replay; expiry only unlocks the explicit handler. */
+export class AccountRenameRegion {
+  private value: RenameSnapshot = { loading: true, context: null, retryAt: 0 };
+  private pending: Promise<void> | null = null;
+  private active = false;
+  private listeners = new Set<() => void>();
+  constructor(
+    private readonly read: () => Promise<AccountRenameResult>,
+    private readonly accountId?: string | null,
+  ) {}
+  snapshot = () => this.value;
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
     return () => {
-      current = false;
+      this.listeners.delete(listener);
     };
-  }, [attempt, props.csrfToken]);
-  const reload = () => {
-    if (result.loading) return;
-    pending.current = null;
-    setResult({ loading: true, context: null });
-    setAttempt((value) => value + 1);
   };
+  private publish(value: RenameSnapshot) {
+    this.value = value;
+    for (const listener of this.listeners) listener();
+  }
+  mount = () => {
+    this.active = true;
+    if (this.value.loading) void this.request();
+    return () => {
+      this.active = false;
+    };
+  };
+  reload = (): Promise<void> => {
+    if (!this.active || this.value.loading || Date.now() < this.value.retryAt) return this.pending ?? Promise.resolve();
+    return this.request();
+  };
+  private request(): Promise<void> {
+    if (this.pending) return this.pending;
+    // Clear all old identity, links and failure metadata before awaiting a fresh read.
+    this.publish({ loading: true, context: null, retryAt: 0 });
+    this.pending = Promise.resolve()
+      .then(this.read)
+      .catch((): AccountRenameResult => ({ context: null, failures: [{ kind: 'failed', status: null }] }))
+      .then((result) => {
+        if (!this.active) return;
+        if (this.accountId && result.context && result.context.accountId !== this.accountId) result = { context: null };
+        const now = Date.now();
+        const retryAt = Math.max(
+          0,
+          ...(result.failures ?? []).map((failure) => preferenceRetryDeadline(failure.retryAfter, now)),
+        );
+        this.publish({ ...result, loading: false, retryAt });
+      })
+      .finally(() => {
+        this.pending = null;
+      });
+    return this.pending;
+  }
+}
+
+function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signed-in' }>) {
+  const [region] = useState(
+    () =>
+      new AccountRenameRegion(
+        () =>
+          props.csrfToken
+            ? import('./account-rename-actions').then(({ readAccountRename }) =>
+                readAccountRename({ headers: { 'X-CSRF-Token': props.csrfToken! } }),
+              )
+            : Promise.resolve({ context: null }),
+        props.accountId,
+      ),
+  );
+  const result = useSyncExternalStore(region.subscribe, region.snapshot, region.snapshot);
+  useEffect(region.mount, [region]);
   return (
-    <AccountSafetyCard {...props} renameAccount={result.context} renameRead={{ loading: result.loading, reload }} />
+    <AccountSafetyCard
+      {...props}
+      renameAccount={result.context}
+      renameRead={{
+        loading: result.loading,
+        reload: region.reload,
+        ...(result.failures ? { failures: result.failures } : {}),
+        retryAt: result.retryAt,
+      }}
+    />
   );
 }
 
 export function AccountSafetyCard(props: AccountSafetyProps) {
   const id = useId();
+  const read = props.state === 'signed-in' ? props.renameRead : undefined;
+  const failure = read?.failures?.find((entry) => entry.kind === 'denied') ?? read?.failures?.[0];
+  const retryAt = useMemo(
+    () =>
+      read?.retryAt ?? Math.max(0, ...(read?.failures ?? []).map((entry) => preferenceRetryDeadline(entry.retryAfter))),
+    [read?.retryAt, read?.failures],
+  );
+  const waiting = usePreferenceRetry(undefined, retryAt);
   const links = props.state === 'signed-in' ? accountSafetyLinks(props.securityHref) : null;
   const linkClass = 'h-auto min-h-11 max-w-full whitespace-normal py-2 text-center';
   return (
@@ -82,18 +147,28 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
           </div>
         ) : (
           <>
-            <AccountRenameLink context={props.renameAccount ?? null} loading={props.renameRead?.loading ?? false} />
+            <AccountRenameLink
+              context={props.renameAccount ?? null}
+              loading={read?.loading ?? false}
+              failure={failure}
+            />
             {props.renameRead ? (
               <div aria-busy={props.renameRead.loading} className="space-y-2">
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={props.renameRead.loading}
+                  disabled={props.renameRead.loading || waiting}
+                  aria-describedby={waiting ? `${id}-rename-wait` : undefined}
                   onClick={props.renameRead.reload}
                   aria-label={`${m.settings_reload()}: ${m.settings_account_rename_heading()}`}
                 >
                   {m.settings_reload()}
                 </Button>
+                {waiting ? (
+                  <p id={`${id}-rename-wait`} role="status" className="text-sm text-muted-foreground">
+                    {m.settings_retry_wait()}
+                  </p>
+                ) : null}
               </div>
             ) : null}
             {links ? (

@@ -3200,5 +3200,7 @@
   "settings_privacy_leave_title": "Datenschutzeinstellungen der Sammlungen verlassen?",
   "settings_verification_leave_title": "Agentenverifizierung verlassen?",
   "settings_all_drafts_leave_title": "Diese Einstellungen verlassen?",
-  "settings_other_drafts_leave_description": "Lokale Entwürfe und die auf dieser Seite gespeicherten Wiederherstellungsschlüssel werden verworfen. Bereits gesendete Befehle können noch abgeschlossen werden."
+  "settings_other_drafts_leave_description": "Lokale Entwürfe und die auf dieser Seite gespeicherten Wiederherstellungsschlüssel werden verworfen. Bereits gesendete Befehle können noch abgeschlossen werden.",
+  "settings_account_rename_failed": "Die Änderung des Benutzernamens konnte nicht geladen werden. Lade neu, um es erneut zu prüfen.",
+  "settings_account_rename_denied": "Deine aktuelle Sitzung darf die Änderung des Benutzernamens nicht laden. Lade neu, um deinen aktuellen Zugriff zu prüfen."
 }

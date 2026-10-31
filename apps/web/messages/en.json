@@ -2816,6 +2816,8 @@
   "settings_account_rename_confirmation": "Continue to Auth to review the current signed-in account and explicitly confirm the change. Auth checks current permissions before renaming.",
   "settings_account_rename_continue": "Continue to handle rename",
   "settings_account_rename_unavailable": "Handle rename is unavailable. Reload to check your current account, permissions and Auth configuration.",
+  "settings_account_rename_failed": "Could not load handle rename. Reload to check again.",
+  "settings_account_rename_denied": "Your current session cannot load handle rename. Reload to check your current access.",
   "realm_review_eyebrow": "Realm governance",
   "realm_review_heading": "Ownership claims",
   "realm_review_intro": "Help an orphaned Realm find its next owner. Review the original request and confirm one approval at a time.",

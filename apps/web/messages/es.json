@@ -3200,5 +3200,7 @@
   "settings_privacy_leave_title": "¿Salir de la privacidad de las colecciones?",
   "settings_verification_leave_title": "¿Salir de la verificación del agente?",
   "settings_all_drafts_leave_title": "¿Salir de estos ajustes?",
-  "settings_other_drafts_leave_description": "Se descartarán los borradores locales y las claves de recuperación de esta página. Los comandos ya enviados pueden completarse."
+  "settings_other_drafts_leave_description": "Se descartarán los borradores locales y las claves de recuperación de esta página. Los comandos ya enviados pueden completarse.",
+  "settings_account_rename_failed": "No se pudo cargar el cambio de nombre de usuario. Recarga para volver a comprobarlo.",
+  "settings_account_rename_denied": "Tu sesión actual no puede cargar el cambio de nombre de usuario. Recarga para comprobar tu acceso actual."
 }

@@ -280,6 +280,7 @@ function SettingsSections({
             <>
               <AccountSafetySection
                 state="signed-in"
+                accountId={page.accountId}
                 securityHref={page.securityHref}
                 renameAccount={page.renameAccount ?? null}
                 csrfToken={csrfToken}

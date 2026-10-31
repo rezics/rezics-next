@@ -1,9 +1,10 @@
 import { createServerFn } from '@tanstack/react-start';
 import { authManagementPageHref } from '../session/auth-page-routes';
 import type { SessionEnv } from '../session/client';
-import type { AccountRenameContext } from './account-rename-data';
+import type { AccountRenameContext, AccountRenameReadResult } from './account-rename-data';
 
 export type AccountRenameNavigation = AccountRenameContext & { href?: string | null };
+export type AccountRenameResult = AccountRenameReadResult<AccountRenameNavigation>;
 
 /** Compose deployment availability after the existing native current-capability read. */
 export function accountRenameNavigation(
@@ -18,15 +19,17 @@ export function accountRenameNavigation(
 }
 
 /** Browser-only region read; POST uses the ordinary Origin and session CSRF checks. */
-export const readAccountRename = createServerFn({ method: 'POST' }).handler(
-  async (): Promise<AccountRenameNavigation | null> => {
-    const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
-    setResponseHeader('cache-control', 'private, no-store');
-    const { env } = await import('cloudflare:workers');
-    const { kernelClient } = await import('../kernel/client');
-    const { loadAccountRenameRegion } = await import('./account-rename-data');
-    const sessionEnv = env as Partial<SessionEnv>;
-    const context = await loadAccountRenameRegion(kernelClient(), getRequest(), sessionEnv);
-    return accountRenameNavigation(sessionEnv, context);
-  },
-);
+export const readAccountRename = createServerFn({ method: 'POST' }).handler(async (): Promise<AccountRenameResult> => {
+  const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
+  setResponseHeader('cache-control', 'private, no-store');
+  const { env } = await import('cloudflare:workers');
+  const { kernelClient } = await import('../kernel/client');
+  const { loadAccountRenameRegionResult, accountRenameException } = await import('./account-rename-data');
+  const sessionEnv = env as Partial<SessionEnv>;
+  try {
+    const result = await loadAccountRenameRegionResult(kernelClient(), getRequest(), sessionEnv);
+    return { ...result, context: accountRenameNavigation(sessionEnv, result.context) };
+  } catch (error) {
+    return { context: null, failures: [accountRenameException(error)] };
+  }
+});

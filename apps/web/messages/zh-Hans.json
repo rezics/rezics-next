@@ -3201,5 +3201,7 @@
   "settings_privacy_leave_title": "离开收藏集隐私设置？",
   "settings_verification_leave_title": "离开代理身份认证？",
   "settings_all_drafts_leave_title": "离开这些设置？",
-  "settings_other_drafts_leave_description": "此页面保留的本地草稿和恢复密钥将丢失。已发送的命令仍可能完成。"
+  "settings_other_drafts_leave_description": "此页面保留的本地草稿和恢复密钥将丢失。已发送的命令仍可能完成。",
+  "settings_account_rename_failed": "无法加载用户名更改。请重新加载以再次检查。",
+  "settings_account_rename_denied": "当前会话无权加载用户名更改。请重新加载以检查当前访问权限。"
 }

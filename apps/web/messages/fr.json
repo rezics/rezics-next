@@ -3200,5 +3200,7 @@
   "settings_privacy_leave_title": "Quitter la confidentialité des collections ?",
   "settings_verification_leave_title": "Quitter la vérification de l’agent ?",
   "settings_all_drafts_leave_title": "Quitter ces paramètres ?",
-  "settings_other_drafts_leave_description": "Les brouillons locaux et les clés de récupération conservés sur cette page seront supprimés. Les commandes déjà envoyées peuvent encore aboutir."
+  "settings_other_drafts_leave_description": "Les brouillons locaux et les clés de récupération conservés sur cette page seront supprimés. Les commandes déjà envoyées peuvent encore aboutir.",
+  "settings_account_rename_failed": "Impossible de charger le changement d’identifiant. Rechargez pour réessayer.",
+  "settings_account_rename_denied": "Votre session actuelle ne peut pas charger le changement d’identifiant. Rechargez pour vérifier votre accès actuel."
 }

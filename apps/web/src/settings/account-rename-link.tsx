@@ -2,15 +2,18 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
 import type { AccountRenameNavigation } from './account-rename-actions';
+import type { AccountRenameFailure } from './account-rename-data';
 
 export function AccountRenameLink({
   context,
   loading = false,
+  failure,
 }: {
   context?: AccountRenameNavigation | null;
   loading?: boolean;
+  failure?: AccountRenameFailure | undefined;
 }) {
-  const href = !loading && context?.available ? (context.href ?? null) : null;
+  const href = !loading && !failure && context?.available ? (context.href ?? null) : null;
   return (
     <div className="space-y-3">
       <h3 className="font-medium">{m.settings_account_rename_heading()}</h3>
@@ -26,6 +29,14 @@ export function AccountRenameLink({
       {loading ? (
         <p role="status" className="text-sm text-muted-foreground">
           {m.settings_profile_loading()}
+        </p>
+      ) : failure ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {failure.kind === 'denied'
+            ? m.settings_account_rename_denied()
+            : failure.kind === 'unavailable'
+              ? m.settings_account_rename_unavailable()
+              : m.settings_account_rename_failed()}
         </p>
       ) : href ? (
         <a

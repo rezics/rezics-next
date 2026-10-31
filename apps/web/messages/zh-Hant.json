@@ -3200,5 +3200,7 @@
   "settings_privacy_leave_title": "離開收藏集隱私設定？",
   "settings_verification_leave_title": "離開代理身分驗證？",
   "settings_all_drafts_leave_title": "離開這些設定？",
-  "settings_other_drafts_leave_description": "此頁面保留的本機草稿和復原金鑰將遺失。已送出的命令仍可能完成。"
+  "settings_other_drafts_leave_description": "此頁面保留的本機草稿和復原金鑰將遺失。已送出的命令仍可能完成。",
+  "settings_account_rename_failed": "無法載入使用者名稱變更。請重新載入以再次檢查。",
+  "settings_account_rename_denied": "目前的工作階段無權載入使用者名稱變更。請重新載入以檢查目前的存取權限。"
 }
