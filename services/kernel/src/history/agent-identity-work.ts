@@ -410,7 +410,7 @@ export async function verifyAgentIdentityWorkReplay(pool: Pool, workflowId: stri
 export async function resolveAgentIdentitySDKWork(
   tx: import('../command/command.ts').CommandTransaction,
   custodyId: string,
-): Promise<{ workflowId: string; gap: string | null } | null> {
+): Promise<{ workflowId: string; source: AgentIdentityWorkSource | null; gap: string | null } | null> {
   const row = (
     await tx.query<{
       workflow_id: string;
@@ -437,6 +437,7 @@ export async function resolveAgentIdentitySDKWork(
     .rows[0];
   return {
     workflowId: row.workflow_id,
+    source: row.source,
     gap: !row.bound
       ? 'identity-sdk-native-binding-unavailable'
       : receiver?.write_state !== 'active' || receiver.epoch !== row.receiver_epoch

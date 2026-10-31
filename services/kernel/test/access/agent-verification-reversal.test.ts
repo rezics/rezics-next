@@ -2179,3 +2179,183 @@ test('accepted reversal technical custody binds its current accepted job indepen
     ).value,
   ).toBe(false);
 });
+
+test('Default History maintenance passes one genuinely funded Source native and Library work frame through released identity consumer staging', async () => {
+  const { spyOn } = await import('bun:test');
+  const { existsSync } = await import('node:fs');
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/agent-identity-work.ts');
+  const retirement = await import('../../src/history/agent-identity-retirement.ts');
+  const sourceConsumer = await import('../../src/semantic/identity-source-consumer-custody.ts');
+  const { admitSharedHistory, advanceSharedHistory } = await import('../../src/access/shared-history.ts');
+  const { HistoryRegistry } = await import('../../src/history/registry.ts');
+  const { account, token } = await verified();
+  const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
+  expect(released.response.status).toBe(200);
+  const decision = released.body.reversal as AgentVerificationReversal;
+  await finish(decision);
+  const receipt = { kind: 'account-agent.unverify' as const, account: account.id, receipt: decision.receiptId };
+  const native = await loadAccountIdentitySource(pool, receipt);
+  const identityJob = await probeAccountIdentityPublication(pool, receipt);
+  const client = await createWorkClient(databaseUrl, pool);
+  const readConsumer = sourceConsumer.readIdentitySourceConsumerCustody;
+  const verifyStage = retirement.verifyAgentIdentityRetirementStage;
+  const readSpy = spyOn(sourceConsumer, 'readIdentitySourceConsumerCustody');
+  const verifySpy = spyOn(retirement, 'verifyAgentIdentityRetirementStage');
+  let frameSpy: { mockRestore(): void } | undefined;
+  try {
+    await client.registerQueue('workflows', {});
+    expect(await enqueueAgentIdentityReversal(pool, client, decision)).toBe('admitted');
+    const receiving = (
+      await pool.query('SELECT * FROM core.agent_identity_work WHERE workflow_id=$1', [native.workflowId])
+    ).rows[0];
+    const inputs = (
+      await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [native.workflowId])
+    ).rows[0].inputs;
+    const erased = (
+      await pool.query(
+        'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
+        [accountRoute, account.id],
+      )
+    ).rows[0];
+    const barrier = { accountId: account.id, accountRoute, version: erased.version, at: erased.at };
+    const reference = {
+      receipt,
+      job: identityJob,
+      source: {
+        partition: native.partition,
+        epoch: native.epoch,
+        position: native.position,
+        transactionId: native.transactionId,
+      },
+      sourceDigest: native.digest,
+      barrier,
+      erasedRole: 'subject' as const,
+    };
+    const unbacked = await retirement.readAgentIdentityRetirementStage(pool, reference, {
+      deadline: Date.now() + 10_000,
+    });
+    expect(unbacked?.handoff.custodyId).toBe(receiving.custody_id);
+    expect(unbacked?.consumer).toBeNull();
+    expect(readSpy).not.toHaveBeenCalled();
+
+    const jobId = randomUUID();
+    await runCommand(pool, { partition: accountRoute >>> 4 }, async (tx) => {
+      await admitSharedHistory(tx, account.id, jobId);
+      return noEffect(null);
+    });
+    // Fixture positioning uses the existing native cursor, immediately before durable work.
+    // The actual default entry still selects and releases the original locator itself.
+    await pool.query(
+      "UPDATE core.preference_history_job SET scan_type='command-receipt/v1',scan_locator=$2 WHERE job_id=$1",
+      [jobId, Buffer.from([255])],
+    );
+    const registry = new HistoryRegistry();
+    const env = process.env;
+    const deps = { pool, client, registry, env, clock };
+    const cursor = async () =>
+      (
+        await pool.query(
+          'SELECT phase,scan_partition,scan_type,scan_locator FROM core.preference_history_job WHERE job_id=$1',
+          [jobId],
+        )
+      ).rows[0];
+    const before = await cursor();
+    const path = new URL('../../src/semantic/identity-source-consumer-maintenance.ts', import.meta.url);
+    if (!existsSync(path)) {
+      expect(await advanceSharedHistory(deps, jobId)).toEqual({
+        state: 'more',
+        gap: retirement.IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE,
+      });
+      expect(await cursor()).toEqual(before);
+      expect(readSpy).not.toHaveBeenCalled();
+    }
+    // This outcome requires the original funded producer after integration. No skip,
+    // mock frame, allowance snapshot or success fallback stands in for its native body.
+    expect(existsSync(path)).toBe(true);
+    const producer: import('../../src/history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceModule =
+      await import(path.href);
+    const withFrame = producer.withIdentitySourceConsumerMaintenance;
+    type Funded = import('../../src/history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext;
+    let active: Funded | null = null;
+    const contexts: Funded[] = [];
+    let entries = 0;
+    frameSpy = spyOn(producer, 'withIdentitySourceConsumerMaintenance').mockImplementation(async function <T>(
+      frameDeps: Parameters<typeof withFrame>[0],
+      context: Parameters<typeof withFrame>[1],
+      body: (funded: Funded) => Promise<T>,
+    ): Promise<T> {
+      entries++;
+      expect(frameDeps.pool).toBe(pool);
+      expect(frameDeps.env).toBe(env);
+      expect(frameDeps.clock).toBe(clock);
+      return withFrame(frameDeps, context, async (funded) => {
+        expect(active).toBeNull();
+        expect(funded.identityConsumerWork).toBeDefined();
+        expect(funded.deadline).toBe(context.deadline);
+        contexts.push(funded);
+        active = funded;
+        try {
+          return await body(funded);
+        } finally {
+          active = null;
+        }
+      });
+    });
+    const failure = new Error('Maintenance fixture failure after actual Source work');
+    let failAfterRead = false;
+    readSpy.mockImplementation(async (selectedPool, selected, context) => {
+      expect(selectedPool).toBe(pool);
+      expect(context).toBe(active);
+      expect(selected).toEqual(reference);
+      const answer = await readConsumer(selectedPool, selected, context);
+      if (failAfterRead) throw failure;
+      return answer;
+    });
+    verifySpy.mockImplementation(async (tx, stage) => {
+      expect(active).not.toBeNull();
+      expect(stage.reference).toEqual(reference);
+      return verifyStage(tx, stage);
+    });
+    expect(await advanceSharedHistory(deps, jobId)).toEqual({
+      state: 'more',
+      gap: 'identity-source-consumer-custody-pending',
+    });
+    expect(entries).toBe(1);
+    expect(contexts).toHaveLength(1);
+    expect(readSpy).toHaveBeenCalledTimes(1);
+    expect(verifySpy).toHaveBeenCalledTimes(1);
+    expect(active).toBeNull();
+    expect(await cursor()).toEqual(before);
+    expect(
+      (await pool.query('SELECT next_run>now() AS delayed FROM core.preference_history_job WHERE job_id=$1', [jobId]))
+        .rows[0].delayed,
+    ).toBe(true);
+    // Reusing a callback context after completion cannot dispatch Source again.
+    expect((await retirement.readAgentIdentityRetirementStage(pool, reference, contexts[0]!))?.consumer).toBeNull();
+    expect(readSpy).toHaveBeenCalledTimes(1);
+    failAfterRead = true;
+    await expect(advanceSharedHistory(deps, jobId)).rejects.toBe(failure);
+    expect(entries).toBe(2);
+    expect(contexts).toHaveLength(2);
+    expect(readSpy).toHaveBeenCalledTimes(2);
+    expect(active).toBeNull();
+    expect(await cursor()).toEqual(before);
+    expect(
+      (await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [native.workflowId])).rows[0]
+        .inputs,
+    ).toEqual(inputs);
+    expect(
+      (
+        await pool.query('SELECT state,owner_ready FROM core.history_work WHERE partition_no=0 AND work_id=$1', [
+          receiving.custody_id,
+        ])
+      ).rows[0],
+    ).toEqual({ state: 'pending', owner_ready: false });
+  } finally {
+    frameSpy?.mockRestore();
+    readSpy.mockRestore();
+    verifySpy.mockRestore();
+    await client.destroy();
+  }
+});

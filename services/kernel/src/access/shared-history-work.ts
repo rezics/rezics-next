@@ -111,7 +111,13 @@ export const sharedHistoryWorkModule: WorkModule = {
             });
             if (selected) {
               const answer = await advanceSharedHistory(
-                { pool: context.pool, client: context.client, registry: history },
+                {
+                  pool: context.pool,
+                  client: context.client,
+                  registry: history,
+                  env: context.env,
+                  clock: context.clock,
+                },
                 selected,
               );
               if (!answer.gap)

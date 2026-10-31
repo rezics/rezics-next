@@ -658,13 +658,36 @@ foreign reads while held. Null/false Semantic evidence remains `identity-source-
 public true result alone cannot replace a durable terminal/technical-undo transfer locator. The currently retained
 Semantic receipt grants no retirement, SDK closure, root-copy closure or Source discharge.
 
-The current default maintenance path is `shared-history-work.ts` → `advanceSharedHistory` →
-`minimizeHistoryWork`. Its mapped Agent identity branch enters `minimizeIdentitySDKWork`; it does not call
-`readAgentIdentityRetirementStage`. The exported staging port alone therefore does not establish default consumer
-maintenance. A funded integration must enter staging after releasing the selected native receiving checkout,
-carry the original Source-owned live work context through Source reads and final verification, and retain the
-existing terminal-transfer gap. The present Source module exports only deadline-based custody read and verify
-ports; it has no maintenance-frame export. Neither a deadline nor saved work counters supplies live funding.
+The default maintenance path is `shared-history-work.ts` → `advanceSharedHistory` → `minimizeHistoryWork` →
+`minimizeIdentitySDKWork`. For one selected current mapped identity unit requiring consumer maintenance, it calls
+`advanceAgentIdentityConsumerMaintenance` after releasing the native job and receiving checkouts. The actual
+`semantic/identity-source-consumer-maintenance.ts` export `withIdentitySourceConsumerMaintenance` opens one frame
+around the entire callback: receiver binding, original source and accepted-job lookup, retirement staging, Source
+read and final native verification. The configured WorkContext pool, environment and clock pass unchanged; History
+owns no maintenance configuration/defaults, native or Library allocation, ledger, usage receipt or refund.
+
+`HistoryReceivingContext.identityConsumerWork` is optional and opaque. Staging forwards the exact original producer
+callback context without copying or persisting its funding. A caller-lifetime WeakSet recognizes only those callback
+objects while their operations are active; it supplies neither funding validation nor Source authority. Unbacked
+direct staging retains its compatible local handoff with a null consumer, without dispatching Source. Source owns
+funding validity, accounting and final invalidation. The final verifier runs before the same producer callback ends;
+exceptions propagate without opening another frame or resetting partial work.
+
+The original Source producer is not yet integrated in this base. The declaration-only adapter in
+`agent-identity-retirement.ts` repeats its published original module ABI exactly, including `KernelClock`; integration
+replaces these temporary declarations with original type aliases. Runtime loads only the original module/export.
+An absent module/export or its exact provisional funding refusal yields
+`identity-source-maintenance-funding-unavailable` before any Source lookup. There is no local fallback frame.
+The selected native association's closed key supplies the original receipt; the undo-only Accounts source read
+supplies its current tuple, digest and erased role, and the existing read-only accepted-source getter supplies its
+existing job. No fresh identity admission, source reconstruction or workflow-name parsing occurs.
+
+Funding-unavailable or still-pending consumer work keeps this one existing cursor and retries at the ordinary
+ten-second native lease cadence. Completed frontiers are not reset, unrelated ticks allocate no Source work, and
+unsupported terminal-transfer/SDK/root/copy branches retain their exact pending gaps. The original receiving,
+restore/writer/source generations, rollback and physical/raw/progress ceilings are unchanged. Caller wiring and
+local typing do not establish a funded Source body or native acceptance; the outcome test requires that original
+producer after integration and never substitutes a synthetic frame.
 
 The native SDK producer publishes `WorkflowWriterFence` exactly as
 `Readonly<{ workflowID: string; generation: string; closureID: string; closedAt: number }>`, with

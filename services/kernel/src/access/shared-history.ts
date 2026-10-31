@@ -11,6 +11,8 @@ import { decodeLocator } from '../history/locator.ts';
 import { historyArtifact, type HistoryArtifactType } from '../history/contracts.ts';
 import type { HistoryBarrier, HistoryRegistry } from '../history/registry.ts';
 import type { WorkClient } from '../work/client.ts';
+import type { WorkContext } from '../work/registry.ts';
+import { IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE } from '../history/agent-identity-retirement.ts';
 
 type Job = {
   job_id: string;
@@ -76,7 +78,7 @@ async function pending(tx: CommandTransaction, job: Job, gap: string): Promise<S
 /** One fixed physical home and at most eight keys / one minimizer. Epoch changes invalidate the
  * local certificate. No caller-supplied fixture IDs, account-table scan or other participant ACK. */
 export async function advanceSharedHistory(
-  deps: { pool: Pool; client: WorkClient; registry: HistoryRegistry },
+  deps: { pool: Pool; client: WorkClient; registry: HistoryRegistry } & Partial<Pick<WorkContext, 'env' | 'clock'>>,
   jobId: string,
 ): Promise<SharedHistoryResult> {
   const deferred = await withConnection(deps.pool, async (tx) => {
@@ -222,12 +224,23 @@ export async function advanceSharedHistory(
     work,
     deps.registry,
     proof,
+    deps.env && deps.clock ? { env: deps.env, clock: deps.clock } : undefined,
   );
   return withConnection(deps.pool, async (tx) => {
     await tx.query('BEGIN');
     try {
       await tx.query('SELECT job_id FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE', [jobId]);
       await barrier(tx, job);
+      if (gap === IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE || gap === 'identity-source-consumer-custody-pending') {
+        // Keep this exact selected cursor for bounded native continuation. The service's
+        // ordinary ten-second lease cadence applies; no completed frontier is reset and
+        // no new job/account scan or immediate retry is introduced.
+        await tx.query("UPDATE core.preference_history_job SET next_run=now()+interval '10 seconds' WHERE job_id=$1", [
+          jobId,
+        ]);
+        await tx.query('COMMIT');
+        return result('more', gap);
+      }
       if (!gap)
         gap = await recordHistoryReceivingProof(tx, proof, job.scan_partition, decodeLocator('durable-work/v1', work));
       await scannedArtifact(tx, job, 'durable-work/v1', work, gap);

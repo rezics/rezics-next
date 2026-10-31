@@ -1,11 +1,13 @@
 import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
-import { lockHistoryBarrier } from './receiving.ts';
+import { lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
 import { sealHistoryAccount } from './gates.ts';
 import type { WorkClient } from '../work/client.ts';
 import { decodeLocator } from './locator.ts';
 import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
-import { AGENT_IDENTITY_SDK_RETIREMENT } from './agent-identity-retirement.ts';
+import { AGENT_IDENTITY_SDK_RETIREMENT, advanceAgentIdentityConsumerMaintenance } from './agent-identity-retirement.ts';
+import type { AgentIdentityWorkSource } from './agent-identity-source.ts';
+import type { WorkContext } from '../work/registry.ts';
 import { readAgentIdentitySDKFence, type AgentIdentitySDKRetirementReceipt } from './agent-identity-sdk-fence.ts';
 import canonicalize from 'canonicalize';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
@@ -98,6 +100,8 @@ async function minimizeIdentitySDKWork(
   custodyId: string,
   locator: Buffer,
   barrier: HistoryBarrier,
+  context: HistoryReceivingContext,
+  maintenance?: Pick<WorkContext, 'env' | 'clock'> & { source: AgentIdentityWorkSource },
 ): Promise<string | null> {
   const saved = await withConnection(
     pool,
@@ -124,8 +128,20 @@ async function minimizeIdentitySDKWork(
     !saved.owner_ready ||
     saved.request !== null ||
     saved.scope !== null
-  )
+  ) {
+    if (maintenance)
+      return advanceAgentIdentityConsumerMaintenance(
+        { pool, client, env: maintenance.env, clock: maintenance.clock },
+        {
+          partition: job.partition_no,
+          locator: { artifactType: 'durable-work/v1', workId: custodyId },
+          accounts: maintenance.source.accounts,
+        },
+        barrier,
+        context,
+      );
     return AGENT_IDENTITY_SDK_RETIREMENT.gap;
+  }
   const receipt = saved.sdk_retirement_receipt;
   if (
     job.account_route !== barrier.accountRoute ||
@@ -134,7 +150,6 @@ async function minimizeIdentitySDKWork(
   )
     return 'identity-sdk-retirement-barrier-changed';
   // This path runs under the existing caller deadline, including SDK and physical probes.
-  const context = { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) };
   if (job.partition_no !== 0) return 'identity-sdk-receiving-home-mismatch';
   const before = await readAgentIdentitySDKFence(pool, client, receipt, context);
   if (before.state === 'pending') return before.gap;
@@ -196,6 +211,7 @@ export async function minimizeHistoryWork(
   locator: Buffer,
   registry: HistoryRegistry,
   barrier: HistoryBarrier,
+  maintenance?: Pick<WorkContext, 'env' | 'clock'>,
 ): Promise<string | null> {
   const key = decodeLocator('durable-work/v1', locator);
   if (key.artifactType !== 'durable-work/v1') throw new TypeError('Invalid durable locator');
@@ -203,7 +219,17 @@ export async function minimizeHistoryWork(
   const mapping = await withConnection(pool, (tx) => resolveAgentIdentitySDKWork(tx, key.workId));
   const sdkWorkId = mapping?.workflowId ?? key.workId;
   if (mapping?.gap) return mapping.gap;
-  if (mapping) return minimizeIdentitySDKWork(pool, client, job, key.workId, locator, barrier);
+  if (mapping)
+    return minimizeIdentitySDKWork(
+      pool,
+      client,
+      job,
+      key.workId,
+      locator,
+      barrier,
+      { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) },
+      maintenance && mapping.source ? { ...maintenance, source: mapping.source } : undefined,
+    );
   const prepared = await withConnection(pool, async (tx): Promise<string | null> => {
     await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
     try {
