@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { createKernelClient } from '@rezics/client';
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import {
@@ -257,13 +257,13 @@ test('Selected Collection publication communicates zero one and many selected it
     Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
   const previousGetLocale = getLocale;
   const { createRoot } = await import('react-dom/client');
-  const host = window.document.createElement('div');
+  const host = window.document.createElement('div') as HTMLElement;
   window.document.body.append(host);
-  const root = createRoot(host as unknown as HTMLElement);
+  const root = createRoot(host);
   const source = publicationExample.source;
   if (source.state !== 'ready') throw new Error('Expected the existing disclosed selection example');
   const candidates = publicationCandidates(source.page);
-  let renderPage = () => createElement('div');
+  let renderPage: () => ReactNode = () => null;
   const router = createRouter({
     routeTree: createRootRoute({ component: () => renderPage() }),
     history: createMemoryHistory({ initialEntries: ['/en/collections/publication-example/publish'] }),
@@ -300,10 +300,10 @@ test('Selected Collection publication communicates zero one and many selected it
             },
           });
         await act(async () => root.render(createElement(RouterProvider, { router, key: `${locale}:${count}` })));
-        const checkboxes = host.querySelectorAll('input[type="checkbox"]');
+        const checkboxes = host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
         const confirmation = checkboxes[checkboxes.length - 1]!;
         const publish = Array.from(host.querySelectorAll('button')).find(
-          (button: any) => button.textContent === m.library_publication_publish(),
+          (button) => button.textContent === m.library_publication_publish(),
         )!;
         for (let index = 0; index < count; index++) await click(checkboxes[index]!);
         const text = new Intl.NumberFormat(locale).format(count);
