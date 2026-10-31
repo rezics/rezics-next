@@ -1,3 +1,4 @@
+import { mixedResultKindNavigation } from './search.stories';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { getLocale } from '../paraglide/runtime.js';
@@ -89,6 +90,24 @@ export const TopRated: Story = {
   render: () => <PageStory visitor="Signed Out" path={pagePaths['search-rating']} />,
 };
 
+export const MixedCards: Story = {
+  render: () => <PageStory visitor="Signed Out" path="/search?q=Mira" />,
+  play: async (context) => {
+    await pageReady(context);
+    const main = within(context.canvasElement).getByRole('main');
+    await within(main).findByText('Mira Reading Room');
+    await expect(main.querySelectorAll('[data-slot="discovery-results"] > li')).toHaveLength(4);
+    await mixedResultKindNavigation(context);
+    const canvas = within(context.canvasElement);
+    if (window.matchMedia('(max-width: 767px)').matches)
+      await userEvent.click(canvas.getByRole('button', { name: m.search_label() }));
+    else await userEvent.click(canvas.getByRole('combobox', { name: m.search_label() }));
+    const input = canvas.getByRole('combobox', { name: m.search_label() });
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Mira unavailable{Enter}');
+    await expect(await canvas.findByText(m.search_failed())).toBeVisible();
+  },
+};
 export const MixedUnavailable: Story = {
   render: () => <PageStory visitor="Signed Out" path="/search?q=Mira%20unavailable" />,
   play: async (context) => {

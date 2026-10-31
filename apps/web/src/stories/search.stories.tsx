@@ -5,6 +5,7 @@ import { PageStory, pagePaths, pageReady } from './page';
 
 const meta = {
   title: 'Pages/Discovery/Search',
+  excludeStories: ['mixedResultKindNavigation'],
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;
@@ -36,39 +37,24 @@ export const ResultFilters: Story = {
   },
 };
 
-export const MixedCards: Story = {
-  render: () => <PageStory visitor="Signed Out" path="/search?q=Mira" />,
-  play: async (context) => {
-    await pageReady(context);
-    const main = within(context.canvasElement).getByRole('main');
-    await within(main).findByText('Mira Reading Room');
-    await expect(main.querySelectorAll('[data-slot="discovery-results"] > li')).toHaveLength(4);
-    const results = within(main);
-    const navigation = await results.findByRole('navigation', { name: m.search_result_kinds() });
-    const links = within(navigation);
-    const all = links.getByRole('link', { name: m.search_kind_navigation_all() });
-    const account = links
-      .getAllByRole('link')
-      .find(
-        (link) => new URL(link.getAttribute('href')!, window.location.href).searchParams.get('kinds') === 'account',
-      )!;
-    await expect(all).toHaveAttribute('aria-current', 'page');
-    await userEvent.click(account);
-    await waitFor(() =>
-      expect(links.getByRole('link', { name: account.textContent! })).toHaveAttribute('aria-current', 'page'),
-    );
-    await expect(links.getByRole('link', { name: m.search_kind_navigation_all() })).not.toHaveAttribute('aria-current');
-    await userEvent.click(links.getByRole('link', { name: m.search_kind_navigation_all() }));
-    await waitFor(() =>
-      expect(links.getByRole('link', { name: m.search_kind_navigation_all() })).toHaveAttribute('aria-current', 'page'),
-    );
-    const canvas = within(context.canvasElement);
-    if (window.matchMedia('(max-width: 767px)').matches)
-      await userEvent.click(canvas.getByRole('button', { name: m.search_label() }));
-    else await userEvent.click(canvas.getByRole('combobox', { name: m.search_label() }));
-    const input = canvas.getByRole('combobox', { name: m.search_label() });
-    await userEvent.clear(input);
-    await userEvent.type(input, 'Mira unavailable{Enter}');
-    await expect(await canvas.findByText(m.search_failed())).toBeVisible();
-  },
+// Extend the existing canonical mixed-results story without changing its catalogue identity.
+export const mixedResultKindNavigation: NonNullable<Story['play']> = async (context) => {
+  const main = within(context.canvasElement).getByRole('main');
+  const results = within(main);
+  const navigation = await results.findByRole('navigation', { name: m.search_result_kinds() });
+  const links = within(navigation);
+  const all = links.getByRole('link', { name: m.search_kind_navigation_all() });
+  const account = links
+    .getAllByRole('link')
+    .find((link) => new URL(link.getAttribute('href')!, window.location.href).searchParams.get('kinds') === 'account')!;
+  await expect(all).toHaveAttribute('aria-current', 'page');
+  await userEvent.click(account);
+  await waitFor(() =>
+    expect(links.getByRole('link', { name: account.textContent! })).toHaveAttribute('aria-current', 'page'),
+  );
+  await expect(links.getByRole('link', { name: m.search_kind_navigation_all() })).not.toHaveAttribute('aria-current');
+  await userEvent.click(links.getByRole('link', { name: m.search_kind_navigation_all() }));
+  await waitFor(() =>
+    expect(links.getByRole('link', { name: m.search_kind_navigation_all() })).toHaveAttribute('aria-current', 'page'),
+  );
 };
