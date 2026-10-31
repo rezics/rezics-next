@@ -227,9 +227,7 @@ export const PhoneSheetKeyboardSubmission: Story = {
     await userEvent.type(input, 'Prince');
     await userEvent.keyboard('{Enter}');
     await expect(context.args.onNavigate).toHaveBeenCalledTimes(1);
-    await expect(context.args.onNavigate).toHaveBeenCalledWith(
-      `/${getLocale()}/search?type=schema%3ABook&q=Prince`,
-    );
+    await expect(context.args.onNavigate).toHaveBeenCalledWith(`/${getLocale()}/search?type=schema%3ABook&q=Prince`);
     await expect(canvas.queryByRole('dialog')).toBeNull();
     await expect(input).toHaveAttribute('aria-expanded', 'false');
   },
