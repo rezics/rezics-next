@@ -10,7 +10,7 @@ type Component = {
   id: string;
   path: string;
   stories: { id: string; snippet?: string }[];
-  reactDocgen?: { props: Record<string, unknown> };
+  reactDocgen?: { props: Record<string, unknown>; definedInFile: string };
 };
 type Reply = {
   error?: unknown;
@@ -145,6 +145,7 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
       const components = Object.values(manifest.components);
       const component = components.find((candidate) => candidate.stories.some((story) => story.id === selected!.id));
       expect(component?.path).toEndWith(source);
+      expect(component?.reactDocgen?.definedInFile).toStartWith(`${root}/${workspace}/src/`);
       expect(Object.keys(component?.reactDocgen?.props ?? {}).length).toBeGreaterThan(0);
       // Every manifest-tagged canonical story remains reachable, including nested owner stories.
       const storyIds = new Set(components.flatMap((candidate) => candidate.stories.map((story) => story.id)));
