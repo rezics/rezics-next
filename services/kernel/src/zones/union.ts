@@ -1,7 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
 import {
-  compareZoneKeys, zoneUnavailable,
-  type ZoneCandidate, type ZoneKey, type ZoneMembership, type ZonePending,
+  compareZoneKeys,
+  zoneUnavailable,
+  type ZoneCandidate,
+  type ZoneKey,
+  type ZoneMembership,
+  type ZonePending,
 } from './membership.ts';
 
 /** One in-progress range, not a vector of owner cursors or verdicts. `next` counts actually discovered
@@ -17,7 +21,12 @@ export type ZoneUnionPosition = {
   discovery?: Discovery;
   exhausted: boolean;
 };
-export const initialUnionPosition = (basis: string): ZoneUnionPosition => ({ basis, after: null, rows: [], exhausted: false });
+export const initialUnionPosition = (basis: string): ZoneUnionPosition => ({
+  basis,
+  after: null,
+  rows: [],
+  exhausted: false,
+});
 
 /** Settle only the range completely discovered by EVERY source. Independent true settles OR,
  * but cannot justify advancing beyond another stream's covered watermark. Unused input is reread.
@@ -42,11 +51,18 @@ export async function advanceZoneUnion(
   for (let round = 0; round < 3; round++) {
     const discovery = position.discovery ?? { next: 0, rows: [], covered: null, exhausted: true };
     while (discovery.next < membership.streams.length) {
-      if (remaining() <= finalReserve + 1 || !membership.prefixAvailable() ||
-        (membership.order !== 'id' && prefixes >= 3)) return result();
+      if (
+        remaining() <= finalReserve + 1 ||
+        !membership.prefixAvailable() ||
+        (membership.order !== 'id' && prefixes >= 3)
+      )
+        return result();
       const index = discovery.next;
-      const quota = Math.min(99, 2 * (limit - position.rows.length) + 1,
-        Math.max(1, Math.floor((remaining() - finalReserve) / 2)));
+      const quota = Math.min(
+        99,
+        2 * (limit - position.rows.length) + 1,
+        Math.max(1, Math.floor((remaining() - finalReserve) / 2)),
+      );
       const page = await membership.streams[index]!.prefix(position.after, quota);
       prefixes++;
       let previous = position.after;
@@ -62,7 +78,7 @@ export async function advanceZoneUnion(
         discovery.exhausted = false;
       }
       const groups = new Map<string, ZoneCandidate>();
-      for (const row of [...discovery.rows, ...page.rows.map(row => ({ ...row, source: index }))]) {
+      for (const row of [...discovery.rows, ...page.rows.map((row) => ({ ...row, source: index }))]) {
         if (discovery.covered && compare(row.key, discovery.covered) > 0) continue;
         const prior = groups.get(row.id);
         if (prior && compare(row.key, prior.key) !== 0) return zoneUnavailable();
@@ -111,8 +127,11 @@ export async function advanceZoneUnion(
   }
   return result();
   function result() {
-    return { position, advanced: !isDeepStrictEqual(position, original),
-      complete: position.rows.length >= limit || position.exhausted };
+    return {
+      position,
+      advanced: !isDeepStrictEqual(position, original),
+      complete: position.rows.length >= limit || position.exhausted,
+    };
   }
 }
 
@@ -122,8 +141,11 @@ export async function advanceZoneUnion(
 export async function revalidateZoneUnion(membership: ZoneMembership, position: ZoneUnionPosition): Promise<boolean> {
   if (membership.basis !== position.basis) return false;
   for (const [index, row] of position.rows.entries()) {
-    const result = await membership.contains(row.id,
-      position.pending?.subject === row.id ? position.pending : undefined, row.source);
+    const result = await membership.contains(
+      row.id,
+      position.pending?.subject === row.id ? position.pending : undefined,
+      row.source,
+    );
     if (result.value !== true) {
       if (result.pending) position.pending = result.pending;
       if (result.value === false) {
