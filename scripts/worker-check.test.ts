@@ -25,6 +25,7 @@ import {
   scopeRootTypecheck,
   startWorkerCheck,
   startControllerWorkerCheck,
+  controllerProofExecutionArgv,
   stopWorkerCheck,
   waitWorkerCheck,
   requestWorkerCheckCancellation,
@@ -2909,6 +2910,43 @@ function reserveControllerProof(root: string, argv: string[]): ControllerProofBi
   writeAtomicJson(controllerProofReservationPath(registry, binding.token), { version: 1, state: 'reserved', binding });
   return binding;
 }
+
+test('controller proof execution derivation admits only the selected saved wrapper syntax and preserves plain argv', () => {
+  const binding = reserveControllerProof(overloadFixture(), [
+    'bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test', 'tests/once.test.ts',
+  ]);
+  const execution = controllerProofExecutionArgv(binding);
+  expect(execution).toEqual(['--local', '--', 'bun', 'test', 'tests/once.test.ts']);
+  execution.push('changed.test.ts');
+  expect(binding.argv).toEqual(['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test', 'tests/once.test.ts']);
+  for (const argv of [
+    ['bun', 'test', 'tests/once.test.ts'],
+    ['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/once.test.ts'],
+    ['--local', process.execPath, '-e', 'process.exit(0)', '', '$literal; `text`'],
+  ]) {
+    const actual = controllerProofExecutionArgv({ ...binding, argv });
+    expect(actual).toEqual(argv);
+    expect(actual).not.toBe(argv);
+  }
+  for (const argv of [
+    ...['./scripts/worker-check.ts', '/foreign/scripts/worker-check.ts', 'scripts/../scripts/worker-check.ts',
+      'foreign/worker-check.ts'].map((path) => ['bun', path, ...binding.argv.slice(2)]),
+    ['bun', 'run', ...binding.argv.slice(1)],
+    ['env', ...binding.argv],
+    ['sh', '-c', binding.argv.join(' ')],
+    ['bun', 'scripts/worker-check.ts', '--', 'bun', 'test', 'tests/once.test.ts'],
+    ['bun', 'scripts/worker-check.ts', '--local', '--returns', 'out', '--', 'bun', 'test', 'tests/once.test.ts'],
+    ['bun', 'scripts/worker-check.ts', '--local', 'bun', 'test', 'tests/once.test.ts'],
+    binding.argv.slice(0, 6),
+    [...binding.argv, '--timeout', '1000'],
+    [...binding.argv.slice(0, 6), '../escape.test.ts'],
+    [...binding.argv.slice(0, 6), '/absolute.test.ts'],
+    [...binding.argv.slice(0, 6), '*.test.ts'],
+    [...binding.argv.slice(0, 6), 'tests/once.test.ts; echo wrong'],
+    [...binding.argv.slice(0, 4), ...binding.argv],
+  ]) expect(() => controllerProofExecutionArgv({ ...binding, argv })).toThrow('unsupported controller proof wrapper');
+  expect(() => controllerProofExecutionArgv({ ...binding, attempt: 0 })).toThrow();
+});
 
 async function withControllerProofEnvironment(
   binding: ControllerProofBindingV1,

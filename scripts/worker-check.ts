@@ -577,6 +577,43 @@ function validateProofOwner(binding: ControllerProofBindingV1): void {
   }
 }
 
+/** Derive execution without changing the saved original or interpreting shell text. */
+export function controllerProofExecutionArgv(binding: ControllerProofBindingV1): string[] {
+  const { argv } = validateControllerProofBinding(binding);
+  if (!argv.some((arg) => /(?:^|[/\\\s])worker-check\.ts(?:$|\s)/.test(arg))) return [...argv];
+  const prefix = ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test'];
+  const files = argv.slice(prefix.length);
+  if (
+    prefix.some((arg, index) => argv[index] !== arg) ||
+    files.length === 0 ||
+    files.some(
+      (file) =>
+        !/^(?:[\w@.-]+\/)*[\w@.-]+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file) ||
+        file.split('/').some((part) => part === '.' || part === '..' || part.startsWith('-')),
+    )
+  ) {
+    throw new Error('worker-check: unsupported controller proof wrapper original');
+  }
+  return argv.slice(2);
+}
+
+function validateProofExecutionSource(binding: ControllerProofBindingV1): void {
+  const execution = controllerProofExecutionArgv(binding);
+  if (JSON.stringify(execution) === JSON.stringify(binding.argv)) return;
+  // The pure derivation recognizes syntax; execution additionally requires the canonical captured files.
+  for (const path of ['scripts/worker-check.ts', ...execution.slice(4)]) {
+    const entry = proofGit(binding.cwd, ['ls-tree', binding.sourceTree, '--', path]);
+    const file = join(binding.cwd, path);
+    if (
+      !/^100(?:644|755) blob [0-9a-f]+\t/.test(entry) ||
+      !lstatSync(file).isFile() ||
+      realpathSync(file) !== file
+    ) {
+      throw new Error('worker-check: proof wrapper and explicit tests must be canonical tracked files');
+    }
+  }
+}
+
 /** Must be called under the logical fence before every physical incarnation can execute. */
 function validateProofRecord(record: CheckRecord): ControllerProofState | undefined {
   if (record.controllerProof === undefined) return undefined;
@@ -603,6 +640,7 @@ function validateProofRecord(record: CheckRecord): ControllerProofState | undefi
     throw new Error('worker-check: controller proof physical binding changed or was revoked');
   }
   validateProofSource(binding);
+  validateProofExecutionSource(binding);
   return state;
 }
 
@@ -699,6 +737,7 @@ export async function startControllerWorkerCheck(value: ControllerProofBindingV1
         try {
           validateProofOwner(binding);
           validateProofSource(binding, true);
+          validateProofExecutionSource(binding);
         } catch (error) {
           return refuse(String(error));
         }
@@ -970,14 +1009,15 @@ function overloadRerunCommand(argv: readonly string[], files: string[], cwd: str
 /** Derive a bound overload rerun from original argv and its real failure log, retaining wrapper options. */
 function controllerOverloadArgv(record: CheckRecord): string[] {
   const binding = validateControllerProofBinding(record.controllerProof);
+  const execution = controllerProofExecutionArgv(binding);
   let index = 0;
-  while (binding.argv[index] === '--local' || binding.argv[index] === '--returns') {
-    index += binding.argv[index] === '--returns' ? 2 : 1;
+  while (execution[index] === '--local' || execution[index] === '--returns') {
+    index += execution[index] === '--returns' ? 2 : 1;
   }
-  if (binding.argv[index] === '--') index += 1;
-  const command = binding.argv.slice(index);
+  if (execution[index] === '--') index += 1;
+  const command = execution.slice(index);
   const failure = overloadFailure(checkLogContents(join(binding.cwd, record.log)));
-  if (!failure?.files.length) return [...binding.argv];
+  if (!failure?.files.length) return execution;
   let testRoot = binding.cwd;
   for (let position = 1; position < command.length; position += 1) {
     if (command[position] === '--cwd' && command[position + 1]) testRoot = resolve(binding.cwd, command[position + 1]!);
@@ -985,11 +1025,11 @@ function controllerOverloadArgv(record: CheckRecord): string[] {
   }
   const tracked = new Set(proofGit(binding.cwd, ['ls-tree', '-rz', '--name-only', binding.sourceTree]).split('\0'));
   if (failure.files.some((file) => !tracked.has(relative(binding.cwd, resolve(testRoot, file))))) {
-    return [...binding.argv];
+    return execution;
   }
   const subset = overloadRerunCommand(command, failure.files, binding.cwd);
-  if (!subset) return [...binding.argv];
-  return [...validateControllerProofBinding({ ...binding, argv: [...binding.argv.slice(0, index), ...subset] }).argv];
+  if (!subset) return execution;
+  return [...validateControllerProofBinding({ ...binding, argv: [...execution.slice(0, index), ...subset] }).argv];
 }
 
 function checkLogContents(file: string): string {
@@ -3338,7 +3378,8 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
   const physicalRunId = physicalArgument ?? initial.physicalRunId;
   if (!isPhysicalRunId(physicalRunId))
     throw new Error('worker-check: detached check has no valid physical run identity');
-  const executionArgv = initial.physicalArgv ?? initial.argv;
+  const executionArgv = initial.physicalArgv ??
+    (initial.controllerProof ? controllerProofExecutionArgv(initial.controllerProof) : initial.argv);
   if (
     !Array.isArray(executionArgv) ||
     executionArgv.length === 0 ||
@@ -3374,7 +3415,7 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
       runnerHost: hostname(),
       runnerIdentity: identity,
     };
-    const history = physicalRecordFor(updated, identity, hostname(), executionArgv);
+    const history = physicalRecordFor(updated, identity);
     writeRecord(updated);
     writePhysicalRecord(history);
     const registry = registryForStart(process.env, updated.ownership);

@@ -148,6 +148,15 @@ Git root, full HEAD commit/tree and clean captured tracked blobs. Argument bound
 characters are retained; arguments are limited to 1,024 entries, 4,096 characters each and 16 KiB of encoded JSON.
 Untracked logs and generated returns are outside the captured tracked source; tracked gitlinks are unsupported.
 
+`controllerProofExecutionArgv(binding): string[]` is the pure, shape-validating execution derivation. Plain originals
+retain every argument. The sole admitted saved wrapper prefix is
+`bun scripts/worker-check.ts --local -- bun test`, followed by safe explicit test/spec paths. It derives
+`--local -- bun test <files...>` for the existing option parser; local placement remains mandatory. Execution also
+requires the canonical tracked repository wrapper and tracked test files under the exact captured source validation.
+Foreign or aliased wrapper paths, recursive wrappers, extra flags, shell text and other wrapper shapes are refused
+before physical intent. The original wrapper argv stays in binding, registration and the logical record; the producer
+derives execution internally on start and rerun, without invoking another wrapper or allocating another logical UUID.
+
 Exclusive registry token/check claims and monotonic custody under the existing logical check fence prevent duplicate
 execution and revival. Exact replay returns the existing result path. `refused-never-started` requires a durable
 pre-intent refusal that prevents every physical incarnation; loss of registry, claims, intent, registration or result
