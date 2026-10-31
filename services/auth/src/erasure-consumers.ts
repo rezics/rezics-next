@@ -7,7 +7,12 @@ import type {
 } from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { isRefusal } from './workflows.ts';
-import { registrationActivationResult, registrationExpiryResult } from './native-proof-minimization.ts';
+import {
+  originalLifecycleOutcome,
+  registrationActivationResult,
+  registrationExpiryResult,
+} from './native-proof-minimization.ts';
+import { createNativeLifecycleResults } from './native-lifecycle-results.ts';
 
 /** Close only the native credential CAS consumer. The locked source receipt,
  * immutable stage binding and permanent producer fence are the proof; neither
@@ -224,6 +229,7 @@ async function continueRegistration(
     if (original) {
       if (
         original.kind !== 'activation' ||
+        !originalLifecycleOutcome(original) ||
         original.accountId !== row.account_id ||
         original.reservationId !== row.reservation_id ||
         original.authnEpoch !== 1 ||
@@ -321,6 +327,100 @@ async function continueRegistration(
 
 const recoveryBindingSql = `jsonb_build_array(w.reference,w.receipt_id,w.account_id,w.establishment_id,
   w.effect_commitment,w.authn_epoch)`;
+type Recovery = {
+  reference: string;
+  receipt_id: string;
+  account_id: string;
+  establishment_id: string;
+  effect_commitment: string;
+  authn_epoch: number;
+};
+const recoveryBinding = (row: Recovery) => [
+  row.reference,
+  row.receipt_id,
+  row.account_id,
+  row.establishment_id,
+  row.effect_commitment,
+  row.authn_epoch,
+];
+
+async function continueRecovery(
+  pool: Pool,
+  obligationId: string,
+  reference: string,
+  runtime: NativeConsumerRuntime,
+): Promise<boolean> {
+  const row = (
+    await pool.query<Recovery>(
+      `SELECT reference,receipt_id,account_id,establishment_id,effect_commitment,authn_epoch
+       FROM auth_recovery_establishment WHERE reference=$1`,
+      [reference],
+    )
+  ).rows[0];
+  if (!row) return false;
+  // The original producer derives its exact operation key from Auth's source.
+  // All checkouts end before the foreign read, even with a single-slot pool.
+  const original = await createNativeLifecycleResults({ database: pool, access: runtime.access }).readRecoveryResult(
+    reference,
+  );
+  if (original) {
+    if (
+      original.kind !== 'recovery' ||
+      !originalLifecycleOutcome(original) ||
+      original.accountId !== row.account_id ||
+      original.establishmentId !== row.establishment_id ||
+      original.outcome.value.accountId !== row.account_id ||
+      original.outcome.value.receiptId !== row.receipt_id ||
+      original.outcome.value.minimumAuthnEpoch !== String(row.authn_epoch)
+    )
+      return false;
+    return consumeOriginal(pool, obligationId, async (connection) => {
+      const source = await connection.query(
+        `SELECT 1 FROM auth_recovery_establishment w WHERE w.reference=$1
+         AND ${recoveryBindingSql}=$2::jsonb FOR UPDATE`,
+        [reference, JSON.stringify(recoveryBinding(row))],
+      );
+      if (!source.rowCount) return false;
+      // Keep the same original Auth floor and receipt, independently of any
+      // subsequent account deletion/fence. No deadline is renewed here.
+      const floor = await connection.query(
+        `SELECT 1 FROM auth_barrier_proof WHERE reference=$1 AND account_id=$2
+         AND purpose='recovery' AND previous_epoch=$3-1 AND applied_at IS NOT NULL FOR UPDATE`,
+        [reference, row.account_id, row.authn_epoch],
+      );
+      const receipt = await connection.query(
+        `SELECT 1 FROM auth_effect_receipt WHERE receipt_id=$1 AND account_id=$2
+         AND purpose='recovery' AND minimum_authn_epoch=$3 FOR UPDATE`,
+        [row.receipt_id, row.account_id, row.authn_epoch],
+      );
+      if (!floor.rowCount || !receipt.rowCount) return false;
+      const result = JSON.stringify({ outcome: 'released', sourceResult: original.outcome.value });
+      await connection.query(
+        `INSERT INTO auth_native_consumer_proof (store,key,binding,result)
+         VALUES ('recovery',$1,$2::jsonb,$3::jsonb) ON CONFLICT (store,key) DO NOTHING`,
+        [reference, JSON.stringify(recoveryBinding(row)), result],
+      );
+      return !!(
+        await connection.query(
+          `SELECT 1 FROM auth_native_consumer_proof WHERE store='recovery' AND key=$1
+           AND binding=$2::jsonb AND result=$3::jsonb`,
+          [reference, JSON.stringify(recoveryBinding(row)), result],
+        )
+      ).rowCount;
+    });
+  }
+  // Only a still-live fenced source can use the existing completion authority.
+  // A deleted account or a completed (unfenced) source cannot replace a missing
+  // original result. Unknown/expired sources remain pending in that authority.
+  const current = await runtime.access.readAccount(row.account_id);
+  if (!current || current.accountId !== row.account_id || current.state !== 'active' || !current.fenced)
+    return false;
+  if (!runtime.completeRecovery) return false;
+  await runtime.completeRecovery(reference);
+  await recordRecoveryCompletion(pool, reference);
+  return true;
+}
+
 export async function recoveryTerminal(connection: PoolClient, reference: string): Promise<boolean> {
   return !!(
     await connection.query(
@@ -331,22 +431,13 @@ export async function recoveryTerminal(connection: PoolClient, reference: string
     )
   ).rowCount;
 }
-export async function recordRecoveryCompletion(
-  pool: Pool,
-  reference: string,
-  sourceDeleted?: { accountId: string; state: 'deleted'; fenced: true },
-): Promise<void> {
+export async function recordRecoveryCompletion(pool: Pool, reference: string): Promise<void> {
   await pool.query(
     `INSERT INTO auth_native_consumer_proof (store,key,binding,result)
     SELECT 'recovery',w.reference,${recoveryBindingSql},$2::jsonb
     FROM auth_recovery_establishment w WHERE w.reference=$1
     ON CONFLICT (store,key) DO NOTHING`,
-    [
-      reference,
-      JSON.stringify(
-        sourceDeleted ? { outcome: 'source-deleted', sourceResult: sourceDeleted } : { outcome: 'released' },
-      ),
-    ],
+    [reference, JSON.stringify({ outcome: 'released' })],
   );
 }
 
@@ -375,30 +466,8 @@ export async function continueNativeConsumer(
         { operationId: locator.key, obligationId },
         runtime.access,
       );
-    if (locator.store === 'auth_recovery_establishment' && runtime.completeRecovery) {
-      const source = (
-        await pool.query<{ account_id: string }>(
-          'SELECT account_id FROM auth_recovery_establishment WHERE reference=$1',
-          [locator.key],
-        )
-      ).rows[0];
-      if (!source) return false;
-      const current = await runtime.access.readAccount(source.account_id);
-      if (!current || current.accountId !== source.account_id) return false;
-      if (current.state === 'deleted' && current.fenced) {
-        // The actual source's deleted state is immutable and clearFence can
-        // never write it again. This is a present source row, never account absence.
-        await recordRecoveryCompletion(pool, locator.key, {
-          accountId: current.accountId,
-          state: 'deleted',
-          fenced: true,
-        });
-        return true;
-      }
-      await runtime.completeRecovery(locator.key);
-      await recordRecoveryCompletion(pool, locator.key);
-      return true;
-    }
+    if (locator.store === 'auth_recovery_establishment')
+      return await continueRecovery(pool, obligationId, locator.key, runtime);
     return false;
   } catch (error) {
     if (isRefusal(error)) return false;

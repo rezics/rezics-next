@@ -2225,17 +2225,24 @@ remains refused; this path never restores its former authority.
   reuse after cleanup. Credential application takes the client/role admissions
   before its source-row lock, matching erasure's producer order. Surviving
   credentials are never reapplied or removed on behalf of an erased client owner.
-- Recovery records release only after the actual trusted completion port returns.
-  A lost result remains retryable through that port. The actual immutable deleted,
-  fenced source account also proves that its establishment cannot clear a fence
-  later; a missing account, Auth user absence, local expiry or erasure marker does
-  not. Proof binds the exact reference, receipt, establishment, commitment and floor.
-  The private original recovery-result reader is available, but this continuation
-  still uses the existing completion/deleted-source branches; adoption of the
-  original outcome here remains incomplete. Its required original recovery
-  witness/result remains after establishment evidence expires. This pending source
-  boundary supplies no retention exception for creation descriptors, request JSON,
-  handles or approval business payload.
+- Recovery consumes a lost committed result through the producer's
+  `readRecoveryResult(reference)` composition and actual private original-result
+  port. The producer derives the original operation key from Auth's establishment;
+  Auth independently compares the account, receipt, establishment and floor with
+  that returned outcome. Both lifecycle consumers validate the original native
+  partition, epoch, position and transaction ID before recording a proof. No
+  checkout spans the foreign read. Recovery reacquires the same erasure obligation
+  lock as activation, then locks and compares its exact six-field establishment
+  binding, original Auth floor and receipt. Its existing terminal proof records
+  `{outcome: 'released', sourceResult: original.outcome.value}` in the consumer's
+  separate transaction, without invoking `completeRecovery` or reading current
+  account state as proof. A missing, imported, minimized or mismatched original
+  retains the establishment and `native-release` pending state even after account
+  deletion. Only a still-active fenced source may use the ordinary live completion
+  port, which keeps its existing authenticated establishment and expiry checks.
+  No source lifetime or user/session disclosure authority is renewed. This supplies
+  no retention exception for creation descriptors, request JSON, handles or
+  approval business payload.
 - Reduction retains the original operation, delivered ordinal page and count of
   acknowledged owners. The permanent erased-client obligation admits only that
   existing gate. Continuation uses each original page/owner source key, its actual
@@ -2291,14 +2298,12 @@ remains pending, including after native work and the original consent cutoff:
 - Unknown historical registration bindings, lost operator-reservation identities,
   unresolved delivered reduction owners and unknown native requests remain pending.
   Their surviving release witnesses are not discarded or called complete.
-- Access activation resolves the current Auth provisioning evidence before reading
-  its committed native command receipt. If that original evidence has expired or
-  is unavailable, an unrecorded activation result cannot be recovered through the
-  existing port. The exact stage/provisioning witness stays pending. Likewise an
-  unrecorded recovery result whose exact establishment is unavailable or superseded
-  cannot be inferred from elapsed time or a workflow terminal status. Recovering
-  those results needs a source-owned committed-result boundary; this composition
-  does not invent one or authorize a new effect.
+- Ordinary live activation/recovery still resolve their current Auth evidence
+  before command replay. Mechanical erasure consumers separately use the private
+  original-result reader described above for genuine lost committed results.
+  An absent original result or source capability retains the exact stage,
+  provisioning or establishment witness; elapsed time, current account state and
+  workflow terminal status cannot reconstruct that result or authorize a new effect.
 - External delivery-provider diagnostics/logs and backup restore deletion replay
   are specified by the [external custody and restore contract](src/external-custody-contract.md).
   Its source inventory, owner allocation, admission, proof and rollout are adopted;

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import type { OriginalLifecycleRequest } from '@rezics/auth-contract';
 import { failNativeQueries, nativeFixture, password, scopes, type Person } from './support/erasure-native.ts';
@@ -679,8 +679,10 @@ test('real recovery establishment survives a lost committed source reply and obt
   await eventually(async () => f.deliveries.some((message) => message.accountId === subject.accountId));
   const token = f.deliveries.find((message) => message.accountId === subject.accountId)!.token;
   const complete = f.bindings.trustedAccess.completeRecovery!;
+  let completionCalls = 0;
   let reference = '';
   f.bindings.trustedAccess.completeRecovery = async (value) => {
+    completionCalls++;
     reference = value;
     await complete(value);
     throw new Error('Lost real recovery completion reply');
@@ -702,12 +704,103 @@ test('real recovery establishment survives a lost committed source reply and obt
     )
   ).rows[0]!;
   expect(witness).toBeDefined();
+  const readOriginal = f.bindings.trustedAccess.readOriginalLifecycleResult;
+  if (!readOriginal) throw new Error('Missing installed original recovery result reader');
+  const observed: { request?: OriginalLifecycleRequest } = {};
+  f.bindings.trustedAccess.readOriginalLifecycleResult = async (input) => {
+    observed.request = structuredClone(input);
+    return readOriginal(input);
+  };
+  let result;
+  try {
+    result = await f.host.nativeLifecycleResults.readRecoveryResult(reference);
+  } finally {
+    f.bindings.trustedAccess.readOriginalLifecycleResult = readOriginal;
+  }
+  if (!result || result.kind !== 'recovery' || !observed.request || observed.request.kind !== 'recovery')
+    throw new Error('Missing genuine original recovery outcome');
+  const original = result;
+  const request = observed.request;
+  expect(request).toEqual({
+    kind: 'recovery',
+    accountId: subject.accountId,
+    operationKey: createHash('sha256')
+      .update(JSON.stringify(['access-recovery-completion-v1', witness.account_id, witness.receipt_id, witness.establishment_id]))
+      .digest('hex'),
+    source: { establishmentReference: reference },
+  });
+  expect(original.accountId).toBe(witness.account_id);
+  expect(original.establishmentId).toBe(witness.establishment_id);
+  expect(original.outcome.value).toEqual({
+    accountId: witness.account_id,
+    receiptId: witness.receipt_id,
+    minimumAuthnEpoch: String(witness.authn_epoch),
+  });
+  const receipt = (
+    await f.kernel.query(
+      `SELECT epoch,position::text,transaction_id,response FROM core.receipt
+       WHERE partition_no=$1 AND transaction_id=$2 AND command_kind='access.authentication-established'`,
+      [original.outcome.partition, original.outcome.transactionId],
+    )
+  ).rows[0]!;
+  expect(original.outcome).toEqual({
+    partition: original.outcome.partition,
+    epoch: receipt.epoch,
+    position: receipt.position,
+    transactionId: receipt.transaction_id,
+    value: receipt.response,
+  });
+  expect(await readOriginal(request)).toEqual(original);
   expect(
     (await f.pool.query("SELECT 1 FROM auth_native_consumer_proof WHERE store='recovery' AND key=$1", [reference]))
       .rowCount,
   ).toBe(0);
   const recovered = await f.login(subject, 'erasure-web', scopes, replacement);
-  expect((await f.delete(recovered)).status).toBe(200);
+  const ports = f.bindings.workflowPorts;
+  const consumerReader = ports.readOriginalLifecycleResult;
+  if (!consumerReader) throw new Error('Missing installed native consumer reader');
+  // The host retains the actual completion function. Its first effect-path
+  // source read observes every invocation, including that retained function.
+  const resolve = f.host.service.internal.resolveRecoveryEstablishment;
+  let completionEffectReads = 0;
+  f.host.service.internal.resolveRecoveryEstablishment = async (value) => {
+    completionEffectReads++;
+    return resolve(value);
+  };
+  try {
+    ports.readOriginalLifecycleResult = async (input) =>
+      input.kind === 'recovery' && input.source.establishmentReference === reference ? null : consumerReader(input);
+    try {
+      expect((await f.delete(recovered)).status).toBe(200);
+      await eventually(
+        async () =>
+          (await f.pool.query('SELECT pending_code FROM auth_erasure WHERE account_id=$1', [subject.accountId]))
+            .rows[0]?.pending_code === 'native-release',
+      );
+      expect((await ports.readAccount(subject.accountId))!).toMatchObject({ state: 'deleted', fenced: true });
+      expect(
+        (await f.pool.query("SELECT 1 FROM auth_native_consumer_proof WHERE store='recovery' AND key=$1", [reference]))
+          .rowCount,
+      ).toBe(0);
+      expect(
+        (await f.pool.query('SELECT 1 FROM auth_recovery_establishment WHERE reference=$1', [reference])).rowCount,
+      ).toBe(1);
+      expect(completionEffectReads).toBe(0);
+    } finally {
+      ports.readOriginalLifecycleResult = consumerReader;
+    }
+    expect(await consumerReader(request)).toEqual(original);
+    await f.host.workflows.close();
+    await f.host.workflows.start();
+    await eventually(
+      async () =>
+        !(await f.pool.query('SELECT 1 FROM auth_recovery_establishment WHERE reference=$1', [reference])).rowCount,
+    );
+    expect(completionCalls).toBe(1);
+    expect(completionEffectReads).toBe(0);
+  } finally {
+    f.host.service.internal.resolveRecoveryEstablishment = resolve;
+  }
   expect(
     (await f.pool.query('SELECT 1 FROM auth_recovery_establishment WHERE reference=$1', [reference])).rowCount,
   ).toBe(0);
@@ -725,9 +818,18 @@ test('real recovery establishment survives a lost committed source reply and obt
     witness.authn_epoch,
   ]);
   expect(proof.result).toEqual({
-    outcome: 'source-deleted',
-    sourceResult: { accountId: subject.accountId, state: 'deleted', fenced: true },
+    outcome: 'released',
+    sourceResult: original.outcome.value,
   });
+  expect(
+    (
+      await f.kernel.query(
+        `SELECT epoch,position::text,transaction_id,response FROM core.receipt
+         WHERE partition_no=$1 AND transaction_id=$2 AND command_kind='access.authentication-established'`,
+        [original.outcome.partition, original.outcome.transactionId],
+      )
+    ).rows[0],
+  ).toEqual(receipt);
   await expect(complete(reference)).rejects.toThrow();
 }, 180_000);
 

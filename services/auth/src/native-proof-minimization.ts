@@ -1,4 +1,4 @@
-import type { WorkflowFence, WorkflowResponsibility } from '@rezics/auth-contract';
+import type { OriginalLifecycleResult, WorkflowFence, WorkflowResponsibility } from '@rezics/auth-contract';
 
 /** Literal source results, before their last native reader retires. These are
  * never reconstructed from current state or from the minimized proof skeleton. */
@@ -11,6 +11,27 @@ export type RegistrationExpiryResult = {
 
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+/** Validate the original port's native provenance, never the consumer's commit.
+ * Source routing and original receipt/floor equality remain the reader's job. */
+export function originalLifecycleOutcome(result: OriginalLifecycleResult): boolean {
+  const outcome = result.outcome;
+  return (
+    object(outcome) &&
+    Object.keys(outcome).length === 5 &&
+    Number.isInteger(outcome.partition) &&
+    outcome.partition >= 0 &&
+    outcome.partition < 4096 &&
+    Number.isSafeInteger(outcome.epoch) &&
+    outcome.epoch > 0 &&
+    typeof outcome.position === 'string' &&
+    /^[1-9][0-9]{0,18}$/.test(outcome.position) &&
+    BigInt(outcome.position) <= 9223372036854775807n &&
+    typeof outcome.transactionId === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(outcome.transactionId) &&
+    object(outcome.value) &&
+    Object.keys(outcome.value).length === (result.kind === 'activation' ? 1 : 3)
+  );
 }
 export function registrationActivationResult(value: unknown): value is { accountId: string } {
   return object(value) && Object.keys(value).length === 1 && typeof value.accountId === 'string' && !!value.accountId;
