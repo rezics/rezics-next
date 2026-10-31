@@ -432,8 +432,8 @@ async function mutate<T>(
       const [row] = await query<{ generation: string }>(
         tx,
         l,
-        "SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2 AND state='active' FOR UPDATE",
-        [input.route, input.collectionId],
+        "SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2 AND state='active' AND curator_account_id=$3 AND collection_id::text || ':' || extract(epoch FROM created_at)::text=$4 FOR UPDATE",
+        [input.route, input.collectionId, metadata.curatorAccountId, metadata.incarnation],
       );
       if (!row || row.generation !== metadata.sourceGeneration) return null;
       if (metadata.authority === 'private_builtin') {

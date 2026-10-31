@@ -307,7 +307,13 @@ async function revalidateWorkingOwnerFilter(
   const current = await work.compose((allowance) =>
     readNativeCollectionMetadata(dependencies.pool, metadata, { deadline, allowance }),
   );
-  if (!current.metadata || nativeSourceFence(current.metadata) !== nativeSourceFence(metadata))
+  if (
+    !current.metadata ||
+    current.metadata.curatorAccountId !== metadata.curatorAccountId ||
+    current.metadata.ruleRevision !== metadata.ruleRevision ||
+    current.metadata.ruleReleaseDigest !== metadata.ruleReleaseDigest ||
+    nativeSourceFence(current.metadata) !== nativeSourceFence(metadata)
+  )
     throw ownerFilterUnavailable();
   const prepared = await work.compose((allowance) =>
     createCollectionSource(dependencies).prepare({ ...binding.input, allowance }),

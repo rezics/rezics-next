@@ -561,7 +561,10 @@ async function currentSource(client: QueryClient, metadata: NativeCollectionMeta
   if (!current || current.state !== 'active') throw new ProblemError('not_found');
   if (
     current.incarnation !== metadata.incarnation ||
+    current.curatorAccountId !== metadata.curatorAccountId ||
     current.sourceGeneration !== metadata.sourceGeneration ||
+    current.ruleRevision !== metadata.ruleRevision ||
+    current.ruleReleaseDigest !== metadata.ruleReleaseDigest ||
     current.factFence !== metadata.factFence ||
     current.authority !== metadata.authority ||
     current.outputGeneration !== metadata.outputGeneration
