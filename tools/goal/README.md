@@ -795,6 +795,20 @@ migration where those values were already present, but their missing arrival tim
 filters and age thresholds cannot classify a row whose creation time is unknown, and missing Goal/document metadata
 stays unknown rather than being inferred from summary text, read time or row id.
 
+#### Width governor
+
+The independent manager-host sweep checks worker width every minute and delivers at most one wakeable width event per
+Goal in each UTC 15-minute bucket when fewer than ten current attempts have live process identities and known ready,
+pending-start, held or stopped work exists. The event reports the current running and Codex counts, unknown process
+evidence, and known work counts. Ready, held, waiting and stale-identity attempts do not count as running. The manager
+is alerted based on confirmed live workers only; unknown process identities remain explicit evidence and do not
+suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The manager
+chooses whether to recover, reshape or dispatch real work under the existing source-ownership, current-attempt and
+physical-custody guards; stopped work is never restarted automatically. Runtime metadata cannot observe unsubmitted
+work, so Markdown files outside the task inventory are not counted. The notice uses the existing manager turn
+allowance, with at most one width event per Goal per 15-minute bucket; paused, budget-limited and completed managers
+are protected.
+
 ### Check result reuse
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the

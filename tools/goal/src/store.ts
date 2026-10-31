@@ -88,6 +88,12 @@ CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.stat
     version: 7,
     sql: `CREATE TABLE worker_worktree_cleanup (task_id TEXT PRIMARY KEY REFERENCES worker_tasks(id), body TEXT NOT NULL);`,
   },
+  {
+    module: 'worker',
+    version: 8,
+    sql: `CREATE INDEX worker_tasks_width_current ON worker_tasks(sequence)
+      WHERE json_extract(body, '$.state') IN ('ready', 'held', 'running', 'stopped');`,
+  },
   checkResultsMigration(),
   {
     module: 'dev-verifier',

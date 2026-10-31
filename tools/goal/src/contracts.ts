@@ -129,6 +129,7 @@ export interface GateOutcomeSink {
 
 /** Only these wake a manager. Passing gates, merges, environment reruns and automatic consultations are recorded only. */
 export type ManagerEventKind =
+  | 'width'
   | 'question'
   | 'decision'
   | 'blocker'

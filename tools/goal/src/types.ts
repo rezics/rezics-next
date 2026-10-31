@@ -422,4 +422,4 @@ export type FailureClass =
   | 'repeated-assertion'
   | 'new-failure'
   | 'early-stop'
-  | ManagerEventKind;
+  | Exclude<ManagerEventKind, 'width'>;
