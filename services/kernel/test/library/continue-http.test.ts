@@ -82,7 +82,7 @@ test('Continue FULL preserves the unavailable result when the current native Sou
     const response = await world.request('alice', 'GET', '/v1/libraryContinue?view=FULL');
     expect(response.status).toBe(503);
     expect(['dependency_unavailable', 'semantic_not_ready']).toContain(
-      (response.body as Record<string, unknown>).code,
+      String((response.body as Record<string, unknown>).code),
     );
     expect(response.body).not.toHaveProperty('subjects');
     expect(response.body).not.toHaveProperty('next');

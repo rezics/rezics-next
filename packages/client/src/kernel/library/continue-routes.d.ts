@@ -25,6 +25,42 @@ export declare const continuePageSchema: import("typebox").TObject<{
             startedAt: import("typebox").TString;
             completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>, import("typebox").TNull]>;
+        subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+            id: import("typebox").TString;
+            type: import("typebox").TString;
+            types: import("typebox").TArray<import("typebox").TString>;
+            label: import("typebox").TUnion<[import("typebox").TObject<{
+                value: import("typebox").TString;
+                language: import("typebox").TString;
+            }>, import("typebox").TNull]>;
+            creativeWork: import("typebox").TBoolean;
+            cover: import("typebox").TUnion<[import("typebox").TObject<{
+                media: import("typebox").TString;
+                width: import("typebox").TInteger;
+                height: import("typebox").TInteger;
+                placeholder: import("typebox").TObject<{
+                    thumbhash: import("typebox").TString;
+                    color: import("typebox").TString;
+                }>;
+                variants: import("typebox").TArray<import("typebox").TObject<{
+                    format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                    width: import("typebox").TInteger;
+                }>>;
+                focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                    x: import("typebox").TNumber;
+                    y: import("typebox").TNumber;
+                }>, import("typebox").TNull]>;
+                credit: import("typebox").TObject<{
+                    rightsHolder: import("typebox").TString;
+                    via: import("typebox").TObject<{
+                        name: import("typebox").TString;
+                        url: import("typebox").TString;
+                    }>;
+                    license: import("typebox").TString;
+                    obligations: import("typebox").TArray<import("typebox").TString>;
+                }>;
+            }>, import("typebox").TNull]>;
+        }>, import("typebox").TNull]>>;
     }>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
 }>;
@@ -3965,6 +4001,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
     query: import("typebox").TObject<{
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
+        view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
     }>;
     transform: unknown;
     response: {
@@ -3989,6 +4026,42 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     startedAt: import("typebox").TString;
                     completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 }>, import("typebox").TNull]>;
+                subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    types: import("typebox").TArray<import("typebox").TString>;
+                    label: import("typebox").TUnion<[import("typebox").TObject<{
+                        value: import("typebox").TString;
+                        language: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    creativeWork: import("typebox").TBoolean;
+                    cover: import("typebox").TUnion<[import("typebox").TObject<{
+                        media: import("typebox").TString;
+                        width: import("typebox").TInteger;
+                        height: import("typebox").TInteger;
+                        placeholder: import("typebox").TObject<{
+                            thumbhash: import("typebox").TString;
+                            color: import("typebox").TString;
+                        }>;
+                        variants: import("typebox").TArray<import("typebox").TObject<{
+                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                            width: import("typebox").TInteger;
+                        }>>;
+                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                            x: import("typebox").TNumber;
+                            y: import("typebox").TNumber;
+                        }>, import("typebox").TNull]>;
+                        credit: import("typebox").TObject<{
+                            rightsHolder: import("typebox").TString;
+                            via: import("typebox").TObject<{
+                                name: import("typebox").TString;
+                                url: import("typebox").TString;
+                            }>;
+                            license: import("typebox").TString;
+                            obligations: import("typebox").TArray<import("typebox").TString>;
+                        }>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TNull]>>;
             }>>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;
@@ -4071,7 +4144,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
             bearerAuth: never[];
         }[];
     };
-}, {}, "/v1/libraryContinue">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, query, admission, job }: {
+}, {}, "/v1/libraryContinue">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, query, admission, job, request }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -4101,6 +4174,42 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     revision: number;
                     startedAt: string;
                     completedAt: string | null;
+                } | null;
+                subject?: {
+                    id: string;
+                    type: string;
+                    types: string[];
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                    creativeWork: boolean;
+                    cover: {
+                        media: string;
+                        width: number;
+                        height: number;
+                        placeholder: {
+                            thumbhash: string;
+                            color: string;
+                        };
+                        variants: {
+                            format: "avif" | "webp";
+                            width: number;
+                        }[];
+                        focalPoint: {
+                            x: number;
+                            y: number;
+                        } | null;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: string[];
+                        };
+                    } | null;
                 } | null;
             }[];
             next: string | null;
@@ -4183,6 +4292,42 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     startedAt: string;
                     completedAt: string | null;
                 } | null;
+                subject?: {
+                    id: string;
+                    type: string;
+                    types: string[];
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                    creativeWork: boolean;
+                    cover: {
+                        media: string;
+                        width: number;
+                        height: number;
+                        placeholder: {
+                            thumbhash: string;
+                            color: string;
+                        };
+                        variants: {
+                            format: "avif" | "webp";
+                            width: number;
+                        }[];
+                        focalPoint: {
+                            x: number;
+                            y: number;
+                        } | null;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: string[];
+                        };
+                    } | null;
+                } | null;
             }[];
             next: string | null;
         };
@@ -4246,6 +4391,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         query: import("typebox").TObject<{
             limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
+            view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         }>;
         transform: unknown;
         response: {
@@ -4270,6 +4416,42 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         startedAt: import("typebox").TString;
                         completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>, import("typebox").TNull]>;
+                    subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        type: import("typebox").TString;
+                        types: import("typebox").TArray<import("typebox").TString>;
+                        label: import("typebox").TUnion<[import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>, import("typebox").TNull]>;
+                        creativeWork: import("typebox").TBoolean;
+                        cover: import("typebox").TUnion<[import("typebox").TObject<{
+                            media: import("typebox").TString;
+                            width: import("typebox").TInteger;
+                            height: import("typebox").TInteger;
+                            placeholder: import("typebox").TObject<{
+                                thumbhash: import("typebox").TString;
+                                color: import("typebox").TString;
+                            }>;
+                            variants: import("typebox").TArray<import("typebox").TObject<{
+                                format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                                width: import("typebox").TInteger;
+                            }>>;
+                            focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                                x: import("typebox").TNumber;
+                                y: import("typebox").TNumber;
+                            }>, import("typebox").TNull]>;
+                            credit: import("typebox").TObject<{
+                                rightsHolder: import("typebox").TString;
+                                via: import("typebox").TObject<{
+                                    name: import("typebox").TString;
+                                    url: import("typebox").TString;
+                                }>;
+                                license: import("typebox").TString;
+                                obligations: import("typebox").TArray<import("typebox").TString>;
+                            }>;
+                        }>, import("typebox").TNull]>;
+                    }>, import("typebox").TNull]>>;
                 }>>;
                 next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             }>;
@@ -4379,6 +4561,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
     query: {
         limit?: number;
         cursor?: string;
+        view?: "BASIC" | "FULL";
     };
     params: {};
     headers: Record<string, string | undefined>;
@@ -4401,6 +4584,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
     query: import("typebox").TObject<{
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
+        view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
     }>;
     transform: ({ request, set }: {
         server: import("elysia").Server | null;
@@ -4432,6 +4616,42 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         revision: number;
                         startedAt: string;
                         completedAt: string | null;
+                    } | null;
+                    subject?: {
+                        id: string;
+                        type: string;
+                        types: string[];
+                        label: {
+                            value: string;
+                            language: string;
+                        } | null;
+                        creativeWork: boolean;
+                        cover: {
+                            media: string;
+                            width: number;
+                            height: number;
+                            placeholder: {
+                                thumbhash: string;
+                                color: string;
+                            };
+                            variants: {
+                                format: "avif" | "webp";
+                                width: number;
+                            }[];
+                            focalPoint: {
+                                x: number;
+                                y: number;
+                            } | null;
+                            credit: {
+                                rightsHolder: string;
+                                via: {
+                                    name: string;
+                                    url: string;
+                                };
+                                license: string;
+                                obligations: string[];
+                            };
+                        } | null;
                     } | null;
                 }[];
                 next: string | null;
@@ -4514,6 +4734,42 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         startedAt: string;
                         completedAt: string | null;
                     } | null;
+                    subject?: {
+                        id: string;
+                        type: string;
+                        types: string[];
+                        label: {
+                            value: string;
+                            language: string;
+                        } | null;
+                        creativeWork: boolean;
+                        cover: {
+                            media: string;
+                            width: number;
+                            height: number;
+                            placeholder: {
+                                thumbhash: string;
+                                color: string;
+                            };
+                            variants: {
+                                format: "avif" | "webp";
+                                width: number;
+                            }[];
+                            focalPoint: {
+                                x: number;
+                                y: number;
+                            } | null;
+                            credit: {
+                                rightsHolder: string;
+                                via: {
+                                    name: string;
+                                    url: string;
+                                };
+                                license: string;
+                                obligations: string[];
+                            };
+                        } | null;
+                    } | null;
                 }[];
                 next: string | null;
             };
@@ -4577,6 +4833,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
             query: import("typebox").TObject<{
                 limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
                 cursor: import("typebox").TOptional<import("typebox").TString>;
+                view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
             }>;
             transform: unknown;
             response: {
@@ -4601,6 +4858,42 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             startedAt: import("typebox").TString;
                             completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         }>, import("typebox").TNull]>;
+                        subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            id: import("typebox").TString;
+                            type: import("typebox").TString;
+                            types: import("typebox").TArray<import("typebox").TString>;
+                            label: import("typebox").TUnion<[import("typebox").TObject<{
+                                value: import("typebox").TString;
+                                language: import("typebox").TString;
+                            }>, import("typebox").TNull]>;
+                            creativeWork: import("typebox").TBoolean;
+                            cover: import("typebox").TUnion<[import("typebox").TObject<{
+                                media: import("typebox").TString;
+                                width: import("typebox").TInteger;
+                                height: import("typebox").TInteger;
+                                placeholder: import("typebox").TObject<{
+                                    thumbhash: import("typebox").TString;
+                                    color: import("typebox").TString;
+                                }>;
+                                variants: import("typebox").TArray<import("typebox").TObject<{
+                                    format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                                    width: import("typebox").TInteger;
+                                }>>;
+                                focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                                    x: import("typebox").TNumber;
+                                    y: import("typebox").TNumber;
+                                }>, import("typebox").TNull]>;
+                                credit: import("typebox").TObject<{
+                                    rightsHolder: import("typebox").TString;
+                                    via: import("typebox").TObject<{
+                                        name: import("typebox").TString;
+                                        url: import("typebox").TString;
+                                    }>;
+                                    license: import("typebox").TString;
+                                    obligations: import("typebox").TArray<import("typebox").TString>;
+                                }>;
+                            }>, import("typebox").TNull]>;
+                        }>, import("typebox").TNull]>>;
                     }>>;
                     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 }>;
@@ -4712,6 +5005,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         query: {
             limit?: number;
             cursor?: string;
+            view?: "BASIC" | "FULL";
         };
         params: {};
         headers: Record<string, string | undefined>;
@@ -4753,6 +5047,42 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     startedAt: import("typebox").TString;
                     completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 }>, import("typebox").TNull]>;
+                subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    types: import("typebox").TArray<import("typebox").TString>;
+                    label: import("typebox").TUnion<[import("typebox").TObject<{
+                        value: import("typebox").TString;
+                        language: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    creativeWork: import("typebox").TBoolean;
+                    cover: import("typebox").TUnion<[import("typebox").TObject<{
+                        media: import("typebox").TString;
+                        width: import("typebox").TInteger;
+                        height: import("typebox").TInteger;
+                        placeholder: import("typebox").TObject<{
+                            thumbhash: import("typebox").TString;
+                            color: import("typebox").TString;
+                        }>;
+                        variants: import("typebox").TArray<import("typebox").TObject<{
+                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                            width: import("typebox").TInteger;
+                        }>>;
+                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                            x: import("typebox").TNumber;
+                            y: import("typebox").TNumber;
+                        }>, import("typebox").TNull]>;
+                        credit: import("typebox").TObject<{
+                            rightsHolder: import("typebox").TString;
+                            via: import("typebox").TObject<{
+                                name: import("typebox").TString;
+                                url: import("typebox").TString;
+                            }>;
+                            license: import("typebox").TString;
+                            obligations: import("typebox").TArray<import("typebox").TString>;
+                        }>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TNull]>>;
             }>>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;

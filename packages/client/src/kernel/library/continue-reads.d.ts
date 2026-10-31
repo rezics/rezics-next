@@ -2,11 +2,13 @@ import { type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { OwnerQueryDependencies } from './builtin-runtime-query.ts';
 import type { ContinueActiveSession } from './continue-source.ts';
+import type { SubjectSummary } from '../semantic/summaries.ts';
 export type ContinueSubject = Readonly<{
     subjectId: string;
     state: string | null;
     lastActivityAt: string;
     activeProgressSession: ContinueActiveSession | null;
+    subject?: SubjectSummary | null;
 }>;
 export type ContinuePage = {
     subjects: ContinueSubject[];
@@ -20,5 +22,6 @@ export declare function createContinueReads(deps: Omit<OwnerQueryDependencies, '
     list(actor: Actor, query: {
         limit?: number;
         cursor?: string;
-    }, deadline: number): Promise<ContinuePage>;
+        view?: 'BASIC' | 'FULL';
+    }, deadline: number, languages?: readonly string[]): Promise<ContinuePage>;
 };
