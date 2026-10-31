@@ -1,9 +1,19 @@
 import { useRecentSearches } from '../recent';
 import { Cover, coverRatio, type CoverRatio } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Kbd } from '@rezics/ui/shadcn/kbd';
 import { cn } from '@rezics/ui/utils';
 import { ArrowLeft, ArrowUp, Search, SlidersHorizontal } from 'lucide-react';
-import { useEffect, useId, useReducer, useRef, useState, type ComponentProps, type RefObject } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+  type ComponentProps,
+  type RefObject,
+} from 'react';
 import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
@@ -21,6 +31,7 @@ import type { SearchRealmDiscoveryLoader } from '../realm-discovery-section';
 import type { RecentEntry, RecentHistory } from '../recent-history';
 import { nextSuggestion, startTypeahead, validSuggestionText } from '../typeahead';
 import type { SearchScope } from './types';
+import { canEnterHeaderSearch } from './keyboard';
 
 const controlFocus =
   'focus-visible:ring-0 focus-visible:border-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-2';
@@ -44,11 +55,13 @@ export type HeaderSearchProps = {
   slots?: { ask?: null };
   /** Use the same full-screen sheet when an enclosing surface requires it. */
   presentation?: 'responsive' | 'sheet';
+  /** Opt in only for the default ShellSearch owner; isolated instances never claim the document shortcut. */
+  keyboardShortcut?: boolean;
 };
 
 type ViewProps = Pick<
   HeaderSearchProps,
-  'locale' | 'fields' | 'suggestionRatio' | 'history' | 'discovery' | 'loadRealmDiscovery'
+  'locale' | 'fields' | 'suggestionRatio' | 'history' | 'discovery' | 'loadRealmDiscovery' | 'keyboardShortcut'
 > & {
   id: string;
   state: HeaderSearchState;
@@ -96,6 +109,7 @@ export function HeaderSearchView({
   loadRealmDiscovery,
   onRecent,
   onQuery,
+  keyboardShortcut = false,
 }: ViewProps) {
   const { expanded, phoneSheet, scope, query, suggestions, result, activeIndex } = state;
   const action = headerSearchAction(locale, scope);
@@ -136,6 +150,11 @@ export function HeaderSearchView({
       aria-label={phoneSheet ? m.search_label() : undefined}
       className="relative min-w-0 w-full"
     >
+      {keyboardShortcut && (
+        <span id={`${id}-keyboard-help`} className="sr-only">
+          {m.header_search_keyboard_help()}
+        </span>
+      )}
       <button
         ref={triggerRef}
         type="button"
@@ -143,6 +162,9 @@ export function HeaderSearchView({
         aria-labelledby={`${id}-trigger-label`}
         aria-expanded={expanded}
         aria-controls={`${id}-form`}
+        aria-keyshortcuts={keyboardShortcut ? 'Control+k Meta+k' : undefined}
+        aria-describedby={keyboardShortcut ? `${id}-keyboard-help` : undefined}
+        title={keyboardShortcut ? m.header_search_keyboard_help() : undefined}
         className={cn(
           'header-search-trigger flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-border/60 bg-muted/50 px-4 text-start text-sm text-muted-foreground outline-none hover:bg-accent lg:hidden',
           controlFocus,
@@ -153,6 +175,11 @@ export function HeaderSearchView({
         <span id={`${id}-trigger-label`} className="truncate">
           {query || (scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global())}
         </span>
+        {keyboardShortcut && (
+          <Kbd aria-hidden="true" className="ms-auto shrink-0">
+            Ctrl/⌘ K
+          </Kbd>
+        )}
       </button>
       <form
         {...formProps}
@@ -216,13 +243,24 @@ export function HeaderSearchView({
               aria-expanded={expanded}
               aria-controls={expanded ? `${id}-suggestions` : undefined}
               aria-activedescendant={expanded && subjects[activeIndex] ? `${id}-option-${activeIndex}` : undefined}
-              aria-describedby={expanded && status ? `${id}-status` : undefined}
+              aria-keyshortcuts={keyboardShortcut ? 'Control+k Meta+k' : undefined}
+              aria-describedby={
+                [keyboardShortcut && `${id}-keyboard-help`, expanded && status && `${id}-status`]
+                  .filter(Boolean)
+                  .join(' ') || undefined
+              }
+              title={keyboardShortcut ? m.header_search_keyboard_help() : undefined}
               placeholder={scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global()}
               value={query}
               autoComplete="off"
               maxLength={256}
               className="h-11 min-w-0 flex-1 rounded-lg border-0 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:-outline-offset-2"
             />
+            {keyboardShortcut && (
+              <Kbd aria-hidden="true" className="shrink-0">
+                Ctrl/⌘ K
+              </Kbd>
+            )}
           </div>
           {expanded && (
             <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-2">
@@ -371,6 +409,7 @@ function HeaderSearchController({
   history,
   discovery,
   loadRealmDiscovery,
+  keyboardShortcut = false,
 }: HeaderSearchProps) {
   const [state, dispatch] = useReducer(reduceHeaderSearchState, undefined, () =>
     initialHeaderSearchState(scope, initialQuery),
@@ -380,6 +419,8 @@ function HeaderSearchController({
   const form = useRef<HTMLFormElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const returningFocus = useRef(false);
+  const pendingFocus = useRef<'input' | 'return' | null>(null);
+  const priorFocus = useRef<HTMLElement | null>(null);
   const request = useRef<(() => void) | null>(null);
   const [attempt, retry] = useReducer((value: number) => value + 1, 0);
   const [composing, setComposing] = useState(false);
@@ -418,27 +459,58 @@ function HeaderSearchController({
     dispatch({ type: reason });
     // A new opening reads current native data; no result survives dismissal or account navigation.
     dispatch({ type: 'invalidate' });
-    if (restore) {
-      returningFocus.current = true;
-      if (state.phoneSheet)
-        requestAnimationFrame(() => {
-          if (window.matchMedia(compactSearch).matches) trigger.current?.focus();
-          else input.current?.focus();
-          returningFocus.current = false;
-        });
-      else {
-        input.current?.focus();
-        returningFocus.current = false;
-      }
-    }
+    pendingFocus.current = restore ? 'return' : null;
+    if (!restore) priorFocus.current = null;
   };
   const open = () => {
+    if (!state.expanded) {
+      const active = input.current?.ownerDocument.activeElement;
+      priorFocus.current = active instanceof HTMLElement ? active : null;
+      pendingFocus.current = 'input';
+    } else input.current?.focus();
     dispatch({
       type: presentation === 'sheet' || window.matchMedia(compactSearch).matches ? 'open-phone' : 'focus',
     });
     if (state.query.trim() && state.suggestions === 'idle') dispatch({ type: 'query', query: state.query });
-    requestAnimationFrame(() => input.current?.focus());
   };
+  // Focus only after the responsive input/trigger visibility has committed, including Escape restoration.
+  useLayoutEffect(() => {
+    const pending = pendingFocus.current;
+    if (!pending) return;
+    pendingFocus.current = null;
+    returningFocus.current = true;
+    if (pending === 'input') input.current?.focus();
+    else {
+      const prior = priorFocus.current;
+      const fallback =
+        window.matchMedia(compactSearch).matches || presentation === 'sheet' ? trigger.current : input.current;
+      const target =
+        prior?.isConnected &&
+        prior !== prior.ownerDocument.body &&
+        prior.getClientRects().length &&
+        !prior.closest('[inert],[aria-hidden="true"]')
+          ? prior
+          : fallback;
+      target?.focus({ preventScroll: true });
+      if (target?.ownerDocument.activeElement !== target) fallback?.focus({ preventScroll: true });
+      priorFocus.current = null;
+    }
+    returningFocus.current = false;
+  }, [state.expanded, state.phoneSheet, presentation]);
+  useEffect(() => {
+    if (!keyboardShortcut) return;
+    const document = input.current?.ownerDocument;
+    if (!document) return;
+    const shortcut = (event: KeyboardEvent) => {
+      const field = input.current;
+      const entry = state.expanded || !window.matchMedia(compactSearch).matches ? field : trigger.current;
+      if (composing || !field || !entry || !canEnterHeaderSearch(event, field, entry)) return;
+      event.preventDefault();
+      open();
+    };
+    document.addEventListener('keydown', shortcut);
+    return () => document.removeEventListener('keydown', shortcut);
+  }, [keyboardShortcut, composing, state.expanded, state.query, state.suggestions, presentation]);
   useEffect(() => {
     if (!state.expanded) return;
     const outside = (event: PointerEvent) => {
@@ -509,6 +581,7 @@ function HeaderSearchController({
   return (
     <HeaderSearchView
       id={id}
+      keyboardShortcut={keyboardShortcut}
       history={history}
       discovery={discovery}
       loadRealmDiscovery={loadRealmDiscovery}
@@ -566,7 +639,8 @@ function HeaderSearchController({
           setComposing(false);
         },
         onKeyDown: (event) => {
-          if (event.nativeEvent.isComposing) return;
+          if (event.defaultPrevented || composing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
+            return;
           if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !state.expanded) {
             event.preventDefault();
             open();
@@ -611,7 +685,8 @@ function HeaderSearchController({
           if (!state.phoneSheet && !event.currentTarget.contains(event.relatedTarget as Node | null)) close('outside');
         },
         onKeyDown: (event) => {
-          if (event.nativeEvent.isComposing) return;
+          if (event.defaultPrevented || composing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
+            return;
           if (event.key === 'Escape') {
             event.preventDefault();
             event.stopPropagation();

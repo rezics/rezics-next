@@ -22,6 +22,7 @@ export function ShellSearch({ scope }: { scope?: SearchScope } = {}) {
   const params = location.search as Record<string, unknown>;
   return (
     <HeaderSearch
+      keyboardShortcut
       locale={getLocale()}
       history={history}
       scope={scope}

@@ -1,10 +1,12 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser, type Page } from 'playwright';
+import emptySearch from '../src/kernel/recorded/search-empty.json';
 
 let child: ReturnType<typeof Bun.spawn> | undefined;
 let browser: Browser | undefined;
+let origin: string;
 afterAll(async () => {
   await browser?.close();
   if (child) {
@@ -17,8 +19,7 @@ afterAll(async () => {
   }
 });
 
-// Use the existing PageStory route assembly, including AppShell's default ShellSearch and real filter registration.
-test('Header search stays centered and forms one coherent surface across desktop and phone', async () => {
+beforeAll(async () => {
   const port = await new Promise<number>((resolve, reject) => {
     const probe = createServer();
     probe.once('error', reject);
@@ -27,7 +28,7 @@ test('Header search stays centered and forms one coherent surface across desktop
       probe.close((error) => (error ? reject(error) : resolve(port)));
     });
   });
-  const origin = `http://127.0.0.1:${port}`;
+  origin = `http://127.0.0.1:${port}`;
   child = Bun.spawn(['bun', 'run', 'storybook', '--ci', '--host', '127.0.0.1', '--port', String(port)], {
     cwd: join(import.meta.dir, '..'),
     detached: true,
@@ -51,9 +52,13 @@ test('Header search stays centered and forms one coherent surface across desktop
   }
 
   browser = await chromium.launch();
+}, 180_000);
+
+// Use the existing PageStory route assembly, including AppShell's default ShellSearch and real filter registration.
+test('Header search stays centered and forms one coherent surface across desktop and phone', async () => {
   for (const locale of ['en', 'zh-Hans'])
     for (const theme of ['light', 'dark']) {
-      const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
+      const context = await browser!.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
       const page = await context.newPage();
       await page.goto(
         `${origin}/iframe.html?id=pages-discovery-search--typed&viewMode=story&globals=locale:${locale};theme:${theme}`,
@@ -166,3 +171,141 @@ test('Header search stays centered and forms one coherent surface across desktop
       await context.close();
     }
 }, 300_000);
+
+test('A reader can enter and leave the existing header search using a discoverable keyboard shortcut', async () => {
+  for (const locale of ['en', 'zh-Hans'])
+    for (const theme of ['light', 'dark']) {
+      const context = await browser!.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
+      try {
+        const page = await context.newPage();
+        await page.goto(
+          `${origin}/iframe.html?id=pages-discovery-search--typed&viewMode=story&globals=locale:${locale};theme:${theme}`,
+        );
+        await page.locator('html[data-hydrated]').waitFor();
+        await page.getByRole('main').getByRole('heading', { level: 1 }).waitFor();
+        await page.locator('[data-header-search]').getByRole('combobox').waitFor();
+        await keyboardJourney(page, locale);
+      } finally {
+        await context.close();
+      }
+    }
+}, 120_000);
+
+// Extend the same real default composition, retaining every original geometry/filter/phone assertion above.
+async function keyboardJourney(page: Page, locale: string) {
+  const owner = page.locator('[data-header-search]');
+  const input = owner.getByRole('combobox');
+  const origin = page.getByRole('main');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await origin.focus();
+
+  const ignored = await origin.evaluate((element) => {
+    const variants: KeyboardEventInit[] = [
+      {},
+      { ctrlKey: true, repeat: true },
+      { ctrlKey: true, isComposing: true },
+      { ctrlKey: true, keyCode: 229 },
+      { ctrlKey: true, altKey: true },
+      { ctrlKey: true, shiftKey: true },
+      { ctrlKey: true, metaKey: true },
+    ];
+    const results = variants.map((options) => {
+      const event = new KeyboardEvent('keydown', { key: 'k', bubbles: true, cancelable: true, ...options });
+      element.dispatchEvent(event);
+      return !event.defaultPrevented && document.activeElement === element;
+    });
+    const prevented = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true });
+    element.addEventListener('keydown', (event) => event.preventDefault(), { once: true });
+    element.dispatchEvent(prevented);
+    results.push(document.activeElement === element);
+
+    // Unrelated native/custom editors and a focus trap keep their own shortcut and focus.
+    for (const kind of ['input', 'textarea', 'select', 'contenteditable', 'textbox', 'menu', 'trap', 'dialog']) {
+      const container = document.createElement(kind === 'dialog' ? 'dialog' : 'div');
+      const control = document.createElement(['input', 'textarea', 'select'].includes(kind) ? kind : 'button');
+      if (kind === 'contenteditable') container.contentEditable = 'true';
+      if (kind === 'textbox') container.setAttribute('role', 'textbox');
+      if (kind === 'menu') container.setAttribute('role', 'menu');
+      if (kind === 'trap') container.setAttribute('data-focus-trap', 'true');
+      container.append(control);
+      document.body.append(container);
+      if (container instanceof HTMLDialogElement) container.showModal();
+      control.focus();
+      const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true });
+      control.dispatchEvent(event);
+      results.push(!event.defaultPrevented && document.activeElement === control);
+      if (container instanceof HTMLDialogElement) container.close();
+      container.remove();
+    }
+    element.focus();
+    return results;
+  });
+  expect(ignored.every(Boolean)).toBe(true);
+  expect(await owner.getAttribute('data-expanded')).toBe('false');
+
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await origin.focus();
+    await page.keyboard.press(width === 1280 ? 'Control+k' : 'Meta+k');
+    await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'combobox');
+    expect(await input.evaluate((element) => element === document.activeElement)).toBe(true);
+    expect(await owner.count()).toBe(1);
+    expect(await owner.locator('input:not([type="hidden"])').count()).toBe(1);
+    expect(await input.getAttribute('aria-keyshortcuts')).toBe('Control+k Meta+k');
+    expect(await input.getAttribute('aria-describedby')).toContain('keyboard-help');
+    expect(await input.getAttribute('title')).toBeTruthy();
+    if (width === 390) expect(await owner.getAttribute('aria-modal')).toBe('true');
+    await input.fill('Keyboard draft');
+    await page.keyboard.press('Control+k'); // Already in this field: keep the initiating focus target.
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.activeElement?.id === 'main-content');
+    expect(await origin.evaluate((element) => element === document.activeElement)).toBe(true);
+    expect(await owner.getAttribute('data-expanded')).toBe('false');
+    expect(await input.inputValue()).toBe('Keyboard draft');
+    expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
+  }
+
+  // A removed initiator falls back to the compact trigger, rather than focusing a detached node.
+  await page.evaluate(() => {
+    const initiator = document.createElement('button');
+    document.body.append(initiator);
+    initiator.focus();
+    initiator.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true }));
+    initiator.remove();
+  });
+  await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'combobox');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.activeElement?.classList.contains('header-search-trigger'));
+
+  // Keyboard entry still submits the real GET form to its localized route with retained filters, never cursor.
+  await page.keyboard.press('Control+k');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'combobox');
+  const form = owner.getByRole('search');
+  expect(await form.getAttribute('action')).toBe(`/${locale}/search`);
+  const retained = await form
+    .locator('input[type="hidden"]')
+    .evaluateAll((elements) =>
+      elements.map((element) => [(element as HTMLInputElement).name, (element as HTMLInputElement).value]),
+    );
+  expect(retained).toContainEqual(['type', 'schema:Book']);
+  expect(retained.some(([name]) => name === 'cursor')).toBe(false);
+  await input.fill(emptySearch.query);
+  const submitted = form.evaluate(
+    (element) =>
+      new Promise<[string, string][]>((resolve) => {
+        element.addEventListener(
+          'submit',
+          () => resolve(Array.from(new FormData(element as HTMLFormElement).entries()) as [string, string][]),
+          { once: true },
+        );
+      }),
+  );
+  await page.keyboard.press('Enter');
+  expect(await submitted).toEqual([...retained, ['q', emptySearch.query]]);
+  await page
+    .getByRole('main')
+    .getByText(locale === 'en' ? 'No results found.' : '没有找到结果。', { exact: true })
+    .waitFor();
+  expect(await owner.getAttribute('data-expanded')).toBe('false');
+  expect(await input.inputValue()).toBe(emptySearch.query);
+}

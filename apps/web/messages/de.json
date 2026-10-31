@@ -1415,6 +1415,7 @@
   "moderation_appeal_conflict": "Diese Beschwerde wurde bereits bearbeitet. Aktualisiere die Liste, bevor du fortfährst.",
   "header_search_close": "Suche schließen",
   "header_search_filters_unavailable": "Auf dieser Seite sind keine Filter verfügbar.",
+  "header_search_keyboard_help": "Mit Strg+K oder Command+K suchen. Esc schließt die Suche und behält deine Eingabe.",
   "header_search_global": "REZICS durchsuchen",
   "header_search_in_scope": "In {scope} suchen",
   "header_search_loading": "Vorschläge werden geladen…",

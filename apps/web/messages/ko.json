@@ -1415,6 +1415,7 @@
   "moderation_appeal_conflict": "이미 처리된 이의 제기입니다. 계속하기 전에 목록을 새로고침하세요.",
   "header_search_close": "검색 닫기",
   "header_search_filters_unavailable": "이 페이지에서는 필터를 사용할 수 없습니다.",
+  "header_search_keyboard_help": "Ctrl+K 또는 Command+K로 검색하세요. Esc를 누르면 입력한 내용을 유지한 채 닫습니다.",
   "header_search_global": "REZICS 검색",
   "header_search_in_scope": "{scope}에서 검색",
   "header_search_loading": "검색 제안 불러오는 중…",

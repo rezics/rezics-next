@@ -1416,6 +1416,7 @@
   "moderation_appeal_conflict": "此申诉已处理。请刷新列表后再继续。",
   "header_search_close": "关闭搜索",
   "header_search_filters_unavailable": "此页面暂不提供筛选。",
+  "header_search_keyboard_help": "按 Ctrl+K 或 Command+K 搜索；按 Esc 关闭并保留草稿。",
   "header_search_global": "搜索 REZICS",
   "header_search_in_scope": "在 {scope} 中搜索",
   "header_search_loading": "正在加载建议…",

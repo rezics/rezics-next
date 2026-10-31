@@ -1415,6 +1415,7 @@
   "moderation_appeal_conflict": "この異議申し立てはすでに処理されています。続行する前に一覧を更新してください。",
   "header_search_close": "検索を閉じる",
   "header_search_filters_unavailable": "このページでは絞り込みを利用できません。",
+  "header_search_keyboard_help": "Ctrl+K または Command+K で検索。Esc で入力内容を残して閉じます。",
   "header_search_global": "REZICS を検索",
   "header_search_in_scope": "{scope} 内を検索",
   "header_search_loading": "候補を読み込み中…",

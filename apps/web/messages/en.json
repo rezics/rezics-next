@@ -1440,6 +1440,7 @@
   "moderation_appeal_conflict": "This appeal was already resolved. Refresh the queue before continuing.",
   "header_search_close": "Close search",
   "header_search_filters_unavailable": "Filters are not available on this page.",
+  "header_search_keyboard_help": "Ctrl+K or Command+K to search. Esc closes and keeps your draft.",
   "header_search_global": "Search REZICS",
   "header_search_in_scope": "Search in {scope}",
   "header_search_loading": "Loading suggestions…",

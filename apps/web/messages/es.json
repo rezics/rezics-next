@@ -1415,6 +1415,7 @@
   "moderation_appeal_conflict": "Esta apelación ya se resolvió. Actualiza la lista antes de continuar.",
   "header_search_close": "Cerrar búsqueda",
   "header_search_filters_unavailable": "Los filtros no están disponibles en esta página.",
+  "header_search_keyboard_help": "Ctrl+K o Command+K para buscar. Esc cierra la búsqueda y conserva lo escrito.",
   "header_search_global": "Buscar en REZICS",
   "header_search_in_scope": "Buscar en {scope}",
   "header_search_loading": "Cargando sugerencias…",
