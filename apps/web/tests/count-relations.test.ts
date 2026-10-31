@@ -15,8 +15,8 @@ test('one formatter renders exact and lower-bound semantic counts in every local
   }
 });
 
-test('semantic link counts preserve exactness and raise the value to returned items', () => {
-  expect(countFromLinks({ value: 2, exact: true }, 4)).toEqual({ value: 4, relation: 'exact' });
+test('semantic link counts preserve supplied values and exactness', () => {
+  expect(countFromLinks({ value: 2, exact: true }, 4)).toEqual({ value: 2, relation: 'exact' });
   expect(countFromLinks({ value: 7, exact: false }, 4)).toEqual({ value: 7, relation: 'lower_bound' });
   expect(countFromLinks(undefined, 4)).toBeUndefined();
 });
