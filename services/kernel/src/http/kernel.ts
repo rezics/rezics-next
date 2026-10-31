@@ -23,8 +23,6 @@ import {
   type ViewerActionBindings,
 } from '../access/viewer-actions.ts';
 import { contextViewerActionResource, subjectViewerActionResources } from '../semantic/viewer-actions.ts';
-import { fixedGlobalViewerResource } from '../access/fixed-global-viewer-resource.ts';
-import { globalContextAnchor } from '../semantic/context.ts';
 import { accountViewerActionResource } from '../access/account-viewer-actions.ts';
 import { collectionViewerActionResource } from '../library/collection-reads.ts';
 import { realmViewerActionResource } from '../community/realm.ts';
@@ -638,8 +636,6 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     if (viewerResources.has(type)) throw new Error(`${type}: duplicate viewer actions registration`);
     viewerResources.set(type, resource);
   }
-  if (!viewerResources.has('semantic.context'))
-    viewerResources.set('semantic.context', fixedGlobalViewerResource(globalContextAnchor));
   for (const module of dependencies.modules ?? []) module(zones as unknown as ReturnType<typeof createApp>);
   let viewerBindings: ViewerActionBindings;
   viewerActionsRoutes(zones as unknown as ReturnType<typeof createApp>, {

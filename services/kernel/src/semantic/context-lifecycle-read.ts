@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
+import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { viewerActionReadTime } from '../access/index.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
@@ -119,80 +119,95 @@ export async function authorizedContextMetadata(
     context,
   });
   const time = viewerActionReadTime(deps.access, context);
-  const at = authoritativeTimeValue(time);
-  const first = await readNativeContextMetadata(deps.pool, input.ids, input.actor, at, input.deadline);
-  for (const row of first) {
-    const expected = input.expected?.get(row.id);
-    if (expected && (expected.version !== row.version || expected.epoch !== row.epoch))
-      throw new ContextDirectoryPreparingError();
-  }
-  const owners = await activeOwners(deps.pool, first, input.deadline);
-  const byId = new Map(first.map((row) => [row.id, row]));
-  // Final native metadata/grant/current formula revalidation occurs after all foreign anchors are released.
-  const final = await readNativeContextMetadata(deps.pool, input.ids, input.actor, at, input.deadline);
-  const result: ContextDirectoryEntry[] = [];
-  const groups = new Map<number, NativeContextMetadata[]>();
-  for (const row of final) {
-    const before = byId.get(row.id);
-    if (
-      !before ||
-      before.version !== row.version ||
-      before.epoch !== row.epoch ||
-      JSON.stringify(before.owners) !== JSON.stringify(row.owners)
-    )
-      continue;
-    if (row.kind === 'community' && !row.owners.some((id) => owners.has(id))) continue;
-    const home = partitionOf(routeOf(row.id)!);
-    groups.set(home, [...(groups.get(home) ?? []), row]);
-  }
-  for (const [home, rows] of groups) {
-    await withReadTransaction(deps.pool, async (connection) => {
-      const tx = deadlineClient(connection, input.deadline);
-      const owner = await readPartition(tx, home);
-      if (!owner || owner.writeState !== 'active' || rows.some((row) => row.epoch !== owner.epoch))
+  try {
+    const at = authoritativeTimeValue(time);
+    const first = await readNativeContextMetadata(deps.pool, input.ids, input.actor, at, input.deadline);
+    for (const row of first) {
+      const expected = input.expected?.get(row.id);
+      if (expected && (expected.version !== row.version || expected.epoch !== row.epoch))
         throw new ContextDirectoryPreparingError();
-      const current = await tx.query<{ id: string; version: string }>(
-        `SELECT context_id::text AS id,security_revision::text AS version FROM semantic.context
-         WHERE (route,context_id) IN (SELECT * FROM unnest($1::int[],$2::uuid[]))
-           AND (state='active' OR (state='deleted' AND $3::timestamptz<purge_after))`,
-        [rows.map((row) => routeOf(row.id)!), rows.map((row) => row.id), at],
-      );
-      const ids = rows.map((row) => row.id);
-      const read = await decisions.decide(
-        tx,
-        {
-          action: 'context:read',
-          resourceType: 'semantic.context',
-          ids,
-          eligibility: async () => Object.fromEntries(ids.map((id) => [id, true])),
-        },
-        time,
-      );
-      const deleted = rows.filter((row) => row.state === 'deleted');
-      const restore = deleted.length
-        ? await decisions.decide(
-            tx,
-            {
-              action: 'context:restore',
-              resourceType: 'semantic.context',
-              ids: deleted.map((row) => row.id),
-            },
-            time,
-          )
-        : {};
-      const nativeActions = await contextNativeActions(tx, ids, input.actor, time);
-      for (const row of rows) {
-        if (!nativeActions[row.id]?.includes('context:read')) continue;
-        if (!current.rows.some((r) => r.id === row.id && r.version === row.version) || !read[row.id]?.allowed) continue;
-        if (row.state === 'deleted' && (!row.actorOwner || row.id === GLOBAL_CONTEXT || !restore[row.id]?.allowed))
-          continue;
-        const { id, kind, labels, state, deletedAt, purgeAfter } = row;
-        result.push({ id, kind, labels, state, deletedAt, purgeAfter });
-      }
-    });
+    }
+    const owners = await activeOwners(deps.pool, first, input.deadline);
+    const byId = new Map(first.map((row) => [row.id, row]));
+    // Final native metadata/grant/current formula revalidation occurs after all foreign anchors are released.
+    const final = await readNativeContextMetadata(deps.pool, input.ids, input.actor, at, input.deadline);
+    const result: ContextDirectoryEntry[] = [];
+    const groups = new Map<number, NativeContextMetadata[]>();
+    for (const row of final) {
+      const before = byId.get(row.id);
+      if (
+        !before ||
+        before.version !== row.version ||
+        before.epoch !== row.epoch ||
+        JSON.stringify(before.owners) !== JSON.stringify(row.owners)
+      )
+        continue;
+      if (row.kind === 'community' && !row.owners.some((id) => owners.has(id))) continue;
+      const home = partitionOf(routeOf(row.id)!);
+      groups.set(home, [...(groups.get(home) ?? []), row]);
+    }
+    for (const [home, rows] of groups) {
+      await withReadTransaction(deps.pool, async (connection) => {
+        const tx = deadlineClient(connection, input.deadline);
+        const owner = await readPartition(tx, home);
+        if (!owner || owner.writeState !== 'active' || rows.some((row) => row.epoch !== owner.epoch))
+          throw new ContextDirectoryPreparingError();
+        const current = await tx.query<{ id: string; version: string }>(
+          `SELECT context_id::text AS id,security_revision::text AS version FROM semantic.context
+           WHERE (route,context_id) IN (SELECT * FROM unnest($1::int[],$2::uuid[]))
+             AND (state='active' OR (state='deleted' AND $3::timestamptz<purge_after))`,
+          [rows.map((row) => routeOf(row.id)!), rows.map((row) => row.id), at],
+        );
+        const grants = await tx.query<{ id: string; account: string }>(
+          `SELECT resource_id::text AS id,subject_id::text AS account FROM access.resource_role_grant
+           WHERE (route,resource_id) IN (SELECT * FROM unnest($1::int[],$2::uuid[]))
+             AND subject_kind='identity' AND subject_role='' AND grant_role='semantic.context.owner'
+             AND valid @> $3::timestamptz ORDER BY resource_id,subject_id LIMIT 101`,
+          [rows.map((row) => routeOf(row.id)!), rows.map((row) => row.id), at],
+        );
+        if (grants.rows.length > 100) throw new ContextDirectoryPreparingError();
+        const ids = rows.map((row) => row.id);
+        const read = await decisions.decide(
+          tx,
+          {
+            action: 'context:read',
+            resourceType: 'semantic.context',
+            ids,
+            eligibility: async () => Object.fromEntries(ids.map((id) => [id, true])),
+          },
+          time,
+        );
+        const deleted = rows.filter((row) => row.state === 'deleted');
+        const restore = deleted.length
+          ? await decisions.decide(
+              tx,
+              {
+                action: 'context:restore',
+                resourceType: 'semantic.context',
+                ids: deleted.map((row) => row.id),
+              },
+              time,
+            )
+          : {};
+        const nativeActions = await contextNativeActions(tx, ids, input.actor, time);
+        for (const row of rows) {
+          // A grant change after the released Account anchors invalidates this row's prepared evidence.
+          const currentOwners = grants.rows.filter((grant) => grant.id === row.id).map((grant) => grant.account);
+          if (JSON.stringify(currentOwners) !== JSON.stringify(row.owners)) continue;
+          if (!nativeActions[row.id]?.includes('context:read')) continue;
+          if (!current.rows.some((r) => r.id === row.id && r.version === row.version) || !read[row.id]?.allowed) continue;
+          if (row.state === 'deleted' && (!row.actorOwner || row.id === GLOBAL_CONTEXT || !restore[row.id]?.allowed))
+            continue;
+          const { id, kind, labels, state, deletedAt, purgeAfter } = row;
+          result.push({ id, kind, labels, state, deletedAt, purgeAfter });
+        }
+      });
+    }
+    requireAccessDeadline(input.deadline);
+    return result;
+  } finally {
+    releaseOperationalTime(time);
   }
-  requireAccessDeadline(input.deadline);
-  return result;
 }
 
 /** Shared native lifecycle constraints for viewerActions. Access still decides every action. */
