@@ -93,6 +93,33 @@ async function collectionReadyWithHover(context: { canvasElement: HTMLElement })
   if (member) await userEvent.hover(member);
 }
 
+async function compactCollectionReady(context: { canvasElement: HTMLElement }) {
+  await collectionReadyWithHover(context);
+  const canvas = within(context.canvasElement);
+  await expect(canvas.queryByRole('button', { name: m.reaction_like() })).toBeNull();
+  await expect(canvas.queryByRole('button', { name: m.library_subject_save() })).toBeNull();
+  await expect(canvas.queryByText(m.library_collection_social_unavailable())).toBeNull();
+  await expect(canvas.queryByText(m.library_collection_kind_pending())).toBeNull();
+  await expect(canvas.queryByRole('button', { name: new RegExp(m.library_nav_selector()) })).toBeNull();
+  const hero = context.canvasElement.querySelector<HTMLElement>('[data-slot="collection-hero"]');
+  const toolbar = context.canvasElement.querySelector<HTMLElement>('[data-slot="collection-toolbar"]');
+  await expect(hero).toBeVisible();
+  await expect(toolbar).toBeVisible();
+  const view = context.canvasElement.ownerDocument.defaultView!;
+  if (view.innerWidth === 390) {
+    const member = context.canvasElement.querySelector<HTMLElement>('[data-collection-members] [data-slot="list-row"]');
+    await expect(member).toBeVisible();
+    expect(hero!.getBoundingClientRect().height).toBeLessThanOrEqual(view.innerHeight * 0.55);
+    expect(member!.getBoundingClientRect().bottom).toBeLessThanOrEqual(view.innerHeight);
+    const filter = within(toolbar!).getByRole('button', { name: m.collection_filters() }).getBoundingClientRect();
+    for (const link of within(toolbar!).getAllByRole('link')) {
+      const rect = link.getBoundingClientRect();
+      expect(Math.abs(rect.top + rect.height / 2 - filter.top - filter.height / 2)).toBeLessThanOrEqual(1);
+    }
+    expect(context.canvasElement.scrollWidth).toBeLessThanOrEqual(view.innerWidth);
+  }
+}
+
 function variantStory(variant: (typeof variants)[keyof typeof variants]): Story {
   return {
     play: (context) => variantReady(context, variant.title),
@@ -102,7 +129,7 @@ function variantStory(variant: (typeof variants)[keyof typeof variants]): Story 
 
 export const SignedIn: Story = {
   name: 'Signed In',
-  play: collectionReadyWithHover,
+  play: compactCollectionReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-collection']} />,
 };
 export const SignedOut: Story = {
@@ -253,14 +280,52 @@ export const OwnerMenu: Story = {
     await variantReady(context, variants.CuratorPublicMany.title);
     const canvas = within(context.canvasElement);
     await expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull();
-    await expect(canvas.getByRole('button', { name: m.reaction_like() })).toBeDisabled();
+    await expect(canvas.queryByRole('button', { name: m.reaction_like() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.library_subject_save() })).toBeNull();
     const menu = canvas.getByRole('button', { name: m.library_collection_actions() });
     await userEvent.click(menu);
     const actions = await menuForTrigger(menu);
     await expect(actions.getByText(m.library_collection_edit(), { exact: true })).toBeVisible();
-    await expect(actions.getByText(m.report_action(), { exact: true })).toBeVisible();
+    await expect(actions.queryByText(m.report_action(), { exact: true })).toBeNull();
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(menu).toHaveFocus());
+  },
+};
+
+export const DestinationOverflow: Story = {
+  name: 'Library destinations in Collection overflow',
+  render: () => <PageStory visitor="Signed In" path={pagePaths['library-collection']} />,
+  play: async (context) => {
+    await libraryCollectionReady(context);
+    const canvas = within(context.canvasElement);
+    const trigger = canvas.getByRole('button', { name: m.library_collection_actions() });
+    await expect(canvas.queryByRole('button', { name: new RegExp(m.library_nav_selector()) })).toBeNull();
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    const actions = await menuForTrigger(trigger);
+    const view = context.canvasElement.ownerDocument.defaultView!;
+    const sheet = view.matchMedia('(max-width: 767px)').matches || view.matchMedia('(pointer: coarse)').matches;
+    const selector = actions.getByRole(sheet ? 'button' : 'menuitem', { name: m.library_nav_selector() });
+    selector.focus();
+    await userEvent.keyboard(sheet ? '{Enter}' : '{ArrowRight}');
+    const document = within(context.canvasElement.ownerDocument.body);
+    const destination = await document.findByRole(sheet ? 'link' : 'menuitem', {
+      name: m.library_nav_all_collections(),
+    });
+    await expect(destination).toBeVisible();
+    await expect(destination).toHaveAttribute('href', `/${getLocale()}/library/collections`);
+    if (sheet) {
+      await userEvent.click(document.getByRole('button', { name: `‹ ${m.library_collection_cancel()}` }));
+      await expect(await document.findByRole('dialog', { name: m.library_collection_actions() })).toBeVisible();
+    } else {
+      await userEvent.keyboard('{ArrowLeft}');
+      await waitFor(() => expect(selector).toHaveFocus());
+    }
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(trigger).toHaveFocus());
+    const toolbar = within(context.canvasElement.querySelector<HTMLElement>('[data-slot="collection-toolbar"]')!);
+    const grid = toolbar.getByRole('link', { name: m.library_layout_grid() });
+    await expect(grid).toHaveAttribute('href', `/${getLocale()}${pagePaths['library-collection']}?layout=grid`);
   },
 };
 
@@ -290,8 +355,8 @@ export const MembersPreparing: Story = {
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByText(m.library_dynamic_preparing())).toBeVisible();
     await expect(canvas.queryByText(m.library_collection_empty())).toBeNull();
-    await expect(canvas.getByRole('button', { name: m.library_collection_export_download() })).toBeDisabled();
-    await expect(canvas.getByRole('button', { name: m.library_collection_export_copy() })).toBeDisabled();
+    await expect(canvas.queryByRole('button', { name: m.library_collection_export_download() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.library_collection_export_copy() })).toBeNull();
   },
 };
 
@@ -324,7 +389,7 @@ export const AnotherReader: Story = {
     const trigger = canvas.getByRole('button', { name: m.library_collection_actions() });
     await userEvent.click(trigger);
     const actions = await menuForTrigger(trigger);
-    await expect(actions.getByText(m.report_action(), { exact: true })).toBeVisible();
+    await expect(actions.queryByText(m.report_action(), { exact: true })).toBeNull();
     await expect(actions.queryByText(m.library_collection_edit(), { exact: true })).toBeNull();
     await userEvent.keyboard('{Escape}');
   },

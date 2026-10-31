@@ -1,0 +1,123 @@
+import { expect, mock, test } from 'bun:test';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import type { EditableCollectionPage } from '../src/library/collection-load';
+import recording from '../src/kernel/recorded/library-collection.json';
+import memberRecording from '../src/kernel/recorded/library-collection-members.json';
+import { subjectOf } from '../src/library/reads';
+import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { m } from '../src/paraglide/messages.js';
+
+mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
+const { CollectionPage } = await import('../src/library/collection-page');
+
+const page: EditableCollectionPage = {
+  ...recording.collection,
+  visibility: null,
+  disclosedVisibility: 'public',
+  memberCount: null,
+  members: memberRecording.members.map((member) => ({ ...member, subject: subjectOf(member.subject) })),
+  next: null,
+  firstPage: true,
+  following: false,
+  publicExport: true,
+  memberState: 'ready',
+  presentationKind: null,
+  presentationKindSource: 'pending',
+  cover: null,
+  coverSource: 'pending',
+  filterProperties: [{ id: 'schema:genre', label: 'Genre', datatype: 'wikibase-item' }],
+  filterParams: { selected: {}, selectedLabels: {}, ranges: {}, ignored: [] },
+};
+
+async function render(data = page, cursor?: string) {
+  const route = createRootRoute({
+    component: () =>
+      createElement(CollectionPage, {
+        page: data,
+        queryKey: ['collection-page', data.id],
+        refreshPage: async () => data,
+        cursor,
+        search: { type: 'schema:Book', 'f.schema:genre': ['novel', 'essay'] },
+      }),
+  });
+  const router = createRouter({
+    routeTree: route,
+    history: createMemoryHistory({ initialEntries: [`/${getLocale()}/collections/${data.id}`] }),
+  });
+  await router.load();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  try {
+    return renderToStaticMarkup(
+      createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
+    );
+  } finally {
+    client.clear();
+  }
+}
+
+test('Collection phone first screen shows useful members beneath a compact truthful hero and one toolbar without unsupported controls internal status or duplicate title navigation', async () => {
+  // The SignedIn story measures the first real row and the single toolbar at phone390.
+  // This render covers the same composition and disclosure in every launch locale.
+  const previousLocale = getLocale();
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      const html = await render();
+      const hero = html.match(/<header\b[^>]*data-slot="collection-hero"[\s\S]*?<\/header>/)?.[0] ?? '';
+      const toolbar = html.match(/<div\b[^>]*data-slot="collection-toolbar"[\s\S]*?<\/nav><\/div>/)?.[0] ?? '';
+      expect(hero).toContain(recording.collection.title);
+      expect(hero).toContain(recording.collection.curator.displayName);
+      expect(hero).toContain(m.library_visibility_public());
+      expect(hero).not.toContain(m.library_member_count({ count: 0 }));
+      expect(hero).not.toContain(m.library_member_count({ count: 4 }));
+      expect(hero).not.toContain('data-collection-cover-source');
+      expect(html.match(/<h1\b/g)).toHaveLength(1);
+      expect(html).not.toContain('data-library-navigation-phone');
+      expect(html).not.toContain('data-library-navigation-desktop');
+      expect(html).not.toContain(m.library_collection_social_unavailable());
+      expect(html).not.toContain(m.library_collection_kind_pending());
+      for (const label of [m.reaction_like(), m.library_subject_save(), m.report_action()])
+        expect(html).not.toContain(renderToStaticMarkup(createElement('button', null, label)).slice(8, -9));
+      expect(toolbar).toContain(`aria-label="${m.collection_filters()}"`);
+      expect(toolbar.match(/<a\b/g)).toHaveLength(2);
+      const links = [...toolbar.matchAll(/href="([^"]+)"/g)].map((match) => match[1]!.replaceAll('&amp;', '&'));
+      for (const href of links) {
+        const address = new URL(href, 'https://rezics.test');
+        expect(address.searchParams.getAll('f.schema:genre')).toEqual(['novel', 'essay']);
+        expect(address.searchParams.get('type')).toBe('schema:Book');
+      }
+      expect(html.indexOf('data-slot="collection-toolbar"')).toBeLessThan(html.indexOf('data-collection-members'));
+      expect(html.match(/data-slot="member-list-row-title"/g)).toHaveLength(4);
+      expect(html.indexOf('data-collection-members')).toBeLessThan(
+        html.indexOf('aria-label="' + m.library_collection_export_label() + '"'),
+      );
+      expect(html).not.toContain('data-slot="member-list-row-facts"');
+    }
+    const title = '長い題名でも省略せずに読める本のコレクション — A long collection title without truncation';
+    const html = await render({ ...page, title, memberCount: 4 });
+    const heading = html.match(/<h1\b[\s\S]*?<\/h1>/)?.[0] ?? '';
+    expect(heading).toContain(title);
+    expect(heading).not.toMatch(/truncate|line-clamp/);
+    expect(html).toContain(m.library_member_count({ count: 4 }));
+  } finally {
+    setLocale(previousLocale, { reload: false });
+  }
+});
+
+test('compact presentation preserves genuine member preparation, unavailable feedback and retry without exposing stale members', async () => {
+  for (const memberState of ['preparing', 'unavailable'] as const) {
+    const html = await render({ ...page, memberState, publicExport: false, viewerActions: { state: 'unavailable' } });
+    expect(html).toContain(
+      memberState === 'preparing' ? m.library_dynamic_preparing() : m.library_dynamic_unavailable(),
+    );
+    expect(html).toContain(m.library_collection_reload());
+    expect(html).toContain(m.library_collection_actions_unavailable());
+    expect(html).not.toContain(m.library_collection_kind_pending());
+    expect(html).not.toContain(m.library_collection_empty());
+    expect(html).not.toContain('data-slot="member-list-row-title"');
+    expect(html).not.toContain(m.library_collection_export_label());
+  }
+});

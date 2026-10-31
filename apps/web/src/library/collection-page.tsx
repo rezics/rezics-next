@@ -27,7 +27,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { AccountRef } from './account-ref';
 import { coverSrc } from '../media/cover-src';
@@ -52,7 +51,7 @@ import {
 import { admitsCollectionOperation, type CollectionMemberUndo } from './collection-records';
 import type { CollectionMember, CollectionVisibility } from './reads';
 import { pageHead, type HeadContext } from '../shell/head';
-import { LibraryNavigation } from './library-nav';
+import { LibraryNavigationNotice, libraryNavigationMenuEntries } from './library-nav';
 import { libraryNavigationQuery } from './pins-read';
 import { PinControlNotice, usePinControlActions } from './pin-control';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
@@ -60,7 +59,7 @@ import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { validatePublicOrigin } from '../shell/origin';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
-import { BookmarkIcon, EllipsisIcon, HeartIcon, Share2Icon } from 'lucide-react';
+import { EllipsisIcon, Share2Icon } from 'lucide-react';
 import {
   collectionMemberRatio,
   collectionPageAddress,
@@ -634,13 +633,12 @@ export function CollectionPage({
       page.firstPage,
     ).length > 0;
   return (
-    <div className="w-full min-w-0 space-y-6 text-foreground">
-      <LibraryNavigation current={{ collectionId: page.id }} pins={pins} collections={navigationCollections} />
-      <article className="w-full min-w-0 space-y-7">
-        <header className="flex min-w-0 flex-col gap-4 rounded-2xl bg-card px-4 py-5 sm:px-6 sm:py-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 flex-1 space-y-3">
+    <div className="w-full min-w-0 text-foreground">
+      <article className="w-full min-w-0 space-y-4 sm:space-y-5">
+        <header data-slot="collection-hero" className="min-w-0 space-y-3 rounded-2xl bg-card p-4 sm:p-5">
+          <div className="flex min-w-0 items-start gap-3">
             {page.cover ? (
-              <div className="w-24 sm:w-40" data-collection-cover-source={page.coverSource}>
+              <div className="w-16 shrink-0 sm:w-24" data-collection-cover-source={page.coverSource}>
                 <Cover
                   subject={{ id: page.id, title: page.title, types: [] }}
                   cover={page.cover}
@@ -655,34 +653,45 @@ export function CollectionPage({
                 />
               </div>
             ) : null}
-            <PageHeading>{page.title}</PageHeading>
-            <div className="flex min-w-0" data-collection-owner>
-              {page.curator?.handle ? (
-                <a
-                  href={`/${getLocale()}/@${encodeURIComponent(page.curator.handle)}`}
-                  className="min-w-0 text-sm text-muted-foreground hover:text-foreground"
-                >
+            <div className="min-w-0 flex-1 space-y-2">
+              <h1 className="text-2xl leading-tight font-semibold tracking-tight [overflow-wrap:anywhere] sm:text-3xl">
+                {page.title}
+              </h1>
+              <div className="flex min-w-0 text-sm text-muted-foreground" data-collection-owner>
+                {page.curator?.handle ? (
+                  <a
+                    href={`/${getLocale()}/@${encodeURIComponent(page.curator.handle)}`}
+                    className="min-w-0 [overflow-wrap:anywhere] hover:text-foreground"
+                  >
+                    <AccountRef account={page.curator} avatar />
+                  </a>
+                ) : (
                   <AccountRef account={page.curator} avatar />
-                </a>
-              ) : (
-                <AccountRef account={page.curator} avatar />
-              )}
+                )}
+              </div>
             </div>
-            <MetaLine
-              items={[
-                page.memberCount == null ? null : m.library_member_count({ count: page.memberCount }),
-                visibleVisibility ? visibilityLabel(visibleVisibility) : null,
-                <span>
-                  {m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} />
-                </span>,
-              ]}
-            />
-            {page.description ? (
-              <p className="max-w-4xl whitespace-pre-wrap text-muted-foreground">{page.description}</p>
-            ) : null}
           </div>
-          <div className="flex shrink-0 flex-wrap items-start gap-2">
+          <MetaLine
+            className="block text-sm leading-5 text-muted-foreground"
+            items={[
+              page.memberCount == null ? null : m.library_member_count({ count: page.memberCount }),
+              visibleVisibility ? visibilityLabel(visibleVisibility) : null,
+              <span>
+                {m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} />
+              </span>,
+            ]}
+          />
+          {page.description ? (
+            <p className="max-w-4xl text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">
+              {page.description}
+            </p>
+          ) : null}
+          <div data-slot="collection-actions" className="flex min-w-0 flex-wrap items-center gap-2">
             <ResourceAccessLink resourceId={page.id} />
+            <FollowTargetControl
+              targetId={page.id}
+              {...(page.visibility === null ? { following: page.following } : {})}
+            />
             <CollectionReadActions
               onShare={() => copyLink(collectionHref(page.id))}
               entries={[
@@ -697,6 +706,11 @@ export function CollectionPage({
                     ]
                   : []),
                 ...pinActions.entries,
+                {
+                  type: 'submenu',
+                  label: m.library_nav_selector(),
+                  entries: libraryNavigationMenuEntries({ collectionId: page.id }, pins, navigationCollections),
+                },
                 ...(deleteAdmitted
                   ? [
                       {
@@ -717,27 +731,11 @@ export function CollectionPage({
               ]}
             />
             <PinControlNotice notice={pinActions.notice} />
-            <FollowTargetControl
-              targetId={page.id}
-              {...(page.visibility === null ? { following: page.following } : {})}
-            />
-            {!editing ? (
-              <CollectionExport
-                page={page}
-                context={{ origin: publicOrigin(), locale: getLocale() }}
-                laterPage={cursor !== undefined}
-              />
-            ) : null}
           </div>
         </header>
-        <p className="text-sm text-muted-foreground">{m.library_collection_social_unavailable()}</p>
+        <LibraryNavigationNotice pins={pins} collectionsState={navigation.data?.collectionsState ?? 'loaded'} />
         {page.viewerActions?.state === 'unavailable' ? (
           <p role="status">{m.library_collection_actions_unavailable()}</p>
-        ) : null}
-        {page.presentationKindSource === 'pending' || page.coverSource === 'pending' ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {m.library_collection_kind_pending()}
-          </p>
         ) : null}
         <AlertDialog
           open={deletion !== null}
@@ -844,11 +842,6 @@ export function CollectionPage({
               members={page.members}
               disabled={pending}
             />
-            {page.presentationKindSource === 'pending' ? (
-              <p role="status" className="text-sm text-muted-foreground">
-                {m.library_collection_kind_pending()}
-              </p>
-            ) : null}
             <VisibilityField onChange={setVisibility} value={visibility} disabled={pending} />
             <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
             <div className="flex flex-wrap items-center gap-2">
@@ -862,31 +855,37 @@ export function CollectionPage({
           </form>
         ) : null}
 
-        {!editing && page.filterProperties && page.filterParams ? (
-          <CollectionFilters
-            id={page.id}
-            type={page.filterType ?? 'schema:Book'}
-            properties={page.filterProperties}
-            params={page.filterParams}
-          />
-        ) : null}
         {!editing ? (
-          <nav aria-label={m.library_layout()} data-slot="collection-layout" className="flex items-center gap-2">
-            <a
-              className={buttonClass}
-              href={collectionViewAddress(page.id, 'list', cursor, search)}
-              aria-current={layout === 'list' ? 'page' : undefined}
+          <div data-slot="collection-toolbar" className="flex min-w-0 items-center justify-between gap-2">
+            {page.filterProperties && page.filterParams ? (
+              <CollectionFilters
+                id={page.id}
+                type={page.filterType ?? 'schema:Book'}
+                properties={page.filterProperties}
+                params={page.filterParams}
+              />
+            ) : null}
+            <nav
+              aria-label={m.library_layout()}
+              data-slot="collection-layout"
+              className="ms-auto flex shrink-0 items-center gap-1 text-sm"
             >
-              {m.library_layout_list()}
-            </a>
-            <a
-              className={buttonClass}
-              href={collectionViewAddress(page.id, 'grid', cursor, search)}
-              aria-current={layout === 'grid' ? 'page' : undefined}
-            >
-              {m.library_layout_grid()}
-            </a>
-          </nav>
+              <a
+                className={buttonClass}
+                href={collectionViewAddress(page.id, 'list', cursor, search)}
+                aria-current={layout === 'list' ? 'page' : undefined}
+              >
+                {m.library_layout_list()}
+              </a>
+              <a
+                className={buttonClass}
+                href={collectionViewAddress(page.id, 'grid', cursor, search)}
+                aria-current={layout === 'grid' ? 'page' : undefined}
+              >
+                {m.library_layout_grid()}
+              </a>
+            </nav>
+          </div>
         ) : null}
         <CollectionFilterFeedback
           id={page.id}
@@ -1068,6 +1067,13 @@ export function CollectionPage({
             </a>
           </nav>
         ) : null}
+        {!editing ? (
+          <CollectionExport
+            page={page}
+            context={{ origin: publicOrigin(), locale: getLocale() }}
+            laterPage={cursor !== undefined}
+          />
+        ) : null}
       </article>
     </div>
   );
@@ -1083,28 +1089,22 @@ export function CollectionReadActions({
 }) {
   return (
     <>
-      <Button type="button" variant="outline" disabled title={m.library_collection_social_unavailable()}>
-        <HeartIcon aria-hidden="true" />
-        {m.reaction_like()}
-      </Button>
-      <Button type="button" variant="outline" disabled title={m.library_collection_social_unavailable()}>
-        <BookmarkIcon aria-hidden="true" />
-        {m.library_subject_save()}
-      </Button>
       <Button type="button" variant="outline" onClick={onShare}>
         <Share2Icon aria-hidden="true" />
         {m.library_collection_share()}
       </Button>
-      <Menu
-        title={m.library_collection_actions()}
-        backLabel={m.library_collection_cancel()}
-        trigger={
-          <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
-            <EllipsisIcon aria-hidden="true" />
-          </Button>
-        }
-        entries={[...entries, { type: 'item', label: m.report_action(), disabled: true, onSelect: () => {} }]}
-      />
+      {entries.length ? (
+        <Menu
+          title={m.library_collection_actions()}
+          backLabel={m.library_collection_cancel()}
+          trigger={
+            <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
+              <EllipsisIcon aria-hidden="true" />
+            </Button>
+          }
+          entries={entries}
+        />
+      ) : null}
     </>
   );
 }

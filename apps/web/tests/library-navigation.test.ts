@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { LibraryNavigation, libraryNavigationEntries, type LibraryDestination } from '../src/library/library-nav';
+import {
+  LibraryNavigation,
+  LibraryNavigationNotice,
+  libraryNavigationEntries,
+  libraryNavigationMenuEntries,
+  type LibraryDestination,
+} from '../src/library/library-nav';
 import type { BuiltinCollectionRecord } from '../src/library/builtin-collections';
 import type { LibraryPin, LibraryPinsRead } from '../src/library/pins-read';
 import { m } from '../src/paraglide/messages.js';
@@ -150,5 +156,67 @@ test('selected overflow and unavailable pins retain actual titles, current desti
     );
     expect(html).not.toContain('href="/en/collections/unavailable"');
     expect(pins).toEqual(before);
+  }
+});
+
+test('Collection overflow keeps every real Library destination and unavailable pin without adding a mutation', () => {
+  const previousLocale = getLocale();
+  const pins: LibraryPinsRead = {
+    state: 'loaded',
+    revision: 17,
+    next: 'signed-next-page',
+    pins: [
+      { collectionId: 'unavailable', target: null },
+      ...Array.from({ length: 9 }, (_, index): LibraryPin => ({
+        collectionId: `pin-${index}`,
+        target: { id: `pin-${index}`, title: `Reading list ${index}`, membershipKind: 'curated' },
+      })),
+    ],
+  };
+  const collections: BuiltinCollectionRecord[] = [
+    collectionRecording.collection,
+    { id: 'liked', title: null, membershipKind: 'dynamic', builtinKind: 'liked' },
+  ];
+  const before = structuredClone({ pins, collections });
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      const current = { collectionId: collectionRecording.collection.id };
+      const { tabs, overflow } = libraryNavigationEntries(current, pins, collections, locale);
+      const entries = libraryNavigationMenuEntries(current, pins, collections, locale);
+      const links = entries.filter((entry) => entry.type === 'link');
+      const expected = [...tabs, ...overflow].filter((entry) => entry.href);
+      expect(links).toHaveLength(expected.length + 2);
+      for (const entry of expected)
+        expect(links).toContainEqual({ type: 'link', label: entry.label, href: entry.href, current: entry.current });
+      expect(links.filter((entry) => entry.current)).toEqual([
+        {
+          type: 'link',
+          label: collectionRecording.collection.title,
+          href: `/${locale}/collections/${collectionRecording.collection.id}`,
+          current: true,
+        },
+      ]);
+      expect(links.map((entry) => entry.href)).toContain(`/${locale}/library/logs`);
+      expect(links.map((entry) => entry.href)).toContain(`/${locale}/library/follow-counts`);
+      expect(entries.filter((entry) => entry.type !== 'link')).toEqual([
+        {
+          type: 'item',
+          label: m.library_pin_unavailable(),
+          disabled: true,
+          current: false,
+          onSelect: expect.any(Function),
+        },
+      ]);
+      expect(
+        renderToStaticMarkup(createElement(LibraryNavigationNotice, { pins: { state: 'unavailable' } })),
+      ).toContain(m.library_pin_read_failed());
+      expect(renderToStaticMarkup(createElement(LibraryNavigationNotice, { pins: { state: 'preparing' } }))).toContain(
+        m.library_navigation_loading(),
+      );
+    }
+    expect({ pins, collections }).toEqual(before);
+  } finally {
+    setLocale(previousLocale, { reload: false });
   }
 });

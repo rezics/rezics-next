@@ -128,6 +128,42 @@ function DestinationLink({ entry }: { entry: LibraryNavigationEntry }) {
   );
 }
 
+function destinationMenuEntries(entries: readonly LibraryNavigationEntry[]): MenuEntry[] {
+  return entries.map((entry) =>
+    entry.href
+      ? { type: 'link', label: entry.label, href: entry.href, current: entry.current }
+      : { type: 'item', label: entry.label, disabled: true, current: entry.current, onSelect: () => {} },
+  );
+}
+
+function managementDestinations(current: LibraryDestination, locale: string): LibraryNavigationEntry[] {
+  return [
+    {
+      id: 'logs',
+      label: m.library_my_logs_heading(),
+      href: `/${locale}/library/logs`,
+      current: current === 'logs',
+    },
+    {
+      id: 'follow-counts',
+      label: m.library_follow_counts_heading(),
+      href: `/${locale}/library/follow-counts`,
+      current: current === 'follow-counts',
+    },
+  ];
+}
+
+/** The same destinations for a page's overflow menu, without a second selected-title trigger. */
+export function libraryNavigationMenuEntries(
+  current: LibraryDestination,
+  pins: LibraryPinsRead,
+  collections: readonly BuiltinCollectionRecord[],
+  locale = getLocale(),
+): MenuEntry[] {
+  const { tabs, overflow } = libraryNavigationEntries(current, pins, collections, locale);
+  return destinationMenuEntries([...tabs, ...managementDestinations(current, locale), ...overflow]);
+}
+
 function DestinationMenu({
   entries,
   current,
@@ -137,15 +173,10 @@ function DestinationMenu({
 }) {
   const titleId = useId();
   const purposeId = useId();
-  const menuEntries: MenuEntry[] = entries.map((entry) =>
-    entry.href
-      ? { type: 'link', label: entry.label, href: entry.href, current: entry.current }
-      : { type: 'item', label: entry.label, disabled: true, current: entry.current, onSelect: () => {} },
-  );
   return (
     <Menu
       title={m.library_nav_selector()}
-      entries={menuEntries}
+      entries={destinationMenuEntries(entries)}
       trigger={
         <Button
           aria-label={m.library_nav_selector()}
@@ -183,21 +214,7 @@ export function LibraryNavigation({
   const destinations = libraryNavigationEntries(current, pins, collections, locale);
   const overflow = destinations.overflow;
   // Management destinations are additive to the existing Collection and pin model.
-  const tabs: LibraryNavigationEntry[] = [
-    ...destinations.tabs,
-    {
-      id: 'logs',
-      label: m.library_my_logs_heading(),
-      href: `/${locale}/library/logs`,
-      current: current === 'logs',
-    },
-    {
-      id: 'follow-counts',
-      label: m.library_follow_counts_heading(),
-      href: `/${locale}/library/follow-counts`,
-      current: current === 'follow-counts',
-    },
-  ];
+  const tabs: LibraryNavigationEntry[] = [...destinations.tabs, ...managementDestinations(current, locale)];
   const all = [...tabs, ...overflow];
   const phonePins = tabs.filter((entry) => entry.pin).slice(0, 3);
   return (
@@ -226,15 +243,25 @@ export function LibraryNavigation({
         </div>
         <DestinationMenu entries={all} current={all.find((entry) => entry.current)?.label} />
       </nav>
-      {pins.state === 'unavailable' || collectionsState === 'unavailable' ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {pins.state === 'unavailable' ? m.library_pin_read_failed() : m.library_collections_unavailable()}
-        </p>
-      ) : pins.state === 'preparing' || collectionsState === 'preparing' ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.library_navigation_loading()}
-        </p>
-      ) : null}
+      <LibraryNavigationNotice pins={pins} collectionsState={collectionsState} />
     </div>
   );
+}
+
+export function LibraryNavigationNotice({
+  pins,
+  collectionsState = 'loaded',
+}: {
+  pins: LibraryPinsRead;
+  collectionsState?: 'loaded' | 'preparing' | 'unavailable';
+}) {
+  return pins.state === 'unavailable' || collectionsState === 'unavailable' ? (
+    <p role="status" className="text-sm text-muted-foreground">
+      {pins.state === 'unavailable' ? m.library_pin_read_failed() : m.library_collections_unavailable()}
+    </p>
+  ) : pins.state === 'preparing' || collectionsState === 'preparing' ? (
+    <p role="status" className="text-sm text-muted-foreground">
+      {m.library_navigation_loading()}
+    </p>
+  ) : null;
 }
