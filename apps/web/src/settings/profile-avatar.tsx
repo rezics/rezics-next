@@ -5,18 +5,41 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { MediaImage } from '@rezics/ui/media-image';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
-import { uploadAvatar } from '../threads/upload';
+import { resumeReplyImageUpload, uploadAvatar, type UploadRefusalReason } from '../threads/upload';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
-import { avatarMedia, ProfileAvatarUpload, type AvatarUpload } from './profile-avatar-upload';
+import { avatarMedia, ProfileAvatarUpload, type AvatarResume, type AvatarUpload } from './profile-avatar-upload';
+import { usePreferenceRetry } from './preference-failure-retry';
 
-export function useProfileAvatarUpload(editor: ProfileEditor, closed: boolean, upload: AvatarUpload = uploadAvatar) {
-  const controller = useMemo(() => new ProfileAvatarUpload(editor, upload), [editor, upload]);
+export function useProfileAvatarUpload(
+  editor: ProfileEditor,
+  closed: boolean,
+  upload: AvatarUpload = uploadAvatar,
+  resume: AvatarResume | undefined = upload === uploadAvatar ? resumeReplyImageUpload : undefined,
+) {
+  const controller = useMemo(() => new ProfileAvatarUpload(editor, upload, URL, resume), [editor, upload, resume]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   useLayoutEffect(() => {
     if (!closed) return controller.connect();
   }, [controller, closed]);
   return { controller, state, blocked: state.phase === 'uploading' || state.phase === 'error' };
+}
+
+function avatarFailure(reason: UploadRefusalReason | undefined) {
+  switch (reason) {
+    case 'type':
+      return m.settings_profile_avatar_type();
+    case 'too-large':
+      return m.settings_profile_avatar_too_large();
+    case 'rejected':
+      return m.settings_profile_avatar_rejected();
+    case 'closed':
+      return m.settings_profile_avatar_closed();
+    case 'rate-limited':
+      return m.settings_profile_avatar_rate_limited();
+    default:
+      return m.settings_profile_avatar_error();
+  }
 }
 
 /** Product controls compose shadcn primitives with native summaries and a separately owned local preview. */
@@ -35,6 +58,7 @@ export function ProfileAvatar({
   const input = useRef<HTMLInputElement>(null);
   const choose = useRef<HTMLButtonElement>(null);
   const { state, controller } = upload;
+  const waiting = usePreferenceRetry(undefined, state.retryAt ?? 0);
   const local = !!state.url;
   const changed = avatarMedia(avatar) !== avatarMedia(known);
   const status =
@@ -43,7 +67,7 @@ export function ProfileAvatar({
       : state.phase === 'ready'
         ? m.settings_profile_avatar_ready()
         : state.phase === 'error'
-          ? m.settings_profile_avatar_error()
+          ? avatarFailure(state.failure?.reason)
           : changed
             ? avatar
               ? m.settings_profile_avatar_draft()
@@ -81,6 +105,9 @@ export function ProfileAvatar({
           <p id={`${id}-status`} role={state.phase === 'error' ? 'alert' : 'status'}>
             {status}
           </p>
+          {waiting && state.failure?.retryAfter !== undefined ? (
+            <p role="status">{m.settings_profile_avatar_retry_after({ seconds: state.failure.retryAfter })}</p>
+          ) : null}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">
@@ -112,11 +139,11 @@ export function ProfileAvatar({
             {m.settings_profile_avatar_cancel()}
           </Button>
         ) : null}
-        {state.phase === 'error' && local ? (
+        {controller.canRetry() && local ? (
           <Button
             type="button"
             variant="outline"
-            disabled={disabled}
+            disabled={disabled || waiting}
             onClick={() => {
               controller.retry();
               choose.current?.focus();

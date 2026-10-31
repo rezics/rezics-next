@@ -5,14 +5,15 @@ import recording from '../../kernel/recorded/agent-page.json';
 import { profileStoryValues } from '../../kernel/fake/settings-profile';
 import { m } from '../../paraglide/messages.js';
 import { ProfileCard } from '../../settings/profile';
-import type { AvatarUpload } from '../../settings/profile-avatar-upload';
+import type { AvatarResume, AvatarUpload } from '../../settings/profile-avatar-upload';
+import { UploadRefusal } from '../../threads/upload';
 import { ProfileEditor } from '../../settings/profile-write';
 import { rebaseProfile } from '../../settings/profile-write';
 import { PageHeading } from '../../shell/page-heading';
 import { AppShell } from '../../shell/shell';
 import { PatternStory } from '../page';
 
-type Scenario = 'complete' | 'pending' | 'late' | 'failed' | 'save';
+type Scenario = 'complete' | 'pending' | 'late' | 'failed' | 'save' | 'rejected' | 'rate-limited';
 // Reuse the committed native avatar summary and its existing Storybook media assets.
 const recorded = recording.reads.r1.body.accounts[0]!.avatar;
 const avatar = {
@@ -22,12 +23,14 @@ const avatar = {
   ),
 };
 const readbacks = new WeakMap<Element, () => void>();
+const uploadCounts = new WeakMap<Element, () => { uploads: number; resumes: number }>();
 
 function Example({ scenario = 'complete' }: { scenario?: Scenario }) {
   const [fixture] = useState(() => {
     let current = { ...profileStoryValues(), avatar: scenario === 'late' || scenario === 'pending' ? avatar : null };
     let completeRead = () => {};
     let uploads = 0;
+    let resumes = 0;
     const editor = new ProfileEditor(
       {
         read: () =>
@@ -52,10 +55,22 @@ function Example({ scenario = 'complete' }: { scenario?: Scenario }) {
           // An already completed provider response may arrive after local cancellation.
           signal.addEventListener('abort', () => resolve({ src: avatar.media }), { once: true });
         });
-      if (scenario === 'failed' && uploads === 1) throw new Error('Upload refused');
+      if (scenario === 'failed' || scenario === 'rate-limited' || scenario === 'rejected') {
+        const failure = new UploadRefusal(
+          scenario === 'failed' ? 'unavailable' : scenario,
+          scenario === 'rate-limited' ? 2 : undefined,
+        );
+        failure.mediaId = avatar.media;
+        throw failure;
+      }
       return { src: avatar.media };
     };
-    return { editor, upload, finishRead: () => completeRead() };
+    const resume: AvatarResume = async (mediaId) => {
+      resumes++;
+      if (mediaId !== avatar.media) throw new UploadRefusal('unavailable');
+      return { src: mediaId };
+    };
+    return { editor, upload, resume, counts: () => ({ uploads, resumes }), finishRead: () => completeRead() };
   });
   return (
     <PatternStory visitor="Signed In" path="/settings#profile">
@@ -66,10 +81,13 @@ function Example({ scenario = 'complete' }: { scenario?: Scenario }) {
             <section
               aria-label={m.settings_profile_heading()}
               ref={(element) => {
-                if (element) readbacks.set(element, fixture.finishRead);
+                if (element) {
+                  readbacks.set(element, fixture.finishRead);
+                  uploadCounts.set(element, fixture.counts);
+                }
               }}
             >
-              <ProfileCard editor={fixture.editor} avatarUpload={fixture.upload} />
+              <ProfileCard editor={fixture.editor} avatarUpload={fixture.upload} avatarResume={fixture.resume} />
             </section>
           </article>
         </div>
@@ -198,5 +216,44 @@ export const ExplicitSaveReadback: Story = {
     readbacks.get(profile(canvasElement).region)!();
     await view.findByText(m.settings_profile_avatar_empty());
     await view.findByText(m.settings_saved());
+  },
+};
+
+export const RejectedImage: Story = {
+  args: { scenario: 'rejected' },
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => {
+    const view = await choose(canvasElement);
+    await view.findByText(m.settings_profile_avatar_rejected());
+    await expect(view.queryByRole('button', { name: m.settings_profile_avatar_retry() })).toBeNull();
+    await expect(view.getByRole('button', { name: m.settings_profile_save() })).toBeDisabled();
+    await expect(view.getByRole('button', { name: m.settings_profile_choose_avatar() })).toBeEnabled();
+    await expect(uploadCounts.get(profile(canvasElement).region)!()).toEqual({ uploads: 1, resumes: 0 });
+    await userEvent.click(view.getByRole('button', { name: m.settings_profile_avatar_cancel() }));
+    await view.findByText(m.settings_profile_avatar_cancelled());
+    await expect(view.queryByRole('img', { name: m.settings_profile_avatar_preview() })).toBeNull();
+  },
+};
+
+export const RateLimitedReservation: Story = {
+  args: { scenario: 'rate-limited' },
+  globals: { viewport: { value: 'desktop1280' } },
+  play: async ({ canvasElement }) => {
+    const view = await choose(canvasElement);
+    await view.findByText(m.settings_profile_avatar_rate_limited());
+    await view.findByText(m.settings_profile_avatar_retry_after({ seconds: 2 }));
+    const retry = view.getByRole('button', { name: m.settings_profile_avatar_retry() });
+    await expect(retry).toBeDisabled();
+    const preview = await view.findByRole('img', { name: m.settings_profile_avatar_preview() });
+    const selectedUrl = preview.getAttribute('src');
+    await expect(view.getByRole('button', { name: m.settings_profile_save() })).toBeDisabled();
+    await waitFor(() => expect(retry).toBeEnabled());
+    await expect(uploadCounts.get(profile(canvasElement).region)!()).toEqual({ uploads: 1, resumes: 0 });
+    await expect(view.getByRole('button', { name: m.settings_profile_save() })).toBeDisabled();
+    await userEvent.click(retry);
+    await view.findByText(m.settings_profile_avatar_ready());
+    await expect(uploadCounts.get(profile(canvasElement).region)!()).toEqual({ uploads: 1, resumes: 1 });
+    await expect(preview).toHaveAttribute('src', selectedUrl);
+    await expect(view.getByRole('button', { name: m.settings_profile_save() })).toBeEnabled();
   },
 };

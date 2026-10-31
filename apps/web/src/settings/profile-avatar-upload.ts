@@ -1,16 +1,26 @@
+import { UploadRefusal } from '../threads/upload';
+import { preferenceRetryDeadline } from './preference-failure-retry';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
 
 export type AvatarUpload = (accountId: string, file: File, signal: AbortSignal) => Promise<{ src: string }>;
+export type AvatarResume = (mediaId: string, file: File, signal: AbortSignal) => Promise<{ src: string }>;
+type Failure = Pick<UploadRefusal, 'reason' | 'retryAfter'>;
 type Avatar = ProfileValues['avatar'];
 type Selection = {
   accountId: string;
   file: File;
   url: string;
   before: Avatar;
+  reservation?: string;
   media?: string;
 };
-type UploadState = { phase: 'idle' | 'uploading' | 'ready' | 'error' | 'cancelled'; url: string | null };
+type UploadState = {
+  phase: 'idle' | 'uploading' | 'ready' | 'error' | 'cancelled';
+  url: string | null;
+  failure?: Failure;
+  retryAt?: number;
+};
 const idle: UploadState = { phase: 'idle', url: null };
 export const avatarMedia = (avatar: Avatar) => avatar?.media ?? null;
 
@@ -21,10 +31,13 @@ export class ProfileAvatarUpload {
   private request: AbortController | null = null;
   private listeners = new Set<() => void>();
   private connected = false;
+  private retryAt = 0;
+  private rateFailure: Failure | undefined;
   constructor(
     private editor: ProfileEditor,
     private upload: AvatarUpload,
     private urls: Pick<typeof URL, 'createObjectURL' | 'revokeObjectURL'> = URL,
+    private resume?: AvatarResume,
   ) {}
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -34,8 +47,14 @@ export class ProfileAvatarUpload {
     };
   };
   private update(state: UploadState) {
-    this.state = state;
+    const failure = state.failure ?? this.rateFailure;
+    this.state = this.waiting()
+      ? { ...state, retryAt: this.retryAt, ...(failure ? { failure } : {}) }
+      : state;
     this.listeners.forEach((listener) => listener());
+  }
+  private waiting() {
+    return Date.now() < this.retryAt;
   }
   connect() {
     this.connected = true;
@@ -102,20 +121,47 @@ export class ProfileAvatarUpload {
     void this.send(this.selection);
   };
   retry = () => {
-    if (this.editable() && this.selection && this.state.phase === 'error') void this.send(this.selection);
+    if (this.editable() && this.selection && this.canRetry() && !this.waiting()) void this.send(this.selection);
   };
+  canRetry = () =>
+    this.state.phase === 'error' &&
+    !!this.selection &&
+    (!this.selection.reservation || !!this.resume) &&
+    !['type', 'too-large', 'rejected'].includes(this.state.failure?.reason ?? 'unavailable');
   private async send(selection: Selection) {
+    // Replacing or clearing a selection never bypasses the native delay. Expiry does no IO.
+    if (this.waiting()) {
+      this.update({ phase: 'error', url: selection.url });
+      return;
+    }
+    const reservation = selection.reservation;
+    if (reservation && !this.resume) return;
     const request = new AbortController();
     this.request = request;
     this.update({ phase: 'uploading', url: selection.url });
     try {
-      const result = await this.upload(selection.accountId, selection.file, request.signal);
+      const result = reservation
+        ? await this.resume!(reservation, selection.file, request.signal)
+        : await this.upload(selection.accountId, selection.file, request.signal);
       if (!this.owns(selection, request)) return;
+      if (reservation && result.src !== reservation) throw new UploadRefusal('unavailable');
       selection.media = result.src;
       this.update({ phase: 'ready', url: selection.url });
       this.editor.edit({ avatar: { media: result.src } });
-    } catch {
-      if (this.owns(selection, request)) this.update({ phase: 'error', url: selection.url });
+    } catch (error) {
+      if (!this.owns(selection, request)) return;
+      if (error instanceof UploadRefusal) {
+        if (!selection.reservation && error.mediaId) selection.reservation = error.mediaId;
+        const failure: Failure = {
+          reason: error.reason,
+          ...(error.retryAfter !== undefined ? { retryAfter: error.retryAfter } : {}),
+        };
+        if (error.reason === 'rate-limited') {
+          this.retryAt = preferenceRetryDeadline(error.retryAfter?.toString());
+          this.rateFailure = failure;
+        }
+        this.update({ phase: 'error', url: selection.url, failure });
+      } else this.update({ phase: 'error', url: selection.url });
     } finally {
       if (this.request === request) this.request = null;
     }

@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test';
+import { spyOn } from 'bun:test';
+import { UploadRefusal, type UploadRefusalReason } from '../src/threads/upload';
+import type { AvatarResume } from '../src/settings/profile-avatar-upload';
 import { ProfileAvatarUpload, type AvatarUpload } from '../src/settings/profile-avatar-upload';
 import type { ProfileValues } from '../src/settings/profile-data';
 import { ProfileEditor, type ProfileAttempt } from '../src/settings/profile-write';
@@ -236,5 +239,228 @@ test('an uncertain profile save retains its immutable retry and local draft unti
   expect(editor.snapshot().known?.avatar).toEqual(summary('uploaded-avatar'));
   expect(editor.snapshot().draft?.biography).toBe('Later unsaved text');
   expect(boundary.revoked).toEqual(boundary.created);
+  boundary.disconnect();
+});
+
+function recovery(editor: ProfileEditor, resumeAvailable = true) {
+  const calls: {
+    operation: 'upload' | 'resume';
+    target: string;
+    file: File;
+    signal: AbortSignal;
+    result: ReturnType<typeof deferred<{ src: string }>>;
+  }[] = [];
+  const created: string[] = [];
+  const revoked: string[] = [];
+  const request = (operation: 'upload' | 'resume', target: string, file: File, signal: AbortSignal) => {
+    const result = deferred<{ src: string }>();
+    calls.push({ operation, target, file, signal, result });
+    return result.promise;
+  };
+  const upload: AvatarUpload = (...args) => request('upload', ...args);
+  const resume: AvatarResume = (...args) => request('resume', ...args);
+  const controller = new ProfileAvatarUpload(
+    editor,
+    upload,
+    {
+      createObjectURL: () => {
+        const url = `blob:recovery-${created.length}`;
+        created.push(url);
+        return url;
+      },
+      revokeObjectURL: (url) => {
+        revoked.push(url);
+      },
+    },
+    resumeAvailable ? resume : undefined,
+  );
+  return { controller, calls, created, revoked, disconnect: controller.connect() };
+}
+function refusal(reason: UploadRefusalReason, mediaId?: string, retryAfter?: number) {
+  const failure = new UploadRefusal(reason, retryAfter);
+  if (mediaId) failure.mediaId = mediaId;
+  return failure;
+}
+function recoveryEditor(initial = profile()) {
+  return new ProfileEditor(
+    {
+      read: async () => initial,
+      save: async (attempt) => ({ ok: true, profile: attempt.after }),
+    },
+    initial,
+  );
+}
+
+test('Recover an avatar upload using its existing reservation preserving native identity and exact recovery bounds', async () => {
+  const editor = recoveryEditor();
+  const boundary = recovery(editor);
+  const selected = file();
+  boundary.controller.choose(selected);
+  boundary.calls[0]!.result.reject(refusal('unavailable', 'native-avatar-reservation'));
+  await settle();
+  const originalUrl = boundary.controller.snapshot().url;
+  expect(boundary.controller.canRetry()).toBe(true);
+  expect(editor.snapshot().draft?.avatar).toEqual(profile().avatar);
+  // Each deliberate click delegates once to the existing transport, whose frozen tests own 32 reads / 60 seconds.
+  for (let index = 1; index <= 2; index++) {
+    boundary.controller.retry();
+    boundary.controller.retry();
+    expect(boundary.calls).toHaveLength(index + 1);
+    const call = boundary.calls[index]!;
+    expect(call.operation).toBe('resume');
+    expect(call.target).toBe('native-avatar-reservation');
+    expect(call.file).toBe(selected);
+    expect(call.signal).not.toBe(boundary.calls[index - 1]!.signal);
+    call.result.reject(index === 1 ? new Error('Read response lost') : refusal('unavailable', 'another-id'));
+    await settle();
+    expect(boundary.controller.snapshot().url).toBe(originalUrl);
+    expect(boundary.controller.snapshot().phase).toBe('error');
+    expect(editor.snapshot().draft?.avatar).toEqual(profile().avatar);
+  }
+  boundary.controller.retry();
+  boundary.calls[3]!.result.resolve({ src: 'different-reservation' });
+  await settle();
+  expect(boundary.controller.snapshot().phase).toBe('error');
+  expect(editor.snapshot().draft?.avatar).toEqual(profile().avatar);
+  boundary.controller.retry();
+  boundary.calls[4]!.result.resolve({ src: 'native-avatar-reservation' });
+  await settle();
+  expect(boundary.calls.map(({ operation }) => operation)).toEqual(['upload', 'resume', 'resume', 'resume', 'resume']);
+  expect(boundary.calls[0]!.target).toBe(profile().accountId);
+  expect(boundary.calls.slice(1).every(({ target }) => target === 'native-avatar-reservation')).toBe(true);
+  expect(boundary.controller.snapshot()).toEqual({ phase: 'ready', url: originalUrl });
+  expect(editor.snapshot().draft?.avatar).toEqual({ media: 'native-avatar-reservation' });
+  expect(editor.snapshot().known?.avatar).toEqual(profile().avatar);
+  expect(boundary.revoked).toEqual([]);
+  boundary.disconnect();
+  expect(boundary.revoked).toEqual(boundary.created);
+});
+
+test('native file refusals require a new selection while closed and unavailable reasons remain distinct', async () => {
+  for (const reason of ['type', 'too-large', 'rejected', 'closed', 'unavailable'] as const) {
+    const boundary = recovery(recoveryEditor());
+    boundary.controller.choose(file());
+    boundary.calls[0]!.result.reject(refusal(reason, reason === 'rejected' ? 'rejected-reservation' : undefined));
+    await settle();
+    expect(boundary.controller.snapshot().failure).toEqual({ reason });
+    const retryable = reason === 'closed' || reason === 'unavailable';
+    expect(boundary.controller.canRetry()).toBe(retryable);
+    if (!retryable) {
+      boundary.controller.retry();
+      expect(boundary.calls).toHaveLength(1);
+      const replacement = file();
+      boundary.controller.choose(replacement);
+      expect(boundary.calls[1]!.file).toBe(replacement);
+      expect(boundary.calls[1]!.operation).toBe('upload');
+      expect(boundary.revoked).toEqual([boundary.created[0]!]);
+    }
+    boundary.disconnect();
+    expect(boundary.revoked).toEqual(boundary.created);
+  }
+});
+
+test('actual rate delays block upload and resume IO through replacement, cancellation and removal until an explicit retry', async () => {
+  let now = 1_000;
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
+  const boundary = recovery(recoveryEditor());
+  try {
+    const selected = file();
+    boundary.controller.choose(selected);
+    boundary.calls[0]!.result.reject(refusal('rate-limited', 'original-reservation', 7));
+    await settle();
+    expect(boundary.controller.snapshot()).toMatchObject({
+      phase: 'error',
+      failure: { reason: 'rate-limited', retryAfter: 7 },
+      retryAt: 8_000,
+    });
+    now = 7_999;
+    boundary.controller.retry();
+    expect(boundary.calls).toHaveLength(1);
+    now = 8_000;
+    await settle();
+    expect(boundary.calls).toHaveLength(1);
+    boundary.controller.retry();
+    expect(boundary.calls[1]).toMatchObject({ operation: 'resume', target: 'original-reservation', file: selected });
+    boundary.calls[1]!.result.reject(refusal('rate-limited', 'original-reservation', 11));
+    await settle();
+    boundary.controller.choose(file());
+    expect(boundary.controller.snapshot().url).toBe('blob:recovery-1');
+    boundary.controller.retry();
+    boundary.controller.cancel();
+    boundary.controller.choose(file());
+    boundary.controller.remove();
+    const replacement = file();
+    boundary.controller.choose(replacement);
+    expect(boundary.calls).toHaveLength(2);
+    expect(boundary.controller.snapshot()).toMatchObject({
+      phase: 'error',
+      failure: { reason: 'rate-limited', retryAfter: 11 },
+      retryAt: 19_000,
+    });
+    now = 18_999;
+    boundary.controller.retry();
+    expect(boundary.calls).toHaveLength(2);
+    now = 19_000;
+    await settle();
+    expect(boundary.calls).toHaveLength(2);
+    boundary.controller.retry();
+    expect(boundary.calls).toHaveLength(3);
+    expect(boundary.calls[2]).toMatchObject({ operation: 'upload', target: profile().accountId, file: replacement });
+    boundary.calls[2]!.result.resolve({ src: 'replacement-reservation' });
+    await settle();
+    expect(boundary.controller.snapshot().phase).toBe('ready');
+  } finally {
+    boundary.disconnect();
+    clock.mockRestore();
+  }
+  expect(boundary.revoked).toEqual(boundary.created);
+});
+
+test('late reservation recovery cannot survive cancellation, removal, replacement, actor teardown or remount', async () => {
+  for (const action of ['cancel', 'remove', 'replace', 'actor', 'remount'] as const) {
+    const editor = recoveryEditor();
+    const boundary = recovery(editor);
+    boundary.controller.choose(file());
+    boundary.calls[0]!.result.reject(refusal('unavailable', 'old-reservation'));
+    await settle();
+    boundary.controller.retry();
+    const resuming = boundary.calls[1]!;
+    let disconnect = boundary.disconnect;
+    if (action === 'cancel') boundary.controller.cancel();
+    if (action === 'remove') boundary.controller.remove();
+    if (action === 'replace') boundary.controller.choose(file());
+    if (action === 'actor') editor.retire();
+    if (action === 'remount') {
+      disconnect();
+      disconnect = boundary.controller.connect();
+    }
+    expect(resuming.signal.aborted).toBe(true);
+    resuming.result.resolve({ src: 'old-reservation' });
+    await settle();
+    expect(editor.snapshot().draft?.avatar).toEqual(
+      action === 'actor' ? undefined : action === 'remove' ? null : profile().avatar,
+    );
+    expect(boundary.controller.snapshot().phase).not.toBe('ready');
+    if (action === 'actor') {
+      const next = recoveryEditor(profile('account-two'));
+      expect(next.snapshot().draft).toEqual(profile('account-two'));
+    }
+    disconnect();
+    expect(boundary.revoked).toEqual(boundary.created);
+    expect(boundary.revoked.every((url) => url.startsWith('blob:recovery-'))).toBe(true);
+  }
+});
+
+test('a known reservation without an injected resume binding stays unknown instead of reserving another upload', async () => {
+  const editor = recoveryEditor();
+  const boundary = recovery(editor, false);
+  boundary.controller.choose(file());
+  boundary.calls[0]!.result.reject(refusal('unavailable', 'retained-reservation'));
+  await settle();
+  boundary.controller.retry();
+  expect(boundary.calls).toHaveLength(1);
+  expect(boundary.controller.canRetry()).toBe(false);
+  expect(boundary.controller.snapshot()).toMatchObject({ phase: 'error', url: boundary.created[0] });
+  expect(editor.snapshot().draft?.avatar).toEqual(profile().avatar);
   boundary.disconnect();
 });

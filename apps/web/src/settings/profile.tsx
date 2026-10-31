@@ -13,7 +13,7 @@ import { ProfileEditor, profileFieldErrors, type ProfileScope } from './profile-
 import { useProfileEditor } from './profile-write-query';
 import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';
 import { ProfileLinks } from './profile-links';
-import type { AvatarUpload } from './profile-avatar-upload';
+import type { AvatarResume, AvatarUpload } from './profile-avatar-upload';
 import { ProfileNavigation, useProfileNavigationUpload } from './profile-navigation';
 import { usePreferenceRetry } from './preference-failure-retry';
 
@@ -115,10 +115,12 @@ export function ProfileCard({
   editor,
   writable = true,
   avatarUpload,
+  avatarResume,
 }: {
   editor: ProfileEditor;
   writable?: boolean;
   avatarUpload?: AvatarUpload;
+  avatarResume?: AvatarResume;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const waiting = usePreferenceRetry(state.failure);
@@ -136,7 +138,7 @@ export function ProfileCard({
   }, [validationAttempt]);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const closed = !writable || state.readAuthority !== 'allowed' || state.phase === 'unavailable';
-  const avatar = useProfileAvatarUpload(editor, closed, avatarUpload);
+  const avatar = useProfileAvatarUpload(editor, closed, avatarUpload, avatarResume);
   useProfileNavigationUpload(avatar.controller);
   const uploading = avatar.blocked;
   const changed =
