@@ -16,6 +16,7 @@ test('default qualified relation list exposes full readable credit facts and wor
     Element: window.Element,
     Node: window.Node,
     getComputedStyle: window.getComputedStyle.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
@@ -170,7 +171,7 @@ test('default qualified relation list exposes full readable credit facts and wor
     expect(destinations.pop()).toBe(`/en/subjects/${character}/the-traveller?realm=${qualifiedRealm}`);
     await act(async () => user.click(reader.getByRole('link', { name: `Role: ${roleTitle}` })));
     expect(destinations.pop()).toBe(
-      `/en/subjects/${role}/principal-voice-performer-and-narrator-of-the-extended-archival-recollections?realm=${qualifiedRealm}`,
+      `/en/subjects/${role}/principal-voice-performer-and-narrator-of-the-extended?realm=${qualifiedRealm}`,
     );
     await act(async () => user.click(reader.getByRole('button', { name: 'Show spoiler' })));
     expect(reader.getByRole('link', { name: 'Secret performer' })).toBeTruthy();
