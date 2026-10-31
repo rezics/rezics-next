@@ -2825,7 +2825,7 @@
   "exposure_keep_operation": "Le résultat est inconnu. Conservez cette opération sans la modifier ; une nouvelle tentative réutilise son groupe, son action, son corps de requête et sa clé d’idempotence d’origine.",
   "exposure_recorded": "Le résultat de la commande native a été enregistré. Il s’agit d’un résultat historique qui ne prouve pas l’état public actuel. Rechargez les données actuelles avant de tirer des conclusions.",
   "exposure_uncertain": "Le résultat de la commande est inconnu. Aucune autre modification ne sera exécutée automatiquement.",
-  "exposure_not_sent": "La commande n’a pas été envoyée, car son catalogue actuel ou l’autorisation exacte requise n’a pas pu être vérifié.",
+  "exposure_not_sent": "La commande n’a pas été envoyée, car il n’a pas été possible de vérifier son catalogue actuel ou l’autorisation exacte requise.",
   "exposure_changed": "La commande enregistrée a modifié l’ouverture au public au moment de son exécution.",
   "exposure_unchanged": "La commande enregistrée n’a pas modifié l’ouverture au public (changed: false). Il s’agit d’un résultat historique réussi.",
   "erasure_title": "Progression de l’effacement du compte",
