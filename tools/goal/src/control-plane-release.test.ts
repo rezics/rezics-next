@@ -435,20 +435,38 @@ import type { Task } from './types.ts';
 
 function acceptedBatch(h: ReturnType<typeof integrationHarness>, tasks: readonly Task[]): ControlPlaneBatchManifest {
   const manifest = captureControlPlaneBatch(h.store, h.queue, 'control-manager');
-  expect(manifest.members.map(member => member.taskId).sort()).toEqual(tasks.map(task => task.id).sort());
-  for (const task of tasks) requestManagerLanding(task.id, 'control-manager', h.store, h.queue, id => {
-    const current = h.store.task(id);
-    return { taskId: id, attempt: current.currentAttempt, branch: current.branch, worktree: current.worktree,
-      declaredPaths: current.brief.paths, protectedPaths: h.tasks.protectedPaths(current.brief),
-      gate: current.brief.acceptance.command };
-  });
+  expect(manifest.members.map((member) => member.taskId).sort()).toEqual(tasks.map((task) => task.id).sort());
+  for (const task of tasks)
+    requestManagerLanding(task.id, 'control-manager', h.store, h.queue, (id) => {
+      const current = h.store.task(id);
+      return {
+        taskId: id,
+        attempt: current.currentAttempt,
+        branch: current.branch,
+        worktree: current.worktree,
+        declaredPaths: current.brief.paths,
+        protectedPaths: h.tasks.protectedPaths(current.brief),
+        gate: current.brief.acceptance.command,
+      };
+    });
   return manifest;
 }
 
 function batchTrain(h: ReturnType<typeof integrationHarness>, runGate: GateRunner = success, hooks: ReleaseHooks = {}) {
-  return new MergeTrain({ ...h.settings, queue: h.queue, fence: h.store,
-    sink: { onGateOutcome(outcome) { h.outcomes.push(outcome); h.job.onGateOutcome(outcome); } },
-    runGate, runLaunchSmoke: releaseEvidence, ...hooks });
+  return new MergeTrain({
+    ...h.settings,
+    queue: h.queue,
+    fence: h.store,
+    sink: {
+      onGateOutcome(outcome) {
+        h.outcomes.push(outcome);
+        h.job.onGateOutcome(outcome);
+      },
+    },
+    runGate,
+    runLaunchSmoke: releaseEvidence,
+    ...hooks,
+  });
 }
 
 const isFullControlPlaneSuite = (command: readonly string[]) =>
@@ -461,56 +479,71 @@ test('One accepted control-plane main cohort validates its combined final head o
     const main = h.head('main');
     git(h.root, 'branch', 'stabilize', main);
     const independent = addBranchCommit(h, 'dev', { 'independent.txt': 'retained development\n' });
-    const tasks = [dispatchControlPlane(h, 'tools/goal/src/cohort-a.ts'), dispatchControlPlane(h, 'tools/goal/src/cohort-b.ts')];
+    const tasks = [
+      dispatchControlPlane(h, 'tools/goal/src/cohort-a.ts'),
+      dispatchControlPlane(h, 'tools/goal/src/cohort-b.ts'),
+    ];
     for (const task of tasks) await h.start(task);
     const manifest = acceptedBatch(h, tasks);
-    const originals = tasks.map(task => h.store.attempt({ taskId: task.id, attempt: 1 }).result);
+    const originals = tasks.map((task) => h.store.attempt({ taskId: task.id, attempt: 1 }).result);
     const commands: string[][] = [];
     const heads: string[] = [];
     let publications = 0;
-    const result = await batchTrain(h, async (command, cwd) => {
-      commands.push([...command]);
-      if (isFullControlPlaneSuite(command)) {
-        heads.push(git(cwd, 'rev-parse', 'HEAD'));
-        for (const task of tasks) expect(existsSync(join(cwd, task.brief.paths[0]!))).toBe(true);
-      }
-      expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual([main, main, independent]);
-      return { passed: true, output: '', timedOut: false };
-    }, { beforeIntegrationAdvance() {
-      publications++;
-      expect(tasks.map(task => h.store.task(task.id).state)).toEqual(['landing', 'landing']);
-      expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual([main, main, independent]);
-    } }).releaseControlPlaneBatch(manifest);
+    const result = await batchTrain(
+      h,
+      async (command, cwd) => {
+        commands.push([...command]);
+        if (isFullControlPlaneSuite(command)) {
+          heads.push(git(cwd, 'rev-parse', 'HEAD'));
+          for (const task of tasks) expect(existsSync(join(cwd, task.brief.paths[0]!))).toBe(true);
+        }
+        expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual([main, main, independent]);
+        return { passed: true, output: '', timedOut: false };
+      },
+      {
+        beforeIntegrationAdvance() {
+          publications++;
+          expect(tasks.map((task) => h.store.task(task.id).state)).toEqual(['landing', 'landing']);
+          expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual([main, main, independent]);
+        },
+      },
+    ).releaseControlPlaneBatch(manifest);
     await h.job.drain();
     expect(publications).toBe(1);
     expect(heads).toEqual([h.head('main')]);
-    expect(commands.filter(command => command[1] === 'run' && command.includes('typecheck'))).toHaveLength(1);
-    expect(commands.filter(command => command[1] === 'tools/goal/scripts/check-compatibility.ts')).toHaveLength(1);
-    expect(result.members.every(member => member.disposition === 'released' && member.mergedCommit === heads[0])).toBe(true);
+    expect(commands.filter((command) => command[1] === 'run' && command.includes('typecheck'))).toHaveLength(1);
+    expect(commands.filter((command) => command[1] === 'tools/goal/scripts/check-compatibility.ts')).toHaveLength(1);
+    expect(
+      result.members.every((member) => member.disposition === 'released' && member.mergedCommit === heads[0]),
+    ).toBe(true);
     expect(h.outcomes).toHaveLength(2);
     for (const [index, task] of tasks.entries()) {
-      const source = manifest.members.find(member => member.taskId === task.id)!.acceptedCommit;
+      const source = manifest.members.find((member) => member.taskId === task.id)!.acceptedCommit;
       expect(git(h.root, 'merge-base', '--is-ancestor', source, 'main')).toBe('');
       expect(git(task.worktree, 'rev-parse', 'HEAD')).toBe(source);
       expect(h.store.task(task.id)).toMatchObject({ state: 'merged', mergedCommit: heads[0] });
       expect(h.store.attempt({ taskId: task.id, attempt: 1 }).result).toBe(originals[index]!);
-      expect(h.outcomes.find(outcome => outcome.taskId === task.id)).toMatchObject({
-        mergedCommit: heads[0], changedFiles: [task.brief.paths[0]], diffLines: 1,
+      expect(h.outcomes.find((outcome) => outcome.taskId === task.id)).toMatchObject({
+        mergedCommit: heads[0],
+        changedFiles: [task.brief.paths[0]],
+        diffLines: 1,
       });
     }
     expect(git(h.root, 'merge-base', '--is-ancestor', independent, 'dev')).toBe('');
     expect(git(h.root, 'merge-base', '--is-ancestor', h.head('main'), 'stabilize')).toBe('');
     expect(git(h.root, 'merge-base', '--is-ancestor', h.head('stabilize'), 'dev')).toBe('');
     expect(h.queue.nextBatch(10)).toEqual([]);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('failing combined cohorts bisect instead of serial fallback and preserve grouped passing subsets across restart', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
-    const files = ['group-a.ts', 'group-b.ts', 'group-c.ts', 'group-bad.ts'].map(file => `tools/goal/src/${file}`);
-    const tasks = files.map(file => dispatchControlPlane(h, file));
+    const files = ['group-a.ts', 'group-b.ts', 'group-c.ts', 'group-bad.ts'].map((file) => `tools/goal/src/${file}`);
+    const tasks = files.map((file) => dispatchControlPlane(h, file));
     for (const task of tasks) await h.start(task);
     const manifest = acceptedBatch(h, tasks);
     const sizes: number[] = [];
@@ -518,80 +551,115 @@ test('failing combined cohorts bisect instead of serial fallback and preserve gr
       if (!isFullControlPlaneSuite(command)) return { passed: true, output: '', timedOut: false };
       sizes.push(git(cwd, 'diff', '--name-only', 'main', 'HEAD').split('\n').filter(Boolean).length);
       const failed = existsSync(join(cwd, files[3]!));
-      return { passed: !failed, output: failed ? 'exact failing cohort assertion\nfull native output\n' : '', timedOut: false };
+      return {
+        passed: !failed,
+        output: failed ? 'exact failing cohort assertion\nfull native output\n' : '',
+        timedOut: false,
+      };
     }).releaseControlPlaneBatch(manifest);
     expect(sizes).toEqual([4, 2, 2, 1, 1]);
-    expect(result.members.map(member => member.disposition)).toEqual(['released', 'released', 'released', 'excluded']);
+    expect(result.members.map((member) => member.disposition)).toEqual([
+      'released',
+      'released',
+      'released',
+      'excluded',
+    ]);
     expect(result.members[0]!.mergedCommit).toBe(result.members[1]!.mergedCommit);
-    expect(readFileSync(result.members[3]!.logPath, 'utf8')).toContain('exact failing cohort assertion\nfull native output');
+    expect(readFileSync(result.members[3]!.logPath, 'utf8')).toContain(
+      'exact failing cohort assertion\nfull native output',
+    );
     expect(h.store.task(tasks[3]!.id).state).toBe('landing');
     expect(h.queue.nextBatch(20)).toEqual([]); // No ordinary serial drain can pick up a failed cohort's members.
-    const replay = await batchTrain(h, async () => { throw new Error('durable split decisions must not rerun checks'); })
-      .releaseControlPlaneBatch(manifest);
+    const replay = await batchTrain(h, async () => {
+      throw new Error('durable split decisions must not rerun checks');
+    }).releaseControlPlaneBatch(manifest);
     expect(replay).toEqual(result);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('a stale cohort generation cannot be hidden by collective green', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
-    const main = h.head('main'), dev = h.head('dev');
-    const tasks = [dispatchControlPlane(h, 'tools/goal/src/stale-a.ts'), dispatchControlPlane(h, 'tools/goal/src/stale-b.ts')];
+    const main = h.head('main'),
+      dev = h.head('dev');
+    const tasks = [
+      dispatchControlPlane(h, 'tools/goal/src/stale-a.ts'),
+      dispatchControlPlane(h, 'tools/goal/src/stale-b.ts'),
+    ];
     for (const task of tasks) await h.start(task);
     const manifest = acceptedBatch(h, tasks);
     let moved = false;
-    await expect(batchTrain(h, async command => {
-      if (isFullControlPlaneSuite(command) && !moved) {
-        moved = true;
-        const member = manifest.members[1]!;
-        const retained = h.store.attempt(member);
-        h.store.nextAttempt(member, attempt => ({
-          ...retained,
-          attempt,
-          state: 'pending',
-          startedAt: new Date().toISOString(),
-          endedAt: null,
-          process: null,
-          driver: null,
-          auxiliaryProcesses: [],
-          session: null,
-          logPath: join(h.settings.stateDirectory, 'runs', member.taskId, `${attempt}.jsonl`),
-          evidencePath: join(h.settings.stateDirectory, 'evidence', member.taskId, String(attempt)),
-          before: null,
-          after: null,
-          exitCode: null,
-          result: '',
-        }));
-      }
-      return { passed: true, output: '', timedOut: false };
-    }).releaseControlPlaneBatch(manifest)).rejects.toThrow('stale');
+    await expect(
+      batchTrain(h, async (command) => {
+        if (isFullControlPlaneSuite(command) && !moved) {
+          moved = true;
+          const member = manifest.members[1]!;
+          const retained = h.store.attempt(member);
+          h.store.nextAttempt(member, (attempt) => ({
+            ...retained,
+            attempt,
+            state: 'pending',
+            startedAt: new Date().toISOString(),
+            endedAt: null,
+            process: null,
+            driver: null,
+            auxiliaryProcesses: [],
+            session: null,
+            logPath: join(h.settings.stateDirectory, 'runs', member.taskId, `${attempt}.jsonl`),
+            evidencePath: join(h.settings.stateDirectory, 'evidence', member.taskId, String(attempt)),
+            before: null,
+            after: null,
+            exitCode: null,
+            result: '',
+          }));
+        }
+        return { passed: true, output: '', timedOut: false };
+      }).releaseControlPlaneBatch(manifest),
+    ).rejects.toThrow('stale');
     expect([h.head('main'), h.head('dev')]).toEqual([main, dev]);
     expect(h.outcomes).toEqual([]);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('a batch publication ref race preserves independent dev work and rebuilds only the combined candidate', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
-    const tasks = [dispatchControlPlane(h, 'tools/goal/src/race-a.ts'), dispatchControlPlane(h, 'tools/goal/src/race-b.ts')];
+    const tasks = [
+      dispatchControlPlane(h, 'tools/goal/src/race-a.ts'),
+      dispatchControlPlane(h, 'tools/goal/src/race-b.ts'),
+    ];
     for (const task of tasks) await h.start(task);
     const manifest = acceptedBatch(h, tasks);
-    let suites = 0, publications = 0, raced = '';
-    const result = await batchTrain(h, async command => {
-      if (isFullControlPlaneSuite(command)) suites++;
-      return { passed: true, output: '', timedOut: false };
-    }, { beforeIntegrationAdvance() {
-      publications++;
-      if (!raced) raced = addBranchCommit(h, 'dev', { 'dev-race.txt': 'independent during CAS\n' });
-    } }).releaseControlPlaneBatch(manifest);
+    let suites = 0,
+      publications = 0,
+      raced = '';
+    const result = await batchTrain(
+      h,
+      async (command) => {
+        if (isFullControlPlaneSuite(command)) suites++;
+        return { passed: true, output: '', timedOut: false };
+      },
+      {
+        beforeIntegrationAdvance() {
+          publications++;
+          if (!raced) raced = addBranchCommit(h, 'dev', { 'dev-race.txt': 'independent during CAS\n' });
+        },
+      },
+    ).releaseControlPlaneBatch(manifest);
     expect(suites).toBe(2);
     expect(publications).toBe(2);
-    expect(result.members.every(member => member.mergedCommit === h.head('main'))).toBe(true);
+    expect(result.members.every((member) => member.mergedCommit === h.head('main'))).toBe(true);
     expect(git(h.root, 'merge-base', '--is-ancestor', raced, 'dev')).toBe('');
     expect(git(h.root, 'show', 'dev:dev-race.txt')).toBe('independent during CAS');
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('published cohorts recover all original outcomes after interruption and checkout cleanup failure without another proof', async () => {
@@ -599,30 +667,43 @@ test('published cohorts recover all original outcomes after interruption and che
   try {
     h.ensureDev();
     const main = h.head('main');
-    const tasks = [dispatchControlPlane(h, 'tools/goal/src/recover-a.ts'), dispatchControlPlane(h, 'tools/goal/src/recover-b.ts')];
+    const tasks = [
+      dispatchControlPlane(h, 'tools/goal/src/recover-a.ts'),
+      dispatchControlPlane(h, 'tools/goal/src/recover-b.ts'),
+    ];
     for (const task of tasks) await h.start(task);
     const manifest = acceptedBatch(h, tasks);
     const finish = h.queue.finish.bind(h.queue);
-    h.queue.finish = () => { throw new Error('interrupted batch after ref transaction'); };
-    await expect(batchTrain(h, success, { beforeIntegrationAdvance() {
-      writeFileSync(join(h.root, 'README.md'), 'local checkout edit\n');
-    } }).releaseControlPlaneBatch(manifest)).rejects.toThrow('interrupted batch after ref transaction');
+    h.queue.finish = () => {
+      throw new Error('interrupted batch after ref transaction');
+    };
+    await expect(
+      batchTrain(h, success, {
+        beforeIntegrationAdvance() {
+          writeFileSync(join(h.root, 'README.md'), 'local checkout edit\n');
+        },
+      }).releaseControlPlaneBatch(manifest),
+    ).rejects.toThrow('interrupted batch after ref transaction');
     const published = [h.head('main'), h.head('dev')];
     expect(published[0]).not.toBe(main);
     expect(h.outcomes).toEqual([]);
     h.queue.finish = finish;
-    const result = await batchTrain(h, async () => { throw new Error('published proof must survive cleanup failure'); })
-      .releaseControlPlaneBatch(manifest);
+    const result = await batchTrain(h, async () => {
+      throw new Error('published proof must survive cleanup failure');
+    }).releaseControlPlaneBatch(manifest);
     expect([h.head('main'), h.head('dev')]).toEqual(published);
     expect(h.outcomes).toHaveLength(2);
-    expect(result.members.every(member => member.mergedCommit === published[0])).toBe(true);
+    expect(result.members.every((member) => member.mergedCommit === published[0])).toBe(true);
     expect(readFileSync(result.members[0]!.logPath, 'utf8')).toContain('checkout synchronization deferred');
     expect(readFileSync(join(h.root, 'README.md'), 'utf8')).toBe('local checkout edit\n');
-    const replay = await batchTrain(h, async () => { throw new Error('idempotent replay cannot run proof'); })
-      .releaseControlPlaneBatch(manifest);
+    const replay = await batchTrain(h, async () => {
+      throw new Error('idempotent replay cannot run proof');
+    }).releaseControlPlaneBatch(manifest);
     expect(replay).toEqual(result);
     expect(h.outcomes).toHaveLength(2);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('batch receiving refuses GOAL_MANAGER without a persisted authenticated manager session', async () => {
@@ -632,11 +713,24 @@ test('batch receiving refuses GOAL_MANAGER without a persisted authenticated man
     const task = dispatchControlPlane(h);
     await h.start(task);
     const manifest = captureControlPlaneBatch(h.store, h.queue, 'control-manager');
-    await expect(receiveControlPlaneBatch(manifest, { store: h.store, queue: h.queue, train: batchTrain(h),
-      landing() { throw new Error('unauthenticated caller cannot authorize requests'); } }, { GOAL_MANAGER: 'control-manager' }))
-      .rejects.toThrow('authenticated');
+    await expect(
+      receiveControlPlaneBatch(
+        manifest,
+        {
+          store: h.store,
+          queue: h.queue,
+          train: batchTrain(h),
+          landing() {
+            throw new Error('unauthenticated caller cannot authorize requests');
+          },
+        },
+        { GOAL_MANAGER: 'control-manager' },
+      ),
+    ).rejects.toThrow('authenticated');
     expect(h.queue.entry(manifest.members[0]!)?.request.managerLanding).toBeUndefined();
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('an accepted source already represented by main has an honest zero-delta disposition', async () => {
@@ -654,14 +748,16 @@ test('an accepted source already represented by main has an honest zero-delta di
     git(h.root, 'add', '--', path);
     git(h.root, 'commit', '-m', 'Independently represent the accepted implementation');
     let suites = 0;
-    const result = await batchTrain(h, async command => {
+    const result = await batchTrain(h, async (command) => {
       if (isFullControlPlaneSuite(command)) suites++;
       return { passed: true, output: '', timedOut: false };
     }).releaseControlPlaneBatch(manifest);
     expect(suites).toBe(1);
-    expect(result.members.map(member => member.disposition)).toEqual(['already-represented', 'released']);
-    expect(h.outcomes.find(outcome => outcome.taskId === first.id)).toMatchObject({ changedFiles: [], diffLines: 0 });
+    expect(result.members.map((member) => member.disposition)).toEqual(['already-represented', 'released']);
+    expect(h.outcomes.find((outcome) => outcome.taskId === first.id)).toMatchObject({ changedFiles: [], diffLines: 0 });
     expect(git(h.root, 'log', '--format=%s', 'main')).not.toContain(`Merge accepted source ${first.branch}`);
     expect(git(first.worktree, 'rev-parse', 'HEAD')).toBe(manifest.members[0]!.acceptedCommit);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });

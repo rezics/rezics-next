@@ -75,23 +75,42 @@ export class SqliteLandingQueue implements LandingQueue {
   }
   /** Exact durable identity, including delivered rows needed for post-publication recovery. */
   entry(ref: { taskId: string; attempt: number }): LandingEntry | undefined {
-    const row = this.db.query('SELECT * FROM landing_queue WHERE task=? AND attempt=?')
+    const row = this.db
+      .query('SELECT * FROM landing_queue WHERE task=? AND attempt=?')
       .get(ref.taskId, ref.attempt) as {
-        id: number; request: string; outcome: string | null; delivered: number; candidate: string | null; batch: string | null;
-      } | null;
-    return row ? { ...row, batchId: row.batch, request: JSON.parse(row.request), outcome: row.outcome ? JSON.parse(row.outcome) : null } : undefined;
+      id: number;
+      request: string;
+      outcome: string | null;
+      delivered: number;
+      candidate: string | null;
+      batch: string | null;
+    } | null;
+    return row
+      ? {
+          ...row,
+          batchId: row.batch,
+          request: JSON.parse(row.request),
+          outcome: row.outcome ? JSON.parse(row.outcome) : null,
+        }
+      : undefined;
   }
   /** Reserve real requests for explicit cohort release. Ordinary pumps must never retry them as serial landings. */
   claimControlPlaneBatch(batchId: string, members: readonly { taskId: string; attempt: number }[]): void {
-    this.db.transaction(() => {
-      for (const member of members) {
-        this.fence.assertCurrent(member);
-        const entry = this.entry(member);
-        if (!entry || (entry.batchId && entry.batchId !== batchId) || (!entry.batchId && (entry.outcome || entry.delivered)))
-          throw new Error(`Landing request for ${member.taskId} is unavailable for this batch`);
-        this.db.query('UPDATE landing_queue SET batch=? WHERE id=?').run(batchId, entry.id);
-      }
-    }).immediate();
+    this.db
+      .transaction(() => {
+        for (const member of members) {
+          this.fence.assertCurrent(member);
+          const entry = this.entry(member);
+          if (
+            !entry ||
+            (entry.batchId && entry.batchId !== batchId) ||
+            (!entry.batchId && (entry.outcome || entry.delivered))
+          )
+            throw new Error(`Landing request for ${member.taskId} is unavailable for this batch`);
+          this.db.query('UPDATE landing_queue SET batch=? WHERE id=?').run(batchId, entry.id);
+        }
+      })
+      .immediate();
   }
   nextBatch(limit: number, excludedIds: readonly number[] = [], lane?: 'main' | 'dev'): LandingEntry[] {
     if (!Number.isInteger(limit) || limit < 1) throw new Error('landing batch size must be a positive integer');
@@ -133,7 +152,9 @@ export class SqliteLandingQueue implements LandingQueue {
       : '';
     const excluded = excludedIds.length ? ` AND id NOT IN (${excludedIds.map(() => '?').join(',')})` : '';
     const rows = this.db
-      .query(`SELECT * FROM landing_queue WHERE delivered = 0 AND batch IS NULL${laneFilter}${excluded} ORDER BY ${priority}id LIMIT ?`)
+      .query(
+        `SELECT * FROM landing_queue WHERE delivered = 0 AND batch IS NULL${laneFilter}${excluded} ORDER BY ${priority}id LIMIT ?`,
+      )
       .all(...excludedIds, limit) as {
       id: number;
       request: string;
