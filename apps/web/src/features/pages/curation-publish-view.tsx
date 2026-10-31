@@ -11,7 +11,10 @@ import {
 
 export type ValidationCorrection = { describe: (pointer: string) => string; correct: (pointer: string) => void };
 
-export function CurationFailureNotice({ failure, correction }: {
+export function CurationFailureNotice({
+  failure,
+  correction,
+}: {
   failure: Exclude<PublicationRead, { ok: true }>;
   correction?: ValidationCorrection | undefined;
 }) {
@@ -42,7 +45,9 @@ export function CurationFailureNotice({ failure, correction }: {
               {correction && <Button onClick={() => correction.correct(pointer)}>{m.curation_correct()}</Button>}
               <details className="break-all text-sm">
                 <summary>{m.curation_diagnostics()}</summary>
-                <code>{pointer || '/'} — {code}</code>
+                <code>
+                  {pointer || '/'} — {code}
+                </code>
               </details>
             </li>
           ))}
@@ -94,16 +99,22 @@ export function CurationPublicationRecovery({
       {result?.ok === false ? <CurationFailureNotice failure={result} correction={correction} /> : null}
       {intent ? (
         <>
-          <p>{invalid ? m.curation_invalid_intent({ head: intent.expectedHead }) : m.curation_retained({ head: intent.expectedHead })}</p>
+          <p>
+            {invalid
+              ? m.curation_invalid_intent({ head: intent.expectedHead })
+              : m.curation_retained({ head: intent.expectedHead })}
+          </p>
           <div className="flex flex-wrap gap-3">
-            {!invalid && <Button
-              variant="outline"
-              className="min-h-11 whitespace-normal"
-              disabled={busy}
-              onClick={() => void retry()}
-            >
-              {m.curation_retry_original()}
-            </Button>}
+            {!invalid && (
+              <Button
+                variant="outline"
+                className="min-h-11 whitespace-normal"
+                disabled={busy}
+                onClick={() => void retry()}
+              >
+                {m.curation_retry_original()}
+              </Button>
+            )}
             <Button
               variant="outline"
               className="min-h-11 whitespace-normal"
@@ -116,7 +127,11 @@ export function CurationPublicationRecovery({
               <Button
                 className="min-h-11 whitespace-normal"
                 variant="outline"
-                disabled={busy || profileDigest(profile) === profileDigest(intent.profile) || validateProfile(platformRegistry, profile).length > 0}
+                disabled={
+                  busy ||
+                  validateProfile(platformRegistry, profile).length > 0 ||
+                  profileDigest(profile) === profileDigest(intent.profile)
+                }
                 onClick={async () => {
                   const confirmation = await publication.replaceInvalid(profile, head);
                   if (confirmation) onPublished(confirmation);

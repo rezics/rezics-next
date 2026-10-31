@@ -1,4 +1,10 @@
-import { platformRegistry, type CompositionDocument, type CompositionNode, type PresentationProfile, type View } from '@rezics/composition';
+import {
+  platformRegistry,
+  type CompositionDocument,
+  type CompositionNode,
+  type PresentationProfile,
+  type View,
+} from '@rezics/composition';
 import type { CurationRead } from './curate-actions';
 import { profileTemplates, templateViewNames, viewOf, viewPointer, withView, type Template } from './curate';
 import { editorConfig, toComposition, type PageEditorData } from './editor-config';
@@ -16,7 +22,10 @@ export type CorrectionTarget = ViewSelection & {
 /** Reject malformed escapes and non-canonical array positions rather than guessing a target. */
 function pointerSegments(pointer: string): string[] | null {
   if (!pointer.startsWith('/') || /~(?:[^01]|$)/u.test(pointer)) return null;
-  return pointer.slice(1).split('/').map((part) => part.replace(/~1/gu, '/').replace(/~0/gu, '~'));
+  return pointer
+    .slice(1)
+    .split('/')
+    .map((part) => part.replace(/~1/gu, '/').replace(/~0/gu, '~'));
 }
 
 function nodeAt(nodes: CompositionNode[], segment: string | undefined) {
@@ -34,8 +43,10 @@ function editableField(type: string | null, path: string[], locale: string, prop
     const name = path[index]!;
     if (!fields || !Object.hasOwn(fields, name)) return null;
     const field = fields[name]!;
-    value = value !== null && typeof value === 'object' && Object.hasOwn(value, name)
-      ? (value as Record<string, unknown>)[name] : undefined;
+    value =
+      value !== null && typeof value === 'object' && Object.hasOwn(value, name)
+        ? (value as Record<string, unknown>)[name]
+        : undefined;
     names.push(name);
     labels.push(field.label ?? name);
     if (field.type === 'object') {
@@ -68,7 +79,11 @@ function editableField(type: string | null, path: string[], locale: string, prop
 }
 
 /** Resolve indices only in the exact profile to which the validation response belongs. */
-export function resolveCorrection(profile: PresentationProfile, pointer: string, locale: string): CorrectionTarget | null {
+export function resolveCorrection(
+  profile: PresentationProfile,
+  pointer: string,
+  locale: string,
+): CorrectionTarget | null {
   const segments = pointerSegments(pointer);
   if (!segments) return null;
   for (const template of profileTemplates(profile)) {
@@ -79,9 +94,14 @@ export function resolveCorrection(profile: PresentationProfile, pointer: string,
       const document = viewOf(profile, template, view)!;
       if (path[0] === 'root' && path[1] === 'props' && path[2] === 'appearance') {
         const appearance = document.root.props.appearance;
-        const field = editableField(null, path.slice(3), locale,
+        const field = editableField(
+          null,
+          path.slice(3),
+          locale,
           appearance !== null && typeof appearance === 'object' && !Array.isArray(appearance)
-            ? appearance as Record<string, unknown> : {});
+            ? (appearance as Record<string, unknown>)
+            : {},
+        );
         return field ? { template, view, component: null, ...field } : null;
       }
       if (path.shift() !== 'content') return null;
@@ -125,8 +145,11 @@ export function currentCorrection(profile: PresentationProfile, target: Correcti
   visit(document.content);
   if (matches.length !== 1 || matches[0]!.type !== target.component.type) return null;
   // Array item positions have no stable identity. Map them only if that whole property is unchanged.
-  if (target.field.some((part) => /^(0|[1-9][0-9]*)$/u.test(part)) &&
-    JSON.stringify(matches[0]!.props[target.field[0]!]) !== JSON.stringify(target.sourceValue)) return null;
+  if (
+    target.field.some((part) => /^(0|[1-9][0-9]*)$/u.test(part)) &&
+    JSON.stringify(matches[0]!.props[target.field[0]!]) !== JSON.stringify(target.sourceValue)
+  )
+    return null;
   return target;
 }
 export type PresentationDraft = {

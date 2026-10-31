@@ -51,17 +51,35 @@ test('default presentation editor takes a native invalid publication to its actu
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const lookupButton = (label: string) => [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label || item.getAttribute('title') === label);
+  const lookupButton = (label: string) =>
+    [...host.querySelectorAll('button')].find(
+      (item) =>
+        item.textContent?.trim() === label ||
+        item.getAttribute('aria-label') === label ||
+        item.getAttribute('title') === label,
+    );
   const button = (label: string) => {
     const match = lookupButton(label);
     expect(match).toBeDefined();
     return match!;
   };
   const settle = async (ready: () => boolean) => {
-    for (let count = 0; count < 150 && !ready(); count++) await act(async () => { await Bun.sleep(10); });
-    expect(ready(), [...host.querySelectorAll('button')].map((item) => [item.textContent, item.getAttribute('aria-label'), item.getAttribute('title')]).toString()).toBe(true);
+    for (let count = 0; count < 150 && !ready(); count++)
+      await act(async () => {
+        await Bun.sleep(10);
+      });
+    expect(
+      ready(),
+      [...host.querySelectorAll('button')]
+        .map((item) => [item.textContent, item.getAttribute('aria-label'), item.getAttribute('title')])
+        .toString(),
+    ).toBe(true);
   };
-  const click = async (label: string) => { await act(async () => { button(label).click(); }); };
+  const click = async (label: string) => {
+    await act(async () => {
+      button(label).click();
+    });
+  };
   const select = async (id: string, value: string) => {
     await act(async () => {
       const control = host.querySelector(`#${id}`)! as InstanceType<typeof window.HTMLSelectElement>;
@@ -89,46 +107,69 @@ test('default presentation editor takes a native invalid publication to its actu
   };
   try {
     const route = createRootRoute({
-      component: () => createElement(PresentationViewEditor, {
-        initial,
-        locale: 'en',
-        transport: {
-          read: async () => initial,
-          publish: async (input) => {
-            attempts.push(structuredClone(input));
-            return attempts.length === 1
-              ? { ok: false, reason: 'invalid', errors: [{ pointer: '/types/0/views/details/content/0/props/text/en', code: 'invalid' }] }
-              : { ok: true, digest: profileDigest(input.profile), head: input.expectedHead + 1 };
+      component: () =>
+        createElement(PresentationViewEditor, {
+          initial,
+          locale: 'en',
+          transport: {
+            read: async () => initial,
+            publish: async (input) => {
+              attempts.push(structuredClone(input));
+              return attempts.length === 1
+                ? {
+                    ok: false,
+                    reason: 'invalid',
+                    errors: [{ pointer: '/types/0/views/details/content/0/props/text/en', code: 'invalid' }],
+                  }
+                : { ok: true, digest: profileDigest(input.profile), head: input.expectedHead + 1 };
+            },
           },
-        },
-      }),
+        }),
     });
-    const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/en/curate/presentation'] }) });
+    const router = createRouter({
+      routeTree: route,
+      history: createMemoryHistory({ initialEntries: ['/en/curate/presentation'] }),
+    });
     await router.load();
-    await act(async () => { root.render(createElement(RouterProvider, { router })); });
-    expect(host.querySelector('#curation-view')?.getAttribute('id')).toBe('curation-view');
+    await act(async () => {
+      root.render(createElement(RouterProvider, { router }));
+    });
+    expect((host.querySelector('#curation-view') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
+      'overview',
+    );
+    expect((host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
+      JSON.stringify({ scope: 'generic', key: null }),
+    );
     await click(m.curation_publish());
     expect(attempts).toHaveLength(1);
     expect(host.textContent).toContain(m.curation_invalid_retained());
-    expect([...host.querySelectorAll('button')].some((item) => item.textContent === m.curation_retry_original())).toBe(false);
+    expect([...host.querySelectorAll('button')].some((item) => item.textContent === m.curation_retry_original())).toBe(
+      false,
+    );
 
     // Later edits belong to the current editor, even though the error describes the retained intent.
     await select('curation-view', 'overview');
     await heading('overview');
     await edit('text.en', 'Later overview edit');
+    await edit('text.fr', 'Brouillon');
     await edit('text.fr', '');
     await select('curation-template', JSON.stringify({ scope: 'type', key: 'schema:Book' }));
     await select('curation-view', 'details');
     await heading('details');
     await edit('text.ja', '後からの編集');
+    await edit('text.fr', 'Détails');
     await edit('text.fr', '');
     await select('curation-view', 'overview');
     await select('curation-template', JSON.stringify({ scope: 'generic', key: null }));
 
     await click(m.curation_correct());
     await settle(() => window.document.activeElement === textField('text.en') && !!textField('text.en'));
-    expect((host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(JSON.stringify({ scope: 'type', key: 'schema:Book' }));
-    expect((host.querySelector('#curation-view') as InstanceType<typeof window.HTMLSelectElement>).value).toBe('details');
+    expect((host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
+      JSON.stringify({ scope: 'type', key: 'schema:Book' }),
+    );
+    expect((host.querySelector('#curation-view') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
+      'details',
+    );
     expect(textField('text.ja')!.value).toBe('後からの編集');
     expect(textField('text.fr')!.value).toBe('');
     expect(host.textContent).toContain(m.curation_correction_later());
@@ -141,8 +182,15 @@ test('default presentation editor takes a native invalid publication to its actu
     expect(attempts[1]!.expectedHead).toBe(7);
     expect(attempts[1]!.profile).not.toEqual(attempts[0]!.profile);
     const submitted = attempts[1]!.profile;
-    expect('views' in submitted.generic && submitted.generic.views.overview.content[0]!.props.text).toEqual({ en: 'Later overview edit', ja: '読書ノート' });
-    expect(submitted.types[0]!.views!.details!.content[0]!.props).toEqual({ id: 'details', level: 2, text: { en: 'Corrected heading', ja: '後からの編集' } });
+    expect('views' in submitted.generic && submitted.generic.views.overview.content[0]!.props.text).toEqual({
+      en: 'Later overview edit',
+      ja: '読書ノート',
+    });
+    expect(submitted.types[0]!.views!.details!.content[0]!.props).toEqual({
+      id: 'details',
+      level: 2,
+      text: { en: 'Corrected heading', ja: '後からの編集' },
+    });
     expect(host.textContent).toContain(m.curation_saved());
     await select('curation-view', 'details');
     await heading('details');

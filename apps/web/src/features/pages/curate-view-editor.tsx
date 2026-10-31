@@ -147,7 +147,10 @@ export function PresentationViewEditor({
   const templateLabel = (template: Template) =>
     template.key === null ? scopeNames.generic : `${scopeNames[template.scope]}: ${template.key}`;
   const invalidPublication = publicationState.result?.ok === false && publicationState.result.reason === 'invalid';
-  const laterChanges = !!draft && !!publicationState.intent && JSON.stringify(draft.profile) !== JSON.stringify(publicationState.intent.profile);
+  const laterChanges =
+    !!draft &&
+    !!publicationState.intent &&
+    JSON.stringify(draft.profile) !== JSON.stringify(publicationState.intent.profile);
   const unresolvedPublication = pendingPublication && !invalidPublication;
 
   function validationCorrection(source: typeof failureProfile) {
@@ -155,7 +158,12 @@ export function PresentationViewEditor({
       describe(pointer: string) {
         const target = source && resolveCorrection(source, pointer, locale);
         return target
-          ? m.curation_correction_target({ template: templateLabel(target.template), view: viewNames[target.view], component: target.component?.type ?? m.curation_page_settings(), field: target.label })
+          ? m.curation_correction_target({
+              template: templateLabel(target.template),
+              view: viewNames[target.view],
+              component: target.component?.type ?? m.curation_page_settings(),
+              field: target.label,
+            })
           : m.curation_correction_unknown();
       },
       correct(pointer: string) {
@@ -164,10 +172,17 @@ export function PresentationViewEditor({
         const target = original && currentCorrection(draft.profile, original);
         setEditorOpen(true);
         setCorrection(target ? { ...target } : null);
-        setMessage(target
-          ? source && JSON.stringify(source) !== JSON.stringify(draft.profile) ? m.curation_correction_later() : m.curation_correction_help()
-          : m.curation_correction_missing());
-        if (target) setDraft((value) => value && { ...value, selection: { template: target.template, view: target.view } });
+        setMessage(
+          target
+            ? source && JSON.stringify(source) !== JSON.stringify(draft.profile)
+              ? m.curation_correction_later()
+              : m.curation_correction_help()
+            : original
+              ? m.curation_correction_missing()
+              : m.curation_correction_unknown(),
+        );
+        if (target)
+          setDraft((value) => value && { ...value, selection: { template: target.template, view: target.view } });
         else setFocusRegion((value) => value + 1);
       },
     };
@@ -301,8 +316,12 @@ export function PresentationViewEditor({
         <p className="text-sm text-muted-foreground">{m.curation_instructions()}</p>
         <p role="status" className="text-sm">
           {invalidPublication && pendingPublication
-            ? laterChanges ? m.curation_invalid_later() : m.curation_invalid_retained()
-            : dirty ? m.curation_unsaved() : m.curation_saved()}
+            ? laterChanges
+              ? m.curation_invalid_later()
+              : m.curation_invalid_retained()
+            : dirty
+              ? m.curation_unsaved()
+              : m.curation_saved()}
         </p>
       </header>
       {message && (
@@ -332,7 +351,10 @@ export function PresentationViewEditor({
       <fieldset disabled={busy} className="min-w-0 space-y-6">
         <div className="flex flex-wrap gap-3">
           {!editorOpen && (
-            <Button disabled={unresolvedPublication || (invalidPublication && !laterChanges)} onClick={() => void publish()}>
+            <Button
+              disabled={unresolvedPublication || (invalidPublication && !laterChanges)}
+              onClick={() => void publish()}
+            >
               {m.curation_publish()}
             </Button>
           )}
@@ -423,7 +445,14 @@ export function PresentationViewEditor({
                     correction={correction}
                     onInvalid={(errors, document) => {
                       const invalid = withView(profile, selection.template, selection.view, document);
-                      setFailure({ ok: false, reason: 'invalid', errors: errors.map((error) => ({ ...error, pointer: viewPointer(profile, selection.template, selection.view) + error.pointer })) });
+                      setFailure({
+                        ok: false,
+                        reason: 'invalid',
+                        errors: errors.map((error) => ({
+                          ...error,
+                          pointer: viewPointer(profile, selection.template, selection.view) + error.pointer,
+                        })),
+                      });
                       setFailureProfile(invalid);
                     }}
                     onChange={change}

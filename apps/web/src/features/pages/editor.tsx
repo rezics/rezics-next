@@ -1,8 +1,18 @@
 import { platformRegistry } from '@rezics/composition';
-import { Puck, createUsePuck, useGetPuck, type Config } from '@puckeditor/core';
+import { Puck, createUsePuck, useGetPuck, type Config, type FieldRenderFunctions } from '@puckeditor/core';
 import { Button } from '@rezics/ui/shadcn/button';
 import '@puckeditor/core/puck.css';
-import { createContext, createElement, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import type { CompositionDocument, CompositionRegistry, CompositionViolation } from '@rezics/composition';
 import { layoutComponents, PageRoot } from './layout';
 import { editorConfig, fromComposition, publishErrors, toComposition, type PageEditorData } from './editor-config';
@@ -17,6 +27,54 @@ const CorrectionContext = createContext<{
 } | null>(null);
 const useEditorPuck = createUsePuck();
 
+function fieldName(path: string[]) {
+  return path.reduce(
+    (name, part, index) => (/^(0|[1-9][0-9]*)$/u.test(part) ? `${name}[${part}]` : `${name}${index ? '.' : ''}${part}`),
+    '',
+  );
+}
+
+// Keep Puck's array controls and input ownership; open only the requested item's UI state.
+const CorrectionArray: FieldRenderFunctions['array'] = ({ children, id, name, value }) => {
+  const correction = useContext(CorrectionContext);
+  const target = correction?.target;
+  const selectedId = useEditorPuck((state) => state.selectedItem?.props.id ?? null);
+  const getPuck = useGetPuck();
+  useEffect(() => {
+    if (
+      !target ||
+      correction?.focused.current === target ||
+      !id ||
+      !Array.isArray(value) ||
+      selectedId !== (target.component?.id ?? null)
+    )
+      return;
+    const fullName = fieldName(target.field);
+    if (!fullName.startsWith(`${name}[`)) return;
+    const position = /^\[(0|[1-9][0-9]*)\]/u.exec(fullName.slice(name.length));
+    if (!position || Number(position[1]) >= value.length) return;
+    const frame = requestAnimationFrame(() => {
+      const { appState, dispatch } = getPuck();
+      const previous = appState.ui.arrayState[id];
+      const items = previous?.items.length
+        ? previous.items
+        : value.map((_, index) => ({
+            _arrayId: crypto.randomUUID(),
+            _originalIndex: index,
+            _currentIndex: index,
+          }));
+      const item = items.find((entry) => entry._currentIndex === Number(position[1]));
+      if (!item || previous?.openId === item._arrayId) return;
+      dispatch({
+        type: 'setUi',
+        ui: { arrayState: { ...appState.ui.arrayState, [id]: { items, openId: item._arrayId } } },
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [correction, target, selectedId, getPuck, id, name, value]);
+  return <>{children}</>;
+};
+
 function CorrectionSelection({ children }: { children: ReactNode }) {
   const target = useContext(CorrectionContext)?.target;
   const getPuck = useGetPuck();
@@ -29,7 +87,13 @@ function CorrectionSelection({ children }: { children: ReactNode }) {
       if (target.component && !itemSelector) return;
       dispatch({
         type: 'setUi',
-        ui: { itemSelector: itemSelector ?? null, rightSideBarVisible: true, leftSideBarVisible: true, mobilePanelExpanded: true, plugin: { current: 'fields' } },
+        ui: {
+          itemSelector: itemSelector ?? null,
+          rightSideBarVisible: true,
+          leftSideBarVisible: true,
+          mobilePanelExpanded: true,
+          plugin: { current: 'fields' },
+        },
       });
     });
     return () => cancelAnimationFrame(frame);
@@ -53,8 +117,12 @@ function CorrectionFields({ children, isLoading }: { children: ReactNode; isLoad
         if (getComputedStyle(ancestor).display === 'none') return false;
       }
       // Compare owned input names; never interpolate a server pointer into a selector or HTML.
-      const control = Array.from(element!.querySelectorAll('input, textarea, select'))
-        .find((input) => input.getAttribute('name') === target!.field.join('.') && !input.hasAttribute('disabled') && !input.hasAttribute('readonly'));
+      const control = Array.from(element!.querySelectorAll('input, textarea, select')).find(
+        (input) =>
+          input.getAttribute('name') === fieldName(target!.field) &&
+          !input.hasAttribute('disabled') &&
+          !input.hasAttribute('readonly'),
+      );
       if (control) {
         correction!.focused.current = target!;
         (control as HTMLElement).focus();
@@ -63,7 +131,9 @@ function CorrectionFields({ children, isLoading }: { children: ReactNode; isLoad
       return false;
     }
     if (focus()) return;
-    const observer = new MutationObserver(() => { if (focus()) observer.disconnect(); });
+    const observer = new MutationObserver(() => {
+      if (focus()) observer.disconnect();
+    });
     observer.observe(element, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [correction, target, selectedId, isLoading]);
@@ -145,15 +215,18 @@ function violationsHeader(children: ReactNode, errors: CompositionViolation[], p
       {errors.length > 0 && (
         <div className="border-t border-destructive/30 bg-destructive/5 px-4 py-3 text-sm" role="alert">
           <p className="mb-2 font-semibold">{m.curation_invalid()}</p>
-          <ul className="list-disc space-y-1 ps-5">
-            {errors.map(({ pointer, code }, index) => (
-              <li key={`${pointer}:${code}:${index}`}>
-                <code>
-                  {pointerPrefix + pointer || '/'} — {code}
-                </code>
-              </li>
-            ))}
-          </ul>
+          <details>
+            <summary>{m.curation_diagnostics()}</summary>
+            <ul className="list-disc space-y-1 ps-5">
+              {errors.map(({ pointer, code }, index) => (
+                <li key={`${pointer}:${code}:${index}`}>
+                  <code>
+                    {pointerPrefix + pointer || '/'} — {code}
+                  </code>
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       )}
     </>
@@ -192,7 +265,10 @@ export function PageEditor({
     if (publishDisabled) return;
     const violations = publishErrors(platformRegistry, edited);
     setErrors(violations);
-    if (violations.length) onInvalid?.(violations, toComposition(edited));
+    if (violations.length) {
+      onChange?.(edited);
+      onInvalid?.(violations, toComposition(edited));
+    }
     if (violations.length === 0) {
       onChange?.(edited);
       onPublish(toComposition(edited));
@@ -201,26 +277,27 @@ export function PageEditor({
 
   return (
     <CorrectionContext.Provider value={correctionContext}>
-    <Puck
-      config={config}
-      data={data}
-      dictionary={presentationEditorDictionary()}
-      onPublish={(edited) => handlePublish(edited as PageEditorData)}
-      renderHeaderActions={({ state }) => (
-        <Button disabled={publishDisabled} onClick={() => handlePublish(state.data as PageEditorData)}>
-          {m.curation_publish()}
-        </Button>
-      )}
-      onChange={(edited) => {
-        setErrors([]);
-        onChange?.(edited as PageEditorData);
-      }}
-      overrides={{
-        header: ({ children }) => violationsHeader(children, errors, pointerPrefix),
-        puck: CorrectionSelection,
-        fields: CorrectionFields,
-      }}
-    />
+      <Puck
+        config={config}
+        data={data}
+        dictionary={presentationEditorDictionary()}
+        onPublish={(edited) => handlePublish(edited as PageEditorData)}
+        renderHeaderActions={({ state }) => (
+          <Button disabled={publishDisabled} onClick={() => handlePublish(state.data as PageEditorData)}>
+            {m.curation_publish()}
+          </Button>
+        )}
+        onChange={(edited) => {
+          setErrors([]);
+          onChange?.(edited as PageEditorData);
+        }}
+        overrides={{
+          header: ({ children }) => violationsHeader(children, errors, pointerPrefix),
+          puck: CorrectionSelection,
+          fields: CorrectionFields,
+          fieldTypes: { array: CorrectionArray },
+        }}
+      />
     </CorrectionContext.Provider>
   );
 }
