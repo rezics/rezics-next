@@ -296,11 +296,13 @@ const coverRowDensityClasses: Record<CoverDensity, string> = {
 export function CoverRow({
   ratio,
   label,
+  role = 'region',
   density = 'medium',
   children,
 }: {
   ratio: CoverRatio;
   label: string;
+  role?: 'region' | 'group';
   density?: CoverDensity;
   children: ReactNode;
 }) {
@@ -308,7 +310,7 @@ export function CoverRow({
     <RatioContext.Provider value={ratio}>
       <DensityContext.Provider value={density}>
         <div
-          role="region"
+          role={role}
           aria-label={label}
           tabIndex={0}
           data-slot="cover-row"
