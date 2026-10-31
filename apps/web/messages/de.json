@@ -3182,5 +3182,10 @@
   "screen_credits_parts": "Urheber, Besetzung und Teile korrigieren",
   "screen_initial_facts": "Optionale anfängliche Angaben",
   "screen_authored_after": "Ergänze nach dem Erstellen eine selbst verfasste Langbeschreibung im Originaltexteditor mit Sprache und Lizenz.",
-  "screen_classification_pending": "Klassifikationskorrekturen sind hier noch nicht angebunden. Die aktuellen Klassifikationen bleiben sichtbar."
+  "screen_classification_pending": "Klassifikationskorrekturen sind hier noch nicht angebunden. Die aktuellen Klassifikationen bleiben sichtbar.",
+  "settings_notifications_leave_title": "Benachrichtigungseinstellungen verlassen?",
+  "settings_privacy_leave_title": "Datenschutzeinstellungen der Sammlungen verlassen?",
+  "settings_verification_leave_title": "Agentenverifizierung verlassen?",
+  "settings_all_drafts_leave_title": "Diese Einstellungen verlassen?",
+  "settings_other_drafts_leave_description": "Lokale Entwürfe und die auf dieser Seite gespeicherten Wiederherstellungsschlüssel werden verworfen. Bereits gesendete Befehle können noch abgeschlossen werden."
 }

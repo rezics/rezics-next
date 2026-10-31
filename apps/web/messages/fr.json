@@ -3182,5 +3182,10 @@
   "screen_credits_parts": "Corriger les créateurs, la distribution et les parties",
   "screen_initial_facts": "Informations initiales facultatives",
   "screen_authored_after": "Après la création, ajoutez votre propre description longue dans l’éditeur de texte original, avec sa langue et sa licence.",
-  "screen_classification_pending": "Les corrections de classification ne sont pas encore connectées ici. Les classifications actuelles restent visibles."
+  "screen_classification_pending": "Les corrections de classification ne sont pas encore connectées ici. Les classifications actuelles restent visibles.",
+  "settings_notifications_leave_title": "Quitter les préférences de notifications ?",
+  "settings_privacy_leave_title": "Quitter la confidentialité des collections ?",
+  "settings_verification_leave_title": "Quitter la vérification de l’agent ?",
+  "settings_all_drafts_leave_title": "Quitter ces paramètres ?",
+  "settings_other_drafts_leave_description": "Les brouillons locaux et les clés de récupération conservés sur cette page seront supprimés. Les commandes déjà envoyées peuvent encore aboutir."
 }

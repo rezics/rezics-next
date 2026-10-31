@@ -9,6 +9,7 @@ import { PageStory, pageReady, PatternStory } from './page';
 import { sessionQuery } from '../session/query';
 import type { SettingsPage } from '../settings/preferences';
 import { readSettingsPage } from '../settings/actions';
+import { setFakeVerificationState } from '../kernel/fake/verification';
 
 const meta = {
   title: 'Pages/Account/Settings account journey',
@@ -207,4 +208,89 @@ export const PreferenceTransitionPhone: Story = {
 export const PreferenceTransitionDesktop: Story = {
   ...preferenceTransition,
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
+
+const draftDecision: Story = {
+  beforeEach: () => setFakeVerificationState('none'),
+  render: () => <PageStory visitor="Signed In" path="/settings?profile=self" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    const verification = within(await canvas.findByRole('region', { name: m.settings_verification_heading() }));
+    const statement = await verification.findByRole('textbox', { name: m.settings_verification_statement() });
+    await userEvent.type(statement, 'Evidence to finish before submitting.');
+    const row = (await canvas.findByRole('link', { name: /unusually long Collection title/i })).closest('li')!;
+    const visibility = within(row).getByRole('combobox');
+    await userEvent.selectOptions(visibility, 'private');
+    await within(row).findByText(m.settings_privacy_conflict_title());
+    const sections = within(canvas.getByRole('navigation', { name: m.settings_sections_label() }));
+    await userEvent.click(sections.getByRole('link', { name: m.settings_account_heading() }));
+    await expect(within(document.body).queryByRole('alertdialog')).toBeNull();
+    const home = canvas.getByRole('link', { name: 'REZICS' });
+    home.focus();
+    await userEvent.keyboard('{Enter}');
+    const dialog = within(
+      await within(document.body).findByRole('alertdialog', { name: m.settings_all_drafts_leave_title() }),
+    );
+    await expect(within(document.body).getAllByRole('alertdialog')).toHaveLength(1);
+    await expect(dialog.getByRole('button', { name: m.settings_profile_stay() })).toHaveFocus();
+    await userEvent.click(dialog.getByRole('button', { name: m.settings_profile_stay() }));
+    await waitFor(() => expect(home).toHaveFocus());
+    await expect(statement).toHaveValue('Evidence to finish before submitting.');
+    await expect(visibility).toHaveValue('private');
+    // Leave the shared decision visible for the whole-page review.
+    await userEvent.keyboard('{Enter}');
+    await within(document.body).findByRole('alertdialog', { name: m.settings_all_drafts_leave_title() });
+  },
+};
+
+export const DraftDecisionPhone: Story = {
+  ...draftDecision,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+};
+
+export const DraftDecisionDesktop: Story = {
+  ...draftDecision,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
+
+export const LeaveDraftsDesktop: Story = {
+  ...draftDecision,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: async (context) => {
+    await draftDecision.play!(context);
+    const dialog = within(await within(document.body).findByRole('alertdialog'));
+    await userEvent.click(dialog.getByRole('button', { name: m.settings_profile_leave() }));
+    await waitFor(() => expect(within(document.body).queryByRole('alertdialog')).toBeNull());
+    await waitFor(() =>
+      expect(within(context.canvasElement).queryByRole('heading', { level: 1, name: m.settings_heading() })).toBeNull(),
+    );
+    await expect(
+      within(context.canvasElement).queryByRole('textbox', { name: m.settings_verification_statement() }),
+    ).toBeNull();
+  },
+};
+
+export const NoticeDraftDecisionPhone: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: preferenceTransition.render!,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Prepare current viewer' }));
+    const notifications = within(await canvas.findByRole('region', { name: m.settings_notifications_heading() }));
+    const reply = notifications.getByRole('switch', { name: m.settings_notification_reply() });
+    await userEvent.click(reply);
+    await notifications.findByText(m.settings_conflict_title());
+    const home = canvas.getByRole('link', { name: 'REZICS' });
+    home.focus();
+    await userEvent.keyboard('{Enter}');
+    const dialog = within(
+      await within(document.body).findByRole('alertdialog', { name: m.settings_notifications_leave_title() }),
+    );
+    await userEvent.click(dialog.getByRole('button', { name: m.settings_profile_stay() }));
+    await waitFor(() => expect(home).toHaveFocus());
+    await expect(reply).not.toBeChecked();
+    await userEvent.keyboard('{Enter}');
+    await within(document.body).findByRole('alertdialog', { name: m.settings_notifications_leave_title() });
+  },
 };

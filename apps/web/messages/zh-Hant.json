@@ -3182,5 +3182,10 @@
   "screen_credits_parts": "修正創作者、演職人員與組成部分",
   "screen_initial_facts": "可選的初始事實",
   "screen_authored_after": "建立後，請透過原創文字編輯器加入自己的長篇簡介，並註明語言和授權。",
-  "screen_classification_pending": "此處暫未連接分類修正功能。目前分類仍然可見。"
+  "screen_classification_pending": "此處暫未連接分類修正功能。目前分類仍然可見。",
+  "settings_notifications_leave_title": "離開通知偏好設定？",
+  "settings_privacy_leave_title": "離開收藏集隱私設定？",
+  "settings_verification_leave_title": "離開代理身分驗證？",
+  "settings_all_drafts_leave_title": "離開這些設定？",
+  "settings_other_drafts_leave_description": "此頁面保留的本機草稿和復原金鑰將遺失。已送出的命令仍可能完成。"
 }

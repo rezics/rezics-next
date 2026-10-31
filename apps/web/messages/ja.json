@@ -3182,5 +3182,10 @@
   "screen_credits_parts": "制作者・キャスト・構成要素を修正",
   "screen_initial_facts": "任意の初期情報",
   "screen_authored_after": "作成後、オリジナル文章の編集画面で、自分で書いた詳しい説明に言語とライセンスを指定して追加できます。",
-  "screen_classification_pending": "分類の修正はまだ接続されていません。現在の分類は引き続き表示されます。"
+  "screen_classification_pending": "分類の修正はまだ接続されていません。現在の分類は引き続き表示されます。",
+  "settings_notifications_leave_title": "通知設定を離れますか？",
+  "settings_privacy_leave_title": "コレクションの公開設定を離れますか？",
+  "settings_verification_leave_title": "エージェント認証を離れますか？",
+  "settings_all_drafts_leave_title": "これらの設定を離れますか？",
+  "settings_other_drafts_leave_description": "このページに保持されているローカルの下書きと復旧用キーは失われます。送信済みのコマンドは、その後も完了する可能性があります。"
 }

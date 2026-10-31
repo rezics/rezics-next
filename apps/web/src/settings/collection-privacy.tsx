@@ -15,6 +15,8 @@ import { readOwnedCollection, readOwnedCollectionsPage, saveCollectionVisibility
 import type { OwnedCollection } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
 import type { CollectionPrivacyFailure } from './collection-privacy-data';
+import { useSettingsNavigationCurrent, useSettingsNavigationDraft } from './reading-navigation';
+import { collectionPrivacyNeedsNavigationDecision } from './settings-draft-state';
 import {
   CollectionPrivacyEditor,
   CollectionPrivacyPager,
@@ -65,6 +67,13 @@ export function CollectionRow({
   const canRead = useOperation('collection.get');
   const [editor] = useState(() => new CollectionPrivacyEditor(collection, io));
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
+  const isCurrent = useSettingsNavigationCurrent(csrfToken);
+  useSettingsNavigationDraft(
+    'collection-privacy',
+    isCurrent() && collectionPrivacyNeedsNavigationDecision(state),
+    () => isCurrent() && collectionPrivacyNeedsNavigationDecision(editor.snapshot()),
+    editor,
+  );
   useEffect(() => () => editor.dispose(), [editor]);
   const waiting = usePreferenceRetry(state.nativeFailure);
   const id = useId();
@@ -209,8 +218,10 @@ export function CollectionRow({
 /** Mounts afresh whenever the prepared account or operation admission changes. */
 export function CollectionPrivacySection() {
   const admitted = useOperation('account.collections');
-  const { state, subject } = useSession();
-  return admitted && state === 'signed-in' && subject ? <CollectionPrivacyView key={subject} /> : null;
+  const { state, subject, csrfToken } = useSession();
+  return admitted && state === 'signed-in' && subject ? (
+    <CollectionPrivacyView key={JSON.stringify([subject, csrfToken])} />
+  ) : null;
 }
 
 export function CollectionPrivacyView({

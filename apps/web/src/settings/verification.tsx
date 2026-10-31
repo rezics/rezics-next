@@ -12,8 +12,10 @@ import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { csrfHeaders } from '../threads/composer';
 import { useSession } from '../session/query';
-import { unwrapVerificationRead, type AgentVerificationRequest } from './verification-core';
+import { unwrapVerificationRead, type AgentVerificationRequest, type VerificationInput } from './verification-core';
 import { usePreferenceRetry } from './preference-failure-retry';
+import { useSettingsNavigationCurrent, useSettingsNavigationDraft } from './reading-navigation';
+import { verificationNeedsNavigationDecision } from './settings-draft-state';
 import { VerificationSubjectChooser } from './verification-subject-chooser';
 import { VerificationLinks, verificationIssueMessage, type VerificationLinkRow } from './verification-links';
 import {
@@ -65,10 +67,10 @@ function VerificationState({
 }
 
 export function VerificationSection() {
-  const { csrfToken, subject } = useSession();
+  const { state, csrfToken, subject } = useSession();
   const admitted = useOperation('agent_verification.request');
-  if (!admitted || !subject) return null;
-  return <ViewerVerification key={subject} accountId={subject} csrfToken={csrfToken} />;
+  if (!admitted || state !== 'signed-in' || !subject) return null;
+  return <ViewerVerification key={JSON.stringify([subject, csrfToken])} accountId={subject} csrfToken={csrfToken} />;
 }
 
 function ViewerVerification({ accountId, csrfToken }: { accountId: string; csrfToken: string | null }) {
@@ -122,6 +124,8 @@ export function VerificationCard({
   const form = useRef<HTMLFormElement>(null);
   const [showValidation, setShowValidation] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
+  const [acknowledged, setAcknowledged] = useState<Omit<VerificationInput, 'idempotencyKey'> | null>(null);
+  const isCurrent = useSettingsNavigationCurrent(csrfToken);
   const pending = state.phase === 'sending' || state.phase === 'reading';
   const waiting = usePreferenceRetry(state.failure, state.retryAt);
   const verification = state.current?.verificationRequest ?? null;
@@ -137,6 +141,12 @@ export function VerificationCard({
     statement,
     links: populated.map(({ label, url }) => ({ label, url })),
   };
+  useSettingsNavigationDraft(
+    'verification',
+    isCurrent() && verificationNeedsNavigationDecision(state, draft, acknowledged),
+    () => isCurrent() && verificationNeedsNavigationDecision(controller.snapshot(), draft, acknowledged),
+    controller,
+  );
   const issues = showValidation ? validateVerificationDraft(draft) : [];
   function fieldId(issue: VerificationIssue) {
     if (issue.field === 'label' || issue.field === 'url') return `${id}-${issue.field}-${populated[issue.index!]!.key}`;
@@ -150,6 +160,14 @@ export function VerificationCard({
 
   if (state.failure?.message === 'rezics-platform-closed') return null;
 
+  async function recover(action: () => Promise<void>) {
+    const command = action();
+    const original = controller.snapshot().attempt;
+    await command;
+    const current = controller.snapshot();
+    if (original?.kind === 'request' && !current.attempt && current.phase === 'review') setAcknowledged(original.input);
+  }
+
   async function submit() {
     if (!csrfToken || !canRequest) return;
     const invalid = validateVerificationDraft(draft);
@@ -158,7 +176,7 @@ export function VerificationCard({
       focusField(fieldId(invalid[0]!));
       return;
     }
-    await controller.submit(draft);
+    await recover(() => controller.submit(draft));
   }
 
   async function withdraw() {
@@ -296,7 +314,11 @@ export function VerificationCard({
                   <p className="break-all">{state.attempt.requestId}</p>
                 )}
               </details>
-              <Button type="button" disabled={pending || waiting || !csrfToken} onClick={() => void controller.retry()}>
+              <Button
+                type="button"
+                disabled={pending || waiting || !csrfToken}
+                onClick={() => void recover(() => controller.retry())}
+              >
                 {m.settings_verification_retry_original()}
               </Button>
             </AlertDescription>
@@ -312,7 +334,12 @@ export function VerificationCard({
           </p>
         ) : null}
         {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
-        <Button type="button" variant="outline" disabled={pending || waiting} onClick={() => void controller.reload()}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending || waiting}
+          onClick={() => void recover(() => controller.reload())}
+        >
           {m.settings_verification_read_current()}
         </Button>
       </CardContent>

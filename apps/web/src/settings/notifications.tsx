@@ -7,9 +7,14 @@ import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { readSettingsPage, saveNotifications } from './actions';
-import { NotificationEditor, type NotificationEditorIO } from './notification-recovery';
+import {
+  NotificationEditor,
+  notificationsNeedNavigationDecision,
+  type NotificationEditorIO,
+} from './notification-recovery';
 import type { NotificationPreferences } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
+import { useSettingsNavigationCurrent, useSettingsNavigationDraft } from './reading-navigation';
 
 export function notificationName(kind: string): string {
   if (kind === 'reply') return m.settings_notification_reply();
@@ -53,6 +58,13 @@ export function NotificationsCard({
       ),
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
+  const isCurrent = useSettingsNavigationCurrent(csrfToken);
+  useSettingsNavigationDraft(
+    'notifications',
+    isCurrent() && notificationsNeedNavigationDecision(state),
+    () => isCurrent() && notificationsNeedNavigationDecision(editor.snapshot()),
+    editor,
+  );
   const waiting = usePreferenceRetry(state.failure);
   useLayoutEffect(() => setHydrated(true), []);
   const busy = state.phase === 'saving' || state.phase === 'reloading';

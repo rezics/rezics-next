@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useBlocker, type ShouldBlockFn } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { QueryClientContext, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
   AlertDialog,
@@ -25,8 +25,9 @@ import { m } from '../paraglide/messages.js';
 import { sessionQuery, useSession } from '../session/query';
 import type { PreferenceChange, ReadingPreferences } from './preferences';
 import { sameReading, type ReadingValues } from './reading-preferences';
+import { settingsDraftViewerIsCurrent } from './settings-draft-state';
 
-type DraftKind = 'reading' | 'profile';
+type DraftKind = 'reading' | 'profile' | 'notifications' | 'collection-privacy' | 'verification';
 type Draft = { kind: DraftKind; needsDecision: () => boolean };
 
 export function readingNeedsNavigationDecision(state: {
@@ -107,6 +108,28 @@ export function useSettingsNavigationOwner() {
   return useContext(DraftsContext);
 }
 
+/** A mounted editor cannot lend an old viewer's draft to a new session, even before React tears it down. */
+export function useSettingsNavigationCurrent(csrfToken: string | null) {
+  const client = useContext(QueryClientContext);
+  // Standalone cards need no session provider. Observe the existing cache without starting another session read.
+  const subscribe = useCallback(
+    (listener: () => void) => client?.getQueryCache().subscribe(listener) ?? (() => {}),
+    [client],
+  );
+  const snapshot = useCallback(() => client?.getQueryData(sessionQuery.queryKey), [client]);
+  const session = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const owner = useRef<{ subject: string; csrfToken: string | null } | null>(null);
+  const retired = useRef(false);
+  if (!owner.current && session?.state === 'signed-in' && session.subject)
+    owner.current = { subject: session.subject, csrfToken: session.csrfToken };
+  const isCurrent = useCallback(() => {
+    const current = client?.getQueryData(sessionQuery.queryKey);
+    return !retired.current && settingsDraftViewerIsCurrent(owner.current, current, csrfToken);
+  }, [client, csrfToken]);
+  if (owner.current && !isCurrent()) retired.current = true;
+  return isCurrent;
+}
+
 export function useSettingsNavigationDraft(
   kind: DraftKind,
   dirty: boolean,
@@ -123,7 +146,7 @@ export function useSettingsNavigationDraft(
   useLayoutEffect(() => navigation?.refresh(), [dirty, navigation]);
 }
 
-/** One router blocker and one accessible decision cover reading, profile, activity and avatar changes. */
+/** One router blocker and one accessible decision cover every mounted Settings editor. */
 export function SettingsNavigationProvider({ children }: { children: ReactNode }) {
   const [navigation] = useState(() => new SettingsNavigationDrafts());
   useSyncExternalStore(navigation.subscribe, navigation.snapshot, navigation.snapshot);
@@ -158,6 +181,27 @@ export function SettingsNavigationProvider({ children }: { children: ReactNode }
   const kinds = navigation.kinds();
   const reading = kinds.has('reading');
   const combined = reading && kinds.has('profile');
+  const additional = kinds.has('notifications') || kinds.has('collection-privacy') || kinds.has('verification');
+  const title = additional
+    ? kinds.size > 1
+      ? m.settings_all_drafts_leave_title()
+      : kinds.has('notifications')
+        ? m.settings_notifications_leave_title()
+        : kinds.has('collection-privacy')
+          ? m.settings_privacy_leave_title()
+          : m.settings_verification_leave_title()
+    : combined
+      ? m.settings_drafts_leave_title()
+      : reading
+        ? m.settings_reading_leave_title()
+        : m.settings_profile_leave_title();
+  const description = additional
+    ? m.settings_other_drafts_leave_description()
+    : combined
+      ? m.settings_drafts_leave_description()
+      : reading
+        ? m.settings_reading_leave_description()
+        : m.settings_profile_leave_description();
   return (
     <DraftsContext.Provider value={navigation}>
       {children}
@@ -173,20 +217,8 @@ export function SettingsNavigationProvider({ children }: { children: ReactNode }
           className="max-h-[calc(100dvh-2rem)] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]"
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {combined
-                ? m.settings_drafts_leave_title()
-                : reading
-                  ? m.settings_reading_leave_title()
-                  : m.settings_profile_leave_title()}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {combined
-                ? m.settings_drafts_leave_description()
-                : reading
-                  ? m.settings_reading_leave_description()
-                  : m.settings_profile_leave_description()}
-            </AlertDialogDescription>
+            <AlertDialogTitle>{title}</AlertDialogTitle>
+            <AlertDialogDescription>{description}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel ref={stay} className="min-h-11" onClick={navigation.stay}>

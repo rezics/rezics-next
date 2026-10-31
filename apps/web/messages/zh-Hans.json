@@ -3183,5 +3183,10 @@
   "screen_credits_parts": "修正创作者、演职人员与组成部分",
   "screen_initial_facts": "可选的初始事实",
   "screen_authored_after": "创建后，请通过原创文本编辑器添加自己的长篇简介，并注明语言和许可。",
-  "screen_classification_pending": "此处暂未连接分类修正功能。当前分类仍然可见。"
+  "screen_classification_pending": "此处暂未连接分类修正功能。当前分类仍然可见。",
+  "settings_notifications_leave_title": "离开通知偏好设置？",
+  "settings_privacy_leave_title": "离开收藏集隐私设置？",
+  "settings_verification_leave_title": "离开代理身份认证？",
+  "settings_all_drafts_leave_title": "离开这些设置？",
+  "settings_other_drafts_leave_description": "此页面保留的本地草稿和恢复密钥将丢失。已发送的命令仍可能完成。"
 }

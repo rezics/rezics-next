@@ -27,6 +27,10 @@ export function sameNotifications(a: NotificationPreferences, b: NotificationPre
   return Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([key, value]) => b[key] === value);
 }
 
+export function notificationsNeedNavigationDecision(state: NotificationEditorState): boolean {
+  return state.pending !== null || !sameNotifications(state.known.notifications, state.draft);
+}
+
 /** Keeps an unresolved command separate from edits made after it was sent. Nothing is persisted in browser storage. */
 export class NotificationEditor {
   private state: NotificationEditorState;

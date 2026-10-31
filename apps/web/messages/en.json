@@ -3534,5 +3534,10 @@
   "screen_credits_parts": "Correct creators, cast and parts",
   "screen_initial_facts": "Optional initial facts",
   "screen_authored_after": "After creation, add your own long description through the original text editor, with its language and licence.",
-  "screen_classification_pending": "Classification corrections are not connected here yet. Current classifications remain visible."
+  "screen_classification_pending": "Classification corrections are not connected here yet. Current classifications remain visible.",
+  "settings_notifications_leave_title": "Leave notice preferences?",
+  "settings_privacy_leave_title": "Leave Collection privacy settings?",
+  "settings_verification_leave_title": "Leave agent verification?",
+  "settings_all_drafts_leave_title": "Leave these settings?",
+  "settings_other_drafts_leave_description": "Local drafts and recovery keys kept on this page will be discarded. Commands already sent may still finish."
 }

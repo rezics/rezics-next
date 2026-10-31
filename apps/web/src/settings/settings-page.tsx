@@ -219,6 +219,7 @@ function SettingsSections({
           <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
             {page.notifications ? (
               <NotificationsCard
+                key={csrfToken}
                 initial={page.notifications}
                 version={version}
                 csrfToken={csrfToken}
