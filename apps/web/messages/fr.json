@@ -2636,6 +2636,7 @@
   "settings_managed_detail_identity_unavailable": "Identité indisponible",
   "settings_managed_unavailable": "Ce compte n’a pas pu être vérifié. Il est peut-être indisponible ou hors de vos droits d’accès actuels. Réessayez.",
   "settings_managed_first_page": "Première page",
+  "settings_managed_start_first_page": "Recommencer à la première page",
   "settings_managed_read_only": "Détails privés du compte, consultables avec votre identité actuellement connectée, en lecture seule.",
   "settings_managed_detail_loading": "Chargement des détails du compte…",
   "settings_managed_responsibilities_unavailable": "Les responsabilités de ce compte sont indisponibles ou leur consultation n’est pas autorisée.",

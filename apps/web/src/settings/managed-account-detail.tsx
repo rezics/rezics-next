@@ -32,13 +32,18 @@ function Identity({ account, accountId }: { account: ManagementIdentity | null; 
 function Failure({
   failure,
   retry,
+  restart,
+  section,
   pending,
 }: {
   failure: DetailFailure;
   retry?: (() => void) | undefined;
+  restart?: (() => void) | undefined;
+  section?: DetailSection;
   pending: boolean;
 }) {
   const waiting = usePreferenceRetry(failure);
+  const label = section === 'members' ? m.managed_holders_title() : m.managed_operated_title();
   return (
     <Alert
       variant="destructive"
@@ -50,11 +55,32 @@ function Failure({
       <AlertDescription className="space-y-3">
         <p>{m.settings_managed_unavailable()}</p>
         {waiting ? <p>{m.settings_retry_wait()}</p> : null}
-        {retry ? (
-          <Button type="button" variant="outline" disabled={pending || waiting} onClick={retry}>
-            {m.settings_retry()}
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {retry ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 min-w-11 whitespace-normal"
+              disabled={pending || waiting}
+              aria-label={section ? `${m.settings_retry()} · ${label}` : undefined}
+              onClick={retry}
+            >
+              {m.settings_retry()}
+            </Button>
+          ) : null}
+          {restart ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 min-w-11 whitespace-normal"
+              disabled={pending || waiting}
+              aria-label={`${m.settings_managed_start_first_page()} · ${label}`}
+              onClick={restart}
+            >
+              {m.settings_managed_start_first_page()}
+            </Button>
+          ) : null}
+        </div>
       </AlertDescription>
     </Alert>
   );
@@ -80,6 +106,7 @@ function Paging({
         <Button
           type="button"
           variant="outline"
+          className="min-h-11 min-w-11 whitespace-normal"
           disabled={pending}
           aria-label={`${m.settings_managed_first_page()} · ${label}`}
           onClick={() => void reader.load(section)}
@@ -91,6 +118,7 @@ function Paging({
         <Button
           type="button"
           variant="outline"
+          className="min-h-11 min-w-11 whitespace-normal"
           disabled={pending}
           aria-label={`${m.managed_next()} · ${label}`}
           onClick={() => void reader.load(section, next)}
@@ -173,7 +201,9 @@ export function ManagedAccountDetailCard({
                 <Failure
                   failure={members.failure}
                   pending={state.pending || members.pending}
+                  section="members"
                   retry={() => void reader.load('members', members.cursor)}
+                  restart={members.cursor ? () => void reader.load('members') : undefined}
                 />
               ) : null}
               {members.page?.state === 'denied' ? (
@@ -194,13 +224,15 @@ export function ManagedAccountDetailCard({
                   ) : (
                     <p>{m.managed_no_holders()}</p>
                   )}
-                  <Paging
-                    reader={reader}
-                    section="members"
-                    next={members.page.next}
-                    cursor={members.cursor}
-                    pending={state.pending || members.pending}
-                  />
+                  {!members.failure ? (
+                    <Paging
+                      reader={reader}
+                      section="members"
+                      next={members.page.next}
+                      cursor={members.cursor}
+                      pending={state.pending || members.pending}
+                    />
+                  ) : null}
                 </>
               ) : null}
             </section>
@@ -211,7 +243,9 @@ export function ManagedAccountDetailCard({
                 <Failure
                   failure={responsibilities.failure}
                   pending={state.pending || responsibilities.pending}
+                  section="responsibilities"
                   retry={() => void reader.load('responsibilities', responsibilities.cursor)}
+                  restart={responsibilities.cursor ? () => void reader.load('responsibilities') : undefined}
                 />
               ) : null}
               {responsibilities.page === null ? (
@@ -232,13 +266,15 @@ export function ManagedAccountDetailCard({
                   ) : (
                     <p>{m.managed_no_responsibilities()}</p>
                   )}
-                  <Paging
-                    reader={reader}
-                    section="responsibilities"
-                    next={responsibilities.page.next}
-                    cursor={responsibilities.cursor}
-                    pending={state.pending || responsibilities.pending}
-                  />
+                  {!responsibilities.failure ? (
+                    <Paging
+                      reader={reader}
+                      section="responsibilities"
+                      next={responsibilities.page.next}
+                      cursor={responsibilities.cursor}
+                      pending={state.pending || responsibilities.pending}
+                    />
+                  ) : null}
                 </>
               ) : null}
               <p className="text-sm text-muted-foreground">{m.settings_managed_observation()}</p>

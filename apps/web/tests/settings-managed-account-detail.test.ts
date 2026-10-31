@@ -11,7 +11,9 @@ import {
   loadManagedAccountDetail,
   managedAccountTarget,
   managedAccountsBackHref,
+  type DetailRequest,
   type DetailResult,
+  type DetailSection,
   type ManagementDetail,
 } from '../src/settings/managed-account-detail-read';
 import { m } from '../src/paraglide/messages.js';
@@ -359,4 +361,177 @@ test('detail Refresh and feed reads drop stale Auth links immediately and older 
   await switched.load();
   expect(switched.snapshot().detail).toBeUndefined();
   expect(switched.snapshot().authNavigation).toBeUndefined();
+});
+
+test('Offer first-page recovery for a failed managed detail continuation preserving exact original semantic input, native authority and bounded requests', async () => {
+  for (const section of ['members', 'responsibilities'] as const) {
+    const sibling = section === 'members' ? 'responsibilities' : 'members';
+    const cursor = section === 'members' ? memberCursor : operatorCursor;
+    const siblingCursor = section === 'members' ? operatorCursor : memberCursor;
+    let body: unknown = detail();
+    let status = 200;
+    const requests: Request[] = [];
+    const inputs: DetailRequest[] = [];
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json(body, { status });
+      },
+    });
+    const reader = new ManagedAccountReader(
+      viewerId,
+      accountId,
+      (input) => {
+        inputs.push(input);
+        return loadManagedAccountDetail(client, 'Bearer current-viewer', input);
+      },
+      'current-csrf',
+    );
+    await reader.load();
+    const otherPage = detail();
+    otherPage.members.items[0]!.account!.displayName = 'Sibling owner page';
+    otherPage.responsibilities!.items[0]!.account!.displayName = 'Sibling responsibility page';
+    body = otherPage;
+    await reader.load(sibling, siblingCursor);
+    const retained = reader.snapshot()[sibling];
+
+    body = { code: 'invalid_cursor' };
+    status = 400;
+    await reader.load(section, cursor);
+    expect(reader.snapshot()[section].page).toBeUndefined();
+    expect(reader.snapshot()[sibling]).toBe(retained);
+    const label = section === 'members' ? m.managed_holders_title() : m.managed_operated_title();
+    const html = markup(reader);
+    expect(html).toContain(`aria-label="${m.settings_retry()} · ${label}"`);
+    expect(html.split(`aria-label="${m.settings_managed_start_first_page()} · ${label}"`)).toHaveLength(2);
+    expect(html).toContain('min-h-11 min-w-11');
+    expect(html).not.toContain(section === 'members' ? 'Current native owner' : 'Current indexer');
+    await reader.load(section, reader.snapshot()[section].cursor);
+    expect(inputs[3]).toEqual(inputs[2]); // Retry preserves the exact viewer, target, feed and opaque cursor.
+
+    const current = detail();
+    current.members.items[0]!.account!.displayName = 'Current recovered owner';
+    current.responsibilities!.items[0]!.account!.displayName = 'Current recovered responsibility';
+    body = current;
+    status = 200;
+    await reader.load(section);
+    expect(reader.snapshot()[section]).toEqual({ page: current[section], cursor: undefined, pending: false });
+    expect(reader.snapshot()[sibling]).toBe(retained);
+    expect(reader.csrfToken).toBe('current-csrf');
+    expect(inputs).toEqual([
+      { viewerId, accountId },
+      { viewerId, accountId, section: sibling, cursor: siblingCursor },
+      { viewerId, accountId, section, cursor },
+      { viewerId, accountId, section, cursor },
+      { viewerId, accountId, section },
+    ]);
+    expect(requests).toHaveLength(5);
+    const key = section === 'members' ? 'membersCursor' : 'operatorsCursor';
+    expect(new URL(requests[2]!.url).searchParams.get(key)).toBe(cursor);
+    expect(requests[3]!.url).toBe(requests[2]!.url);
+    expect(new URL(requests[4]!.url).search).toBe('');
+    for (const request of requests) {
+      expect(request.method).toBe('GET');
+      expect(new URL(request.url).pathname).toBe(`/v1/accounts/${accountId}/management`);
+      expect(request.headers.get('authorization')).toBe('Bearer current-viewer');
+      expect(request.headers.get('cache-control')).toBe('no-store');
+      expect(request.cache).toBe('no-store');
+    }
+  }
+});
+
+test('a failed first-page reset stays an honest section error; native refusals or restricted responses cannot revive private rows', async () => {
+  for (const section of ['members', 'responsibilities'] as const) {
+    for (const status of [400, 401, 403, 404, 200]) {
+      let result = ready();
+      const inputs: DetailRequest[] = [];
+      const reader = new ManagedAccountReader(viewerId, accountId, async (input) => {
+        inputs.push(input);
+        return result;
+      });
+      await reader.load();
+      const sibling = section === 'members' ? 'responsibilities' : 'members';
+      const retained = reader.snapshot()[sibling];
+      result = { ok: false, failure: detailFailure(400, { code: 'invalid_cursor' }) };
+      await reader.load(section, section === 'members' ? memberCursor : operatorCursor);
+      const restricted = detail();
+      restricted.role = 'member';
+      restricted.members = { state: 'denied', items: [], next: null };
+      restricted.responsibilities = null;
+      result = status === 200 ? ready(restricted) : { ok: false, failure: detailFailure(status) };
+      await reader.load(section);
+      expect(inputs).toHaveLength(3);
+      expect(inputs[2]).toEqual({ viewerId, accountId, section });
+      const html = markup(reader);
+      expect(html).not.toContain(section === 'members' ? 'Current native owner' : 'Current indexer');
+      expect(html).not.toContain(m.settings_managed_start_first_page());
+      expect(html).not.toContain(m.managed_no_holders());
+      expect(html).not.toContain(m.managed_no_responsibilities());
+      if (status === 400) {
+        expect(reader.snapshot()[section]).toEqual({
+          page: undefined,
+          cursor: undefined,
+          pending: false,
+          failure: detailFailure(400),
+        });
+        expect(reader.snapshot()[sibling]).toBe(retained);
+        expect(html).toContain(m.settings_managed_unavailable());
+      } else if (status === 200) {
+        expect(reader.snapshot().members.page?.state).toBe('denied');
+        expect(reader.snapshot().responsibilities.page).toBeNull();
+        expect(html).toContain(m.managed_holders_denied());
+        expect(html).toContain(m.settings_managed_responsibilities_unavailable());
+      } else {
+        expect(reader.snapshot().detail).toBeUndefined();
+        expect(reader.snapshot().members.page).toBeUndefined();
+        expect(reader.snapshot().responsibilities.page).toBeUndefined();
+        expect(reader.snapshot().failure?.status).toBe(status);
+      }
+    }
+  }
+});
+
+test('transient continuation failures retain their page while Retry-After disables both actions; a pending reset admits no duplicate or global read', async () => {
+  for (const section of ['members', 'responsibilities'] satisfies DetailSection[]) {
+    let result = ready();
+    let resolve: ((value: DetailResult) => void) | undefined;
+    let defer = false;
+    const inputs: DetailRequest[] = [];
+    const reader = new ManagedAccountReader(viewerId, accountId, (input) => {
+      inputs.push(input);
+      return defer
+        ? new Promise((done) => {
+            resolve = done;
+          })
+        : Promise.resolve(result);
+    });
+    await reader.load();
+    result = { ok: false, failure: detailFailure(429, {}, { 'retry-after': '3' }) };
+    await reader.load(section, section === 'members' ? memberCursor : operatorCursor);
+    const html = markup(reader);
+    const label = section === 'members' ? m.managed_holders_title() : m.managed_operated_title();
+    const actions = (html.match(/<button\b[^>]*>/g) ?? []).filter((button) =>
+      [m.settings_retry(), m.settings_managed_start_first_page()].some((action) =>
+        button.includes(`aria-label="${action} · ${label}"`),
+      ),
+    );
+    expect(html).toContain(m.settings_retry_wait());
+    expect(actions).toHaveLength(2);
+    for (const action of actions) expect(action).toContain('disabled=""');
+    expect(html).toContain('Current native owner');
+    expect(html).toContain('Current indexer');
+    expect(html).not.toContain(`aria-label="${m.settings_managed_first_page()} ·`);
+    expect(inputs).toHaveLength(2); // Rendering the waiting state never dispatches a request.
+    defer = true;
+    const reset = reader.load(section);
+    expect(reader.snapshot()[section].pending).toBe(true);
+    expect(reader.snapshot()[section === 'members' ? 'responsibilities' : 'members'].pending).toBe(false);
+    await reader.load(section);
+    await reader.load(section, 'another-cursor');
+    await reader.load();
+    expect(inputs).toHaveLength(3);
+    resolve!(ready());
+    await reset;
+    expect(reader.snapshot()[section].cursor).toBeUndefined();
+  }
 });

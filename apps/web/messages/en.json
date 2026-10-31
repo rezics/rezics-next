@@ -2972,6 +2972,7 @@
   "settings_managed_detail_identity_unavailable": "Identity unavailable",
   "settings_managed_unavailable": "This account could not be checked. It may be unavailable or outside your current access. Try again.",
   "settings_managed_first_page": "First page",
+  "settings_managed_start_first_page": "Start at first page",
   "settings_managed_read_only": "Private, read-only account details for your current signed-in identity.",
   "settings_managed_detail_loading": "Loading account details…",
   "settings_managed_responsibilities_unavailable": "Responsibilities are unavailable or not granted for this account.",

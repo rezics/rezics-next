@@ -2636,6 +2636,7 @@
   "settings_managed_detail_identity_unavailable": "Identität nicht verfügbar",
   "settings_managed_unavailable": "Dieses Konto konnte nicht geprüft werden. Es ist möglicherweise nicht verfügbar oder liegt außerhalb deiner aktuellen Zugriffsrechte. Versuche es erneut.",
   "settings_managed_first_page": "Erste Seite",
+  "settings_managed_start_first_page": "Auf der ersten Seite neu beginnen",
   "settings_managed_read_only": "Private Kontodetails für deine aktuell angemeldete Identität, nur zur Ansicht.",
   "settings_managed_detail_loading": "Kontodetails werden geladen…",
   "settings_managed_responsibilities_unavailable": "Verantwortlichkeiten sind für dieses Konto nicht verfügbar oder nicht freigegeben.",

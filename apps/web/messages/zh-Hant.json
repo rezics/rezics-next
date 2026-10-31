@@ -2636,6 +2636,7 @@
   "settings_managed_detail_identity_unavailable": "無法取得身分資料",
   "settings_managed_unavailable": "無法查詢此帳號。帳號可能暫時無法使用，或不在你目前的存取權限內。請重試。",
   "settings_managed_first_page": "第一頁",
+  "settings_managed_start_first_page": "從第一頁重新開始",
   "settings_managed_read_only": "以你目前登入的身分檢視私人帳號資料，僅供讀取。",
   "settings_managed_detail_loading": "正在載入帳號資料…",
   "settings_managed_responsibilities_unavailable": "此帳號的責任資料無法使用，或你尚未獲得檢視權限。",

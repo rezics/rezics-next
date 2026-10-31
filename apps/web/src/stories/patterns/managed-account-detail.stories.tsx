@@ -4,10 +4,20 @@ import { expect, userEvent, within } from 'storybook/test';
 import { detailExample, human, organization } from '../../accounts/management/story-api';
 import { m } from '../../paraglide/messages.js';
 import { ManagedAccountDetailCard } from '../../settings/managed-account-detail';
-import { ManagedAccountReader, type DetailRead } from '../../settings/managed-account-detail-read';
+import { ManagedAccountReader, type DetailRead, type DetailSection } from '../../settings/managed-account-detail-read';
 
 // Illustrative native DTOs for component review, not proof of native authorization or completed operations.
-function Example({ member = false, paging = false }: { member?: boolean; paging?: boolean }) {
+function Example({
+  member = false,
+  paging = false,
+  failed,
+  waiting = false,
+}: {
+  member?: boolean;
+  paging?: boolean;
+  failed?: DetailSection;
+  waiting?: boolean;
+}) {
   const reader = useMemo(() => {
     const read: DetailRead = async (input) => {
       const value = detailExample(organization.id);
@@ -15,6 +25,16 @@ function Example({ member = false, paging = false }: { member?: boolean; paging?
         value.role = 'member';
         value.members = { state: 'denied', items: [], next: null };
         value.responsibilities = null;
+      } else if (failed) {
+        value.members.next = 'illustrative-signed-members-page';
+        value.responsibilities!.next = 'illustrative-signed-responsibilities-page';
+        if (input.section === failed && input.cursor)
+          return {
+            ok: false,
+            failure: waiting
+              ? { status: 429, code: 'rate_limited', transient: true, retryAfter: '60' }
+              : { status: 400, code: 'invalid_cursor', transient: false },
+          };
       } else if (paging) {
         const second = input.section === 'members' && !!input.cursor;
         value.members.items = Array.from({ length: second ? 1 : 20 }, (_, index) => {
@@ -33,11 +53,17 @@ function Example({ member = false, paging = false }: { member?: boolean; paging?
       return { ok: true, viewerId: input.viewerId, value };
     };
     return new ManagedAccountReader(human.id, organization.id, read);
-  }, [member, paging]);
+  }, [member, paging, failed, waiting]);
   useEffect(() => {
-    void reader.load();
-    return () => reader.clear();
-  }, [reader]);
+    let active = true;
+    void reader.load().then(() => {
+      if (active && failed) void reader.load(failed, `illustrative-signed-${failed}-page`);
+    });
+    return () => {
+      active = false;
+      reader.clear();
+    };
+  }, [reader, failed]);
   return (
     <div className="mx-auto max-w-3xl">
       <ManagedAccountDetailCard reader={reader} backHref="/en/settings?view=accounts#account" />
@@ -89,5 +115,66 @@ export const IndependentPaging: Story = {
     await canvas.findByRole('alert');
     await expect(canvas.getByText('Atlas editor 21')).toBeVisible();
     await expect(canvas.getByText(m.managed_reconciling())).toBeVisible();
+  },
+};
+
+export const MembersFirstPageRecovery: Story = {
+  args: { failed: 'members' },
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('alert');
+    const members = within(canvas.getByRole('region', { name: m.managed_holders_title() }));
+    await expect(members.queryByText(human.displayName)).toBeNull();
+    await userEvent.click(
+      members.getByRole('button', { name: `${m.settings_retry()} · ${m.managed_holders_title()}` }),
+    );
+    await members.findByRole('alert'); // The exact expired continuation is still refused.
+    const restart = members.getByRole('button', {
+      name: `${m.settings_managed_start_first_page()} · ${m.managed_holders_title()}`,
+    });
+    restart.focus();
+    await expect(restart).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await members.findByText(human.displayName);
+    await expect(members.queryByRole('alert')).toBeNull();
+    await expect(canvas.getByText(m.managed_current())).toBeVisible();
+    await expect(canvas.getByText(m.managed_reconciling())).toBeVisible();
+  },
+};
+
+export const ResponsibilitiesContinuationFailure: Story = {
+  args: { failed: 'responsibilities' },
+  globals: { viewport: { value: 'desktop1280' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('alert');
+    const responsibilities = within(canvas.getByRole('region', { name: m.managed_operated_title() }));
+    await expect(
+      responsibilities.getByRole('button', {
+        name: `${m.settings_managed_start_first_page()} · ${m.managed_operated_title()}`,
+      }),
+    ).toBeEnabled();
+    await expect(responsibilities.queryByText(m.managed_current())).toBeNull();
+    await expect(responsibilities.queryByText(m.managed_no_responsibilities())).toBeNull();
+    await expect(canvas.getByText(human.displayName)).toBeVisible();
+  },
+};
+
+export const ContinuationRetryAfter: Story = {
+  args: { failed: 'responsibilities', waiting: true },
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('alert');
+    const responsibilities = within(canvas.getByRole('region', { name: m.managed_operated_title() }));
+    await expect(responsibilities.getByText(m.settings_retry_wait())).toBeVisible();
+    for (const action of [m.settings_retry(), m.settings_managed_start_first_page()]) {
+      await expect(
+        responsibilities.getByRole('button', { name: `${action} · ${m.managed_operated_title()}` }),
+      ).toBeDisabled();
+    }
+    await expect(responsibilities.getByText(m.managed_current())).toBeVisible();
+    await expect(canvas.getByText(human.displayName)).toBeVisible();
   },
 };

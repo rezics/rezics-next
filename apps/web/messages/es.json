@@ -2636,6 +2636,7 @@
   "settings_managed_detail_identity_unavailable": "Identidad no disponible",
   "settings_managed_unavailable": "No se pudo consultar esta cuenta. Puede que no esté disponible o que quede fuera de tus permisos de acceso actuales. Inténtalo de nuevo.",
   "settings_managed_first_page": "Primera página",
+  "settings_managed_start_first_page": "Volver a la primera página",
   "settings_managed_read_only": "Datos privados de la cuenta, de solo lectura, para la identidad con la que has iniciado sesión.",
   "settings_managed_detail_loading": "Cargando los datos de la cuenta…",
   "settings_managed_responsibilities_unavailable": "Las responsabilidades de esta cuenta no están disponibles o no tienes permiso para consultarlas.",

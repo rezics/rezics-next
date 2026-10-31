@@ -2637,6 +2637,7 @@
   "settings_managed_detail_identity_unavailable": "无法获取身份资料",
   "settings_managed_unavailable": "无法查询此账号。账号可能暂时无法使用，或不在你当前的访问权限内。请重试。",
   "settings_managed_first_page": "第一页",
+  "settings_managed_start_first_page": "从第一页重新开始",
   "settings_managed_read_only": "以你当前登录的身份查看私人账号资料，仅供读取。",
   "settings_managed_detail_loading": "正在加载账号资料…",
   "settings_managed_responsibilities_unavailable": "此账号的责任资料不可用，或你尚未获得查看权限。",
