@@ -224,23 +224,21 @@ const phone = () => window.matchMedia('(max-width: 767px)').matches;
 async function search(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const canvas = within(context.canvasElement);
-  await userEvent.click(
-    phone()
-      ? canvas.getByRole('button', { name: m.search_label() })
-      : canvas.getByRole('combobox', { name: m.search_label() }),
-  );
-  const input = canvas.getByRole('combobox', { name: m.search_label() });
-  await expect(input).toHaveFocus();
+  const trigger =
+    canvas.queryByRole('button', { name: m.header_search_global() }) ??
+    canvas.getByRole('combobox', { name: m.search_label() });
+  await userEvent.click(trigger);
+  const input = await canvas.findByRole('combobox', { name: m.search_label() });
+  await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'));
+  await waitFor(() => expect(input).toHaveFocus());
   await expect(context.canvasElement.querySelectorAll('input[role="combobox"]')).toHaveLength(1);
-  return { canvas, input };
+  return { canvas, input, trigger };
 }
 export const Rest: Story = {
   play: async (context) => {
-    const { canvas } = await search(context);
+    const { trigger } = await search(context);
     await userEvent.keyboard('{Escape}');
-    await expect(
-      phone() ? canvas.getByRole('button', { name: m.search_label() }) : canvas.getByRole('combobox'),
-    ).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
   },
 };
 export const Unread: Story = {
@@ -309,10 +307,45 @@ export const SearchEmpty: Story = {
 export const SearchRecent: Story = {
   render: () => <Example state="recent" />,
   play: async (context) => {
-    const { canvas } = await search(context);
+    const { canvas, input } = await search(context);
+    await expect(canvas.getByRole('heading', { name: m.header_search_recent() })).toBeVisible();
     await expect(canvas.getByRole('button', { name: recording.query })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: realmRecording.realm.title })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.header_search_history() })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await expect(input).toHaveFocus();
+  },
+};
+export const SearchHistory: Story = {
+  render: () => <Example state="recent" />,
+  play: async (context) => {
+    await SearchRecent.play!(context);
+    const canvas = within(context.canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.header_search_history() }));
     await expect(canvas.getByRole('heading', { name: m.header_search_history() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: recording.query })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: realmRecording.realm.title })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.header_search_recent() })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+  },
+};
+export const SearchHistoryTransition: Story = {
+  tags: ['!dev'],
+  render: () => <Example state="recent" />,
+  play: async (context) => {
+    await SearchHistory.play!(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.header_search_recent() }));
+    await expect(canvas.getByRole('heading', { name: m.header_search_recent() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: recording.query })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.header_search_history() })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   },
 };
 export const SearchTrending: Story = {
@@ -324,11 +357,18 @@ export const SearchTrending: Story = {
     const region = await realmState(context, 'ready');
     await expect(readyRealms).toHaveBeenCalledTimes(1);
     await expect(readyRealms).toHaveBeenLastCalledWith({ locale: getLocale(), sort: 'trending', limit: 20 });
-    await expect(within(region).getByRole('link', { name: new RegExp(realmRecording.realm.title) })).toHaveAttribute(
-      'href',
-      `/${getLocale()}/realms/${realmRecording.realm.realmId}`,
-    );
-    await userEvent.click(within(region).getByRole('button'));
+    const realm = within(region).getByRole('link', { name: new RegExp(realmRecording.realm.title) });
+    await expect(realm).toBeVisible();
+    await expect(realm).toHaveAttribute('href', `/${getLocale()}/realms/${realmRecording.realm.realmId}`);
+    await expect(within(region).getByRole('button', { name: m.realm_discovery_continue() })).toBeVisible();
+  },
+};
+export const SearchTrendingSparsePage: Story = {
+  render: () => <Example state="trending" loadRealms={readyRealms} />,
+  play: async (context) => {
+    await SearchTrending.play!(context);
+    const region = await realmState(context, 'ready');
+    await userEvent.click(within(region).getByRole('button', { name: m.realm_discovery_continue() }));
     await waitFor(() => expect(readyRealms).toHaveBeenCalledTimes(2));
     await expect(readyRealms).toHaveBeenLastCalledWith({
       locale: getLocale(),
@@ -338,7 +378,18 @@ export const SearchTrending: Story = {
     });
     await realmState(context, 'ready');
     await expect(within(region).queryByRole('link')).toBeNull();
-    await userEvent.click(within(region).getByRole('button'));
+    await expect(within(region).getByRole('status')).toHaveTextContent(m.realm_discovery_page_empty());
+    await expect(within(region).getByRole('status')).toBeVisible();
+    await expect(within(region).getByRole('button', { name: m.realm_discovery_continue() })).toBeVisible();
+  },
+};
+export const SearchTrendingPagination: Story = {
+  tags: ['!dev'],
+  render: () => <Example state="trending" loadRealms={readyRealms} />,
+  play: async (context) => {
+    await SearchTrendingSparsePage.play!(context);
+    const region = await realmState(context, 'ready');
+    await userEvent.click(within(region).getByRole('button', { name: m.realm_discovery_continue() }));
     await waitFor(() => expect(readyRealms).toHaveBeenCalledTimes(3));
     await expect(readyRealms).toHaveBeenLastCalledWith({
       locale: getLocale(),
@@ -347,7 +398,9 @@ export const SearchTrending: Story = {
       limit: 20,
     });
     await realmState(context, 'ready');
+    await expect(within(region).queryByRole('link')).toBeNull();
     await expect(within(region).queryByRole('button')).toBeNull();
+    await expect(within(region).getByRole('status')).toHaveTextContent(m.realm_discovery_empty());
   },
 };
 async function realmState(context: { canvasElement: HTMLElement }, state: string) {
@@ -360,8 +413,14 @@ export const SearchLoading: Story = {
   play: async (context) => {
     loadingRealms.mockClear();
     const { input } = await search(context);
-    await realmState(context, 'loading');
-    await expect(loadingRealms).toHaveBeenCalledTimes(1);
+    const region = await realmState(context, 'loading');
+    const discovery = within(region).getByRole('region', { name: m.realm_discovery_trending() });
+    await expect(discovery).toBeVisible();
+    await expect(discovery).toHaveAttribute('aria-busy', 'true');
+    const status = within(discovery).getByRole('status');
+    await expect(status).toBeVisible();
+    await expect(status).toHaveTextContent(m.realm_discovery_loading());
+    await waitFor(() => expect(loadingRealms).toHaveBeenCalledTimes(1));
     await expect(input).toHaveFocus();
   },
 };
@@ -435,6 +494,7 @@ async function creationOrder(sheet: ReturnType<typeof within>, fragments: string
   );
 }
 export const CreationOwnersLifecycle: Story = {
+  tags: ['!dev'],
   render: () => <Example state="creation-owners" />,
   play: async (context) => {
     await pageReady(context);
@@ -457,6 +517,7 @@ export const CreationOwnersLifecycle: Story = {
   },
 };
 export const CreationSessionTransition: Story = {
+  tags: ['!dev'],
   render: () => <Example state="creation-session" />,
   play: async (context) => {
     await pageReady(context);
