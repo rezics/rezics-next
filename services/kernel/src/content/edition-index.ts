@@ -79,7 +79,7 @@ export async function readCreatorEditions(
   });
   // Release the home checkout before any source/Access preparation. Never refill
   // skipped rows; continuation advances by the last EXAMINED immutable key.
-  const readable: string[] = [];
+  const readable: ContentEditionView[] = [];
   const read = async (id: string) => {
     try {
       const result = await readCreatorContentEdition(deps, id, { actor, deadline: context.deadline }, false);
@@ -90,16 +90,19 @@ export async function readCreatorEditions(
     }
   };
   for (const candidate of candidates.value) {
-    if (await read(candidate.edition_id)) readable.push(candidate.edition_id);
-  }
-  const editions: ContentEditionView[] = [];
-  for (const id of readable) {
-    const current = await read(id);
-    if (current) editions.push(current);
+    const current = await read(candidate.edition_id);
+    if (current) readable.push(current);
   }
   const identities = input.identity
-    ? await readEditionIdentities(deps, editions, { actor, deadline: context.deadline })
+    ? await readEditionIdentities(deps, readable, { actor, deadline: context.deadline })
     : null;
+  // Keep the existing final native pass after composition. A fresh refusal drops
+  // both edition metadata and its independently authorized identity; never refill.
+  const editions: ContentEditionView[] = [];
+  for (const candidate of readable) {
+    const current = await read(candidate.editionId);
+    if (current) editions.push(current);
+  }
   const last = candidates.value.at(-1);
   return {
     editions: identities
