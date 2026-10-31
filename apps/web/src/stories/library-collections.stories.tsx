@@ -283,7 +283,7 @@ export const CollectionsNinePins: Story = {
     await expect(manager).toBeVisible();
     const rows = within(manager).getAllByRole('listitem');
     expect(rows).toHaveLength(9);
-    await expect(within(rows[8]!).getByRole('link', { name: 'Reading list 9', exact: true })).toBeVisible();
+    await expect(within(rows[8]!).getByRole('link', { name: 'Reading list 9' })).toBeVisible();
     await expect(within(rows[8]!).getByRole('button', { name: m.library_pin_actions() })).toBeEnabled();
 
     const navigation = context.canvasElement.querySelector<HTMLElement>('[data-library-navigation-desktop]');
@@ -291,7 +291,7 @@ export const CollectionsNinePins: Story = {
     await expect(navigation?.querySelectorAll('a[data-library-pin]')).toHaveLength(8);
     if (!navigation) throw new globalThis.Error('Missing Library navigation');
     if (window.getComputedStyle(navigation).display !== 'none') {
-      const links = within(navigation).getAllByRole('link', { name: m.library_nav_all_collections(), exact: true });
+      const links = within(navigation).getAllByRole('link', { name: m.library_nav_all_collections() });
       await expect(links).toHaveLength(1);
       await expect(links[0]!).toBeVisible();
       return;
@@ -302,18 +302,17 @@ export const CollectionsNinePins: Story = {
     if (!phone) throw new globalThis.Error('Missing phone Library navigation');
     await expect(phone).toBeVisible();
     expect(phone.querySelectorAll('a[data-library-pin]')).toHaveLength(3);
-    const selector = within(phone).getByRole('button', { name: m.library_nav_selector(), exact: true });
+    const selector = within(phone).getByRole('button', { name: m.library_nav_selector() });
     await expect(selector).toBeVisible();
     await expect(selector).toHaveTextContent(m.library_nav_all_collections());
     await userEvent.click(selector);
 
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     const menu = sheet
-      ? await within(document.body).findByRole('dialog', { name: m.library_nav_selector(), exact: true })
+      ? await within(document.body).findByRole('dialog', { name: m.library_nav_selector() })
       : await within(document.body).findByRole('menu');
     const destination = within(menu).getByRole(sheet ? 'link' : 'menuitem', {
       name: m.library_nav_all_collections(),
-      exact: true,
     });
     destination.scrollIntoView({ block: 'nearest' });
     await expect(destination).toBeVisible();
