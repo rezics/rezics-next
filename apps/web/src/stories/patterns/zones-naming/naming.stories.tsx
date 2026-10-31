@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { Button } from '@rezics/ui/shadcn/button';
+import { pickZoneName } from '@rezics/composition';
 import { CreateZone } from '../../../features/zones/manage/create';
 import { createOwnedZone } from '../../../features/zones/manage/request';
 import { zoneEditorFixture } from '../../../features/zones/editor/fixture';
@@ -63,6 +64,10 @@ type Story = StoryObj<typeof meta>;
 export const CreateReadRenameRead: Story = {
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
+    // Missing or withheld primary text must not turn an unrelated translation into the primary.
+    const withheld = { primaryLanguage: 'ja' as const, labels: { de: 'Mein Regal' } };
+    await expect(pickZoneName(withheld, 'fr')).toEqual({ text: '' });
+    await expect(pickZoneName(withheld, 'de')).toEqual({ text: 'Mein Regal', lang: 'de' });
     await userEvent.selectOptions(view.getByLabelText(m.zones_create_starter()), 'book');
     await expect(view.getByLabelText(m.zone_name_primary())).toHaveValue('');
     await userEvent.selectOptions(view.getByLabelText(m.zone_name_language()), 'ja');

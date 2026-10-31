@@ -16,7 +16,6 @@ import type { SubjectLibrarySlotData } from '../library/subject-slot';
 import type { SessionEnv } from '../session/client';
 import { defaultReader, type Reader } from '../subject/reader';
 import { loadReader } from '../subject/load-reader';
-import { pageText } from '../features/pages/shared';
 import { useEffect, useState, type ReactNode } from 'react';
 import { NotFoundPage, StatusPage } from '../shell/shell';
 import type { PagePaths } from '../shell/head';

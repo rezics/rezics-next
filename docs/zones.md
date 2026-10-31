@@ -164,7 +164,8 @@ composition label rules keep their existing requirements.
 Zone-only display uses the requested readable language, then the stored primary language, then the
 explicit legacy order: `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr`, `es`. The shared `pickZoneName`
 helper consumes only disclosed labels; missing or withheld names are never recovered from private
-configuration. The owner editor explains the legacy order and stores an explicit primary when the owner
+configuration. When explicit primary metadata exists but neither the requested nor primary name is
+readable, the display remains unnamed instead of selecting an unrelated translation. The owner editor explains the legacy order and stores an explicit primary when the owner
 edits a name or chooses its language. Switching either interface or primary language preserves entered
 names; selecting a missing primary presents a blank required field without adding an empty translation. Only nonprimary translations can be
 removed. Optional translations are progressively disclosed and must be authored, never synthesized.

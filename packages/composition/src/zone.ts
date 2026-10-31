@@ -40,7 +40,7 @@ export function pickZoneName(
   const language =
     UI_LOCALES.find((language) => language === requested && !!zone.labels[language]?.trim()) ??
     (zone.primaryLanguage && zone.labels[zone.primaryLanguage]?.trim() ? zone.primaryLanguage : undefined) ??
-    UI_LOCALES.find((language) => !!zone.labels[language]?.trim());
+    (zone.primaryLanguage === undefined ? UI_LOCALES.find((language) => !!zone.labels[language]?.trim()) : undefined);
   return language ? { text: zone.labels[language]!, lang: language } : { text: '' };
 }
 
