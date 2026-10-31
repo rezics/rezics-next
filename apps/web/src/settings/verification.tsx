@@ -12,7 +12,12 @@ import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { csrfHeaders } from '../threads/composer';
 import { useSession } from '../session/query';
-import { unwrapVerificationRead, type AgentVerificationRequest, type VerificationInput } from './verification-core';
+import {
+  unwrapVerificationRead,
+  type AgentVerificationRequest,
+  type VerificationFailure,
+  type VerificationInput,
+} from './verification-core';
 import { usePreferenceRetry } from './preference-failure-retry';
 import { useSettingsNavigationCurrent, useSettingsNavigationDraft } from './reading-navigation';
 import { verificationNeedsNavigationDecision } from './settings-draft-state';
@@ -32,6 +37,27 @@ import {
 } from './verification-recovery';
 import { readVerificationState, requestVerificationAction, withdrawVerificationAction } from './verification-actions';
 
+function subjectLabel(title: string | null | undefined, subjectId: string | undefined) {
+  return title?.trim() && title !== subjectId ? title : m.settings_verification_generic_subject();
+}
+
+function CommandDetails({ failure }: { failure: VerificationFailure }) {
+  // Only bounded diagnostic identifiers belong here; never render the transported message or command key.
+  const code = failure.code && /^[a-z][a-z0-9_]{0,63}$/.test(failure.code) ? failure.code : null;
+  const requestId =
+    failure.requestId && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$/.test(failure.requestId) ? failure.requestId : null;
+  return (
+    <details>
+      <summary>{m.settings_verification_command_details()}</summary>
+      <div className="space-y-2 break-words">
+        <p>{m.settings_verification_read_error({ status: failure.status })}</p>
+        {code ? <p>{m.settings_verification_diagnostic_code({ code })}</p> : null}
+        {requestId ? <p>{m.settings_verification_diagnostic_request({ requestId })}</p> : null}
+      </div>
+    </details>
+  );
+}
+
 function VerificationState({
   verification,
   subjectTitle,
@@ -41,7 +67,9 @@ function VerificationState({
 }) {
   if (!verification) return null;
   if (verification.state === 'pending' || verification.state === 'approving')
-    return <p>{m.settings_verification_pending({ subject: subjectTitle ?? verification.catalogueSubjectId })}</p>;
+    return (
+      <p>{m.settings_verification_pending({ subject: subjectLabel(subjectTitle, verification.catalogueSubjectId) })}</p>
+    );
   if (verification.state === 'approved')
     return (
       <p>
@@ -50,7 +78,10 @@ function VerificationState({
           className="underline"
           href={
             subjectHref(
-              { id: verification.catalogueSubjectId, label: subjectTitle ?? verification.catalogueSubjectId },
+              {
+                id: verification.catalogueSubjectId,
+                label: subjectLabel(subjectTitle, verification.catalogueSubjectId),
+              },
               getLocale(),
             ).href
           }
@@ -124,6 +155,8 @@ export function VerificationCard({
   const form = useRef<HTMLFormElement>(null);
   const [showValidation, setShowValidation] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
+  // Capture the genuine label in the action handler, before a send clears current status or the draft changes.
+  const [action, setAction] = useState<{ kind: 'request' | 'withdraw'; subject: string } | null>(null);
   const [acknowledged, setAcknowledged] = useState<Omit<VerificationInput, 'idempotencyKey'> | null>(null);
   const isCurrent = useSettingsNavigationCurrent(csrfToken);
   const pending = state.phase === 'sending' || state.phase === 'reading';
@@ -174,11 +207,13 @@ export function VerificationCard({
       focusField(fieldId(invalid[0]!));
       return;
     }
+    setAction({ kind: 'request', subject: subjectLabel(selected?.title, selected?.id) });
     await recover(() => controller.submit(draft));
   }
 
   async function withdraw() {
     if (!csrfToken || !confirmation || !canWithdraw) return;
+    setAction({ kind: 'withdraw', subject: subjectLabel(subjectTitle, verification?.catalogueSubjectId) });
     await controller.withdraw(true);
     setConfirmation(false);
   }
@@ -318,17 +353,34 @@ export function VerificationCard({
         {state.attempt && !pending ? (
           <Alert>
             <AlertTitle>
-              {state.attempt.kind === 'request'
-                ? m.settings_verification_uncertain_request()
-                : m.settings_verification_uncertain_withdraw()}
+              {state.attempt.receipt
+                ? state.attempt.kind === 'request'
+                  ? m.settings_verification_request_received()
+                  : m.settings_verification_withdraw_received()
+                : state.attempt.kind === 'request'
+                  ? m.settings_verification_uncertain_request()
+                  : m.settings_verification_uncertain_withdraw()}
             </AlertTitle>
             <AlertDescription className="space-y-3">
-              <details>
-                <summary>{m.settings_verification_original()}</summary>
-                <p className="break-all">{state.attempt.input.idempotencyKey}</p>
-                {'subject' in state.attempt.input ? (
+              <p>
+                {state.attempt.kind === 'request'
+                  ? m.settings_verification_request_action({
+                      subject: action?.subject ?? m.settings_verification_generic_subject(),
+                    })
+                  : m.settings_verification_withdraw_action({
+                      subject: action?.subject ?? m.settings_verification_generic_subject(),
+                    })}
+              </p>
+              <p>{m.settings_verification_check_guidance()}</p>
+              <p>
+                {state.attempt.kind === 'request'
+                  ? m.settings_verification_retry_request_guidance()
+                  : m.settings_verification_retry_withdraw_guidance()}
+              </p>
+              {state.attempt.kind === 'request' ? (
+                <details>
+                  <summary>{m.settings_verification_original()}</summary>
                   <div className="space-y-2 break-words">
-                    <p>{state.attempt.input.subject}</p>
                     <p className="whitespace-pre-wrap">{state.attempt.input.statement}</p>
                     <ul>
                       {state.attempt.input.links.map((link, index) => (
@@ -338,29 +390,41 @@ export function VerificationCard({
                       ))}
                     </ul>
                   </div>
-                ) : (
-                  <p className="break-all">{state.attempt.requestId}</p>
-                )}
-              </details>
+                </details>
+              ) : null}
               <Button
                 type="button"
                 disabled={pending || waiting || !csrfToken}
                 onClick={() => void recover(() => controller.retry())}
               >
-                {m.settings_verification_retry_original()}
+                {state.attempt.kind === 'request'
+                  ? m.settings_verification_retry_original()
+                  : m.settings_verification_retry_withdraw()}
               </Button>
             </AlertDescription>
           </Alert>
         ) : null}
-        {state.phase === 'review' ? <p role="status">{m.settings_verification_draft_preserved()}</p> : null}
-        {state.failure && state.readStatus !== 'error' ? (
-          <p role="alert">
-            {m.settings_verification_command_error({
-              status: state.failure.status,
-              message: state.failure.message,
-            })}
-          </p>
+        {state.phase === 'refused' ? (
+          <Alert>
+            <AlertTitle>
+              {action?.kind === 'withdraw'
+                ? m.settings_verification_withdraw_refused()
+                : m.settings_verification_request_refused()}
+            </AlertTitle>
+            <AlertDescription>
+              <p>
+                {action?.kind === 'withdraw'
+                  ? m.settings_verification_withdraw_action({ subject: action.subject })
+                  : m.settings_verification_request_action({
+                      subject: action?.subject ?? m.settings_verification_generic_subject(),
+                    })}
+              </p>
+              <p>{m.settings_verification_check_guidance()}</p>
+            </AlertDescription>
+          </Alert>
         ) : null}
+        {state.phase === 'review' ? <p role="status">{m.settings_verification_draft_preserved()}</p> : null}
+        {state.failure && state.readStatus !== 'error' ? <CommandDetails failure={state.failure} /> : null}
         {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
         <Button
           type="button"

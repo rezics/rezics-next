@@ -172,6 +172,7 @@ export const CurrentStatusRecoveredPhone: Story = {
 
 const readRecoveryFixtures = new WeakMap<Element, ReturnType<typeof readRecoveryTransport>>();
 const transportedReadMessage = 'The settings service could not return your preferences.';
+const transportedCommandMessage = 'upstream write lost; Authorization: Bearer private-backend-token; SQL body';
 const continuation = 'read-recovery+/page-2==';
 
 /** Native-shaped responses at fetch, with the default Settings route, actions, queries and controllers intact. */
@@ -179,14 +180,19 @@ function readRecoveryTransport(fallback: typeof fetch) {
   const collections = collectionsRecording.collections;
   const subject = demoAgentSubjects[0]!;
   const reads = { collections: [] as (string | null)[], verification: 0 };
-  const commands: { method: string; path: string; key: string | null }[] = [];
+  const commands: { method: string; path: string; key: string | null; body: unknown }[] = [];
   let current: AgentVerificationRequest | null = null;
   const fetcher = (async (input, init) => {
     const request = new Request(input instanceof Request ? input : new URL(String(input), window.location.href), init);
     const url = new URL(request.url);
     if (url.origin !== 'http://kernel.local') return fallback(input, init);
     if (request.method !== 'GET' && request.method !== 'HEAD')
-      commands.push({ method: request.method, path: url.pathname, key: request.headers.get('idempotency-key') });
+      commands.push({
+        method: request.method,
+        path: url.pathname,
+        key: request.headers.get('idempotency-key'),
+        body: await request.clone().json(),
+      });
     if (request.method === 'GET' && url.pathname === '/v1/accounts/story-viewer/collections') {
       reads.collections.push(url.searchParams.get('cursor'));
       if (reads.collections.length === 2)
@@ -214,6 +220,7 @@ function readRecoveryTransport(fallback: typeof fetch) {
     }
     if (request.method === 'POST' && url.pathname === '/v1/accounts/story-viewer:requestVerification') {
       const draft = (await request.json()) as Omit<VerificationInput, 'idempotencyKey'>;
+      if (current) return Response.json({ verificationRequest: current }, { status: 201 });
       current = {
         ...draft,
         id: 'read-recovery-request',
@@ -230,10 +237,22 @@ function readRecoveryTransport(fallback: typeof fetch) {
         updatedAt: '2026-01-01T00:00:00Z',
       };
       // The server accepted the setup request, but its receipt did not reach the client.
-      return Response.json({ code: 'dependency_unavailable', detail: 'Request response lost' }, { status: 503 });
+      return Response.json(
+        { code: 'dependency_unavailable', detail: transportedCommandMessage, request_id: 'verification-send' },
+        { status: 503 },
+      );
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/accounts/story-viewer:withdrawVerification' && current) {
+      const replay = current.state === 'withdrawn';
+      current = { ...current, state: 'withdrawn' };
+      return replay
+        ? Response.json({ verificationRequest: current })
+        : Response.json({ code: 'dependency_unavailable', detail: transportedCommandMessage }, { status: 503 });
     }
     if (request.method === 'GET' && url.pathname === '/v1/subjects:suggest')
-      return Response.json({ subjects: [subject] });
+      return Response.json({
+        subjects: [url.searchParams.get('q')?.includes('Lantern') ? demoAgentSubjects[1]! : subject],
+      });
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${subject.id}`) return Response.json({ subject });
     return fallback(input, init);
   }) as typeof fetch;
@@ -263,7 +282,7 @@ function DefaultReadRecoveryPage() {
 }
 
 export const DefaultReadRecovery: StoryObj = {
-  name: 'Default Collection and verification read recovery describes the failed read and preserves retained data and command identity',
+  name: 'Default verification request and withdrawal recovery explain the actual unconfirmed action without raw protocol detail and preserve original drafts and command identity through status reads',
   tags: ['!dev'],
   render: () => <DefaultReadRecoveryPage />,
   play: async ({ canvasElement }) => {
@@ -277,8 +296,13 @@ export const DefaultReadRecovery: StoryObj = {
     await userEvent.keyboard('{ArrowDown}{Enter}');
     const statement = view.getByRole('textbox', { name: m.settings_verification_statement() });
     await userEvent.type(statement, 'Original evidence');
+    const linkLabel = view.getByRole('textbox', { name: m.settings_verification_link_label() });
+    const linkUrl = view.getByRole('textbox', { name: m.settings_verification_link_url() });
+    await userEvent.type(linkLabel, 'Official profile');
+    await userEvent.type(linkUrl, 'https://example.test/original');
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_submit() }));
     await view.findByText(m.settings_verification_uncertain_request());
+    await expect(view.getByRole('button', { name: m.settings_verification_submit() })).toBeDisabled();
     await expect(fixture.commands).toHaveLength(1);
     const originalCommands = fixture.commands.map((command) => ({ ...command }));
     await expect(originalCommands[0]).toMatchObject({
@@ -286,10 +310,38 @@ export const DefaultReadRecovery: StoryObj = {
       path: '/v1/accounts/story-viewer:requestVerification',
     });
     const originalKey = JSON.parse(fixture.commands[0]!.key!);
+    const subject = getLocale() === 'ja' ? demoAgentSubjects[0]!.labels.ja! : demoAgentSubjects[0]!.labels.en!;
+    await expect(view.getByText(m.settings_verification_request_action({ subject }))).toBeVisible();
+    await expect(view.getByText(m.settings_verification_check_guidance())).toBeVisible();
+    await expect(view.getByText(m.settings_verification_retry_request_guidance())).toBeVisible();
+    await expect(view.queryByText(transportedCommandMessage, { exact: false })).toBeNull();
+    await expect(canvasElement).not.toHaveTextContent('private-backend-token');
+    const commandDetails = view.getByText(m.settings_verification_command_details()).closest('details')!;
+    await expect(commandDetails).not.toHaveAttribute('open');
+    await userEvent.click(view.getByText(m.settings_verification_command_details()));
+    await expect(within(commandDetails).getByText(m.settings_verification_read_error({ status: 503 }))).toBeVisible();
+    await expect(
+      within(commandDetails).getByText(m.settings_verification_diagnostic_code({ code: 'dependency_unavailable' })),
+    ).toBeVisible();
+    await expect(
+      within(commandDetails).getByText(m.settings_verification_diagnostic_request({ requestId: 'verification-send' })),
+    ).toBeVisible();
     await userEvent.click(view.getByText(m.settings_verification_original()));
-    await view.findByText(originalKey);
+    await expect(view.getByText('Original evidence', { selector: 'p' })).toBeVisible();
+    await expect(view.getByText('Official profile: https://example.test/original')).toBeVisible();
+    await expect(view.queryByText(originalKey, { exact: false })).toBeNull();
+    await expect(view.queryByText(demoAgentSubjects[0]!.id, { exact: false })).toBeNull();
     await userEvent.clear(statement);
     await userEvent.type(statement, 'Later draft');
+    await userEvent.clear(linkUrl);
+    await userEvent.type(linkUrl, 'https://example.test/later');
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_change_subject() }));
+    await userEvent.type(view.getByRole('combobox', { name: m.settings_verification_subject() }), 'Lantern');
+    await within(document.body).findByRole('option');
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    await expect(view.getByText(`Lantern Press · ${m.settings_verification_organization()}`)).toBeVisible();
+    await expect(view.getByText(m.settings_verification_request_action({ subject }))).toBeVisible();
+    await expect(view.getByRole('button', { name: m.settings_verification_submit() })).toBeDisabled();
 
     const reload = view.getByRole('button', { name: m.settings_verification_read_current() });
     await userEvent.click(reload);
@@ -342,11 +394,43 @@ export const DefaultReadRecovery: StoryObj = {
     );
     await expect(statement).toHaveValue('Later draft');
     await userEvent.click(view.getByText(m.settings_verification_original()));
-    await expect(view.getByText(originalKey)).toBeVisible();
+    await expect(view.getByText('Original evidence', { selector: 'p' })).toBeVisible();
+    await expect(view.getByText('Official profile: https://example.test/original')).toBeVisible();
+    await expect(view.getByText(m.settings_verification_request_action({ subject }))).toBeVisible();
+    await expect(view.queryByText(originalKey, { exact: false })).toBeNull();
     await expect(view.getByRole('button', { name: m.settings_verification_retry_original() })).toBeEnabled();
     await expect(fixture.reads).toEqual({ collections: [null, continuation, continuation], verification: 3 });
     // All recovery was GET: no visibility write, request replay, withdrawal or replacement command key.
     await expect(fixture.commands).toEqual(originalCommands);
     await expect(view.queryByRole('button', { name: m.settings_verification_withdraw() })).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_retry_original() }));
+    await view.findByText(m.settings_verification_draft_preserved());
+    await expect(fixture.commands).toEqual([originalCommands[0], originalCommands[0]]);
+    await expect(fixture.commands[1]!.key).toBe(fixture.commands[0]!.key);
+    await expect(fixture.commands[1]!.body).toEqual({
+      subject: demoAgentSubjects[0]!.id,
+      statement: 'Original evidence',
+      links: [{ label: 'Official profile', url: 'https://example.test/original' }],
+    });
+    await expect(statement).toHaveValue('Later draft');
+    await expect(linkUrl).toHaveValue('https://example.test/later');
+    await expect(view.getByText(`Lantern Press · ${m.settings_verification_organization()}`)).toBeVisible();
+    await expect(view.queryByText(m.settings_verification_verified())).toBeNull();
+    await expect(view.queryByText(originalKey, { exact: false })).toBeNull();
+
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_withdraw() }));
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_confirm_withdraw() }));
+    await view.findByText(m.settings_verification_uncertain_withdraw());
+    await expect(view.getByText(m.settings_verification_withdraw_action({ subject }))).toBeVisible();
+    await expect(view.getByText(m.settings_verification_retry_withdraw_guidance())).toBeVisible();
+    await expect(view.queryByText(m.settings_verification_withdrawn())).toBeNull();
+    await expect(view.queryByText(transportedCommandMessage, { exact: false })).toBeNull();
+    const withdrawal = structuredClone(fixture.commands[2]!);
+    await expect(withdrawal).toMatchObject({ path: '/v1/accounts/story-viewer:withdrawVerification', body: {} });
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_retry_withdraw() }));
+    await view.findByText(m.settings_verification_withdrawn());
+    await expect(fixture.commands).toEqual([originalCommands[0], originalCommands[0], withdrawal, withdrawal]);
+    await expect(statement).toHaveValue('Later draft');
+    await expect(linkUrl).toHaveValue('https://example.test/later');
   },
 };

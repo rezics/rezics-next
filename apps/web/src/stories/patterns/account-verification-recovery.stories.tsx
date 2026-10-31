@@ -211,9 +211,10 @@ export const WithdrawalLostResponse: Story = {
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_confirm_withdraw() }));
     await view.findByText(m.settings_verification_uncertain_withdraw());
     await expect(view.queryByText(m.settings_verification_withdrawn())).toBeNull();
-    await userEvent.click(view.getByRole('button', { name: m.settings_verification_retry_original() }));
+    await expect(view.getByText(m.settings_verification_withdraw_action({ subject: 'Avery' }))).toBeVisible();
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_retry_withdraw() }));
     await view.findByText(m.settings_verification_withdrawn());
-    await expect(view.queryByRole('button', { name: m.settings_verification_retry_original() })).toBeNull();
+    await expect(view.queryByRole('button', { name: m.settings_verification_retry_withdraw() })).toBeNull();
   },
 };
 
@@ -393,6 +394,7 @@ export const FiveLinkKeyboardEditingPhone: Story = {
 
 async function showRetryAfter(canvasElement: HTMLElement, withdraw = false) {
   const view = within(canvasElement);
+  const retryLabel = withdraw ? m.settings_verification_retry_withdraw() : m.settings_verification_retry_original();
   if (withdraw) {
     await userEvent.click(await view.findByRole('button', { name: m.settings_verification_withdraw() }));
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_confirm_withdraw() }));
@@ -404,12 +406,12 @@ async function showRetryAfter(canvasElement: HTMLElement, withdraw = false) {
   await view.findByText(
     withdraw ? m.settings_verification_uncertain_withdraw() : m.settings_verification_uncertain_request(),
   );
-  await userEvent.click(view.getByRole('button', { name: m.settings_verification_retry_original() }));
+  await userEvent.click(view.getByRole('button', { name: retryLabel }));
   await view.findByText(m.settings_retry_wait());
   await expect(view.getByRole('button', { name: m.settings_verification_read_current() })).toBeDisabled();
-  await expect(view.getByRole('button', { name: m.settings_verification_retry_original() })).toBeDisabled();
-  await userEvent.click(view.getByText(m.settings_verification_original()));
+  await expect(view.getByRole('button', { name: retryLabel })).toBeDisabled();
   if (!withdraw) {
+    await userEvent.click(view.getByText(m.settings_verification_original()));
     const statement = view.getByRole('textbox', { name: m.settings_verification_statement() });
     await expect(statement).toBeEnabled();
     await userEvent.clear(statement);
@@ -418,7 +420,8 @@ async function showRetryAfter(canvasElement: HTMLElement, withdraw = false) {
     await expect(view.getByText(pending.statement, { selector: 'p' })).toBeVisible();
     await expect(view.getByRole('button', { name: m.settings_verification_add_link() })).toBeEnabled();
   } else {
-    await expect(view.getByText(pending.id)).toBeVisible();
+    await expect(view.getByText(m.settings_verification_withdraw_action({ subject: 'Avery' }))).toBeVisible();
+    await expect(view.queryByText(pending.id)).toBeNull();
   }
   await expect(view.queryByText(m.settings_verification_draft_preserved())).toBeNull();
 }
