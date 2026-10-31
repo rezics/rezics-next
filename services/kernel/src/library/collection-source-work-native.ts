@@ -4,7 +4,8 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool, QueryResultRow } from 'pg';
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
-import type { ScopeWorkContext, readScopeWorkDefinition } from '../search/scope-work-context.ts';
+import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
+import type { Access } from '../request/access.ts';
 import { nativeSourceFence, type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
 import { readNativeCollectionMetadata, type NativeCollectionMetadata } from './collection-source-native.ts';
 import { CollectionSourceLedger } from './collection-source-work.ts';
@@ -17,6 +18,7 @@ export type CollectionSourceWorkState = Readonly<{
   basis: CanonicalBasis;
   generation: string;
   observation: CollectionSourceObservation;
+  definition: CollectionSourceWorkDefinition;
 }>;
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
 
@@ -44,17 +46,17 @@ async function query<R extends QueryResultRow>(
   );
 }
 
-/** Consumes an actual native admission, then compares its retained binding to current local Source records.
- * The caller must reread native admission before I/O and again before returning. This data never grants Access.
+/** Rereads actual native admission before I/O, then compares its binding to current local Source records.
+ * The Source repeats this whole operation before returning. This data never grants Access.
  */
 export async function readCollectionSourceWorkState(
   pool: Pool,
   work: ScopeWorkContext,
-  native: CollectionSourceWorkDefinition,
-  options: Readonly<{ deadline: number; allowance: WorkAllowance }>,
+  options: Readonly<{ access: Access; deadline: number; allowance: WorkAllowance }>,
 ) {
   const l = new CollectionSourceLedger(options.allowance, options.deadline);
   try {
+    const native = await readScopeWorkDefinition(work, { pool, access: options.access, deadline: options.deadline });
     if (!hasLiveOperationalTransaction(work.tx)) throw new ProblemError('semantic_not_ready');
     const resources = currentOperationalResources(work.tx);
     const source = native.sourceIdentity;
@@ -108,7 +110,7 @@ export async function readCollectionSourceWorkState(
     }, native.observation.basis) || !isDeepStrictEqual(basis.authority, native.observation.authority))
       throw new ProblemError('semantic_not_ready');
     return {
-      metadata, basis, generation: head.generation, observation: native.observation, work: l.receipt(),
+      metadata, basis, generation: head.generation, observation: native.observation, definition: native, work: l.receipt(),
     };
   } catch (error) {
     if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => l.receipt(), configurable: true });
@@ -149,6 +151,9 @@ export async function readCollectionSourceWorkGroup(
   const l = new CollectionSourceLedger(options.allowance, options.deadline);
   try {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Invalid work group limit');
+    if (after && (after.driver === 'output' ||
+      (state.metadata.authority === 'curated' ? after.driver !== 'member' : after.driver === 'member')))
+      throw new ProblemError('invalid_cursor');
     const rows = await query<{ original: string; driver: number; fact: string }>(work, l,
       `SELECT stored_subject_id::text AS original,driver,fact_id::text AS fact FROM library.canonical_source_reference
        WHERE route=$1 AND collection_id=$2 AND generation=$3 AND canonical_subject_id=$4

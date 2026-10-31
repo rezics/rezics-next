@@ -7,7 +7,7 @@ import type { Access, Actor } from '../request/access.ts';
 import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
-import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
+import type { ScopeWorkContext } from '../search/scope-work-context.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
   readCollectionSourceWorkState,
@@ -311,11 +311,10 @@ export function createCollectionSource(dependencies: {
 }): CollectionSource {
   const prepared = new WeakMap<PreparedCollectionSource, Prepared>();
   async function authorize(
-    input: CollectionSourceContext,
+    input: Extract<CollectionSourceContext, { actor: Actor }>,
     metadata: NativeCollectionMetadata,
     l: CollectionSourceLedger,
   ) {
-    if (input.work) throw new ProblemError('semantic_not_ready');
     const allowed = await l.run((allowance) =>
       authorizeNativeCollectionMetadata(dependencies.pool, metadata, {
         ...input,
@@ -370,27 +369,19 @@ export function createCollectionSource(dependencies: {
       if (input.work) {
         const collectionId = 'collectionId' in input ? input.collectionId : input.source.observation.collectionId;
         if (collectionId !== input.work.locator.collectionId) throw new ProblemError('semantic_not_ready');
-        const native = await readScopeWorkDefinition(input.work, {
-          ...dependencies,
-          deadline: input.deadline,
-        });
-        if (
-          native.sourceIdentity.collectionId !== collectionId ||
-          ('source' in input && !isDeepStrictEqual(input.source.observation, native.observation))
-        )
-          throw new ProblemError('semantic_not_ready');
         const current = await l.run((allowance) => readCollectionSourceWorkState(
-          dependencies.pool, input.work!, native, { deadline: input.deadline, allowance },
+          dependencies.pool, input.work!, { access: dependencies.access, deadline: input.deadline, allowance },
         ));
+        if ('source' in input && !isDeepStrictEqual(input.source.observation, current.observation))
+          throw new ProblemError('semantic_not_ready');
         const result = await body(l, current);
         // This is a fresh native admission on the SAME live Core client, not a cached getter verdict.
-        const finalNative = await readScopeWorkDefinition(input.work, { ...dependencies, deadline: input.deadline });
-        if (!isDeepStrictEqual(native, finalNative)) throw new ProblemError('semantic_not_ready');
         const final = await l.run((allowance) => readCollectionSourceWorkState(
-          dependencies.pool, input.work!, finalNative, { deadline: input.deadline, allowance },
+          dependencies.pool, input.work!, { access: dependencies.access, deadline: input.deadline, allowance },
         ));
-        if (current.generation !== final.generation || !isDeepStrictEqual(current.basis, final.basis) ||
-          !isDeepStrictEqual(current.metadata, final.metadata)) throw new ProblemError('semantic_not_ready');
+        if (!isDeepStrictEqual(current.definition, final.definition) || current.generation !== final.generation ||
+          !isDeepStrictEqual(current.basis, final.basis) || !isDeepStrictEqual(current.metadata, final.metadata))
+          throw new ProblemError('semantic_not_ready');
         // Final comparisons consume the same reservation and are included in every successful receipt.
         return { ...result, work: l.receipt() };
       }
@@ -519,7 +510,7 @@ export function createCollectionSource(dependencies: {
           ),
         );
         if (!metadata || metadata.state !== 'active') throw new ProblemError('not_found');
-        if (!current) await authorize(input, metadata, l);
+        if (!input.work) await authorize(input, metadata, l);
         const state = current ?? await ready(input, metadata, l);
         const source: PreparedCollectionSource = {
           [preparedSource]: true,
