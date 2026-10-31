@@ -1033,7 +1033,7 @@ async function originalJob(job: OriginalJob) {
   );
   assert(fact);
   return {
-    type: recipe ? 'schema:Recipe' : 'schema:Book',
+    type: recipe ? ('schema:Recipe' as const) : ('schema:Book' as const),
     subjects,
     selected,
     reduced,
@@ -1315,6 +1315,7 @@ for (const surface of ownerSurfaces) {
           // Composed reads preserve the problem body and Retry-After, not the
           // internal response's Content-Type. Assert only the actual public DTO.
           expect(result.body.status).toBe(503);
+          assert(typeof result.body.code === 'string');
           expect(['index_not_ready', 'semantic_not_ready']).toContain(result.body.code);
           expect(result.headers?.['retry-after']).toBeTruthy();
           for (const key of [
@@ -1714,7 +1715,10 @@ for (const reduction of ['imported-source-fence', 'statement-consent-retraction'
       assert(selected && 'statement' in selected);
       expect(selected.source).toEqual(control.source);
       expect(selected.decision).toBe('accepted');
-      expect(control.current.adoption?.selection).toContainEqual({ candidate: control.candidate, rank: 'preferred' });
+      expect(control.current.adoption?.mode).toBe('replace');
+      expect(selected.rank).toBe('preferred');
+      expect(selected.retracted).toBeNull();
+      expect(selected.retraction).toBeNull();
       expect(control.dependency.kind).toBe('sourceTuple');
       expect(control.dependency.tuple).toMatchObject({
         source: control.source.source,
@@ -1747,7 +1751,7 @@ for (const reduction of ['imported-source-fence', 'statement-consent-retraction'
     }
     const observations: (Awaited<ReturnType<typeof capturedNative>> & {
       queried: import('../../src/search/public-filter-consumer-contract.ts').PublicFilterQueriedObservation;
-      execution?: string;
+      execution: string | undefined;
     })[] = [];
     try {
       // Retain BOTH actual immutable kinds before the single terminal reduction.
@@ -1789,7 +1793,7 @@ for (const reduction of ['imported-source-fence', 'statement-consent-retraction'
         status('takedown' in control ? await control.takedown() : await control.retract(), 200);
         for (const bound of observations) {
           const observed = await bound.operations.readStatus(
-            { queried: bound.queried, execution: bound.execution },
+            { queried: bound.queried, ...(bound.execution === undefined ? {} : { execution: bound.execution }) },
             nativeContext(),
           );
           expect(observed.status).toBe('observed');
@@ -1828,7 +1832,7 @@ for (const reduction of ['imported-source-fence', 'statement-consent-retraction'
         }
         for (const bound of observations) {
           const final = await bound.operations.readStatus(
-            { queried: bound.queried, execution: bound.execution },
+            { queried: bound.queried, ...(bound.execution === undefined ? {} : { execution: bound.execution }) },
             nativeContext(),
           );
           expect(final.status).toBe('observed');
