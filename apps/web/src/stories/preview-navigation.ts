@@ -33,7 +33,7 @@ export function bindPreviewNavigation({
     : 'This browser has no Navigation API; links and GET forms work here, but location.assign leaves the recorded preview.';
   const owner = window.crypto.randomUUID();
   let index = history.location.state.__TSR_index;
-  let traversing = false;
+  let browserIndex = index;
   let journey = false;
   const stamp = () => ({ ...originalState, rezicsPageStory: { owner, index } });
   browser.replaceState(stamp(), '', frameUrl);
@@ -48,7 +48,6 @@ export function bindPreviewNavigation({
 
   function visit(url: URL, replace = false): void {
     const href = `${url.pathname}${url.search}${url.hash}`;
-    onLocation(href);
     // Keep the browser's exact URL encoding and repeated query values; route loaders validate as usual.
     if (replace) history.replace(href);
     else history.push(href);
@@ -117,20 +116,19 @@ export function bindPreviewNavigation({
   function popstate(event: PopStateEvent): void {
     const entry = event.state?.rezicsPageStory;
     if (entry?.owner !== owner) return;
-    const delta = entry.index - index;
+    browserIndex = entry.index;
+    const delta = browserIndex - index;
     if (!delta) return;
-    traversing = true;
     history.go(delta);
-    traversing = false;
   }
 
   const unsubscribeHistory = history.subscribe(({ location, action }) => {
-    const previous = index;
     index = location.state.__TSR_index;
-    if (traversing) return;
-    if (action.type === 'PUSH') browser.pushState(stamp(), '', frameUrl);
-    else if (action.type === 'REPLACE') browser.replaceState(stamp(), '', frameUrl);
-    else browser.go(index - previous);
+    if (action.type === 'PUSH' || action.type === 'REPLACE') {
+      browserIndex = index;
+      if (action.type === 'PUSH') browser.pushState(stamp(), '', frameUrl);
+      else browser.replaceState(stamp(), '', frameUrl);
+    } else if (browserIndex !== index) browser.go(index - browserIndex);
   });
   const unsubscribeLoad = router.subscribe('onBeforeLoad', ({ fromLocation, toLocation }) => {
     journey ||= !!fromLocation && fromLocation.publicHref !== toLocation.publicHref;
