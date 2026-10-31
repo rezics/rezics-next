@@ -108,6 +108,19 @@ async function submitFields(canvasElement: HTMLElement) {
   return canvas;
 }
 export const Current: Story = {};
+export const ExactCurrentValue: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const label = pickText(definitions.release.properties['schema:inLanguage'].labels, getLocale()).text;
+    const field = within(await canvas.findByRole('region', { name: label }));
+    const select = field.getByRole('combobox', { name: m.facts_choose_value() });
+    await expect(select).toHaveAccessibleName(m.facts_choose_value());
+    await expect(field.getByRole('button', { name: m.facts_edit_field() })).toBeDisabled();
+    await userEvent.selectOptions(select, field.getByRole('option', { name: m.facts_selected_value({ number: 2 }) }));
+    await userEvent.click(field.getByRole('button', { name: m.facts_edit_field() }));
+    await expect(field.getAllByRole('textbox', { name: m.correction_value() })[0]!).toHaveValue('fr');
+  },
+};
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const Denied: Story = { args: { scenario: 'read-denied' } };

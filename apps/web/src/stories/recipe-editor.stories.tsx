@@ -213,6 +213,20 @@ export const ReaderUnavailable: Story = {
   },
 };
 export const Correction: Story = { args: { correction: true } };
+export const ExactCurrentValue: Story = {
+  args: { correction: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const heading = await canvas.findByRole('heading', { name: fieldName('schema:recipeIngredient') });
+    const current = within(heading.closest('section')!);
+    await expect(current.getByText('200 g lentils')).toBeVisible();
+    await userEvent.click(current.getByRole('button', { name: m.recipe_correct() }));
+    const replacement = canvas.getAllByRole('heading', { name: fieldName('schema:recipeIngredient') }).at(-1)!;
+    const field = within(replacement.closest('section')!);
+    await expect(field.getByRole('textbox', { name: m.correction_value() })).toHaveValue('200 g lentils');
+    await expect(current.getByRole('button', { name: m.recipe_correct() })).toBeDisabled();
+  },
+};
 export const Concealed: Story = { args: { correction: true, scenario: 'concealed' } };
 export const Proposed: Story = {
   args: { correction: true },

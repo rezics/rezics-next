@@ -257,11 +257,13 @@ export function RecipeEditor({
                 <section key={field} className="space-y-3">
                   <h2 className="font-semibold">{name(field)}</h2>
                   {(read.public!.subject.statements[field] ?? []).map((source) => (
-                    <div key={source.id} className="space-y-2">
-                      <CandidateValue snak={source} related={read.public!.related} locale={locale} />
+                    <div key={source.id} className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
+                      <div className="min-w-0 break-words sm:flex-1">
+                        <CandidateValue snak={source} related={read.public!.related} locale={locale} />
+                      </div>
                       <Button
                         variant="outline"
-                        size="sm"
+                        className="h-auto min-h-11 max-w-full whitespace-normal"
                         disabled={rows.some((row) => row.source?.id === source.id)}
                         onClick={() =>
                           setRows([...rows, { id: crypto.randomUUID(), source, statement: statementInput(source) }])

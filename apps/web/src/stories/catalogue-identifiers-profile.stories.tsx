@@ -62,6 +62,22 @@ export const RouteEntry: Story = {
   ),
 };
 export const CurrentEvidence: Story = {};
+export const ExactCurrentValue: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const fixture = identifiersProfileFixture();
+    const label = pickText(fixture.release.properties['schema:sameAs']!.labels, getLocale()).text;
+    const field = within(await canvas.findByRole('region', { name: label }));
+    await userEvent.selectOptions(
+      field.getByRole('combobox', { name: m.facts_choose_value() }),
+      field.getByRole('option', { name: m.facts_selected_value({ number: 1 }) }),
+    );
+    await userEvent.click(field.getByRole('button', { name: m.facts_edit_field() }));
+    const values = field.getAllByRole('textbox', { name: m.correction_value() });
+    await expect(values[0]!).toHaveValue(identifiersCitation);
+    await expect(values[1]!).toHaveValue(identifiersCitation);
+  },
+};
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const SignedOut: Story = { args: { scenario: 'signed-out' } };

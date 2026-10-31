@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -134,6 +134,7 @@ function FactField({
   const label = pageText(definition.labels, locale).text || m.subject_value_unlabelled({}, o);
   const selected = read.public.subject.statements[property] ?? [];
   const [source, setSource] = useState(selected.length === 1 ? selected[0]!.id : '');
+  const sourceId = useId();
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
   return (
@@ -146,11 +147,13 @@ function FactField({
       </p>
       <SelectedFacts property={property} read={read} locale={locale} />
       {!draft ? (
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           {!!selected.length && (
-            <Field className="min-w-0 flex-1">
-              <FieldLabel>{m.facts_choose_value({}, o)}</FieldLabel>
+            <Field className="w-full min-w-0 sm:flex-1">
+              <FieldLabel htmlFor={sourceId}>{m.facts_choose_value({}, o)}</FieldLabel>
               <NativeSelect
+                id={sourceId}
+                className="w-full [&>select]:min-h-11"
                 aria-label={m.facts_choose_value({}, o)}
                 value={source}
                 onChange={(event) => setSource(event.target.value)}
@@ -164,19 +167,28 @@ function FactField({
               </NativeSelect>
             </Field>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy || !canStage || (!!selected.length && !source)}
-            onClick={() => onStage(source || null)}
-          >
-            {m.facts_edit_field({}, o)}
-          </Button>
-          {!!selected.length && definition.multivalued && (
-            <Button type="button" variant="outline" disabled={busy || !canStage} onClick={() => onStage(null)}>
-              {m.facts_add_value({}, o)}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 whitespace-normal"
+              disabled={busy || !canStage || (!!selected.length && !source)}
+              onClick={() => onStage(source || null)}
+            >
+              {m.facts_edit_field({}, o)}
             </Button>
-          )}
+            {!!selected.length && definition.multivalued && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-11 whitespace-normal"
+                disabled={busy || !canStage}
+                onClick={() => onStage(null)}
+              >
+                {m.facts_add_value({}, o)}
+              </Button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
