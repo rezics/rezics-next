@@ -21,7 +21,7 @@ import { systemClock } from '../../../src/clock.ts';
 import type { SemanticOutcomeDriver } from '../../semantic/outcome-driver.ts';
 import type { CreatedSubject } from '../../support/released-discovery.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
-import { startOutcomeWorkerProcess } from './outcome-rpc.ts';
+import { outcomeClockInstant, startOutcomeWorkerProcess } from './outcome-rpc.ts';
 import { searchProxy } from './outcome-supervisor.ts';
 import { searchWorkerOwnership, type SearchWorkerKind } from './runner-slot.ts';
 
@@ -120,14 +120,25 @@ export function releasedDiscoveryRuntime(
   let closing: Promise<void> | undefined;
   let starting: Promise<void> | undefined;
   let sealed = false;
+  let frozenInstant: number | undefined;
+  let clockPending = Promise.resolve();
+  let clockFailure: unknown;
+  let clockUpdates = 0;
   const operations = new Set<Promise<unknown>>();
-  function operation<T>(run: () => Promise<T>): Promise<T> {
-    if (sealed) return Promise.reject(new Error('Released discovery runtime is closed'));
-    if (!started) return Promise.reject(new Error('Released discovery runtime has not started'));
-    const pending = Promise.resolve().then(run);
+  function track<T>(pending: Promise<T>): Promise<T> {
     operations.add(pending);
     void pending.finally(() => operations.delete(pending)).catch(() => {});
     return pending;
+  }
+  function operation<T>(run: () => Promise<T>): Promise<T> {
+    if (sealed) return Promise.reject(new Error('Released discovery runtime is closed'));
+    if (!started) return Promise.reject(new Error('Released discovery runtime has not started'));
+    // Admit worker controls in invocation order, including synchronous fixture clock transitions.
+    try {
+      return track(run());
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
   function native() {
     if (!publicFilters) throw new Error('Released discovery runtime has not received installed Kernel Access');
@@ -182,11 +193,12 @@ export function releasedDiscoveryRuntime(
     },
     async restart() {
       ownership.requireOwnedChild();
+      const initialInstant = frozenInstant;
       return operation(() =>
         workerOperation(async () => {
           if (!worker?.exited) throw new Error('Restart requires confirmed actual worker exit');
           // Reuse the original environment, database, prefix and durable preparations verbatim.
-          worker = startOutcomeWorkerProcess(env!);
+          worker = startOutcomeWorkerProcess(env!, initialInstant);
           return worker.ready;
         }),
       );
@@ -231,6 +243,50 @@ export function releasedDiscoveryRuntime(
   };
   return {
     control,
+    onClockChange(instant: Date): void {
+      if (sealed) throw new Error('Released discovery runtime is closed');
+      if (clockFailure !== undefined) throw clockFailure;
+      if (!(instant instanceof Date)) throw new Error('Fixture clock transition requires a Date');
+      const value = outcomeClockInstant(instant.getTime());
+      if (frozenInstant !== undefined && value < frozenInstant) throw new Error('Fixture clock cannot move backwards');
+      if (clockUpdates >= 64) throw new Error('Too many pending fixture clock transitions');
+      frozenInstant = value; // Store only the scalar, never the caller's mutable Date.
+      if (!starting) return; // Lazy construction: init will acknowledge the latest pre-start instant.
+      clockUpdates += 1;
+      clockPending = track(
+        workerOperation(async () => {
+          await starting;
+          if (clockFailure !== undefined) throw clockFailure;
+          // Instrumentation already owns the original shared closure; never replace it with a replica.
+          if (worker) await worker.setClock(value);
+          else if (!instrumentedWorker) throw new Error('Released discovery worker has not started');
+        })
+          .catch((error: unknown) => {
+            clockFailure ??= error;
+            throw error;
+          })
+          .finally(() => {
+            clockUpdates -= 1;
+          }),
+      );
+    },
+    flushClock(): Promise<void> {
+      if (sealed) return Promise.reject(new Error('Released discovery runtime is closed'));
+      if (clockFailure !== undefined) return Promise.reject(clockFailure);
+      if (frozenInstant === undefined) return Promise.resolve();
+      if (!starting) return Promise.reject(new Error('Released discovery worker has not started'));
+      // Join the lifecycle queue too: an earlier restart must acknowledge init before this flush completes.
+      const pending = clockPending;
+      return track(
+        workerOperation(async () => {
+          await starting;
+          await pending;
+          if (sealed) throw new Error('Released discovery runtime is closed');
+          if (clockFailure !== undefined) throw clockFailure;
+          worker?.assertClockCustody();
+        }),
+      );
+    },
     onAccessReady(access: Access): void {
       if (sealed || !config || publicFilters) throw new Error('Released discovery Access composition is not available');
       publicFilters = createDefaultPublicFilterRuntime({
@@ -264,7 +320,8 @@ export function releasedDiscoveryRuntime(
     start(runtime: SemanticOutcomeDriver['fixtures']['runtime'], send: Request): Promise<void> {
       if (sealed || starting)
         return Promise.reject(new Error('Released discovery runtime start already attempted or closed'));
-      return (starting = (async () => {
+      const initialInstant = frozenInstant;
+      return (starting = workerOperation(async () => {
         request = send;
         databaseUrl = runtime.databaseUrl;
         await connect();
@@ -282,11 +339,11 @@ export function releasedDiscoveryRuntime(
           instrumentedWorker = createOutcomeWorker({ kernelPool, clock: config?.clock ?? systemClock });
           await instrumentedWorker.request<WorkerStats>('init', { env });
         } else {
-          worker = startOutcomeWorkerProcess(env);
+          worker = startOutcomeWorkerProcess(env, initialInstant);
           await worker.ready;
         }
         started = true;
-      })());
+      }));
     },
     close(): Promise<void> {
       sealed = true;
@@ -303,6 +360,7 @@ export function releasedDiscoveryRuntime(
             errors.push(error);
           }
         };
+        await attempt(() => clockPending);
         await attempt(async () => worker?.close());
         await attempt(async () => instrumentedWorker?.close());
         // A failed drain must never permit deleting the running worker's index.

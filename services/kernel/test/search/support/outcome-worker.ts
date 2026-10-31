@@ -7,7 +7,7 @@ import { readSearchConfig } from '../../../src/search/work.ts';
 import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
 import { readMembershipRouteKey } from '../../../src/access/membership-work-config.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
-import { createOutcomeRpc } from './outcome-rpc.ts';
+import { createOutcomeRpc, createOutcomeWorkerClock } from './outcome-rpc.ts';
 import { createSearchRunnerSlot } from './runner-slot.ts';
 
 /** Observations only: no credentials, source answers or inferred starter execution. */
@@ -18,6 +18,8 @@ export interface WorkerStats {
   startedServices: Record<string, number>;
   searchStarterInvocations: number;
   stopped: boolean;
+  /** Sampled from the actual WorkerConfig.clock; never readiness or Source lag evidence. */
+  clockInstant: number;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -29,8 +31,8 @@ function noParams(params: unknown) {
 }
 
 function initEnv(params: unknown): Record<string, string | undefined> {
-  if (!record(params) || Object.keys(params).length !== 1 || !record(params.env)) {
-    throw new Error('init requires only {env}');
+  if (!record(params) || Object.keys(params).some((key) => key !== 'env' && key !== 'clock') || !record(params.env)) {
+    throw new Error('init requires {env} and optional private clock state');
   }
   const env: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(params.env)) {
@@ -42,8 +44,9 @@ function initEnv(params: unknown): Record<string, string | undefined> {
 
 /** One production SDK composition, shared by the child and explicit pool instrumentation. */
 export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' | 'clock'> = {}) {
+  const workerClock = createOutcomeWorkerClock(overrides.clock);
   const slot = createSearchRunnerSlot();
-  const observations: WorkerStats = {
+  const observations: Omit<WorkerStats, 'clockInstant'> = {
     defaultModules: KERNEL_WORK_MODULES.map(({ name }) => name),
     registeredModules: [],
     registrationCounts: {},
@@ -51,7 +54,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
     searchStarterInvocations: 0,
     stopped: false,
   };
-  const stats = (): WorkerStats => structuredClone(observations);
+  const stats = (): WorkerStats => ({ ...structuredClone(observations), clockInstant: workerClock.clock().getTime() });
   let initialized = false;
   let ready = false;
   let closing = false;
@@ -60,6 +63,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
   let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
   let searchContext: WorkContext | undefined;
   let searchServices = 0;
+  let tail = Promise.resolve();
 
   function close(): Promise<WorkerStats> {
     closing = true; // Seal admission before awaiting any in-flight initialization or controls.
@@ -109,7 +113,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
       },
     }));
     try {
-      worker = await startWorker({ ...readWorkerConfig(env), ...overrides }, defaults, env);
+      worker = await startWorker({ ...readWorkerConfig(env), ...overrides, clock: workerClock.clock }, defaults, env);
       if (
         searchServices !== 1 ||
         observations.searchStarterInvocations !== 1 ||
@@ -136,11 +140,12 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
 
   function control(method: string, params: unknown): unknown | Promise<unknown> {
     if (closing) throw new Error('Outcome worker is closing');
-    if (!['init', 'indexing', 'rebuild', 'stats', 'close'].includes(method))
+    if (!['init', 'indexing', 'rebuild', 'stats', 'clock', 'close'].includes(method))
       throw new Error(`Unknown control: ${method}`);
     if (method === 'init') {
       const env = initEnv(params);
       if (initialized) throw new Error('Outcome worker init already attempted');
+      if (record(params) && 'clock' in params) workerClock.initialize(params.clock);
       initialized = true;
       return (starting = init(env));
     }
@@ -149,6 +154,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
       return close();
     }
     if (!ready) throw new Error('Outcome worker is not initialized');
+    if (method === 'clock') return workerClock.change(params);
     if (method === 'indexing') {
       if (
         !record(params) ||
@@ -181,7 +187,12 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
   return {
     close,
     request<T = unknown>(method: string, params?: unknown): Promise<T> {
-      return Promise.resolve().then(() => control(method, params)) as Promise<T>;
+      const pending = tail.then(() => control(method, params));
+      tail = pending.then(
+        () => {},
+        () => {},
+      );
+      return pending as Promise<T>;
     },
   };
 }

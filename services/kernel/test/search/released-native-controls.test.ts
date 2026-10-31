@@ -107,3 +107,39 @@ test('SIGKILL observes actual child exit and restarts the same world without a n
     reason: 'source_pending',
   });
 }, 180_000);
+
+test('the existing owned child receives explicit shared fixture instants and retains them across same-world restart', async () => {
+  // Semantic owns this additive controller and request forwarding. Keep this native regression
+  // attached to the existing shared fixture while its producer lands independently.
+  const clock = Reflect.get(fixture, 'clock') as {
+    now(): Date;
+    freeze(): Date;
+    advanceBy(milliseconds: number): Date;
+  };
+  expect(clock).toBeDefined();
+  const native = fixture.search!;
+  const prefix = native.indexPrefix;
+  const frozen = clock.freeze();
+  const flushThroughRequest = async () => {
+    const response = await fixture.request('anonymous', 'GET', '/v1/definitions/active');
+    expect(response.status).toBe(200);
+  };
+  await flushThroughRequest();
+  expect((await native.workerStats()).clockInstant).toBe(frozen.getTime());
+  expect(clock.freeze().getTime()).toBe(frozen.getTime());
+  const advanced = clock.advanceBy(1_234);
+  await flushThroughRequest();
+  expect((await native.workerStats()).clockInstant).toBe(advanced.getTime());
+  await native.indexing('paused');
+  await native.indexing('running');
+  expect((await native.workerStats()).clockInstant).toBe(advanced.getTime());
+
+  expect(await native.crash()).toEqual({ code: null, signal: 'SIGKILL' });
+  const restarted = await native.restart();
+  expect(restarted.clockInstant).toBe(advanced.getTime());
+  expect(native.indexPrefix).toBe(prefix);
+  expect(clock.now().getTime()).toBe(advanced.getTime());
+  const next = clock.advanceBy(1);
+  await flushThroughRequest();
+  expect((await native.workerStats()).clockInstant).toBe(next.getTime());
+}, 180_000);

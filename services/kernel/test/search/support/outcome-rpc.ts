@@ -1,9 +1,68 @@
 import { randomUUID } from 'node:crypto';
 import { fork } from 'node:child_process';
 import type { WorkerStats } from './outcome-worker.ts';
+import { systemClock, type KernelClock } from '../../../src/clock.ts';
+
+/** Private child custody, never fixture credentials or business authority. */
+export interface OutcomeClockState {
+  lifecycle: string;
+  instant?: number;
+}
+
+export function outcomeClockInstant(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || !Number.isFinite(new Date(value).getTime()))
+    throw new Error('Worker clock instant must be a valid safe integer timestamp');
+  return value;
+}
+
+function clockState(value: unknown, requireInstant: boolean): OutcomeClockState {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => key !== 'lifecycle' && key !== 'instant') ||
+    !('lifecycle' in value) ||
+    typeof value.lifecycle !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value.lifecycle)
+  )
+    throw new Error('Worker clock requires its private lifecycle');
+  const instant = 'instant' in value ? outcomeClockInstant(value.instant) : undefined;
+  if (requireInstant && instant === undefined) throw new Error('Worker clock transition requires an instant');
+  return { lifecycle: value.lifecycle, ...(instant === undefined ? {} : { instant }) };
+}
+
+/** Replicates explicit fixture instants only. The supplied instrumentation function retains its identity. */
+export function createOutcomeWorkerClock(supplied?: KernelClock) {
+  let lifecycle: string | undefined;
+  let instant: number | undefined;
+  const clock: KernelClock = supplied ?? (() => (instant === undefined ? systemClock() : new Date(instant)));
+  return {
+    clock,
+    initialize(value: unknown) {
+      if (supplied) throw new Error('Instrumented worker retains the supplied clock');
+      if (lifecycle !== undefined) throw new Error('Worker clock lifecycle already initialized');
+      const state = clockState(value, false);
+      lifecycle = state.lifecycle;
+      instant = state.instant;
+    },
+    change(value: unknown): OutcomeClockState {
+      if (supplied) throw new Error('Instrumented worker retains the supplied clock');
+      const state = clockState(value, true);
+      if (lifecycle === undefined || state.lifecycle !== lifecycle) throw new Error('Foreign worker clock lifecycle');
+      if (instant !== undefined && state.instant! < instant) throw new Error('Worker clock cannot move backwards');
+      instant = state.instant!;
+      return { lifecycle, instant };
+    },
+  };
+}
 
 /** Owns only the existing native worker executable; it never provisions fixture state. */
-export function startOutcomeWorkerProcess(env: Record<string, string | undefined>) {
+export function startOutcomeWorkerProcess(env: Record<string, string | undefined>, frozenInstant?: number) {
+  const lifecycle = randomUUID();
+  const initialClock: OutcomeClockState = {
+    lifecycle,
+    ...(frozenInstant === undefined ? {} : { instant: outcomeClockInstant(frozenInstant) }),
+  };
   const child = fork(`${import.meta.dir}/outcome-worker.ts`, [], {
     execPath: process.execPath,
     env: {
@@ -17,6 +76,7 @@ export function startOutcomeWorkerProcess(env: Record<string, string | undefined
   });
   let output = '';
   let exited = false;
+  let custodyFailure: Error | undefined;
   const append = (chunk: unknown) => (output = (output + String(chunk)).slice(-65_536));
   child.stdout!.on('data', append);
   child.stderr!.on('data', append);
@@ -29,19 +89,28 @@ export function startOutcomeWorkerProcess(env: Record<string, string | undefined
   const rpc = createOutcomeRpc(
     {
       send: (packet) =>
-        new Promise<void>((resolve, reject) =>
-          child.send(packet as object, (error) => (error ? reject(error) : resolve())),
-        ),
+        new Promise<void>((resolve, reject) => {
+          child.send(packet as object, (error) => {
+            if (error) {
+              custodyFailure ??= error;
+              reject(error);
+            } else resolve();
+          });
+        }),
       subscribe(message, failure) {
-        const disconnected = () => failure(new Error(`Worker IPC disconnected: ${output}`));
-        const stopped = () => failure(new Error(`Worker exited: ${output}`));
+        const failed = (error: Error) => {
+          custodyFailure ??= error;
+          failure(error);
+        };
+        const disconnected = () => failed(new Error(`Worker IPC disconnected: ${output}`));
+        const stopped = () => failed(new Error(`Worker exited: ${output}`));
         child.on('message', message);
-        child.on('error', failure);
+        child.on('error', failed);
         child.on('disconnect', disconnected);
         child.on('exit', stopped);
         return () => {
           child.off('message', message);
-          child.off('error', failure);
+          child.off('error', failed);
           child.off('disconnect', disconnected);
           child.off('exit', stopped);
         };
@@ -54,14 +123,30 @@ export function startOutcomeWorkerProcess(env: Record<string, string | undefined
       timeoutMs: 90_000,
     },
   );
-  const ready = rpc.request<WorkerStats>('init', { env });
+  // The initial explicit instant is installed before startWorker can register or launch work.
+  const ready = rpc.request<WorkerStats>('init', { env, clock: initialClock });
   let closing: Promise<void> | undefined;
   let crashing: Promise<{ code: number | null; signal: string | null }> | undefined;
+  const assertClockCustody = () => {
+    if (custodyFailure) throw custodyFailure;
+    if (closing || crashing || exited || !child.connected) throw new Error('Worker clock custody is unavailable');
+  };
   return {
     rpc,
     ready,
     get exited() {
       return exited;
+    },
+    assertClockCustody,
+    async setClock(value: number): Promise<void> {
+      const instant = outcomeClockInstant(value);
+      assertClockCustody();
+      await ready;
+      assertClockCustody();
+      const acknowledged = await rpc.request<OutcomeClockState>('clock', { lifecycle, instant });
+      assertClockCustody();
+      if (acknowledged.lifecycle !== lifecycle || acknowledged.instant !== instant)
+        throw new Error('Worker clock acknowledgment does not match the transition');
     },
     crash() {
       if (closing) return Promise.reject(new Error('Worker is already closing'));
