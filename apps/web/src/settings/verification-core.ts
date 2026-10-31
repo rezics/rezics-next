@@ -59,7 +59,7 @@ function validRequest(value: unknown, accountId: string): value is AgentVerifica
     !!value.id &&
     value.accountId === accountId &&
     (value.accountKind === 'actor' || value.accountKind === 'organization') &&
-    typeof value.requestedBy === 'string' &&
+    (value.requestedBy === null || typeof value.requestedBy === 'string') &&
     typeof value.catalogueSubjectId === 'string' &&
     typeof value.statement === 'string' &&
     Array.isArray(value.links) &&

@@ -185,6 +185,43 @@ test('an empty verification response is represented as no request', async () => 
   await expect(readVerification(client as never, 'alice', 'Bearer token')).resolves.toBeNull();
 });
 
+test('current verification reads accept explicit nullable requesters on retained terminal requests and reject malformed or foreign responses', async () => {
+  const organizationRequest = {
+    ...request,
+    accountId: 'org-1',
+    accountKind: 'organization',
+    requestedBy: null,
+  } as const;
+  const retainedTerminalRequests = [
+    { ...organizationRequest, state: 'rejected', reason: 'Request did not establish ownership.' },
+    { ...organizationRequest, state: 'withdrawn' },
+    {
+      ...organizationRequest,
+      state: 'failed',
+      problem: { type: 'verification_unavailable', detail: 'Verification could not be completed.' },
+    },
+  ] as const;
+
+  for (const verificationRequest of retainedTerminalRequests) {
+    const { client } = fakeClient([{ status: 200, data: { verificationRequest } }]);
+    await expect(readVerification(client as never, 'org-1', 'Bearer manager-token')).resolves.toEqual(
+      verificationRequest,
+    );
+  }
+
+  const { requestedBy: _requestedBy, ...requestWithoutRequester } = organizationRequest;
+  const invalidRequests = [
+    requestWithoutRequester,
+    { ...organizationRequest, requestedBy: undefined },
+    { ...organizationRequest, requestedBy: 17 },
+    { ...organizationRequest, accountId: 'another-org' },
+  ];
+  for (const verificationRequest of invalidRequests) {
+    const { client } = fakeClient([{ status: 200, data: { verificationRequest } }]);
+    await expect(readVerification(client as never, 'org-1', 'Bearer manager-token')).rejects.toThrow();
+  }
+});
+
 test('a verification request sends the selected subject, statement, and labelled links exactly once', async () => {
   const { client, calls } = fakeClient([{ status: 201, data: { verificationRequest: request } }]);
   await expect(requestVerification(client as never, 'alice', 'Bearer token', input)).resolves.toEqual({
