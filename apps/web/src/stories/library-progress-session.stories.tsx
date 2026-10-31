@@ -1,6 +1,8 @@
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
-import { profileSessionId, retiredSessionId } from '../kernel/fake/progress-profiles';
+import { profileSession, profileSessionId, retiredSessionId } from '../kernel/fake/progress-profiles';
+import { ProgressSessionPage } from '../library/progress-session';
+import type { NativeProgressPresentation, ProgressSessionPage as ProgressPageData } from '../library/progress-reads';
 import { setLibraryProgressStoryMode } from '../kernel/fake/library-progress-story';
 import {
   manualScalarId,
@@ -10,7 +12,7 @@ import {
   manualWithheldId,
 } from '../kernel/fake/progress-profile-stories';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PageStory, libraryProgressSessionReady, pagePaths, pageReady } from './page';
+import { PageStory, PatternStory, libraryProgressSessionReady, pagePaths, pageReady } from './page';
 
 const meta = {
   title: 'Pages/Library/Progress Session',
@@ -24,10 +26,99 @@ export const SignedIn: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-progress-session']} />,
 };
 
+// The recorded route has no presentation. These explicit DTO inputs illustrate the delivered shape,
+// without resolving history from progressProfile or claiming a native recording/authorization result.
+const declaredPresentation = {
+  meaning: 'known',
+  unitLabel: 'segment at acceptance',
+  unitLabelLanguage: 'en',
+  unitCountForms: { one: 'segment at acceptance', other: 'segments at acceptance' },
+  structure: 'unverified',
+  recording: {
+    state: 'supported',
+    inputRules: { min: '0.25', max: '98.5', step: '0.01', total: 'required' },
+  },
+} satisfies NativeProgressPresentation;
+const boundedProfilePage: ProgressPageData = {
+  signedIn: true,
+  idempotencyKey: '10203040-5060-4070-8090-102030405060',
+  session: {
+    ...profileSession,
+    mode: 'scalar_amount',
+    state: 'active',
+    meaning: declaredPresentation.meaning,
+    unitLabel: declaredPresentation.unitLabel,
+    unitLabelLanguage: declaredPresentation.unitLabelLanguage,
+    unitCountForms: declaredPresentation.unitCountForms,
+    recordingState: declaredPresentation.recording.state,
+    inputRules: declaredPresentation.recording.inputRules,
+    changes: [],
+    changesNext: null,
+    units: [],
+    unitsNext: null,
+  },
+};
+
+function DeclaredProfileView() {
+  setLibraryProgressStoryMode('recorded');
+  return (
+    <PatternStory visitor="Signed In" path={`/library/progress/${profileSessionId}`}>
+      <main className="w-full max-w-4xl space-y-6 p-4">
+        <p role="note">
+          Bounded view with explicit declared DTO inputs. Native recording and authorization are unverified.
+        </p>
+        <ProgressSessionPage page={boundedProfilePage} />
+      </main>
+    </PatternStory>
+  );
+}
+
 export const ProfileUnits: Story = {
-  name: 'Journey with profile units',
-  play: libraryProgressSessionReady,
-  render: () => <PageStory visitor="Signed In" path={`/library/progress/${profileSessionId}`} />,
+  name: 'Journey with declared profile units (bounded view)',
+  play: async (context) => {
+    await libraryProgressSessionReady(context);
+    await userEvent.click(within(context.canvasElement).getByRole('button', { name: m.library_progress_update() }));
+    const dialog = await within(document.body).findByRole('dialog');
+    const amount = within(dialog).getByRole('spinbutton', { name: m.library_progress_amount() });
+    expect(amount).toHaveAttribute('min', '0.25');
+    expect(amount).toHaveAttribute('max', '98.5');
+    expect(amount).toHaveAttribute('step', '0.01');
+  },
+  render: () => <DeclaredProfileView />,
+};
+
+export const ProfileUnitsRecordingUnavailable: Story = {
+  name: 'Journey route without recorded presentation',
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.library_history_unavailable());
+    await canvas.findByText(m.library_progress_recording_unavailable());
+    expect(canvas.queryByRole('button', { name: m.library_progress_update() })).not.toBeInTheDocument();
+    expect(canvas.getByText('2.5 / 10', { exact: true })).toBeVisible();
+  },
+  render: () => {
+    setLibraryProgressStoryMode('recorded');
+    return <PageStory visitor="Signed In" path={`/library/progress/${profileSessionId}`} />;
+  },
+};
+
+export const DeclaredRecordingRefused: Story = {
+  name: 'Current command refuses advisory support (bounded view)',
+  play: async (context) => {
+    await libraryProgressSessionReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_progress_update() }));
+    const dialog = within(await within(document.body).findByRole('dialog'));
+    const amount = dialog.getByRole('spinbutton', { name: m.library_progress_amount() });
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '3');
+    await userEvent.click(dialog.getByRole('button', { name: m.library_progress_record(), exact: true }));
+    await canvas.findByRole('alert');
+    await canvas.findByText(m.library_progress_no_longer_offered());
+    expect(canvas.queryByRole('button', { name: m.library_progress_update() })).not.toBeInTheDocument();
+    expect(canvas.getByText('2.5 / 10 segments at acceptance', { exact: true })).toBeVisible();
+  },
+  render: () => <DeclaredProfileView />,
 };
 export const RetiredPair: Story = {
   name: 'Progress no longer offered',

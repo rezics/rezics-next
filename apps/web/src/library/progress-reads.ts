@@ -28,22 +28,88 @@ export type ProgressState = 'active' | 'completed' | 'abandoned';
 export type NativeProgressSession = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['progressSessions']>['get']>>['data']
 >['progressSession'];
-type NativeField<T, K extends PropertyKey> = K extends keyof T ? T[K] : never;
-/** No parallel Web wire contract: this is never until the native declaration is delivered. */
-export type NativeProgressPresentation = NonNullable<NativeField<NativeProgressSession, 'presentation'>>;
+export type NativeProgressPresentation = NonNullable<NativeProgressSession['presentation']>;
 type NativeProgressInputRules = Extract<NativeProgressPresentation['recording'], { state: 'supported' }>['inputRules'];
 type ProgressInputRules = ProfileProgressInputRules | NativeProgressInputRules;
 type NativeDetailOptions = NonNullable<Parameters<ReturnType<KernelClient['progressSessions']>['get']>[0]>;
-type NativeDetailQuery = NonNullable<NativeField<NativeDetailOptions, 'query'>>;
-type NativePresentationQuery = Extract<NativeField<NativeDetailQuery, 'presentation'>, 'FULL'>;
-/** The current closed native query rejects presentation. Enable only with its declared producer. */
-export function nativeProgressPresentationQuery(): { presentation: NativePresentationQuery } | undefined {
-  return undefined;
+type NativeDetailQuery = NonNullable<NativeDetailOptions['query']>;
+type NativePresentationQuery = NonNullable<NativeDetailQuery['presentation']>;
+/** Opt in on the existing owner point read, independently of current subject summaries. */
+export function nativeProgressPresentationQuery(): { presentation: NativePresentationQuery } {
+  return { presentation: 'FULL' };
 }
 
-/** Missing native body is unavailable; untyped response additions are not display or recording authority. */
-export function nativeProgressPresentation(_session: NativeProgressSession): NativeProgressPresentation | undefined {
-  return undefined;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function onlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => keys.includes(key));
+}
+
+function isLabelLanguage(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== 'string') return false;
+  try {
+    // The label's own language selects its plural form, so malformed tags must not reach Intl.
+    return Intl.getCanonicalLocales(value).length === 1;
+  } catch {
+    return false;
+  }
+}
+
+function isCountForms(value: unknown): value is NonNullable<NativeProgressPresentation['unitCountForms']> {
+  return (
+    isRecord(value) &&
+    onlyKeys(value, ['other', 'zero', 'one', 'two', 'few', 'many']) &&
+    typeof value.other === 'string' &&
+    Object.values(value).every((form) => typeof form === 'string')
+  );
+}
+
+function isInputRules(value: unknown): value is NativeProgressInputRules {
+  return (
+    isRecord(value) &&
+    onlyKeys(value, ['min', 'max', 'step', 'total']) &&
+    (value.min === undefined || typeof value.min === 'string') &&
+    (value.max === undefined || typeof value.max === 'string') &&
+    typeof value.step === 'string' &&
+    (value.total === 'optional' || value.total === 'required' || value.total === 'forbidden')
+  );
+}
+
+function isRecording(value: unknown): value is NativeProgressPresentation['recording'] {
+  if (!isRecord(value)) return false;
+  if (value.state === 'unsupported' || value.state === 'unavailable') return onlyKeys(value, ['state']);
+  return value.state === 'supported' && onlyKeys(value, ['state', 'inputRules']) && isInputRules(value.inputRules);
+}
+
+function isPresentation(value: unknown): value is NativeProgressPresentation {
+  return (
+    isRecord(value) &&
+    onlyKeys(value, [
+      'meaning',
+      'unitLabel',
+      'unitLabelLanguage',
+      'unitCountForms',
+      'dimension',
+      'structure',
+      'recording',
+    ]) &&
+    (value.meaning === 'known' || value.meaning === 'unknown' || value.meaning === 'unavailable') &&
+    (value.unitLabel === undefined || typeof value.unitLabel === 'string') &&
+    isLabelLanguage(value.unitLabelLanguage) &&
+    (value.unitCountForms === undefined || isCountForms(value.unitCountForms)) &&
+    (value.dimension === undefined || typeof value.dimension === 'string') &&
+    value.structure === 'unverified' &&
+    isRecording(value.recording)
+  );
+}
+
+/** Decode only the closed native DTO; neither an accepting pin nor an undeclared extension is presentation. */
+export function nativeProgressPresentation(session: NativeProgressSession): NativeProgressPresentation | undefined {
+  const presentation: unknown = session.presentation;
+  return isPresentation(presentation) ? presentation : undefined;
 }
 
 const unavailablePresentation = {
@@ -53,24 +119,15 @@ const unavailablePresentation = {
 } as const;
 
 function presentationFields(
-  presentation: Pick<ProgressLabelInput, 'unitLabel' | 'unitLabelLanguage' | 'unitCountForms' | 'dimension'> & {
-    meaning: string;
-    structure: 'unverified';
-    recording: { state: string; inputRules?: NativeProgressInputRules };
-  },
+  presentation: NativeProgressPresentation,
 ): Pick<
   ProgressSessionCore,
   'meaning' | 'recordingState' | 'unitLabel' | 'unitLabelLanguage' | 'unitCountForms' | 'dimension' | 'inputRules'
 > {
-  const meaning =
-    presentation.meaning === 'known' || presentation.meaning === 'unknown' ? presentation.meaning : 'unavailable';
-  const recordingState =
-    presentation.recording.state === 'supported' || presentation.recording.state === 'unsupported'
-      ? presentation.recording.state
-      : 'unavailable';
+  const { meaning, recording } = presentation;
   return {
     meaning,
-    recordingState,
+    recordingState: recording.state,
     ...(meaning !== 'known'
       ? {}
       : {
@@ -81,18 +138,14 @@ function presentationFields(
           ...(presentation.unitCountForms === undefined ? {} : { unitCountForms: presentation.unitCountForms }),
           ...(presentation.dimension === undefined ? {} : { dimension: presentation.dimension }),
         }),
-    ...(recordingState !== 'supported' || presentation.recording.inputRules === undefined
+    ...(recording.state !== 'supported'
       ? {}
       : {
           inputRules: {
-            ...(presentation.recording.inputRules.min === undefined
-              ? {}
-              : { min: presentation.recording.inputRules.min }),
-            ...(presentation.recording.inputRules.max === undefined
-              ? {}
-              : { max: presentation.recording.inputRules.max }),
-            step: presentation.recording.inputRules.step,
-            total: presentation.recording.inputRules.total,
+            ...(recording.inputRules.min === undefined ? {} : { min: recording.inputRules.min }),
+            ...(recording.inputRules.max === undefined ? {} : { max: recording.inputRules.max }),
+            step: recording.inputRules.step,
+            total: recording.inputRules.total,
           },
         }),
   };
