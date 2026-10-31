@@ -24,27 +24,28 @@ const signedOut: SubjectLibrarySlotData = { ...unavailable, session: 'signed-out
 export function subjectLibraryLeafQuery(frame: SubjectFrameData, locale: string, session: ReaderSession) {
   const query = subjectLibraryQuery(frame.id, locale, false, undefined, undefined, frame.type);
   const ready = session.state === 'signed-in' && !!session.subject && !!session.csrfToken;
+  const currentData = (data: SubjectLibrarySlotData): SubjectLibrarySlotData =>
+    ready &&
+    data.session === 'signed-in' &&
+    data.csrfToken === session.csrfToken &&
+    (!data.entry || data.entry.subjectId === frame.id)
+      ? data
+      : unavailable;
   return queryOptions({
     queryKey: [...query.queryKey, ready ? { viewer: session.subject, credential: session.csrfToken } : null] as const,
     queryFn: async (context) => {
-      if (typeof query.queryFn !== 'function') return unavailable;
+      if (!ready || typeof query.queryFn !== 'function') return unavailable;
       const data = await query.queryFn({ ...context, queryKey: query.queryKey });
       context.signal.throwIfAborted();
-      return data;
+      return currentData(data);
     },
-    enabled: query.enabled && ready,
+    enabled: query.enabled === true && ready,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    select: (data: SubjectLibrarySlotData): SubjectLibrarySlotData =>
-      ready &&
-      data.session === 'signed-in' &&
-      data.csrfToken === session.csrfToken &&
-      (!data.entry || data.entry.subjectId === frame.id)
-        ? data
-        : unavailable,
+    select: currentData,
   });
 }
 

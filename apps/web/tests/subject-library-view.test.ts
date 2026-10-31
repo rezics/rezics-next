@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createElement } from 'react';
@@ -20,7 +20,8 @@ const { loadViewPages, subjectFrame, SubjectFrame, SubjectViewPage } = await imp
   '../src/features/pages/subject-frame'
 );
 const { SubjectLibraryLeaf, subjectLibraryLeafQuery } = await import('../src/features/pages/subject-library-leaf');
-const { subjectLibraryQuery } = await import('../src/features/pages/subject-queries');
+const queries = await import('../src/features/pages/subject-queries');
+const { subjectLibraryQuery } = queries;
 const { subjectPageMessages, viewTabLabels } = await import('../src/features/pages/route-support');
 const { subjectTabs } = await import('../src/features/pages/views');
 
@@ -191,6 +192,37 @@ describe('An ordinary non-overview subject view can use the same Library leaf fo
         client.getQueryData(subjectLibraryLeafQuery(frame, 'en', { ...viewer, csrfToken: 'new' }).queryKey),
       ).toBeUndefined();
     } finally {
+      client.clear();
+    }
+  });
+
+  test('concurrent reads deduplicate and a response from another session never enters the viewer cache', async () => {
+    let reads = 0;
+    // Substitute only the personal transport result to exercise a session change while a request is in flight.
+    const source = spyOn(queries, 'subjectLibraryQuery').mockImplementation((...args) => ({
+      ...subjectLibraryQuery(...args),
+      queryFn: async () => {
+        reads++;
+        return personal;
+      },
+    }));
+    const client = new QueryClient();
+    try {
+      const owner = subjectLibraryLeafQuery(frame, 'en', viewer);
+      const result = await Promise.all([client.fetchQuery(owner), client.fetchQuery(owner)]);
+      expect(result).toEqual([personal, personal]);
+      expect(reads).toBe(1);
+      const changed = subjectLibraryLeafQuery(frame, 'en', {
+        state: 'signed-in', subject: 'reader-b', csrfToken: 'session-b',
+      });
+      expect((await client.fetchQuery(changed)).session).toBe('unavailable');
+      expect(client.getQueryData(changed.queryKey)?.entry).toBeNull();
+      expect(JSON.stringify(client.getQueryData(changed.queryKey))).not.toContain('private-state');
+      expect(subjectLibraryLeafQuery(frame, 'en', signedOut).enabled).toBe(false);
+      expect((await client.fetchQuery(subjectLibraryLeafQuery(frame, 'en', signedOut))).session).toBe('unavailable');
+      expect(reads).toBe(2);
+    } finally {
+      source.mockRestore();
       client.clear();
     }
   });
