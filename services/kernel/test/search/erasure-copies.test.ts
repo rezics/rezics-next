@@ -177,37 +177,67 @@ test('a late prepared capture cannot resurrect the erased immutable generation',
 test('a prepared payload survives observation close only until bounded registration erasure scrubs its independent copy', async () => {
   const { stepRetainedTargetErasure } = await import('../../src/search/public-filter-custody.ts');
   const f = await fixture();
-  const prepared = await custody.retainPrepared({ registration: f.registration,
-    covered: { observation: crypto.randomUUID() }, build: 'orphan', generation: 1n,
-    rows: [{ original: 'erased-original', terminal: 'survivor' }], expiresAt: Date.now() + 300_000,
-  }, context());
+  const prepared = await custody.retainPrepared(
+    {
+      registration: f.registration,
+      covered: { observation: crypto.randomUUID() },
+      build: 'orphan',
+      generation: 1n,
+      rows: [{ original: 'erased-original', terminal: 'survivor' }],
+      expiresAt: Date.now() + 300_000,
+    },
+    context(),
+  );
   if (prepared.status !== 'retained') throw new Error(prepared.reason);
   await custody.closeObservation(prepared.queried, search, context());
   let after: string | null = null;
   let complete = false;
   for (let n = 0; n < 12; n++) {
-    const result = await stepRetainedTargetErasure(pool, { partition: f.registration.partition,
-      physicalTarget: f.consumer.physicalTarget, after }, search, context());
+    const result = await stepRetainedTargetErasure(
+      pool,
+      { partition: f.registration.partition, physicalTarget: f.consumer.physicalTarget, after },
+      search,
+      context(),
+    );
     expect(result.state).not.toBe('pending');
     after = result.after;
-    if (result.state === 'complete') { complete = true; break; }
+    if (result.state === 'complete') {
+      complete = true;
+      break;
+    }
   }
   expect(complete).toBe(true);
-  const rows = await pool.query(`SELECT rows,state FROM search.public_filter_prepared
-    WHERE (partition_no,registration,build,generation)=($1,$2,'orphan',1)`, [f.registration.partition,f.registration.id]);
+  const rows = await pool.query(
+    `SELECT rows,state FROM search.public_filter_prepared
+    WHERE (partition_no,registration,build,generation)=($1,$2,'orphan',1)`,
+    [f.registration.partition, f.registration.id],
+  );
   expect(rows.rows[0].state).toBe('erasing');
   expect(rows.rows[0].rows).not.toContain('erased-original');
 });
 
 test('new native captures advance retained-copy admission even when the public result is empty', async () => {
   const f = await fixture();
-  const revision = async () => (await pool.query(`SELECT copy_revision::text FROM search.public_filter_target
-    WHERE (partition_no,physical_target)=($1,$2)`, [f.registration.partition, f.consumer.physicalTarget])).rows[0].copy_revision;
+  const revision = async () =>
+    (
+      await pool.query(
+        `SELECT copy_revision::text FROM search.public_filter_target
+    WHERE (partition_no,physical_target)=($1,$2)`,
+        [f.registration.partition, f.consumer.physicalTarget],
+      )
+    ).rows[0].copy_revision;
   const before = await revision();
-  const prepared = await custody.retainPrepared({ registration: f.registration,
-    covered: { observation: crypto.randomUUID() }, build: 'excluded', generation: 1n,
-    rows: [], expiresAt: Date.now() + 300_000,
-  }, context());
+  const prepared = await custody.retainPrepared(
+    {
+      registration: f.registration,
+      covered: { observation: crypto.randomUUID() },
+      build: 'excluded',
+      generation: 1n,
+      rows: [],
+      expiresAt: Date.now() + 300_000,
+    },
+    context(),
+  );
   expect(prepared.status).toBe('retained');
   expect(BigInt(await revision())).toBeGreaterThan(BigInt(before));
 });

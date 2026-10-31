@@ -51,8 +51,7 @@ export const searchWorkModule: WorkModule = {
       { name: 'search.withdrawTrending', ...COMMAND_STEP_RETRIES },
     );
     const acknowledge = DBOS.registerStep(
-      async (accountId: string) =>
-        markSearchPersonalErasure(context.pool, accountId),
+      async (accountId: string) => markSearchPersonalErasure(context.pool, accountId),
       { name: 'search.acknowledgeErasure', ...COMMAND_STEP_RETRIES },
     );
     const enqueueWithdrawal = async (input: Withdrawal) => {
@@ -98,10 +97,13 @@ export const searchWorkModule: WorkModule = {
           if (account.rows[0]?.state !== 'deleted' || !account.rows[0]?.authn_fenced)
             throw new Error('Search erasure requires the terminal account fence');
           // Capture personal applicability before either owner removes its last native row.
-          await tx.query(`UPDATE search.erasure_progress SET ever_applied=ever_applied OR
+          await tx.query(
+            `UPDATE search.erasure_progress SET ever_applied=ever_applied OR
             EXISTS(SELECT 1 FROM search.recent_search_state WHERE partition_no=$1 AND route=$2 AND account_id=$3)
             OR EXISTS(SELECT 1 FROM search.trending_member WHERE route=0 AND account_id=$3)
-            WHERE partition_no=$1 AND account_id=$3`, [partitionOf(route), route, accountId]);
+            WHERE partition_no=$1 AND account_id=$3`,
+            [partitionOf(route), route, accountId],
+          );
           await tx.query(
             'DELETE FROM search.recent_search_state WHERE partition_no=$1 AND route=$2 AND account_id=$3',
             [partitionOf(route), route, accountId],

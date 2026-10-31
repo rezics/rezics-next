@@ -543,19 +543,22 @@ export function createSearchWriterGuard(options: {
     const erasure = await tx.query<{ phase: string; barrier: HistoryBarrier }>(
       `SELECT phase,barrier FROM search.erasure_effect WHERE partition_no=0 AND job=$1
        AND physical_target=$2 AND consumer=$3 AND incarnation=$4`,
-      [request.job, options.index, request.consumer, request.consumer.incarnation]);
+      [request.job, options.index, request.consumer, request.consumer.incarnation],
+    );
     if (erasure.rowCount !== 1) return pendingPublication();
     return erasure.rows[0]!;
   }
   async function publicationSource(value: SearchWriterPublicationFence, context: PublicFilterConsumerContext) {
-    const job = await withReadTransaction(options.pool, tx => publicationJob(tx, value));
+    const job = await withReadTransaction(options.pool, (tx) => publicationJob(tx, value));
     // Generation publication retains its own owner protocol; its unavailable receiving proof stays pending.
     if (!job.barrier) return pendingPublication();
     const proof = await readSubjectErasureSourceProof({ pool: options.pool }, job.barrier, context);
     if (!proof) return pendingPublication();
-    const verified = await runCommand(options.pool,
-      { partition: job.barrier.accountRoute >> 4, deadline: context.deadline }, async tx =>
-        noEffect(await verifySubjectErasureSourceProof(tx, job.barrier, proof)));
+    const verified = await runCommand(
+      options.pool,
+      { partition: job.barrier.accountRoute >> 4, deadline: context.deadline },
+      async (tx) => noEffect(await verifySubjectErasureSourceProof(tx, job.barrier, proof)),
+    );
     if (!verified.value) return pendingPublication();
   }
   async function publicationRetained(tx: CommandTransaction, value: SearchWriterPublicationFence) {
@@ -684,7 +687,8 @@ export function createSearchWriterGuard(options: {
             );
           const progress = {
             page,
-            uncertain: copiesPending || page.copies.some((row) => row.writer_token && row.dispatch_state === 'dispatched'),
+            uncertain:
+              copiesPending || page.copies.some((row) => row.writer_token && row.dispatch_state === 'dispatched'),
             revoked: revocable.length,
           };
           return revocable.length ? { value: progress, events: changed() } : noEffect(progress);
@@ -763,8 +767,7 @@ export function createSearchWriterGuard(options: {
           await publicationRetained(tx, input);
           // Erasure never switches an alias. A fully drained gate can also be safely aborted
           // when a current Source page changes, before repairing the replacement page.
-          if (job.barrier ? row!.publication_home !== 4096 : job.phase === 'intent')
-            return pendingPublication();
+          if (job.barrier ? row!.publication_home !== 4096 : job.phase === 'intent') return pendingPublication();
           await tx.query(
             `UPDATE search.identity_writer_gate SET publication_released_fence=publication_fence,publication_fence=NULL,
             publication_revision=publication_revision+1 WHERE partition_no=0 AND physical_target=$1`,

@@ -1491,15 +1491,23 @@ export async function stepRetainedObservationErasure(
       ]);
       return { state: 'more', cost: meter };
     }
-    const effect = await sql(pool, meter,
+    const effect = await sql(
+      pool,
+      meter,
       `DELETE FROM search.public_filter_repair_effect WHERE (partition_no,observation,execution,page,item) IN
        (SELECT partition_no,observation,execution,page,item FROM search.public_filter_repair_effect
-        WHERE (partition_no,observation)=($1,$2) ORDER BY execution,page,item LIMIT 1) RETURNING item`, keys);
+        WHERE (partition_no,observation)=($1,$2) ORDER BY execution,page,item LIMIT 1) RETURNING item`,
+      keys,
+    );
     if (effect.rowCount) return { state: 'more', cost: meter };
-    const page = await sql(pool, meter,
+    const page = await sql(
+      pool,
+      meter,
       `DELETE FROM search.public_filter_repair_page WHERE (partition_no,observation,execution,ordinal) IN
        (SELECT partition_no,observation,execution,ordinal FROM search.public_filter_repair_page
-        WHERE (partition_no,observation)=($1,$2) ORDER BY execution,ordinal LIMIT 1) RETURNING ordinal`, keys);
+        WHERE (partition_no,observation)=($1,$2) ORDER BY execution,ordinal LIMIT 1) RETURNING ordinal`,
+      keys,
+    );
     if (page.rowCount) return { state: 'more', cost: meter };
     const executions = await sql(
       pool,
@@ -1548,46 +1556,71 @@ export async function stepRetainedTargetErasure(
   target: Readonly<{ partition: number; physicalTarget: string; after: string | null }>,
   search: OpenSearch | undefined,
   context: PublicFilterConsumerContext,
-): Promise<Readonly<{
-  state: 'more' | 'complete' | 'pending'; after: string | null;
-  reason?: RetainedErasureProgress['reason']; cost: CustodyCost;
-}>> {
+): Promise<
+  Readonly<{
+    state: 'more' | 'complete' | 'pending';
+    after: string | null;
+    reason?: RetainedErasureProgress['reason'];
+    cost: CustodyCost;
+  }>
+> {
   home(target.partition);
   text(target.physicalTarget);
   const meter = cost();
   try {
     check(context);
-    const registrations = await sql(pool, meter,
+    const registrations = await sql(
+      pool,
+      meter,
       `SELECT id,consumer FROM search.public_filter_registration
        WHERE partition_no=$1 AND physical_target=$2 AND ($3::text IS NULL OR id>$3)
-       ORDER BY id LIMIT 1`, [target.partition, target.physicalTarget, target.after]);
+       ORDER BY id LIMIT 1`,
+      [target.partition, target.physicalTarget, target.after],
+    );
     const row = registrations.rows[0];
     if (!row) return { state: 'complete', after: target.after, cost: meter };
     const consumer = decode<PublicFilterConsumer>(row.consumer);
     requireValue(consumer.physicalTarget === target.physicalTarget);
-    const observation = await sql(pool, meter,
+    const observation = await sql(
+      pool,
+      meter,
       `SELECT observation FROM search.public_filter_observation
        WHERE (partition_no,registration)=($1,$2) ORDER BY observation LIMIT 1`,
-      [target.partition, row.id]);
+      [target.partition, row.id],
+    );
     if (observation.rowCount) {
-      const progress = await stepRetainedObservationErasure(pool, {
-        partition: target.partition, registration: row.id,
-        observation: observation.rows[0].observation, incarnation: consumer.incarnation,
-      }, search, context);
+      const progress = await stepRetainedObservationErasure(
+        pool,
+        {
+          partition: target.partition,
+          registration: row.id,
+          observation: observation.rows[0].observation,
+          incarnation: consumer.incarnation,
+        },
+        search,
+        context,
+      );
       addCost(meter, progress.cost);
-      return { state: progress.state === 'pending' ? 'pending' : 'more', after: target.after,
-        reason: progress.reason, cost: meter };
+      return {
+        state: progress.state === 'pending' ? 'pending' : 'more',
+        after: target.after,
+        reason: progress.reason,
+        cost: meter,
+      };
     }
     // Prepared has independent custody after the observation disappeared. Lock its own immutable
     // key and refuse recapture BEFORE clearing it, under the same lock used by retainPrepared's UPSERT.
-    const prepared = await sql(pool, meter,
+    const prepared = await sql(
+      pool,
+      meter,
       `WITH candidate AS (SELECT partition_no,registration,build,generation
         FROM search.public_filter_prepared WHERE (partition_no,registration)=($1,$2)
           AND (state<>'erasing' OR rows<>$3) ORDER BY build,generation LIMIT 1 FOR UPDATE)
        UPDATE search.public_filter_prepared p SET state='erasing',rows=$3 FROM candidate c
        WHERE (p.partition_no,p.registration,p.build,p.generation)=
              (c.partition_no,c.registration,c.build,c.generation) RETURNING p.build`,
-      [target.partition, row.id, encode([])]);
+      [target.partition, row.id, encode([])],
+    );
     return { state: 'more', after: prepared.rowCount ? target.after : row.id, cost: meter };
   } catch (error) {
     if (error instanceof TypeError) throw error;
@@ -1660,15 +1693,20 @@ export async function readGenerationPublicationCustody(
  * Erasing markers alone are insufficient: the independent prepared payload must actually be empty.
  */
 export async function hasRetainedWriterPublicationCopies(
-  tx: Pick<import('pg').PoolClient, 'query'>, partition: number, physicalTarget: string,
+  tx: Pick<import('pg').PoolClient, 'query'>,
+  partition: number,
+  physicalTarget: string,
 ): Promise<boolean> {
-  const retained = await tx.query(`SELECT 1 FROM search.public_filter_observation o
+  const retained = await tx.query(
+    `SELECT 1 FROM search.public_filter_observation o
     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
     WHERE r.partition_no=$1 AND r.physical_target=$2
     UNION ALL
     SELECT 1 FROM search.public_filter_prepared p
     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(p.partition_no,p.registration)
     WHERE r.partition_no=$1 AND r.physical_target=$2 AND (p.state<>'erasing' OR p.rows<>$3)
-    LIMIT 1`, [partition, physicalTarget, encode([])]);
+    LIMIT 1`,
+    [partition, physicalTarget, encode([])],
+  );
   return retained.rowCount !== 0;
 }

@@ -9,11 +9,7 @@ import {
   readAccountDiscoveryBindings,
 } from '../access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../access/account-discovery-work.ts';
-import {
-  readErasureStatus,
-  recordLateErasureItem,
-  resolveLateErasureItem,
-} from '../access/erasure.ts';
+import { readErasureStatus, recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
 import type { AccountDiscoverySummary, DiscoveryIndexAction, DiscoveryKey, DiscoveryRegistry } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
 import type { OpenSearch } from './opensearch.ts';
@@ -491,7 +487,8 @@ export async function eraseDiscoveryAccount(
 ) {
   const route = routeOf(accountId);
   if (route === null) throw new TypeError('Invalid erasure Account key');
-  if (!Number.isInteger(inputLimit) || inputLimit < 1 || inputLimit > 100) throw new RangeError('Invalid erasure copy limit');
+  if (!Number.isInteger(inputLimit) || inputLimit < 1 || inputLimit > 100)
+    throw new RangeError('Invalid erasure copy limit');
   const copies = await withConnection(pool, async (client) => {
     if (!(await readErasureStatus(client, accountId))) return null;
     return (
@@ -549,7 +546,6 @@ export async function eraseDiscoveryAccount(
   }
   if (copies.length === inputLimit) return; // A bounded page is never an all-copy acknowledgement.
   // All-copy Search participation owns the final ACK, including Source and retained snapshots.
-
 }
 
 /** A physically deleted generation may still own an open erasure locator. */
