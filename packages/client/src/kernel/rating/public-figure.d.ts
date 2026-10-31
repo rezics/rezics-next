@@ -15,6 +15,29 @@ export type PublicFigure = Readonly<{
     asOf: string | null;
     position: string;
 }>;
+type PendingPopulation = {
+    questionId: string;
+    populationId: string;
+};
+export type SubjectPriorInput = {
+    population_route: number;
+    question_id: string;
+    population_id: string;
+    generation: string;
+    epoch: number | null;
+    status: 'absent' | 'inactive' | 'active';
+    m: string | null;
+    c: string | null;
+};
+/** Finish each source snapshot before checking out any subject command connection. */
+export declare function capturePublicFigurePriorInputs(pool: Pool, keys: readonly PendingPopulation[]): Promise<SubjectPriorInput[]>;
+/** Internal subject-home command for a captured republish page, also safe to redeliver after an epoch change. */
+export declare function markPublicFigurePriorPage(pool: Pool, input: {
+    partition: number;
+    subjectIds: readonly string[];
+    prior: SubjectPriorInput;
+    requiredGeneration: string;
+}): Promise<void>;
 /** Compute consumer readiness from the published count, never from pending votes or shard totals. */
 export declare function publicFigureState(figure: Pick<PublicFigure, 'count'> | null, grain: string, pending: boolean): 'ready' | 'insufficient_data' | 'updating';
 /** Point-read the pending mark, including an unpublished row; no vote or aggregate data is read. */
@@ -42,3 +65,4 @@ export declare function pagePublicFigures(client: Queryable, input: {
 export declare function drainPublicFigures(pool: Pool, partition: number, limit?: number): Promise<number>;
 /** Drain the aggregate partition's pending figures after the aggregate-applied event commits. */
 export declare function createPublicFigureDrainEffect(pool: Pool): Effect;
+export {};

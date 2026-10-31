@@ -268,6 +268,32 @@ CREATE TABLE rating.source_statistic (
 
 
 --
+-- Name: subject_home_prior_input; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.subject_home_prior_input (
+    partition_no integer NOT NULL,
+    population_route integer NOT NULL,
+    question_id uuid NOT NULL,
+    population_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    epoch integer,
+    status text NOT NULL,
+    m numeric(12,4),
+    c bigint,
+    CONSTRAINT subject_home_prior_input_c_check CHECK ((c >= 1)),
+    CONSTRAINT subject_home_prior_input_check CHECK ((population_route = ((get_byte(uuid_send(population_id), 10) * 256) + get_byte(uuid_send(population_id), 11)))),
+    CONSTRAINT subject_home_prior_input_check1 CHECK ((((status = 'absent'::text) AND (generation = 0) AND (epoch IS NULL) AND (m IS NULL) AND (c IS NULL)) OR ((status = 'inactive'::text) AND (generation > 0) AND (epoch IS NOT NULL) AND (m IS NULL) AND (c IS NULL)) OR ((status = 'active'::text) AND (generation > 0) AND (epoch IS NOT NULL) AND (m IS NOT NULL) AND (c IS NOT NULL)))),
+    CONSTRAINT subject_home_prior_input_epoch_check CHECK ((epoch >= 1)),
+    CONSTRAINT subject_home_prior_input_generation_check CHECK ((generation >= 0)),
+    CONSTRAINT subject_home_prior_input_m_check CHECK (((m >= (0)::numeric) AND (m <= (10)::numeric))),
+    CONSTRAINT subject_home_prior_input_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT subject_home_prior_input_population_route_check CHECK (((population_route >= 0) AND (population_route <= 65535))),
+    CONSTRAINT subject_home_prior_input_status_check CHECK ((status = ANY (ARRAY['absent'::text, 'inactive'::text, 'active'::text])))
+);
+
+
+--
 -- Name: vote; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -410,6 +436,14 @@ ALTER TABLE ONLY rating.question
 
 ALTER TABLE ONLY rating.source_statistic
     ADD CONSTRAINT source_statistic_pkey PRIMARY KEY (route, subject_id, source);
+
+
+--
+-- Name: subject_home_prior_input subject_home_prior_input_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.subject_home_prior_input
+    ADD CONSTRAINT subject_home_prior_input_pkey PRIMARY KEY (partition_no, population_route, question_id, population_id);
 
 
 --
@@ -581,6 +615,14 @@ ALTER TABLE ONLY rating.public_figure
 
 ALTER TABLE ONLY rating.source_statistic
     ADD CONSTRAINT source_statistic_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: subject_home_prior_input subject_home_prior_input_question_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.subject_home_prior_input
+    ADD CONSTRAINT subject_home_prior_input_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id);
 
 
 --
