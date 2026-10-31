@@ -18,6 +18,14 @@ const request = {
   snapshot: 'pit' as const,
 };
 
+test('the ordinary released fixture selects the actual owned child and retains all default Search services', async () => {
+  expect(fixture.search!.workerKind).toBe('owned-child');
+  const stats = await fixture.search!.workerStats();
+  expect(stats.searchStarterInvocations).toBe(1);
+  // The runner slot owns only indexing; default retention/erasure starters also execute.
+  expect(stats.startedServices.search).toBeGreaterThan(stats.searchStarterInvocations);
+});
+
 test('the released native fixture keeps original Source publication unavailable instead of supplying custody or readiness', async () => {
   const native = fixture.search!;
   // This is the real factory, using the released definitions and installed Access. Its

@@ -1,4 +1,4 @@
-import { readWorkerConfig, startWorker } from '../../../src/worker.ts';
+import { readWorkerConfig, startWorker, type WorkerConfig } from '../../../src/worker.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import type { WorkContext, WorkModule } from '../../../src/work/registry.ts';
 import { rebuildSubjects } from '../../../src/search/generations.ts';
@@ -40,9 +40,8 @@ function initEnv(params: unknown): Record<string, string | undefined> {
   return { ...process.env, ...workerTestEnv(env) };
 }
 
-// This executable owns one SDK for its entire lifetime. It never provisions Auth.
-if (import.meta.main) {
-  if (!process.send) throw new Error('Outcome worker requires a private IPC channel');
+/** One production SDK composition, shared by the child and explicit pool instrumentation. */
+export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' | 'clock'> = {}) {
   const slot = createSearchRunnerSlot();
   const observations: WorkerStats = {
     defaultModules: KERNEL_WORK_MODULES.map(({ name }) => name),
@@ -84,27 +83,33 @@ if (import.meta.main) {
         await module.register({
           ...context,
           addService(original) {
-            if (module.name === 'search') {
-              searchServices += 1;
-              if (searchServices !== 1) throw new Error('Default search must register exactly one service');
-              searchContext = context;
-            }
+            // Search also owns retention/erasure services. Adopt only the actual
+            // runner returned by its post-launch starter, retaining every service.
+            const isRunner = (service: Awaited<ReturnType<typeof original>>) =>
+              module.name === 'search' && 'refresh' in service && typeof service.refresh === 'function';
             const start = async () => {
               const service = await original();
               observations.startedServices[module.name] = (observations.startedServices[module.name] ?? 0) + 1;
-              if (module.name === 'search') observations.searchStarterInvocations += 1;
+              if (isRunner(service)) observations.searchStarterInvocations += 1;
               return service;
             };
             context.addService(async () => {
               const service = await start();
-              return module.name === 'search' ? slot.adopt(service, start) : service;
+              if (!isRunner(service)) return service;
+              searchServices += 1;
+              if (searchServices !== 1) {
+                await service.stop();
+                throw new Error('Default search must start exactly one runner');
+              }
+              searchContext = context;
+              return slot.adopt(service, start);
             });
           },
         });
       },
     }));
     try {
-      worker = await startWorker(readWorkerConfig(env), defaults, env);
+      worker = await startWorker({ ...readWorkerConfig(env), ...overrides }, defaults, env);
       if (
         searchServices !== 1 ||
         observations.searchStarterInvocations !== 1 ||
@@ -173,9 +178,21 @@ if (import.meta.main) {
     });
   }
 
+  return {
+    close,
+    request<T = unknown>(method: string, params?: unknown): Promise<T> {
+      return Promise.resolve().then(() => control(method, params)) as Promise<T>;
+    },
+  };
+}
+
+// This executable owns one SDK for its entire lifetime. It never provisions Auth.
+if (import.meta.main) {
+  if (!process.send) throw new Error('Outcome worker requires a private IPC channel');
+  const worker = createOutcomeWorker();
   // Install loss/failure handling before accepting init, including disconnect during startup.
   const lost = () => {
-    void close().catch((error) => {
+    void worker.close().catch((error) => {
       console.error('Outcome worker shutdown failed', error);
       process.exitCode = 1;
     });
@@ -201,7 +218,7 @@ if (import.meta.main) {
         };
       },
     },
-    { onRequest: control },
+    { onRequest: (method, params) => worker.request(method, params) },
   );
   // The parent disconnects only after receiving the completed close reply; natural exit proves drain.
 }

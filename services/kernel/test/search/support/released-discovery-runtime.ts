@@ -5,7 +5,7 @@ import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } fro
 import type { PublicFilterConsumerOperations } from '../../../src/search/public-filter-consumer-contract.ts';
 import { createPublicPreparationStore, type PreparationRecord } from '../../../src/search/public-preparation-store.ts';
 import type { OpenSearch } from '../../../src/search/opensearch.ts';
-import type { WorkerStats } from './outcome-worker.ts';
+import { createOutcomeWorker, type WorkerStats } from './outcome-worker.ts';
 import type { HttpResponse } from '../../../../../specs/semantic-driver.ts';
 import type { createKernel } from '../../../src/http/kernel.ts';
 import { subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
@@ -49,6 +49,8 @@ export type ReleasedTransportBoundary = Readonly<{
 export interface ReleasedDiscoveryRuntime extends ReleasedNativeConsumers {
   /** Diagnostic transport address only; never consumer or job authority. */
   readonly indexPrefix: string;
+  /** Instrumentation is observable and cannot be mistaken for process-kill evidence. */
+  readonly workerKind: ReleasedDiscoveryWorkerKind;
   indexing(state: 'paused' | 'running'): Promise<void>;
   converge(subjects: readonly CreatedSubject[]): Promise<void>;
   rebuild(): Promise<{ generation: number; previous: number | null }>;
@@ -69,9 +71,9 @@ export interface ReleasedDiscoveryComposition {
   close(): Promise<void>;
 }
 
-/** One native prefix, supplied HTTP pool and default SDK child in the supplied database world. */
+/** One native prefix and one default SDK, with explicit pool instrumentation kept in-process. */
 export function releasedDiscoveryRuntime(
-  _kernelPool?: (url: string) => Pool | Promise<Pool>,
+  kernelPool?: (url: string) => Pool | Promise<Pool>,
 ): ReleasedDiscoveryComposition {
   const url = process.env.OPENSEARCH_URL;
   if (!url) throw new Error('OPENSEARCH_URL must name the native Search node');
@@ -96,6 +98,7 @@ export function releasedDiscoveryRuntime(
     },
   };
   let worker: ReturnType<typeof startOutcomeWorkerProcess> | undefined;
+  let instrumentedWorker: ReturnType<typeof createOutcomeWorker> | undefined;
   let env: Record<string, string | undefined> | undefined;
   let config: Parameters<typeof createKernel>[0] | undefined;
   let publicFilters: DefaultPublicFilterRuntime | undefined;
@@ -125,6 +128,14 @@ export function releasedDiscoveryRuntime(
     workerTail = pending.then(() => {}, () => {});
     return pending;
   }
+  function workerRequest<T>(method: string, params?: unknown): Promise<T> {
+    if (instrumentedWorker) return instrumentedWorker.request<T>(method, params);
+    if (worker) return worker.rpc.request<T>(method, params);
+    return Promise.reject(new Error('Released discovery worker has not started'));
+  }
+  const incompatiblePool = () => new Error(
+    'Owned-child crash/restart is incompatible with the explicit kernelPool capability (in-process instrumentation)',
+  );
   async function retain(job: Parameters<DefaultPublicFilterRuntime['repair']>[0]): Promise<string> {
     if (!config || !databaseUrl) throw new Error('Released discovery preparation has not started');
     preparationClient ??= createWorkClient(databaseUrl, config.pool);
@@ -135,6 +146,7 @@ export function releasedDiscoveryRuntime(
   }
   const control: ReleasedDiscoveryRuntime = {
     indexPrefix: prefix,
+    workerKind: kernelPool ? 'in-process' : 'owned-child',
     bindRequest: (...args) => operation(() => native().bindRequest(...args)),
     resumeRequest: (...args) => operation(() => native().resumeRequest(...args)),
     repair: (...args) => operation(() => native().repair(...args)),
@@ -152,16 +164,18 @@ export function releasedDiscoveryRuntime(
       );
       return result.rows[0] ?? null;
     }),
-    workerStats: () => operation(() => workerOperation(() => worker!.rpc.request<WorkerStats>('stats'))),
-    crash: () => operation(() => workerOperation(() => worker!.crash())),
-    restart: () => operation(() => workerOperation(async () => {
+    workerStats: () => operation(() => workerOperation(() => workerRequest<WorkerStats>('stats'))),
+    crash: () => kernelPool
+      ? Promise.reject(incompatiblePool())
+      : operation(() => workerOperation(() => worker!.crash())),
+    restart: () => kernelPool ? Promise.reject(incompatiblePool()) : operation(() => workerOperation(async () => {
       if (!worker?.exited) throw new Error('Restart requires confirmed actual worker exit');
       // Reuse the original environment, database, prefix and durable preparations verbatim.
       worker = startOutcomeWorkerProcess(env!);
       return worker.ready;
     })),
     indexing: (state) => operation(() => workerOperation(async () => {
-      await worker!.rpc.request('indexing', { state });
+      await workerRequest('indexing', { state });
     })),
     converge: (subjects) =>
       operation(async () => {
@@ -191,7 +205,7 @@ export function releasedDiscoveryRuntime(
         }
       }),
     rebuild: () => operation(() => workerOperation(() =>
-      worker!.rpc.request<Awaited<ReturnType<ReleasedDiscoveryRuntime['rebuild']>>>('rebuild'),
+      workerRequest<Awaited<ReturnType<ReleasedDiscoveryRuntime['rebuild']>>>('rebuild'),
     )),
   };
   return {
@@ -243,8 +257,13 @@ export function releasedDiscoveryRuntime(
           OPENSEARCH_URL: proxy!.url,
           KERNEL_SEARCH_PREFIX: prefix,
         });
-        worker = startOutcomeWorkerProcess(env);
-        await worker.ready;
+        if (kernelPool) {
+          instrumentedWorker = createOutcomeWorker({ kernelPool, clock: config?.clock ?? systemClock });
+          await instrumentedWorker.request<WorkerStats>('init', { env });
+        } else {
+          worker = startOutcomeWorkerProcess(env);
+          await worker.ready;
+        }
         started = true;
       })());
     },
@@ -264,6 +283,7 @@ export function releasedDiscoveryRuntime(
           }
         };
         await attempt(async () => worker?.close());
+        await attempt(async () => instrumentedWorker?.close());
         // A failed drain must never permit deleting the running worker's index.
         if (worker && !worker.exited)
           throw new AggregateError(errors, 'Released discovery worker exit was not confirmed');
@@ -275,6 +295,8 @@ export function releasedDiscoveryRuntime(
           await proxy?.close();
         });
         if (errors.length) throw new AggregateError(errors, 'Released discovery runtime drain failed');
+        // An unstarted composition never acquired an engine handle or created native state.
+        if (!transport && !starting) return;
         await attempt(async () => {
           const { generations } = await subjectGenerations(cleanupSearch, prefix);
           for (const generation of generations)
