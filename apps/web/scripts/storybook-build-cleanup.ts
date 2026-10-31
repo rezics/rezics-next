@@ -57,7 +57,10 @@ export function cleanupStorybookUiOutput(
   overrides: Partial<StorybookCleanupFileSystem> = {},
 ) {
   const fileSystem = { ...systemFileSystem, ...overrides };
-  const ownerUid = process.getuid();
+  const ownerUid = process.getuid?.();
+  if (ownerUid === undefined) {
+    throw new Error('Cannot verify ownership of generated Storybook output on this platform.');
+  }
   const worktree = resolve(worktreeRoot);
   requireDirectory(worktree, 'worktree root', fileSystem);
 
