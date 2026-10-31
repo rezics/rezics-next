@@ -122,7 +122,9 @@ export function CoverList({
       <ListRow key={`${item.id}-${index}`}>
         <div data-statement={item.statement}>{card}</div>
       </ListRow>
-    ) : card;
+    ) : (
+      card
+    );
   });
   if (credits) {
     return (
