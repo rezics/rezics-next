@@ -591,14 +591,15 @@ export function controllerProofExecutionArgv(binding: ControllerProofBindingV1):
   while (argv[index] === '--local' || argv[index] === '--returns') index += argv[index] === '--returns' ? 2 : 1;
   if (argv[index] === '--') index += 1;
   const command = splitEnvironmentCommand(argv.slice(index))?.command ?? argv.slice(index);
-  const isBun = command[0] === 'bun' || command[0] === process.execPath || command[0]?.endsWith('/bun');
-  // Test arguments and eval program text are ordinary argv, not executable wrapper paths.
-  if (isBun && ['test', '-e', '--eval', '-p', '--print'].includes(command[1] ?? '')) return [...argv];
-  const namesWrapper = (arg: string) => /(?:^|[/\\\s"'=])worker-check\.ts(?:$|[/\\\s"';])/.test(arg);
+  const isBun = /(?:^|[/\\])bun(?:\.exe)?$/.test(command[0] ?? '');
+  const namesWrapper = (arg: string) => /(?:^|[/\\\s"'=])worker-check\.ts(?:$|[^\w.-])/.test(arg);
   let entry = command[1] === 'run' ? 2 : 1;
   while (command[entry]?.startsWith('-')) {
+    // Eval program text is ordinary argv, including when Bun options precede it.
+    if (isBun && /^(?:-e|-p|--eval|--print)(?:=|$)/.test(command[entry]!)) return [...argv];
     entry += command[entry] === '--cwd' || command[entry] === '-C' ? 2 : 1;
   }
+  if (isBun && command[entry] === 'test') return [...argv];
   const namedWrapper = isBun
     ? namesWrapper(command[entry] ?? '')
     : command.some(namesWrapper);

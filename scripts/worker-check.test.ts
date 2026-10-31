@@ -2923,6 +2923,7 @@ test('controller proof execution derivation admits only the selected saved wrapp
   for (const argv of [
     ['bun', 'test', 'tests/once.test.ts'],
     ['bun', '-e', "console.log('scripts/worker-check.ts')", 'scripts/worker-check.ts'],
+    ['bun', '--cwd', 'services/kernel', '-e', "console.log('scripts/worker-check.ts')"],
     ['bun', 'test', 'tests/worker-check.ts.test.ts'],
     ['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/once.test.ts'],
     ['--local', process.execPath, '-e', 'process.exit(0)', '', '$literal; `text`'],
@@ -2939,6 +2940,7 @@ test('controller proof execution derivation admits only the selected saved wrapp
     ['sh', '-c', binding.argv.join(' ')],
     ['bun', 'alias.ts', ...binding.argv.slice(2)],
     ['bun', '"scripts/worker-check.ts"', ...binding.argv.slice(2)],
+    ['bun', 'scripts/worker-check.ts&&echo', '--', 'bun', 'test', 'tests/once.test.ts'],
     ['bun', 'scripts/worker-check.ts', '--', 'bun', 'test', 'tests/once.test.ts'],
     ['bun', 'scripts/worker-check.ts', '--local', '--returns', 'out', '--', 'bun', 'test', 'tests/once.test.ts'],
     ['bun', 'scripts/worker-check.ts', '--local', 'bun', 'test', 'tests/once.test.ts'],
