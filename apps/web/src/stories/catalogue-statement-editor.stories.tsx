@@ -144,3 +144,22 @@ export const Proposed: Story = {
     await expect(canvas.getByRole('button', { name: m.candidate_accept() })).toBeTruthy();
   },
 };
+
+export const InvalidDate: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const precision = await canvas.findByRole('combobox', { name: m.correction_precision() });
+    await userEvent.selectOptions(precision, '11');
+    const year = canvas.getByRole('textbox', { name: m.correction_year() });
+    await userEvent.clear(year);
+    await userEvent.type(year, '1946');
+    const month = canvas.getByRole('spinbutton', { name: m.correction_month() });
+    await userEvent.clear(month);
+    await userEvent.type(month, '2');
+    const day = canvas.getByRole('spinbutton', { name: m.correction_day() });
+    await userEvent.clear(day);
+    await userEvent.type(day, '30');
+    await userEvent.click(canvas.getByRole('button', { name: m.correction_submit() }));
+    await canvas.findByText(m.correction_error_invalid_format() + ' ' + m.correction_error_date());
+  },
+};

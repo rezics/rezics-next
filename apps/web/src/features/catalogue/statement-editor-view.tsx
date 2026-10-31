@@ -4,7 +4,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { CandidateValue, pageText } from '../pages/data';
 import { isRecord } from '../pages/shared';
 import { m } from '../../paraglide/messages.js';
@@ -25,6 +25,14 @@ import {
   type SnakInput,
   type StatementInput,
 } from './statement-editor';
+
+import {
+  controlId,
+  presentStatementViolations,
+  type ScalarFeedback,
+  type ScalarField,
+  type StatementFeedback,
+} from './statement-validation-presentation';
 
 type Current = Extract<EditorRead, { ok: true }>;
 type ScalarRead = Pick<Current, 'release'> & { public: Pick<Current['public'], 'related'> };
@@ -77,13 +85,29 @@ function ScalarControl({
   read,
   locale,
   onChange,
+  feedback,
 }: {
+  feedback?: ScalarFeedback | undefined;
   part: SnakInput;
   definition: PropertyDefinition | undefined;
   read: ScalarRead;
   locale: string;
   onChange: (value: SnakInput['value']) => void;
 }) {
+  const localId = useId();
+  const id = (field: string) => controlId(feedback?.id ?? localId, feedback?.address ?? 'scalar', field);
+  const invalid = (field: ScalarField) => {
+    const compound = definition?.datatype === 'quantity' || definition?.datatype === 'monolingualtext';
+    const errors =
+      feedback?.errors.filter(
+        (error) => error.target === id(field) || (compound && field !== 'state' && error.target === id('value')),
+      ) ?? [];
+    return {
+      'aria-invalid': errors.length ? (true as const) : undefined,
+      'aria-describedby': errors.length ? errors.map((error) => error.id).join(' ') : undefined,
+    };
+  };
+  const control = (field: ScalarField) => ({ id: id(field), ...invalid(field) });
   const o = { locale: locale as never };
   const content = part.value.type === 'value' ? part.value.content : undefined;
   const record = isRecord(content) ? content : {};
@@ -98,10 +122,22 @@ function ScalarControl({
         <p className="text-muted-foreground">{m.correction_preserved({}, o)}</p>
       </div>
     );
-  const field = (label: string, value: string, update: (value: string) => void, type = 'text') => (
+  const field = (
+    key: ScalarField | 'year' | 'month' | 'day',
+    label: string,
+    value: string,
+    update: (value: string) => void,
+    type = 'text',
+  ) => (
     <Field>
-      <FieldLabel>{label}</FieldLabel>
-      <Input aria-label={label} type={type} value={value} onChange={(event) => update(event.target.value)} />
+      <FieldLabel htmlFor={id(key)}>{label}</FieldLabel>
+      <Input
+        {...(key === 'year' || key === 'month' || key === 'day' ? { id: id(key), ...invalid('date') } : control(key))}
+        aria-label={label}
+        type={type}
+        value={value}
+        onChange={(event) => update(event.target.value)}
+      />
     </Field>
   );
   const patch = (key: string, value: unknown) => {
@@ -138,10 +174,18 @@ function ScalarControl({
     definition.units?.includes('*') ? ['1', ...Object.keys(unitSymbols)] : (definition.units ?? [])
   ).filter((id) => !!unitName(id));
   return (
-    <div className="space-y-3">
+    <div
+      id={id(definition.datatype === 'quantity' || definition.datatype === 'monolingualtext' ? 'value' : 'value-group')}
+      role="group"
+      aria-label={m.correction_value({}, o)}
+      tabIndex={-1}
+      {...invalid('value')}
+      className="space-y-3"
+    >
       <Field>
-        <FieldLabel>{m.correction_value_state({}, o)}</FieldLabel>
+        <FieldLabel htmlFor={id('state')}>{m.correction_value_state({}, o)}</FieldLabel>
         <NativeSelect
+          {...control('state')}
           aria-label={m.correction_value_state({}, o)}
           value={part.value.type}
           onChange={(event) => {
@@ -167,12 +211,16 @@ function ScalarControl({
       {part.value.type === 'value' &&
         (definition.datatype === 'quantity' ? (
           <>
-            {field(m.correction_amount({}, o), typeof record.amount === 'string' ? record.amount : '', (value) =>
-              patch('amount', value),
+            {field(
+              'amount',
+              m.correction_amount({}, o),
+              typeof record.amount === 'string' ? record.amount : '',
+              (value) => patch('amount', value),
             )}
             <Field>
-              <FieldLabel>{m.correction_unit({}, o)}</FieldLabel>
+              <FieldLabel htmlFor={id('unit')}>{m.correction_unit({}, o)}</FieldLabel>
               <NativeSelect
+                {...control('unit')}
                 aria-label={m.correction_unit({}, o)}
                 value={typeof record.unit === 'string' ? record.unit : ''}
                 onChange={(event) => patch('unit', event.target.value)}
@@ -191,11 +239,13 @@ function ScalarControl({
             {!isRecord(properties.lowerBound) && !isRecord(properties.upperBound) ? null : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {field(
+                  'lowerBound',
                   m.correction_lower({}, o),
                   typeof record.lowerBound === 'string' ? record.lowerBound : '',
                   (value) => patch('lowerBound', value),
                 )}
                 {field(
+                  'upperBound',
                   m.correction_upper({}, o),
                   typeof record.upperBound === 'string' ? record.upperBound : '',
                   (value) => patch('upperBound', value),
@@ -204,10 +254,22 @@ function ScalarControl({
             )}
           </>
         ) : definition.datatype === 'time' ? (
-          <>
+          <div
+            id={id('date')}
+            role="group"
+            aria-labelledby={id('date-label')}
+            tabIndex={-1}
+            {...invalid('date')}
+            className="space-y-3"
+          >
+            <p id={id('date-label')} className="font-medium">
+              {m.correction_date({}, o)}
+            </p>
             <Field>
-              <FieldLabel>{m.correction_precision({}, o)}</FieldLabel>
+              <FieldLabel htmlFor={id('precision')}>{m.correction_precision({}, o)}</FieldLabel>
               <NativeSelect
+                id={id('precision')}
+                {...invalid('date')}
                 aria-label={m.correction_precision({}, o)}
                 value={precision ?? ''}
                 onChange={(event) => setDate(0, date?.[1] ?? '', Number(event.target.value))}
@@ -232,10 +294,13 @@ function ScalarControl({
               </NativeSelect>
             </Field>
             <div className="grid gap-3 sm:grid-cols-3">
-              {field(m.correction_year({}, o), date?.[1]?.replace(/^\+/, '') ?? '', (value) => setDate(0, value))}
+              {field('year', m.correction_year({}, o), date?.[1]?.replace(/^\+/, '') ?? '', (value) =>
+                setDate(0, value),
+              )}
               {precision !== undefined &&
                 precision >= 10 &&
                 field(
+                  'month',
                   m.correction_month({}, o),
                   date?.[2] === '00' ? '' : (date?.[2] ?? ''),
                   (value) => setDate(1, value),
@@ -243,6 +308,7 @@ function ScalarControl({
                 )}
               {precision === 11 &&
                 field(
+                  'day',
                   m.correction_day({}, o),
                   date?.[3] === '00' ? '' : (date?.[3] ?? ''),
                   (value) => setDate(2, value),
@@ -250,19 +316,23 @@ function ScalarControl({
                 )}
             </div>
             <p className="text-sm text-muted-foreground">{m.correction_calendar({}, o)}</p>
-          </>
+          </div>
         ) : definition.datatype === 'monolingualtext' ? (
           <>
-            {field(m.correction_value({}, o), typeof record.text === 'string' ? record.text : '', (value) =>
+            {field('text', m.correction_value({}, o), typeof record.text === 'string' ? record.text : '', (value) =>
               patch('text', value),
             )}
-            {field(m.correction_language({}, o), typeof record.language === 'string' ? record.language : '', (value) =>
-              patch('language', value),
+            {field(
+              'language',
+              m.correction_language({}, o),
+              typeof record.language === 'string' ? record.language : '',
+              (value) => patch('language', value),
             )}
           </>
         ) : (
           field(
-            m.correction_value({}, o),
+            'value',
+            definition.datatype === 'url' ? m.correction_url({}, o) : m.correction_value({}, o),
             typeof content === 'string' ? content : '',
             (value) => onChange({ type: 'value', content: value }),
             definition.datatype === 'url' ? 'url' : 'text',
@@ -278,7 +348,9 @@ function PartEditor({
   locale,
   onChange,
   control,
+  feedback,
 }: {
+  feedback?: ScalarFeedback | undefined;
   control?: ((part: SnakInput, change: (value: SnakInput['value']) => void) => ReactNode) | undefined;
   part: SnakInput;
   read: StatementFieldsRead;
@@ -294,6 +366,7 @@ function PartEditor({
       {control?.(part, onChange) ?? (
         <ScalarControl
           part={part}
+          feedback={feedback}
           definition={read.release.properties[part.property.id]}
           read={read}
           locale={locale}
@@ -365,7 +438,9 @@ export function StatementFields({
   heading: Heading = 'h2',
   valueControl,
   partControl,
+  feedback,
 }: {
+  feedback?: StatementFeedback | undefined;
   draft: StatementInput;
   current: StatementFieldsRead;
   locale: string;
@@ -377,9 +452,11 @@ export function StatementFields({
 }) {
   const o = { locale: locale as never };
   const definition = current.release.properties[draft.property.id];
+  const section = (name: string) => ({ id: feedback ? `${feedback.id}-${name}` : undefined, tabIndex: -1 });
+  const scalarFeedback = (address: string) => (feedback ? { ...feedback, address } : undefined);
   return (
     <>
-      <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+      <section {...section('fact')} className="space-y-3 rounded-xl border border-border bg-card p-4">
         <Heading className="font-semibold">{m.correction_replacement({}, o)}</Heading>
         <DefinitionGuideLink
           locale={locale}
@@ -397,6 +474,7 @@ export function StatementFields({
         {valueControl ?? (
           <ScalarControl
             part={draft}
+            feedback={scalarFeedback('fact')}
             definition={definition}
             read={current}
             locale={locale}
@@ -407,11 +485,12 @@ export function StatementFields({
           {definition?.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
         </p>
       </section>
-      <section className="space-y-3">
+      <section {...section('qualifiers')} className="space-y-3">
         <Heading className="font-semibold">{m.correction_qualifiers({}, o)}</Heading>
         {(draft.qualifiers ?? []).map((part, index) => (
           <PartEditor
             control={partControl}
+            feedback={scalarFeedback(`qualifier-${index}`)}
             key={index}
             part={part}
             read={current}
@@ -438,7 +517,7 @@ export function StatementFields({
           }
         />
       </section>
-      <section className="space-y-4">
+      <section {...section('references')} className="space-y-4">
         <Heading className="font-semibold">{m.correction_references({}, o)}</Heading>
         <p className="text-sm text-muted-foreground">{m.correction_citation_hint({}, o)}</p>
         {draft.references.map((reference, index) => (
@@ -449,6 +528,7 @@ export function StatementFields({
             {reference.parts.map((part, partIndex) => (
               <PartEditor
                 control={partControl}
+                feedback={scalarFeedback(`reference-${index}-part-${partIndex}`)}
                 key={partIndex}
                 part={part}
                 read={current}
@@ -513,6 +593,7 @@ export function StatementEditor({
   onLifecycleClear?: () => void | Promise<void>;
 }) {
   const o = { locale: locale as never };
+  const feedbackId = useId();
   const [read, setRead] = useState(initial);
   const [draft, setDraft] = useState<StatementInput | null>(() =>
     initial.ok && initial.source ? statementInput(initial.source) : null,
@@ -530,6 +611,13 @@ export function StatementEditor({
   const label = subject ? pageText(subject.labels, locale).text : '';
   const href = subject ? subjectHref({ id: subject.id, label }, locale).href : undefined;
   const definition = draft && current ? current.release.properties[draft.property.id] : undefined;
+  const feedback: StatementFeedback = {
+    id: feedbackId,
+    errors:
+      draft && current
+        ? presentStatementViolations(failure?.errors ?? [], draft, current.release, locale, feedbackId)
+        : [],
+  };
   const guideReturn =
     href && draft
       ? `${href}/edit?${new URLSearchParams({ property: draft.property.id, ...(current?.source ? { statement: current.source.id } : {}) })}`
@@ -618,17 +706,23 @@ export function StatementEditor({
       {failure && (
         <div className="space-y-3 rounded-lg border border-destructive/50 p-4">
           <EditorFailure reason={failure.reason} locale={locale} />
-          {!!failure.errors?.length && (
-            <ul className="list-disc space-y-1 ps-5 text-sm">
-              {failure.errors.map((error, index) => (
-                <li key={index}>
-                  {m.correction_invalid_part({}, o)}{' '}
-                  <span className="break-all">
-                    {error.pointer.replaceAll(
-                      /schema:[A-Za-z]+/g,
-                      () => pageText(definition?.labels, locale).text || m.correction_value({}, o),
-                    )}
-                  </span>
+          {!!feedback.errors.length && (
+            <ul className="list-disc space-y-2 ps-5 text-sm" aria-label={m.correction_errors({}, o)}>
+              {feedback.errors.map((error) => (
+                <li key={error.id} id={error.id}>
+                  <a
+                    className="font-medium underline underline-offset-4"
+                    href={`#${error.target}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      const target = event.currentTarget.ownerDocument.getElementById(error.target);
+                      target?.focus();
+                      target?.scrollIntoView?.({ block: 'center' });
+                    }}
+                  >
+                    {error.label}
+                  </a>
+                  <p>{error.instruction}</p>
                 </li>
               ))}
             </ul>
@@ -677,6 +771,9 @@ export function StatementEditor({
         </section>
       ) : draft && current ? (
         <form
+          id={`${feedbackId}-fields`}
+          tabIndex={-1}
+          aria-label={m.correction_title({}, o)}
           className="space-y-6"
           onSubmit={(event) => {
             event.preventDefault();
@@ -717,6 +814,7 @@ export function StatementEditor({
               locale={locale}
               change={change}
               guideReturn={guideReturn}
+              feedback={feedback}
             />
           </fieldset>
           <div className="flex flex-wrap gap-3">

@@ -13,7 +13,14 @@ import type { CandidateTransport } from '../../subject/candidate-review';
 import { pickText } from '@rezics/composition';
 import type { FakeRoute } from '../fake-modules';
 
-export type StatementScenario = 'ready' | 'denied' | 'invalid' | 'stale' | 'unavailable' | 'lost-response';
+export type StatementScenario =
+  | 'ready'
+  | 'denied'
+  | 'invalid'
+  | 'stale'
+  | 'unavailable'
+  | 'lost-response'
+  | 'unknown-field-once';
 
 /** Extend the existing review fake, retaining its native acceptance/adoption and public reader. */
 export function statementFixture(scenario: StatementScenario = 'ready', locale = 'en', property = candidateProperty) {
@@ -33,6 +40,7 @@ export function statementFixture(scenario: StatementScenario = 'ready', locale =
   }[] = [];
   const receipts = new Map<string, { candidate: string; revision: number }>();
   let lost = false;
+  let unknownFieldRejected = false;
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
       status,
@@ -66,6 +74,13 @@ export function statementFixture(scenario: StatementScenario = 'ready', locale =
           { code: 'invalid_request', errors: [{ pointer: '/statement/value/content/time', code: 'invalid_format' }] },
           400,
         );
+      if (scenario === 'unknown-field-once' && !unknownFieldRejected) {
+        unknownFieldRejected = true;
+        return json(
+          { code: 'invalid_request', errors: [{ pointer: '/statement/serverOnly', code: 'unknown_field' }] },
+          400,
+        );
+      }
       if (scenario === 'stale') return json({ code: 'stale_editorial_head' }, 409);
       if (scenario === 'unavailable') return json({ code: 'semantic_not_ready' }, 503);
       if (key && receipts.has(key)) return json(receipts.get(key), 201);
