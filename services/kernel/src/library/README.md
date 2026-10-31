@@ -147,6 +147,8 @@ Current implementation evidence is narrower than the capability:
   public activation. `owner-filter-working-source.ts` carries the immutable native query admission, actor, actual
   time/attempt and transferred ledger through all ordinary Source and closure calls. Working metadata uses the
   current native curator/incarnation/epoch/source/rule/fact fences, with no public output generation or receipt.
+  Saved working meaning uses its stored accepted rule release; it does not acquire a built-in release or a public
+  output proof. Final Source comparison includes the current curator and rule revision/release alongside capture.
   The existing canonical capture/repair producer and native custody retain a distinct `private_builtin` identity
   for the working facts; public output never certifies that capture. Private working reads require an explicit
   owner filter on the existing members route; the ordinary unfiltered public/unlisted request continues to read
