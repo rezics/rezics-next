@@ -160,7 +160,10 @@ export function createAuthHistoryProofBindings(pool: Pool): Required<AuthErasure
   };
 }
 /** Phase-specific Access reader. Early native consumption never implies copy completion. */
-export async function readAuthNativeConsumption(pool: Pool, expected: AuthErasureSource): Promise<boolean> {
+export async function readAuthNativeConsumption(
+  pool: Pool | PoolClient,
+  expected: AuthErasureSource,
+): Promise<boolean> {
   shape(expected, true);
   return (
     (await proofRead.run(pool, {

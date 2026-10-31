@@ -91,6 +91,7 @@ export function createWriteRateLimiter(config: WriteRateConfig = {}): DurableWri
         return await spendWriteRateCounter(deadlineClient(context.pool, identity.deadline), {
           route: identity.route,
           identityDigest: identity.identityDigest,
+          accountId: identity.accountId,
           family,
           units,
           budget: budgets[identity.rateClass][family],
@@ -133,6 +134,7 @@ export function createWriteRateLimiter(config: WriteRateConfig = {}): DurableWri
         const [row] = await spendChunkQuery.run(deadlineClient(context.pool, identity.deadline), {
           route: identity.route,
           identity_digest: identity.identityDigest,
+          account_id: identity.accountId ?? '',
           operation_id: chunk.operation.id,
           chunk_index: chunk.index,
           family,

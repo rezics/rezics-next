@@ -25,6 +25,7 @@ export async function spendWriteRateCounter(
   input: {
     route: number;
     identityDigest: string;
+    accountId?: string | null;
     family: string;
     units: number;
     budget: { maximum: number; seconds: number };
@@ -50,9 +51,10 @@ export async function spendWriteRateCounter(
     budget.seconds > 172800
   )
     throw new RangeError('Invalid write rate counter input');
-  const row = await spend.run(client, {
+  const [row] = await spend.run(client, {
     route,
     identity_digest: identityDigest,
+    account_id: input.accountId ?? '',
     family,
     admitted_units: units <= budget.maximum ? units : 0,
     maximum: budget.maximum,

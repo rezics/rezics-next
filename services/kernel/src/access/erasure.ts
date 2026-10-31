@@ -1,3 +1,4 @@
+import { registerNativeErasureWork } from './erasure-native.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkModule } from '../work/registry.ts';
 import canonicalize from 'canonicalize';
@@ -401,6 +402,7 @@ export async function advanceErasureCompletion(deps: { pool: Pool; clock?: () =>
 export const erasureWorkModule: WorkModule = {
   name: 'account_erasure',
   register(context) {
+    registerNativeErasureWork(context);
     const advance = DBOS.registerStep(
       async (accountId: string) => (await advanceErasureCompletion({ pool: context.pool }, accountId)).value,
       { name: 'access.erasure.advance', retriesAllowed: true, maxAttempts: 10 },

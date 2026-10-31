@@ -12,6 +12,7 @@ type Identity = IdentityExpiry & {
   deadline: number;
   clock: KernelClock;
   route?: number;
+  accountId?: string;
   name: string;
   rateClass: AccountRateClass;
 };
@@ -43,6 +44,7 @@ export function bindAccountRateIdentity(
       expiryClock,
       clock,
       route: facts.route,
+      accountId: actor.accountId,
       name: `account:${actor.accountId}`,
       rateClass,
     }),
@@ -131,6 +133,7 @@ export function rateIdentity(context: WriteRateContext, secret: string) {
   const identityDigest = createHmac('sha256', secret).update(identity.name).digest('hex');
   return {
     identityDigest,
+    accountId: identity.accountId ?? null,
     route: identity.route ?? Number.parseInt(identityDigest.slice(0, 4), 16),
     rateClass: identity.rateClass,
     deadline: Math.min(context.deadline, identity.deadline),

@@ -198,6 +198,28 @@ export const ERASURE_DISCOVERY_ROLES: readonly (readonly [string, string, Routin
   ['resource_role_grant', 'subject_id', 'partitions', 'route:int,erasure_key:bigint', "subject_kind = 'identity'"],
   ['standing_parent_installation', 'resource_id', 'owner', 'route:int,erasure_key:bigint', ''],
   ['workflow_approval', 'actor_id', 'owner', 'route:int,approval_id:uuid', ''],
+  ['write_rate_counter', 'account_id', 'owner', 'route:int,identity_digest:text,family:text', ''],
+  [
+    'write_rate_chunk',
+    'account_id',
+    'owner',
+    'route:int,identity_digest:text,operation_id:uuid,chunk_index:bigint',
+    '',
+  ],
+  ['workflow_approval', 'erasure_subject_id', 'partitions', 'route:int,approval_id:uuid', ''],
+  ['workflow_approval', 'erasure_operator_id', 'partitions', 'route:int,approval_id:uuid', ''],
+  ['workflow_approval', 'erasure_member_id', 'partitions', 'route:int,approval_id:uuid', ''],
+  ['workflow_approval', 'erasure_previous_operator_id', 'partitions', 'route:int,approval_id:uuid', ''],
+  ['workflow_approval', 'erasure_previous_subject_id', 'partitions', 'route:int,approval_id:uuid', ''],
+  ['workflow_approval', 'erasure_principal_id', 'partitions', 'route:int,approval_id:uuid', ''],
+  [
+    'operator_opening_receipt',
+    'erasure_principal_id',
+    'partitions',
+    'route:int,operator_account_id:uuid,receipt_id:uuid',
+    '',
+  ],
+  ['erasure_continuation_role', 'account_id', 'partitions', 'route:int,artifact:text,row_id:uuid', ''],
 ];
 
 export type ErasureDiscoveryPage = {
@@ -231,10 +253,6 @@ export async function discoverErasurePage(
   return withConnection(pool, async (tx) => {
     await tx.query('BEGIN');
     try {
-      // Require an ordered seek even when tiny or stale statistics make scanning and sorting look cheaper.
-      await tx.query(`SELECT set_config('enable_seqscan','off',true),
-        set_config('enable_bitmapscan','off',true), set_config('enable_sort','off',true),
-        set_config('enable_incremental_sort','off',true)`);
       // The obligation is immutable and permanent. Never restore or consult an initiating actor.
       const obligation = await tx.query('SELECT version FROM access.erasure WHERE route=$1 AND account_id=$2', [
         route,

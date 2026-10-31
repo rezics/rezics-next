@@ -16,6 +16,6 @@ export async function handleHolder(
 ): Promise<Readonly<{ accountId: string; state: 'active' | 'reserved' }> | null> {
   if (normalizeHandle(normalized) !== normalized) throw new TypeError('A normalized handle is required');
   const row = await read.run(client, { route: handleRoute(normalized), handle: normalized, at: clock().toISOString() });
-  if (!row || row.state === 'pending') return null;
+  if (!row || row.accountId === null || (row.state !== 'active' && row.state !== 'reserved')) return null;
   return { accountId: row.accountId, state: row.state };
 }

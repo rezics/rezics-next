@@ -65,7 +65,7 @@ export async function bootstrapGovernance(pool: Pool, accountId: string): Promis
         resource_id: PLATFORM_RESOURCE.id,
       });
       if (!current?.global) throw new BootstrapGovernanceUnavailableError();
-      if (current.account_id !== null) {
+      if (current.bootstrapped) {
         if (current.account_id !== accountId) throw new BootstrapGovernanceUnavailableError();
         throw new AlreadyBootstrapped();
       }

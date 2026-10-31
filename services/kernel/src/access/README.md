@@ -3071,16 +3071,16 @@ not claim that existing payloads are already minimized or that shared-history ha
 - Backup expiry is an open external condition: no backup retention policy exists, so the coordinator does not model it.
 
 - Access has no takedown of a single profile field (display name, avatar, biography or links) in [lifecycle.ts](lifecycle.ts); under the [policy](../../../../docs/deletion.md), a takedown would withhold only the field the notice covers and keep the data.
-- `access.account` residual relationship, verification and operation fields have no complete deletion minimization rule or deadline.
+- Native terminal account minimization waits for every local proof consumer; missing consumer and shared-copy proofs still prevent complete erasure and a closure deadline.
 - Handle-based reads of retired and deleted handles return the same empty list as unknown handles; ids reads retain the exact three-field deletion identity.
-- Former-handle allocation records intentionally remain after their 30-day forwarding period to prevent impersonation; historical handle operation/effect/registration-expiry rows have no scrub or purge deadline.
-- Membership history, terminal slots/proofs and principal assignments have no erasure schedule; live inverse/coordination cleanup depends on workflow completion without a deadline.
-- Grants/role grants, denials, resource initialization/standing records and governance provenance have no account-deletion retention schedule; retained denial reasons also need minimization.
+- Native handle cleanup permanently retires allocations without owner/provenance and purges consumed operation/effect/registration-expiry rows; unfinished handle consumers still block their pages.
+- Native cleanup covers terminal organization history, consumed slots/proofs and principal assignments. Live inverse/coordination cleanup and Realm terminal-proof consumption still depend on actual owner completion.
+- Native deletion removes subject/account-resource grants, role grants and denials and minimizes initialization/bootstrap attribution. Surviving grants' command provenance still requires shared-copy cleanup.
 - Rating controller history has no erasure trigger or justified retention duration.
 - Fence, credential-floor and operator-opening receipts have no erasure/minimization schedule; expired opening authority leaves personal payloads stored.
 - Workflow approval expiry has a sweep primitive but no registered scheduler or bounded erasure deadline.
 - Continuation roots, children, completions and fan-out pages retain prior handles/relations indefinitely. No alert was found for a committed deletion continuation expiring before cleanup finishes; governance renewal exists but is not an alert.
-- Verification requests/evidence, reviewer reasons and failure details have no deletion or retention deadline; a field for the decision reason alone does not ensure the policy's evidence-check record or outcome notification.
+- Native terminal verification cleanup removes deleted-subject requests after reversal and minimizes erased requester/reviewer attribution on surviving requests. Missing decision/reversal consumption still blocks cleanup; outcome notification remains separate.
 - Write-rate cleanup is optional per deployment partition and batch-limited; no deadline covers missing admission, contention or backlog.
 - Shared receipts, outbox events and write-basis records retain personal payloads without an erasure schedule; their operational purposes do not settle indefinite personal-data retention.
 - Kernel workflow retention covers terminal work only, with no deletion-specific scrub, stuck-work deadline or backlog guarantee.
@@ -3527,3 +3527,105 @@ extends no lifetime and supplies no current user disclosure, approval or session
 authority. Existing activation, recovery, public replay and security checks keep
 their current semantics. Consumer/minimizer integration remains with its owner;
 this source port does not settle unknown consumers or authorize witness deletion.
+### Native erasure groups
+
+The default `account_erasure` module also registers `account_erasure_native` for the committed tombstone event.
+It opens an opaque `erasure_native_progress` identity before enqueueing. Native workflow inputs contain only that
+identity; step results are fixed codes. Discovery uses `discoverErasurePage` and its adopted role manifest. The
+native destructive checkpoint is separate from discovery: selected-key mutation, exact absence proofs and the
+checkpoint commit together. A crash between discovery and purge replays the same discovered page. Consumed page
+results are cleared in the purge transaction. Deleting DBOS history does not reset native progress.
+
+Implemented native phases cover preferences; grants, role grants and denials in subject and account-resource
+roles; standing parent installations; present/former handle claims; handle effects/operations; principal assignments
+in principal, creator and assigned-actor roles; governance reach in resource and actor roles; initialization creator
+attribution; bootstrap attribution; terminal organization membership history and organization-close work; terminal
+verification requests in subject, requester and reviewer roles; account-agent pages after real reversal; and
+account-bound rate counters/chunks. Permission
+provenance remains with shared history, preserving grants between surviving subjects and resources.
+
+Initialization markers retain only route, resource id and resource type, with creator and initialization time null.
+Bootstrap markers retain route/resource id with account and transaction null. A minimized bootstrap still refuses a
+second bootstrap. These markers carry no replacement account owner.
+
+Each page contains at most 100 raw keys in one physical partition, at most 64 KiB returned and 1 KiB per locator.
+Durable replays are checked against those bounds before readiness probes or consumer calls. Mutation and absence
+proofs use full native keys. The organization history phases require the installed random-row-key cursor migration
+`20261029041713`; they never reset a surviving close cursor. Current/future membership, nonterminal membership
+slots, incomplete organization closes and unfinished verification decisions retain the whole discovered page.
+
+A retired handle retains only route, normalized handle and `retired` state. Owner, transaction, reservation, hold,
+forwarding and operation fields are null. Its enabled trigger validates the permanent obligation and finished
+handle operations in the erasure transaction, then prevents updates/deletion/reallocation permanently. A
+pending/active claim, outstanding hold or published operation retains its page as `handle-consumer`; expiry never
+proves consumption.
+
+`erasure_native_blocked` retains each blocked phase's page and exact fixed reason while independent later phases
+continue. Advancing the scheduling phase does not certify destructive completion. The unpurged discovery result
+remains durable; retries rotate through blocked phases with an indexed prefix seek. Local committed deletion
+commands use the original continuation keys, validated against the permanent obligation and exact current deletion
+fence instead of an expired caller approval. One invocation attempts one root's bounded local steps. Authorization
+records are not treated as Auth consumption witnesses, and continuation evidence is retained.
+
+Verified rate charges store their account association in the counter/chunk transaction. The transaction locks the
+account against deletion and checks the permanent obligation, preventing a pre-deletion authenticated context from
+recreating erased rate rows. Anonymous identities remain unbound. The migration records whether old HMAC-only
+stores were empty; legacy rows leave `rate-binding-deployment-coverage` pending rather than pretending they can be
+reverse-attributed. Mixed-version writer shutdown remains a deployment requirement.
+
+The account-agent page phase starts the real receipt-bound deletion reversal. Its existing registered workflow
+performs Semantic unmerge, page removal and final account-witness clearing. A pending/verified account retains
+`verification-reversal-consumer`; native erasure does not clear those pointers itself or assume that an enqueue
+finished the reversal.
+
+Rating controller history remains specifically pending as `controller-transition-consumer` for a surviving current
+controller, or `rating-controller-projection-custody` otherwise. Delayed vote events and recounts read the controller
+at event T; a current operator change or eligibility handoff alone does not establish projection consumption.
+
+Terminal phases also discover registration expiry; membership inverses and terminal proofs in member and group
+roles; organization membership slots; operator slots in subject and operator roles; coordination in owner and related
+roles; approvals in actor, typed operation subject/operator/member/previous relationship and delegated-principal
+roles; openings in operator, subject, acting-human and delegated-principal roles; credential floors; continuation
+children and their typed allowlist targets; fence receipts in subject and old/current operator roles; foreign
+operator/controller links; and the account skeleton last. Typed continuation roles point to independent random
+native row ids, not copied allowlists, targets or cursors. The native producer records those roles in the source
+transaction. This is native attribution, not a shared-copy recorder or custody acknowledgement.
+
+The immutable Auth `native-consumed` proof is now read through its actual fixed reader with the original account,
+barrier version/T, continuation and receipt. Local continuation authorization is still not consumption. Actual
+kernel business-command receipts, under their original native keys, prove local retirement/release/handle effects;
+children drain before roots. Child purge records only opaque original command identities as permanent replay
+refusal, so a restarted consumer cannot recreate a previously purged child under a fresh random row id.
+
+Terminal membership proofs require the exact inverse and hold to be gone. Organization slots additionally require
+the copied terminal proof created by the real member release, with the exact source transaction; the source proof
+stays until its slot is consumed. Operator slots require the original native release command receipt. Existing
+immutable triggers stay enabled. Their narrow DELETE exception checks the permanent obligation, selected native
+row and terminal source in the same purge transaction. No live membership is treated as terminal by inverse
+existence, TTL or a caller-side leave.
+
+A surviving verification applicant keeps its decision and application when only its requester or reviewer is
+erased: cleanup removes that attribution, and reviewer reason/problem fields, instead of deleting the survivor's
+request. A deleted verification subject retains its request until actual account-agent reversal has finished.
+
+Account minimization waits for every other native phase, including retried blocked phases. It removes private
+fields, historical handles/reservations, verification pointers and timestamps while preserving deleted identity,
+authentication floor and the current fence/transaction needed for refusal. Only this terminal page can remove the
+immutable creation timestamp. Successful independent phases cannot bypass a pending terminal-proof consumer.
+
+The Access participant remains incomplete. Approval and opening acceptance can precede their effects; current
+source provides no exact discharged-consumer proof for all those records or credential floors. Those selected
+rows retain respectively `approval-consumer-proof-unavailable`, `opening-consumer-proof-unavailable` or
+`credential-consumer-proof-unavailable`. Historical suspension/unfence work and cursor-bearing operator pages
+retain their own continuation/page consumer reason; an Auth deletion witness does not discharge them. Realm
+membership terminal proofs retain their actual source consumer dependency. Current foreign operator relationships
+retain the existing transition protocol. These are individual durable blocked pages, not a blanket substitution
+for independent native cleanup. The Realm deletion-entry/publication producer remains its owner's responsibility.
+
+The supported shared-history producer-closure handoff for Access receipts, events and actual DBOS copies is still
+missing. No recorder/minimizer or Context-role publication bridge is invented here. If all native phases finish,
+`native_complete_at` records that fact outside DBOS and `shared-history-producer` identifies the remaining custody
+path. This marker never calls `acknowledgeErasure`. Access and shared-history remain pending in `readErasureStatus`;
+neither shared-history's global acknowledgement nor Auth's final acknowledgement is an early native readiness
+condition. Native deletion, recovery, role/privacy and growth outcomes still require the preserved three-file
+acceptance after integration; workspace typing does not establish those outcomes.

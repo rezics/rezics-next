@@ -52,7 +52,7 @@ export type AgentVerificationRequest = {
   id: string;
   accountId: string;
   accountKind: 'actor' | 'organization';
-  requestedBy: string;
+  requestedBy: string | null;
   catalogueSubjectId: string;
   statement: string;
   links: AccountVerificationLink[];
@@ -85,7 +85,7 @@ type VerificationRow = {
   id: string;
   accountId: string;
   accountKind: 'actor' | 'organization';
-  requestedBy: string;
+  requestedBy: string | null;
   catalogueSubjectId: string;
   statement: string;
   links: unknown;
@@ -667,13 +667,20 @@ export type AgentVerificationWorkflowRequest = Pick<
   'id' | 'accountId' | 'accountKind' | 'requestedBy' | 'catalogueSubjectId' | 'state' | 'decisionReceiptId'
 >;
 
+function verificationRequester(input: { requestedBy: string | null }): string {
+  if (input.requestedBy === null) throw new AgentVerificationConflictError();
+  return input.requestedBy;
+}
+
 /** Durable workflow read: one primary-key lookup in the Global Context partition. */
 export async function readAgentVerificationWorkflowRequest(
   pool: Pool,
   requestId: string,
 ): Promise<AgentVerificationWorkflowRequest | null> {
   const row = rows<VerificationRow>(await requestRead.run(pool, { request_id: requestId }))[0];
-  return row
+  // Attribution is erased only after the decision consumer is terminal. A
+  // delayed workflow read must not recreate its old principal or authority.
+  return row && row.requestedBy !== null
     ? {
         id: row.id,
         accountId: row.accountId,
@@ -713,7 +720,7 @@ export async function recordPendingAgentVerification(
     {
       partition: partitionOf(route),
       receipt: {
-        actorAccountId: input.requestedBy,
+        actorAccountId: verificationRequester(input),
         kind: 'access.agent-verification.pending',
         key: `${input.id}:pending`,
         digest,
@@ -837,7 +844,7 @@ export async function completeAgentVerification(
     {
       partition: partitionOf(route),
       receipt: {
-        actorAccountId: input.requestedBy,
+        actorAccountId: verificationRequester(input),
         kind: 'access.agent-verification.complete',
         key: `${input.id}:complete`,
         digest,
@@ -886,7 +893,7 @@ export async function clearPendingAgentVerification(
     {
       partition: partitionOf(route),
       receipt: {
-        actorAccountId: input.requestedBy,
+        actorAccountId: verificationRequester(input),
         kind: 'access.agent-verification.clear',
         key: `${input.id}:clear`,
         digest,
@@ -933,7 +940,7 @@ export async function finishAgentVerification(
     {
       partition: 0,
       receipt: {
-        actorAccountId: input.requestedBy,
+        actorAccountId: verificationRequester(input),
         kind: 'access.agent-verification.finish',
         key: `${input.id}:finish`,
         digest,
@@ -981,7 +988,7 @@ export async function failAgentVerification(
     {
       partition: 0,
       receipt: {
-        actorAccountId: input.requestedBy,
+        actorAccountId: verificationRequester(input),
         kind: 'access.agent-verification.fail',
         key: `${input.id}:fail`,
         digest,
@@ -1249,7 +1256,7 @@ export async function finishAgentVerificationReversal(
       partition: partitionOf(routeOf(input.accountId)!),
       clock,
       receipt: {
-        actorAccountId: input.requestedBy,
+        actorAccountId: verificationRequester(input),
         kind: 'access.agent-verification.reversed',
         key: input.receiptId,
         digest: createHash('sha256').update(JSON.stringify(input)).digest(),

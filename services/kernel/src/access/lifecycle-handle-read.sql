@@ -3,4 +3,4 @@ SELECT account_id AS "accountId", normalized_handle AS handle, state,
        former_until::text AS "formerUntil",
        hold_operation_id AS "operationId", hold_expected_handle AS "expectedHandle"
 FROM access.handle_claim
-WHERE route = :route AND normalized_handle = :handle;
+WHERE route = :route AND normalized_handle = :handle AND account_id IS NOT NULL;

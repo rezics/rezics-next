@@ -277,7 +277,11 @@ export async function readAgentPages(
   const selected = page.slice(0, limit);
   const last = selected.at(-1);
   return {
-    agentPages: selected.map(({ handle, kind, lastModified }) => ({ handle: handle!, kind, lastModified })),
+    agentPages: selected.map(({ handle, kind, lastModified }) => {
+      // Only the erased identity skeleton can lose its public timestamp.
+      if (lastModified === null) throw new Error('Live account public timestamp is missing');
+      return { handle: handle!, kind, lastModified };
+    }),
     next:
       page.length > limit && last
         ? await encodeListCursor(tokens, binding, { epoch: 1, after: [last.route, last.accountId] }, at)

@@ -1,3 +1,12 @@
+import { afterAll, beforeAll, describe } from 'bun:test';
+import { createPool } from '../../src/database/pool.ts';
+import { advanceNativeErasure, openNativeErasure, NATIVE_ERASURE_GROUPS } from '../../src/access/erasure-native.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { readErasureStatus } from '../../src/access/erasure.ts';
+import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';
+import { deletePersona } from '../support/account-deletion.ts';
 import { expect, test } from 'bun:test';
 import type { AuthErasureObligation, AuthErasureObligationCursor } from '@rezics/auth-contract';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
@@ -238,3 +247,265 @@ test('missing original native floor evidence remains pending and ownership chang
     await db.close();
   }
 }, 120000);
+
+describe('Access native terminal cleanup', () => {
+  const pool = createPool(process.env.DATABASE_URL!);
+  let auth: Awaited<ReturnType<typeof nativeFixture>>;
+  let kernel: ReturnType<typeof createKernel>;
+  const key = () => crypto.randomUUID();
+  let prefix = 0;
+  const person = () => auth.person(`native_erase_${key().replaceAll('-', '_')}_${prefix++}`);
+  const context = async (bearer: string) => ({
+    pool,
+    deadline: Date.now() + 10000,
+    actor: await auth.access.authenticate(bearer, { pool, deadline: Date.now() + 10000 }),
+  });
+  async function preferences(accountId: string, bearer: string, idempotencyKey: string) {
+    return kernel.handle(
+      new Request(`http://kernel.test/v1/accounts/${accountId}/preferences`, {
+        method: 'PATCH',
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(idempotencyKey),
+        },
+        body: JSON.stringify({
+          expectedVersion: 0,
+          spoilerLevel: 2,
+          suitability: 'show',
+          shelf: { gridSize: 'large', layouts: { all: 'table' }, tableColumns: ['title'] },
+        }),
+      }),
+    );
+  }
+  async function snapshot(store: string, accountId: string) {
+    // Independent exact locators, not discovery's output or participant completion.
+    return (
+      await pool.query(`SELECT * FROM access.${store} WHERE route=$1 AND account_id=$2`, [routeOf(accountId), accountId])
+    ).rows;
+  }
+  async function ownerGroups(progressId: string) {
+    // Stop at the first foreign role: this is a native page test, not a coverage waiver.
+    while (
+      (await pool.query('SELECT phase FROM access.erasure_native_progress WHERE progress_id=$1', [progressId])).rows[0]
+        .phase < 2
+    )
+      await advanceNativeErasure(pool, progressId);
+  }
+
+  beforeAll(async () => {
+    scopes.push('account:read', 'account:update', 'account:delete');
+    auth = await nativeFixture(pool);
+    kernel = createKernel({
+      pool,
+      routeKey: new Uint8Array(32).fill(28),
+      tokens: auth.referenceKeys,
+      access: () => auth.access,
+      writeRate: createWriteRateLimiter({
+        secret: 'erasure-native-write-limiter-secret',
+        overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
+      }),
+    });
+  }, 120000);
+  afterAll(async () => {
+    try {
+      await auth?.close();
+    } finally {
+      await pool.end();
+    }
+  });
+
+  test('confirmed native deletion purges exact account resources, preserves survivors, and old bearer/replay cannot restore preferences', async () => {
+    const erased = await person();
+    const survivor = await person();
+    const preferenceKey = key();
+    expect((await preferences(erased.accountId, erased.bearer, preferenceKey)).status).toBe(200);
+    expect((await preferences(survivor.accountId, survivor.bearer, key())).status).toBe(200);
+    const survivorBefore = await snapshot('account_preferences', survivor.accountId);
+    // A grant to a surviving account/resource survives even though its granter is erased.
+    const ctx = await context(erased.bearer);
+    await createGrantCommands({ pool, access: auth.access, managementAction: 'account:manage' }).create(ctx, {
+      resource: { route: routeOf(erased.accountId)!, id: erased.accountId },
+      subject: { kind: 'account', id: survivor.accountId },
+      actions: ['account:read'],
+      valid: '(,)',
+      key: key(),
+    });
+    const target = await person();
+    await createGrantCommands({ pool, access: auth.access, managementAction: 'account:manage' }).create(
+      await context(target.bearer),
+      {
+        resource: { route: routeOf(target.accountId)!, id: target.accountId },
+        subject: { kind: 'account', id: erased.accountId },
+        actions: ['account:read'],
+        valid: '(,)',
+        key: key(),
+      },
+    );
+    // Give the erasing human grant authority on a surviving resource via the ordinary command.
+    await createGrantCommands({ pool, access: auth.access, managementAction: 'account:manage' }).create(
+      await context(target.bearer),
+      {
+        resource: { route: routeOf(target.accountId)!, id: target.accountId },
+        subject: { kind: 'account', id: erased.accountId },
+        actions: ['account:manage'],
+        valid: '(,)',
+        key: key(),
+      },
+    );
+    await createGrantCommands({ pool, access: auth.access, managementAction: 'account:manage' }).create(ctx, {
+      resource: { route: routeOf(target.accountId)!, id: target.accountId },
+      subject: { kind: 'account', id: survivor.accountId },
+      actions: ['account:read'],
+      valid: '(,)',
+      key: key(),
+    });
+    const survivingGrant = (
+      await pool.query('SELECT * FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
+        routeOf(target.accountId),
+        target.accountId,
+        survivor.accountId,
+      ])
+    ).rows;
+    expect(survivingGrant).toHaveLength(1);
+    await deletePersona({ pool, auth }, erased);
+    const progressId = await openNativeErasure(pool, erased.accountId);
+    await ownerGroups(progressId);
+    expect(await snapshot('account_preferences', erased.accountId)).toEqual([]);
+    expect(
+      (
+        await pool.query('SELECT 1 FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [
+          routeOf(erased.accountId),
+          erased.accountId,
+        ])
+      ).rows,
+    ).toEqual([]);
+    expect(await snapshot('account_preferences', survivor.accountId)).toEqual(survivorBefore);
+    expect(
+      (
+        await pool.query('SELECT * FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
+          routeOf(target.accountId),
+          target.accountId,
+          survivor.accountId,
+        ])
+      ).rows,
+    ).toEqual(survivingGrant);
+    expect((await preferences(erased.accountId, erased.bearer, preferenceKey)).status).toBe(401);
+    expect((await preferences(erased.accountId, erased.bearer, key())).status).toBe(401);
+    expect(await snapshot('account_preferences', erased.accountId)).toEqual([]);
+    expect((await readErasureStatus(pool, erased.accountId))?.participants.access?.outcome).toBe('pending');
+  }, 120000);
+
+  test('purge and checkpoint roll back together; a lost committed response resumes from native state in a fresh pool', async () => {
+    const erased = await person();
+    await deletePersona({ pool, auth }, erased);
+    const progressId = await openNativeErasure(pool, erased.accountId);
+    await advanceNativeErasure(pool, progressId); // preferences: next phase owns default grants
+    const before = (
+      await pool.query('SELECT phase,page FROM access.erasure_native_progress WHERE progress_id=$1', [progressId])
+    ).rows;
+    await pool.query(`CREATE FUNCTION public.reject_native_checkpoint() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.phase <> OLD.phase OR NEW.page <> OLD.page THEN RAISE EXCEPTION 'native checkpoint failed'; END IF;
+      RETURN NEW; END $$`);
+    await pool.query(`CREATE TRIGGER reject_native_checkpoint BEFORE UPDATE ON access.erasure_native_progress
+      FOR EACH ROW EXECUTE FUNCTION public.reject_native_checkpoint()`);
+    try {
+      await expect(advanceNativeErasure(pool, progressId)).rejects.toThrow('native checkpoint failed');
+    } finally {
+      await pool.query('DROP TRIGGER reject_native_checkpoint ON access.erasure_native_progress');
+      await pool.query('DROP FUNCTION public.reject_native_checkpoint()');
+    }
+    expect(
+      (await pool.query('SELECT phase,page FROM access.erasure_native_progress WHERE progress_id=$1', [progressId])).rows,
+    ).toEqual(before);
+    expect(
+      (
+        await pool.query('SELECT 1 FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [
+          routeOf(erased.accountId),
+          erased.accountId,
+        ])
+      ).rowCount,
+    ).toBeGreaterThan(0);
+    await advanceNativeErasure(pool, progressId); // committed page, simulate losing its response
+    const restarted = createPool(process.env.DATABASE_URL!);
+    try {
+      expect(await openNativeErasure(restarted, erased.accountId)).toBe(progressId);
+      await advanceNativeErasure(restarted, progressId);
+    } finally {
+      await restarted.end();
+    }
+    expect(
+      (
+        await pool.query('SELECT 1 FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [
+          routeOf(erased.accountId),
+          erased.accountId,
+        ])
+      ).rowCount,
+    ).toBe(0);
+    const copiedKeys = await pool.query(
+      `SELECT result FROM access.erasure_progress
+      WHERE route=$1 AND account_id=$2 AND store='resource_grant' AND role='resource_id'`,
+      [routeOf(erased.accountId), erased.accountId],
+    );
+    expect(copiedKeys.rows[0].result).toBeNull();
+  }, 120000);
+
+  test('missing permanent obligation cannot open native work or mutate a surviving account', async () => {
+    const survivor = await person();
+    const before = await snapshot('account', survivor.accountId);
+    await expect(openNativeErasure(pool, survivor.accountId)).rejects.toThrow();
+    expect(await snapshot('account', survivor.accountId)).toEqual(before);
+    expect(NATIVE_ERASURE_GROUPS).toContainEqual(['resource_grant', 'subject_id']);
+    expect(NATIVE_ERASURE_GROUPS).toContainEqual(['resource_role_grant', 'subject_id']);
+    expect(NATIVE_ERASURE_GROUPS).toContainEqual(['resource_denial', 'subject_id']);
+  });
+
+  test('native cleanup severs bootstrap attribution and rate associations without reopening either owner', async () => {
+    const erased = await person();
+    const survivor = await person();
+    const { bootstrapGovernance, BootstrapGovernanceUnavailableError, PLATFORM_RESOURCE } =
+      await import('../../src/access/bootstrap-governance.ts');
+    await bootstrapGovernance(pool, erased.accountId);
+    const retained = await context(erased.bearer);
+    const surviving = await context(survivor.bearer);
+    const limiter = createWriteRateLimiter({ secret: 'native-erasure-account-binding-secret' });
+    expect(await limiter.spend(retained, 'write')).toEqual({ allowed: true });
+    expect(await limiter.spend(surviving, 'write')).toEqual({ allowed: true });
+    const nativeRates = (accountId: string) =>
+      pool.query(
+        `SELECT identity_digest,family,count,expires_at,account_id FROM access.write_rate_counter
+       WHERE route=$1 AND account_id=$2 ORDER BY identity_digest,family`,
+        [routeOf(accountId), accountId],
+      );
+    expect((await nativeRates(erased.accountId)).rows.length).toBeGreaterThan(0);
+    const survivorBefore = (await nativeRates(survivor.accountId)).rows;
+    await deletePersona({ pool, auth }, erased);
+    // This object was authenticated before T. No bearer reauthentication is used
+    // to obtain the denial: the counter's own transaction must enforce the fence.
+    await expect(limiter.spend(retained, 'write')).rejects.toThrow();
+    const progressId = await openNativeErasure(pool, erased.accountId);
+    const lastRate = NATIVE_ERASURE_GROUPS.findIndex(([store]) => store === 'write_rate_counter');
+    for (;;) {
+      const progress = await pool.query('SELECT phase FROM access.erasure_native_progress WHERE progress_id=$1', [
+        progressId,
+      ]);
+      if (progress.rows[0].phase > lastRate) break;
+      await advanceNativeErasure(pool, progressId);
+    }
+    expect((await nativeRates(erased.accountId)).rows).toEqual([]);
+    const bootstrap = await pool.query(
+      'SELECT route,resource_id,account_id,transaction_id FROM access.governance_bootstrap WHERE route=$1 AND resource_id=$2',
+      [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id],
+    );
+    expect(bootstrap.rows).toEqual([
+      { route: 0, resource_id: PLATFORM_RESOURCE.id, account_id: null, transaction_id: null },
+    ]);
+    await expect(bootstrapGovernance(pool, survivor.accountId)).rejects.toBeInstanceOf(
+      BootstrapGovernanceUnavailableError,
+    );
+    expect((await nativeRates(survivor.accountId)).rows).toEqual(survivorBefore);
+    await expect(limiter.spend(retained, 'write')).rejects.toThrow();
+    expect((await nativeRates(erased.accountId)).rows).toEqual([]);
+    expect((await readErasureStatus(pool, erased.accountId))?.participants.access?.outcome).toBe('pending');
+  }, 600000);
+});

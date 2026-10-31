@@ -31,6 +31,11 @@ CREATE FUNCTION access.advance_operator_relation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF access.native_terminal_account_ready(OLD) AND NEW.operator_relation_version=0
+     AND OLD.operator_account_id IS NULL AND NEW.operator_account_id IS NULL
+     AND OLD.operator_reservation_id IS NULL AND NEW.operator_reservation_id IS NULL THEN
+    RETURN NEW;
+  END IF;
   IF NEW.operator_account_id IS DISTINCT FROM OLD.operator_account_id
      OR NEW.operator_reservation_id IS DISTINCT FROM OLD.operator_reservation_id THEN
     NEW.operator_relation_version := OLD.operator_relation_version + 1;
@@ -93,6 +98,7 @@ CREATE FUNCTION access.committed_continuation_completion_immutable() RETURNS tri
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP='DELETE' AND access.native_erasure_delete_ready(TG_TABLE_NAME,to_jsonb(OLD)) THEN RETURN OLD; END IF;
   RAISE EXCEPTION 'Committed continuation completions are immutable';
 END;
 $$;
@@ -146,6 +152,33 @@ $$;
 
 
 --
+-- Name: erasure_entry_account(text, text); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.erasure_entry_account(step text, target text) RETURNS uuid
+    LANGUAGE sql IMMUTABLE
+    AS $$
+ SELECT CASE
+   WHEN step IN ('erase-auth-owner','revoke-auth-sessions','operator-responsibility-page','operator-unfence-page')
+     THEN target::uuid
+   WHEN step IN ('retire-operator','release-operator','fence','unfence') THEN split_part(target,':',1)::uuid
+ END;
+$$;
+
+
+--
+-- Name: erasure_requested_principal(text); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.erasure_requested_principal(value text) RETURNS uuid
+    LANGUAGE sql IMMUTABLE
+    AS $_$
+  SELECT CASE WHEN value ~ '^urn:rezics:request:[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}:[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+    THEN split_part(value, ':', 4)::uuid END;
+$_$;
+
+
+--
 -- Name: guard_account_creation_time(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -153,10 +186,10 @@ CREATE FUNCTION access.guard_account_creation_time() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF NEW.created_at IS DISTINCT FROM OLD.created_at THEN
-    RAISE EXCEPTION 'Account creation time is immutable' USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
+ IF NEW.created_at IS DISTINCT FROM OLD.created_at AND NOT (NEW.created_at IS NULL AND access.native_terminal_account_ready(OLD)) THEN
+  RAISE EXCEPTION 'Account creation time is immutable' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
 END;
 $$;
 
@@ -319,7 +352,89 @@ CREATE FUNCTION access.guard_membership_terminal() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP='DELETE' AND access.native_erasure_delete_ready(TG_TABLE_NAME,to_jsonb(OLD)) THEN RETURN OLD; END IF;
   RAISE EXCEPTION 'Membership terminal proof is immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
+-- Name: guard_native_continuation_delete(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_native_continuation_delete() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT access.native_erasure_delete_ready(TG_TABLE_NAME,to_jsonb(OLD))
+ OR EXISTS (SELECT 1 FROM access.committed_continuation_entry WHERE route=OLD.route AND continuation_id=OLD.continuation_id)
+ OR EXISTS (SELECT 1 FROM access.committed_continuation_completion WHERE route=OLD.route AND continuation_id=OLD.continuation_id)
+ OR EXISTS (SELECT 1 FROM access.operator_fence_page WHERE route=OLD.route AND continuation_id=OLD.continuation_id) THEN
+  RAISE EXCEPTION 'Continuation erasure requires finished consumers and drained children' USING ERRCODE='23514';
+ END IF;
+ RETURN OLD;
+END;
+$$;
+
+
+--
+-- Name: guard_native_erasure_replay(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_native_erasure_replay() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ PERFORM 1 FROM access.committed_continuation c
+   WHERE c.route=NEW.route AND c.continuation_id=NEW.continuation_id FOR KEY SHARE;
+ IF NOT FOUND THEN
+  RAISE EXCEPTION 'Native continuation has been erased' USING ERRCODE='23514';
+ END IF;
+ IF EXISTS (SELECT 1 FROM access.erasure_native_consumed_child d
+   WHERE d.route=NEW.route AND d.continuation_id=NEW.continuation_id
+   AND d.artifact=CASE TG_TABLE_NAME WHEN 'committed_continuation_entry' THEN 'entry'
+     WHEN 'committed_continuation_completion' THEN 'completion' ELSE 'page' END
+   AND d.entry_key=CASE WHEN TG_TABLE_NAME='operator_fence_page'
+     THEN sha256(convert_to(to_jsonb(NEW)->>'page_key','UTF8'))
+     ELSE sha256(convert_to(concat_ws(':',to_jsonb(NEW)->>'step',to_jsonb(NEW)->>'key'),'UTF8')) END) THEN
+  RAISE EXCEPTION 'Native continuation child is permanently consumed' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_retired_handle(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_retired_handle() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP <> 'INSERT' AND OLD.state = 'retired' THEN
+    RAISE EXCEPTION 'Retired handles are permanent' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  IF NEW.state = 'retired' THEN
+    IF TG_OP <> 'UPDATE' OR OLD.state <> 'reserved' OR OLD.hold_operation_id IS NOT NULL
+      OR NOT EXISTS (SELECT 1 FROM access.erasure e WHERE e.account_id = OLD.account_id
+        AND e.route = (get_byte(uuid_send(OLD.account_id),10)*256+get_byte(uuid_send(OLD.account_id),11)))
+      OR EXISTS (SELECT 1 FROM access.lifecycle_handle_operation o WHERE o.account_id = OLD.account_id
+        AND o.route = (get_byte(uuid_send(OLD.account_id),10)*256+get_byte(uuid_send(OLD.account_id),11))
+        AND o.state = 'published') THEN
+      RAISE EXCEPTION 'Handle erasure requires a permanent obligation and finished consumer' USING ERRCODE = '23514';
+    END IF;
+  ELSIF EXISTS (SELECT 1 FROM access.erasure e WHERE e.account_id = NEW.account_id
+    AND e.route = (get_byte(uuid_send(NEW.account_id),10)*256+get_byte(uuid_send(NEW.account_id),11))) THEN
+    -- The committed deletion's real native redirect consumer may finish. No new
+    -- reservation, hold, ownership or revival can cross the permanent barrier.
+    IF TG_OP <> 'UPDATE' OR OLD.account_id IS DISTINCT FROM NEW.account_id
+      OR OLD.state <> 'active' OR NEW.state <> 'reserved' OR NEW.hold_operation_id IS NOT NULL THEN
+      RAISE EXCEPTION 'Erased accounts cannot allocate handles' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -340,6 +455,134 @@ $$;
 
 
 --
+-- Name: native_erasure_delete_ready(text, jsonb); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.native_erasure_delete_ready(store text, value jsonb) RETURNS boolean
+    LANGUAGE plpgsql STABLE
+    AS $$
+DECLARE erased uuid; root access.committed_continuation;
+BEGIN
+ SELECT p.account_id INTO erased FROM access.erasure_native_progress p JOIN access.erasure e USING(route,account_id)
+ WHERE p.progress_id::text=current_setting('rezics.erasure_progress',true);
+ IF erased IS NULL OR value->>'erasure_row_id' IS DISTINCT FROM current_setting('rezics.erasure_row',true) THEN RETURN false; END IF;
+ IF store='membership_inverse_terminal' THEN
+  RETURN (erased=(value->>'account_id')::uuid OR erased=(value->>'group_id')::uuid)
+   AND NOT EXISTS (SELECT 1 FROM access.membership_inverse m WHERE m.route=(value->>'route')::int
+     AND m.account_id=(value->>'account_id')::uuid AND m.kind=value->>'kind' AND m.group_id=(value->>'group_id')::uuid
+     AND m.reservation_id=(value->>'reservation_id')::uuid)
+   AND NOT EXISTS (SELECT 1 FROM access.lifecycle_coordination c WHERE c.route=(value->>'route')::int
+     AND c.account_id=(value->>'account_id')::uuid AND c.reservation_id=(value->>'reservation_id')::uuid);
+ ELSIF store='lifecycle_membership_slot' THEN
+  RETURN (value->>'terminal')::boolean AND (erased=(value->>'organization_id')::uuid OR erased=(value->>'member_account_id')::uuid);
+ ELSIF store IN ('committed_continuation_entry','committed_continuation_completion','committed_continuation','operator_fence_page') THEN
+  IF NOT EXISTS (SELECT 1 FROM access.erasure_continuation_role r WHERE r.route=(value->>'route')::int
+    AND r.row_id=(value->>'erasure_row_id')::uuid AND r.account_id=erased
+    AND r.artifact=CASE store WHEN 'committed_continuation' THEN 'root' WHEN 'committed_continuation_entry' THEN 'entry'
+      WHEN 'committed_continuation_completion' THEN 'completion' ELSE 'page' END) THEN RETURN false; END IF;
+  SELECT * INTO root FROM access.committed_continuation WHERE route=(value->>'route')::int
+    AND continuation_id=(value->>'continuation_id')::uuid;
+  RETURN root.allowlist @> '[{"step":"erase-auth-owner"}]'::jsonb
+    AND EXISTS (SELECT 1 FROM access.auth_history_proof p JOIN access.erasure e USING(route,account_id)
+      WHERE p.route=root.route AND p.account_id=root.account_id AND p.phase='native-consumed'
+        AND p.continuation_id=root.continuation_id AND p.receipt_id=root.barrier_receipt_id AND p.version=e.version AND p.at=e.at)
+    AND NOT EXISTS (SELECT 1 FROM access.lifecycle_handle_operation h
+      WHERE h.route=root.route AND h.account_id=root.account_id AND h.state='published');
+ END IF;
+ RETURN false;
+END;
+$$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: account; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.account (
+    discovery_revision bigint DEFAULT 0 NOT NULL,
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    kind text NOT NULL,
+    handle text COLLATE pg_catalog."C",
+    display_name text,
+    avatar_url text,
+    biography text,
+    state text DEFAULT 'pending'::text NOT NULL,
+    operator_account_id uuid,
+    controller_id uuid,
+    birth_date date,
+    content_preferences jsonb DEFAULT '{}'::jsonb NOT NULL,
+    suspension_reason text,
+    minimum_authn_epoch bigint DEFAULT 1 NOT NULL,
+    transaction_id uuid NOT NULL,
+    registration_id uuid,
+    registration_expires_at timestamp with time zone,
+    authn_fenced boolean DEFAULT false NOT NULL,
+    fence_receipt_id uuid,
+    operator_relation_version bigint DEFAULT 0 NOT NULL,
+    operator_reservation_id uuid,
+    membership_inverse_complete boolean DEFAULT false NOT NULL,
+    handle_operation_id text,
+    created_at timestamp with time zone DEFAULT statement_timestamp(),
+    rate_tier text DEFAULT 'ordinary'::text NOT NULL,
+    links jsonb DEFAULT '[]'::jsonb NOT NULL,
+    avatar uuid,
+    public_views jsonb DEFAULT '{"posts": true, "realms": false, "reviews": true, "collections": true}'::jsonb NOT NULL,
+    speakers_listed boolean DEFAULT false NOT NULL,
+    agent_verified boolean DEFAULT false NOT NULL,
+    agent_subject_id uuid,
+    agent_verification_receipt_id uuid,
+    pending_agent_subject_id uuid,
+    pending_agent_receipt_id uuid,
+    public_changed_at timestamp with time zone DEFAULT statement_timestamp(),
+    handle_change_times timestamp with time zone[] DEFAULT '{}'::timestamp with time zone[] NOT NULL,
+    membership_time timestamp with time zone,
+    CONSTRAINT account_agent_verification_check CHECK ((((pending_agent_subject_id IS NULL) = (pending_agent_receipt_id IS NULL)) AND ((agent_verified AND (agent_subject_id IS NOT NULL) AND (agent_verification_receipt_id IS NOT NULL) AND (pending_agent_subject_id IS NULL)) OR ((NOT agent_verified) AND (agent_subject_id IS NULL) AND (agent_verification_receipt_id IS NULL))))),
+    CONSTRAINT account_avatar_route_check CHECK (((avatar IS NULL) OR (route = ((get_byte(uuid_send(avatar), 10) * 256) + get_byte(uuid_send(avatar), 11))))),
+    CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT account_check1 CHECK (((operator_account_id IS NULL) OR ((kind = 'actor'::text) AND (operator_account_id <> account_id)))),
+    CONSTRAINT account_content_preferences_check CHECK ((jsonb_typeof(content_preferences) = 'object'::text)),
+    CONSTRAINT account_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT account_handle_change_times_check CHECK ((cardinality(handle_change_times) <= 5)),
+    CONSTRAINT account_handle_check CHECK ((handle ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text)),
+    CONSTRAINT account_kind_check CHECK ((kind = ANY (ARRAY['actor'::text, 'organization'::text]))),
+    CONSTRAINT account_links_check CHECK (((jsonb_typeof(links) = 'array'::text) AND (jsonb_array_length(links) <= 5))),
+    CONSTRAINT account_live_timestamps CHECK (((state = 'deleted'::text) OR ((created_at IS NOT NULL) AND (public_changed_at IS NOT NULL)))),
+    CONSTRAINT account_membership_time_check CHECK (isfinite(membership_time)),
+    CONSTRAINT account_minimum_authn_epoch_check CHECK ((minimum_authn_epoch > 0)),
+    CONSTRAINT account_operator_relation_version_check CHECK ((operator_relation_version >= 0)),
+    CONSTRAINT account_public_views_check CHECK (((jsonb_typeof(public_views) = 'object'::text) AND (public_views ?& ARRAY['posts'::text, 'reviews'::text, 'collections'::text, 'realms'::text]) AND ((public_views - ARRAY['posts'::text, 'reviews'::text, 'collections'::text, 'realms'::text]) = '{}'::jsonb) AND (jsonb_typeof((public_views -> 'posts'::text)) = 'boolean'::text) AND (jsonb_typeof((public_views -> 'reviews'::text)) = 'boolean'::text) AND (jsonb_typeof((public_views -> 'collections'::text)) = 'boolean'::text) AND (jsonb_typeof((public_views -> 'realms'::text)) = 'boolean'::text))),
+    CONSTRAINT account_rate_tier_check CHECK ((rate_tier = ANY (ARRAY['ordinary'::text, 'trusted'::text, 'service'::text]))),
+    CONSTRAINT account_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT account_service_tier_actor CHECK (((rate_tier <> 'service'::text) OR (kind = 'actor'::text))),
+    CONSTRAINT account_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'active'::text, 'suspended'::text, 'deleted'::text])))
+);
+
+
+--
+-- Name: native_terminal_account_ready(access.account); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.native_terminal_account_ready(value access.account) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+ SELECT value.state='deleted' AND value.authn_fenced
+  AND value.account_id::text=current_setting('rezics.erasure_terminal',true)
+  AND EXISTS (SELECT 1 FROM access.erasure e WHERE e.route=value.route AND e.account_id=value.account_id)
+  AND EXISTS (SELECT 1 FROM access.erasure_native_progress p WHERE p.route=value.route AND p.account_id=value.account_id
+    AND p.progress_id::text=current_setting('rezics.erasure_progress',true)
+    -- Durable phases 0..60 precede the terminal account page (61); 62 is
+    -- the blocked-page retry scheduler. No earlier page can minimize identity.
+    AND p.phase IN (61,62)
+    AND NOT EXISTS (SELECT 1 FROM access.erasure_native_blocked b WHERE b.progress_id=p.progress_id AND b.reason<>'terminal-inventory'));
+$$;
+
+
+--
 -- Name: operator_fence_page_immutable(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -347,7 +590,46 @@ CREATE FUNCTION access.operator_fence_page_immutable() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP='DELETE' AND access.native_erasure_delete_ready(TG_TABLE_NAME,to_jsonb(OLD)) THEN RETURN OLD; END IF;
   RAISE EXCEPTION 'Operator fence pages are immutable';
+END;
+$$;
+
+
+--
+-- Name: record_native_continuation_roles(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.record_native_continuation_roles() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  root access.committed_continuation;
+  artifact text;
+  actor uuid;
+BEGIN
+  artifact := CASE TG_TABLE_NAME WHEN 'committed_continuation' THEN 'root'
+    WHEN 'committed_continuation_entry' THEN 'entry'
+    WHEN 'committed_continuation_completion' THEN 'completion' ELSE 'page' END;
+  SELECT * INTO STRICT root FROM access.committed_continuation
+    WHERE route=NEW.route AND continuation_id=NEW.continuation_id;
+  INSERT INTO access.erasure_continuation_role(route,account_id,artifact,row_id)
+    SELECT NEW.route,id,artifact,NEW.erasure_row_id FROM unnest(ARRAY[root.account_id,root.prior_operator_account_id]) id
+    WHERE id IS NOT NULL ON CONFLICT DO NOTHING;
+  IF artifact IN ('entry','completion') THEN
+    actor := access.erasure_entry_account(NEW.step,NEW.target);
+    IF actor IS NOT NULL THEN
+      INSERT INTO access.erasure_continuation_role VALUES(NEW.route,actor,artifact,NEW.erasure_row_id) ON CONFLICT DO NOTHING;
+    END IF;
+  ELSE
+    FOR actor IN SELECT access.erasure_entry_account(a->>'step',a->>'target')
+      FROM jsonb_array_elements(NEW.allowlist) a LOOP
+      IF actor IS NOT NULL THEN
+        INSERT INTO access.erasure_continuation_role VALUES(NEW.route,actor,artifact,NEW.erasure_row_id) ON CONFLICT DO NOTHING;
+      END IF;
+    END LOOP;
+  END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -360,7 +642,9 @@ CREATE FUNCTION access.record_public_account_change() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF TG_OP = 'INSERT' THEN
+  IF TG_OP='UPDATE' AND access.native_terminal_account_ready(OLD) THEN
+    NEW.public_changed_at := NULL;
+  ELSIF TG_OP = 'INSERT' THEN
     NEW.public_changed_at := NEW.created_at;
   ELSIF ROW(NEW.account_id, NEW.kind, NEW.state, NEW.authn_fenced, NEW.avatar, NEW.public_views,
             NEW.speakers_listed, NEW.handle, NEW.display_name, NEW.avatar_url, NEW.biography,
@@ -424,74 +708,6 @@ END;
 $$;
 
 
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
---
--- Name: account; Type: TABLE; Schema: access; Owner: -
---
-
-CREATE TABLE access.account (
-    discovery_revision bigint DEFAULT 0 NOT NULL,
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    kind text NOT NULL,
-    handle text COLLATE pg_catalog."C",
-    display_name text,
-    avatar_url text,
-    biography text,
-    state text DEFAULT 'pending'::text NOT NULL,
-    operator_account_id uuid,
-    controller_id uuid,
-    birth_date date,
-    content_preferences jsonb DEFAULT '{}'::jsonb NOT NULL,
-    suspension_reason text,
-    minimum_authn_epoch bigint DEFAULT 1 NOT NULL,
-    transaction_id uuid NOT NULL,
-    registration_id uuid,
-    registration_expires_at timestamp with time zone,
-    authn_fenced boolean DEFAULT false NOT NULL,
-    fence_receipt_id uuid,
-    operator_relation_version bigint DEFAULT 0 NOT NULL,
-    operator_reservation_id uuid,
-    membership_inverse_complete boolean DEFAULT false NOT NULL,
-    handle_operation_id text,
-    created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
-    rate_tier text DEFAULT 'ordinary'::text NOT NULL,
-    links jsonb DEFAULT '[]'::jsonb NOT NULL,
-    avatar uuid,
-    public_views jsonb DEFAULT '{"posts": true, "realms": false, "reviews": true, "collections": true}'::jsonb NOT NULL,
-    speakers_listed boolean DEFAULT false NOT NULL,
-    agent_verified boolean DEFAULT false NOT NULL,
-    agent_subject_id uuid,
-    agent_verification_receipt_id uuid,
-    pending_agent_subject_id uuid,
-    pending_agent_receipt_id uuid,
-    public_changed_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
-    handle_change_times timestamp with time zone[] DEFAULT '{}'::timestamp with time zone[] NOT NULL,
-    membership_time timestamp with time zone,
-    CONSTRAINT account_agent_verification_check CHECK ((((pending_agent_subject_id IS NULL) = (pending_agent_receipt_id IS NULL)) AND ((agent_verified AND (agent_subject_id IS NOT NULL) AND (agent_verification_receipt_id IS NOT NULL) AND (pending_agent_subject_id IS NULL)) OR ((NOT agent_verified) AND (agent_subject_id IS NULL) AND (agent_verification_receipt_id IS NULL))))),
-    CONSTRAINT account_avatar_route_check CHECK (((avatar IS NULL) OR (route = ((get_byte(uuid_send(avatar), 10) * 256) + get_byte(uuid_send(avatar), 11))))),
-    CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT account_check1 CHECK (((operator_account_id IS NULL) OR ((kind = 'actor'::text) AND (operator_account_id <> account_id)))),
-    CONSTRAINT account_content_preferences_check CHECK ((jsonb_typeof(content_preferences) = 'object'::text)),
-    CONSTRAINT account_created_at_check CHECK (isfinite(created_at)),
-    CONSTRAINT account_handle_change_times_check CHECK ((cardinality(handle_change_times) <= 5)),
-    CONSTRAINT account_handle_check CHECK ((handle ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text)),
-    CONSTRAINT account_kind_check CHECK ((kind = ANY (ARRAY['actor'::text, 'organization'::text]))),
-    CONSTRAINT account_links_check CHECK (((jsonb_typeof(links) = 'array'::text) AND (jsonb_array_length(links) <= 5))),
-    CONSTRAINT account_membership_time_check CHECK (isfinite(membership_time)),
-    CONSTRAINT account_minimum_authn_epoch_check CHECK ((minimum_authn_epoch > 0)),
-    CONSTRAINT account_operator_relation_version_check CHECK ((operator_relation_version >= 0)),
-    CONSTRAINT account_public_views_check CHECK (((jsonb_typeof(public_views) = 'object'::text) AND (public_views ?& ARRAY['posts'::text, 'reviews'::text, 'collections'::text, 'realms'::text]) AND ((public_views - ARRAY['posts'::text, 'reviews'::text, 'collections'::text, 'realms'::text]) = '{}'::jsonb) AND (jsonb_typeof((public_views -> 'posts'::text)) = 'boolean'::text) AND (jsonb_typeof((public_views -> 'reviews'::text)) = 'boolean'::text) AND (jsonb_typeof((public_views -> 'collections'::text)) = 'boolean'::text) AND (jsonb_typeof((public_views -> 'realms'::text)) = 'boolean'::text))),
-    CONSTRAINT account_rate_tier_check CHECK ((rate_tier = ANY (ARRAY['ordinary'::text, 'trusted'::text, 'service'::text]))),
-    CONSTRAINT account_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT account_service_tier_actor CHECK (((rate_tier <> 'service'::text) OR (kind = 'actor'::text))),
-    CONSTRAINT account_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'active'::text, 'suspended'::text, 'deleted'::text])))
-);
-
-
 --
 -- Name: account_preferences; Type: TABLE; Schema: access; Owner: -
 --
@@ -536,7 +752,7 @@ CREATE TABLE access.agent_verification_request (
     request_id uuid NOT NULL,
     account_id uuid NOT NULL,
     account_kind text NOT NULL,
-    requested_by uuid NOT NULL,
+    requested_by uuid,
     catalogue_subject_id uuid NOT NULL,
     statement text NOT NULL,
     links jsonb DEFAULT '[]'::jsonb NOT NULL,
@@ -552,7 +768,6 @@ CREATE TABLE access.agent_verification_request (
     CONSTRAINT agent_verification_request_account_kind_check CHECK ((account_kind = ANY (ARRAY['actor'::text, 'organization'::text]))),
     CONSTRAINT agent_verification_request_check CHECK ((route = ((get_byte(uuid_send(request_id), 10) * 256) + get_byte(uuid_send(request_id), 11)))),
     CONSTRAINT agent_verification_request_check1 CHECK (((state = ANY (ARRAY['approving'::text, 'approved'::text, 'rejected'::text, 'failed'::text])) = (decision_receipt_id IS NOT NULL))),
-    CONSTRAINT agent_verification_request_check2 CHECK (((state = ANY (ARRAY['approving'::text, 'approved'::text, 'rejected'::text, 'failed'::text])) = (decided_by IS NOT NULL))),
     CONSTRAINT agent_verification_request_check3 CHECK (((problem_type IS NULL) = (problem_detail IS NULL))),
     CONSTRAINT agent_verification_request_created_at_check CHECK (isfinite(created_at)),
     CONSTRAINT agent_verification_request_links_check CHECK (((jsonb_typeof(links) = 'array'::text) AND (jsonb_array_length(links) <= 5))),
@@ -609,6 +824,7 @@ CREATE TABLE access.committed_continuation (
     committed_expires_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     completions jsonb DEFAULT '[]'::jsonb NOT NULL,
+    erasure_row_id uuid DEFAULT gen_random_uuid() NOT NULL,
     CONSTRAINT committed_continuation_allowlist_check CHECK (access.committed_continuation_entries(allowlist, 1, 4, false)),
     CONSTRAINT committed_continuation_check CHECK ((route = ((get_byte(uuid_send(continuation_id), 10) * 256) + get_byte(uuid_send(continuation_id), 11)))),
     CONSTRAINT committed_continuation_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
@@ -640,6 +856,7 @@ CREATE TABLE access.committed_continuation_completion (
     receipt_id uuid NOT NULL,
     receipt_key text,
     receipt_digest text,
+    erasure_row_id uuid DEFAULT gen_random_uuid() NOT NULL,
     CONSTRAINT committed_continuation_business_receipt_check CHECK (((receipt_key IS NULL) = (receipt_digest IS NULL))),
     CONSTRAINT committed_continuation_completion_check CHECK ((route = ((get_byte(uuid_send(continuation_id), 10) * 256) + get_byte(uuid_send(continuation_id), 11)))),
     CONSTRAINT committed_continuation_completion_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
@@ -663,6 +880,7 @@ CREATE TABLE access.committed_continuation_entry (
     target text NOT NULL,
     key text NOT NULL,
     digest text NOT NULL,
+    erasure_row_id uuid DEFAULT gen_random_uuid() NOT NULL,
     CONSTRAINT committed_continuation_entry_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT committed_continuation_entry_key_check CHECK (((length(key) >= 1) AND (length(key) <= 240))),
     CONSTRAINT committed_continuation_entry_step_check CHECK ((step ~ '^[a-z][a-z0-9-]{0,63}$'::text)),
@@ -733,6 +951,20 @@ CREATE TABLE access.erasure_acknowledgement (
 
 
 --
+-- Name: erasure_continuation_role; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.erasure_continuation_role (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    artifact text NOT NULL,
+    row_id uuid NOT NULL,
+    CONSTRAINT erasure_continuation_role_artifact_check CHECK ((artifact = ANY (ARRAY['root'::text, 'entry'::text, 'completion'::text, 'page'::text]))),
+    CONSTRAINT erasure_continuation_role_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: erasure_late_item; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -758,6 +990,71 @@ CREATE TABLE access.erasure_locator_work (
     resolution_transaction_id uuid,
     CONSTRAINT erasure_locator_work_check CHECK (((state = 'resolved'::text) = (resolution_transaction_id IS NOT NULL))),
     CONSTRAINT erasure_locator_work_state_check CHECK ((state = ANY (ARRAY['open'::text, 'done'::text, 'resolved'::text])))
+);
+
+
+--
+-- Name: erasure_native_blocked; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.erasure_native_blocked (
+    progress_id uuid NOT NULL,
+    phase integer NOT NULL,
+    page integer NOT NULL,
+    consumer_index integer DEFAULT 0 NOT NULL,
+    reason text NOT NULL,
+    CONSTRAINT erasure_native_blocked_consumer_index_check CHECK (((consumer_index >= 0) AND (consumer_index < 100))),
+    CONSTRAINT erasure_native_blocked_page_check CHECK ((page >= 0)),
+    CONSTRAINT erasure_native_blocked_phase_check CHECK ((phase >= 0)),
+    CONSTRAINT erasure_native_blocked_reason_check CHECK ((reason = ANY (ARRAY['handle-consumer'::text, 'membership-terminal-consumer'::text, 'organization-close-consumer'::text, 'verification-decision-consumer'::text, 'verification-reversal-consumer'::text, 'controller-transition-consumer'::text, 'rating-controller-projection-custody'::text, 'organization-cursor-cutover'::text, 'rate-binding-deployment-coverage'::text, 'auth-fence-release-witness-unavailable'::text, 'continuation-barrier-consumer'::text, 'deletion-local-consumer'::text, 'native-terminal-consumer'::text, 'approval-consumer-proof-unavailable'::text, 'opening-consumer-proof-unavailable'::text, 'credential-consumer-proof-unavailable'::text, 'continuation-child-consumer'::text, 'operator-page-consumer'::text, 'terminal-inventory'::text])))
+);
+
+
+--
+-- Name: erasure_native_consumed_child; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.erasure_native_consumed_child (
+    route integer NOT NULL,
+    continuation_id uuid NOT NULL,
+    artifact text NOT NULL,
+    entry_key bytea NOT NULL,
+    progress_id uuid NOT NULL,
+    CONSTRAINT erasure_native_consumed_child_artifact_check CHECK ((artifact = ANY (ARRAY['entry'::text, 'completion'::text, 'page'::text]))),
+    CONSTRAINT erasure_native_consumed_child_entry_key_check CHECK ((octet_length(entry_key) = 32))
+);
+
+
+--
+-- Name: erasure_native_coverage; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.erasure_native_coverage (
+    name text NOT NULL,
+    covered boolean NOT NULL,
+    CONSTRAINT erasure_native_coverage_name_check CHECK ((name = 'rate-account-binding'::text))
+);
+
+
+--
+-- Name: erasure_native_progress; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.erasure_native_progress (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    progress_id uuid NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    phase integer DEFAULT 0 NOT NULL,
+    page integer DEFAULT 0 NOT NULL,
+    pending text,
+    retry_phase integer DEFAULT '-1'::integer NOT NULL,
+    native_complete_at timestamp with time zone,
+    CONSTRAINT erasure_native_progress_page_check CHECK ((page >= 0)),
+    CONSTRAINT erasure_native_progress_pending_check CHECK ((pending = ANY (ARRAY['handle-consumer'::text, 'native-inventory'::text, 'shared-history-producer'::text]))),
+    CONSTRAINT erasure_native_progress_phase_check CHECK ((phase >= 0)),
+    CONSTRAINT erasure_native_progress_retry_phase_check CHECK ((retry_phase >= '-1'::integer)),
+    CONSTRAINT erasure_native_progress_version_check CHECK ((version = 1))
 );
 
 
@@ -804,8 +1101,9 @@ CREATE TABLE access.exposure_opening (
 CREATE TABLE access.governance_bootstrap (
     route integer NOT NULL,
     resource_id uuid NOT NULL,
-    account_id uuid NOT NULL,
-    transaction_id uuid NOT NULL,
+    account_id uuid,
+    transaction_id uuid,
+    CONSTRAINT governance_bootstrap_attribution_check CHECK (((account_id IS NULL) = (transaction_id IS NULL))),
     CONSTRAINT governance_bootstrap_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
     CONSTRAINT governance_bootstrap_resource_id_check CHECK ((resource_id = '00000000-0000-8000-8000-000000000000'::uuid)),
     CONSTRAINT governance_bootstrap_route_check CHECK ((route = 0))
@@ -836,21 +1134,20 @@ CREATE TABLE access.handle_claim (
     discovery_revision bigint DEFAULT 0 NOT NULL,
     route integer NOT NULL,
     normalized_handle text NOT NULL COLLATE pg_catalog."C",
-    account_id uuid NOT NULL,
+    account_id uuid,
     state text NOT NULL,
     expires_at timestamp with time zone,
     reserved_until timestamp with time zone,
-    transaction_id uuid NOT NULL,
+    transaction_id uuid,
     reservation_id uuid,
     hold_operation_id text,
     hold_expected_handle text,
     former_until timestamp with time zone,
     CONSTRAINT handle_claim_check CHECK ((route = ((get_byte(sha256(convert_to(normalized_handle, 'UTF8'::name)), 0) * 256) + get_byte(sha256(convert_to(normalized_handle, 'UTF8'::name)), 1)))),
-    CONSTRAINT handle_claim_check1 CHECK ((((state = 'pending'::text) AND (expires_at IS NOT NULL) AND (reserved_until IS NULL)) OR ((state = 'active'::text) AND (expires_at IS NULL) AND (reserved_until IS NULL)) OR ((state = 'reserved'::text) AND (expires_at IS NULL) AND (reserved_until IS NOT NULL)))),
+    CONSTRAINT handle_claim_disposition CHECK ((((state = 'retired'::text) AND (account_id IS NULL) AND (transaction_id IS NULL) AND (expires_at IS NULL) AND (reserved_until IS NULL) AND (reservation_id IS NULL) AND (hold_operation_id IS NULL) AND (hold_expected_handle IS NULL) AND (former_until IS NULL)) OR ((state = ANY (ARRAY['pending'::text, 'active'::text, 'reserved'::text])) AND (account_id IS NOT NULL) AND (transaction_id IS NOT NULL) AND (((state = 'pending'::text) AND (expires_at IS NOT NULL) AND (reserved_until IS NULL)) OR ((state = 'active'::text) AND (expires_at IS NULL) AND (reserved_until IS NULL)) OR ((state = 'reserved'::text) AND (expires_at IS NULL) AND (reserved_until IS NOT NULL)))))),
     CONSTRAINT handle_claim_former_until_check CHECK (((former_until IS NULL) OR (state = ANY (ARRAY['pending'::text, 'reserved'::text])))),
     CONSTRAINT handle_claim_normalized_handle_check CHECK ((normalized_handle ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text)),
-    CONSTRAINT handle_claim_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT handle_claim_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'active'::text, 'reserved'::text])))
+    CONSTRAINT handle_claim_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -938,6 +1235,7 @@ CREATE TABLE access.lifecycle_membership_slot (
     reservation_id uuid NOT NULL,
     terminal boolean DEFAULT false NOT NULL,
     transaction_id uuid NOT NULL,
+    erasure_row_id uuid DEFAULT gen_random_uuid() NOT NULL,
     CONSTRAINT lifecycle_membership_slot_check CHECK ((route = ((get_byte(uuid_send(organization_id), 10) * 256) + get_byte(uuid_send(organization_id), 11))))
 );
 
@@ -998,6 +1296,7 @@ CREATE TABLE access.membership_inverse_terminal (
     reservation_transaction_id uuid NOT NULL,
     proof_transaction_id uuid NOT NULL,
     transaction_id uuid NOT NULL,
+    erasure_row_id uuid DEFAULT gen_random_uuid() NOT NULL,
     CONSTRAINT membership_inverse_terminal_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT membership_inverse_terminal_kind_check CHECK ((kind = ANY (ARRAY['organization'::text, 'realm'::text])))
 );
@@ -1014,6 +1313,7 @@ CREATE TABLE access.operator_fence_page (
     cursor text,
     next_cursor text,
     allowlist jsonb NOT NULL,
+    erasure_row_id uuid DEFAULT gen_random_uuid() NOT NULL,
     CONSTRAINT operator_fence_page_allowlist_check CHECK (access.committed_continuation_entries(allowlist, 0, 101, false)),
     CONSTRAINT operator_fence_page_page_key_check CHECK ((page_key ~ '^[0-9a-f]{64}$'::text))
 );
@@ -1049,6 +1349,7 @@ CREATE TABLE access.operator_opening_receipt (
     credential_operation_key text,
     credential_effect_reference text,
     credential_effect_digest text,
+    erasure_principal_id uuid GENERATED ALWAYS AS (access.erasure_requested_principal(requested_by)) STORED,
     CONSTRAINT credential_binding_closed CHECK ((((credential_purpose IS NULL) AND (credential_operation_key IS NULL) AND (credential_effect_reference IS NULL) AND (credential_effect_digest IS NULL)) OR ((purpose = 'credential-management'::text) AND (credential_purpose IS NOT NULL) AND (credential_purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'add-key'::text, 'remove-key'::text])) AND (credential_operation_key IS NOT NULL) AND ((length(credential_operation_key) >= 1) AND (length(credential_operation_key) <= 255)) AND (credential_effect_reference IS NOT NULL) AND ((length(credential_effect_reference) >= 1) AND (length(credential_effect_reference) <= 4096)) AND (credential_effect_digest IS NOT NULL) AND (credential_effect_digest ~ '^[a-f0-9]{64}$'::text)))),
     CONSTRAINT operator_opening_receipt_check CHECK ((route = ((get_byte(uuid_send(operator_account_id), 10) * 256) + get_byte(uuid_send(operator_account_id), 11)))),
     CONSTRAINT operator_opening_receipt_check1 CHECK ((expires_at <= (created_at + '00:01:00'::interval))),
@@ -1225,8 +1526,9 @@ CREATE TABLE access.resource_initialization (
     route integer NOT NULL,
     resource_id uuid NOT NULL,
     resource_type text NOT NULL,
-    creator_id uuid NOT NULL,
-    initialized_at timestamp with time zone NOT NULL,
+    creator_id uuid,
+    initialized_at timestamp with time zone,
+    CONSTRAINT resource_initialization_attribution_check CHECK (((creator_id IS NULL) = (initialized_at IS NULL))),
     CONSTRAINT resource_initialization_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
     CONSTRAINT resource_initialization_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
@@ -1321,6 +1623,39 @@ CREATE TABLE access.workflow_approval (
     transaction_id uuid NOT NULL,
     consumed_at timestamp with time zone,
     consumed_transaction_id uuid,
+    erasure_subject_id uuid GENERATED ALWAYS AS ((
+CASE (operation ->> 'kind'::text)
+    WHEN 'credential'::text THEN (operation ->> 'subjectAccountId'::text)
+    WHEN 'membership'::text THEN (operation ->> 'organizationId'::text)
+    WHEN 'opening'::text THEN (operation ->> 'subjectAccountId'::text)
+    WHEN 'rename'::text THEN (operation ->> 'accountId'::text)
+    WHEN 'delete'::text THEN (operation ->> 'accountId'::text)
+    WHEN 'revoke'::text THEN (operation ->> 'accountId'::text)
+    WHEN 'fence-operator'::text THEN (operation ->> 'accountId'::text)
+    ELSE NULL::text
+END)::uuid) STORED,
+    erasure_operator_id uuid GENERATED ALWAYS AS ((
+CASE
+    WHEN ((operation ->> 'kind'::text) = ANY (ARRAY['automated'::text, 'opening'::text, 'transfer'::text, 'transfer-acceptance'::text])) THEN (operation ->> 'operatorAccountId'::text)
+    ELSE NULL::text
+END)::uuid) STORED,
+    erasure_member_id uuid GENERATED ALWAYS AS ((
+CASE
+    WHEN ((operation ->> 'kind'::text) = 'membership'::text) THEN (operation ->> 'memberAccountId'::text)
+    ELSE NULL::text
+END)::uuid) STORED,
+    erasure_previous_operator_id uuid GENERATED ALWAYS AS ((
+CASE
+    WHEN ((operation ->> 'kind'::text) = ANY (ARRAY['transfer'::text, 'transfer-acceptance'::text])) THEN ((operation -> 'previous'::text) ->> 'operatorAccountId'::text)
+    WHEN ((operation ->> 'kind'::text) = 'delete'::text) THEN ((operation -> 'responsibility'::text) ->> 'operatorAccountId'::text)
+    ELSE NULL::text
+END)::uuid) STORED,
+    erasure_previous_subject_id uuid GENERATED ALWAYS AS ((
+CASE
+    WHEN ((operation ->> 'kind'::text) = ANY (ARRAY['transfer'::text, 'transfer-acceptance'::text])) THEN ((operation -> 'previous'::text) ->> 'subjectAccountId'::text)
+    ELSE NULL::text
+END)::uuid) STORED,
+    erasure_principal_id uuid GENERATED ALWAYS AS (access.erasure_requested_principal(requested_by)) STORED,
     CONSTRAINT credential_expiry CHECK ((((operation ->> 'kind'::text) <> 'credential'::text) OR (expires_at <= (created_at + '00:01:00'::interval)))),
     CONSTRAINT workflow_approval_authn_epoch_check CHECK (((authn_epoch > 0) AND (authn_epoch <= '9007199254740991'::bigint))),
     CONSTRAINT workflow_approval_check CHECK ((route = ((get_byte(uuid_send(approval_id), 10) * 256) + get_byte(uuid_send(approval_id), 11)))),
@@ -1350,6 +1685,7 @@ CREATE UNLOGGED TABLE access.write_rate_chunk (
     operation_id uuid NOT NULL,
     chunk_index bigint NOT NULL,
     expires_at timestamp with time zone NOT NULL,
+    account_id uuid,
     CONSTRAINT write_rate_chunk_chunk_index_check CHECK (((chunk_index >= 0) AND (chunk_index <= '9007199254740991'::bigint))),
     CONSTRAINT write_rate_chunk_expires_at_check CHECK (isfinite(expires_at)),
     CONSTRAINT write_rate_chunk_identity_digest_check CHECK ((identity_digest ~ '^[a-f0-9]{64}$'::text)),
@@ -1367,6 +1703,7 @@ CREATE UNLOGGED TABLE access.write_rate_counter (
     count integer NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     route integer NOT NULL,
+    account_id uuid,
     CONSTRAINT write_rate_counter_count_check CHECK ((count >= 0)),
     CONSTRAINT write_rate_counter_expires_at_check CHECK (isfinite(expires_at)),
     CONSTRAINT write_rate_counter_family_check CHECK ((family ~ '^[a-z][a-z0-9_.:-]{0,63}$'::text)),
@@ -1464,6 +1801,14 @@ ALTER TABLE ONLY access.erasure_acknowledgement
 
 
 --
+-- Name: erasure_continuation_role erasure_continuation_role_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_continuation_role
+    ADD CONSTRAINT erasure_continuation_role_pkey PRIMARY KEY (account_id, route, artifact, row_id);
+
+
+--
 -- Name: erasure_late_item erasure_late_item_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1477,6 +1822,46 @@ ALTER TABLE ONLY access.erasure_late_item
 
 ALTER TABLE ONLY access.erasure_locator_work
     ADD CONSTRAINT erasure_locator_work_pkey PRIMARY KEY (workflow_id);
+
+
+--
+-- Name: erasure_native_blocked erasure_native_blocked_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_native_blocked
+    ADD CONSTRAINT erasure_native_blocked_pkey PRIMARY KEY (progress_id, phase);
+
+
+--
+-- Name: erasure_native_consumed_child erasure_native_consumed_child_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_native_consumed_child
+    ADD CONSTRAINT erasure_native_consumed_child_pkey PRIMARY KEY (route, continuation_id, artifact, entry_key);
+
+
+--
+-- Name: erasure_native_coverage erasure_native_coverage_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_native_coverage
+    ADD CONSTRAINT erasure_native_coverage_pkey PRIMARY KEY (name);
+
+
+--
+-- Name: erasure_native_progress erasure_native_progress_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_native_progress
+    ADD CONSTRAINT erasure_native_progress_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: erasure_native_progress erasure_native_progress_progress_id_key; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_native_progress
+    ADD CONSTRAINT erasure_native_progress_progress_id_key UNIQUE (progress_id);
 
 
 --
@@ -1793,6 +2178,27 @@ CREATE UNIQUE INDEX committed_continuation_barrier ON access.committed_continuat
 
 
 --
+-- Name: committed_continuation_completion_erasure_row; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX committed_continuation_completion_erasure_row ON access.committed_continuation_completion USING btree (route, erasure_row_id);
+
+
+--
+-- Name: committed_continuation_entry_erasure_row; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX committed_continuation_entry_erasure_row ON access.committed_continuation_entry USING btree (route, erasure_row_id);
+
+
+--
+-- Name: committed_continuation_erasure_row; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX committed_continuation_erasure_row ON access.committed_continuation USING btree (route, erasure_row_id);
+
+
+--
 -- Name: committed_continuation_operator_latest; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -1870,6 +2276,20 @@ CREATE INDEX erasure_committed_continuation_prior_operator_account_id ON access.
 
 
 --
+-- Name: erasure_continuation_barrier; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_continuation_barrier ON access.committed_continuation USING btree (route, account_id, barrier_receipt_id);
+
+
+--
+-- Name: erasure_continuation_reservation; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_continuation_reservation ON access.committed_continuation USING btree (route, account_id, prior_reservation_id, prior_operator_account_id);
+
+
+--
 -- Name: erasure_credential_floor_receipt_account_id; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -1916,6 +2336,13 @@ CREATE INDEX erasure_governance_reach_resource_id ON access.governance_reach USI
 --
 
 CREATE INDEX erasure_handle_claim_account_id ON access.handle_claim USING btree (account_id, route, normalized_handle);
+
+
+--
+-- Name: erasure_handle_unfinished; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_handle_unfinished ON access.lifecycle_handle_operation USING btree (account_id, route, operation_id) WHERE (state = 'published'::text);
 
 
 --
@@ -2003,6 +2430,13 @@ CREATE INDEX erasure_locator_work_open ON access.erasure_locator_work USING btre
 
 
 --
+-- Name: erasure_member_id_approval; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_member_id_approval ON access.workflow_approval USING btree (erasure_member_id, route, approval_id);
+
+
+--
 -- Name: erasure_membership_inverse_account_id; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -2028,6 +2462,20 @@ CREATE INDEX erasure_membership_inverse_terminal_account_id ON access.membership
 --
 
 CREATE INDEX erasure_membership_inverse_terminal_group_id ON access.membership_inverse_terminal USING btree (group_id, route, account_id, kind, reservation_id);
+
+
+--
+-- Name: erasure_opening_principal; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_opening_principal ON access.operator_opening_receipt USING btree (erasure_principal_id, route, operator_account_id, receipt_id);
+
+
+--
+-- Name: erasure_operator_id_approval; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_operator_id_approval ON access.workflow_approval USING btree (erasure_operator_id, route, approval_id);
 
 
 --
@@ -2087,6 +2535,20 @@ CREATE INDEX erasure_organization_member_organization_id ON access.organization_
 
 
 --
+-- Name: erasure_previous_operator_id_approval; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_previous_operator_id_approval ON access.workflow_approval USING btree (erasure_previous_operator_id, route, approval_id);
+
+
+--
+-- Name: erasure_previous_subject_id_approval; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_previous_subject_id_approval ON access.workflow_approval USING btree (erasure_previous_subject_id, route, approval_id);
+
+
+--
 -- Name: erasure_principal_assignment_assigned_actor_id; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -2105,6 +2567,13 @@ CREATE INDEX erasure_principal_assignment_creator_principal_id ON access.princip
 --
 
 CREATE INDEX erasure_principal_assignment_principal_id ON access.principal_assignment USING btree (principal_id, route, request_id);
+
+
+--
+-- Name: erasure_principal_id_approval; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_principal_id_approval ON access.workflow_approval USING btree (erasure_principal_id, route, approval_id);
 
 
 --
@@ -2185,10 +2654,31 @@ CREATE INDEX erasure_standing_parent_installation_resource_id ON access.standing
 
 
 --
+-- Name: erasure_subject_id_approval; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_subject_id_approval ON access.workflow_approval USING btree (erasure_subject_id, route, approval_id);
+
+
+--
 -- Name: erasure_workflow_approval_actor_id; Type: INDEX; Schema: access; Owner: -
 --
 
 CREATE INDEX erasure_workflow_approval_actor_id ON access.workflow_approval USING btree (actor_id, route, approval_id);
+
+
+--
+-- Name: erasure_write_rate_chunk_account; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_write_rate_chunk_account ON access.write_rate_chunk USING btree (account_id, route, identity_digest, operation_id, chunk_index);
+
+
+--
+-- Name: erasure_write_rate_counter_account; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_write_rate_counter_account ON access.write_rate_counter USING btree (account_id, route, identity_digest, family);
 
 
 --
@@ -2203,6 +2693,13 @@ CREATE INDEX lifecycle_coordination_purpose_page ON access.lifecycle_coordinatio
 --
 
 CREATE UNIQUE INDEX lifecycle_membership_live ON access.lifecycle_membership_slot USING btree (route, organization_id, member_account_id) WHERE (NOT terminal);
+
+
+--
+-- Name: operator_fence_page_erasure_row; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX operator_fence_page_erasure_row ON access.operator_fence_page USING btree (route, erasure_row_id);
 
 
 --
@@ -2401,6 +2898,13 @@ CREATE TRIGGER erasure_guard BEFORE DELETE OR UPDATE ON access.erasure FOR EACH 
 
 
 --
+-- Name: handle_claim guard_retired_handle; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER guard_retired_handle BEFORE INSERT OR DELETE OR UPDATE ON access.handle_claim FOR EACH ROW EXECUTE FUNCTION access.guard_retired_handle();
+
+
+--
 -- Name: lifecycle_membership_slot lifecycle_membership_terminal_guard; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -2426,6 +2930,62 @@ CREATE TRIGGER membership_inverse_guard BEFORE DELETE OR UPDATE ON access.member
 --
 
 CREATE TRIGGER membership_inverse_terminal_guard BEFORE DELETE OR UPDATE ON access.membership_inverse_terminal FOR EACH ROW EXECUTE FUNCTION access.guard_membership_terminal();
+
+
+--
+-- Name: committed_continuation native_continuation_delete; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER native_continuation_delete BEFORE DELETE ON access.committed_continuation FOR EACH ROW EXECUTE FUNCTION access.guard_native_continuation_delete();
+
+
+--
+-- Name: committed_continuation_completion native_erasure_replay; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER native_erasure_replay BEFORE INSERT ON access.committed_continuation_completion FOR EACH ROW EXECUTE FUNCTION access.guard_native_erasure_replay();
+
+
+--
+-- Name: committed_continuation_entry native_erasure_replay; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER native_erasure_replay BEFORE INSERT ON access.committed_continuation_entry FOR EACH ROW EXECUTE FUNCTION access.guard_native_erasure_replay();
+
+
+--
+-- Name: operator_fence_page native_erasure_replay; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER native_erasure_replay BEFORE INSERT ON access.operator_fence_page FOR EACH ROW EXECUTE FUNCTION access.guard_native_erasure_replay();
+
+
+--
+-- Name: committed_continuation native_erasure_roles; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER native_erasure_roles AFTER INSERT ON access.committed_continuation FOR EACH ROW EXECUTE FUNCTION access.record_native_continuation_roles();
+
+
+--
+-- Name: committed_continuation_completion native_erasure_roles; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER native_erasure_roles AFTER INSERT ON access.committed_continuation_completion FOR EACH ROW EXECUTE FUNCTION access.record_native_continuation_roles();
+
+
+--
+-- Name: committed_continuation_entry native_erasure_roles; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER native_erasure_roles AFTER INSERT ON access.committed_continuation_entry FOR EACH ROW EXECUTE FUNCTION access.record_native_continuation_roles();
+
+
+--
+-- Name: operator_fence_page native_erasure_roles; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER native_erasure_roles AFTER INSERT ON access.operator_fence_page FOR EACH ROW EXECUTE FUNCTION access.record_native_continuation_roles();
 
 
 --
@@ -2493,6 +3053,30 @@ ALTER TABLE ONLY access.erasure_acknowledgement
 
 ALTER TABLE ONLY access.erasure_late_item
     ADD CONSTRAINT erasure_late_item_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
+
+
+--
+-- Name: erasure_native_blocked erasure_native_blocked_progress_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_native_blocked
+    ADD CONSTRAINT erasure_native_blocked_progress_id_fkey FOREIGN KEY (progress_id) REFERENCES access.erasure_native_progress(progress_id);
+
+
+--
+-- Name: erasure_native_consumed_child erasure_native_consumed_child_progress_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_native_consumed_child
+    ADD CONSTRAINT erasure_native_consumed_child_progress_id_fkey FOREIGN KEY (progress_id) REFERENCES access.erasure_native_progress(progress_id);
+
+
+--
+-- Name: erasure_native_progress erasure_native_progress_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_native_progress
+    ADD CONSTRAINT erasure_native_progress_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
 
 
 --

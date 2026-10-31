@@ -353,6 +353,17 @@ export async function recordCompletion(
   receiptId: string,
   receipt: LifecycleReceipt,
 ): Promise<{ continuationId: string; receiptId: string }> {
+  return recordBoundCompletion(tx, located, presented, receiptId, receipt, false);
+}
+
+async function recordBoundCompletion(
+  tx: CommandTransaction,
+  located: { route: number; continuationId: string; digest: string },
+  presented: ContinuationEntry,
+  receiptId: string,
+  receipt: LifecycleReceipt,
+  permanentErasure: boolean,
+): Promise<{ continuationId: string; receiptId: string }> {
   refused(presented.digest === continuationEntryDigest(presented));
   const row = await oneRow(() =>
     loadContinuation.run(tx, { route: located.route, continuation_id: located.continuationId }),
@@ -372,7 +383,8 @@ export async function recordCompletion(
       })),
   );
   const at = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
-  refused(Date.parse(canonicalInstant(stored.expiresAt)) > Date.parse(at));
+  if (permanentErasure) await requireErasureBarrier(tx, snapshot);
+  else refused(Date.parse(canonicalInstant(stored.expiresAt)) > Date.parse(at));
   await completeContinuation.run(tx, {
     route: located.route,
     continuation_id: stored.continuationId,
@@ -385,6 +397,81 @@ export async function recordCompletion(
     receipt_digest: receipt.digest,
   });
   return { continuationId: stored.continuationId, receiptId };
+}
+
+/** Permanent erasure is a different, non-bearer authority. It applies ONLY to
+ * the exact current deletion barrier; historical fences, foreign accounts and
+ * ordinary expired approvals retain the public continuation's expiry checks.
+ * The obligation, current account fence and immutable root are checked together.
+ */
+async function requireErasureBarrier(tx: Pick<CommandTransaction, 'query'>, root: ContinuationSnapshot): Promise<void> {
+  refused(isDeletionContinuation(root));
+  const row = await tx.query(
+    `SELECT 1 FROM access.erasure e
+     JOIN access.account a ON a.route=e.route AND a.account_id=e.account_id
+     JOIN access.lifecycle_fence_receipt f ON f.route=a.route AND f.account_id=a.account_id
+       AND f.receipt_id=a.fence_receipt_id
+     WHERE e.route=$1 AND e.account_id=$2 AND a.state='deleted' AND a.authn_fenced
+       AND f.receipt_id=$3 AND f.transaction_id=$4 AND f.minimum_authn_epoch=$5::bigint
+       AND a.minimum_authn_epoch=f.minimum_authn_epoch`,
+    [root.route, root.accountId, root.barrierReceiptId, root.barrierTransactionId, root.minimumAuthnEpoch],
+  );
+  refused(row.rowCount === 1);
+}
+
+/** Native local consumer, deliberately not an Auth completion or an erasure ACK.
+ * Its input is an exact discovered root id. Nothing here copies the root into
+ * DBOS, renews an approval, or infers consumption from authorization records.
+ * Existing business commands execute under their ORIGINAL committed keys.
+ */
+export async function continueErasureDeletion(pool: Pool, continuationId: string, clock?: () => Date): Promise<void> {
+  const discoveredRoute = routeOf(continuationId);
+  refused(discoveredRoute !== null);
+  const route: number = discoveredRoute;
+  async function root(): Promise<ContinuationSnapshot> {
+    return withConnection(pool, async (tx) => {
+      const row = await oneRow(() => loadContinuation.run(tx, { route, continuation_id: continuationId }));
+      refused(row);
+      const stored = row as StoredContinuation;
+      const allowlist = entries(stored.allowlist);
+      refused(allowlist);
+      const snapshot = snapshotOf(route, stored, allowlist);
+      refused(stored.digest === committedContinuationDigest(snapshot));
+      await requireErasureBarrier(tx, snapshot);
+      return snapshot;
+    });
+  }
+  const execute = lifecycleExecutor(pool, clock);
+  const runner = createCommittedDeletionRunner({
+    pool,
+    ...(clock ? { clock } : {}),
+    root,
+    async live(snapshot) {
+      await withConnection(pool, (tx) => requireErasureBarrier(tx, snapshot));
+    },
+    async authorizeStep(_reference, entry) {
+      const snapshot = await root();
+      return execute(
+        {
+          route,
+          id: continuationId,
+          kind: 'cleanup-continuation.recorded',
+          key: `committed:${entry.key}`,
+          input: { continuationId, step: entry.step, target: entry.target, key: entry.key, digest: entry.digest },
+        },
+        (tx, transactionId, receipt) =>
+          recordBoundCompletion(
+            tx,
+            { route, continuationId, digest: committedContinuationDigest(snapshot) },
+            entry,
+            transactionId,
+            receipt,
+            true,
+          ),
+      );
+    },
+  });
+  await runner.continueCommitted(continuationId);
 }
 
 export type CommittedContinuations = {

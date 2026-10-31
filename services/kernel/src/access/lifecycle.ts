@@ -1044,7 +1044,7 @@ export function createLifecycleInternals(
       const claim = await withConnection(pool, (client) =>
         handleRead.run(client, { route: handleRoute(handle), handle }),
       );
-      if (!claim) return null;
+      if (!claim || claim.accountId === null || claim.state === 'retired') return null;
       const at = Date.parse(iso(clock));
       const forwards = claim.formerUntil !== null && Date.parse(claim.formerUntil) > at;
       if (claim.state === 'pending' && Date.parse(claim.expiresAt!) <= at) return null;
