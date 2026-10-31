@@ -14,7 +14,7 @@ import {
 } from 'node:fs';
 import { hostname } from 'node:os';
 import { createRequire } from 'node:module';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CONTRACT_PATH = fileURLToPath(new URL('../contracts/check-scripts.json', import.meta.url));
@@ -728,20 +728,22 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
 
     if (binary) {
       const packageRoot = join(scriptsRoot, 'node_modules/bun');
-      // Bun may keep optional dependencies on the installed package's private edge.
-      // Follow that graph from the real manifest, using only the contract's package name.
+      // Inspect the installed package's dependency graph, excluding global lookup paths.
+      // Read metadata directly: cached subpath resolution can hide restored or missing files.
       const packageManifest = realpathSync(join(packageRoot, 'package.json'));
-      let platformManifest: string;
-      try {
-        platformManifest = createRequire(packageManifest).resolve(`${binary.package}/package.json`);
-      } catch (error) {
-        // A linked installation can expose a hoisted dependency at the checkout edge
-        // without placing it among the real package's ancestors. Inspect only that edge.
-        const hoistedManifest = join(scriptsRoot, 'node_modules', binary.package, 'package.json');
-        if (!commandExists(hoistedManifest)) throw error;
-        platformManifest = realpathSync(hoistedManifest);
-      }
-      const platformRoot = dirname(platformManifest);
+      const dependencyPaths = (createRequire(packageManifest).resolve.paths(binary.package) ?? []).filter((path) => {
+        const fromAncestor = relative(dirname(path), dirname(packageManifest));
+        return basename(path) === 'node_modules' && !isAbsolute(fromAncestor) &&
+          fromAncestor !== '..' && !fromAncestor.startsWith(`..${sep}`);
+      });
+      // A linked checkout can expose a hoisted edge outside the real package's ancestors.
+      dependencyPaths.push(join(scriptsRoot, 'node_modules'));
+      const platformDirectory = dependencyPaths
+        .map((path) => join(path, binary.package))
+        .find((path) => existsSync(path) && statSync(path).isDirectory());
+      if (!platformDirectory) throw new Error(`Installed Bun dependency ${binary.package} is missing.`);
+      const platformRoot = realpathSync(platformDirectory);
+      const platformManifest = join(platformRoot, 'package.json');
       const installed = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as {
         name?: string;
         version?: string;
