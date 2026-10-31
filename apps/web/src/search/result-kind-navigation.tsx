@@ -28,7 +28,7 @@ export function ResultKindNavigation({
   // Missing metadata is unknown: retain exact selections, without inventing labels or catalogue membership.
   for (const id of selected) if (!choices.has(id)) choices.set(id, {});
   const destinations = [
-    { id: undefined, text: m.search_all_kinds(), lang: locale, current: selected.length === 0 },
+    { id: undefined, text: m.search_kind_navigation_all(), lang: locale, current: selected.length === 0 },
     ...[...choices].map(([id, labels]) => {
       const label = localizedLabel(labels, locale);
       return { id, text: label.text || id, lang: label.lang, current: selected.length === 1 && selected[0] === id };

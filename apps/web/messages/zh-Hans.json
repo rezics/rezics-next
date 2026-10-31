@@ -3809,5 +3809,6 @@
   "curation_stay": "留在编辑器",
   "curation_leave": "离开并丢弃本地修改",
   "search_kind_navigation_selected": "已选结果类型：{kinds}",
-  "search_kind_navigation_more": "在筛选中选择更多结果类型。"
+  "search_kind_navigation_more": "在筛选中选择更多结果类型。",
+  "search_kind_navigation_all": "全部"
 }

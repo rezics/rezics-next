@@ -3808,5 +3808,6 @@
   "curation_stay": "留在編輯器",
   "curation_leave": "離開並捨棄本機修改",
   "search_kind_navigation_selected": "已選結果類型：{kinds}",
-  "search_kind_navigation_more": "在篩選中選擇更多結果類型。"
+  "search_kind_navigation_more": "在篩選中選擇更多結果類型。",
+  "search_kind_navigation_all": "全部"
 }

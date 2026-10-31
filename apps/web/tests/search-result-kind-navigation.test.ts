@@ -106,7 +106,7 @@ test('default mixed SearchPage offers direct result-kind navigation that retains
     );
     const original = await page.evaluate(() => (window as any).kindRouter.state.location.search);
     const account = navigation.getByRole('link', { name: 'Account', exact: true });
-    const all = navigation.getByRole('link', { name: 'All result kinds', exact: true });
+    const all = navigation.getByRole('link', { name: 'All', exact: true });
     expect(await all.getAttribute('aria-current')).toBe('page');
     const destination = new URL((await account.getAttribute('href'))!, 'https://site.test');
     expect(destination.pathname).toBe('/en/search');

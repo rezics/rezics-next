@@ -3808,5 +3808,6 @@
   "curation_stay": "Seguir en el editor",
   "curation_leave": "Salir y descartar los cambios locales",
   "search_kind_navigation_selected": "Tipos de resultado seleccionados: {kinds}",
-  "search_kind_navigation_more": "Elige más tipos de resultado en Filtros."
+  "search_kind_navigation_more": "Elige más tipos de resultado en Filtros.",
+  "search_kind_navigation_all": "Todos"
 }
