@@ -129,8 +129,8 @@ test('current denial replaces readable content without cached body, parent title
 });
 
 test('Exact revision and history use genuine current derivative images', async () => {
-  // The original shared producer is absent in this checkout. Its admitted outcome is typed
-  // unavailability, never an invented variant, original download or a second media caller.
+  // Each explicit load uses the original shared producer. A native source failure stays
+  // unavailable, never an invented variant, original download or a per-image retry.
   const revision = {
     ...selected,
     mediaIds: [id(60), id(61)],
@@ -155,6 +155,7 @@ test('Exact revision and history use genuine current derivative images', async (
     if (path === `/v1/posts/${identity.postId}/revisions/${identity.revisionId}`)
       return denied ? Response.json({ code: 'not_found' }, { status: 404 }) : Response.json({ post: revision });
     if (path === `/v1/threads/${selected.threadId}`) return Response.json(current);
+    if (path === '/v1/media/presentations') return new Response(null, { status: 503 });
     if (path === '/v1/accounts') return Response.json({ accounts: [] });
     throw new Error(`Unexpected request: ${path}`);
   });
@@ -173,11 +174,27 @@ test('Exact revision and history use genuine current derivative images', async (
   expect(html).toContain(selected.licence);
   expect(page.revision.sha256).toBe(selected.sha256);
   expect(page.thread.differentHead).toBe(true);
-  // History shares this exact absence boundary; it has no per-revision/per-image substitute.
+  // History makes its own bounded page read; it has no per-revision/per-image substitute.
   expect(await loadRevisionDocumentMedia(kernel, revisionDocumentImageIds([revision, later]), 'Bearer reader')).toEqual(
     { kind: 'unavailable' },
   );
-  expect(requests).toHaveLength(3);
+  expect(requests).toHaveLength(5);
+  const mediaRequests = requests.filter((request) => new URL(request.url).pathname === '/v1/media/presentations');
+  expect(mediaRequests).toHaveLength(2);
+  expect(mediaRequests.every((request) => request.method === 'POST')).toBe(true);
+  expect(await Promise.all(mediaRequests.map((request) => request.json()))).toEqual([
+    { ids: [id(60)] },
+    { ids: [id(60)] },
+  ]);
+  expect(
+    requests
+      .filter((request) => new URL(request.url).pathname !== '/v1/media/presentations')
+      .map((request) => new URL(request.url).pathname),
+  ).toEqual([
+    `/v1/posts/${identity.postId}/revisions/${identity.revisionId}`,
+    `/v1/threads/${selected.threadId}`,
+    '/v1/accounts',
+  ]);
   expect(
     requests
       .filter((request) => !request.url.includes('/accounts'))
