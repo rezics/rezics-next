@@ -24,21 +24,21 @@ Neither option can call the present implementation complete or make pending its 
 
 Paths below are relative to `services/kernel/src/`; links pin the inspected source revision.
 
-| Owner and source | Actual callable/data and boundary |
-| --- | --- |
-| Core, [command/operational.ts][operational], `runOperationalTransaction`, lines 87–215 | Work-step rejects principal/basis/authorization; mints one T, takes the partition fence and account terminal fences, and exposes a live transaction only inside its body. `enqueueIntent` requires exactly the fenced accounts. It does not authorize Subject reads. |
-| Core, [command/command.ts][command], lines 266–317 | `authoritativeTimeValue`, `commandTime`, `withOperationalAttempt`, `releaseOperationalTime`: T is registered object identity, removed when the attempt ends. A timestamp, deserialized object or T retained after completion cannot replace it. |
-| Library, [collection-kind.ts][kind], lines 321–430 | `CollectionKindSourceStep` explicitly extracts the **Actor** Source branch. `readType({subjectId,at,actor,deadline,allowance})` returns a Type plus `WorkReceipt`, or unavailable. It is called only after positive canonical membership; that alone cannot retain excluded-original Type/disclosure dependencies. |
-| Library, [collection-kind-preparation.ts][preparation], `current`, `retained`, `resolve`, `resume` | Actual metadata authorization uses Actor; retained scope lookup joins native capture/receipt. Only anonymous preparation and genuinely zero scanned population proceed. `resume.readType` calls `readSubjectSummaries` behind an undefined footprint, which refuses native dispatch. Private/nonempty proof is absent. |
-| Library, [collection-kind-work-admission.ts][admission] | `CollectionKindPreparationLocator={route,ownerAccountId,collectionId,preparationId}`. `CollectionKindWorkDefinition={releaseDigest,audience,sourceIdentity,observation,identityObservation,repairReceipt,custody}`. BOTH `admitCollectionKindPreparationStep(tx,locator)` and `readCollectionKindWorkDefinition(tx,locator)` throw `dependency_unavailable`. These are declarations, not working admission. |
-| Search, [scope-work-context.ts][context], lines 31–112, 125–131 | Distinct `CollectionKindPreparationWorkContext={kind:'collection-kind-preparation',tx,locator}`. `readCollectionKindPreparationWorkDefinition` checks live Core work-step/pool/partition/owner/deadline, calls ORIGINAL Library admission/getter, validates their entire result, then `admitScopeWork` returns `commandTime(tx)`. It supplies technical work input, not permission. |
-| Library, [collection-source-work-native.ts][sourcework], lines 53–145 | `readCollectionSourceWorkState` rereads admission and local metadata, canonical scope/head/generation, identity digest and exact Source basis. Kind rejects curated input here; public output is explicitly unsupported here. Do not substitute Members or a public catalogue capture. |
-| Accounts, [request/access.ts][access], lines 135–239, 272–307 | `PrepareReadDecisionsInput.actor`, `accessCheck(access,actor,action,resource,context)` and native prepared-check factory all require Actor. `PreparedAccessCheckInvocation={client,time,work}` accounts for the SAME prepared invocation; it cannot change its actor binding. |
-| Accounts, [access/permission.ts][permission], lines 140–205, 231–378, 872 onward | Actual implementation of preparation, decision and prepared-work binding. `prepared`/`readEvidence` are process-local WeakMaps; copied/serialized values are not proof. `prepareReadDecisions` requires SAME native T when metered. The contract's `access/decisions.ts` does not exist at this revision; implementation is here, not a hidden overload. |
-| Accounts, [access/eligibility.ts][eligibility] | Prepare/verify contexts both require Actor. Capability/evidence registries bind action/resource/actor/deadline. Verification runs at the formula's T; missing required disclosure must fail the whole check, not merely disable the public floor. |
-| Semantic, [subject.ts][subject], `readItemTypes`, lines 863–867; `read-item-types.sql` | Structural visible-row projection, <=256 IDs; no Access or WorkReceipt. SQL also reads the account-agent link. It is not a subject Type grant or the proposed narrow evidence producer. |
-| Semantic, [summaries.ts][summaries], lines 93–148; [list-presentation.ts][presentation], lines 352 onward | Summaries use actual Actor/current `subject:read` plus eligibility, then hydrate labels/images/editions. List facts use actual Actor, original/terminal reads, identities, provenance, Accounts and tuple fences, with released homes and final comparisons. Neither exports admitted Kind Type evidence or a Source WorkReceipt. |
-| Semantic, [scope-leaf-evidence.ts][leaf], lines 147–165, 451–454 | `LeafOptions` has a distinct actorless work union, but its work branch refuses before IO. `LeafNativeWork` in `scope-leaf-selection.ts` has real finite accounting; its existence does not implement the missing work audience. |
+| Owner and source                                                                                          | Actual callable/data and boundary                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core, [command/operational.ts][operational], `runOperationalTransaction`, lines 87–215                    | Work-step rejects principal/basis/authorization; mints one T, takes the partition fence and account terminal fences, and exposes a live transaction only inside its body. `enqueueIntent` requires exactly the fenced accounts. It does not authorize Subject reads.                                                                                                                                        |
+| Core, [command/command.ts][command], lines 266–317                                                        | `authoritativeTimeValue`, `commandTime`, `withOperationalAttempt`, `releaseOperationalTime`: T is registered object identity, removed when the attempt ends. A timestamp, deserialized object or T retained after completion cannot replace it.                                                                                                                                                             |
+| Library, [collection-kind.ts][kind], lines 321–430                                                        | `CollectionKindSourceStep` explicitly extracts the **Actor** Source branch. `readType({subjectId,at,actor,deadline,allowance})` returns a Type plus `WorkReceipt`, or unavailable. It is called only after positive canonical membership; that alone cannot retain excluded-original Type/disclosure dependencies.                                                                                          |
+| Library, [collection-kind-preparation.ts][preparation], `current`, `retained`, `resolve`, `resume`        | Actual metadata authorization uses Actor; retained scope lookup joins native capture/receipt. Only anonymous preparation and genuinely zero scanned population proceed. `resume.readType` calls `readSubjectSummaries` behind an undefined footprint, which refuses native dispatch. Private/nonempty proof is absent.                                                                                      |
+| Library, [collection-kind-work-admission.ts][admission]                                                   | `CollectionKindPreparationLocator={route,ownerAccountId,collectionId,preparationId}`. `CollectionKindWorkDefinition={releaseDigest,audience,sourceIdentity,observation,identityObservation,repairReceipt,custody}`. BOTH `admitCollectionKindPreparationStep(tx,locator)` and `readCollectionKindWorkDefinition(tx,locator)` throw `dependency_unavailable`. These are declarations, not working admission. |
+| Search, [scope-work-context.ts][context], lines 31–112, 125–131                                           | Distinct `CollectionKindPreparationWorkContext={kind:'collection-kind-preparation',tx,locator}`. `readCollectionKindPreparationWorkDefinition` checks live Core work-step/pool/partition/owner/deadline, calls ORIGINAL Library admission/getter, validates their entire result, then `admitScopeWork` returns `commandTime(tx)`. It supplies technical work input, not permission.                         |
+| Library, [collection-source-work-native.ts][sourcework], lines 53–145                                     | `readCollectionSourceWorkState` rereads admission and local metadata, canonical scope/head/generation, identity digest and exact Source basis. Kind rejects curated input here; public output is explicitly unsupported here. Do not substitute Members or a public catalogue capture.                                                                                                                      |
+| Accounts, [request/access.ts][access], lines 135–239, 272–307                                             | `PrepareReadDecisionsInput.actor`, `accessCheck(access,actor,action,resource,context)` and native prepared-check factory all require Actor. `PreparedAccessCheckInvocation={client,time,work}` accounts for the SAME prepared invocation; it cannot change its actor binding.                                                                                                                               |
+| Accounts, [access/permission.ts][permission], lines 140–205, 231–378, 872 onward                          | Actual implementation of preparation, decision and prepared-work binding. `prepared`/`readEvidence` are process-local WeakMaps; copied/serialized values are not proof. `prepareReadDecisions` requires SAME native T when metered. The contract's `access/decisions.ts` does not exist at this revision; implementation is here, not a hidden overload.                                                    |
+| Accounts, [access/eligibility.ts][eligibility]                                                            | Prepare/verify contexts both require Actor. Capability/evidence registries bind action/resource/actor/deadline. Verification runs at the formula's T; missing required disclosure must fail the whole check, not merely disable the public floor.                                                                                                                                                           |
+| Semantic, [subject.ts][subject], `readItemTypes`, lines 863–867; `read-item-types.sql`                    | Structural visible-row projection, <=256 IDs; no Access or WorkReceipt. SQL also reads the account-agent link. It is not a subject Type grant or the proposed narrow evidence producer.                                                                                                                                                                                                                     |
+| Semantic, [summaries.ts][summaries], lines 93–148; [list-presentation.ts][presentation], lines 352 onward | Summaries use actual Actor/current `subject:read` plus eligibility, then hydrate labels/images/editions. List facts use actual Actor, original/terminal reads, identities, provenance, Accounts and tuple fences, with released homes and final comparisons. Neither exports admitted Kind Type evidence or a Source WorkReceipt.                                                                           |
+| Semantic, [scope-leaf-evidence.ts][leaf], lines 147–165, 451–454                                          | `LeafOptions` has a distinct actorless work union, but its work branch refuses before IO. `LeafNativeWork` in `scope-leaf-selection.ts` has real finite accounting; its existence does not implement the missing work audience.                                                                                                                                                                             |
 
 `collection-kind.ts:createCollectionKindReads` performs audience selection, one exact observation lookup,
 completeness/source-generation checks, then `native.revalidate({actor,...})` before returning the winner.
@@ -85,7 +85,7 @@ They require successful supported completion and preservation of refusals; neith
 
 No TypeScript import cycle inherently requires completed Kind evidence before admission. A native implementation
 would create a cycle if Library admits only a **completed Type observation**, while Semantic first needs that
-admission to create Type evidence. Admit the immutable committed *prepare/repair intent and exact Source custody*
+admission to create Type evidence. Admit the immutable committed _prepare/repair intent and exact Source custody_
 before Type production; completion/adoption is a later state. Never admit a missing Source capture to break it.
 The repair receipt in the definition must remain the actual identity repair receipt, not a fabricated Type receipt.
 
@@ -104,8 +104,10 @@ Do not add any field to the existing WorkDefinition as a guessed structural subs
 ```ts
 // Library: collection-kind-work-admission.ts; same native preparation namespace.
 type KindTypePageRef = Readonly<{
-  kind: 'collection-kind-type-page'; version: 1;
-  locator: CollectionKindPreparationLocator; pageId: string;
+  kind: 'collection-kind-type-page';
+  version: 1;
+  locator: CollectionKindPreparationLocator;
+  pageId: string;
 }>;
 // Accounts: access/permission.ts; private native registry/retained-record brand.
 declare const kindAudienceEvidence: unique symbol;
@@ -113,22 +115,28 @@ type KindAudienceEvidence = Readonly<{ [kindAudienceEvidence]: true }>;
 // Semantic: scope-leaf-selection.ts; the row is internal, not a response/debug DTO.
 type KindTypeDisposition =
   | Readonly<{ original: string; terminal: string; state: 'vote'; typeId: string }>
-  | Readonly<{ original: string; terminal: string | null;
-      state: 'excluded' | 'duplicate' }>;
+  | Readonly<{ original: string; terminal: string | null; state: 'excluded' | 'duplicate' }>;
 type KindTypePageResult =
-  | Readonly<{ status: 'current'; page: KindTypePageRef;
-      rows: readonly KindTypeDisposition[]; work: WorkReceipt }>
+  | Readonly<{ status: 'current'; page: KindTypePageRef; rows: readonly KindTypeDisposition[]; work: WorkReceipt }>
   | Readonly<{ status: 'unavailable'; work: WorkReceipt }>;
 // Semantic: scope-leaf-evidence.ts; consumes original native selection plans.
-declare function prepareCollectionKindTypeEvidence(input: Readonly<{
-  actor: Actor; work: CollectionKindPreparationWorkContext;
-  allowance: WorkAllowance; deadline: number;
-}>): Promise<KindTypePageResult>;
+declare function prepareCollectionKindTypeEvidence(
+  input: Readonly<{
+    actor: Actor;
+    work: CollectionKindPreparationWorkContext;
+    allowance: WorkAllowance;
+    deadline: number;
+  }>,
+): Promise<KindTypePageResult>;
 // Library: collection-kind-preparation.ts; source-local consumption only.
-declare function readCollectionKindTypeEvidence(input: Readonly<{
-  work: CollectionKindPreparationWorkContext; page: KindTypePageRef;
-  allowance: WorkAllowance; deadline: number;
-}>): Promise<KindTypePageResult>;
+declare function readCollectionKindTypeEvidence(
+  input: Readonly<{
+    work: CollectionKindPreparationWorkContext;
+    page: KindTypePageRef;
+    allowance: WorkAllowance;
+    deadline: number;
+  }>,
+): Promise<KindTypePageResult>;
 ```
 
 `work` selects the attempt; its native `commandTime(work.tx)` supplies T, never an additional caller time.
@@ -138,14 +146,14 @@ using original native formula/eligibility preparation and actual-work declaratio
 It must expose bounded producer/verifier hooks to Semantic, **not** a public `allow` flag or stored client principal.
 This brand is a required new contract; no current Accounts function can manufacture the proposed retained evidence.
 
-| Field or evidence | Original owner, actual provenance and verification point |
-| --- | --- |
-| `locator`, `pageId`, version/tag | Library creates under the committed Kind preparation, binds one immutable Source capture, release, audience namespace and original input interval. Reread native row plus committed receipt; strings/JSON do not establish provenance. |
-| Source binding | Reuse the exact definition's `sourceIdentity`, `observation`, `custody`, `identityObservation`, `repairReceipt`, `releaseDigest`; verify current native scope/head/generation/hold and owner epoch on every admitted use. Preserve private_builtin versus output versus curated authority distinctions. |
-| `KindAudienceEvidence` | Accounts owns origin authentication provenance, exact request-to-audience binding, formula/policy version, native account/operator/delegation/membership/client-scope/grant/denial observations, temporal validity and currentness verification. AuthnEpoch in Actor is not the whole authentication proof; Actor contains no bearer-expiry field. Require the native producer's lifetime, never invent one from this struct. |
-| `original`, `terminal`, `state`, `typeId` | Semantic owns independently anchored original and terminal selection, identity version/mapping, visibility/security/release/revision, required disclosure and exact provenance tuple observations. Persist denied/absent/duplicate dispositions without disclosing their Type. Only eligible terminal contributes its exact Type once. |
-| Completeness/currentness | Library owns sealed raw interval/EOF and progress/CAS. Semantic owns original/terminal positive AND negative dependency coverage. Accounts owns permission/time dependencies. Type values alone and existing identity observations are insufficient. |
-| `work` | Existing native Source/Access producers alone return actual receipts. Library translates through its existing ledger. The SAME reservation includes request evidence production, rejected originals, duplicate/alias/lookahead work, verification, final local adoption and cleanup. |
+| Field or evidence                         | Original owner, actual provenance and verification point                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `locator`, `pageId`, version/tag          | Library creates under the committed Kind preparation, binds one immutable Source capture, release, audience namespace and original input interval. Reread native row plus committed receipt; strings/JSON do not establish provenance.                                                                                                                                                                                        |
+| Source binding                            | Reuse the exact definition's `sourceIdentity`, `observation`, `custody`, `identityObservation`, `repairReceipt`, `releaseDigest`; verify current native scope/head/generation/hold and owner epoch on every admitted use. Preserve private_builtin versus output versus curated authority distinctions.                                                                                                                       |
+| `KindAudienceEvidence`                    | Accounts owns origin authentication provenance, exact request-to-audience binding, formula/policy version, native account/operator/delegation/membership/client-scope/grant/denial observations, temporal validity and currentness verification. AuthnEpoch in Actor is not the whole authentication proof; Actor contains no bearer-expiry field. Require the native producer's lifetime, never invent one from this struct. |
+| `original`, `terminal`, `state`, `typeId` | Semantic owns independently anchored original and terminal selection, identity version/mapping, visibility/security/release/revision, required disclosure and exact provenance tuple observations. Persist denied/absent/duplicate dispositions without disclosing their Type. Only eligible terminal contributes its exact Type once.                                                                                        |
+| Completeness/currentness                  | Library owns sealed raw interval/EOF and progress/CAS. Semantic owns original/terminal positive AND negative dependency coverage. Accounts owns permission/time dependencies. Type values alone and existing identity observations are insufficient.                                                                                                                                                                          |
+| `work`                                    | Existing native Source/Access producers alone return actual receipts. Library translates through its existing ledger. The SAME reservation includes request evidence production, rejected originals, duplicate/alias/lookahead work, verification, final local adoption and cleanup.                                                                                                                                          |
 
 Produce a disposition for every examined original, including excluded originals and aliases of an already counted
 terminal. Denied original cannot be rescued by readable terminal; denied terminal cannot contribute via readable
@@ -222,17 +230,17 @@ and foreign-currentness contracts above; neither a new brand nor a finite TTL so
 
 ## Adversarial native cases to freeze before implementation
 
-| Change or attack | Required outcome |
-| --- | --- |
-| Revoke, explicit deny/ban, suspension, account terminal T, operator/delegation/membership change | Pause between preparation, Type production, local adoption and getter. Current native Accounts dependencies invalidate/deny before disclosure; old identity/custody success cannot override them. No serialized initiator restoration. |
-| Authn floor, renewed credentials, changed client scopes/client/requestedBy | Fresh actual request binds its own audience; mismatch never selects another namespace. Permission receipt cannot renew authentication or lift a floor. Preserve ordinary public-floor semantics where the actual formula permits them, without a cached-winner fallback. |
-| Type, visibility, disclosure/consent, retraction, merge/repoint, release/profile change | Original AND terminal evidence changes invalidate before count/tie/empty disclosure. Repair restarts or extends exact dependencies; identity equality alone never certifies Type. |
-| Source mutation/generation/incarnation, private/public output, owner epoch/move, tuple fence drift | Reject mixed captures and old receipts. Native Source authority and tuple currentness are independent. Retain activation generation distinctions; no private capture proves public output. |
-| Private owner, anonymous, unrelated reader | Owner working Source requires its own native authority. Anonymous may see only its independently admitted view. Hidden Type cannot affect winning count, lexical tie or apparent emptiness. Do not expose count deltas, excluded identifiers or diagnostics. |
-| Excluded original, readable canonical terminal, many originals sharing terminal | Withheld original stays excluded; negative evidence remains enrolled. Count one eligible canonical terminal once; charge every raw support and duplicate. Newly eligible original invalidates/extends prior coverage. |
-| Missing/legacy/unbranded evidence, zero memberCount, raw EOF | Unavailable; only complete native zero population is vacuous. Do not upgrade an old summary, partial scope or legacy version into current evidence. |
-| Replay, rollback, crash after receipt/page/count/intent, delayed cleanup | Uncommitted native xid cannot prove success. Existing generation/version CAS prevents double counting; progress/count/intent commit together. Retire only exact old hold after replacement commit; rollback leaves no adopted evidence. Closed tx/T and a receipt from another reservation fail. |
-| Foreign mutation after last reread; expiry during local wait | Writer fence/currentness validation must reject it before adoption/disclosure. A successful test without this interleaving would not prove the protocol. Unknown coverage remains unavailable, not permanently accepted pending. |
+| Change or attack                                                                                   | Required outcome                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Revoke, explicit deny/ban, suspension, account terminal T, operator/delegation/membership change   | Pause between preparation, Type production, local adoption and getter. Current native Accounts dependencies invalidate/deny before disclosure; old identity/custody success cannot override them. No serialized initiator restoration.                                                           |
+| Authn floor, renewed credentials, changed client scopes/client/requestedBy                         | Fresh actual request binds its own audience; mismatch never selects another namespace. Permission receipt cannot renew authentication or lift a floor. Preserve ordinary public-floor semantics where the actual formula permits them, without a cached-winner fallback.                         |
+| Type, visibility, disclosure/consent, retraction, merge/repoint, release/profile change            | Original AND terminal evidence changes invalidate before count/tie/empty disclosure. Repair restarts or extends exact dependencies; identity equality alone never certifies Type.                                                                                                                |
+| Source mutation/generation/incarnation, private/public output, owner epoch/move, tuple fence drift | Reject mixed captures and old receipts. Native Source authority and tuple currentness are independent. Retain activation generation distinctions; no private capture proves public output.                                                                                                       |
+| Private owner, anonymous, unrelated reader                                                         | Owner working Source requires its own native authority. Anonymous may see only its independently admitted view. Hidden Type cannot affect winning count, lexical tie or apparent emptiness. Do not expose count deltas, excluded identifiers or diagnostics.                                     |
+| Excluded original, readable canonical terminal, many originals sharing terminal                    | Withheld original stays excluded; negative evidence remains enrolled. Count one eligible canonical terminal once; charge every raw support and duplicate. Newly eligible original invalidates/extends prior coverage.                                                                            |
+| Missing/legacy/unbranded evidence, zero memberCount, raw EOF                                       | Unavailable; only complete native zero population is vacuous. Do not upgrade an old summary, partial scope or legacy version into current evidence.                                                                                                                                              |
+| Replay, rollback, crash after receipt/page/count/intent, delayed cleanup                           | Uncommitted native xid cannot prove success. Existing generation/version CAS prevents double counting; progress/count/intent commit together. Retire only exact old hold after replacement commit; rollback leaves no adopted evidence. Closed tx/T and a receipt from another reservation fail. |
+| Foreign mutation after last reread; expiry during local wait                                       | Writer fence/currentness validation must reject it before adoption/disclosure. A successful test without this interleaving would not prove the protocol. Unknown coverage remains unavailable, not permanently accepted pending.                                                                 |
 
 ## Indispensable owner changes and source patterns
 
