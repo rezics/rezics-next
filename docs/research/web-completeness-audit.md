@@ -200,7 +200,10 @@ It is reference evidence of the reported failure. The enlarged current public
 `shots/patterns-library-collection-filters--reference--1280.png` independently reproduces it: the white surface
 ends near x160, while input fields extend to approximately x536. Concept-selected, word-range-applied,
 combined-filters, no-matches and preparing desktop states also visibly share the containment defect.
-Current dev source contains an exact structural explanation: `packages/ui/src/components/menu.tsx` sets custom
+The `patterns-collection-editor--dynamic-rule` pair exposes the same seam in another consumer: desktop fields
+extend beyond the tiny surface; phone keeps a narrow popup, compressing numeric fields to roughly 35 pixels and
+wrapping Apply/Clear labels. This differs from the contained phone Library filter Pattern and belongs in the
+broken-layout count at both widths. Current dev source contains an exact structural explanation: `packages/ui/src/components/menu.tsx` sets custom
 content width to `Math.max(triggerRect.width, 128)`, then uses that number as the fixed portal's inline width.
 `apps/web/src/library/collection-filters.tsx` independently asks its inner form for approximately 32rem on desktop.
 The outer surface and inner form therefore disagree about the width they own. The shadcn menu's anchor-width rule
