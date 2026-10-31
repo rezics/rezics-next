@@ -92,7 +92,7 @@ export async function readNativeKindTypeAnchor(
   deadline: number,
 ): Promise<NativeKindTypeAnchor> {
   const lockInput = { route: input.route, subject_id: input.subjectId };
-  const lockValues = kindTypeLock.params.map((name) => lockInput[name]);
+  const lockValues = kindTypeLock.params.map((name) => lockInput[name as keyof typeof lockInput]);
   const lockBytes = sourceBytes(lockValues);
   const lockReservation = work.reserve({
     candidateKeys: 1,
@@ -125,7 +125,7 @@ export async function readNativeKindTypeAnchor(
     include_type: input.includeType,
     max_type_bytes: KIND_TYPE_MAX_BYTES,
   };
-  const values = kindTypeAnchor.params.map((name) => parameters[name]);
+  const values = kindTypeAnchor.params.map((name) => parameters[name as keyof typeof parameters]);
   const inputBytes = sourceBytes(values);
   const reservation = work.reserve(kindTypeAnchorFootprint(inputBytes));
   reservation.dispatch();

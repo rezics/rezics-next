@@ -7,18 +7,19 @@ SELECT wanted.subject_id::text AS subject_id,
        COALESCE(f.version, 0)::text AS writer_version,
        s.visibility, s.security_revision::text AS security_revision,
        s.current_release,
-       CASE WHEN :include_type::boolean AND s.visibility = 'visible'
-                  AND octet_length(s.type) <= :max_type_bytes::integer
+       CASE WHEN wanted.include_type AND s.visibility = 'visible'
+                  AND octet_length(s.type) <= wanted.max_type_bytes
             THEN s.type END AS type,
-       CASE WHEN :include_type::boolean AND s.visibility = 'visible'
-            THEN octet_length(s.type) > :max_type_bytes::integer ELSE false END AS type_oversized,
+       CASE WHEN wanted.include_type AND s.visibility = 'visible'
+            THEN octet_length(s.type) > wanted.max_type_bytes ELSE false END AS type_oversized,
        r.revision, r.recorded_transaction_id::text AS revision_transaction,
        rb.epoch AS revision_epoch, rb.position::text AS revision_position,
        d.target::text AS redirect, d.sequence AS redirect_sequence,
        d.recorded_transaction_id::text AS redirect_transaction,
        db.epoch AS redirect_epoch, db.position::text AS redirect_position,
        agent.account_id::text AS account_id
-FROM (SELECT :route::integer AS route, :subject_id::uuid AS subject_id) wanted
+FROM (SELECT :route::integer AS route, :subject_id::uuid AS subject_id,
+             :include_type::boolean AS include_type, :max_type_bytes::integer AS max_type_bytes) wanted
 LEFT JOIN semantic.subject s
   ON s.route = wanted.route AND s.subject_id = wanted.subject_id
 LEFT JOIN semantic.kind_type_anchor_fence f
