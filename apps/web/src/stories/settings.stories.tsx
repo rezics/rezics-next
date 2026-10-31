@@ -64,15 +64,17 @@ async function settingsReady(context: { canvasElement: HTMLElement }, expectVeri
   await expect(notificationSwitches).toHaveLength(notifications.length);
   for (const [index, [kind, checked]] of notifications.entries()) {
     const control = await notificationView.findByRole('switch', { name: notificationName(kind) });
-    await expect((control as HTMLInputElement).checked).toBe(checked);
+    if (checked) await expect(control).toBeChecked();
+    else await expect(control).not.toBeChecked();
     await expect(notificationSwitches[index]).toHaveAccessibleName(notificationName(kind));
   }
   await notificationView.findByText(m.settings_notifications_mandatory());
   await view.findByRole('button', { name: m.account_sign_out() });
   await view.findByRole('heading', { level: 2, name: m.settings_privacy_heading() });
-  await view.findByRole('link', { name: 'Books to revisit' });
+  const collectionRow = (await view.findByRole('link', { name: 'Books to revisit' })).closest('li');
+  if (!collectionRow) throw new Error('Collection row missing');
   await view.findByRole('link', { name: /unusually long Collection title/i });
-  await view.findByRole('combobox', { name: m.settings_privacy_visibility_label() });
+  await within(collectionRow).findByRole('combobox', { name: m.settings_privacy_visibility_label() });
   await view.findByRole('heading', { level: 2, name: m.settings_profile_heading() });
   await view.findByRole('textbox', { name: m.settings_profile_display_name() });
   await view.findByRole('textbox', { name: m.settings_profile_biography() });
