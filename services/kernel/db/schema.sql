@@ -2151,6 +2151,13 @@ CREATE CONSTRAINT TRIGGER agent_identity_work_source_native AFTER INSERT ON core
 
 
 --
+-- Name: partition context_directory_home_change; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER context_directory_home_change AFTER UPDATE OF epoch, write_state ON core.partition FOR EACH ROW EXECUTE FUNCTION semantic.context_directory_invalidate_home();
+
+
+--
 -- Name: partition follow_count_source_topology; Type: TRIGGER; Schema: core; Owner: -
 --
 

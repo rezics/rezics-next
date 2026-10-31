@@ -2380,6 +2380,13 @@ CREATE TRIGGER committed_continuation_immutable BEFORE UPDATE ON access.committe
 
 
 --
+-- Name: resource_role_grant context_directory_owner_dirty; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER context_directory_owner_dirty AFTER INSERT OR DELETE OR UPDATE ON access.resource_role_grant FOR EACH ROW EXECUTE FUNCTION semantic.context_directory_owner_dirty();
+
+
+--
 -- Name: erasure_acknowledgement erasure_acknowledgement_guard; Type: TRIGGER; Schema: access; Owner: -
 --
 
