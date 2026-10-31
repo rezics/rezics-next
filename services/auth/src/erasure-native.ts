@@ -4,12 +4,17 @@ import type { AuthErasureBarrier, AuthErasureSource } from '@rezics/auth-contrac
 import {
   NATIVE_PHASE_VERSION,
   nativePhases,
-  nativePhaseExtensions,
-  nativeV1ClientPhases,
+  NATIVE_V1_END,
+  nativeClientPhases,
+  NATIVE_CLIENT_CONSENT_PHASE,
+  NATIVE_CLIENT_PHASE_END,
+  NATIVE_PHASE_END,
   nativeV1RequestRoles,
   requireNativePhaseVersion,
   upgradeNativeCursor,
 } from './erasure-role-upgrade.ts';
+import { NATIVE_CREATION_PARTY_PRODUCERS } from './creation-party-context.ts';
+import { nativeCreationCoverageComplete, nativeCreationRolesAbsent } from './erasure-coverage.ts';
 import { requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
 import { recoveryCopyRoles, recoveryCopyPendingCode, type RecoveryCopyPending } from './recovery-copy-source.ts';
 import { nativeRoleStores, nativeRoleCoverageComplete, reconcileNativeRoleCoveragePage } from './erasure-coverage.ts';
@@ -184,7 +189,15 @@ export const nativeErasureStores: readonly Store[] = [
   {
     table: 'auth_provisioning_receipt',
     key: 'idempotency_key',
-    roles: ['account_id', 'erasure_creator_id', 'erasure_operator_id', 'erasure_delegate_id', 'erasure_initiator_id'],
+    roles: [
+      'account_id',
+      'erasure_creator_id',
+      'erasure_operator_id',
+      'erasure_delegate_id',
+      'erasure_initiator_id',
+      ...NATIVE_CREATION_PARTY_PRODUCERS[1].accountPhases.map((phase) => phase.role),
+    ],
+    client: 'erasure_client_id',
   },
   {
     table: 'account',
@@ -210,7 +223,15 @@ export const nativeErasureStores: readonly Store[] = [
   {
     table: 'auth_registration_stage',
     key: 'registration_id',
-    roles: ['account_id', 'erasure_creator_id', 'erasure_operator_id', 'erasure_delegate_id', 'erasure_initiator_id'],
+    roles: [
+      'account_id',
+      'erasure_creator_id',
+      'erasure_operator_id',
+      'erasure_delegate_id',
+      'erasure_initiator_id',
+      ...NATIVE_CREATION_PARTY_PRODUCERS[0].accountPhases.map((phase) => phase.role),
+    ],
+    client: 'erasure_client_id',
   },
   {
     table: 'auth_client_reduction_progress',
@@ -236,7 +257,12 @@ export const nativeErasureStores: readonly Store[] = [
     roles: ['erasure_client_owner_id', 'erasure_source_client_owner_id'],
     client: 'clientId',
   },
-  { table: 'auth_workflow_request', key: 'workflow_id', roles: [], client: 'erasure_client_id' },
+  {
+    table: 'auth_workflow_request',
+    key: 'workflow_id',
+    roles: ['erasure_actor_id', 'erasure_principal_id'],
+    client: 'erasure_client_id',
+  },
   { table: 'auth_consent', key: 'id', roles: ['erasure_client_owner_id', 'erasure_source_client_owner_id'] },
 ];
 
@@ -338,7 +364,7 @@ export async function startNativeErasure(
     await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-erasure:${accountId}`]);
     const row = (
       await connection.query<{ id: string }>(
-        `INSERT INTO auth_erasure (account_id,barrier,version,applicable,kernel_version,kernel_at,native_phase_version,native_role_version) VALUES ($1,$2,$3,${initialApplicability},$4,$5,2,
+        `INSERT INTO auth_erasure (account_id,barrier,version,applicable,kernel_version,kernel_at,native_phase_version,native_role_version) VALUES ($1,$2,$3,${initialApplicability},$4,$5,${NATIVE_PHASE_VERSION},
           CASE WHEN EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND armed AND store_index=${nativeRoleStores.length}) THEN 1 ELSE 0 END)
        ON CONFLICT (account_id) DO UPDATE SET account_id=EXCLUDED.account_id RETURNING id`,
         [accountId, barrier, ERASURE_VERSION, identity?.version ?? null, identity?.at ?? null],
@@ -412,12 +438,9 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
       }
     }
     if (store.table === 'auth_workflow_request') {
-      const held = await connection.query(
-        'SELECT 1 FROM auth_workflow_request WHERE workflow_id=$1 AND (erasure_stage_id IS NOT NULL OR terminal_at IS NULL)',
-        [key],
-      );
-      if (held.rowCount && !(await nativeRequestTerminal(connection, key)))
-        return { after, keys, blocked: 'native-request' };
+      // A historical unknown row may be disposed of as a whole only after its
+      // actual native reader retires. terminal_at alone is not that witness.
+      if (!(await nativeRequestTerminal(connection, key))) return { after, keys, blocked: 'native-request' };
     }
     if (store.table === 'auth_client_reduction_progress') {
       const held = await connection.query(
@@ -506,10 +529,35 @@ export async function nativeErasurePage(
     const row = (await connection.query<Obligation>('SELECT * FROM auth_erasure WHERE id=$1 FOR UPDATE', [id])).rows[0];
     if (!row) throw new Error('Auth erasure obligation missing');
     const upgraded = upgradeNativeCursor(row);
+    const oldPlaceholder = row.native_phase_version === 2 && row.phase >= 88;
+    const oldEnd = row.native_phase_version === 1 && row.phase === NATIVE_V1_END;
+    // The identity adapter retains saved v1 evidence. An old EOF boundary is
+    // not a seek into the first new role; preserve it in the immutable snapshot.
+    if (oldEnd) upgraded.after_key = '';
+    if (
+      oldPlaceholder &&
+      row.phase >= 89 &&
+      (await nativeCreationCoverageComplete(connection)) &&
+      (await nativeCreationRolesAbsent(connection, row.account_id))
+    ) {
+      upgraded.phase =
+        NATIVE_V1_END +
+        NATIVE_CREATION_PARTY_PRODUCERS.reduce((count, producer) => count + producer.accountPhases.length, 0);
+    }
     if (row.native_phase_version !== NATIVE_PHASE_VERSION) {
-      // The identity map preserves every finished phase, raw boundary and tail.
-      await connection.query('UPDATE auth_erasure SET native_phase_version=2,revision=revision+1 WHERE id=$1', [id]);
-      row.native_phase_version = upgraded.native_phase_version;
+      // Retain the original cursor once, before translating an unavailable v2
+      // slot. T, applicability and consent evidence are never part of this write.
+      await connection.query(
+        `UPDATE auth_erasure SET native_phase_upgrade=COALESCE(native_phase_upgrade,
+          jsonb_build_object('native_phase_version',native_phase_version,'phase',phase,
+            'client_phase',client_phase,'after_key',after_key,'client_id',client_id)),
+          native_phase_version=$2,phase=$3,after_key=$4,native_completed_at=NULL,revision=revision+1 WHERE id=$1`,
+        [id, upgraded.native_phase_version, upgraded.phase, upgraded.after_key],
+      );
+      Object.assign(row, upgraded);
+      // Reserve this page for the bounded independent native coverage probes.
+      // No consumer join or role drain shares their examined-key allowance.
+      if (oldPlaceholder || oldEnd) return { id, state: 'more' as const, code: 'native-phase-upgrade' };
     }
     if (restoreGeneration) {
       const replay = (
@@ -605,7 +653,7 @@ export async function nativeErasurePage(
         return answer('more', 'client');
       }
       await requireErasureCursorVersion(connection, undefined, row.client_id);
-      const clientPhase = nativeV1ClientPhases[row.client_phase];
+      const clientPhase = nativeClientPhases[row.client_phase];
       const store = clientPhase && {
         ...nativeErasureStores.find((store) => store.table === clientPhase.table)!,
         client: clientPhase.role,
@@ -620,13 +668,18 @@ export async function nativeErasurePage(
         });
         return answer(page.blocked ? 'pending' : 'more', page.blocked ?? 'client');
       }
+      if (row.client_phase !== NATIVE_CLIENT_CONSENT_PHASE && row.client_phase < NATIVE_CLIENT_PHASE_END)
+        throw new Error('Auth native client phase cursor unavailable');
       // Client consent is indexed by its independent ordinal after deployed v2.
-      const consents = (
-        await connection.query<{ traversal_ordinal: string }>(
-          'SELECT traversal_ordinal FROM auth_consent WHERE client_id=$1 ORDER BY traversal_ordinal LIMIT $2 FOR UPDATE',
-          [row.client_id, Math.floor((ERASURE_PAGE_SIZE - 10) / 2)],
-        )
-      ).rows;
+      const consents =
+        row.client_phase === NATIVE_CLIENT_CONSENT_PHASE
+          ? (
+              await connection.query<{ traversal_ordinal: string }>(
+                'SELECT traversal_ordinal FROM auth_consent WHERE client_id=$1 ORDER BY traversal_ordinal LIMIT $2 FOR UPDATE',
+                [row.client_id, Math.floor((ERASURE_PAGE_SIZE - 10) / 2)],
+              )
+            ).rows
+          : [];
       if (consents.length) {
         for (const consent of consents)
           await connection.query('DELETE FROM auth_consent WHERE client_id=$1 AND traversal_ordinal=$2', [
@@ -636,10 +689,13 @@ export async function nativeErasurePage(
         await checkpoint(connection, row, {});
         return answer('more', 'client-consent');
       }
-      const unavailable = nativePhaseExtensions.find((phase) => phase.kind === 'unavailable');
-      if (unavailable?.kind === 'unavailable') {
-        await checkpoint(connection, row, { code: unavailable.code });
-        return answer('pending', unavailable.code);
+      if (row.client_phase === NATIVE_CLIENT_CONSENT_PHASE) {
+        await checkpoint(connection, row, { clientPhase: row.client_phase + 1 });
+        return answer('more', 'client');
+      }
+      if (!(await nativeCreationCoverageComplete(connection))) {
+        await checkpoint(connection, row, { code: 'native-creation-roles-unavailable' });
+        return answer('pending', 'native-creation-roles-unavailable');
       }
       // Every native client child has been drained. The guard checks actual stores,
       // including rows predating typed protocol attribution, before the FK action.
@@ -654,6 +710,17 @@ export async function nativeErasurePage(
       const page = await drainStore(connection, store, phase.role, row.account_id, row.after_key);
       held = page.held;
       if (page.keys) await connection.query('UPDATE auth_erasure SET applicable=true WHERE id=$1', [id]);
+      if (
+        row.phase === NATIVE_V1_END &&
+        !page.keys &&
+        !page.blocked &&
+        !(await nativeCreationCoverageComplete(connection))
+      ) {
+        if (await nativeCreationRolesAbsent(connection, row.account_id)) {
+          await checkpoint(connection, row, { code: 'native-creation-roles-unavailable' });
+          return answer('pending', 'native-creation-roles-unavailable');
+        }
+      }
       await checkpoint(connection, row, {
         phase: row.phase + (page.keys || page.blocked ? 0 : 1),
         after: page.keys || page.blocked ? page.after : '',
@@ -827,7 +894,7 @@ export async function redriveNativeErasure(pool: Pool, runtime?: NativeConsumerR
   if (coverage) return coverage;
   const next = (
     await pool.query<{ id: string }>(
-      `SELECT id FROM auth_erasure WHERE native_completed_at IS NULL OR native_role_version=0 OR native_phase_version<2 OR phase<90
+      `SELECT id FROM auth_erasure WHERE native_completed_at IS NULL OR native_role_version=0 OR native_phase_version<${NATIVE_PHASE_VERSION} OR phase<${NATIVE_PHASE_END}
      ORDER BY revision,id LIMIT 1`,
     )
   ).rows[0];

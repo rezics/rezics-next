@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
-import { nativePhaseExtensions } from './erasure-role-upgrade.ts';
+import { NATIVE_CREATION_PARTY_PRODUCERS } from './creation-party-context.ts';
+import { requireNativePhaseVersion } from './erasure-role-upgrade.ts';
 import { copyTransaction } from './erasure-copy.ts';
 
 export const NATIVE_ROLE_VERSION = 1;
@@ -102,7 +103,7 @@ export function installNativeRoleProducer(pool: Pool): void {
     const release = client.release.bind(client);
     try {
       await client.query(
-        "SELECT set_config('auth.native_role_producer','1',false),set_config('auth.native_phase_producer','2',false)",
+        "SELECT set_config('auth.native_role_producer','1',false),set_config('auth.native_phase_producer','3',false)",
       );
     } catch (error) {
       release(error as Error);
@@ -142,6 +143,8 @@ export function installNativeRoleProducer(pool: Pool): void {
  * never follows from a momentary empty-table probe or an ordinal cutover. */
 export async function installNativeRoleCoverage(pool: Pool): Promise<void> {
   await copyTransaction(pool, async (client) => {
+    await requireNativePhaseVersion(client);
+    await client.query("SELECT set_config('auth.native_phase_producer','3',true)");
     // Recovery holds this row before touching a native store. Take it first on
     // restart too, so a concurrent deployment page cannot invert the lock order.
     const deployment = await client.query(
@@ -172,7 +175,7 @@ export async function installNativeRoleCoverage(pool: Pool): Promise<void> {
       await client.query('UPDATE auth_native_role_deployment SET store_index=$1 WHERE singleton', [
         nativeRoleStores.length,
       ]);
-      await client.query(`UPDATE auth_copy_coverage SET native_covered=${nativePhaseExtensions.some((phase) => phase.kind === 'unavailable') ? 'false' : 'true'} AND NOT EXISTS(
+      await client.query(`UPDATE auth_copy_coverage SET native_covered=true AND NOT EXISTS(
         SELECT 1 FROM auth_native_role_unknown LIMIT 1) WHERE singleton AND version=1`);
     }
   });
@@ -183,6 +186,8 @@ export async function installNativeRoleCoverage(pool: Pool): Promise<void> {
  * subsequently removes a historical row; expiry is not recovered custody. */
 export async function reconcileNativeRoleCoveragePage(pool: Pool): Promise<number> {
   return copyTransaction(pool, async (client) => {
+    await requireNativePhaseVersion(client);
+    await client.query("SELECT set_config('auth.native_phase_producer','3',true)");
     const state = (
       await client.query<{ store_index: number; armed: boolean }>(
         'SELECT store_index,armed FROM auth_native_role_deployment WHERE singleton AND version=1 FOR UPDATE',
@@ -207,7 +212,7 @@ export async function reconcileNativeRoleCoveragePage(pool: Pool): Promise<numbe
     if (!rows.length) {
       await client.query('UPDATE auth_native_role_deployment SET store_index=store_index+1 WHERE singleton');
       if (state.store_index + 1 === nativeRoleStores.length)
-        await client.query(`UPDATE auth_copy_coverage SET native_covered=${nativePhaseExtensions.some((phase) => phase.kind === 'unavailable') ? 'false' : 'true'} AND NOT EXISTS(
+        await client.query(`UPDATE auth_copy_coverage SET native_covered=true AND NOT EXISTS(
           SELECT 1 FROM auth_native_role_unknown LIMIT 1) WHERE singleton AND version=1`);
     }
     return rows.length || 1;
@@ -217,9 +222,6 @@ export async function reconcileNativeRoleCoveragePage(pool: Pool): Promise<numbe
 /** Complete deployment coverage is necessary only for a coverage claim. Known
  * role cleanup keeps making progress even when a historical store is unknown. */
 export async function nativeRoleCoverageComplete(client: Pick<PoolClient, 'query'>): Promise<boolean> {
-  // Original deployment reconciliation remains useful, but cannot cover a
-  // producer whose full original party export is absent from this inventory.
-  if (nativePhaseExtensions.some((phase) => phase.kind === 'unavailable')) return false;
   return Boolean(
     (
       await client.query(`SELECT 1 FROM auth_copy_coverage
@@ -237,4 +239,38 @@ export async function nativeRoleDeploymentComplete(client: Pick<PoolClient, 'que
       )
     ).rowCount,
   );
+}
+
+/** Original creation guards record unclassified history and the supported generic
+ * no-stage receipt as sticky unknown custody. Only the drained native deployment
+ * plus those source witnesses can cover this boundary. */
+export async function nativeCreationCoverageComplete(client: Pick<PoolClient, 'query'>): Promise<boolean> {
+  return Boolean(
+    (
+      await client.query(
+        `SELECT 1 FROM auth_native_role_deployment
+    WHERE singleton AND armed AND store_index=$1 AND NOT EXISTS (
+      SELECT 1 FROM auth_native_role_unknown WHERE store IN ('auth_registration_stage','auth_provisioning_receipt'))`,
+        [nativeRoleStores.length],
+      )
+    ).rowCount,
+  );
+}
+
+/** At most twelve leading-role seeks, under the account fence. Used only on
+ * an otherwise empty boundary/upgrade page; never a population or payload scan. */
+export async function nativeCreationRolesAbsent(
+  client: Pick<PoolClient, 'query'>,
+  accountId: string,
+): Promise<boolean> {
+  for (const producer of NATIVE_CREATION_PARTY_PRODUCERS) {
+    for (const phase of producer.accountPhases) {
+      if (
+        (await client.query(`SELECT 1 FROM ${quote(phase.table)} WHERE ${quote(phase.role)}=$1 LIMIT 1`, [accountId]))
+          .rowCount
+      )
+        return false;
+    }
+  }
+  return true;
 }

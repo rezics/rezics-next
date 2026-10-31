@@ -76,6 +76,20 @@ export type RequestParties = {
   request_context_version: number;
 };
 
+/** Literal inventory of the original writer below. Registration is not a
+ * consumer proof. These versions are checked by the database before a fresh
+ * request can commit; old rows are never filled from current relationships. */
+export const NATIVE_REQUEST_PARTY_PRODUCER = {
+  table: 'auth_workflow_request',
+  key: 'workflow_id',
+  versions: { request_party_version: 1, request_context_version: 1, erasure_actor_version: 1 },
+  accountPhases: [
+    { kind: 'request', table: 'auth_workflow_request', role: 'erasure_actor_id' },
+    { kind: 'request', table: 'auth_workflow_request', role: 'erasure_principal_id' },
+  ],
+  clientPhase: { table: 'auth_workflow_request', role: 'erasure_source_client_id' },
+} as const;
+
 // Payload/digest fields are deliberately excluded from scope reads.
 export const REQUEST_PARTY_COLUMNS = `erasure_subject_id,erasure_human_id,erasure_operator_id,
   erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id,

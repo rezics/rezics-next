@@ -986,8 +986,8 @@ handoff together. Any source, fence or SDK failure rolls both back. Workflow IDs
 business digests, operation keys and enqueue input shapes keep their original ABI.
 
 `request_party_version` and `request_context_version` pin this projection. Indexed
-actor, principal and source-client columns add the missing provenance without changing
-the erasure phase inventory. Every original role and version is immutable on replay,
+actor, principal and source-client columns add the missing provenance. The versioned
+native inventory below binds their erasure seeks to the original producer. Every original role and version is immutable on replay,
 even in the creation transaction; current relations never refill a request. Existing
 rows retain version zero and unknown pending provenance. Request scope reads only
 original typed columns. A request locator does not establish SDK copy coverage.
@@ -2380,8 +2380,8 @@ including an in-flight client and raw boundary; old EOF now starts appended
 coverage. Unknown versions, out-of-inventory phases and oversized boundaries
 refuse. `native_phase_version` versions interpretation, not custody evidence.
 
-One ordinary native page upgrades its obligation and checkpoints its actual work
-in the same transaction. No account list or bulk cursor rewrite is needed. The
+One ordinary native page upgrades its obligation and checkpoints its source
+probes or actual work in the same transaction. No account list or bulk cursor rewrite is needed. The
 permanent obligation retains applicability, barrier/T, source handoff, committed
 user deletion and the original consent deadline. A completed old obligation is
 scheduled only for missing inventory; neither its completed phases nor its
@@ -2395,17 +2395,52 @@ An old lease in another pool/process remains refused after activation. Deploymen
 EOF, an empty native table and an older `native_completed_at` cannot supply a
 current native or shared-copy completion proof.
 
-This revision has the original stage/provisioning creator, operator, initiator
-and delegate columns and the original request roles. It has no producer-owned
-full creation/request role exports or migrations. The appended source adapters
-therefore report `native-creation-roles-unavailable` and
-`native-request-roles-unavailable`. They add no proposed party columns, infer no
-parties from current relationships and certify no readiness. Integration must
-bind these closed source adapters to the producers' actual original exports;
-column presence alone cannot open them. Current mapped phases still drain their
-exact native roles, preserving living subjects' credentials on foreign creator
-erasure. Missing full-source custody keeps completion pending. Shared SDK,
-external/provider and Source consumer closure remain independent.
+Native phase inventory 3 preserves all 89 saved v1 identities and the 22 client
+store subphases. Inventory 2 remains separately defined: positions 88/89 were
+unavailable creation/request placeholders and 90 was done. They are never
+interpreted as inventory 3 role seeks. A v2 placeholder or done marker resumes at
+the first missing creation boundary with an empty new raw boundary; its original
+cursor is retained in immutable `auth_erasure.native_phase_upgrade`. A v1 EOF
+also starts its new role at an empty seek boundary while retaining that saved
+EOF evidence; the identity adapter itself preserves the old cursor. Earlier
+positions, raw keys, client boundaries, applicability, barrier, T, user deletion
+and the original consent deadline remain unchanged. Old completion markers cannot
+certify these additional roles.
+
+`NATIVE_CREATION_PARTY_PRODUCERS` in the original `creation-party-context.ts`
+module binds the actual `createStage` projection and its exact provisioning copy.
+Positions 88–93 drain stage actor, human, native opening operator, principal,
+target-client owner and source-client owner; 94–99 drain the corresponding
+receipt roles. These remain distinct from creator, target operator, initiator,
+delegate and subject in the saved inventory. The original version-1 creation
+guard validates source bindings, snapshots owners under client locks and refuses
+historical refill. The generic no-stage provisioning ABI stays version zero and
+records permanent missing-source custody. That original path supplies the
+missing-coverage restart case without manufacturing a source witness.
+
+`NATIVE_REQUEST_PARTY_PRODUCER` in the original `workflow-request-parties.ts`
+writer binds actor/principal at 100/101; done is 102. Consent keeps client
+position 22, request source-client is 23, and stage/receipt target/source-client
+seeks occupy 24–27. All use the existing leading-role indexes and native consumer
+retirement. The empty-client guard checks every added child. Current requests
+carry party/context/actor version 1; the original historical version-zero ABI
+remains pending and invalidates coverage instead of acquiring inferred roles.
+The existing native request terminal reader also recognizes a fully versioned
+non-stage operation only after `finishCopyResult` commits its exact native return
+digest and `completeCopy` consumes that return. A terminal timestamp or SDK status
+alone remains insufficient. Registration still requires its exact activation or
+expiry proof. Producer registration supplies no completion, receiving claim or ACK.
+
+No v2 cursor independently proves the new creation roles drained. Its request or
+done position can reach the first request phase only after the native deployment
+is drained, actual creation guards report no unknown source custody, and twelve
+bounded leading-role seeks prove the account's new creation ranges empty under
+its fence. That upgrade uses a separate ordinary page within the same budget.
+Otherwise it starts the first actual creation phase. Original placeholder raw
+boundaries are never used to seek a new role. Unknown creation custody stays at
+the first missing boundary when no known creation row can advance; known rows
+still use the ordinary native drains. A current fully classified deployment can
+advance normally. Neither old done nor deployment EOF alone certifies it.
 
 Native role seeks project bounded raw locators only, take the same client locks,
 and reserve guard/child/checkpoint work within the 48-key/64-KiB page. Nested

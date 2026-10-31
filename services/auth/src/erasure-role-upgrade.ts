@@ -1,7 +1,9 @@
 import type { PoolClient } from 'pg';
+import { NATIVE_CREATION_PARTY_PRODUCERS } from './creation-party-context.ts';
+import { NATIVE_REQUEST_PARTY_PRODUCER } from './workflow-request-parties.ts';
 
 // Saved numeric identities. Never derive this inventory from a producer's mutable roles.
-export const NATIVE_PHASE_VERSION = 2;
+export const NATIVE_PHASE_VERSION = 3;
 export type NativePhase =
   | { kind: 'clients' | 'assertion' | 'public-key' | 'counter' | 'done' }
   | { kind: 'subject' | 'request'; table: string; role: string }
@@ -133,13 +135,20 @@ export const nativeV1RequestRoles = [
   'erasure_delegate_id',
   'erasure_initiator_id',
 ] as const;
-// These are source boundaries, not guessed party columns. The producer-owned
-// full creation/request exports are absent in this revision. Keep these closed
-// until their original exports/migrations can replace them with literal phases.
-// Column presence, an empty table or deployment EOF cannot establish custody.
-export const nativePhaseExtensions: readonly NativePhase[] = [
+// V2 is a saved inventory in its own right. Its unavailable slots are not
+// raw-key seeks and cannot be reused as the boundaries of a delivered role.
+export const nativeV2Phases: readonly NativePhase[] = [
+  ...nativeV1Phases.slice(0, NATIVE_V1_END),
   { kind: 'unavailable', source: 'creation', code: 'native-creation-roles-unavailable' },
   { kind: 'unavailable', source: 'request', code: 'native-request-roles-unavailable' },
+  { kind: 'done' },
+];
+export const NATIVE_V2_END = 90;
+// Bound to the original native producers, not a descriptor or guessed schema.
+export const nativePhaseExtensions: readonly NativePhase[] = [
+  ...NATIVE_CREATION_PARTY_PRODUCERS[0].accountPhases,
+  ...NATIVE_CREATION_PARTY_PRODUCERS[1].accountPhases,
+  ...NATIVE_REQUEST_PARTY_PRODUCER.accountPhases,
 ];
 export const nativePhases: readonly NativePhase[] = [
   ...nativeV1Phases.slice(0, NATIVE_V1_END),
@@ -147,6 +156,18 @@ export const nativePhases: readonly NativePhase[] = [
   { kind: 'done' },
 ];
 export const NATIVE_PHASE_END = NATIVE_V1_END + nativePhaseExtensions.length;
+// Preserve the old consent position (22), including its pending deadline.
+// Newly delivered client roles start after it, never reinterpret that boundary.
+export const NATIVE_CLIENT_CONSENT_PHASE = 22;
+export const NATIVE_REQUEST_SOURCE_CLIENT_PHASE = 23;
+export const NATIVE_CLIENT_PHASE_END = 28;
+export const nativeClientPhases = [
+  ...nativeV1ClientPhases,
+  null, // Original consent page.
+  NATIVE_REQUEST_PARTY_PRODUCER.clientPhase,
+  ...NATIVE_CREATION_PARTY_PRODUCERS[0].clientPhases,
+  ...NATIVE_CREATION_PARTY_PRODUCERS[1].clientPhases,
+] as const;
 
 export type NativeCursor = {
   native_phase_version: number;
@@ -161,19 +182,32 @@ export type NativeCursor = {
 export function upgradeNativeCursor<T extends NativeCursor>(
   cursor: T,
 ): Omit<T, 'native_phase_version'> & { native_phase_version: typeof NATIVE_PHASE_VERSION } {
-  const end = cursor.native_phase_version === 1 ? NATIVE_V1_END : NATIVE_PHASE_END;
+  const end =
+    cursor.native_phase_version === 1
+      ? NATIVE_V1_END
+      : cursor.native_phase_version === 2
+        ? NATIVE_V2_END
+        : NATIVE_PHASE_END;
+  const clientEnd =
+    cursor.native_phase_version === NATIVE_PHASE_VERSION ? NATIVE_CLIENT_PHASE_END : nativeV1ClientPhases.length;
   if (
-    ![1, NATIVE_PHASE_VERSION].includes(cursor.native_phase_version) ||
+    ![1, 2, NATIVE_PHASE_VERSION].includes(cursor.native_phase_version) ||
     !Number.isInteger(cursor.phase) ||
     cursor.phase < 0 ||
     cursor.phase > end ||
     !Number.isInteger(cursor.client_phase) ||
     cursor.client_phase < 0 ||
-    cursor.client_phase > nativeV1ClientPhases.length ||
+    cursor.client_phase > clientEnd ||
     Buffer.byteLength(cursor.after_key) > 1024 ||
     (cursor.client_id !== null && Buffer.byteLength(cursor.client_id) > 1024)
   )
     throw new Error('Auth native phase cursor unavailable');
+  // No v2 cursor contains independent completion evidence for the delivered
+  // creation roles. Both placeholders and done revisit the first required role. No old done marker
+  // can certify a newly delivered role. Save the immutable old cursor separately
+  // in the transaction that persists this translation.
+  if (cursor.native_phase_version === 2 && cursor.phase >= NATIVE_V1_END)
+    return { ...cursor, phase: NATIVE_V1_END, after_key: '', native_phase_version: NATIVE_PHASE_VERSION };
   return { ...cursor, native_phase_version: NATIVE_PHASE_VERSION };
 }
 
@@ -185,7 +219,7 @@ export async function requireNativePhaseVersion(client: PoolClient): Promise<voi
     [NATIVE_PHASE_VERSION],
   );
   if (!marker.rowCount) throw new Error('Auth native phase deployment unavailable');
-  await client.query("SELECT set_config('auth.native_phase_worker','2',true)");
+  await client.query("SELECT set_config('auth.native_phase_worker','3',true)");
 }
 
 export function nativePhaseComplete(cursor: { native_phase_version: number; phase: number }): boolean {

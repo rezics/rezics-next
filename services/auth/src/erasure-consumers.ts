@@ -323,13 +323,22 @@ export async function continueNativeConsumer(
   }
 }
 
+// Registration retains its exact activation/expiry proof. A current non-stage
+// operation uses the original finishCopyResult/completeCopy native return reader:
+// its committed digest must actually be consumed. terminal_at/SDK status alone
+// and historical missing attribution remain insufficient.
 export async function nativeRequestTerminal(connection: PoolClient, workflowId: string): Promise<boolean> {
   return !!(
     await connection.query(
-      `SELECT 1 FROM auth_workflow_request r
-    JOIN auth_native_consumer_proof p ON p.store='registration' AND p.key=r.erasure_stage_id
-    WHERE r.workflow_id=$1 AND p.binding->>1=r.workflow_id
-      AND p.result->>'outcome' IN ('activated','expired')`,
+      `SELECT 1 FROM auth_workflow_request r WHERE r.workflow_id=$1 AND (
+        EXISTS (SELECT 1 FROM auth_native_consumer_proof p
+          WHERE p.store='registration' AND p.key=r.erasure_stage_id
+            AND p.binding->>1=r.workflow_id AND p.result->>'outcome' IN ('activated','expired'))
+        OR (r.erasure_stage_id IS NULL AND r.terminal_at IS NOT NULL
+          AND r.request_party_version=1 AND r.request_context_version=1 AND r.erasure_actor_version=1
+          AND EXISTS (SELECT 1 FROM auth_copy_work w WHERE w.workflow_id=r.workflow_id
+            AND w.source_key=r.workflow_id AND w.result_digest IS NOT NULL
+            AND w.result_finished_at IS NOT NULL AND w.ready)))`,
       [workflowId],
     )
   ).rowCount;

@@ -239,9 +239,7 @@ END $$;
 -- Name: auth_erasure_client_empty(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.auth_erasure_client_empty() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
+CREATE FUNCTION public.auth_erasure_client_empty() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF EXISTS (SELECT 1 FROM session WHERE "clientId"=OLD.client_id)
     OR EXISTS (SELECT 1 FROM "oauthAccessToken" WHERE "clientId"=OLD.client_id)
@@ -251,7 +249,13 @@ BEGIN
     OR EXISTS (SELECT 1 FROM auth_consent WHERE client_id=OLD.client_id)
     OR EXISTS (SELECT 1 FROM auth_client_coverage WHERE client_id=OLD.client_id)
     OR EXISTS (SELECT 1 FROM auth_client_reduction WHERE client_id=OLD.client_id)
-    OR EXISTS (SELECT 1 FROM auth_client_reduction_progress WHERE client_id=OLD.client_id) THEN
+    OR EXISTS (SELECT 1 FROM auth_client_reduction_progress WHERE client_id=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_client_id=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_source_client_id=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM auth_registration_stage WHERE erasure_client_id=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM auth_registration_stage WHERE erasure_source_client_id=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM auth_provisioning_receipt WHERE erasure_client_id=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM auth_provisioning_receipt WHERE erasure_source_client_id=OLD.client_id) THEN
     RAISE EXCEPTION 'Auth native client children remain' USING ERRCODE='55000';
   END IF;
   RETURN OLD;
@@ -1021,7 +1025,7 @@ CREATE FUNCTION public.auth_native_phase_coverage_guard() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF NEW.native_covered AND current_setting('auth.native_phase_producer',true) IS DISTINCT FROM '2' THEN
+  IF NEW.native_covered AND current_setting('auth.native_phase_producer',true) IS DISTINCT FROM '3' THEN
     RAISE EXCEPTION 'Auth native phase producer version refused' USING ERRCODE='55000';
   END IF;
   RETURN NEW;
@@ -1041,7 +1045,7 @@ BEGIN
          NEW.native_completed_at,NEW.native_role_version) IS DISTINCT FROM
      ROW(OLD.phase,OLD.client_phase,OLD.after_key,OLD.client_id,OLD.native_phase_version,
          OLD.native_completed_at,OLD.native_role_version) THEN
-    IF current_setting('auth.native_phase_worker',true) IS DISTINCT FROM '2' THEN
+    IF current_setting('auth.native_phase_worker',true) IS DISTINCT FROM '3' THEN
       RAISE EXCEPTION 'Auth native phase worker version refused' USING ERRCODE='55000';
     END IF;
   END IF;
@@ -1062,12 +1066,13 @@ CREATE FUNCTION public.auth_native_phase_producer_guard() RETURNS trigger
 BEGIN
   -- This lock crosses processes and survives a pool restart. The old native
   -- role triggers remain responsible for original source custody and history.
-  PERFORM 1 FROM auth_native_phase_deployment WHERE singleton AND version=2 FOR SHARE;
+  PERFORM 1 FROM auth_native_phase_deployment WHERE singleton AND version=3 FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Auth native phase deployment unavailable' USING ERRCODE='55000'; END IF;
   IF NULLIF(current_setting('auth.erasure_obligation',true),'') IS NOT NULL THEN
-    IF current_setting('auth.native_phase_worker',true) IS DISTINCT FROM '2' THEN
+    IF current_setting('auth.native_phase_worker',true) IS DISTINCT FROM '3' THEN
       RAISE EXCEPTION 'Auth native phase worker version refused' USING ERRCODE='55000';
     END IF;
-  ELSIF TG_OP<>'DELETE' AND current_setting('auth.native_phase_producer',true) IS DISTINCT FROM '2'
+  ELSIF TG_OP<>'DELETE' AND current_setting('auth.native_phase_producer',true) IS DISTINCT FROM '3'
     AND current_setting('auth.native_role_reconcile',true) IS DISTINCT FROM '1' THEN
     RAISE EXCEPTION 'Auth native phase producer version refused' USING ERRCODE='55000';
   END IF;
@@ -1618,7 +1623,7 @@ CREATE TABLE public.auth_erasure (
     copies_completed_at timestamp with time zone,
     copies_published_at timestamp with time zone,
     native_role_version smallint DEFAULT 0 NOT NULL,
-    native_phase_version smallint DEFAULT 1 NOT NULL,
+    native_phase_version smallint DEFAULT 3 NOT NULL,
     source_route integer,
     original_native_id text,
     recovery_copy_pending text DEFAULT 'recovery-copy-coverage'::text NOT NULL,
@@ -1628,7 +1633,7 @@ CREATE TABLE public.auth_erasure (
     CONSTRAINT auth_erasure_inventory_coverage_check CHECK ((inventory_coverage = ANY (ARRAY['unknown'::text, 'covered'::text]))),
     CONSTRAINT auth_erasure_kernel_at_check CHECK ((octet_length(kernel_at) <= 64)),
     CONSTRAINT auth_erasure_kernel_identity CHECK ((((kernel_version IS NULL) AND (kernel_at IS NULL)) OR ((kernel_version > 0) AND (kernel_at IS NOT NULL)))),
-    CONSTRAINT auth_erasure_native_phase_version_check CHECK ((native_phase_version = ANY (ARRAY[1, 2]))),
+    CONSTRAINT auth_erasure_native_phase_version_check CHECK ((native_phase_version = ANY (ARRAY[1, 2, 3]))),
     CONSTRAINT auth_erasure_native_role_version_check CHECK ((native_role_version = ANY (ARRAY[0, 1]))),
     CONSTRAINT auth_erasure_original_native_id_check CHECK (((octet_length(original_native_id) >= 1) AND (octet_length(original_native_id) <= 1024))),
     CONSTRAINT auth_erasure_recovery_copy_pending_check CHECK ((recovery_copy_pending = ANY (ARRAY['recovery-copy-custody'::text, 'recovery-copy-coverage'::text]))),
@@ -1723,7 +1728,7 @@ CREATE TABLE public.auth_native_phase_deployment (
     singleton boolean DEFAULT true NOT NULL,
     version smallint NOT NULL,
     CONSTRAINT auth_native_phase_deployment_singleton_check CHECK (singleton),
-    CONSTRAINT auth_native_phase_deployment_version_check CHECK ((version = 2))
+    CONSTRAINT auth_native_phase_deployment_version_check CHECK ((version = 3))
 );
 
 
@@ -2791,7 +2796,7 @@ CREATE INDEX auth_erasure_copy_pending ON public.auth_erasure USING btree (revis
 -- Name: auth_erasure_pending; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX auth_erasure_pending ON public.auth_erasure USING btree (revision, id) WHERE ((native_completed_at IS NULL) OR (native_role_version = 0) OR (native_phase_version < 2) OR (phase < 90));
+CREATE INDEX auth_erasure_pending ON public.auth_erasure USING btree (revision, id) WHERE ((native_completed_at IS NULL) OR (native_role_version = 0) OR (native_phase_version < 3) OR (phase < 102));
 
 
 --
@@ -6631,3 +6636,41 @@ END $$;
 CREATE TRIGGER auth_copy_native_fence_immutable BEFORE UPDATE OR DELETE ON auth_copy_work
   FOR EACH ROW EXECUTE FUNCTION auth_copy_native_fence_immutable();
 
+ALTER TABLE auth_erasure ADD COLUMN native_phase_upgrade jsonb
+  CHECK(octet_length(native_phase_upgrade::text)<=16384);
+CREATE FUNCTION auth_native_phase_upgrade_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.native_phase_upgrade IS NOT NULL AND NEW.native_phase_upgrade IS DISTINCT FROM OLD.native_phase_upgrade THEN
+    RAISE EXCEPTION 'Auth native phase upgrade evidence is immutable' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER auth_native_phase_upgrade_immutable BEFORE UPDATE ON auth_erasure
+  FOR EACH ROW EXECUTE FUNCTION auth_native_phase_upgrade_immutable();
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM auth_workflow_request WHERE request_party_version=0 LIMIT 1) THEN
+    PERFORM auth_native_role_unknown('auth_workflow_request','unsupported-producer-format');
+  END IF;
+END $$;
+
+CREATE FUNCTION auth_native_request_party_version_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  -- The original ABI deliberately retains historical version zero. It is not
+  -- a current producer claim and can never certify native coverage.
+  IF NEW.request_party_version=0 THEN
+    PERFORM auth_native_role_unknown('auth_workflow_request','unsupported-producer-format');
+  ELSIF NEW.request_context_version<>1 OR NEW.erasure_actor_version<>1 THEN
+    RAISE EXCEPTION 'Auth native request party producer version refused' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER zzz_native_request_party_version BEFORE INSERT ON auth_workflow_request
+  FOR EACH ROW EXECUTE FUNCTION auth_native_request_party_version_guard();
+
+
+-- Final forward-inventory pending predicate, after the native role extensions.
+DROP INDEX auth_erasure_pending;
+CREATE INDEX auth_erasure_pending ON auth_erasure(revision,id)
+  WHERE native_completed_at IS NULL OR native_role_version=0 OR native_phase_version<3 OR phase<102;

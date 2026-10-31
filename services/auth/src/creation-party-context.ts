@@ -6,6 +6,45 @@ import type {
 } from '@rezics/auth-contract';
 export type { NativeCreationContext } from '@rezics/auth-contract';
 
+// Literal projection of createStage and its exact provisioning-receipt copy.
+// Versions describe original custody, never consumer retirement or completion.
+export const NATIVE_CREATION_PARTY_PRODUCERS = [
+  {
+    table: 'auth_registration_stage',
+    key: 'registration_id',
+    versions: { creation_context_version: 1, erasure_actor_version: 1 },
+    accountPhases: [
+      { kind: 'subject', table: 'auth_registration_stage', role: 'erasure_actor_id' },
+      { kind: 'subject', table: 'auth_registration_stage', role: 'erasure_human_id' },
+      { kind: 'subject', table: 'auth_registration_stage', role: 'erasure_native_operator_id' },
+      { kind: 'subject', table: 'auth_registration_stage', role: 'erasure_principal_id' },
+      { kind: 'subject', table: 'auth_registration_stage', role: 'erasure_client_owner_id' },
+      { kind: 'subject', table: 'auth_registration_stage', role: 'erasure_source_client_owner_id' },
+    ],
+    clientPhases: [
+      { table: 'auth_registration_stage', role: 'erasure_client_id' },
+      { table: 'auth_registration_stage', role: 'erasure_source_client_id' },
+    ],
+  },
+  {
+    table: 'auth_provisioning_receipt',
+    key: 'idempotency_key',
+    versions: { creation_context_version: 1, erasure_actor_version: 1 },
+    accountPhases: [
+      { kind: 'subject', table: 'auth_provisioning_receipt', role: 'erasure_actor_id' },
+      { kind: 'subject', table: 'auth_provisioning_receipt', role: 'erasure_human_id' },
+      { kind: 'subject', table: 'auth_provisioning_receipt', role: 'erasure_native_operator_id' },
+      { kind: 'subject', table: 'auth_provisioning_receipt', role: 'erasure_principal_id' },
+      { kind: 'subject', table: 'auth_provisioning_receipt', role: 'erasure_client_owner_id' },
+      { kind: 'subject', table: 'auth_provisioning_receipt', role: 'erasure_source_client_owner_id' },
+    ],
+    clientPhases: [
+      { table: 'auth_provisioning_receipt', role: 'erasure_client_id' },
+      { table: 'auth_provisioning_receipt', role: 'erasure_source_client_id' },
+    ],
+  },
+] as const;
+
 export type NativeCreationPort = { readNativeCreationContext?: ReadNativeCreationContext };
 
 export function creationContextUnavailable(
