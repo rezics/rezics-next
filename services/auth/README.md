@@ -390,7 +390,7 @@ Validation touches only the request's scopes, costs O(scopes in the request),
 at most O(mounted actions), and adds no reads. Token scope claims and stored
 consent remain O(mounted actions), which is platform configuration, not user data.
 
-Better Auth 1.8.0-beta.2's installed public `$context.adapter` types support
+Better Auth 1.8.0-beta.3's installed public `$context.adapter` types support
 `create({ forceAllowId: true })` and `transaction()`. Provisioning uses that
 facility with `user.id = account_id`, and credential `accountId = userId`.
 No internal identity mapping is necessary. The tests inspect actual PostgreSQL
@@ -484,7 +484,7 @@ checks. Credential keys never join Auth's public signing JWKS.
 
 ## Passkeys and credential freshness
 
-Better Auth's `@better-auth/passkey` plugin is pinned to `1.8.0-beta.2`, matching
+Better Auth's `@better-auth/passkey` plugin is pinned to `1.8.0-beta.3`, matching
 `better-auth`. It uses RP ID `rezics.com`, RP name `REZICS`, the configured issuer
 as its expected origin, and requires a resident credential and user verification.
 The native `/api/auth/passkey/*` routes remain private. Auth aliases require the
@@ -1849,7 +1849,7 @@ relies on the Access floor rather than on token rows.
 
 ### Refresh families (provider patch)
 
-`patches/@better-auth%2Foauth-provider@1.8.0-beta.2.patch`, registered in the root
+`patches/@better-auth%2Foauth-provider@1.8.0-beta.3.patch`, registered in the root
 `patchedDependencies`, fixes a provider defect: reuse detection did not
 linearize with rotation. A rotation revoked its parent, then inserted the child
 in a separate write. A concurrent replay, even in another process, deleted the

@@ -1,4 +1,4 @@
-Downstream patch for @better-auth/oauth-provider 1.8.0-beta.2.
+Downstream patch for @better-auth/oauth-provider 1.8.0-beta.3.
 
 Defect: refresh-token reuse detection does not linearize with rotation. A
 rotation revokes its parent and then inserts the child in a separate,
@@ -20,81 +20,11 @@ retention jobs.
 Drop this patch once upstream ships equivalent atomic, permanent family
 revocation without history scans. Upstream issue draft and reproduction:
 services/auth/scripts/probe-native-refresh.ts.
-diff --git a/dist/authorize-DXYo-K2n.mjs b/dist/authorize-DXYo-K2n.mjs
-index 28cf3e9439..93f1844340 100644
---- a/dist/authorize-DXYo-K2n.mjs
-+++ b/dist/authorize-DXYo-K2n.mjs
-@@ -3729,28 +3729,7 @@ async function revokeOpaqueAccessToken(ctx, accessToken) {
- 	});
- }
- async function revokeRefreshToken(ctx, refreshToken, clientId) {
--	const { userId } = refreshToken;
--	if (refreshToken.revoked) {
--		await invalidateRefreshFamily(ctx, clientId, userId);
--		return;
--	}
--	const iat = Math.floor(Date.now() / 1e3);
--	if (!await ctx.context.adapter.incrementOne({
--		model: "oauthRefreshToken",
--		where: [{
--			field: "id",
--			value: refreshToken.id
--		}, {
--			field: "revoked",
--			operator: "eq",
--			value: null
--		}],
--		increment: {},
--		set: { revoked: /* @__PURE__ */ new Date(iat * 1e3) }
--	})) {
--		await invalidateRefreshFamily(ctx, clientId, userId);
--		return;
--	}
-+	await invalidateRefreshFamily(ctx, refreshToken.authorizationCodeId);
- 	await ctx.context.adapter.deleteMany({
- 		model: "oauthAccessToken",
- 		where: [{
-@@ -4093,6 +4072,27 @@ const schema = {
- 	*
- 	* Refresh tokens are linked to a session.
- 	*/
-+	oauthRefreshFamily: { fields: {
-+		clientId: {
-+			type: "string",
-+			required: true
-+		},
-+		revoked: {
-+			type: "boolean",
-+			required: true,
-+			defaultValue: false
-+		},
-+		sequence: {
-+			type: "number",
-+			required: true,
-+			defaultValue: 0
-+		},
-+		expiresAt: {
-+			type: "date",
-+			required: true,
-+			index: true
-+		}
-+	} },
- 	oauthRefreshToken: { fields: {
- 		token: {
- 			type: "string",
-diff --git a/dist/introspect-kDLwBDTx.mjs b/dist/introspect-kDLwBDTx.mjs
-index 1398e6d766..c6e7f44b3f 100644
---- a/dist/introspect-kDLwBDTx.mjs
-+++ b/dist/introspect-kDLwBDTx.mjs
-@@ -1,6 +1,7 @@
- import { t as __exportAll } from "./rolldown-runtime-wcPFST8Q.mjs";
- import { B as collectExtensionIdTokenClaims, D as resolveSessionAuthTime, F as validateClientCredentials, G as getExtensionGrantHandler, I as validateClientScopes, J as getSupportedGrantTypes, M as toAudienceClaim, N as toResourceList, O as resolveSubjectIdentifier, V as collectExtensionUserInfoClaims, X as hasUserInfoClaimExtension, a as decryptStoredClientSecret, c as extractClientCredentials, f as getJwtPlugin, h as isPKCERequired, j as storeToken, m as getStoredToken, r as clientAllowsGrant, s as destructureCredentials, u as getClient, x as parseClientMetadata, y as normalizeTimestampValue, z as collectExtensionAccessTokenClaims } from "./utils-CyzcafJL.mjs";
- import { APIError } from "better-auth/api";
-+import { getCurrentAdapter, runWithTransaction } from "@better-auth/core/context";
- import { generateRandomString, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
- import { APIError as APIError$1 } from "better-call";
- import { logger } from "@better-auth/core/env";
-@@ -1626,68 +1627,77 @@ async function createOpaqueAccessToken(ctx, opts, user, client, scopes, payload,
+diff --git a/dist/authorize-B6wOm2dJ.mjs b/dist/authorize-B6wOm2dJ.mjs
+index bdfeca9..64e0692 100644
+--- a/dist/authorize-B6wOm2dJ.mjs
++++ b/dist/authorize-B6wOm2dJ.mjs
+@@ -1819,68 +1819,77 @@ async function createOpaqueAccessToken(ctx, opts, user, client, scopes, payload,
  	return (opts.prefix?.opaqueAccessToken ?? "") + token;
  }
  /**
@@ -223,7 +153,7 @@ index 1398e6d766..c6e7f44b3f 100644
  }
  async function createRefreshToken(ctx, opts, user, referenceId, authorizationCodeId, client, scopes, payload, originalRefresh, authTime, resources, confirmation, requestedUserInfoClaims, authenticationContext) {
  	const iat = payload.iat ?? Math.floor(Date.now() / 1e3);
-@@ -1711,13 +1721,7 @@ async function createRefreshToken(ctx, opts, user, referenceId, authorizationCod
+@@ -1904,13 +1913,7 @@ async function createRefreshToken(ctx, opts, user, referenceId, authorizationCod
  		createdAt: /* @__PURE__ */ new Date(iat * 1e3),
  		expiresAt: /* @__PURE__ */ new Date(exp * 1e3)
  	};
@@ -238,7 +168,7 @@ index 1398e6d766..c6e7f44b3f 100644
  	const rotatedAt = /* @__PURE__ */ new Date(iat * 1e3);
  	const rotationUpdate = {
  		revoked: rotatedAt,
-@@ -1725,27 +1729,54 @@ async function createRefreshToken(ctx, opts, user, referenceId, authorizationCod
+@@ -1918,27 +1921,54 @@ async function createRefreshToken(ctx, opts, user, referenceId, authorizationCod
  	};
  	const reuseInterval = opts.refreshTokenReuseInterval ?? 0;
  	if (reuseInterval > 0) rotationUpdate.rotationReplayExpiresAt = /* @__PURE__ */ new Date((iat + reuseInterval) * 1e3);
@@ -310,7 +240,7 @@ index 1398e6d766..c6e7f44b3f 100644
  		token: await encodeRefreshToken(opts, token, sessionId)
  	};
  }
-@@ -2134,6 +2165,7 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
+@@ -2328,6 +2358,7 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
  	* `invalid_client`, so resolve it before the code lookup can report
  	* `invalid_grant` and before a one-time code is consumed). */
  	const client = await validateClientCredentials(ctx, opts, client_id, client_secret, void 0, preVerified, "authorization_code", authMethod);
@@ -318,7 +248,7 @@ index 1398e6d766..c6e7f44b3f 100644
  	/** Get and check Verification Value */
  	const { verificationValue, effectiveResources, authorizedResources, authorizationCodeId } = await checkVerificationValue(ctx, opts, code, client_id, redirect_uri, resources);
  	const scopes = verificationValue.query.scope?.split(" ");
-@@ -2277,12 +2309,34 @@ async function handleRefreshTokenGrant(ctx, opts) {
+@@ -2474,12 +2505,34 @@ async function handleRefreshTokenGrant(ctx, opts) {
  	* `invalid_client`, so resolve it before the refresh token lookup can
  	* report `invalid_grant`). */
  	const client = await validateClientCredentials(ctx, opts, client_id, client_secret, void 0, preVerified, "refresh_token", authMethod);
@@ -356,7 +286,7 @@ index 1398e6d766..c6e7f44b3f 100644
  		error_description: "invalid refresh token",
  		error: "invalid_grant"
  	});
-@@ -2318,7 +2372,7 @@ async function handleRefreshTokenGrant(ctx, opts) {
+@@ -2515,7 +2568,7 @@ async function handleRefreshTokenGrant(ctx, opts) {
  				error: "invalid_grant"
  			});
  		}
@@ -365,7 +295,7 @@ index 1398e6d766..c6e7f44b3f 100644
  		throw new APIError("BAD_REQUEST", {
  			error_description: "invalid refresh token",
  			error: "invalid_grant"
-@@ -2432,6 +2486,7 @@ async function validateJwtAccessToken(ctx, opts, jwtPayload, clientId) {
+@@ -2629,6 +2682,7 @@ async function validateJwtAccessToken(ctx, opts, jwtPayload, clientId) {
  async function validateOpaqueAccessToken(ctx, opts, accessToken, clientId) {
  	if (!accessToken.expiresAt || accessToken.expiresAt < /* @__PURE__ */ new Date()) return inactiveAccessToken();
  	if (accessToken.revoked) return inactiveAccessToken();
@@ -373,7 +303,7 @@ index 1398e6d766..c6e7f44b3f 100644
  	const resources = Array.isArray(accessToken.resources) ? accessToken.resources : void 0;
  	let client;
  	if (accessToken.clientId) {
-@@ -2507,6 +2562,7 @@ async function validateRefreshToken(ctx, opts, refreshToken, clientId) {
+@@ -2704,6 +2758,7 @@ async function validateRefreshToken(ctx, opts, refreshToken, clientId) {
  	if (!refreshToken.clientId || refreshToken.clientId !== clientId) return { active: false };
  	if (!refreshToken.expiresAt || refreshToken.expiresAt < /* @__PURE__ */ new Date()) return { active: false };
  	if (refreshToken.revoked) return { active: false };
@@ -381,3 +311,61 @@ index 1398e6d766..c6e7f44b3f 100644
  	let sessionId = refreshToken.sessionId ?? void 0;
  	if (sessionId) {
  		const session = await ctx.context.adapter.findOne({
+@@ -6376,28 +6431,7 @@ async function revokeOpaqueAccessToken(ctx, accessToken) {
+ 	});
+ }
+ async function revokeRefreshToken(ctx, refreshToken, clientId) {
+-	const { userId } = refreshToken;
+-	if (refreshToken.revoked) {
+-		await invalidateRefreshFamily(ctx, clientId, userId);
+-		return;
+-	}
+-	const iat = Math.floor(Date.now() / 1e3);
+-	if (!await ctx.context.adapter.incrementOne({
+-		model: "oauthRefreshToken",
+-		where: [{
+-			field: "id",
+-			value: refreshToken.id
+-		}, {
+-			field: "revoked",
+-			operator: "eq",
+-			value: null
+-		}],
+-		increment: {},
+-		set: { revoked: /* @__PURE__ */ new Date(iat * 1e3) }
+-	})) {
+-		await invalidateRefreshFamily(ctx, clientId, userId);
+-		return;
+-	}
++	await invalidateRefreshFamily(ctx, refreshToken.authorizationCodeId);
+ 	await ctx.context.adapter.deleteMany({
+ 		model: "oauthAccessToken",
+ 		where: [{
+@@ -6741,6 +6775,27 @@ const schema = {
+ 	*
+ 	* Refresh tokens are linked to a session.
+ 	*/
++	oauthRefreshFamily: { fields: {
++		clientId: {
++			type: "string",
++			required: true
++		},
++		revoked: {
++			type: "boolean",
++			required: true,
++			defaultValue: false
++		},
++		sequence: {
++			type: "number",
++			required: true,
++			defaultValue: 0
++		},
++		expiresAt: {
++			type: "date",
++			required: true,
++			index: true
++		}
++	} },
+ 	oauthRefreshToken: { fields: {
+ 		token: {
+ 			type: "string",
