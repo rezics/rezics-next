@@ -5,8 +5,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RealmLeaveRecovery } from '../src/community/realm-leave-recovery.tsx';
 import { classifyRealmLeaveFailure, realmLeaveReadResolves } from '../src/community/realm-leave-recovery';
 import { refreshRealmMembership } from '../src/community/realm-membership-queries';
-import { loadRealmMembership, requestRealmMembership } from '../src/community/space';
+import { loadRealmMembership, loadSpacePage, requestRealmMembership } from '../src/community/space';
 import { loadAccess } from '../src/accounts/resource-access/data';
+import { readRealmClaim } from '../src/community/realm-claim-native';
+import { communityCurrentClaim, withCommunityCurrentClaim } from '../src/stories/community-current-claim';
+import space from '../src/kernel/recorded/space.json';
+import participation from '../src/kernel/recorded/realm-participation.json';
 
 const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
 const idempotencyKey = '123e4567-e89b-42d3-a456-426614174000';
@@ -186,4 +190,68 @@ test('only the declared closed last-owner problem on leave offers specific owner
     expect((await failure(body)).ownerReason).toBe('unavailable');
   expect((await failure(ownerProblem, 'leave', 403)).ownerReason).toBe('unavailable');
   expect(await failure(ownerProblem, 'join')).toEqual({ kind: 'uncertain', ownerReason: 'unavailable' });
+});
+
+test('positive community journeys share the page and current Realm source without supplying participation or command authority', async () => {
+  const source = communityCurrentClaim;
+  const credential = 'Bearer recorded-story-token';
+  let participationStatus = participation.status;
+  const delegated: Request[] = [];
+  const recorded = withCommunityCurrentClaim((async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    delegated.push(request);
+    const path = new URL(request.url).pathname;
+    if (path === `/v1/spaces/${source.spaceId}`) return Response.json(space);
+    if (path === '/v1/spaceAddresses/quiet-novel-club') return Response.json({ spaceId: source.spaceId });
+    if (path.endsWith('/boards') || path.endsWith('/publications')) return Response.json({ items: [], next: null });
+    if (path === `/v1/realms/${source.realmId}/participation`)
+      return new Response(null, { status: participationStatus });
+    return Response.json(problem(), { status: 403 });
+  }) as typeof fetch);
+  const client = createKernelClient('http://kernel.local', { fetch: recorded });
+  const page = await loadSpacePage(
+    client,
+    new Request('https://site.example/en/spaces/quiet-novel-club'),
+    {},
+    { address: 'quiet-novel-club' },
+    'anonymous',
+  );
+  expect(page.realm?.continuity).toEqual(source);
+  expect(page.realm?.presentation?.state).toBe('unavailable');
+  const request = () => new Request('https://site.example/action', { headers: { authorization: credential } });
+  const read = () => readRealmClaim(client, request(), {}, { realmId: source.realmId, credentialMode: 'session' });
+  expect(await read()).toEqual({ kind: 'ready', snapshot: source, admission: 'allowed' });
+  participationStatus = 403;
+  expect(await read()).toEqual({ kind: 'ready', snapshot: source, admission: 'denied' });
+  expect(
+    await readRealmClaim(client, new Request('https://site.example/'), {}, {
+      realmId: source.realmId,
+      credentialMode: 'anonymous',
+    }),
+  ).toEqual({ kind: 'ready', snapshot: source, admission: 'signed-out' });
+  const foreign = new Request('https://site.example/', { headers: { authorization } });
+  expect(await readRealmClaim(client, foreign, {}, { realmId: source.realmId, credentialMode: 'session' })).toEqual({
+    kind: 'denied',
+  });
+  expect(await readRealmClaim(client, request(), {}, { realmId, credentialMode: 'session' })).toEqual({
+    kind: 'denied',
+  });
+  const refused = await requestRealmMembership(
+    client,
+    new Request('https://site.example/action', { method: 'POST', headers: { authorization: credential } }),
+    {},
+    { realmId: source.realmId, action: 'leave', idempotencyKey },
+  );
+  expect(refused.outcome).toBe('refused');
+  expect(delegated.at(-1)?.headers.get('idempotency-key')).toBe(JSON.stringify(idempotencyKey));
+  expect(delegated.filter((item) => new URL(item.url).pathname.endsWith('/participation'))).toHaveLength(2);
+  // Relative browser requests must reach the preceding adapter unchanged, without Request construction.
+  const relative: unknown[] = [];
+  const browser = withCommunityCurrentClaim((async (...args: unknown[]) => {
+    relative.push(...args);
+    return new Response(null, { status: 204 });
+  }) as typeof fetch);
+  const init = { method: 'POST' };
+  await browser('/local-action', init);
+  expect(relative).toEqual(['/local-action', init]);
 });

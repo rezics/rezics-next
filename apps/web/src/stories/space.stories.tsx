@@ -4,8 +4,13 @@ import realmBoardsRecording from '../kernel/recorded/realm-boards.json';
 import spaceRecording from '../kernel/recorded/space.json';
 import { PageStory, pageReady } from './page';
 import { m } from '../paraglide/messages.js';
+import { communityCurrentClaimStory } from './community-current-claim';
 
-const meta = { title: 'Pages/Community/Space', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Pages/Community/Space',
+  parameters: { layout: 'fullscreen' },
+  beforeEach: communityCurrentClaimStory,
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

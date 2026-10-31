@@ -8,6 +8,7 @@ import boards from '../kernel/recorded/realm-boards.json';
 import { PatternStory } from './page';
 import { RealmBansExample } from './realm-bans/example';
 import { banAndUnban } from './realm-bans/realm-bans.stories';
+import { communityCurrentClaim, communityCurrentClaimStory } from './community-current-claim';
 
 const meta = { title: 'Pages/Community/Realm bans', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -19,6 +20,7 @@ const page: SpacePageData = {
     title: realm.realm.title,
     summary: realm.realm.summary,
     visibility: 'public',
+    continuity: communityCurrentClaim,
     viewer: null,
     published: [],
     boards: boards.items.map((board) => ({
@@ -31,6 +33,7 @@ const page: SpacePageData = {
 };
 
 export const ManagementJourney: Story = {
+  beforeEach: communityCurrentClaimStory,
   render: () => (
     <PatternStory visitor="Signed In" path="/spaces/quiet-novel-club">
       <AppShell>

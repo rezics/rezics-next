@@ -4,6 +4,7 @@ import { RealmMembership } from '../../../community/realm-membership';
 import realm from '../../../kernel/recorded/realm.json';
 import { m } from '../../../paraglide/messages.js';
 import { PatternStory } from '../../page';
+import { withCommunityCurrentClaim } from '../../community-current-claim';
 
 type Scenario = 'owner-required' | 'generic-refusal' | 'access-denied' | 'uncertain-retry' | 'accepted-pending';
 const realmId = realm.realm.realmId;
@@ -29,10 +30,11 @@ export function leaveRecoveryStory(scenario: Scenario): Pick<StoryObj, 'beforeEa
       accessReads = 0;
       membershipReads = 0;
       const previous = globalThis.fetch;
+      const currentClaim = withCommunityCurrentClaim(previous);
       globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const request = new Request(input, init);
-        const url = new URL(request.url);
+        const url = new URL(input instanceof Request ? input.url : String(input), 'http://rezics.local');
         if (url.origin !== 'http://kernel.local') return previous(input, init);
+        const request = new Request(input, init);
         const problem = (owner: boolean) => ({
           type: `https://rezics.com/problems/${owner ? 'realm_last_owner' : 'forbidden'}`,
           title: owner ? 'Realm Ownership Transfer Required' : 'Forbidden',
@@ -58,7 +60,7 @@ export function leaveRecoveryStory(scenario: Scenario): Pick<StoryObj, 'beforeEa
           accessReads++;
           return Response.json(problem(false), { status: 403 });
         }
-        return previous(input, init);
+        return currentClaim(input, init);
       }) as typeof fetch;
       return () => {
         globalThis.fetch = previous;
