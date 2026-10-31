@@ -173,7 +173,9 @@ test('real daily audit template passes risk validation for tomorrow without broa
   try {
     const tomorrow = new Date(Date.parse(date(0)) + 86400_000);
     expect(dispatchDailyStepAudit(db, [], () => ({ ...task('tomorrow'), brief }), tomorrow)?.brief).toEqual(brief);
-  } finally { db.close(); }
+  } finally {
+    db.close();
+  }
 });
 
 test('daily audit parse and dispatch failures retain their causes across reopen and report exactly once', () => {
@@ -200,9 +202,14 @@ test('daily audit parse and dispatch failures retain their causes across reopen 
       expect(dispatchDailyStepAudit(db, [], dispatch, new Date(date(1)), report)).toBeNull();
       expect(calls).toBe(1);
       expect(inbox.pending('supermanager')).toHaveLength(1);
-      expect(inbox.pending('supermanager')[0]!.event.summary).toContain(failure === 'parse' ? 'undeclared risk area' : 'original cause');
+      expect(inbox.pending('supermanager')[0]!.event.summary).toContain(
+        failure === 'parse' ? 'undeclared risk area' : 'original cause',
+      );
       expect(inbox.pending('supermanager')[0]!.event.summary).not.toMatch(/[\r\n]/);
-    } finally { db.close(); dir.close(); }
+    } finally {
+      db.close();
+      dir.close();
+    }
   }
 });
 
@@ -212,13 +219,38 @@ test('a failed audit notice delivery is retried durably without redispatching th
   const inbox = new SqliteManagerInbox(db, dir.path);
   let calls = 0;
   try {
-    dispatchDailyStepAudit(db, [], () => { calls++; throw new Error('original dispatch failure'); }, new Date(date(0)), () => { throw new Error('inbox unavailable'); });
-    expect((db.query('SELECT reported_at FROM flow_audit_failures').get() as { reported_at: string | null }).reported_at).toBeNull();
-    dispatchDailyStepAudit(db, [], () => { calls++; return task('wrong'); }, new Date(date(1)), summary => inbox.deliver({ managerId: 'supermanager', kind: 'environment', summary }));
+    dispatchDailyStepAudit(
+      db,
+      [],
+      () => {
+        calls++;
+        throw new Error('original dispatch failure');
+      },
+      new Date(date(0)),
+      () => {
+        throw new Error('inbox unavailable');
+      },
+    );
+    expect(
+      (db.query('SELECT reported_at FROM flow_audit_failures').get() as { reported_at: string | null }).reported_at,
+    ).toBeNull();
+    dispatchDailyStepAudit(
+      db,
+      [],
+      () => {
+        calls++;
+        return task('wrong');
+      },
+      new Date(date(1)),
+      (summary) => inbox.deliver({ managerId: 'supermanager', kind: 'environment', summary }),
+    );
     expect(calls).toBe(1);
     expect(inbox.pending('supermanager')).toHaveLength(1);
     expect(inbox.pending('supermanager')[0]!.event.summary).toContain('original dispatch failure');
-  } finally { db.close(); dir.close(); }
+  } finally {
+    db.close();
+    dir.close();
+  }
 });
 
 test('integration and cancellation close open stages idempotently without inventing completions', () => {
@@ -226,22 +258,47 @@ test('integration and cancellation close open stages idempotently without invent
   const store = new WorkerStore(db);
   try {
     for (const state of ['integrated', 'cancelled'] as const) {
-      const t = store.createTask(task(state).brief, { branch: 'b', worktree: 'w', briefPath: 'p', base: 'c' }, 'implementation', state);
+      const t = store.createTask(
+        task(state).brief,
+        { branch: 'b', worktree: 'w', briefPath: 'p', base: 'c' },
+        'implementation',
+        state,
+      );
       for (const stage of ['start', 'check', 'landing', 'verification'] as const)
-        recordFlow(db, { taskId: t.id, attempt: 0, stage, action: stage === 'landing' ? 'enqueued' : 'requested', at: date(0) });
+        recordFlow(db, {
+          taskId: t.id,
+          attempt: 0,
+          stage,
+          action: stage === 'landing' ? 'enqueued' : 'requested',
+          at: date(0),
+        });
       if (state === 'integrated') store.commitMerge({ taskId: t.id, attempt: 0 }, () => 'actual-commit');
-      else store.updateTask({ taskId: t.id, attempt: 0 }, current => { current.state = state; });
-      const count = readFlow(db).filter(e => e.taskId === t.id && e.action === 'closed').length;
+      else
+        store.updateTask({ taskId: t.id, attempt: 0 }, (current) => {
+          current.state = state;
+        });
+      const count = readFlow(db).filter((e) => e.taskId === t.id && e.action === 'closed').length;
       store.updateTask({ taskId: t.id, attempt: 0 }, () => {});
-      expect(readFlow(db).filter(e => e.taskId === t.id && e.action === 'closed')).toHaveLength(count);
+      expect(readFlow(db).filter((e) => e.taskId === t.id && e.action === 'closed')).toHaveLength(count);
       expect(count).toBeGreaterThanOrEqual(4);
     }
     const report = flowReport(readFlow(db), readFlowTasks(db), Date.parse(date(180)));
-    expect(report.queues.every(q => q.length === 0)).toBe(true);
-    expect(report.stages.find(s => s.stage === 'check')?.p90Ms).toBeNull();
-    expect(report.stages.find(s => s.stage === 'verification')?.p90Ms).toBeNull();
-    expect(checkFlowAlarms(db, report, () => { throw new Error('stale alarm'); }, new Date(date(180)))).toEqual([]);
-  } finally { db.close(); }
+    expect(report.queues.every((q) => q.length === 0)).toBe(true);
+    expect(report.stages.find((s) => s.stage === 'check')?.p90Ms).toBeNull();
+    expect(report.stages.find((s) => s.stage === 'verification')?.p90Ms).toBeNull();
+    expect(
+      checkFlowAlarms(
+        db,
+        report,
+        () => {
+          throw new Error('stale alarm');
+        },
+        new Date(date(180)),
+      ),
+    ).toEqual([]);
+  } finally {
+    db.close();
+  }
 });
 
 test('legacy terminal tasks suppress stale queues while live workers and post-integration promotion remain visible', () => {
@@ -249,7 +306,12 @@ test('legacy terminal tasks suppress stale queues while live workers and post-in
   const store = new WorkerStore(db);
   try {
     for (const state of ['integrated', 'merged', 'cancelled', 'running'] as const) {
-      const t = store.createTask(task(state).brief, { branch: 'b', worktree: 'w', briefPath: 'p', base: 'c' }, 'implementation', state);
+      const t = store.createTask(
+        task(state).brief,
+        { branch: 'b', worktree: 'w', briefPath: 'p', base: 'c' },
+        'implementation',
+        state,
+      );
       // Legacy rows deliberately bypass the new closure writer.
       db.query('UPDATE worker_tasks SET body=? WHERE id=?').run(JSON.stringify({ ...t, state }), t.id);
       for (const stage of ['check', 'promotion'] as const)
@@ -257,9 +319,11 @@ test('legacy terminal tasks suppress stale queues while live workers and post-in
     }
     const events = readFlow(db);
     const report = flowReport(events, readFlowTasks(db), Date.parse(date(180)));
-    expect(report.queues.find(q => q.stage === 'check')?.tasks).toEqual(['running']);
-    expect(report.queues.find(q => q.stage === 'promotion')?.tasks).toEqual(['integrated', 'running']);
-    expect(report.tasks.every(t => t.workingMs === null)).toBe(true);
+    expect(report.queues.find((q) => q.stage === 'check')?.tasks).toEqual(['running']);
+    expect(report.queues.find((q) => q.stage === 'promotion')?.tasks).toEqual(['integrated', 'running']);
+    expect(report.tasks.every((t) => t.workingMs === null)).toBe(true);
     expect(readFlow(db)).toEqual(events);
-  } finally { db.close(); }
+  } finally {
+    db.close();
+  }
 });

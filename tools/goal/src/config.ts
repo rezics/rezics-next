@@ -622,8 +622,12 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     },
     dispatchDailyStepAudit() {
       const template = join(import.meta.dir, '../templates/daily-step-audit.md');
-      dispatchDailyStepAudit(db, store.tasks(), () => tasks.dispatch(template), new Date(), (summary) =>
-        inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
+      dispatchDailyStepAudit(
+        db,
+        store.tasks(),
+        () => tasks.dispatch(template),
+        new Date(),
+        (summary) => inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
       );
     },
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {

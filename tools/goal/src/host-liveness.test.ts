@@ -2,13 +2,20 @@ import { expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ensureHostRunning, recordHostLiveness, startHostSupervisor, superviseHost, supervisorLeasePath, type HostLivenessConfig } from './host-liveness.ts';
+import {
+  ensureHostRunning,
+  recordHostLiveness,
+  startHostSupervisor,
+  superviseHost,
+  supervisorLeasePath,
+  type HostLivenessConfig,
+} from './host-liveness.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const liveness = join(import.meta.dir, 'host-liveness.ts');
-const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(predicate: () => boolean, timeout = 8000): Promise<void> {
   const deadline = Date.now() + timeout;
   while (!predicate() && Date.now() < deadline) await pause(20);
@@ -16,16 +23,18 @@ async function until(predicate: () => boolean, timeout = 8000): Promise<void> {
 }
 function leaseIdentity(path: string): ProcessIdentity | undefined {
   try {
-    const file = readdirSync(path).find(file => file.endsWith('.json'));
+    const file = readdirSync(path).find((file) => file.endsWith('.json'));
     return file ? JSON.parse(readFileSync(join(path, file), 'utf8')) : undefined;
-  } catch { return undefined; }
+  } catch {
+    return undefined;
+  }
 }
 function stop(identity: ProcessIdentity | undefined, signal: NodeJS.Signals = 'SIGTERM') {
   if (identity && sameProcess(identity)) process.kill(identity.pid, signal);
 }
 async function terminate(child: ChildProcess) {
   if (child.exitCode !== null || child.signalCode !== null) return;
-  const exited = new Promise(resolve => child.once('exit', resolve));
+  const exited = new Promise((resolve) => child.once('exit', resolve));
   child.kill('SIGTERM');
   await exited;
 }
@@ -33,8 +42,13 @@ async function terminate(child: ChildProcess) {
 test('an independent owned supervisor detects host exit, restarts once, and fences duplicate supervisors and launchers', async () => {
   const dir = temporaryDirectory();
   const config: HostLivenessConfig = {
-    stateDirectory: dir.path, managerSocket: join(dir.path, 'manager.sock'), mainCheckout: dir.path,
-    command: [process.execPath, runtime], pollMs: 20, minBackoffMs: 40, maxBackoffMs: 160,
+    stateDirectory: dir.path,
+    managerSocket: join(dir.path, 'manager.sock'),
+    mainCheckout: dir.path,
+    command: [process.execPath, runtime],
+    pollMs: 20,
+    minBackoffMs: 40,
+    maxBackoffMs: 160,
   };
   // The real CLI fixture reads these two paths; spawned children inherit this test's environment.
   const previous = { state: process.env.FAKE_GOAL_STATE, main: process.env.FAKE_GOAL_MAIN };
@@ -49,7 +63,7 @@ test('an independent owned supervisor detects host exit, restarts once, and fenc
     const original = leaseIdentity(`${config.managerSocket}.lease`)!;
     expect(sameProcess(original)).toBe(true);
     duplicate = spawn(process.execPath, [liveness, JSON.stringify(config)], { stdio: 'ignore' });
-    const duplicateExit = new Promise(resolve => duplicate!.once('exit', resolve));
+    const duplicateExit = new Promise((resolve) => duplicate!.once('exit', resolve));
     await duplicateExit;
     expect(duplicate.exitCode).toBe(0);
     expect(leaseIdentity(supervisorLeasePath(dir.path))?.pid).toBe(supervisor.pid);
@@ -72,8 +86,10 @@ test('an independent owned supervisor detects host exit, restarts once, and fenc
     stop(leaseIdentity(supervisorLeasePath(dir.path)));
     stop(leaseIdentity(`${config.managerSocket}.lease`));
     if (duplicate) await terminate(duplicate);
-    if (previous.state === undefined) delete process.env.FAKE_GOAL_STATE; else process.env.FAKE_GOAL_STATE = previous.state;
-    if (previous.main === undefined) delete process.env.FAKE_GOAL_MAIN; else process.env.FAKE_GOAL_MAIN = previous.main;
+    if (previous.state === undefined) delete process.env.FAKE_GOAL_STATE;
+    else process.env.FAKE_GOAL_STATE = previous.state;
+    if (previous.main === undefined) delete process.env.FAKE_GOAL_MAIN;
+    else process.env.FAKE_GOAL_MAIN = previous.main;
     dir.close();
   }
 }, 15_000);
@@ -82,16 +98,30 @@ test('restart failures preserve the exact cause and use durable bounded backoff 
   const dir = temporaryDirectory();
   const failing = join(dir.path, 'failure.ts');
   const attempts = join(dir.path, 'attempts.jsonl');
-  writeFileSync(failing, `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(attempts)}, JSON.stringify(Date.now())+'\\n'); console.error('fixture host startup cause'); process.exit(17);`);
+  writeFileSync(
+    failing,
+    `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(attempts)}, JSON.stringify(Date.now())+'\\n'); console.error('fixture host startup cause'); process.exit(17);`,
+  );
   const dead = spawn(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 50)'], { stdio: 'ignore' });
   const identity = processIdentity(dead.pid!)!;
-  await new Promise(resolve => dead.once('exit', resolve));
+  await new Promise((resolve) => dead.once('exit', resolve));
   writeFileSync(join(dir.path, 'manager-host-liveness.json'), JSON.stringify({ identity, desired: true }));
   const config: HostLivenessConfig = {
-    stateDirectory: dir.path, managerSocket: join(dir.path, 'manager.sock'), mainCheckout: dir.path,
-    command: [process.execPath, failing], pollMs: 10, minBackoffMs: 80, maxBackoffMs: 240,
+    stateDirectory: dir.path,
+    managerSocket: join(dir.path, 'manager.sock'),
+    mainCheckout: dir.path,
+    command: [process.execPath, failing],
+    pollMs: 10,
+    minBackoffMs: 80,
+    maxBackoffMs: 240,
   };
-  const count = () => { try { return readFileSync(attempts, 'utf8').trim().split('\n').map(Number); } catch { return []; } };
+  const count = () => {
+    try {
+      return readFileSync(attempts, 'utf8').trim().split('\n').map(Number);
+    } catch {
+      return [];
+    }
+  };
   let controller = new AbortController();
   let running = superviseHost(config, controller.signal);
   try {
@@ -120,8 +150,11 @@ test('restart failures preserve the exact cause and use durable bounded backoff 
 test('supervisor launch reports readiness only after fenced ownership is established', async () => {
   const dir = temporaryDirectory();
   const config: HostLivenessConfig = {
-    stateDirectory: dir.path, managerSocket: join(dir.path, 'manager.sock'), mainCheckout: dir.path,
-    command: [process.execPath, runtime], pollMs: 20,
+    stateDirectory: dir.path,
+    managerSocket: join(dir.path, 'manager.sock'),
+    mainCheckout: dir.path,
+    command: [process.execPath, runtime],
+    pollMs: 20,
   };
   let owner: ProcessIdentity | undefined;
   try {
@@ -141,7 +174,9 @@ test('supervisor launch reports readiness only after fenced ownership is establi
 test('a supervisor arriving after state teardown never recreates the removed directory', async () => {
   const dir = temporaryDirectory();
   const config: HostLivenessConfig = {
-    stateDirectory: dir.path, managerSocket: join(dir.path, 'manager.sock'), mainCheckout: dir.path,
+    stateDirectory: dir.path,
+    managerSocket: join(dir.path, 'manager.sock'),
+    mainCheckout: dir.path,
     command: [process.execPath, runtime],
   };
   dir.close();
@@ -150,5 +185,7 @@ test('a supervisor arriving after state teardown never recreates the removed dir
     expect(existsSync(dir.path)).toBe(false);
     await startHostSupervisor(config);
     expect(existsSync(dir.path)).toBe(false);
-  } finally { dir.close(); }
+  } finally {
+    dir.close();
+  }
 });

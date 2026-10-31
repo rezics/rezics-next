@@ -552,7 +552,8 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     });
   } finally {
     // Intentional shutdown must not be interpreted as a crash. Code handoff keeps restart desired.
-    if (stopRequested && !restart && existsSync(runtime.stateDirectory)) recordHostLiveness(runtime.stateDirectory, false);
+    if (stopRequested && !restart && existsSync(runtime.stateDirectory))
+      recordHostLiveness(runtime.stateDirectory, false);
     if (recoveryTimer) clearInterval(recoveryTimer);
     if (codeTimer) clearInterval(codeTimer);
     if (stateTimer) clearInterval(stateTimer);

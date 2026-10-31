@@ -133,14 +133,20 @@ export type FlowTask = Pick<Task, 'id'> & {
 };
 
 function terminalCloses(state: Task['state'] | undefined, stage: FlowStage): boolean {
-  return state === 'cancelled' || state === 'stopped' || state === 'merged' ||
-    (state === 'integrated' && stage !== 'promotion');
+  return (
+    state === 'cancelled' ||
+    state === 'stopped' ||
+    state === 'merged' ||
+    (state === 'integrated' && stage !== 'promotion')
+  );
 }
 
 /** Explicit closure is not a successful stage completion and never supplies a duration. */
 export function closePendingFlow(db: Database, task: Task, at = new Date().toISOString()): void {
   ensureFlow(db);
-  const events = db.query('SELECT task_id AS taskId, attempt, stage, action, at FROM flow_events WHERE task_id=? ORDER BY at,sequence').all(task.id) as FlowEvent[];
+  const events = db
+    .query('SELECT task_id AS taskId, attempt, stage, action, at FROM flow_events WHERE task_id=? ORDER BY at,sequence')
+    .all(task.id) as FlowEvent[];
   for (const stage of FLOW_STAGES) {
     if (!terminalCloses(task.state, stage)) continue;
     const attempts = new Set(events.filter((event) => event.stage === stage).map((event) => event.attempt));
@@ -160,7 +166,11 @@ export function readFlowTasks(db: Database): FlowTask[] {
   const exists = db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='worker_tasks'").get();
   if (!exists) return [];
   return (
-    db.query("SELECT id, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.state') AS state FROM worker_tasks ORDER BY sequence").all() as {
+    db
+      .query(
+        "SELECT id, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.state') AS state FROM worker_tasks ORDER BY sequence",
+      )
+      .all() as {
       id: string;
       goal: string | null;
       state: Task['state'];
@@ -210,7 +220,9 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       if (e.action === 'requested' && !checks.some((x) => x.at >= e.at && x.action === 'acquired')) checkKnown = false;
     }
     const working =
-      es.some((e) => e.stage === 'worker' && e.action === 'started') && open === undefined && (!checks.length || checkKnown)
+      es.some((e) => e.stage === 'worker' && e.action === 'started') &&
+      open === undefined &&
+      (!checks.length || checkKnown)
         ? Math.max(0, workerMs - checkWaitMs)
         : null;
     return {
@@ -227,8 +239,17 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     const pending = requests.filter(
       (e) =>
         !terminal.has(e.taskId) &&
-        !(stage !== 'promotion' && ordered.some((x) => x.taskId === e.taskId && x.attempt >= e.attempt &&
-          x.stage === 'integration' && x.action === 'integrated' && x.at >= e.at)) &&
+        !(
+          stage !== 'promotion' &&
+          ordered.some(
+            (x) =>
+              x.taskId === e.taskId &&
+              x.attempt >= e.attempt &&
+              x.stage === 'integration' &&
+              x.action === 'integrated' &&
+              x.at >= e.at,
+          )
+        ) &&
         !ordered.some(
           (x) =>
             x.taskId === e.taskId &&
@@ -287,11 +308,23 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
               waitEnds[q.stage].includes(x.action),
           );
           // Closed or legacy terminal requests have no observed wait end. Keep their duration unknown.
-          const closed = ordered.some((x) => x.taskId === e.taskId && x.attempt === e.attempt &&
-            x.stage === e.stage && x.at >= e.at && x.action === 'closed');
+          const closed = ordered.some(
+            (x) =>
+              x.taskId === e.taskId &&
+              x.attempt === e.attempt &&
+              x.stage === e.stage &&
+              x.at >= e.at &&
+              x.action === 'closed',
+          );
           const terminal = tasks.some((task) => task.id === e.taskId && terminalCloses(task.terminalState, e.stage));
-          return sum + (end ? Math.max(0, Date.parse(end.at) - Date.parse(e.at)) :
-            closed || terminal ? 0 : Math.max(0, now - Date.parse(e.at)));
+          return (
+            sum +
+            (end
+              ? Math.max(0, Date.parse(end.at) - Date.parse(e.at))
+              : closed || terminal
+                ? 0
+                : Math.max(0, now - Date.parse(e.at)))
+          );
         }, 0),
       }))
       .sort((a, b) => b.ms - a.ms)[0]?.stage ?? null;
@@ -374,7 +407,9 @@ export function dispatchDailyStepAudit(
   const report = () => {
     try {
       db.transaction(() => {
-        const failures = db.query('SELECT day, cause FROM flow_audit_failures WHERE reported_at IS NULL ORDER BY day').all() as { day: string; cause: string }[];
+        const failures = db
+          .query('SELECT day, cause FROM flow_audit_failures WHERE reported_at IS NULL ORDER BY day')
+          .all() as { day: string; cause: string }[];
         for (const failure of failures) {
           reportFailure(`Daily step audit failed (${failure.day}): ${JSON.stringify(failure.cause)}`);
           db.query('UPDATE flow_audit_failures SET reported_at=? WHERE day=?').run(now.toISOString(), failure.day);
@@ -402,7 +437,7 @@ export function dispatchDailyStepAudit(
     db.query('UPDATE flow_audit_runs SET task_id=? WHERE day=?').run(audit.id, day);
     return audit;
   } catch (error) {
-    const cause = error instanceof Error ? error.stack ?? error.message : String(error);
+    const cause = error instanceof Error ? (error.stack ?? error.message) : String(error);
     db.query('INSERT INTO flow_audit_failures(day,failed_at,cause) VALUES (?,?,?)').run(day, now.toISOString(), cause);
     report();
     return null;
