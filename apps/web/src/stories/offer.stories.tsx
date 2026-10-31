@@ -1,7 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
-import { PageStory, exposureStory, pagePaths, pageReady, offerCjkReady, offerDelistedReady, offerPageReady } from './page';
+import {
+  PageStory,
+  exposureStory,
+  pagePaths,
+  pageReady,
+  offerCjkReady,
+  offerDelistedReady,
+  offerPageReady,
+} from './page';
 import { acquisitionProblems, setMappedCheckoutStory } from '../kernel/fake/checkout';
 import { localizeHref } from '../paraglide/runtime.js';
 
