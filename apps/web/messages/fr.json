@@ -877,6 +877,7 @@
   "settings_account_delete_continue": "Continuer vers la suppression du compte",
   "settings_account_delete_heading": "Supprimer le compte",
   "settings_account_delete_text": "Vous confirmerez la suppression dans les paramètres sécurisés du compte. Une nouvelle connexion peut être nécessaire. La suppression est définitive : l’accès au compte prend fin dès la confirmation, tandis que le nettoyage des données privées se poursuit ensuite.",
+  "settings_account_reference_details": "Détails techniques du compte",
   "settings_account_safety_text": "Gérez votre mot de passe, vos clés d’accès et vos sessions ouvertes dans les paramètres de sécurité.",
   "settings_account_sign_in_text": "Connectez-vous pour gérer la sécurité de votre compte ou le supprimer.",
   "settings_account_sign_out_text": "Déconnectez-vous de votre session actuelle sur ce site.",

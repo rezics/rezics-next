@@ -890,6 +890,7 @@
   "settings_account_delete_continue": "Continue to account deletion",
   "settings_account_delete_heading": "Delete account",
   "settings_account_delete_text": "You will confirm deletion in the secure account settings and may need to sign in again. Deletion is final: access ends when confirmed, while private data cleanup continues afterward.",
+  "settings_account_reference_details": "Technical account details",
   "settings_account_safety_text": "Manage your password, passkeys and signed-in sessions in security settings.",
   "settings_account_sign_in_text": "Sign in to manage account security and deletion.",
   "settings_account_sign_out_text": "Sign out of your current website session.",

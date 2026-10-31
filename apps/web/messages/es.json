@@ -877,6 +877,7 @@
   "settings_account_delete_continue": "Continuar para eliminar la cuenta",
   "settings_account_delete_heading": "Eliminar cuenta",
   "settings_account_delete_text": "Confirmarás la eliminación en los ajustes seguros de la cuenta. Puede que tengas que iniciar sesión de nuevo. La eliminación es definitiva: el acceso termina al confirmarla y la limpieza de los datos privados continúa después.",
+  "settings_account_reference_details": "Detalles técnicos de la cuenta",
   "settings_account_safety_text": "Gestiona tu contraseña, llaves de acceso y sesiones abiertas en los ajustes de seguridad.",
   "settings_account_sign_in_text": "Inicia sesión para gestionar la seguridad de tu cuenta o eliminarla.",
   "settings_account_sign_out_text": "Cierra tu sesión actual en este sitio.",

@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
@@ -13,19 +14,36 @@ export function AccountRenameLink({
   loading?: boolean;
   failure?: AccountRenameFailure | undefined;
 }) {
-  const href = !loading && !failure && context?.available ? (context.href ?? null) : null;
+  const id = useId();
+  const identity = !loading && !failure ? context : null;
+  const href = identity?.available ? (identity.href ?? null) : null;
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 max-w-full space-y-3 [overflow-wrap:anywhere]">
       <h3 className="font-medium">{m.settings_account_rename_heading()}</h3>
-      {context ? (
-        <p className="break-words text-sm">
-          {m.settings_account_rename_identity({ account: context.accountId })}
-          {' · '}
-          {context.handle ? `@${context.handle}` : m.settings_account_rename_handleless()}
-        </p>
+      {identity ? (
+        <div className="w-full min-w-0 max-w-full space-y-2">
+          <p
+            id={`${id}-identity`}
+            className="w-full whitespace-normal text-base leading-relaxed font-medium [overflow-wrap:anywhere]"
+          >
+            {identity.handle ? `@${identity.handle}` : m.settings_account_rename_handleless()}
+          </p>
+          <details className="min-w-0 max-w-full text-sm text-muted-foreground">
+            <summary className="min-h-11 max-w-full cursor-pointer rounded-sm py-2 whitespace-normal focus-visible:outline-2 focus-visible:outline-ring">
+              {m.settings_account_reference_details()}
+            </summary>
+            <p className="max-w-full py-2 [overflow-wrap:anywhere]">
+              {m.settings_account_rename_identity({ account: identity.accountId })}
+            </p>
+          </details>
+        </div>
       ) : null}
-      <p className="text-sm text-muted-foreground">{m.settings_account_rename_policy()}</p>
-      <p className="text-sm text-muted-foreground">{m.settings_account_rename_confirmation()}</p>
+      <p id={`${id}-policy`} className="text-sm text-muted-foreground">
+        {m.settings_account_rename_policy()}
+      </p>
+      <p id={`${id}-confirmation`} className="text-sm text-muted-foreground">
+        {m.settings_account_rename_confirmation()}
+      </p>
       {loading ? (
         <p role="status" className="text-sm text-muted-foreground">
           {m.settings_profile_loading()}
@@ -42,7 +60,11 @@ export function AccountRenameLink({
         <a
           href={href}
           referrerPolicy="no-referrer"
-          className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'h-auto min-h-11 whitespace-normal py-2')}
+          aria-describedby={`${id}-identity ${id}-policy ${id}-confirmation`}
+          className={cn(
+            buttonVariants({ variant: 'outline', size: 'lg' }),
+            'h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal py-2 text-center [overflow-wrap:anywhere]',
+          )}
         >
           {m.settings_account_rename_continue()}
         </a>

@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, useSyncExternalStore, useMemo } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Separator } from '@rezics/ui/shadcn/separator';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
@@ -130,16 +130,16 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
   );
   const waiting = usePreferenceRetry(undefined, retryAt);
   const links = props.state === 'signed-in' ? accountSafetyLinks(props.securityHref) : null;
-  const linkClass = 'h-auto min-h-11 max-w-full whitespace-normal py-2 text-center';
+  const actionClass =
+    'h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal py-2 text-center [overflow-wrap:anywhere]';
   return (
-    <Card>
+    <Card className="min-w-0 max-w-full">
       <CardHeader>
         <CardTitle>
           <h2 id="settings-account-heading">{m.settings_account_heading()}</h2>
         </CardTitle>
-        <CardDescription>{m.settings_account_safety_text()}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="min-w-0 max-w-full space-y-6 [overflow-wrap:anywhere]">
         {props.state === 'signed-out' ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">{m.settings_account_sign_in_text()}</p>
@@ -157,6 +157,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
                 <Button
                   type="button"
                   variant="outline"
+                  className={actionClass}
                   disabled={props.renameRead.loading || waiting}
                   aria-describedby={waiting ? `${id}-rename-wait` : undefined}
                   onClick={props.renameRead.reload}
@@ -171,26 +172,38 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
                 ) : null}
               </div>
             ) : null}
-            {links ? (
-              <a href={links.security} className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), linkClass)}>
-                {m.account_security_settings()}
-              </a>
-            ) : (
-              <p role="status" className="text-sm text-muted-foreground">
-                {m.settings_account_auth_unavailable()}
-              </p>
-            )}
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">{m.settings_account_sign_out_text()}</p>
+              <p id={`${id}-security`} className="text-sm text-muted-foreground">
+                {m.settings_account_safety_text()}
+              </p>
+              {links ? (
+                <a
+                  href={links.security}
+                  referrerPolicy="no-referrer"
+                  aria-describedby={`${id}-security`}
+                  className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), actionClass)}
+                >
+                  {m.account_security_settings()}
+                </a>
+              ) : (
+                <p role="status" className="text-sm text-muted-foreground">
+                  {m.settings_account_auth_unavailable()}
+                </p>
+              )}
+            </div>
+            <div className="space-y-3">
+              <p id={`${id}-sign-out`} className="text-sm text-muted-foreground">
+                {m.settings_account_sign_out_text()}
+              </p>
               <form method="post" action="/auth/sign-out" className="m-0">
                 <input type="hidden" name="csrf_token" value={props.csrfToken ?? ''} />
                 <Button
                   type="submit"
                   variant="outline"
                   size="lg"
-                  className="min-h-11"
+                  className={actionClass}
                   disabled={!props.csrfToken}
-                  aria-describedby={!props.csrfToken ? `${id}-csrf` : undefined}
+                  aria-describedby={`${id}-sign-out${!props.csrfToken ? ` ${id}-csrf` : ''}`}
                 >
                   {m.account_sign_out()}
                 </Button>
@@ -200,7 +213,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
                   <p id={`${id}-csrf`} role="status" className="text-sm text-muted-foreground">
                     {m.settings_account_csrf_unavailable()}
                   </p>
-                  <Button type="button" variant="outline" className="min-h-11" onClick={props.onReload}>
+                  <Button type="button" variant="outline" className={actionClass} onClick={props.onReload}>
                     {m.settings_reload()}
                   </Button>
                 </div>
@@ -209,11 +222,15 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
             <Separator />
             <div className="space-y-3">
               <h3 className="font-medium">{m.settings_account_delete_heading()}</h3>
-              <p className="text-sm text-muted-foreground">{m.settings_account_delete_text()}</p>
+              <p id={`${id}-deletion`} className="text-sm text-muted-foreground">
+                {m.settings_account_delete_text()}
+              </p>
               {links ? (
                 <a
                   href={links.deletion}
-                  className={cn(buttonVariants({ variant: 'destructive', size: 'lg' }), linkClass)}
+                  referrerPolicy="no-referrer"
+                  aria-describedby={`${id}-deletion`}
+                  className={cn(buttonVariants({ variant: 'destructive', size: 'lg' }), actionClass)}
                 >
                   {m.settings_account_delete_continue()}
                 </a>

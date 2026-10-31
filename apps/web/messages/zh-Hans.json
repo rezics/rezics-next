@@ -878,6 +878,7 @@
   "settings_account_delete_continue": "前往删除账号",
   "settings_account_delete_heading": "删除账号",
   "settings_account_delete_text": "你将在安全的账号设置中确认删除，届时可能需要重新登录。删除后无法恢复：确认后即无法再使用账号，私人数据会在后续逐步清理。",
+  "settings_account_reference_details": "账户技术信息",
   "settings_account_safety_text": "前往安全设置，管理密码、通行密钥和已登录的会话。",
   "settings_account_sign_in_text": "请先登录，再管理账号安全或删除账号。",
   "settings_account_sign_out_text": "退出当前的网站会话。",

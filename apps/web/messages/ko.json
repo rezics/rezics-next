@@ -877,6 +877,7 @@
   "settings_account_delete_continue": "계정 삭제로 이동",
   "settings_account_delete_heading": "계정 삭제",
   "settings_account_delete_text": "안전한 계정 설정에서 삭제를 확인하게 되며, 다시 로그인해야 할 수도 있습니다. 삭제는 되돌릴 수 없습니다. 확인 즉시 계정을 사용할 수 없게 되며, 비공개 데이터 정리는 이후에도 계속됩니다.",
+  "settings_account_reference_details": "계정 기술 정보",
   "settings_account_safety_text": "보안 설정에서 비밀번호, 패스키, 로그인된 세션을 관리하세요.",
   "settings_account_sign_in_text": "계정 보안을 관리하거나 계정을 삭제하려면 로그인하세요.",
   "settings_account_sign_out_text": "현재 웹사이트 세션에서 로그아웃합니다.",
