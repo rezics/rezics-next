@@ -4,6 +4,7 @@ import {
   type ManagementMembershipAccess,
 } from './account-management-membership-transport.ts';
 import { randomUUID } from 'node:crypto';
+import { createNativeLifecycleResults } from './native-lifecycle-results.ts';
 import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 import { authManagementClient } from './auth-management-client.ts';
 import {
@@ -169,6 +170,8 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     })());
   return {
     service,
+    /** Private server composition; never mounted by any transport. */
+    nativeLifecycleResults: createNativeLifecycleResults({ database: options.database, access: options.trustedAccess }),
     handler: accountOperationTransport(
       service,
       workflows,

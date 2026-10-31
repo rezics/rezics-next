@@ -1,4 +1,5 @@
 import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './automated-operator-source.ts';
+import { readOriginalLifecycleResult } from './native-lifecycle-results.ts';
 import { createManagementMembershipAccess, type ManagementMembershipAccess } from './management-membership-source.ts';
 import { createAuthHistoryProofBindings } from './shared-history-auth.ts';
 import { accessClock, installAccessClock } from './access-clock.ts';
@@ -13,6 +14,7 @@ import type {
   TrustedAccessPorts,
   BarrierProofPort,
   ProvisioningEvidencePort,
+  OriginalLifecycleRequest,
 } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, ActionCatalogue } from '../request/access.ts';
@@ -253,6 +255,8 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     readNativeCreationContext({ pool, access, approvals }, input, boundary());
   const trustedAccess: TrustedAccessPorts & ManagementMembershipAccess & AutomatedOperatorAccess = {
     readNativeCreationContext: creationContext,
+    readOriginalLifecycleResult: (input) =>
+      readOriginalLifecycleResult({ pool, referenceKeys, source: workflow }, input),
     ...createAutomatedOperatorAccess({
       pool,
       access,
@@ -330,6 +334,8 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       readAssignment(pool, requestedBy, assignedActorId, accessClock(access)),
   };
   const workflowPorts: AccountWorkflowPorts<LifecycleRequest> = authWorkflowBoundary({
+    readOriginalLifecycleResult: (input: OriginalLifecycleRequest) =>
+      readOriginalLifecycleResult({ pool, referenceKeys, source: workflow }, input),
     ...internalLifecycle,
     ...operators,
     ...lifecycle,

@@ -234,6 +234,8 @@ export type AuthErasureProofPorts = {
 interface SharedAccessPorts extends AuthErasureProofPorts, Partial<AuthErasureObligationPorts> {
   /** Private attribution only, resolved before creating a new private copy. */
   readNativeCreationContext?: ReadNativeCreationContext;
+  /** Private mechanical consumer only; never current user disclosure or authority. */
+  readOriginalLifecycleResult?: import('./native-lifecycle-results.ts').OriginalLifecycleResultPort['readOriginalLifecycleResult'];
   /** Sign-in may expose a suspended human's state privately for a refusal after credential verification. */
   readAccount(accountId: string, purpose?: 'signin'): Promise<AccessAccount | null>;
   /** Deleted and fenced accounts only. Ordinary reads stay empty for those rows. */
@@ -428,6 +430,8 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
     input: Command & { handle: string; reservationId: string; evidence?: unknown },
   ): Result<{ accountId: string; handle: string }>;
   activate(input: Command & { evidence: unknown }): Result<{ accountId: string }>;
+  /** Private mechanical settlement only. Missing native source remains pending. */
+  readOriginalLifecycleResult?: import('./native-lifecycle-results.ts').OriginalLifecycleResultPort['readOriginalLifecycleResult'];
   expireRegistration(input: Command & { handle: string; reservationId: string }): Result<unknown>;
   releaseExpiredRegistrationHandle(input: Command & { handle: string; reservationId: string }): Result<unknown>;
   provisioningReference(input: {
@@ -539,6 +543,8 @@ export interface ProvisioningResult {
 export type NativeWorkflowPair = { accountId: string; reservationId: string };
 export type AutomatedCreationBinding = Omit<Extract<AccountOperation, { kind: 'automated' }>, 'authorization'>;
 export type NativeWorkflowProofPorts = {
+  /** Optional for older compositions: missing original source always stays pending. */
+  readOriginalLifecycleSource?: import('./native-lifecycle-results.ts').OriginalLifecycleSourcePort['readOriginalLifecycleSource'];
   recordPending(input: NativeWorkflowPair & { reference: string }): Promise<void>;
   pendingReference(input: NativeWorkflowPair): Promise<string | null>;
   provisioningEvidence(input: NativeWorkflowPair): Promise<unknown>;
@@ -654,3 +660,10 @@ export type BarrierProofVerifierFactory<Database> = (options: { database: Databa
 export type ProvisioningEvidenceVerifierFactory<Database> = (options: {
   database: Database;
 }) => ProvisioningEvidencePort;
+export type {
+  OriginalLifecycleRequest,
+  OriginalLifecycleSource,
+  OriginalLifecycleSourcePort,
+  OriginalLifecycleResult,
+  OriginalLifecycleResultPort,
+} from './native-lifecycle-results.ts';

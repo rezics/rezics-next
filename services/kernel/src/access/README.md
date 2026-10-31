@@ -3498,3 +3498,32 @@ holder enumeration, public fallback or `account:read` scope. The local
 `accessTokenForProof` and native authentication; default account bindings expose
 it on `trustedAccess`. This read neither approves nor creates an account: the
 existing approval, workflow and native responsibility commands retain all checks.
+
+## Original committed lifecycle results
+
+`native-lifecycle-results.ts` exports `readOriginalLifecycleResult`; native account
+bindings expose it on the private `trustedAccess` and native `workflowPorts`. Its closed Auth contract accepts an
+activation account/reservation/key and exact provisioning stage/receipt, or a
+recovery account/key and exact establishment reference. These are lookup hints.
+Auth's host supplies `nativeLifecycleResults.readRegistrationResult(stageId)` and
+`readRecoveryResult(reference)` for mechanical consumers, deriving those hints
+from the original native source. Missing original-source capabilities stay pending.
+
+The reader checks out Access, releases it, calls the actual Auth owner point
+reader, then independently checks out Access again. Both native snapshots must
+agree on the exact original command receipt, full payload, transaction, epoch,
+position and internal-service write basis on an active source home. Activation
+also verifies the original sealed pending command receipt and immutable reservation,
+expiry and initial floor. Recovery verifies its original floor command receipt
+and fence row against the Auth establishment. Every read is a fixed number of
+unique-key seeks; receipt key versions are bounded by the existing native ABI.
+
+Expiry alone does not invalidate an already committed result. Missing, imported,
+retired, minimized or mismatched source evidence returns null. Current account
+state cannot reconstruct a result. The output contains only the original native
+outcome and minimal technical provenance, never a handle, credential, private
+descriptor, pending reference or payload digest. This port executes no command,
+extends no lifetime and supplies no current user disclosure, approval or session
+authority. Existing activation, recovery, public replay and security checks keep
+their current semantics. Consumer/minimizer integration remains with its owner;
+this source port does not settle unknown consumers or authorize witness deletion.

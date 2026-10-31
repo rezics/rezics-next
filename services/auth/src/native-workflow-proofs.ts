@@ -3,6 +3,7 @@ export type { NativeWorkflowPair, AutomatedCreationBinding, NativeWorkflowProofP
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createProvisioningEvidenceVerifier } from './provisioning-evidence.ts';
+import { createOriginalLifecycleSourceReader } from './native-lifecycle-results.ts';
 
 function bounded(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 4096 && !value.includes('\0');
@@ -17,6 +18,7 @@ function pair(input: NativeWorkflowPair) {
 export function createNativeWorkflowProofPorts({ database }: { database: Pool }) {
   const verifier = createProvisioningEvidenceVerifier({ database });
   return {
+    ...createOriginalLifecycleSourceReader({ database }),
     async recordPending(input: NativeWorkflowPair & { reference: string }): Promise<void> {
       const { accountId, reservationId, reference } = input;
       pair(input);
