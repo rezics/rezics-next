@@ -66,12 +66,13 @@ test('a locator and a query-shaped object cannot admit Source work or open a che
   // No Access operation is allowed before real Core/native admission.
   const access = new Proxy({} as Access, { get() { throw new Error('Unadmitted Access call'); } });
   for (const kind of ['members-preparation', 'collection-kind-preparation'] as const) {
-    const work = {
-      kind,
-      tx: { query() { throw new Error('Unadmitted Source SQL'); } },
-      locator: { route: 0xc100, ownerAccountId: newId(0xc100), collectionId,
-        episodeId: newId(0xc100), preparationId: newId(0xc100) },
-    } as ScopeWorkContext;
+    // @ts-expect-error Deliberately unminted: a query shape lacks Core's transaction brand.
+    const tx: ScopeWorkContext['tx'] = { query() { throw new Error('Unadmitted Source SQL'); } };
+    const locator = { route: 0xc100, ownerAccountId: newId(0xc100), collectionId,
+      episodeId: newId(0xc100), preparationId: newId(0xc100) };
+    const work: ScopeWorkContext = kind === 'members-preparation'
+      ? { kind, tx, locator }
+      : { kind, tx, locator };
     await expect(createCollectionSource({ pool, access }).prepare({
       work, collectionId, deadline: Date.now() + 5000, allowance: ownerAllowance(),
     })).rejects.toMatchObject({ code: 'semantic_not_ready' });

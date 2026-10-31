@@ -85,7 +85,9 @@ export interface CollectionSourceObservation {
 }
 
 const preparedSource: unique symbol = Symbol('prepared Collection Source');
-/** Not an allow capability. EVERY operation reauthorizes actor/source/required subject anchors currently. */
+/** Not an allow capability. Ordinary operations reauthorize actor/source/required subject anchors;
+ * mechanical work operations freshly admit the exact native episode and current Source instead.
+ */
 export interface PreparedCollectionSource {
   readonly [preparedSource]: true;
   readonly observation: CollectionSourceObservation;
@@ -155,7 +157,9 @@ export type CollectionSubjectMembership = MembershipResultBase &
   (
     | {
         readonly result: true;
-        /** Current native membership AND all required original/terminal subject Access; revalidate before disclosure. */
+        /** Ordinary reads include current original/terminal subject Access. Work results prove structural
+         * membership only; the final ordinary reader must reauthorize both anchors before disclosure.
+         */
         readonly positiveEvidence: CollectionSourceEvidence;
       }
     | {
@@ -184,7 +188,7 @@ export type CollectionSourceCall = CollectionSourceContext & {
 
 export type ContainsCollectionSubject = CollectionSourceCall & {
   readonly subjectId: string;
-  /** Same group/source basis only. Current source, original and terminal authorization is always repeated. */
+  /** Same group/source basis only. Source admission is repeated; ordinary reads also repeat both Subject guards. */
   readonly progress?: CollectionAliasProgress;
   /**
    * Optional previously observed witness key. The owner validates its subject/source/basis binding and treats it
