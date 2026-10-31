@@ -2386,7 +2386,7 @@ test('Original Account reversal writer publishes exact native reversal settlemen
   );
   const erased = (await pool.query('SELECT version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2',
     [accountRoute, account.id])).rows[0];
-  const reference = { receipt, job, source: { partition: source.partition, epoch: source.epoch,
+  const reference: import('../../src/semantic/identity-source-consumer-custody.ts').IdentitySourceConsumerReference = { receipt, job, source: { partition: source.partition, epoch: source.epoch,
     position: source.position, transactionId: source.transactionId }, sourceDigest: source.digest,
     barrier: { accountId: account.id, accountRoute, version: erased.version, at: erased.at },
     erasedRole: 'subject' as const };
@@ -2445,7 +2445,7 @@ test('Original Account reversal writer publishes exact native reversal settlemen
   expect(await verify({ ...reference, sourceDigest: '0'.repeat(64) })).toBe(false);
   expect(await verify({ ...reference, source: { ...reference.source, position: source.position + 1n } })).toBe(false);
   expect(await verify({ ...reference, barrier: { ...reference.barrier, version: erased.version + 1 } })).toBe(false);
-  expect(await verify({ ...reference, erasedRole: 'requester' as 'subject' })).toBe(false);
+  expect(await verify({ ...reference, erasedRole: 'requester' })).toBe(false);
   expect(await verify(reference, {} as typeof proof)).toBe(false);
   expect(await verify(reference, proof, 0)).toBe(false);
   expect(await independent()).toEqual(before);
