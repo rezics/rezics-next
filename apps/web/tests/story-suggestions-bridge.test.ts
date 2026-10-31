@@ -86,7 +86,7 @@ test('the BFF keeps locale order, numeric bounds, explicit identity and each sto
     expect(url.searchParams.get('limit')).toBe('10');
     expect(url.searchParams.getAll('languages')).toEqual(['zh-Hant', 'zh', 'zh-Hans']);
     expect(request.headers.get('accept-language')).toBe('zh-Hant, zh;q=0.9, zh-Hans;q=0.8');
-    expect(request.headers.get('authorization')).toBe(credential);
+    expect(request.headers.get('authorization'), `${visitor} ${JSON.stringify(init)}`).toBe(credential);
   }
   const before = calls.length;
   for (const query of [
