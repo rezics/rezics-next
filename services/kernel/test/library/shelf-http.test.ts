@@ -5,6 +5,10 @@ import { createKernel, createKernelAccessResolver } from '../../src/http/kernel.
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { personalLibraryRoutes } from '../../src/library/personal-routes.ts';
+import {
+  createShelfMaintenanceOps,
+  type ShelfMaintenanceBinding,
+} from '../../src/library/shelf-maintenance-ops-contract.ts';
 import { admitShelfRead } from '../../src/library/shelf-admission.ts';
 import { type ShelfEntry, type ShelfReads, type ShelfSummary } from '../../src/library/shelf-contract.ts';
 import type { definitionRoutes } from '../../src/semantic/http/definitions.ts';
@@ -362,3 +366,197 @@ test('default kernel composes native shelf reads and reports pending maintenance
     await progress(true);
   }
 });
+
+test('The default native personal Library composes real maintenance and current generations and serves signed chronological pages selected by the existing page controls', async () => {
+  const route = 0x2202;
+  const empty = newId(route),
+    populated = newId(route);
+  const subjects = Array.from({ length: 3 }, () => newId(route)).sort();
+  const state = 'reading.arc-1';
+  const native = createKernel({
+    pool: db.pool,
+    tokens: testTokens(),
+    clock,
+    access: admittedAccess,
+    routeKey: new Uint8Array(32),
+    receiptKeys: testReceiptKeys(),
+  });
+  const credentials = new Map<string, string>();
+  for (const accountId of [empty, populated]) {
+    await db.admin.query(
+      `INSERT INTO access.account(route,account_id,kind,state,minimum_authn_epoch,transaction_id)
+       VALUES ($1,$2,'actor','active',1,$2)`,
+      [route, accountId],
+    );
+    credentials.set(
+      accountId,
+      await accountToken({
+        accountId,
+        clientId: 'shelf-default',
+        scopes: ['library_entry:list', 'progress_session:list', 'subject:read'],
+      }),
+    );
+  }
+  const request = (path: string, accountId = populated) =>
+    native.handle(
+      new Request(`http://kernel.test${path}`, {
+        headers: { authorization: `Bearer ${credentials.get(accountId)!}` },
+      }),
+    );
+  const pagePath = '/v1/libraryEntries?orderBy=createdAt&direction=desc&limit=1';
+  const emptyResponse = await request(pagePath, empty);
+  expect(emptyResponse.headers.get('cache-control')).toContain('no-store');
+  expect(await json(emptyResponse)).toEqual({ libraryEntries: [], next: null });
+  expect((await json(await request('/v1/libraryShelfSummary', empty))).tabs.all).toEqual({ total: 0, shown: 0 });
+  expect(await json(await request('/v1/libraryShelfTypes', empty))).toEqual({ types: [], next: null });
+
+  // Native identity history is consumed by the original Type/source preparation, without replacement ports.
+  for (const [i, subjectId] of subjects.entries()) {
+    await db.admin.query(
+      `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id) VALUES ($1,$2,'schema:Book',$2)`,
+      [route, subjectId],
+    );
+    await db.admin.query(
+      `INSERT INTO semantic.revision(route,subject_id,revision,kind,release,recorded_transaction_id)
+       VALUES ($1,$2,1,'create',$3,$2)`,
+      [route, subjectId, `sha256:${'0'.repeat(64)}`],
+    );
+    await db.admin.query(
+      `INSERT INTO library.entry(route,account_id,subject_id,state,revision,created_at,updated_at,finished_at,transaction_id)
+       VALUES ($1,$2,$3,$4,1,$5,$6,$7,$3)`,
+      [
+        route,
+        populated,
+        subjectId,
+        state,
+        i === 0 ? '2026-01-01T00:00:00.000001Z' : '2026-01-02T00:00:00.000001Z',
+        i === 0 ? '2026-01-03T00:00:00.000002Z' : '2026-01-03T00:00:00.000001Z',
+        i === 1 ? null : i === 0 ? '2026-01-04T00:00:00.000002Z' : '2026-01-04T00:00:00.000001Z',
+      ],
+    );
+  }
+  await json(await request(pagePath), 503, 'dependency_unavailable');
+  const run = (
+    await db.admin.query(
+      `SELECT run_id,epoch::text,sequence::text,segment FROM library.shelf_maintenance_run
+     WHERE route=$1 AND account_id=$2`,
+      [route, populated],
+    )
+  ).rows[0]!;
+  let binding: ShelfMaintenanceBinding = {
+    route,
+    accountId: populated,
+    runId: run.run_id,
+    epoch: run.epoch,
+    sequence: run.sequence,
+    segment: run.segment,
+  };
+  // Resume exactly the factory installed by the default worker. Each call commits one bounded native page.
+  const maintenance = createShelfMaintenanceOps({ pool: db.pool, access, clock });
+  let terminal = false;
+  for (let n = 0; n < 100; n++) {
+    const receipt = await maintenance.page(binding);
+    if (n === 0) await json(await request(pagePath), 503, 'dependency_unavailable');
+    if (receipt.terminal) {
+      terminal = true;
+      break;
+    }
+    expect(receipt.next).not.toBeNull();
+    binding = receipt.next!;
+  }
+  expect(terminal).toBe(true);
+  const gate = (
+    await db.admin.query(
+      'SELECT initialized,mode,ready,active_generation FROM library.shelf_maintenance WHERE route=$1 AND account_id=$2',
+      [route, populated],
+    )
+  ).rows[0]!;
+  expect(gate).toMatchObject({ initialized: true, mode: 'open', ready: true });
+  expect(gate.active_generation).not.toBe('00000000-0000-0000-0000-000000000000');
+
+  const orders = [
+    ['createdAt', 'desc', [1, 2, 0]],
+    ['createdAt', 'asc', [0, 2, 1]],
+    ['lastActivity', 'desc', [0, 1, 2]],
+    ['lastActivity', 'asc', [2, 1, 0]],
+    ['finishedAt', 'desc', [0, 2, 1]],
+    ['finishedAt', 'asc', [1, 2, 0]],
+  ] as const;
+  let firstCursor = '';
+  for (const [orderBy, direction, expected] of orders) {
+    const path = `/v1/libraryEntries?orderBy=${orderBy}&direction=${direction}&state=${state}&type=schema%3ABook&limit=1`;
+    let cursor: string | null = null;
+    for (let i = 0; i < 3; i++) {
+      const body = await json(await request(path + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '')));
+      expect(body.libraryEntries).toHaveLength(1);
+      expect(body.libraryEntries[0]).toMatchObject({
+        subjectId: subjects[expected[i]!],
+        state,
+        revision: 1,
+        activeProgressSession: null,
+      });
+      expect(body.libraryEntries[0].incarnationId).toBeString();
+      expect(body.libraryEntries[0].createdAt).toContain('.000001');
+      cursor = body.next;
+      if (i < 2) expect(cursor).toBeString();
+      else expect(cursor).toBeNull();
+      if (orderBy === 'createdAt' && direction === 'desc' && i === 0) firstCursor = cursor!;
+    }
+  }
+  await json(
+    await request(
+      `/v1/libraryEntries?orderBy=lastActivity&direction=desc&state=${state}&type=schema%3ABook&limit=1&cursor=${encodeURIComponent(firstCursor)}`,
+    ),
+    400,
+    'invalid_cursor',
+  );
+  const full = await json(await request(`${pagePath}&view=FULL`));
+  expect(full.libraryEntries[0]).toHaveProperty('subject');
+  expect(full.libraryEntries[0]).not.toHaveProperty('accountId');
+  expect(full.libraryEntries[0]).not.toHaveProperty('transactionId');
+
+  // Retained counters for the exact dictionary key must never count toward the active generation.
+  await db.admin.query(
+    `INSERT INTO library.shelf_count(route,account_id,generation_id,bucket,type_id,n)
+     SELECT route,account_id,$3,bucket,type_id,999 FROM library.shelf_count
+     WHERE route=$1 AND account_id=$2 AND generation_id=$4`,
+    [route, populated, newId(route), gate.active_generation],
+  );
+  const warm = await capture(db, async () => {
+    expect((await json(await request('/v1/libraryShelfSummary?type=schema%3ABook'))).tabs.all).toEqual({
+      total: 3,
+      shown: 3,
+    });
+    expect(await json(await request('/v1/libraryShelfTypes'))).toEqual({
+      types: [{ type: 'schema:Book', count: 3 }],
+      next: null,
+    });
+    await json(await request(pagePath));
+  });
+  expect(
+    warm.capture.statements.some((sql) =>
+      /(?:INSERT INTO|UPDATE) (?:core\.(?:receipt|outbox)|library\.shelf_maintenance)/i.test(sql),
+    ),
+  ).toBe(false);
+  await db.admin.query(
+    "UPDATE library.shelf_maintenance SET mode='rebuilding',ready=false,epoch=epoch+1 WHERE route=$1 AND account_id=$2",
+    [route, populated],
+  );
+  await json(await request(pagePath), 503, 'dependency_unavailable');
+  await db.admin.query("UPDATE library.shelf_maintenance SET mode='open',ready=true WHERE route=$1 AND account_id=$2", [
+    route,
+    populated,
+  ]);
+  await json(
+    await request(
+      `/v1/libraryEntries?orderBy=createdAt&direction=desc&state=${state}&type=schema%3ABook&limit=1&cursor=${encodeURIComponent(firstCursor)}`,
+    ),
+    400,
+    'invalid_cursor',
+  );
+  await db.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2', [
+    route,
+    populated,
+  ]);
+  await json(await request(pagePath), 401, 'invalid_credentials');
+}, 30000);

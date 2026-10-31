@@ -1,5 +1,5 @@
 import {
-  isLegacyEntryState,
+  isShelfEntryState,
   MAX_SHELF_PAGE_SIZE,
   type ShelfDateReader,
   type ShelfPageReader,
@@ -26,7 +26,7 @@ export function createShelfCreatedDescReader(): ShelfDateReader {
         throw new TypeError('Invalid shelf owner route');
       if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > MAX_SHELF_PAGE_SIZE)
         throw new RangeError('Invalid shelf page limit');
-      if (query.state !== null && !isLegacyEntryState(query.state)) throw new TypeError('Invalid shelf state');
+      if (query.state !== null && !isShelfEntryState(query.state)) throw new TypeError('Invalid shelf state');
       if (query.typeId !== null && routeOf(query.typeId) !== route) throw new TypeError('Invalid private shelf type');
       if (
         after !== null &&

@@ -1,3 +1,5 @@
+import { libraryEntryStateWrite, shelfSort, type LibraryEntryStateWrite, type ShelfSort } from './shelf-params';
+export { libraryEntryStateWrite, type LibraryEntryStateWrite } from './shelf-params';
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
@@ -16,14 +18,7 @@ import {
   type LibrarySubject,
 } from './reads';
 
-export type LibraryEntryStateWrite = string;
 export type LibraryEntryStateRead = string;
-
-const entryStateId = /^[a-z][a-z0-9_.-]{0,63}$(?![\s\S])/;
-
-export function libraryEntryStateWrite(value: string | undefined): LibraryEntryStateWrite | undefined {
-  return value !== undefined && entryStateId.test(value) ? value : undefined;
-}
 
 export function libraryEntryStateLabel(state: LibraryEntryStateRead, locale?: string): string {
   return locale === undefined ? m.library_other() : m.library_other({}, { locale: locale as Locale });
@@ -36,6 +31,8 @@ export type PersonalLibraryEntry = {
   incarnationId?: string | null;
   createdAt: string;
   updatedAt: string;
+  lastActivityAt?: string;
+  finishedAt?: string | null;
   stateLabel?: string;
   stateOptions?: LibraryStateChoice[];
   activeProgressSession?: ProgressLabelInput | null;
@@ -50,6 +47,10 @@ export type PersonalLibraryView =
       signedIn: true;
       state?: LibraryEntryStateWrite;
       stateLabel?: string;
+      sort?: ShelfSort;
+      sortExplicit?: boolean;
+      cursorReset?: boolean;
+      readState?: 'closed' | 'denied' | 'preparing' | 'unavailable';
       entries: PersonalLibraryEntry[];
       next: string | null;
     };
@@ -97,6 +98,8 @@ type RawEntry = {
   incarnationId?: string | null;
   createdAt: string;
   updatedAt: string;
+  lastActivityAt?: string;
+  finishedAt?: string | null;
   activeProgressSession?: ProgressLabelInput | null;
   subject?: Parameters<typeof subjectOf>[0];
 };
@@ -109,6 +112,8 @@ function presentEntry(entry: RawEntry): ReloadedLibraryEntry {
     ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+    ...(entry.lastActivityAt === undefined ? {} : { lastActivityAt: entry.lastActivityAt }),
+    ...(entry.finishedAt === undefined ? {} : { finishedAt: entry.finishedAt }),
     activeProgressSession: entry.activeProgressSession ?? null,
     subject: subjectOf(entry.subject),
   };
@@ -137,18 +142,33 @@ async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promis
   return viewerCredential(request);
 }
 
-/** One FULL page of the viewer's entries, newest update first, optionally of one state and shorter than a list page. */
+class ShelfPageUnavailableError extends Error {
+  constructor(readonly state: 'denied' | 'preparing' | 'unavailable') {
+    super('Library shelf unavailable');
+  }
+}
+
+/** One FULL bounded page. Omitting sort retains the historical update-order query for other callers. */
 export async function readEntryPage(
   client: KernelClient,
   authorization: string,
   cursor: string | undefined,
   state: LibraryEntryStateWrite | undefined,
   limit?: number,
+  sort?: ShelfSort,
 ) {
   const result = await client.libraryEntries.get({
-    query: { ...libraryListQuery(cursor, limit), ...(state ? { state } : {}) },
+    query: { ...libraryListQuery(cursor, limit), ...(state ? { state } : {}), ...sort },
     headers: { authorization },
   });
+  if (sort) {
+    const status = statusOf(result);
+    const code = codeOf(result.error);
+    if (status === 400 && code === 'invalid_cursor') throw new StaleCursorError();
+    if (status === 403 && code !== 'platform_closed') throw new ShelfPageUnavailableError('denied');
+    if (status === 503)
+      throw new ShelfPageUnavailableError(code === 'dependency_unavailable' ? 'preparing' : 'unavailable');
+  }
   return readLibraryResult(result);
 }
 
@@ -194,22 +214,39 @@ export async function loadPersonalLibrary(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { state?: string; cursor?: string },
+  input: { state?: string; cursor?: string; orderBy?: ShelfSort['orderBy']; direction?: ShelfSort['direction'] },
 ): Promise<PersonalLibraryView> {
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   if (!authorization) return { signedIn: false };
   const state = libraryEntryStateWrite(input.state);
+  const sort = shelfSort({ state, orderBy: input.orderBy, direction: input.direction });
+  const sortExplicit = input.orderBy !== undefined || input.direction !== undefined;
+  let cursorReset = false;
   let page: Awaited<ReturnType<typeof readEntryPage>>;
   try {
-    page = await readEntryPage(client, authorization, input.cursor, state);
+    try {
+      page = await readEntryPage(client, authorization, input.cursor, state, undefined, sort);
+    } catch (error) {
+      if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
+      cursorReset = true;
+      page = await readEntryPage(client, authorization, undefined, state, undefined, sort);
+    }
   } catch (error) {
-    if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
-    page = await readEntryPage(client, authorization, undefined, state);
+    const readState = isPlatformClosedError(error)
+      ? 'closed'
+      : error instanceof ShelfPageUnavailableError
+        ? error.state
+        : undefined;
+    if (!readState) throw error;
+    return { signedIn: true, ...(state ? { state } : {}), sort, sortExplicit, readState, entries: [], next: null };
   }
   return {
     signedIn: true,
     ...(state ? { state } : {}),
+    sort,
+    sortExplicit,
+    ...(cursorReset ? { cursorReset: true } : {}),
     entries: presentShelfEntries(page.libraryEntries),
     next: page.next,
   };

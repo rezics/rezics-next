@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Toaster } from '@rezics/ui/shadcn/toast';
 import { expect, userEvent, within } from 'storybook/test';
+import type { PersonalLibraryView } from '../library/entries-read';
 import { PersonalLibraryPage } from '../library/entries-page';
 import { continueProgress } from '../library/continue-read';
 import type { ContinueView } from '../library/continue-source';
@@ -123,3 +124,108 @@ export const ContinueUnknown: Story = uncertain({ state: 'unknown' }, () => m.li
 export const ContinueUnavailable: Story = uncertain({ state: 'unavailable', status: 503 }, () =>
   m.library_continue_unavailable(),
 );
+
+function chronological(page: PersonalLibraryView): Story {
+  return {
+    render: () => {
+      setLibraryNavigationStoryState({ pinCount: 0, builtins: 'none', collectionCount: 0 });
+      return (
+        <PatternStory visitor="Signed In" path="/library?orderBy=finishedAt&direction=asc&layout=table">
+          <div className="mx-auto max-w-7xl p-4 sm:p-8">
+            <PersonalLibraryPage
+              page={page}
+              continueState={{ state: 'loaded', entries: [], next: null }}
+              locale={getLocale()}
+              display={{ layout: 'table', size: 'm' }}
+            />
+          </div>
+        </PatternStory>
+      );
+    },
+  };
+}
+
+export const ChronologicalOrder: Story = {
+  ...chronological({
+    signedIn: true,
+    sort: { orderBy: 'finishedAt', direction: 'asc' },
+    sortExplicit: true,
+    entries: [
+      {
+        subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000011',
+        state: 'reading.arc-1',
+        stateLabel: 'Reading',
+        revision: 1,
+        incarnationId: '0192f3a0-6c1e-7b2a-9d4e-000000000012',
+        createdAt: '2026-01-01T00:00:00.123456Z',
+        updatedAt: '2026-01-02T00:00:00.123456Z',
+        lastActivityAt: '2026-01-03T00:00:00.123456Z',
+        finishedAt: null,
+        subject: null,
+        changeKey: 'chronological-change',
+        removeKey: 'chronological-remove',
+      },
+      {
+        subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000021',
+        state: 'completed',
+        stateLabel: 'Completed',
+        revision: 2,
+        createdAt: '2026-01-01T00:00:00.123456Z',
+        updatedAt: '2026-01-02T00:00:00.123456Z',
+        lastActivityAt: '2026-01-04T00:00:00.123456Z',
+        finishedAt: '2026-01-02T00:00:00.123456Z',
+        subject: {
+          id: '0192f3a0-6c1e-7b2a-9d4e-000000000021',
+          type: 'schema:Book',
+          types: ['schema:Book'],
+          label: { value: 'A completed book', language: 'en' },
+          cover: null,
+        },
+        changeKey: 'chronological-completed-change',
+        removeKey: 'chronological-completed-remove',
+      },
+    ],
+    next: 'constructed-next-page',
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('combobox', { name: m.library_sort_by() })).toHaveValue('finishedAt');
+    await expect(canvas.getByRole('combobox', { name: m.library_sort_direction() })).toHaveValue('asc');
+    await expect(canvas.getByRole('link', { name: m.library_next_page() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library?orderBy=finishedAt&direction=asc&layout=table&cursor=constructed-next-page`,
+    );
+    // Unsupported columns are plain headings; the three native dates carry the only sort buttons.
+    if (window.matchMedia('(min-width: 640px)').matches) {
+      await expect(
+        canvas.getByRole('columnheader', { name: m.library_column_title() }).querySelector('button'),
+      ).toBeNull();
+      await expect(canvas.getByRole('columnheader', { name: m.library_sort_finished() })).toHaveAttribute(
+        'aria-sort',
+        'ascending',
+      );
+    }
+  },
+};
+
+export const ChronologicalPreparing: Story = chronological({
+  signedIn: true,
+  entries: [],
+  next: null,
+  readState: 'preparing',
+  sort: { orderBy: 'finishedAt', direction: 'asc' },
+});
+export const ChronologicalDenied: Story = chronological({
+  signedIn: true,
+  entries: [],
+  next: null,
+  readState: 'denied',
+  sort: { orderBy: 'finishedAt', direction: 'asc' },
+});
+export const ChronologicalUnavailable: Story = chronological({
+  signedIn: true,
+  entries: [],
+  next: null,
+  readState: 'unavailable',
+  sort: { orderBy: 'finishedAt', direction: 'asc' },
+});

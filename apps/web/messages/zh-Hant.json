@@ -3328,5 +3328,16 @@
   "subject_summary_collapse": "收起簡介",
   "subject_view_all": "查看全部{label}",
   "subject_view_continue": "繼續瀏覽{label}",
-  "subject_work": "作品"
+  "subject_work": "作品",
+  "library_sort_by": "排序依據",
+  "library_sort_activity": "最近活動",
+  "library_sort_created": "加入日期",
+  "library_sort_finished": "完成日期",
+  "library_sort_direction": "排序方向",
+  "library_sort_newest": "最新在前",
+  "library_sort_oldest": "最早在前",
+  "library_sort_apply": "套用排序",
+  "library_sort_restarted": "頁面連結已過期或書庫已變更。現按所選順序顯示第一頁。",
+  "library_sort_denied": "你沒有權限依此順序查看書庫。",
+  "library_sort_preparing": "正在準備你的書庫，請稍後重試。"
 }

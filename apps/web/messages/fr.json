@@ -3328,5 +3328,16 @@
   "subject_summary_collapse": "Réduire",
   "subject_view_all": "Tout voir : {label}",
   "subject_view_continue": "Suite : {label}",
-  "subject_work": "Œuvre"
+  "subject_work": "Œuvre",
+  "library_sort_by": "Trier par",
+  "library_sort_activity": "Dernière activité",
+  "library_sort_created": "Date d’ajout",
+  "library_sort_finished": "Date de fin",
+  "library_sort_direction": "Ordre",
+  "library_sort_newest": "Plus récent en premier",
+  "library_sort_oldest": "Plus ancien en premier",
+  "library_sort_apply": "Appliquer le tri",
+  "library_sort_restarted": "Ce lien a expiré ou la bibliothèque a changé. La première page est affichée dans l’ordre choisi.",
+  "library_sort_denied": "Vous n’avez pas l’autorisation de consulter cet ordre de la bibliothèque.",
+  "library_sort_preparing": "Votre bibliothèque est en cours de préparation. Réessayez dans un instant."
 }

@@ -15,17 +15,17 @@ its payload and order (`updated_at DESC, subject_id ASC`) stay unchanged. Its cu
 helper; old readable HMAC tokens are refused. `direction` and `type` without
 `orderBy` are `400 invalid_request`.
 
-| Parameter   | Values                                    |
-| ----------- | ----------------------------------------- |
-| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt` |
-| `direction` | `desc` (default), `asc`                   |
-| `state`     | the five entry states, optional           |
-| `type`      | exact full primary-type CURIE, optional   |
-| `view`      | `BASIC` (default), `FULL`                 |
-| `limit`     | 1 to 100, default 20. The web asks 48.    |
-| `cursor`    | opaque, at most 4096 characters           |
+| Parameter   | Values                                            |
+| ----------- | ------------------------------------------------- |
+| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt`         |
+| `direction` | `desc` (default), `asc`                           |
+| `state`     | exact validated profile state ID, optional        |
+| `type`      | exact full primary-type CURIE, optional           |
+| `view`      | `BASIC` (default), `FULL`                         |
+| `limit`     | 1 to 100, default 20. The personal page asks 100. |
+| `cursor`    | opaque, at most 4096 characters                   |
 
-The response is `{libraryEntries, next}`. Each item has the BASIC entry fields (`subjectId`, `state`, `revision`,
+The response is `{libraryEntries, next}`. Each item has the BASIC entry fields (`subjectId`, optional nullable `incarnationId`, `state`, `revision`,
 `createdAt`, `updatedAt`) and three additions. FULL adds only `subject`, as it does today; the embedded session never gains
 `subject`.
 
@@ -37,7 +37,16 @@ The response is `{libraryEntries, next}`. Each item has the BASIC entry fields (
   session API returns them; `completed_units` returns the maintained count and never the sparse set.
 
 The Continue row is `state=in_progress&orderBy=lastActivity`. Defaults are the web's choice, exported as
-`SHELF_DEFAULT_ORDER`: completed `finishedAt`, planned `createdAt`, in progress, paused and dropped `lastActivity`, all `desc`.
+`SHELF_DEFAULT_ORDER`: completed `finishedAt`, planned `createdAt`, every other exact profile state `lastActivity`, all `desc`.
+The personal Library selects this native route explicitly on every layout. Its URL carries `orderBy` and `direction`
+through route validation, the server function and generated client. Sort changes reset the cursor. State filters
+use their adopted default until the URL specifies an order, then preserve that explicit order. Layout/size changes
+and next-page links preserve the effective sort/filter and cursor. A rejected stale cursor restarts the same query
+and displays a restart notice. Label shelves retain their native assignment order and receive no date parameters.
+Only the three native dates have sortable table headers; title/type/status remain plain headings. Sort controls
+require both advertised entry-list and progress-list admission; current native Access still decides every read.
+The profile supplies exact state labels and choices; summary tabs retain their existing legacy bucket meanings.
+No new content-family declaration or state coercion is introduced.
 
 `GET /v1/libraryShelfSummary?type=` returns `{tabs}`. `tabs` has the keys `all`, `in_progress`, `planned`, `completed`,
 `paused`, `dropped`, `collections`, each `{total, shown}`. `total` ignores the type filter and `shown` applies it; without
@@ -49,6 +58,26 @@ The web hides empty overview sections from these counts.
 
 Every new path is `x-exposure: gate:personal_library` and `x-action: library_entry:list`; the summary and the facets
 need no progress authority because they carry no progress.
+
+### Default producer composition
+
+The HTTP kernel binds `createDefaultShelfReads` to the existing `createShelfMaintenanceOps` factory with its configured
+pool, installed Access, lazy WorkClient and clock. This adds no pool, worker lifecycle or queue. Before the final RR
+checkout, an admitted bounded current-state gate probe can request the original guarded owner initialization command.
+That command authorizes before receipt lookup, rechecks under the native gate lock, and publishes an advancement event
+only when it actually installs initialization. Warm page, summary and facet reads create no initialization receipt or
+event. An absent gate alone never establishes empty: only the original exact owner `hasEntries`/`hasCollections`/
+`hasSessions` decision publishes an empty nil generation. Nonempty owners retain the native durable backfill intent;
+the existing maintenance worker/recovery resumes bounded pages using the original identity-only source preparation
+and private Type allocator. Reads remain unavailable until committed complete producer state is published.
+
+The same RR client as each page/metadata read proves initialized, open, ready native owner state, a current active
+generation and owner epoch. Missing, moved, rebuilding, purging or otherwise unproved currentness is unavailable.
+Summary keys and facet discovery bind the exact active `shelf_count.generation_id`; returned dictionary values bind
+that generation's positive type count and the exact private `(route,account_id,type_id)` identity. The dictionary
+itself has no generation column. Sparse absent counters mean zero only under this complete producer proof. Retained
+generations never contribute a duplicate count. Cursor bindings include both the owner epoch and active generation,
+in addition to the original viewer, query and partition epoch. Entry incarnation CAS guards survive every date shape.
 
 ### Authorization
 
@@ -399,6 +428,13 @@ tests; they name file and literal test title only. Their geometric scales belong
   empty partition visits. Source/survivor observations are separate when owners differ. Verification has constant row work
   per attempt, plus source/value bytes; no stale worker can lower a stamp across retries.
 - Growth check: `test/library/growth-shelf-writes.test.ts` — `shelf writes and projection pages stay bounded as private populations grow`.
+
+### Initialize or inspect a current owner generation
+
+- Touches: indexed account/partition/native gate and current installed Access. Guarded first initialization uses the
+  original owner-input EXISTS decision and durable backfill intent; warm reads have no command/receipt/event history.
+- Bound: constant indexed readiness work. Existing maintenance continues bounded pages, never a request-time owner scan.
+- Growth check: existing native maintenance/read growth assertions remain the deferred integration proof.
 
 ### Backfill, erasure and counter rebuild
 

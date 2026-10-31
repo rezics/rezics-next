@@ -3328,5 +3328,16 @@
   "subject_summary_collapse": "Mostrar menos",
   "subject_view_all": "Ver todo: {label}",
   "subject_view_continue": "Continuar: {label}",
-  "subject_work": "Obra"
+  "subject_work": "Obra",
+  "library_sort_by": "Ordenar por",
+  "library_sort_activity": "Última actividad",
+  "library_sort_created": "Fecha de incorporación",
+  "library_sort_finished": "Fecha de finalización",
+  "library_sort_direction": "Dirección",
+  "library_sort_newest": "Más recientes primero",
+  "library_sort_oldest": "Más antiguos primero",
+  "library_sort_apply": "Aplicar orden",
+  "library_sort_restarted": "Este enlace ha caducado o la biblioteca ha cambiado. Se muestra la primera página en el orden seleccionado.",
+  "library_sort_denied": "No tienes permiso para consultar este orden de la biblioteca.",
+  "library_sort_preparing": "Tu biblioteca se está preparando. Inténtalo de nuevo en unos momentos."
 }

@@ -11,4 +11,5 @@ WITH input AS (
 SELECT keys.bucket, keys.type_id AS "typeId", COALESCE(counts.n, 0)::text AS n
 FROM keys LEFT JOIN library.shelf_count AS counts
   ON counts.route = :route::integer AND counts.account_id = :account_id::uuid
+  AND counts.generation_id = :generation_id::uuid
   AND counts.bucket = keys.bucket AND counts.type_id = keys.type_id;

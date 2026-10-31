@@ -3328,5 +3328,16 @@
   "subject_summary_collapse": "소개 접기",
   "subject_view_all": "{label} 전체 보기",
   "subject_view_continue": "{label} 계속 보기",
-  "subject_work": "작품"
+  "subject_work": "작품",
+  "library_sort_by": "정렬 기준",
+  "library_sort_activity": "최근 활동",
+  "library_sort_created": "추가한 날짜",
+  "library_sort_finished": "완료한 날짜",
+  "library_sort_direction": "정렬 방향",
+  "library_sort_newest": "최신순",
+  "library_sort_oldest": "오래된순",
+  "library_sort_apply": "정렬 적용",
+  "library_sort_restarted": "페이지 링크가 만료되었거나 라이브러리가 변경되었습니다. 선택한 순서로 첫 페이지를 표시합니다.",
+  "library_sort_denied": "이 순서로 라이브러리를 볼 권한이 없습니다.",
+  "library_sort_preparing": "라이브러리를 준비 중입니다. 잠시 후 다시 시도하세요."
 }

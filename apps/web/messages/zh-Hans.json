@@ -3329,5 +3329,16 @@
   "subject_summary_collapse": "收起简介",
   "subject_view_all": "查看全部{label}",
   "subject_view_continue": "继续浏览{label}",
-  "subject_work": "作品"
+  "subject_work": "作品",
+  "library_sort_by": "排序依据",
+  "library_sort_activity": "最近活动",
+  "library_sort_created": "添加日期",
+  "library_sort_finished": "完成日期",
+  "library_sort_direction": "排序方向",
+  "library_sort_newest": "最新在前",
+  "library_sort_oldest": "最早在前",
+  "library_sort_apply": "应用排序",
+  "library_sort_restarted": "页面链接已过期或书库已更改。现按所选顺序显示第一页。",
+  "library_sort_denied": "你没有权限按此顺序查看书库。",
+  "library_sort_preparing": "正在准备你的书库，请稍后重试。"
 }

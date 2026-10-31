@@ -1,5 +1,5 @@
 import { routeOf } from '../route/route.ts';
-import { isLegacyEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
+import { isShelfEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
 import unfiltered from './shelf-page-created-asc.sql';
 import stateOnly from './shelf-page-created-asc-state.sql';
 import typeOnly from './shelf-page-created-asc-type.sql';
@@ -38,7 +38,7 @@ export function createShelfCreatedAscReader(): ShelfDateReader {
         throw new TypeError('This shelf reader requires createdAt asc');
       if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > MAX_SHELF_PAGE_SIZE)
         throw new RangeError('Invalid shelf page limit');
-      if (query.state !== null && !isLegacyEntryState(query.state)) throw new TypeError('Invalid shelf state');
+      if (query.state !== null && !isShelfEntryState(query.state)) throw new TypeError('Invalid shelf state');
       if (query.typeId !== null && (typeof query.typeId !== 'string' || !uuid.test(query.typeId)))
         throw new TypeError('Shelf type must be a private UUID');
       if (

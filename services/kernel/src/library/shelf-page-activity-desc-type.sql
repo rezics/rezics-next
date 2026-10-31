@@ -1,6 +1,6 @@
 WITH args AS (SELECT :after_key::nullable(timestamptz) AS key, :take::integer AS take),
 scoped AS NOT MATERIALIZED (
-  SELECT subject_id, state, revision, created_at, updated_at, activity_at, finished_at
+  SELECT subject_id, incarnation_id, state, revision, created_at, updated_at, activity_at, finished_at
   FROM library.entry
   WHERE route = :route::integer AND account_id = :account_id::uuid
     AND type_id = :type_id::nullable(uuid)
@@ -17,7 +17,7 @@ scoped AS NOT MATERIALIZED (
      AND subject_id > :after_subject_id::nullable(uuid)
    ORDER BY activity_at DESC, subject_id ASC LIMIT (SELECT take FROM args))
 )
-SELECT subject_id AS "subjectId", state, revision,
+SELECT subject_id AS "subjectId", incarnation_id AS "incarnationId", state, revision,
        to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "createdAt",
        to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt",
        to_char(activity_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "lastActivityAt",

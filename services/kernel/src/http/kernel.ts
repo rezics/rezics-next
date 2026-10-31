@@ -55,6 +55,7 @@ import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
+import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
@@ -567,17 +568,17 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
-    shelves: () =>
-      createDefaultShelfReads({
+    shelves: () => {
+      const access = resolveAccess({ actions: actionCatalogue(personal), realmRoleReader });
+      return createDefaultShelfReads({
         pool: dependencies.pool,
         tokens,
         clock,
-        access: resolveAccess({
-          actions: actionCatalogue(personal),
-          realmRoleReader,
-        }),
+        access,
+        maintenance: createShelfMaintenanceOps({ pool: dependencies.pool, access, client: workClient, clock }),
         ...dependencies.shelves,
-      }),
+      });
+    },
   });
   const labels = personalLabelRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
     routeKey: dependencies.routeKey,

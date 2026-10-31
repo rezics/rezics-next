@@ -2,7 +2,7 @@ import all from './shelf-page-finished-desc.sql';
 import state from './shelf-page-finished-desc-state.sql';
 import type from './shelf-page-finished-desc-type.sql';
 import stateType from './shelf-page-finished-desc-state-type.sql';
-import { isLegacyEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader, type ShelfDateRows } from './shelf-contract.ts';
+import { isShelfEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader, type ShelfDateRows } from './shelf-contract.ts';
 import { routeOf } from '../route/route.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -41,7 +41,7 @@ export function createShelfFinishedDescReader(): ShelfDateReader {
         !query ||
         query.orderBy !== 'finishedAt' ||
         query.direction !== 'desc' ||
-        (query.state !== null && !isLegacyEntryState(query.state)) ||
+        (query.state !== null && !isShelfEntryState(query.state)) ||
         (query.typeId !== null && (typeof query.typeId !== 'string' || !uuid.test(query.typeId)))
       )
         throw new TypeError('Invalid finished descending shelf query');

@@ -29,7 +29,7 @@ import { libraryEntryStateWrite, type LibraryEntryStateRead, type PersonalLibrar
 import { coverSubject } from './subject-row';
 import { displayLibraryTitle } from './title';
 import { progressView } from './progress-label';
-import { shelfHref, type ShelfLayout, type ShelfSize } from './shelf-params';
+import { shelfHref, type ShelfLayout, type ShelfSize, type ShelfSort } from './shelf-params';
 import { useHydrated, useShelfRows, type ShelfFailure, type ShelfRow } from './shelf-rows';
 import type { LibrarySubject } from './reads';
 import type { LabelShelfEntry } from './label-shelf-read';
@@ -74,15 +74,24 @@ export function shelfCover(subject: LibrarySubject | null) {
 function coverOf(entry: PersonalLibraryEntry) {
   return shelfCover(entry.subject);
 }
-type Controls = ReturnType<typeof useShelfRows> & { locale: string; hydrated: boolean };
+type Controls = ReturnType<typeof useShelfRows> & {
+  locale: string;
+  hydrated: boolean;
+  sort?: ShelfSort;
+  filterSort?: ShelfSort;
+  layout: ShelfLayout;
+  size: ShelfSize;
+};
 function hrefOf(entry: PersonalLibraryEntry, locale: string): string {
   return entry.subject
     ? subjectHref({ id: entry.subject.id, label: displayLibraryTitle(entry.subject.label, locale).text }, locale).href
     : `/${locale}/library`;
 }
-function stateHref(state: LibraryEntryStateRead, locale: string) {
+function stateHref(state: LibraryEntryStateRead, locale: string, controls: Controls) {
   const writable = libraryEntryStateWrite(state);
-  return writable ? shelfHref(locale, { state: writable }) : undefined;
+  return writable
+    ? shelfHref(locale, { state: writable, ...controls.filterSort, layout: controls.layout, size: controls.size })
+    : undefined;
 }
 function EntryMenu({
   row,
@@ -177,7 +186,7 @@ function EntryMenu({
   );
 }
 function Updated({ entry, locale }: { entry: PersonalLibraryEntry; locale: string }) {
-  return <RelativeTime value={entry.updatedAt} locale={locale} timeZone="UTC" />;
+  return <RelativeTime value={entry.lastActivityAt ?? entry.updatedAt} locale={locale} timeZone="UTC" />;
 }
 function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
   const { rows, locale } = controls;
@@ -186,7 +195,7 @@ function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
       {rows.map((row) => {
         const { entry } = row;
         const status = stateLabel(entry.state, entry.stateLabel);
-        const statusHref = stateHref(entry.state, locale);
+        const statusHref = stateHref(entry.state, locale, controls);
         const progress = entryProgress(entry, locale);
         const title = titleOf(entry, locale);
         const notes =
@@ -223,7 +232,7 @@ function ListView({ controls }: { controls: Controls }) {
         const localizedTitle = titleOf(entry, locale);
         const title = localizedTitle.text;
         const status = stateLabel(entry.state, entry.stateLabel);
-        const href = stateHref(entry.state, locale);
+        const href = stateHref(entry.state, locale, controls);
         const progress = entryProgress(entry, locale);
         return (
           <ShelfListRow
@@ -263,19 +272,25 @@ function ListView({ controls }: { controls: Controls }) {
     </ShelfList>
   );
 }
-function TableView({ controls }: { controls: Controls }) {
+function TableView({ controls, state }: { controls: Controls; state?: string }) {
   const { rows, locale } = controls;
+  const navigate = useNavigate();
+  const entries = useOperation('library_entry.list');
+  const progress = useOperation('progress_session.list');
+  const sortable = entries && progress && !!controls.sort;
   const columns: ShelfColumn[] = [
     { id: 'cover', label: '', visible: true },
     { id: 'title', label: m.library_column_title(), visible: true },
     { id: 'type', label: m.library_column_type(), visible: true },
     { id: 'status', label: m.library_column_status(), visible: true },
-    { id: 'lastActivity', label: m.library_updated(), visible: true },
+    { id: 'added', label: m.library_sort_created(), visible: true, sortable },
+    { id: 'finished', label: m.library_sort_finished(), visible: true, sortable },
+    { id: 'lastActivity', label: m.library_sort_activity(), visible: true, sortable },
   ];
   const tableRows: ShelfTableRow[] = rows.map((row) => {
     const { entry } = row;
     const status = stateLabel(entry.state, entry.stateLabel);
-    const href = stateHref(entry.state, locale);
+    const href = stateHref(entry.state, locale, controls);
     const title = titleOf(entry, locale);
     return {
       id: entry.subjectId,
@@ -293,6 +308,8 @@ function TableView({ controls }: { controls: Controls }) {
         ) : (
           status
         ),
+      added: <RelativeTime value={entry.createdAt} locale={locale} timeZone="UTC" />,
+      finished: entry.finishedAt ? <RelativeTime value={entry.finishedAt} locale={locale} timeZone="UTC" /> : '—',
       lastActivity: (
         <span className="inline-flex items-center gap-1">
           <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}>
@@ -302,22 +319,54 @@ function TableView({ controls }: { controls: Controls }) {
       ),
     };
   });
-  return <ShelfTable rows={tableRows} columns={columns} onSort={() => {}} />;
+  return (
+    <ShelfTable
+      rows={tableRows}
+      columns={columns}
+      {...(controls.sort
+        ? {
+            sort: {
+              field:
+                controls.sort.orderBy === 'createdAt'
+                  ? 'added'
+                  : controls.sort.orderBy === 'finishedAt'
+                    ? 'finished'
+                    : 'lastActivity',
+              direction: controls.sort.direction,
+            } as const,
+          }
+        : {})}
+      onSort={(field, direction) => {
+        if (!sortable || !['added', 'finished', 'lastActivity'].includes(field)) return;
+        const orderBy = field === 'added' ? 'createdAt' : field === 'finished' ? 'finishedAt' : 'lastActivity';
+        void navigate({
+          to: '/library',
+          search: { state, orderBy, direction, layout: controls.layout, size: controls.size },
+        });
+      }}
+    />
+  );
 }
 export function ShelfEntries({
   entries,
   locale,
   layout,
   size,
+  sort,
+  filterSort,
+  state,
 }: {
   entries: PersonalLibraryEntry[];
   locale: string;
   layout: ShelfLayout;
   size: ShelfSize;
+  sort?: ShelfSort;
+  filterSort?: ShelfSort;
+  state?: string;
 }) {
   const hydrated = useHydrated();
   const shelfRows = useShelfRows(entries);
-  const controls: Controls = { ...shelfRows, locale, hydrated };
+  const controls: Controls = { ...shelfRows, locale, hydrated, layout, size, sort, filterSort };
   const leaving = shelfRows.rows.find((row) => row.entry.subjectId === shelfRows.removing)?.entry;
   const notices = layout === 'grid' ? [] : shelfRows.rows.filter((row) => row.conflict || row.failure);
   if (!shelfRows.rows.length && !shelfRows.restoreMessage) return null;
@@ -353,7 +402,7 @@ export function ShelfEntries({
       {layout === 'table' ? (
         <>
           <div className="hidden sm:block">
-            <TableView controls={controls} />
+            <TableView controls={controls} state={state} />
           </div>
           <div className="sm:hidden">
             <ListView controls={controls} />

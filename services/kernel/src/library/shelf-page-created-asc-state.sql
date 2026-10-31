@@ -4,7 +4,7 @@ WITH args AS MATERIALIZED (
          :has_after::boolean AS has_after, :after_created_at::timestamptz AS after_created_at,
          :after_subject_id::uuid AS after_subject_id, :count::integer AS page_limit
 ), scoped AS NOT MATERIALIZED (
-  SELECT subject_id, state, revision, created_at, updated_at, activity_at, finished_at
+  SELECT subject_id, incarnation_id, state, revision, created_at, updated_at, activity_at, finished_at
   FROM library.entry
   WHERE route = (SELECT route FROM args) AND account_id = (SELECT account_id FROM args)
     AND state = (SELECT state FROM args)
@@ -19,7 +19,7 @@ WITH args AS MATERIALIZED (
   (SELECT scoped.* FROM scoped WHERE (SELECT has_after FROM args) AND created_at > (SELECT after_created_at FROM args)
    ORDER BY created_at ASC, subject_id DESC LIMIT (SELECT page_limit FROM args))
 )
-SELECT subject_id AS "subjectId", state, revision,
+SELECT subject_id AS "subjectId", incarnation_id AS "incarnationId", state, revision,
        created_at::text AS "createdAt", updated_at::text AS "updatedAt",
        activity_at::text AS "lastActivityAt", finished_at::text AS "finishedAt"
 FROM candidates

@@ -1,7 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { shareAccount } from '../access/account-share.ts';
+import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
-import { commandAccessContext } from '../access/command-admission.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -10,14 +12,15 @@ import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { admitShelfRead } from './shelf-admission.ts';
-import { createLibraryCommandRunner, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { shelfNeedsInitialization } from './shelf-reader-generation.ts';
 import {
   DEFAULT_SHELF_PAGE_SIZE,
   MAX_SHELF_PAGE_SIZE,
   SHELF_DIRECTIONS,
   SHELF_ORDERS,
   SHELF_TYPE_RESPONSE_BYTES,
-  isLegacyEntryState,
+  isShelfEntryState,
   normalizeShelfQuery,
   shelfCursorBinding,
   shelfTypeCursorBinding,
@@ -95,8 +98,6 @@ function timestamp(value: string): boolean {
 }
 
 export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
-  const runner = createLibraryCommandRunner(deps);
-
   async function snapshot<T>(
     actor: Actor,
     progress: boolean,
@@ -119,36 +120,7 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         pool: deps.pool,
         deadline,
       });
-      if (deps.maintenance) {
-        const maintenance = deps.maintenance;
-        await runner.ownAccountPrepared(
-          actor,
-          {
-            action: 'library_entry:list',
-            kind: 'library.shelf.initialize',
-            requestKey: randomUUID(),
-            input: {},
-            prepare: (attempt) =>
-              accessCheck(
-                deps.access,
-                actor,
-                'library_entry:list',
-                resource,
-                commandAccessContext({ pool: deps.pool, deadline }, attempt),
-              ),
-          },
-          async (tx, command, admitted) => {
-            if (!(await admitted(tx, command.time))) throw new ProblemError('forbidden');
-            const result = await maintenance.initialize(tx, { route, accountId: account.accountId });
-            return {
-              value: result,
-              events: [{ type: 'com.rezics.library.shelf.initialized.v1', subject: account.accountId, data: {} }],
-            };
-          },
-        );
-      }
-      return withReadTransaction(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
+      async function admitted(client: Parameters<typeof readAccount>[0]) {
         const current = await readAccount(client, route, account.accountId);
         if (
           !current ||
@@ -166,6 +138,75 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
         if (partition.writeState === 'moved')
           throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+        return partition;
+      }
+      const shelfOwner = { route, accountId: account.accountId };
+      // Release the bounded probe before an owner command and before the final RR checkout. No readiness cache.
+      if (
+        deps.maintenance &&
+        (await withReadTransaction(deps.pool, async (connection) => {
+          const client = deadlineClient(connection, deadline);
+          await admitted(client);
+          return shelfNeedsInitialization(client, shelfOwner);
+        }))
+      ) {
+        const maintenance = deps.maintenance;
+        const authorization = resourceAuthorization({
+          access: deps.access,
+          actor,
+          action: 'library_entry:list',
+          anchor: {
+            resource,
+            async validate(client) {
+              await shareAccount(client, account.accountId);
+              const current = await readAccount(client, route, account.accountId);
+              return (
+                !!current &&
+                current.kind === 'actor' &&
+                current.state === 'active' &&
+                !current.fenced &&
+                Number.isSafeInteger(account.authnEpoch) &&
+                account.authnEpoch >= 1 &&
+                current.minimumAuthnEpoch <= BigInt(account.authnEpoch)
+              );
+            },
+          },
+          context: { pool: deps.pool, deadline, partition: partitionOf(route) },
+        });
+        await runCommand(
+          deps.pool,
+          {
+            ...principalCommandIdentity(account),
+            partition: partitionOf(route),
+            deadline,
+            clock: deps.clock,
+            authorization,
+            receipt: {
+              kind: 'library.shelf.initialize',
+              key: account.accountId,
+              digest: createHash('sha256').update(account.accountId).digest(),
+            },
+          },
+          async (tx) => {
+            const result = await maintenance.initialize(tx, shelfOwner);
+            // initialize atomically rechecks after the gate lock, including a concurrent first reader/writer.
+            if (!result.initializedNow) return noEffect(null);
+            return {
+              value: null,
+              events: [
+                {
+                  type: 'com.rezics.library.shelf-maintenance.advanced.v1',
+                  subject: account.accountId,
+                  data: { accountId: account.accountId },
+                },
+              ],
+            };
+          },
+        );
+      }
+      return withReadTransaction(deps.pool, async (connection) => {
+        const client = deadlineClient(connection, deadline);
+        const partition = await admitted(client);
         if (!deps.generation)
           throw new ShelfReadUnavailableError(
             'ShelfMaintenanceOps.initialize and native RR gate/current-generation reader',
@@ -208,7 +249,7 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
       if (
         !SHELF_ORDERS.includes(value.orderBy as ShelfOrder) ||
         (value.direction !== undefined && !SHELF_DIRECTIONS.includes(value.direction as 'asc' | 'desc')) ||
-        (value.state !== undefined && (typeof value.state !== 'string' || !isLegacyEntryState(value.state)))
+        (value.state !== undefined && (typeof value.state !== 'string' || !isShelfEntryState(value.state)))
       )
         throw new ProblemError('invalid_argument');
       const selected = page(value);

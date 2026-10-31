@@ -107,3 +107,75 @@ test('the full Continue destination retains its exhausted message and continuati
   );
   expect(next).toContain('href="/en/library/continue?cursor=opaque%3Anext"');
 });
+
+test('chronological Library addresses retain exact profile states and effective order while label shelves keep assignment order', async () => {
+  const { validateShelfSearch, shelfSort, shelfHref } = await import('../src/library/shelf-params');
+  const selected = validateShelfSearch({
+    state: 'reading.arc-1',
+    orderBy: 'finishedAt',
+    direction: 'asc',
+    cursor: 'signed:page',
+    layout: 'table',
+    size: 'l',
+  });
+  expect(selected).toEqual({
+    state: 'reading.arc-1',
+    orderBy: 'finishedAt',
+    direction: 'asc',
+    cursor: 'signed:page',
+    layout: 'table',
+    size: 'l',
+  });
+  expect(shelfSort({ state: 'planned' })).toEqual({ orderBy: 'createdAt', direction: 'desc' });
+  expect(shelfSort({ state: 'completed' })).toEqual({ orderBy: 'finishedAt', direction: 'desc' });
+  expect(shelfSort({ state: 'reading.arc-1' })).toEqual({ orderBy: 'lastActivity', direction: 'desc' });
+  const next = new URL(shelfHref('en', { ...selected, cursor: 'signed:next' }), 'http://site.test');
+  expect(Object.fromEntries(next.searchParams)).toEqual({ ...selected, cursor: 'signed:next' });
+  const layout = new URL(shelfHref('en', { ...selected, layout: 'list' }), 'http://site.test');
+  expect(layout.searchParams.get('orderBy')).toBe('finishedAt');
+  expect(layout.searchParams.get('cursor')).toBe('signed:page');
+  const label = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
+  const labelSearch = validateShelfSearch({ ...selected, label });
+  expect(labelSearch).not.toHaveProperty('orderBy');
+  expect(labelSearch).not.toHaveProperty('direction');
+  const labelHref = shelfHref('en', { ...selected, label });
+  expect(labelHref).not.toContain('orderBy=');
+  expect(labelHref).not.toContain('direction=');
+  expect(validateShelfSearch({ state: 'Invented State', orderBy: 'title', direction: 'random' })).toEqual({});
+});
+
+test('personal chronological reads send native sort and preserve the historical shared list query', async () => {
+  const { readEntryPage } = await import('../src/library/entries-read');
+  const { libraryListQuery, StaleCursorError } = await import('../src/library/reads');
+  const calls: unknown[] = [];
+  let response: unknown = { status: 200, data: { libraryEntries: [], next: null }, error: null };
+  const client = {
+    libraryEntries: {
+      get: async (input: unknown) => {
+        calls.push(input);
+        return response;
+      },
+    },
+  } as unknown as import('@rezics/client').KernelClient;
+  const sort = { orderBy: 'finishedAt', direction: 'asc' } as const;
+  await readEntryPage(client, 'Bearer owner', 'signed:next', 'reading.arc-1', 20, sort);
+  expect(calls[0]).toEqual({
+    query: { view: 'FULL', limit: 20, cursor: 'signed:next', state: 'reading.arc-1', ...sort },
+    headers: { authorization: 'Bearer owner' },
+  });
+  await readEntryPage(client, 'Bearer owner', undefined, undefined);
+  expect(calls[1]).toEqual({ query: libraryListQuery(), headers: { authorization: 'Bearer owner' } });
+  expect(libraryListQuery()).toEqual({ view: 'FULL', limit: 100 });
+  response = { status: 400, error: { value: { code: 'invalid_cursor' } } };
+  await expect(readEntryPage(client, 'Bearer owner', 'old', undefined, 20, sort)).rejects.toBeInstanceOf(
+    StaleCursorError,
+  );
+  response = { status: 403, error: { value: { code: 'forbidden' } } };
+  await expect(readEntryPage(client, 'Bearer owner', undefined, undefined, 20, sort)).rejects.toMatchObject({
+    state: 'denied',
+  });
+  response = { status: 503, error: { value: { code: 'dependency_unavailable' } } };
+  await expect(readEntryPage(client, 'Bearer owner', undefined, undefined, 20, sort)).rejects.toMatchObject({
+    state: 'preparing',
+  });
+});

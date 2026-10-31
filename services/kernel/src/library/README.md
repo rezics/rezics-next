@@ -1409,7 +1409,12 @@ Ordering keys are fractional-indexing keys. Keys are generated within 32 charact
 
 Native shelf maintenance is exported by `shelf-maintenance-ops-contract.ts` and installed by the existing
 Library WorkModule. Its default initialization, operator request, page/CAS, complete-generation swap and bounded
-recovery are implemented in `shelf-maintenance-runtime.ts`. The derived allocator guard accepts only that runner's
+recovery are implemented in `shelf-maintenance-runtime.ts`. The default HTTP shelf factory now binds that same
+maintenance factory, configured pool/Access/lazy WorkClient/clock and a same-client native RR generation reader.
+An admitted indexed gate probe requests guarded initialization only when needed, before final RR checkout; warm
+reads create no initialization effects. Complete active-generation counters and exact private dictionary identities
+serve summaries/facets, including nonnil native generations. Nonempty owners use the original bounded native
+backfill and identity-only source preparation, never a request-time scan or a second producer. The derived allocator guard accepts only that runner's
 same live transaction/run/epoch/build capability. Nonempty type repair remains pending when the real allocator or
 scoped identity-only source adapters are absent. Shelf purge verifies native tombstone envelopes and observes the
 existing Library erasure participant's local disposition; it does not add a participant or acknowledge shared custody.
@@ -1450,7 +1455,11 @@ history. Historic abandonment times absent from storage remain unknown; migratio
 Last-activity, date-finished and date-added keyset reads need indexes matching the account, applicable status/type
 filters and ordering. Status/type-filtered tab counts and facets use maintained private counters. Do not sort or
 recount a growing library or progress history to serve a page. The shelf interface contract owns exact query names,
-defaults, finish-date/null semantics and type projection details. Requests without shelf additions retain the
+defaults, finish-date/null semantics and type projection details. The personal Library selects those native date
+shapes in grid/list/table and the phone fallback, with URL-bound sort/direction, exact profile state filters and
+cursor restart notices. The current 100-entry personal-page request stays within the API's 20 default/100 maximum;
+shared Collection list query defaults remain unchanged. Label shelves keep assignment order. Unavailable/denied
+chronological reads display their actual state instead of a successful empty shelf. Requests without shelf additions retain the
 existing list envelope and fields. A source's primary type can change: its maintained type key follows anchored
 source re-reads and source revision ordering, rather than a permanent snapshot. Raw `readItemTypes` grants no Access
 permission; displayed subject summaries still use authorized summary reads. An unavailable summary does not justify

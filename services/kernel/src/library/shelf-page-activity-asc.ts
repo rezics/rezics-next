@@ -1,5 +1,5 @@
 import { routeOf } from '../route/route.ts';
-import { isLegacyEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader, type ShelfDateRows } from './shelf-contract.ts';
+import { isShelfEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader, type ShelfDateRows } from './shelf-contract.ts';
 import page from './shelf-page-activity-asc.sql';
 import statePage from './shelf-page-activity-asc-state.sql';
 import typePage from './shelf-page-activity-asc-type.sql';
@@ -37,7 +37,7 @@ export function createShelfActivityAscReader(): ShelfDateReader {
       if (
         query.orderBy !== 'lastActivity' ||
         query.direction !== 'asc' ||
-        (query.state !== null && !isLegacyEntryState(query.state)) ||
+        (query.state !== null && !isShelfEntryState(query.state)) ||
         (query.typeId !== null && (typeof query.typeId !== 'string' || !UUID.test(query.typeId)))
       )
         throw new TypeError('Invalid activity ascending shelf query');
@@ -74,10 +74,10 @@ export function createShelfActivityAscReader(): ShelfDateReader {
             ? await statePage.run(client, { ...parameters, state: query.state })
             : await stateTypePage.run(client, { ...parameters, state: query.state, type_id: query.typeId });
       const entries: ShelfDateRows['entries'] = rows.slice(0, query.limit).map((row) => {
-        const { subjectId, state, revision, createdAt, updatedAt, lastActivityAt, finishedAt } = row;
+        const { subjectId, incarnationId, state, revision, createdAt, updatedAt, lastActivityAt, finishedAt } = row;
         if (createdAt === null || updatedAt === null || lastActivityAt === null || revision === null || state === null)
           throw new Error('Shelf activity backfill is incomplete');
-        return { subjectId, state, revision, createdAt, updatedAt, lastActivityAt, finishedAt };
+        return { subjectId, incarnationId, state, revision, createdAt, updatedAt, lastActivityAt, finishedAt };
       });
       return {
         entries,

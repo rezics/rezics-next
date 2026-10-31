@@ -37,6 +37,10 @@ export type LegacyEntryState = (typeof ENTRY_STATES)[number];
 export function isLegacyEntryState(value: string): value is LegacyEntryState {
   return ENTRY_STATES.some((state) => state === value);
 }
+/** Original profile vocabulary grammar; chronological reads preserve the exact state identifier. */
+export function isShelfEntryState(value: string): boolean {
+  return /^[a-z][a-z0-9_.-]{0,63}$(?![\s\S])/.test(value);
+}
 export const SHELF_ORDERS = ['lastActivity', 'finishedAt', 'createdAt'] as const;
 export const SHELF_DIRECTIONS = ['desc', 'asc'] as const;
 export type ShelfOrder = (typeof SHELF_ORDERS)[number];
@@ -78,6 +82,7 @@ export type ShelfSession = Omit<ProgressSession, 'accountId' | 'transactionId'>;
 /** Existing BASIC entry fields plus the shelf additions. FULL adds `subject` at the transport layer. */
 export type ShelfEntry = {
   subjectId: string;
+  incarnationId?: string | null;
   state: EntryState;
   revision: number;
   createdAt: string;

@@ -3328,5 +3328,16 @@
   "subject_summary_collapse": "Weniger anzeigen",
   "subject_view_all": "Alle {label} ansehen",
   "subject_view_continue": "Weitere {label}",
-  "subject_work": "Werk"
+  "subject_work": "Werk",
+  "library_sort_by": "Sortieren nach",
+  "library_sort_activity": "Letzte Aktivität",
+  "library_sort_created": "Hinzugefügt am",
+  "library_sort_finished": "Abgeschlossen am",
+  "library_sort_direction": "Reihenfolge",
+  "library_sort_newest": "Neueste zuerst",
+  "library_sort_oldest": "Älteste zuerst",
+  "library_sort_apply": "Sortierung anwenden",
+  "library_sort_restarted": "Dieser Seitenlink ist abgelaufen oder die Bibliothek hat sich geändert. Die erste Seite wird in der gewählten Reihenfolge angezeigt.",
+  "library_sort_denied": "Du hast keine Berechtigung, diese Bibliotheksreihenfolge zu lesen.",
+  "library_sort_preparing": "Deine Bibliothek wird vorbereitet. Versuche es gleich erneut."
 }

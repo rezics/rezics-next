@@ -3680,5 +3680,16 @@
   "subject_summary_collapse": "Show less",
   "subject_view_all": "See all {label}",
   "subject_view_continue": "Continue {label}",
-  "subject_work": "Work"
+  "subject_work": "Work",
+  "library_sort_by": "Sort by",
+  "library_sort_activity": "Last activity",
+  "library_sort_created": "Date added",
+  "library_sort_finished": "Date finished",
+  "library_sort_direction": "Direction",
+  "library_sort_newest": "Newest first",
+  "library_sort_oldest": "Oldest first",
+  "library_sort_apply": "Apply sort",
+  "library_sort_restarted": "This page link has expired or the Library changed. Showing the first page in the selected order.",
+  "library_sort_denied": "You do not have permission to read this Library order.",
+  "library_sort_preparing": "Your Library is being prepared. Try again shortly."
 }

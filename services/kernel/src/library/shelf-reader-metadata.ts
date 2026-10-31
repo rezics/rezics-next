@@ -19,11 +19,7 @@ function count(text: string): number {
   return value;
 }
 
-/**
- * The installed shelf_count relation has no generation column yet. Its rows may be served only when the native
- * gate proves that the complete active generation is nil. A different generation needs the producer's real DDL,
- * rather than a guessed column or a silent fallback to old counters.
- */
+/** Complete native generation selected in the same RR snapshot as every counter and dictionary read. */
 export function createShelfMetadataReaders(
   generation: ShelfReadGenerationReader,
 ): ShelfSummaryReader & ShelfFacetReader {
@@ -31,26 +27,31 @@ export function createShelfMetadataReaders(
     const state = await generation(...args);
     if (state.readiness !== 'ready' || state.activeGeneration === null)
       throw new ShelfReadUnavailableError('native complete shelf generation');
-    if (state.activeGeneration !== EMPTY_SHELF_GENERATION)
-      throw new ShelfReadUnavailableError('generation-keyed shelf_count native storage binding');
+    return state.activeGeneration;
   }
   return {
     async summary(client, route, accountId, typeId) {
-      await current(client, { route, accountId });
-      return readShelfSummary(client, route, accountId, typeId);
+      const generationId = await current(client, { route, accountId });
+      return readShelfSummary(client, route, accountId, typeId, generationId);
     },
     async types(client, route, accountId, after, limit, byteBudget) {
-      await current(client, { route, accountId });
-      return readShelfFacets(client, route, accountId, after, limit, byteBudget);
+      const generationId = await current(client, { route, accountId });
+      return readShelfFacets(client, route, accountId, after, limit, byteBudget, generationId);
     },
   };
 }
 
-/** Native current-table reader. Caller owns admission and complete nil-generation evidence in this snapshot. */
-export const readShelfSummary: ShelfSummaryReader['summary'] = async (client, route, accountId, typeId) => {
+/** Storage reader; caller owns admission and complete generation evidence. Nil remains the legacy fixture default. */
+export const readShelfSummary = async (
+  client: Parameters<ShelfSummaryReader['summary']>[0],
+  route: number,
+  accountId: string,
+  typeId: string | null,
+  generationId = EMPTY_SHELF_GENERATION,
+): Promise<ShelfSummary> => {
   const rows = await summaryRows.run(
     { query: client.query.bind(client) },
-    { route, account_id: accountId, type_id: typeId },
+    { route, account_id: accountId, type_id: typeId, generation_id: generationId },
   );
   const tabs = Object.fromEntries(
     ['all', ...ENTRY_STATES, 'collections'].map((tab) => [tab, { total: 0, shown: 0 }]),
@@ -67,20 +68,22 @@ export const readShelfSummary: ShelfSummaryReader['summary'] = async (client, ro
   return { tabs };
 };
 
-/** Native discovery/value reader, under the same admitted complete nil-generation snapshot. */
-export const readShelfFacets: ShelfFacetReader['types'] = async (
-  client,
-  route,
-  accountId,
-  after,
-  limit,
-  byteBudget,
-) => {
+/** Native discovery/value reader, under the same admitted complete generation snapshot. */
+export const readShelfFacets = async (
+  client: Parameters<ShelfFacetReader['types']>[0],
+  route: number,
+  accountId: string,
+  after: string | null,
+  limit: number,
+  byteBudget: number,
+  generationId = EMPTY_SHELF_GENERATION,
+): Promise<Awaited<ReturnType<ShelfFacetReader['types']>>> => {
   const rows = await facetRows.run(
     { query: client.query.bind(client) },
     {
       route,
       account_id: accountId,
+      generation_id: generationId,
       after: after ?? EMPTY_SHELF_GENERATION,
       take: limit + 1,
     },
@@ -108,6 +111,7 @@ export const readShelfFacets: ShelfFacetReader['types'] = async (
           {
             route,
             account_id: accountId,
+            generation_id: generationId,
             type_ids: selected.map((row) => row.typeId),
           },
         );

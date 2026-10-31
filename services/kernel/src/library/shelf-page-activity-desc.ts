@@ -1,5 +1,5 @@
 import { routeOf } from '../route/route.ts';
-import { isLegacyEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
+import { isShelfEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
 import all from './shelf-page-activity-desc.sql';
 import state from './shelf-page-activity-desc-state.sql';
 import type from './shelf-page-activity-desc-type.sql';
@@ -42,7 +42,7 @@ export function createShelfActivityDescReader(): ShelfDateReader {
         !query ||
         query.orderBy !== 'lastActivity' ||
         query.direction !== 'desc' ||
-        (query.state !== null && !isLegacyEntryState(query.state)) ||
+        (query.state !== null && !isShelfEntryState(query.state)) ||
         (query.typeId !== null && (typeof query.typeId !== 'string' || !UUID.test(query.typeId)))
       )
         throw new TypeError('Invalid activity descending shelf query');

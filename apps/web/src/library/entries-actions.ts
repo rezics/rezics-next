@@ -1,3 +1,4 @@
+import { validateShelfSearch, type ShelfSearch } from './shelf-params';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -71,13 +72,10 @@ async function nameRestoreResult(result: LibraryRestoreResult): Promise<LibraryR
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function validateRead(input: unknown): { state?: string; cursor?: string } {
-  if (!input || typeof input !== 'object') return {};
-  const value = input as Record<string, unknown>;
-  return {
-    ...(typeof value.state === 'string' ? { state: value.state } : {}),
-    ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
-  };
+function validateRead(input: unknown): Pick<ShelfSearch, 'state' | 'cursor' | 'orderBy' | 'direction'> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const { state, cursor, orderBy, direction } = validateShelfSearch(input as Record<string, unknown>);
+  return { state, cursor, orderBy, direction };
 }
 
 function readIdentity(
@@ -126,7 +124,7 @@ export const readPersonalLibrary = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<PersonalLibraryView> => {
     setResponseHeader('cache-control', 'private, no-store');
     const view = await loadPersonalLibrary(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
-    if (!view.signedIn) return view;
+    if (!view.signedIn || view.readState) return view;
     await nameSubjectTypes(view.entries.map((entry) => entry.subject));
     const release = await readRelease().catch(() => undefined);
     return presentLibraryStateLabels(view, release, requestLocale() ?? 'en');

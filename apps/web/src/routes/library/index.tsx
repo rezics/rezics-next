@@ -124,11 +124,13 @@ export const Route = createFileRoute('/library/')({
   // The router merges what the address says over what validation returns, so a value the validator dropped is still
   // there; reading through the validator again keeps only the documented values.
   loaderDeps: ({ search }) => {
-    const { state, cursor, label } = validateShelfSearch(search);
+    const { state, cursor, label, orderBy, direction } = validateShelfSearch(search);
     return {
       state,
       cursor,
       label,
+      orderBy,
+      direction,
       undoLabelId: typeof search.undoLabelId === 'string' ? search.undoLabelId : undefined,
       undoSubjectId: typeof search.undoSubjectId === 'string' ? search.undoSubjectId : undefined,
       undoAssignmentId: typeof search.undoAssignmentId === 'string' ? search.undoAssignmentId : undefined,
@@ -157,7 +159,12 @@ export const Route = createFileRoute('/library/')({
       });
     const [page, continueEntries] = await Promise.all([
       readPersonalLibrary({
-        data: { ...(deps.state ? { state: deps.state } : {}), ...(deps.cursor ? { cursor: deps.cursor } : {}) },
+        data: {
+          orderBy: deps.orderBy,
+          direction: deps.direction,
+          ...(deps.state ? { state: deps.state } : {}),
+          ...(deps.cursor ? { cursor: deps.cursor } : {}),
+        },
       }),
       readContinueEntries({ data: {} }),
     ]);

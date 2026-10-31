@@ -1,4 +1,4 @@
-import { isLegacyEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
+import { isShelfEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
 import { routeOf, ROUTES } from '../route/route.ts';
 import unfiltered from './shelf-page-finished-asc.sql';
 import byState from './shelf-page-finished-asc-state.sql';
@@ -35,7 +35,7 @@ export function createShelfFinishedAscReader(): ShelfDateReader {
       if (query.orderBy !== 'finishedAt' || query.direction !== 'asc') throw new TypeError('Invalid shelf order');
       if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > MAX_SHELF_PAGE_SIZE)
         throw new RangeError('Invalid shelf page limit');
-      if (query.state !== null && !isLegacyEntryState(query.state)) throw new TypeError('Invalid shelf state');
+      if (query.state !== null && !isShelfEntryState(query.state)) throw new TypeError('Invalid shelf state');
       if (query.typeId !== null && (typeof query.typeId !== 'string' || !uuid.test(query.typeId)))
         throw new TypeError('Shelf type must be a private UUID');
       if (

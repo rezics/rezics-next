@@ -56,7 +56,12 @@ no per-built-in membership caches or copied exact-fact-witness stores. That plan
 Every qualifying producer must cover insertion; incomplete coverage returns preparing/readiness, never false empty.
 Native current membership and disclosure reject stale positives immediately, including deleted label parents.
 Bounded durable maintenance may prepare indexes. Logical Library/Collection list and detail reads stay pure;
-they never repair indexes or create headers, grants, receipts or domain events. The common members GET alone may
+they never repair indexes or create headers or grants. The personal native chronological shelf adapter may, after
+current owner admission and an indexed missing/uninitialized-gate probe, run the existing guarded owner initialization
+command before final RR checkout. Only actual initialization creates its command receipt/advancement event and
+original bounded backfill intent; warm reads do not. Empty readiness comes only from the original three owner-input
+EXISTS decisions, and incomplete nonempty generations remain unavailable. See the [shelf contract](../services/kernel/src/library/shelf-contract.md#default-producer-composition).
+The common members GET may
 start bounded idempotent derived preparation and its work intent under the adopted
 [dynamic members contract](dynamic-collections.md#model-and-identity), keyed by viewer, Collection, validated filter,
 sort and accepted release/meaning. It writes no domain state, header, grant, event or receipt. Retained preparation

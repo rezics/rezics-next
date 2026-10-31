@@ -232,6 +232,7 @@ async function initialize(tx: CommandTransaction, owner: ShelfOwner) {
     gate = await gateLock.run(tx, ownerArgs(owner));
   } else if (!gate.initialized) gate = await gateLock.run(tx, ownerArgs(owner));
   if (!gate) throw new Error('Shelf gate disappeared');
+  const initializedNow = !gate.initialized;
   if (!gate.initialized) {
     const facts = await inputs.run(tx, ownerArgs(owner));
     const readiness = initialShelfReadiness({
@@ -250,6 +251,7 @@ async function initialize(tx: CommandTransaction, owner: ShelfOwner) {
   if (!gate) throw new Error('Shelf gate disappeared');
   const run = gate.runId ? await runRead.run(tx, runArgs(owner, gate.runId)) : null;
   return {
+    initializedNow,
     readiness: gate.ready ? ('ready' as const) : ('backfill' as const),
     generationId: gate.activeGeneration,
     requested: run && run.phase !== 'complete' && !run.cancelled ? bindingFor(owner, run) : null,
@@ -519,7 +521,11 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
   const { pool, clock, access } = deps;
   let work: Promise<WorkClient> | undefined;
   const workClient = () =>
-    deps.client ? Promise.resolve(deps.client) : (work ??= createWorkClient(pool.options.connectionString ?? '', pool));
+    typeof deps.client === 'function'
+      ? deps.client()
+      : deps.client
+        ? Promise.resolve(deps.client)
+        : (work ??= createWorkClient(pool.options.connectionString ?? '', pool));
   const ports = createShelfMaintenanceDerivedPorts();
   async function requestRebuild(
     actor: Parameters<ShelfMaintenanceOps['requestRebuild']>[0],

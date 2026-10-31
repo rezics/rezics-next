@@ -4,7 +4,7 @@ import { createShelfReads } from './shelf-reads.ts';
 import { createShelfPageReader } from './shelf-reader-page.ts';
 import { createShelfMetadataReaders } from './shelf-reader-metadata.ts';
 import { lookupShelfType } from './shelf-reader-types.ts';
-import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
+import { readShelfGeneration } from './shelf-reader-generation.ts';
 
 export type ShelfNativeReadBindings = Pick<ShelfReadDependencies, 'maintenance' | 'generation'>;
 
@@ -12,13 +12,7 @@ export type ShelfNativeReadBindings = Pick<ShelfReadDependencies, 'maintenance' 
 export function createDefaultShelfReads(
   dependencies: Pick<ShelfReadDependencies, 'pool' | 'access' | 'tokens' | 'clock'> & ShelfNativeReadBindings,
 ): ShelfReads {
-  const generation =
-    dependencies.generation ??
-    (async () => {
-      throw new ShelfReadUnavailableError(
-        'ShelfMaintenanceOps.initialize and native RR gate/current-generation reader',
-      );
-    });
+  const generation = dependencies.generation ?? readShelfGeneration;
   const metadata = createShelfMetadataReaders(generation);
   return createShelfReads({
     ...dependencies,

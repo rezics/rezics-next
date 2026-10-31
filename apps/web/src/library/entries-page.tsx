@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
 import { ContinueSection, useContinueRefresh } from './continue';
 import { LibraryNavigation } from './library-nav';
@@ -16,10 +16,18 @@ import type {
   LibraryRestoreResult,
   PersonalLibraryView,
 } from './entries-read';
-import { Exposure } from '../kernel/exposure';
+import { Exposure, useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { shelfHref, shelfLayouts, shelfSizes, type ShelfLayout, type ShelfSize } from './shelf-params';
+import {
+  shelfHref,
+  shelfSort,
+  type ShelfSort,
+  shelfLayouts,
+  shelfSizes,
+  type ShelfLayout,
+  type ShelfSize,
+} from './shelf-params';
 import { ShelfEntries } from './shelf-view';
 import { useHydrated } from './shelf-rows';
 import { LabelShelfEntries } from './shelf-view';
@@ -42,15 +50,21 @@ function DisplayControls({
   locale,
   display,
   label,
+  sort,
+  cursor,
+  filterSort,
 }: {
   state?: LibraryEntryStateWrite;
   locale: string;
   display: Display;
   label?: string;
+  sort?: ShelfSort;
+  filterSort?: ShelfSort;
+  cursor?: string;
 }) {
   const hydrated = useHydrated();
   const navigate = useNavigate();
-  const stateSearch = state ? { state } : {};
+  const stateSearch = { ...(state ? { state } : {}), ...sort, ...(cursor ? { cursor } : {}) };
   const labelSearch = label ? { label } : {};
   if (!hydrated) {
     const selected = (current: boolean) => buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'sm' });
@@ -85,7 +99,7 @@ function DisplayControls({
         {state ? (
           <a
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            href={shelfHref(locale, { layout: display.layout, size: display.size, ...labelSearch })}
+            href={shelfHref(locale, { ...filterSort, layout: display.layout, size: display.size, ...labelSearch })}
           >
             {m.library_clear_state()}
           </a>
@@ -135,12 +149,54 @@ function DisplayControls({
       {state ? (
         <a
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          href={shelfHref(locale, { layout: display.layout, size: display.size, ...labelSearch })}
+          href={shelfHref(locale, { ...filterSort, layout: display.layout, size: display.size, ...labelSearch })}
         >
           {m.library_clear_state()}
         </a>
       ) : null}
     </div>
+  );
+}
+
+/** Ordinary URL form works before hydration and resets the keyset when the selected predicate changes. */
+function SortControls({
+  locale,
+  state,
+  display,
+  sort,
+}: {
+  locale: string;
+  state?: string;
+  display: Display;
+  sort: ShelfSort;
+}) {
+  const entries = useOperation('library_entry.list');
+  const progress = useOperation('progress_session.list');
+  if (!entries || !progress) return null;
+  return (
+    <form method="get" action={`/${locale}/library`} className="flex flex-wrap items-end gap-2">
+      {state ? <input type="hidden" name="state" value={state} /> : null}
+      <input type="hidden" name="layout" value={display.layout} />
+      <input type="hidden" name="size" value={display.size} />
+      <label className="grid gap-1 text-sm">
+        {m.library_sort_by()}
+        <select name="orderBy" defaultValue={sort.orderBy} className="rounded-md border bg-background p-2">
+          <option value="lastActivity">{m.library_sort_activity()}</option>
+          <option value="createdAt">{m.library_sort_created()}</option>
+          <option value="finishedAt">{m.library_sort_finished()}</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-sm">
+        {m.library_sort_direction()}
+        <select name="direction" defaultValue={sort.direction} className="rounded-md border bg-background p-2">
+          <option value="desc">{m.library_sort_newest()}</option>
+          <option value="asc">{m.library_sort_oldest()}</option>
+        </select>
+      </label>
+      <Button type="submit" variant="outline">
+        {m.library_sort_apply()}
+      </Button>
+    </form>
   );
 }
 
@@ -179,6 +235,9 @@ export function PersonalLibraryPage({
         <p>{m.library_sign_in()}</p>
       </div>
     );
+  const sort = page.sort ?? shelfSort({ state: page.state });
+  const filterSort = page.sortExplicit ? sort : undefined;
+  const effectiveCursor = page.cursorReset ? undefined : cursor;
   const heading = page.state
     ? m.library_tracked_entries_state({ status: page.stateLabel ?? m.library_other() })
     : m.library_tracked_entries();
@@ -216,17 +275,45 @@ export function PersonalLibraryPage({
             {heading}
           </h2>
           <Exposure operation="library_entry.list">
-            <DisplayControls {...(page.state ? { state: page.state } : {})} locale={locale} display={display} />
+            <DisplayControls
+              {...(page.state ? { state: page.state } : {})}
+              locale={locale}
+              display={display}
+              sort={sort}
+              filterSort={filterSort}
+              cursor={effectiveCursor}
+            />
           </Exposure>
         </div>
+        <SortControls
+          key={`${sort.orderBy}:${sort.direction}`}
+          locale={locale}
+          state={page.state}
+          display={display}
+          sort={sort}
+        />
+        {page.cursorReset ? <p role="status">{m.library_sort_restarted()}</p> : null}
         {page.state ? (
           <p className="text-sm text-muted-foreground">
             {m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}
           </p>
         ) : null}
-        {page.entries.length ? (
+        {page.readState ? (
+          <p role={page.readState === 'preparing' ? 'status' : 'alert'}>
+            {page.readState === 'closed'
+              ? m.platform_closed_message()
+              : page.readState === 'denied'
+                ? m.library_sort_denied()
+                : page.readState === 'preparing'
+                  ? m.library_sort_preparing()
+                  : m.error_message()}
+          </p>
+        ) : page.entries.length ? (
           <ShelfEntries
-            key={`${page.state ?? 'all'}:${cursor ?? ''}`}
+            key={`${page.state ?? 'all'}:${sort.orderBy}:${sort.direction}:${effectiveCursor ?? ''}`}
+            sort={sort}
+            filterSort={filterSort}
+            state={page.state}
             entries={page.entries}
             locale={locale}
             {...display}
@@ -252,6 +339,7 @@ export function PersonalLibraryPage({
             className={buttonVariants({ variant: 'outline' })}
             href={shelfHref(locale, {
               ...(page.state ? { state: page.state } : {}),
+              ...sort,
               cursor: page.next,
               layout: display.layout,
               size: display.size,
