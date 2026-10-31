@@ -145,11 +145,7 @@ export function RatingControlView({
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <span className="font-medium text-sm">{question.label}</span>
-        <output
-          aria-live="polite"
-          className="font-semibold tabular-nums"
-          data-slot="rating-control-value"
-        >
+        <output aria-live="polite" className="font-semibold tabular-nums" data-slot="rating-control-value">
           {valueText}
         </output>
       </div>

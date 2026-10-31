@@ -59,34 +59,37 @@ test.each([
   { units: 20, rangeValue: 20, text: '10 out of 10', pending: true, locale: 'en' },
   { units: 15, rangeValue: 15, text: '7.5 / 10', pending: false, locale: 'zh-Hans' },
   { units: null, rangeValue: 10, text: '尚未评分', pending: true, locale: 'zh-Hans' },
-])('the native rating input owns its label and current value text: %j', ({ units, rangeValue, text, pending, locale }) => {
-  const html = view({ kind: 'ready', units }, { pending, locale });
-  const interactive = html.split('<noscript>')[0]!;
-  const ranges = (interactive.match(/<input\b[^>]*>/g) ?? []).filter((tag) => tag.includes('type="range"'));
-  expect(ranges).toHaveLength(1);
-  const input = ranges[0]!;
-  for (const attribute of [
-    `aria-label="${ratingQuestion.label}"`,
-    `aria-valuetext="${text}"`,
-    `aria-valuenow="${rangeValue}"`,
-    `value="${rangeValue}"`,
-    'min="0"',
-    'max="20"',
-    'step="1"',
-  ])
-    expect(input).toContain(attribute);
-  expect(input.includes('disabled=""')).toBe(pending);
-  expect(input).not.toContain('tabindex="-1"');
-  expect(interactive).toContain(`>${text}</output>`);
-  const group = interactive.match(/<div\b[^>]*data-slot="slider"[^>]*>/)?.[0];
-  expect(group).toBeDefined();
-  expect(group).toContain('role="group"');
-  expect(group).not.toMatch(/aria-label=|aria-labelledby=|aria-valuetext=/);
-  const thumb = interactive.match(/<div\b[^>]*data-slot="slider-thumb"[^>]*>/)?.[0];
-  expect(thumb).toBeDefined();
-  expect(thumb).not.toMatch(/role="slider"|aria-label=|aria-valuetext=/);
-  expect(interactive).not.toContain(`for="rating-${subjectId}"`);
-});
+])(
+  'the native rating input owns its label and current value text: %j',
+  ({ units, rangeValue, text, pending, locale }) => {
+    const html = view({ kind: 'ready', units }, { pending, locale });
+    const interactive = html.split('<noscript>')[0]!;
+    const ranges = (interactive.match(/<input\b[^>]*>/g) ?? []).filter((tag) => tag.includes('type="range"'));
+    expect(ranges).toHaveLength(1);
+    const input = ranges[0]!;
+    for (const attribute of [
+      `aria-label="${ratingQuestion.label}"`,
+      `aria-valuetext="${text}"`,
+      `aria-valuenow="${rangeValue}"`,
+      `value="${rangeValue}"`,
+      'min="0"',
+      'max="20"',
+      'step="1"',
+    ])
+      expect(input).toContain(attribute);
+    expect(input.includes('disabled=""')).toBe(pending);
+    expect(input).not.toContain('tabindex="-1"');
+    expect(interactive).toContain(`>${text}</output>`);
+    const group = interactive.match(/<div\b[^>]*data-slot="slider"[^>]*>/)?.[0];
+    expect(group).toBeDefined();
+    expect(group).toContain('role="group"');
+    expect(group).not.toMatch(/aria-label=|aria-labelledby=|aria-valuetext=/);
+    const thumb = interactive.match(/<div\b[^>]*data-slot="slider-thumb"[^>]*>/)?.[0];
+    expect(thumb).toBeDefined();
+    expect(thumb).not.toMatch(/role="slider"|aria-label=|aria-valuetext=/);
+    expect(interactive).not.toContain(`for="rating-${subjectId}"`);
+  },
+);
 
 test('the native input retains the question scale and question-specific label through the shared thumb props', () => {
   const question: RatingQuestion = {
