@@ -204,13 +204,34 @@ export const DeniedDetail: Story = {
   async play(args) {
     await ready(args);
     const canvas = within(args.canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.library_copy_more_actions() }));
+    const recordedCopy = recording.copies[0]!;
+    const row = (await canvas.findByText(recordedCopy.note!, { exact: true })).closest('li');
+    if (!row) throw new globalThis.Error('The recorded owner copy did not render in the list.');
+    const rawRow = row.textContent;
+    const trigger = within(row).getByRole('button', { name: m.library_copy_more_actions(), exact: true });
+    await userEvent.click(trigger);
     const view = within(document.body);
-    await userEvent.click(view.getByRole('menuitem', { name: m.library_copy_edit() }));
-    await view.findByText(m.library_copy_detail_forbidden());
-    const dialog = within(view.getByRole('dialog'));
+    // Menu uses a titled sheet with buttons on phones and coarse pointers, and a portalled menu on desktop.
+    const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+    const actions = await view.findByRole(sheet ? 'dialog' : 'menu', {
+      name: m.library_copy_more_actions(),
+      exact: true,
+    });
+    if (!sheet) expect(actions.id).toBe(trigger.getAttribute('aria-controls'));
+    const edit = await within(actions).findByRole(sheet ? 'button' : 'menuitem', {
+      name: m.library_copy_edit(),
+      exact: true,
+    });
+    expect(edit).toBeVisible();
+    await userEvent.click(edit);
+    const dialog = within(await view.findByRole('dialog', { name: m.library_copy_edit(), exact: true }));
+    await dialog.findByText(m.library_copy_detail_forbidden());
     expect(dialog.queryByText(recording.copies[0]!.note!)).not.toBeInTheDocument();
     expect(dialog.queryByRole('button', { name: m.library_copy_save() })).not.toBeInTheDocument();
+    expect(dialog.queryByRole('button', { name: m.library_copy_delete() })).not.toBeInTheDocument();
+    expect(dialog.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(row).toBeInTheDocument();
+    expect(row.textContent).toBe(rawRow);
   },
 };
 export const ExactCapturedStatusEdit: Story = {
