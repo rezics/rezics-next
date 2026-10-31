@@ -349,9 +349,13 @@ export function createCollectionSource(dependencies: {
     const saved = prepared.get(input.source);
     if (!saved) throw new ProblemError('invalid_cursor');
     if (input.work) {
-      if (!current || !isDeepStrictEqual(saved.workBinding, { kind: input.work.kind, locator: input.work.locator }) ||
-        saved.generation !== current.generation || !isDeepStrictEqual(saved.basis, current.basis) ||
-        !isDeepStrictEqual(input.source.observation, current.observation))
+      if (
+        !current ||
+        !isDeepStrictEqual(saved.workBinding, { kind: input.work.kind, locator: input.work.locator }) ||
+        saved.generation !== current.generation ||
+        !isDeepStrictEqual(saved.basis, current.basis) ||
+        !isDeepStrictEqual(input.source.observation, current.observation)
+      )
         throw new ProblemError('semantic_not_ready');
       return saved;
     }
@@ -373,18 +377,30 @@ export function createCollectionSource(dependencies: {
       if (input.work) {
         const collectionId = 'collectionId' in input ? input.collectionId : input.source.observation.collectionId;
         if (collectionId !== input.work.locator.collectionId) throw new ProblemError('semantic_not_ready');
-        const current = await l.run((allowance) => readCollectionSourceWorkState(
-          dependencies.pool, input.work!, { access: dependencies.access, deadline: input.deadline, allowance },
-        ));
+        const current = await l.run((allowance) =>
+          readCollectionSourceWorkState(dependencies.pool, input.work!, {
+            access: dependencies.access,
+            deadline: input.deadline,
+            allowance,
+          }),
+        );
         if ('source' in input && !isDeepStrictEqual(input.source.observation, current.observation))
           throw new ProblemError('semantic_not_ready');
         const result = await body(l, current);
         // This is a fresh native admission on the SAME live Core client, not a cached getter verdict.
-        const final = await l.run((allowance) => readCollectionSourceWorkState(
-          dependencies.pool, input.work!, { access: dependencies.access, deadline: input.deadline, allowance },
-        ));
-        if (!isDeepStrictEqual(current.definition, final.definition) || current.generation !== final.generation ||
-          !isDeepStrictEqual(current.basis, final.basis) || !isDeepStrictEqual(current.metadata, final.metadata))
+        const final = await l.run((allowance) =>
+          readCollectionSourceWorkState(dependencies.pool, input.work!, {
+            access: dependencies.access,
+            deadline: input.deadline,
+            allowance,
+          }),
+        );
+        if (
+          !isDeepStrictEqual(current.definition, final.definition) ||
+          current.generation !== final.generation ||
+          !isDeepStrictEqual(current.basis, final.basis) ||
+          !isDeepStrictEqual(current.metadata, final.metadata)
+        )
           throw new ProblemError('semantic_not_ready');
         // Final comparisons consume the same reservation and are included in every successful receipt.
         return { ...result, work: l.receipt() };
@@ -424,20 +440,24 @@ export function createCollectionSource(dependencies: {
     });
     const raw = Math.min(100, Math.floor(l.allowance().remaining.candidateKeys / 4));
     if (!raw) return partial('allowance');
-    const window = input.work && current
-      ? await l.run((allowance) => readCollectionSourceWorkGroup(
-          input.work!, current, input.subjectId, after, raw, { deadline: input.deadline, allowance },
-        ))
-      : await useCanonical(l, () =>
-      readCanonicalSourceGroup(dependencies.pool, {
-        route: obs.route,
-        collectionId: obs.collectionId,
-        deadline: input.deadline,
-        allowance: canonicalAllowance(l.allowance(), raw),
-        basis: saved.basis,
-        progress: { pendingSubjectId: input.subjectId, after, generation: saved.generation, basis: saved.basis },
-      }),
-    );
+    const window =
+      input.work && current
+        ? await l.run((allowance) =>
+            readCollectionSourceWorkGroup(input.work!, current, input.subjectId, after, raw, {
+              deadline: input.deadline,
+              allowance,
+            }),
+          )
+        : await useCanonical(l, () =>
+            readCanonicalSourceGroup(dependencies.pool, {
+              route: obs.route,
+              collectionId: obs.collectionId,
+              deadline: input.deadline,
+              allowance: canonicalAllowance(l.allowance(), raw),
+              basis: saved.basis,
+              progress: { pendingSubjectId: input.subjectId, after, generation: saved.generation, basis: saved.basis },
+            }),
+          );
     if (!('rows' in window)) return partial('native_evidence');
     for (const row of window.rows) {
       // Probe current original support, then consume the ordinary Semantic original AND terminal guards at T.
@@ -456,8 +476,11 @@ export function createCollectionSource(dependencies: {
         // read is made with the home checkout held; the final ordinary reader still checks both anchors.
         if (input.work) {
           return {
-            result: true, subjectId: input.subjectId, positiveEvidence: { [nativeEvidence]: true },
-            observation: obs, work: l.receipt(),
+            result: true,
+            subjectId: input.subjectId,
+            positiveEvidence: { [nativeEvidence]: true },
+            observation: obs,
+            work: l.receipt(),
           };
         }
         const resolved = await l.bounded(
@@ -506,23 +529,29 @@ export function createCollectionSource(dependencies: {
       return guarded(input, async (l, current) => {
         const route = routeOf(input.collectionId);
         if (route === null) throw new ProblemError('not_found');
-        const { metadata } = current ?? await l.run((allowance) =>
-          readNativeCollectionMetadata(
-            dependencies.pool,
-            { route, collectionId: input.collectionId },
-            { deadline: input.deadline, allowance },
-          ),
-        );
+        const { metadata } =
+          current ??
+          (await l.run((allowance) =>
+            readNativeCollectionMetadata(
+              dependencies.pool,
+              { route, collectionId: input.collectionId },
+              { deadline: input.deadline, allowance },
+            ),
+          ));
         if (!metadata || metadata.state !== 'active') throw new ProblemError('not_found');
         if (!input.work) await authorize(input, metadata, l);
-        const state = current ?? await ready(input, metadata, l);
+        const state = current ?? (await ready(input, metadata, l));
         const source: PreparedCollectionSource = {
           [preparedSource]: true,
           observation: current?.observation ?? observation(metadata, state.basis),
         };
         prepared.set(source, {
-          metadata, basis: state.basis, generation: state.generation,
-          ...(input.work ? { workBinding: { kind: input.work.kind, locator: Object.freeze({ ...input.work.locator }) } } : {}),
+          metadata,
+          basis: state.basis,
+          generation: state.generation,
+          ...(input.work
+            ? { workBinding: { kind: input.work.kind, locator: Object.freeze({ ...input.work.locator }) } }
+            : {}),
         });
         return { source, work: l.receipt() };
       });
@@ -534,26 +563,31 @@ export function createCollectionSource(dependencies: {
       return guarded(input, async (l, current) => {
         const saved = await revalidate(input, l, current),
           obs = current?.observation ?? observation(saved.metadata, saved.basis);
-        if (input.afterSubjectId !== null && routeOf(input.afterSubjectId) === null) throw new ProblemError('invalid_cursor');
+        if (input.afterSubjectId !== null && routeOf(input.afterSubjectId) === null)
+          throw new ProblemError('invalid_cursor');
         const candidates: CanonicalCollectionCandidate[] = [];
         let coveredThrough = input.afterSubjectId,
           exhausted = false;
         while (l.allowance().remaining.candidateKeys > 0 && candidates.length < 100) {
-          const seek = input.work && current
-            ? await l.run((allowance) => seekCollectionSourceWorkGroup(
-                input.work!, current, coveredThrough, { deadline: input.deadline, allowance },
-              ))
-            : await useCanonical(l, () =>
-            seekCanonicalSourceGroup(dependencies.pool, {
-              route: obs.route,
-              collectionId: obs.collectionId,
-              basis: saved.basis,
-              generation: saved.generation,
-              afterSubjectId: coveredThrough,
-              deadline: input.deadline,
-              allowance: canonicalAllowance(l.allowance(), 1),
-            }),
-          );
+          const seek =
+            input.work && current
+              ? await l.run((allowance) =>
+                  seekCollectionSourceWorkGroup(input.work!, current, coveredThrough, {
+                    deadline: input.deadline,
+                    allowance,
+                  }),
+                )
+              : await useCanonical(l, () =>
+                  seekCanonicalSourceGroup(dependencies.pool, {
+                    route: obs.route,
+                    collectionId: obs.collectionId,
+                    basis: saved.basis,
+                    generation: saved.generation,
+                    afterSubjectId: coveredThrough,
+                    deadline: input.deadline,
+                    allowance: canonicalAllowance(l.allowance(), 1),
+                  }),
+                );
           if (!('subjectId' in seek)) throw new ProblemError('dependency_unavailable');
           if (!seek.subjectId) {
             exhausted = true;

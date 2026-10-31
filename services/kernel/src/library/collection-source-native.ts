@@ -1,5 +1,9 @@
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
-import { currentOperationalResources, hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
+import {
+  currentOperationalResources,
+  hasLiveOperationalTransaction,
+  type OperationalTransaction,
+} from '../command/operational.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { accessRoot } from '../access/derived-access.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
@@ -266,7 +270,8 @@ async function call<T extends object>(
     try {
       return { ...(await operation(work)), work: work.receipt() };
     } catch (error) {
-      if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
+      if (error instanceof Error)
+        Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
       throw error;
     }
   }
@@ -298,7 +303,8 @@ async function readOnly<T>(
         reservation.dispatch();
         let result: QueryResult | undefined;
         try {
-          result = await tx.query({ text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) });
+          const request = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
+          result = await tx.query(request);
           return result;
         } finally {
           const bound = footprint(sql, values, work)!;
