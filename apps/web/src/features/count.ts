@@ -2,11 +2,11 @@ export type Count = { value: number; relation: 'exact' | 'lower_bound' };
 
 export function countFromLinks(
   count: { value: number; exact: boolean } | undefined,
-  returned: number,
+  _returned: number,
 ): Count | undefined {
   if (!count) return;
   return {
-    value: Math.max(count.value, returned),
+    value: count.value,
     relation: count.exact ? 'exact' : 'lower_bound',
   };
 }
