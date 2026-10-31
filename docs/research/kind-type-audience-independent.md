@@ -6,10 +6,11 @@ Only this report is changed. No other investigation was consulted; no runtime or
 
 ## Finding and recommendation
 
-There is no truthful drop-in actorless Type/audience callable on this revision. Two inputs are missing:
-an Accounts-native, request-origin audience evidence producer, and complete native invalidation of that evidence's
-Type/disclosure/permission dependency closure. The admitted Kind work context supplies technical maintenance input;
-it supplies neither an audience principal nor subject permission. SAME T and accounting do not bridge that gap.
+There is no truthful drop-in actorless Type/audience callable on this revision. Missing boundaries are an
+Accounts-native request-origin audience evidence producer, complete native invalidation of its Type/disclosure/
+permission dependency closure, and native per-home producer admission beyond the live Source-local context.
+The admitted Kind work context supplies technical maintenance input; it supplies neither an audience principal
+nor subject permission. SAME T and accounting do not bridge those gaps.
 
 Recommend a narrow evidence extension in the ORIGINAL owners, conditional on manager adoption of its authority
 and invalidation semantics below. Keep ordinary final viewer authorization in Accounts. Do not restore an Actor,
