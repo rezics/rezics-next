@@ -47,7 +47,10 @@ test('a Kind locator, audience namespace and structural transaction cannot issue
   } as unknown as OperationalTransaction;
   const evidence = createNativeKindTypeEvidence({ pool, access: {} as Access });
   const budget = allowance();
-  const read = await evidence.read({ locator, allowance: budget, deadline: Date.now() + 10000 });
+  // An audience label cannot extend the original closed Library locator. A
+  // valid locator will require paid native owner lookup once that owner exists.
+  const forgedLocator = { ...locator, audience: 'public' };
+  const read = await evidence.read({ locator: forgedLocator, allowance: budget, deadline: Date.now() + 10000 });
   expect(read.status).toBe('unavailable');
   expect(read.work.reservationId).toBe(budget.reservationId);
   expect(Object.values(read.work.used).every((value) => value === 0)).toBe(true);
