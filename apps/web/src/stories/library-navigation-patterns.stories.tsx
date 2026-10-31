@@ -83,7 +83,7 @@ export const PhoneSelectorOpen: Story = {
 
 export const SelectedCollectionSelector: Story = {
   name: 'Selected Collection title and keyboard focus',
-  parameters: PhoneSelectorOpen.parameters,
+  parameters: { ...PhoneSelectorOpen.parameters },
   render: () => (
     <PatternStory>
       <LibraryNavigation
