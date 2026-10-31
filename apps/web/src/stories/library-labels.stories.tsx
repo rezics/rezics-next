@@ -221,3 +221,64 @@ export const PickerPages: Story = {
     await expect(view.queryByRole('button', { name: 'Empty label' })).not.toBeInTheDocument();
   },
 };
+
+async function openPhoneLabelForm(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = within(context.canvasElement);
+  const trigger = await view.findByRole('button', { name: m.library_subject_label_add() });
+  await waitFor(() =>
+    expect(context.canvasElement.querySelector('[data-subject-label-picker]')).not.toBeInTheDocument(),
+  );
+  await userEvent.click(trigger);
+  const input = (await view.findByRole('textbox', {
+    name: m.library_subject_label_name(),
+  })) as HTMLInputElement;
+  await expect(input).toBeVisible();
+  await expect(input).toBeRequired();
+  const form = input.form!;
+  await expect(form.checkValidity()).toBe(false);
+  await userEvent.click(within(form).getByRole('button', { name: m.library_subject_label_add() }));
+  await expect(input).toHaveValue('');
+  await expect(input.validity.valueMissing).toBe(true);
+  await userEvent.type(input, 'One more label');
+  await expect(form.checkValidity()).toBe(true);
+  const create = await within(form).findByRole('button', {
+    name: m.library_subject_label_create({ name: 'One more label' }),
+  });
+  await expect(create).toBeVisible();
+  await expect(create).toBeEnabled();
+  return { view, trigger, input, form, create };
+}
+
+export const PhoneBeforeCapacity: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <SubjectLabelStory count={31} />,
+  play: async (context) => {
+    const { trigger, form } = await openPhoneLabelForm(context);
+    await expect(context.canvasElement.querySelectorAll('[data-subject-label-chip]')).toHaveLength(31);
+    await userEvent.click(within(form).getByRole('button', { name: m.library_collection_cancel() }));
+    await waitFor(() =>
+      expect(context.canvasElement.querySelector('[data-subject-label-picker]')).not.toBeInTheDocument(),
+    );
+    await expect(trigger).toHaveFocus();
+    await userEvent.click(trigger);
+    const input = await within(context.canvasElement).findByRole('textbox', {
+      name: m.library_subject_label_name(),
+    });
+    await expect(input).toHaveValue('');
+    await expect(input).toBeRequired();
+  },
+};
+
+export const PhoneCapacity: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <SubjectLabelStory count={32} />,
+  play: async (context) => {
+    const { view, input, create } = await openPhoneLabelForm(context);
+    await userEvent.click(create);
+    await view.findByText(m.library_subject_label_capacity());
+    await expect(context.canvasElement.querySelectorAll('[data-subject-label-chip]')).toHaveLength(32);
+    await expect(input).toBeVisible();
+    await expect(input).toHaveValue('One more label');
+  },
+};

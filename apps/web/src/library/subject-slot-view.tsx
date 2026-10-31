@@ -132,6 +132,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
     'idle',
   );
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const labelPickerTrigger = useRef<HTMLElement>(null);
   const [labelPending, setLabelPending] = useState(false);
   const [labelNotice, setLabelNotice] = useState(data.labelResult);
   const [labelUndo, setLabelUndo] = useState(data.labelUndo);
@@ -772,116 +773,126 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                   data-subject-label-picker-details
                   open={labelPickerOpen}
                   onToggle={(event) => setLabelPickerOpen(event.currentTarget.open)}
-                  className="max-w-md"
+                  className="min-w-0 max-w-md"
                 >
-                  <summary className={`${buttonClass} cursor-pointer list-none`}>
+                  <summary
+                    ref={labelPickerTrigger}
+                    role="button"
+                    aria-expanded={hydrated ? labelPickerOpen : undefined}
+                    className={`${buttonClass} cursor-pointer list-none`}
+                  >
                     {m.library_subject_label_add()}
                   </summary>
-                  <form
-                    data-subject-label-picker
-                    method="post"
-                    action={action}
-                    onSubmit={(event) => void submitLabelName(event)}
-                    className="mt-2 space-y-2 rounded-lg border bg-background p-3"
-                  >
-                    <input type="hidden" name="intent" value="assign-by-name" />
-                    <input type="hidden" name="idempotencyKey" value={data.labelAssignKey} />
-                    <input type="hidden" name="createKey" value={data.labelCreateKey} />
-                    <input type="hidden" name="subjectId" value={subject.id} />
-                    <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
-                    <label className="grid gap-1 text-sm font-medium">
-                      {m.library_subject_label_input()}
-                      <input
-                        name="name"
-                        aria-label={m.library_subject_label_name()}
-                        autoComplete="off"
-                        maxLength={200}
-                        required
-                        value={labelQuery}
-                        onChange={(event) => {
-                          latestLabelQuery.current = event.currentTarget.value;
-                          setLabelQuery(event.currentTarget.value);
-                        }}
-                        className="h-9 rounded-md border bg-background px-3 text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                      />
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      <Exposure operation="library_label.create">
-                        <button type="submit" disabled={hydrated && labelPending} className={buttonClass}>
-                          {m.library_subject_label_add()}
+                  {/* Keep the no-script form; hydrated closed pickers have no inactive required controls. */}
+                  {!hydrated || labelPickerOpen ? (
+                    <form
+                      data-subject-label-picker
+                      method="post"
+                      action={action}
+                      onSubmit={(event) => void submitLabelName(event)}
+                      className="mt-2 space-y-2 rounded-lg border bg-background p-3"
+                    >
+                      <input type="hidden" name="intent" value="assign-by-name" />
+                      <input type="hidden" name="idempotencyKey" value={data.labelAssignKey} />
+                      <input type="hidden" name="createKey" value={data.labelCreateKey} />
+                      <input type="hidden" name="subjectId" value={subject.id} />
+                      <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
+                      <label className="grid gap-1 text-sm font-medium">
+                        {m.library_subject_label_input()}
+                        <input
+                          name="name"
+                          aria-label={m.library_subject_label_name()}
+                          autoComplete="off"
+                          maxLength={200}
+                          required
+                          value={labelQuery}
+                          onChange={(event) => {
+                            latestLabelQuery.current = event.currentTarget.value;
+                            setLabelQuery(event.currentTarget.value);
+                          }}
+                          className="h-11 w-full min-w-0 rounded-md border bg-background px-3 text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                        />
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <Exposure operation="library_label.create">
+                          <button type="submit" disabled={hydrated && labelPending} className={buttonClass}>
+                            {m.library_subject_label_add()}
+                          </button>
+                        </Exposure>
+                        <button
+                          type="button"
+                          className={buttonClass}
+                          onClick={() => {
+                            setLabelPickerOpen(false);
+                            setLabelQuery('');
+                            latestLabelQuery.current = '';
+                            labelPickerTrigger.current?.focus();
+                          }}
+                        >
+                          {m.library_collection_cancel()}
                         </button>
-                      </Exposure>
-                      <button
-                        type="button"
-                        className={buttonClass}
-                        onClick={() => {
-                          setLabelPickerOpen(false);
-                          setLabelQuery('');
-                          latestLabelQuery.current = '';
+                      </div>
+                      <SubjectLabelMore
+                        query={labelQuery}
+                        next={labelNext}
+                        onPage={(page) => {
+                          setLabelNext(page.next ?? null);
+                          setLabelChoices(page.labels);
+                          setLabelSearchState(page.state);
                         }}
-                      >
-                        {m.library_collection_cancel()}
-                      </button>
-                    </div>
-                    <SubjectLabelMore
-                      query={labelQuery}
-                      next={labelNext}
-                      onPage={(page) => {
-                        setLabelNext(page.next ?? null);
-                        setLabelChoices(page.labels);
-                        setLabelSearchState(page.state);
-                      }}
-                    />
-                    <SubjectLabelReadNotice {...(labelReadReason !== undefined ? { reason: labelReadReason } : {})} />
-                    {labelSearchState === 'loaded' ? (
-                      <ul aria-label={m.library_subject_label_input()} className="space-y-1">
-                        {labelChoices.map((choice) => (
-                          <li key={choice.id}>
-                            <Exposure operation="library_label.assign">
-                              <button
-                                type="button"
-                                disabled={hydrated && labelPending}
-                                onClick={() => void writeLabel({ intent: 'assign', label: choice })}
-                                className="w-full rounded px-2 py-1 text-start text-sm hover:bg-muted disabled:opacity-50"
-                              >
-                                {choice.name}
-                              </button>
-                            </Exposure>
-                          </li>
-                        ))}
-                        {normalizeLibraryLabelName(labelQuery) &&
-                        !labelChoices.some(
-                          (choice) => normalizeLibraryLabelName(choice.name) === normalizeLibraryLabelName(labelQuery),
-                        ) ? (
-                          <li>
-                            <Exposure operation="library_label.create">
-                              <button
-                                type="button"
-                                disabled={hydrated && labelPending}
-                                onClick={() => void writeLabel({ intent: 'create-and-assign', name: labelQuery })}
-                                className="w-full rounded px-2 py-1 text-start text-sm font-medium text-primary hover:bg-muted disabled:opacity-50"
-                              >
-                                {m.library_subject_label_create({ name: normalizeLibraryLabelName(labelQuery) })}
-                              </button>
-                            </Exposure>
-                          </li>
-                        ) : null}
-                        {labelChoices.length === 0 ? (
-                          <li className="px-2 py-1 text-sm text-muted-foreground">
-                            {m.library_subject_label_no_results()}
-                          </li>
-                        ) : null}
-                      </ul>
-                    ) : labelSearchState === 'closed' ? (
-                      <p role="status" className="text-sm text-muted-foreground">
-                        {m.library_subject_label_closed()}
-                      </p>
-                    ) : labelSearchState === 'unavailable' ? (
-                      <p role="alert" className="text-sm text-muted-foreground">
-                        {m.library_subject_label_unavailable()}
-                      </p>
-                    ) : null}
-                  </form>
+                      />
+                      <SubjectLabelReadNotice {...(labelReadReason !== undefined ? { reason: labelReadReason } : {})} />
+                      {labelSearchState === 'loaded' ? (
+                        <ul aria-label={m.library_subject_label_input()} className="space-y-1">
+                          {labelChoices.map((choice) => (
+                            <li key={choice.id}>
+                              <Exposure operation="library_label.assign">
+                                <button
+                                  type="button"
+                                  disabled={hydrated && labelPending}
+                                  onClick={() => void writeLabel({ intent: 'assign', label: choice })}
+                                  className="w-full rounded px-2 py-1 text-start text-sm hover:bg-muted disabled:opacity-50"
+                                >
+                                  {choice.name}
+                                </button>
+                              </Exposure>
+                            </li>
+                          ))}
+                          {normalizeLibraryLabelName(labelQuery) &&
+                          !labelChoices.some(
+                            (choice) =>
+                              normalizeLibraryLabelName(choice.name) === normalizeLibraryLabelName(labelQuery),
+                          ) ? (
+                            <li>
+                              <Exposure operation="library_label.create">
+                                <button
+                                  type="button"
+                                  disabled={hydrated && labelPending}
+                                  onClick={() => void writeLabel({ intent: 'create-and-assign', name: labelQuery })}
+                                  className="w-full rounded px-2 py-1 text-start text-sm font-medium text-primary hover:bg-muted disabled:opacity-50"
+                                >
+                                  {m.library_subject_label_create({ name: normalizeLibraryLabelName(labelQuery) })}
+                                </button>
+                              </Exposure>
+                            </li>
+                          ) : null}
+                          {labelChoices.length === 0 ? (
+                            <li className="px-2 py-1 text-sm text-muted-foreground">
+                              {m.library_subject_label_no_results()}
+                            </li>
+                          ) : null}
+                        </ul>
+                      ) : labelSearchState === 'closed' ? (
+                        <p role="status" className="text-sm text-muted-foreground">
+                          {m.library_subject_label_closed()}
+                        </p>
+                      ) : labelSearchState === 'unavailable' ? (
+                        <p role="alert" className="text-sm text-muted-foreground">
+                          {m.library_subject_label_unavailable()}
+                        </p>
+                      ) : null}
+                    </form>
+                  ) : null}
                 </details>
               </Exposure>
               <SubjectLabelNotice {...(labelNotice !== undefined ? { result: labelNotice } : {})} />

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
 import { Toaster } from '@rezics/ui/shadcn/toast';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
+import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
 import { ContinueSection, useContinueRefresh } from './continue';
@@ -318,12 +319,11 @@ export function LabelShelfPage({
           csrfToken={page.csrfToken ?? null}
         />
       ) : (
-        <ShelfEmpty
-          kind="library"
-          title={m.library_label_shelf_empty()}
-          description={m.library_label_shelf_empty()}
-          actions={<span />}
-        />
+        <Empty role="status" data-kind="library">
+          <EmptyHeader>
+            <EmptyTitle>{m.library_label_shelf_empty()}</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
       )}
       {page.next ? (
         <a
