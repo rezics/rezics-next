@@ -193,6 +193,6 @@ export const RestorablePost: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('button', { name: m.thread_post_restore() })).toBeVisible();
-    await expect(canvasElement.querySelector('time[datetime="2099-11-23T03:04:05.000Z"]')).toBeVisible();
+    await expect(canvasElement.querySelector('time[datetime="2026-11-23T03:04:05.000Z"]')).toBeVisible();
   },
 };

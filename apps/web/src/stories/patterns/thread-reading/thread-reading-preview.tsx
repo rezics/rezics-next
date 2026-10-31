@@ -83,7 +83,7 @@ function Connected({ state }: { state: ReadingState }) {
                   removed: true,
                   body: null,
                   sha256: null,
-                  restorableUntil: '2099-11-23T03:04:05.000Z',
+                  restorableUntil: '2026-11-23T03:04:05.000Z',
                 };
               return state === 'deleted'
                 ? { ...post, body: null, sha256: null, removed: true, availability: 'erased' }
