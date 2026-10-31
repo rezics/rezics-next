@@ -5377,6 +5377,20 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 id: string;
                                 offerId: string;
                                 title: string;
+                                currency: string;
+                                unitAmountMinor: number;
+                                taxCode: string;
+                                amountTaxMinor: number | null;
+                                recordedCharge: {
+                                    currency: string;
+                                    moneyUnit: {
+                                        system: "stripe-api";
+                                        exponent: 0 | 2;
+                                        factsVersion: "stripe-money-v1";
+                                    };
+                                    amountTotalMinor: number;
+                                    amountTaxMinor: number | null;
+                                } | null;
                                 targetSubjectId: string;
                                 subject: {
                                     id: string;
