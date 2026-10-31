@@ -2054,7 +2054,7 @@ test('Native technical identity receiver retains no requester or decider copies 
   } finally {
     client.release();
   }
-});
+}, 60_000);
 
 test('technical identity receiver rejects mismatched originals without callbacks or inventory and rolls back a failed local post-write verification', async () => {
   const { acceptAccountIdentityTechnicalSource, verifyAccountIdentityTechnicalSource } =

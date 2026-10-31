@@ -238,9 +238,11 @@ export async function acceptTechnicalSource(
   if (!binding || binding.job.jobId !== reference.job.jobId || binding.job.epoch !== reference.job.epoch)
     return refuse();
   const intent = technicalIntent(source.input.intent, reference.receipt);
-  if (!intent || normalized(intent) !== normalized(source.input.intent) || source.roles.length > 8) return refuse();
-  // All rejection paths precede the first write/callback. SQL reserves the locked owner's
-  // forthcoming fence, checked against the actual executor outbox by a deferred constraint.
+  if (!intent || normalized(intent) !== normalized(source.input.intent)) return refuse();
+  // The conditional INSERT checks the exact original producer header and its current
+  // owner/restore generation before any tuple write. No History role/copy scope is read.
+  // SQL reserves the locked owner's forthcoming fence, checked against the actual
+  // executor outbox by a deferred constraint.
   const row = (
     await tx.query(insert.sql, [
       routeOf(reference.receipt.account),
@@ -261,7 +263,7 @@ export async function acceptTechnicalSource(
       currentCommand(tx).transactionId,
     ])
   ).rows[0];
-  if (!row) throw accountIdentityUnavailable('technical receiver lost its locked native owner');
+  if (!row) return refuse();
   wroteTechnical.add(tx);
   await tx.query(
     `INSERT INTO access.agent_identity_technical_role

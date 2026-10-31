@@ -3742,7 +3742,8 @@ Its temporary native guard permits only the exact owner-migration cleanup, then 
 future inventory is constrained to the retained subject.
 
 First acceptance validates the genuine original source, its erased-role association, native
-component/digest and accepted current job before writing. Replay and undo-only reads resolve the
+component/digest, sealed native producer header with current owner/restore generation, and
+accepted current job before writing. Replay and undo-only reads resolve the
 same receiver without the erased personal roles or a current Account relationship. They validate
 the exact immutable technical source, accepted binding/job, receiving receipt, owner epoch,
 restore generation and retained inventory. Source's already-bound retained/reference/terminal
