@@ -32,6 +32,7 @@ export type {
   NativeKindTypeEvidence,
   KindTypeEvidenceReference,
   KindTypeEvidenceProgress,
+  KindTypeEvidenceAudienceInput,
   KindTypeEvidenceReadInput,
   KindTypeEvidenceReadResult,
   KindTypeEvidenceVerifyInput,

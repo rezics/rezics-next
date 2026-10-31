@@ -4,6 +4,8 @@ import type { Access, Actor } from '../request/access.ts';
 import type { FactClause } from '../search/disclosure/check.ts';
 import type { IndexedStatement } from '../search/source.ts';
 import { type ScopeWorkContext } from '../search/scope-work-context.ts';
+export { createNativeKindTypeEvidence } from './kind-type-evidence.ts';
+export type { NativeKindTypeEvidence, KindTypeEvidenceReference, KindTypeEvidenceProgress, KindTypeEvidenceAudienceInput, KindTypeEvidenceReadInput, KindTypeEvidenceReadResult, KindTypeEvidenceVerifyInput, KindTypeEvidenceVerifyResult, } from './kind-type-evidence.ts';
 export type LeafWork = Readonly<{
     keys: number;
     points: number;
@@ -69,4 +71,3 @@ export type LeafOptions = Readonly<{
 export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions) => Promise<LeafEvidence>;
 /** Native selected evidence only; matching remains the shared Search pure matcher. */
 export declare function readScopeLeafEvidence(pool: Pool, request: LeafRequest, options: LeafOptions): Promise<LeafEvidence>;
-export {};

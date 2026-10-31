@@ -2462,7 +2462,7 @@ export declare function erasureStatusRoutes(app: ReturnType<typeof definitionRou
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

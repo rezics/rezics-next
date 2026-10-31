@@ -883,18 +883,25 @@ successful mapping or participant receipt.
 ## Native Kind Type dependencies
 
 `kind-type-evidence.ts` and `scope-leaf-evidence.ts` export
-`createNativeKindTypeEvidence({pool,access})`. Its closed `read({locator,allowance,deadline})`
-input uses the original Library `CollectionKindPreparationLocator`; it accepts no Actor,
+`createNativeKindTypeEvidence({pool,access})`. Its closed `read({locator,audience?,allowance,deadline})`
+input uses the original Library `CollectionKindPreparationLocator`; `audience`, when supplied,
+is exactly the original Accounts `PrepareKindAudienceInput` origin/input reference pair.
+Accounts resolves that pair from the committed Library interval before detached preparation.
+The Source consults only the original `Access.kindAudience.prepare.bound` declaration; a
+reference or declared bound does not admit work. The input accepts no Actor,
 time, subjects or permission claims. `verify({work,evidence,allowance,deadline})` uses the
 original distinct `CollectionKindPreparationWorkContext` and checks the genuine live Core
 transaction/time, exact Source home, owner and locator. References locate native records;
 possession supplies neither admission nor audience authority.
 
 The public methods currently return unavailable before IO. Library's original admission/getter
-exports are unavailable and have no bounded attempt/origin/receipt declaration; Accounts has no
-purpose-bound origin/current-audience producer in its original evaluator; Core has no original
-per-home Kind attempt admission outside a held Source transaction. Their literal producer types,
-finite work declarations and Source-local negative/temporal writer closure remain indispensable.
+exports are unavailable and have no bounded attempt/origin/receipt declaration. Accounts has
+delivered `access/kind-audience.ts`, reexported through request/access and composed by the original
+evaluator. Its capture, resolveInput, prepare and verifySource operations have bound/run/actual
+declarations, but the native factory declares no admitted bound and refuses before IO. All five
+formula, negative, temporal, Type/disclosure and writer closures remain required. Core has no
+original per-home Kind attempt admission outside a held Source transaction. Actual owner bodies,
+finite work declarations and Source-local currentness remain indispensable.
 The module names those missing bindings explicitly. No prepared/current evidence, count, empty
 proof, private repair completion or supported native positive is claimed by these declarations.
 
@@ -906,6 +913,9 @@ Native Type has no imported-field tuple. The pure dependency selector retains ea
 `CanonicalDerivedRow`, including excluded and duplicate supports. It yields a structural candidate,
 never an admitted vote. A denied original cannot be rescued by its terminal; only original Accounts
 decisions for both anchors can admit support to Library's existing terminal uniqueness/count CAS.
+Each raw projection requires the genuine live Core operational transaction/time on its exact
+native home before and after IO. Structural clients, foreign-home and ended transactions refuse;
+this necessary home check does not replace original Kind attempt admission or audience authority.
 
 The exact per-subject writer fence enrolls a missing key before observation and locks the same key
 before subject, revision, redirect and agent-link mutations become visible. This supplies local

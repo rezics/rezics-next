@@ -2584,7 +2584,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     node: string;
                                     property: string;
                                     direction: "in" | "out";
-                                    count: number;
+                                    count?: number;
                                     cursor: string;
                                 }[];
                             };

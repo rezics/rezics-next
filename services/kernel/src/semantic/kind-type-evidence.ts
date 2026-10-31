@@ -1,6 +1,7 @@
 /** Private native Kind evidence. References are locators, never read authority. */
 import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
+import type { PrepareKindAudienceInput } from '../access/kind-audience.ts';
 import type { CollectionKindPreparationLocator } from '../library/collection-kind-work-admission.ts';
 import type { CanonicalDerivedRow, CanonicalGroupProgress } from '../library/canonical-source-store.ts';
 import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
@@ -29,9 +30,15 @@ export type KindTypeContribution = Readonly<{
   typeId: string;
 }>;
 
+/** Accounts resolves these original lookup refs from Library's committed input
+ * before detached preparation. They carry no admission or permission themselves.
+ */
+export type KindTypeEvidenceAudienceInput = Readonly<Pick<PrepareKindAudienceInput, 'origin' | 'input'>>;
+
 export type KindTypeEvidenceReadInput = Readonly<{
   /** Library resolves its committed bounded attempt. No caller-supplied subjects. */
   locator: CollectionKindPreparationLocator;
+  audience?: KindTypeEvidenceAudienceInput;
   allowance: WorkAllowance;
   deadline: number;
 }>;
@@ -68,12 +75,12 @@ export interface NativeKindTypeEvidence {
   verify(input: KindTypeEvidenceVerifyInput): Promise<KindTypeEvidenceVerifyResult>;
 }
 
-/** These are missing producer contracts, NOT names asserted to be existing exports.
- * Keep them explicit until the original owners publish their literal declarations.
+/** Native implementations still owed by the original owners. Accounts' literal
+ * KindAudienceAccess is delivered; its staged factory supplies no admitted bound.
  */
 export const KIND_TYPE_MISSING_OWNER_BINDINGS = Object.freeze([
   'Library collection-kind-work-admission.ts: committed bounded attempt lookup, original reference/frontier, audience origin and finite admission work receipt',
-  'Accounts request/access.ts and access/permission.ts: purpose-bound native audience origin, original/terminal current formula evidence and Source-local negative/temporal writer closure',
+  'Accounts access/kind-audience.ts and access/permission.ts: native bodies and finite bounds for KindAudienceAccess, with all five original formula/negative/temporal/Type-disclosure/writer closures',
   'Core command/operational.ts: original per-home Kind attempt admission with a genuine live T and the SAME Source reservation, without a held Source transaction',
 ] as const);
 
@@ -98,8 +105,28 @@ export function createNativeKindTypeEvidence(config: Readonly<{ pool: Pool; acce
       const work = new NativeCollectionWork(input.allowance, input.deadline);
       if (!validLocator(input.locator) || Date.now() >= input.deadline)
         return { status: 'unavailable', work: work.receipt() };
+      const audience = input.audience;
+      const port = config.access.kindAudience;
+      if (
+        !audience ||
+        !port ||
+        !isDeepStrictEqual(audience.origin.locator, input.locator) ||
+        !isDeepStrictEqual(audience.input.locator, input.locator)
+      )
+        return { status: 'unavailable', work: work.receipt() };
+      const nativeInput: PrepareKindAudienceInput = {
+        origin: audience.origin,
+        input: audience.input,
+        context: { pool: config.pool, deadline: input.deadline },
+        allowance: input.allowance,
+      };
+      // This is the original owner's PURE declaration only. No run/actual or
+      // authority follows from reference equality or a defined footprint.
+      if (port.prepare.bound(nativeInput) === undefined)
+        return { status: 'unavailable', work: work.receipt() };
       // The Library getter currently has no bounded attempt/origin or native work receipt.
-      // Calling it, ordinary summaries, or Access here would dispatch unadmitted work.
+      // Original per-home Core admission is also missing. Do not start detached
+      // native work merely because the Accounts interface now exists.
       return { status: 'unavailable', work: work.receipt() };
     },
     async verify(input) {

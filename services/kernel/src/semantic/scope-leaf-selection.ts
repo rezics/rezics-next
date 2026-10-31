@@ -5,7 +5,13 @@ import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { ACCESS_WORK_AXES, AccessWorkAccounting, EMPTY_ACCESS_WORK, type AccessWork } from '../access/work.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { partitionOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { authoritativeTimeValue, commandTime } from '../command/command.ts';
+import {
+  currentOperationalResources,
+  hasLiveOperationalTransaction,
+  type OperationalTransaction,
+} from '../command/operational.ts';
 import home from './scope-leaf-selection-home.sql';
 import anchor from './scope-leaf-selection-anchor.sql';
 import slot from './scope-leaf-selection-slot.sql';
@@ -85,12 +91,41 @@ export function kindTypeAnchorFootprint(inputBytes: number): WorkDimensions {
   };
 }
 
+/** Necessary native-home liveness, not Library Kind admission or Accounts
+ * permission. A structural client or a live transaction on another home cannot
+ * dispatch this projection. The public producer still awaits those owner bodies.
+ */
+function requireKindTypeHome(
+  client: OperationalTransaction,
+  input: Readonly<{ route: number; subjectId: string }>,
+  deadline: number,
+): void {
+  if (
+    !hasLiveOperationalTransaction(client) ||
+    routeOf(input.subjectId) !== input.route ||
+    !Number.isFinite(deadline) ||
+    Date.now() >= deadline
+  )
+    throw new AccessUnavailableError('contention');
+  const resources = currentOperationalResources(client);
+  const time = commandTime(client);
+  if (
+    !time ||
+    resources.mode !== 'work-step' ||
+    resources.partition !== partitionOf(input.route) ||
+    deadline > resources.deadline
+  )
+    throw new AccessUnavailableError('contention');
+  authoritativeTimeValue(time);
+}
+
 export async function readNativeKindTypeAnchor(
-  client: Pick<PoolClient, 'query'>,
+  client: OperationalTransaction,
   input: Readonly<{ route: number; subjectId: string; includeType: boolean }>,
   work: NativeCollectionWork,
   deadline: number,
 ): Promise<NativeKindTypeAnchor> {
+  requireKindTypeHome(client, input, deadline);
   const lockInput = { route: input.route, subject_id: input.subjectId };
   const lockValues = kindTypeLock.params.map((name) => lockInput[name as keyof typeof lockInput]);
   const lockBytes = Buffer.byteLength(kindTypeLock.sql) + sourceBytes(lockValues);
@@ -112,6 +147,7 @@ export async function readNativeKindTypeAnchor(
       query_timeout: Math.max(1, deadline - Date.now()),
     };
     const locked = await client.query<{ version: string }>(query);
+    requireKindTypeHome(client, input, deadline);
     if (locked.rows.length !== 1) throw new AccessUnavailableError('contention');
     lockReservation.settle({ bytes: lockBytes + sourceBytes(locked.rows), emptySeeks: 0 });
   } catch (error) {
@@ -128,6 +164,7 @@ export async function readNativeKindTypeAnchor(
   };
   const values = kindTypeAnchor.params.map((name) => parameters[name as keyof typeof parameters]);
   const inputBytes = Buffer.byteLength(kindTypeAnchor.sql) + sourceBytes(values);
+  requireKindTypeHome(client, input, deadline);
   const reservation = work.reserve(kindTypeAnchorFootprint(inputBytes));
   reservation.dispatch();
   try {
@@ -137,6 +174,7 @@ export async function readNativeKindTypeAnchor(
       query_timeout: Math.max(1, deadline - Date.now()),
     };
     const result = await client.query<NativeKindTypeAnchor>(query);
+    requireKindTypeHome(client, input, deadline);
     const row = result.rows[0];
     if (result.rows.length !== 1 || !row || !row.writer_enrolled || row.subject_id !== input.subjectId)
       throw new AccessUnavailableError('contention');
@@ -158,7 +196,7 @@ export async function readNativeKindTypeAnchor(
  * opening another pool. This comparison alone grants no audience authority.
  */
 export async function verifyNativeKindTypeAnchor(
-  client: Pick<PoolClient, 'query'>,
+  client: OperationalTransaction,
   input: Readonly<{ route: number; expected: NativeKindTypeAnchor; includeType: boolean }>,
   work: NativeCollectionWork,
   deadline: number,
