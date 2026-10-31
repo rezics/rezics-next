@@ -37,6 +37,11 @@ import {
 } from './verification-recovery';
 import { readVerificationState, requestVerificationAction, withdrawVerificationAction } from './verification-actions';
 
+const verificationActionClassName =
+  'h-auto min-h-11 min-w-11 w-full max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] sm:w-auto';
+const verificationSummaryClassName =
+  'min-h-11 min-w-11 max-w-full cursor-pointer py-3 whitespace-normal [overflow-wrap:anywhere]';
+
 function subjectLabel(title: string | null | undefined, subjectId: string | undefined) {
   return title?.trim() && title !== subjectId ? title : m.settings_verification_generic_subject();
 }
@@ -51,7 +56,7 @@ function CommandDetails({ failure }: { failure: VerificationFailure }) {
   const requestId = boundedDiagnosticId(failure.requestId);
   return (
     <details>
-      <summary>{m.settings_verification_command_details()}</summary>
+      <summary className={verificationSummaryClassName}>{m.settings_verification_command_details()}</summary>
       <div className="space-y-2 break-words">
         <p>{m.settings_verification_read_error({ status: failure.status })}</p>
         {code ? <p>{m.settings_verification_diagnostic_code({ code })}</p> : null}
@@ -222,14 +227,14 @@ export function VerificationCard({
   }
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle>
           <h2>{m.settings_verification_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_verification_intro()}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="min-w-0 space-y-4">
         <div role="status" aria-live="polite" aria-atomic="true">
           {state.phase === 'loading' || state.readStatus === 'reading' ? (
             <p>{m.settings_verification_loading()}</p>
@@ -258,7 +263,7 @@ export function VerificationCard({
             </p>
             {state.failure ? (
               <details>
-                <summary>{m.settings_verification_read_details()}</summary>
+                <summary className={verificationSummaryClassName}>{m.settings_verification_read_details()}</summary>
                 <p>{m.settings_verification_read_error({ status: state.failure.status })}</p>
               </details>
             ) : null}
@@ -324,7 +329,11 @@ export function VerificationCard({
               </Field>
               <VerificationLinks id={id} rows={links} onChange={setLinks} errors={errors} />
             </FieldGroup>
-            <Button type="submit" disabled={!csrfToken || !canRequest || pending || !selected}>
+            <Button
+              type="submit"
+              className={verificationActionClassName}
+              disabled={!csrfToken || !canRequest || pending || !selected}
+            >
               {m.settings_verification_submit()}
             </Button>
           </form>
@@ -333,22 +342,33 @@ export function VerificationCard({
           confirmation ? (
             <Alert>
               <AlertTitle>{m.settings_verification_confirm_title()}</AlertTitle>
-              <AlertDescription className="space-x-2">
+              <AlertDescription className="flex min-w-0 max-w-full flex-wrap gap-2">
                 <Button
                   type="button"
                   variant="destructive"
+                  className={verificationActionClassName}
                   disabled={pending || !csrfToken}
                   onClick={() => void withdraw()}
                 >
                   {m.settings_verification_confirm_withdraw()}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setConfirmation(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={verificationActionClassName}
+                  onClick={() => setConfirmation(false)}
+                >
                   {m.settings_verification_cancel()}
                 </Button>
               </AlertDescription>
             </Alert>
           ) : (
-            <Button type="button" variant="outline" onClick={() => setConfirmation(true)}>
+            <Button
+              type="button"
+              variant="outline"
+              className={verificationActionClassName}
+              onClick={() => setConfirmation(true)}
+            >
               {m.settings_verification_withdraw()}
             </Button>
           )
@@ -360,7 +380,7 @@ export function VerificationCard({
                 ? m.settings_verification_uncertain_request()
                 : m.settings_verification_uncertain_withdraw()}
             </AlertTitle>
-            <AlertDescription className="space-y-3">
+            <AlertDescription className="min-w-0 space-y-3">
               <p>
                 {state.attempt.receipt
                   ? state.attempt.kind === 'request'
@@ -387,7 +407,7 @@ export function VerificationCard({
               </p>
               {state.attempt.kind === 'request' ? (
                 <details>
-                  <summary>{m.settings_verification_original()}</summary>
+                  <summary className={verificationSummaryClassName}>{m.settings_verification_original()}</summary>
                   <div className="space-y-2 break-words">
                     <p className="whitespace-pre-wrap">{state.attempt.input.statement}</p>
                     <ul>
@@ -401,12 +421,13 @@ export function VerificationCard({
                 </details>
               ) : boundedDiagnosticId(state.attempt.requestId) ? (
                 <details>
-                  <summary>{m.settings_verification_withdraw_details()}</summary>
+                  <summary className={verificationSummaryClassName}>{m.settings_verification_withdraw_details()}</summary>
                   <p className="break-all">{state.attempt.requestId}</p>
                 </details>
               ) : null}
               <Button
                 type="button"
+                className={verificationActionClassName}
                 disabled={pending || waiting || !csrfToken}
                 onClick={() => void recover(() => controller.retry())}
               >
@@ -442,6 +463,7 @@ export function VerificationCard({
         <Button
           type="button"
           variant="outline"
+          className={verificationActionClassName}
           disabled={pending || waiting}
           onClick={() => void recover(() => controller.reload())}
         >

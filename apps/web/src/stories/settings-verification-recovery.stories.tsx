@@ -14,6 +14,7 @@ import {
 } from '../settings/verification-core';
 import { VerificationRecovery } from '../settings/verification-recovery';
 import { PageStory, PatternStory } from './page';
+import { selectSettingsCategory } from './settings-category-navigation';
 
 type Scenario = 'empty' | 'failure' | 'recovery';
 
@@ -287,8 +288,27 @@ export const DefaultReadRecovery: StoryObj = {
   render: () => <DefaultReadRecoveryPage />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await view.findByText(m.settings_verification_read_empty());
+    // Run this same composition at phone390 and desktop1280 with the locale/theme globals.
+    const expectComfortableAction = async (action: HTMLElement) => {
+      const style = getComputedStyle(action);
+      await expect(parseFloat(style.minHeight)).toBeGreaterThanOrEqual(44);
+      await expect(parseFloat(style.minWidth)).toBeGreaterThanOrEqual(44);
+      await expect(style.maxWidth).toBe('100%');
+      await expect(style.whiteSpace).toBe('normal');
+      await expect(style.overflowWrap).toBe('anywhere');
+      await expect(style.textOverflow).not.toBe('ellipsis');
+      const bounds = action.getBoundingClientRect();
+      const container = action.closest('[data-slot="card-content"]')!.getBoundingClientRect();
+      await expect(bounds.height).toBeGreaterThanOrEqual(44);
+      await expect(bounds.width).toBeGreaterThanOrEqual(44);
+      await expect(bounds.left).toBeGreaterThanOrEqual(container.left - 1);
+      await expect(bounds.right).toBeLessThanOrEqual(container.right + 1);
+      await expect(action.scrollWidth).toBeLessThanOrEqual(action.clientWidth + 1);
+      await expect(action.scrollHeight).toBeLessThanOrEqual(action.clientHeight + 1);
+    };
     const retained = await view.findByRole('link', { name: collectionsRecording.collections[0]!.title });
+    await selectSettingsCategory(canvasElement, m.settings_verification_heading());
+    await view.findByText(m.settings_verification_read_empty());
     const fixture = readRecoveryFixtures.get(canvasElement.firstElementChild!)!;
     // Establish one unresolved command through the actual form before testing read-only recovery.
     await userEvent.type(view.getByRole('combobox', { name: m.settings_verification_subject() }), 'Haruka');
@@ -300,7 +320,13 @@ export const DefaultReadRecovery: StoryObj = {
     const linkUrl = view.getByRole('textbox', { name: m.settings_verification_link_url() });
     await userEvent.type(linkLabel, 'Official profile');
     await userEvent.type(linkUrl, 'https://example.test/original');
-    await userEvent.click(view.getByRole('button', { name: m.settings_verification_submit() }));
+    const submit = view.getByRole('button', { name: m.settings_verification_submit() });
+    await expectComfortableAction(submit);
+    await expectComfortableAction(view.getByRole('button', { name: m.settings_verification_read_current() }));
+    // Layout, category selection and editing do not send a command or another status read.
+    await expect(fixture.commands).toEqual([]);
+    await expect(fixture.reads).toEqual({ collections: [null], verification: 1 });
+    await userEvent.click(submit);
     await view.findByText(m.settings_verification_uncertain_request());
     await expect(view.getByRole('button', { name: m.settings_verification_submit() })).toBeDisabled();
     await expect(fixture.commands).toHaveLength(1);
@@ -318,6 +344,7 @@ export const DefaultReadRecovery: StoryObj = {
     await expect(view.queryByText(transportedCommandMessage, { exact: false })).toBeNull();
     await expect(canvasElement).not.toHaveTextContent('private-backend-token');
     const commandDetails = view.getByText(m.settings_verification_command_details()).closest('details')!;
+    await expectComfortableAction(commandDetails.querySelector('summary')!);
     await expect(commandDetails).not.toHaveAttribute('open');
     await userEvent.click(view.getByText(m.settings_verification_command_details()));
     await expect(within(commandDetails).getByText(m.settings_verification_read_error({ status: 503 }))).toBeVisible();
@@ -327,7 +354,9 @@ export const DefaultReadRecovery: StoryObj = {
     await expect(
       within(commandDetails).getByText(m.settings_verification_diagnostic_request({ requestId: 'verification-send' })),
     ).toBeVisible();
-    await userEvent.click(view.getByText(m.settings_verification_original()));
+    const originalSummary = view.getByText(m.settings_verification_original());
+    await expectComfortableAction(originalSummary);
+    await userEvent.click(originalSummary);
     await expect(view.getByText('Original evidence', { selector: 'p' })).toBeVisible();
     await expect(view.getByText('Official profile: https://example.test/original')).toBeVisible();
     await expect(view.queryByText(originalKey, { exact: false })).toBeNull();
@@ -357,10 +386,19 @@ export const DefaultReadRecovery: StoryObj = {
     const details = within(failure as HTMLElement)
       .getByText(m.settings_verification_read_details())
       .closest('details')!;
+    await expectComfortableAction(details.querySelector('summary')!);
     await expect(details).not.toHaveAttribute('open');
     await userEvent.click(within(failure as HTMLElement).getByText(m.settings_verification_read_details()));
     await expect(within(details).getByText(m.settings_verification_read_error({ status: 503 }))).toBeVisible();
     await expect(view.queryByText(transportedReadMessage, { exact: false })).toBeNull();
+    const replay = view.getByRole('button', { name: m.settings_verification_retry_original() });
+    await expectComfortableAction(reload);
+    await expectComfortableAction(replay);
+    for (const button of [reload, replay]) {
+      await expect(button).toBeDisabled();
+      await userEvent.click(button);
+    }
+    await selectSettingsCategory(canvasElement, m.settings_privacy_heading());
     await userEvent.click(view.getByRole('button', { name: m.settings_privacy_load_more() }));
     await view.findByText(m.settings_privacy_page_load_failed());
     await view.findByText(m.settings_privacy_unavailable());
@@ -369,8 +407,7 @@ export const DefaultReadRecovery: StoryObj = {
     await expect(retained).toBeInTheDocument();
     const retry = view.getByRole('button', { name: m.settings_retry() });
     const refresh = view.getByRole('button', { name: m.settings_privacy_refresh_list() });
-    const replay = view.getByRole('button', { name: m.settings_verification_retry_original() });
-    for (const button of [retry, refresh, reload, replay]) {
+    for (const button of [retry, refresh]) {
       await expect(button).toBeDisabled();
       await userEvent.click(button);
     }
@@ -387,6 +424,7 @@ export const DefaultReadRecovery: StoryObj = {
     await userEvent.click(retry);
     await view.findByRole('link', { name: collectionsRecording.collections[1]!.title });
     await expect(view.getByRole('link', { name: collectionsRecording.collections[0]!.title })).toBe(retained);
+    await selectSettingsCategory(canvasElement, m.settings_verification_heading());
     await userEvent.click(reload);
     await view.findByText(
       m.settings_verification_pending({
@@ -419,6 +457,35 @@ export const DefaultReadRecovery: StoryObj = {
     await expect(view.queryByText(m.settings_verification_verified())).toBeNull();
     await expect(view.queryByText(originalKey, { exact: false })).toBeNull();
 
+    const withdraw = view.getByRole('button', { name: m.settings_verification_withdraw() });
+    await expectComfortableAction(withdraw);
+    await userEvent.click(withdraw);
+    const confirm = view.getByRole('button', { name: m.settings_verification_confirm_withdraw() });
+    const cancel = view.getByRole('button', { name: m.settings_verification_cancel() });
+    await expect(view.getByText(m.settings_verification_confirm_title())).toBeVisible();
+    for (const action of [confirm, cancel]) await expectComfortableAction(action);
+    await expect(confirm).toHaveClass('text-destructive');
+    const group = confirm.parentElement!;
+    await expect(cancel.parentElement).toBe(group);
+    const groupStyle = getComputedStyle(group);
+    await expect(groupStyle.display).toBe('flex');
+    await expect(groupStyle.flexWrap).toBe('wrap');
+    await expect(groupStyle.maxWidth).toBe('100%');
+    await expect(parseFloat(groupStyle.rowGap)).toBeGreaterThanOrEqual(8);
+    await expect(parseFloat(groupStyle.columnGap)).toBeGreaterThanOrEqual(8);
+    await expect(group.scrollWidth).toBeLessThanOrEqual(group.clientWidth + 1);
+    const confirmBounds = confirm.getBoundingClientRect();
+    const cancelBounds = cancel.getBoundingClientRect();
+    await expect(
+      confirmBounds.bottom + 7 <= cancelBounds.top || confirmBounds.right + 7 <= cancelBounds.left,
+    ).toBe(true);
+    confirm.focus();
+    await userEvent.keyboard('{Tab}');
+    await expect(cancel).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(view.queryByRole('button', { name: m.settings_verification_confirm_withdraw() })).toBeNull();
+    await expect(fixture.commands).toEqual([originalCommands[0], originalCommands[0]]);
+    await expect(fixture.reads).toEqual({ collections: [null, continuation, continuation], verification: 3 });
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_withdraw() }));
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_confirm_withdraw() }));
     await view.findByText(m.settings_verification_uncertain_withdraw());
@@ -429,7 +496,10 @@ export const DefaultReadRecovery: StoryObj = {
     await expect(view.queryByText(transportedCommandMessage, { exact: false })).toBeNull();
     const withdrawal = structuredClone(fixture.commands[2]!);
     await expect(withdrawal).toMatchObject({ path: '/v1/accounts/story-viewer:withdrawVerification', body: {} });
-    await userEvent.click(view.getByRole('button', { name: m.settings_verification_retry_withdraw() }));
+    const retryWithdrawal = view.getByRole('button', { name: m.settings_verification_retry_withdraw() });
+    await expectComfortableAction(retryWithdrawal);
+    await expectComfortableAction(view.getByRole('button', { name: m.settings_verification_read_current() }));
+    await userEvent.click(retryWithdrawal);
     await view.findByText(m.settings_verification_withdrawn());
     await expect(fixture.commands).toEqual([originalCommands[0], originalCommands[0], withdrawal, withdrawal]);
     await expect(statement).toHaveValue('Later draft');
