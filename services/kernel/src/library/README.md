@@ -156,11 +156,10 @@ Current implementation evidence is narrower than the capability:
   checked before and after work. Neither working reads nor preparation update the public head, output members or
   its cursor basis. Publication B uses the existing native atomic output hooks and observed Collection revision;
   failed/refused B retains A, and a third retained allocation still refuses without actual disposition.
-  This adds no whole-query publication or complete independent private-support originals for a state-only Source.
-  The Semantic scope/public-capture
-  modules retain their own producer qualifications. Complete native population,
-  current disclosure, retained preparation/default worker integration and physical bounds still require the
-  real producer bodies and combined native verification; source typing does not certify those outcomes.
+  Whole-query publication now consumes this distinct private working Source through its own current native
+  admission. The Semantic scope/public-capture modules retain their own producer qualifications. Complete public
+  disclosure, public/frozen input support, retained preparation/default worker integration and physical bounds still
+  require combined native verification; source typing does not certify those outcomes.
 - `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
   the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.
@@ -217,6 +216,12 @@ stable and accepted meaning pinned in the native header. Its storage title defau
 state identifier until an owner changes it; no query AST is retained there. Liked refuses. The existing canonical
 Source producer shares its identity allocator with original commands: it allocates an actual native scope only,
 without claiming capture, observation, repair or custody completion. No public/frozen/full-query completion proof is claimed.
+
+The work-admission/getter independently reread this committed episode and its original initiator receipt, current
+pinned rule/release, private working identity, complete canonical Source generation, scoped identity observation,
+current native receipt/custody, and unknown-size B on that same Core client. Missing current Source or scoped
+prerequisites remain unavailable. Bounded query staging is implemented; final human command and default receiving
+composition remain independent dependencies. Their unavailable outcomes are not successful empty results.
 
 The existing terminal participant invokes `purgeCollectionPublicationEpisodes` in bounded owner-indexed pages,
 removing private source/operation/initiator snapshots even when completed public A is retained. The three families
@@ -289,7 +294,7 @@ guards and destination disposition requirements remain. B never changes the sele
 hooks refuse whole-query generations. Final activation remains the ordinary `completeCollectionSourceOutput` hook,
 which requires its shared work ledger and exact episode locator and independently rereads the native staging seal.
 
-Each step admits and reads the whole current c19 definition on the same Core client before Source/Type work. It
+Each step admits and reads the whole current publication definition on the same Core client before Source/Type work. It
 uses the shared Source, id order, compiler and evaluator, transferring one allowance in every dimension. A private
 bounded frontier retains at most one unfinished canonical subject and native leaf progress. Unused suffix/lookahead
 is charged and sought again after the last settled key. Positive and excluded subjects retain their native evidence
@@ -303,16 +308,16 @@ cannot supply a count, completion flag or proof. The retained definition digest 
 each step still compares the whole getter result before and after foreign work. Moving a sealed episode to
 `awaiting_activation` therefore does not reinterpret its pinned meaning or invalidate its unchanged native seal.
 
-The published c19 work-admission functions still throw `dependency_unavailable`; Search's work-context union now has
-the distinct `collection-publication` branch and its worker exposes the existing Search scope runtime to Library.
-Staging therefore remains unavailable until the Search-owned native admission/getter and guarded evaluator branches
-are integrated; it does not alias Members/Kind or restore an Actor. The current shared evaluator also lacks native owner-work evaluation and a
-durable publication leaf-resume binding. Catalogue leaf sealing remains unavailable until Search exposes its actual
-current public Source/index proof in addition to the private owner capture. No index dependency is invented for a
-pure owner query. These are explicit unsupported native branches, not successful empty outputs or native acceptance.
-The original public DYNAMIC whole-query/lifecycle/C5 outcomes remain unproved. The new focused output-mode assertions
-exercise real native interrupted/replayed allocation, unknown versus empty cardinality, ordinary-hook refusal,
-changed fences, selected-A preservation and the third-copy limit; they are source assertions, not a whole-query pass.
+The delivered Search work-context union has a distinct `collection-publication` branch. Its admission rejects a
+locator without the live Core work-step and exact owner namespace, then independently rereads the immutable episode
+and exact original creation receipt before checking current Source evidence. The getter returns only the complete
+current pinned definition and native references; it does not issue Source acknowledgements, complete-cut proofs,
+viewer permission or activation authority. Source capture and repair remain with the existing bounded canonical and
+scoped-observation producers. Catalogue leaf sealing remains unavailable until Search exposes its actual current
+public Source/index proof in addition to the private owner capture. No index dependency is invented for a pure owner
+query. The original public DYNAMIC whole-query/lifecycle/C5 outcomes remain unproved. The focused output-mode
+assertions exercise real native interrupted/replayed allocation, unknown versus empty cardinality, ordinary-hook
+refusal, changed fences, selected-A preservation and the third-copy limit; they are not a whole-query pass.
 
 Retention/custody inventory: `collection_publication_staging` is keyed by `(route,collection_id,generation)`, with
 exact publication and account indexes; it retains only immutable rule/native source/custody references, digests,
@@ -343,12 +348,11 @@ result. The projector is used only after native current authority; it does not r
 Internal creation retains its required `durableInitiator` commitment unchanged.
 
 The actual native episode types live in `collection-publication-episode-contract.ts`; the distinct mechanical
-role's locator and admission/getter declarations live in `collection-publication-work-admission.ts`. The latter
-two functions remain typed unavailable adapters pending their Search-owned native implementation. The mounted
-service uses the real begin/status/initiator readers; the single existing Library WorkModule registers locator-only
-staging and final activation. No fallback successful publication, new runtime or substitute selected-set producer is
-used. Until the native work-admission boundary is integrated, accepted progress remains unavailable rather than
-reporting an empty or completed result.
+role's locator and admission/getter declarations live in `collection-publication-work-admission.ts`. Their body
+validates current native episode and private Source evidence on the same Core client before returning pinned work
+data. The mounted service uses the real begin/status/initiator readers; the single existing Library WorkModule
+registers locator-only staging and final activation. This boundary does not claim successful whole-query publication,
+final activation or public Source proof.
 `collection-publication-http.test.ts` retains the unmet real API/default-worker acceptance and focused closed
 grammar/privacy assertions. It uses the existing native fixture and actual output rows/receipt, with no replacement
 worker or domain backend. Schema availability and local typing do not establish that native acceptance.
@@ -356,13 +360,12 @@ worker or domain backend. Schema availability and local typing do not establish 
 ### Explicit selected-set publication
 
 The distinct whole-query seam in `collection-publication-work-admission.ts` rejects clients without
-the original live Core work-step, exact fenced owner namespace and native attempt time before IO.
-Its published locator and result declarations remain unchanged. A valid executor is still unavailable:
-`collection-publication-episode-contract.ts` supplies domain types and a `DurableInitiatorReader` alias,
-but no native episode reader or original committed operation/source/creation-receipt reader exists here.
-Those peer-owned readers must arrive before this seam can independently bind its installed pool,
-initialize the private working input or return a genuine current definition. Selected-set output rows
-cannot supply that missing authority. No successful whole-query admission or native proof is claimed.
+the original live Core work-step, exact fenced owner namespace and native attempt time before IO. Its published
+locator and result declarations remain unchanged. It consumes the real episode, operation/source, creation receipt,
+current rule and native Source readers. A current pinned definition is returned only while the private working Source,
+identity observation, repair receipt, custody and unknown-size B still match the exact episode. Selected-set output
+rows cannot supply that authority. This admission does not establish whole-query completion, disclosure support or
+activation, and the original public DYNAMIC whole-query/lifecycle/C5 outcomes remain unproved.
 
 `POST /v1/collections/{collectionId}:publishSelected` takes the closed body `{revision,subjectIds}` and ordinary
 Idempotency-Key. `subjectIds` is an explicit selection of 0–100 distinct raw native Subject IDs. Calling this
