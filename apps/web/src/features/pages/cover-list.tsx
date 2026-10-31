@@ -7,25 +7,29 @@ import {
 } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
+import { ListRow } from '@rezics/ui/list-row';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
 import { listKeyFacts } from '../../media/type-presentation';
 import type { Fact } from '../../search/results';
 import { relationTargetHref } from './edition-work';
 import type { Item, RowValue } from './overview';
+import { QualifiedCredit } from './qualified-credit';
 import { SpoilerGate } from './values';
 
-/** One related subject as a card: its own Type presentation, cover, title and one secondary line. */
+/** One current relation, keeping full credit facts separate from ordinary card metadata. */
 function ItemCard({
   item,
   value,
   listPresentationFor,
   facts,
+  credit = false,
 }: {
   item: Item;
   value: RowValue;
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
   facts?: Readonly<Record<string, readonly Fact[]>>;
+  credit?: boolean;
 }) {
   const title = item.label.text || value.unlabelled;
   const subject = coverSubject(item.id, title, item.summary, item.type);
@@ -37,59 +41,50 @@ function ItemCard({
     [],
     value.locale,
   );
-  const qualified = (item.qualified ?? []).map((note, index) =>
-    note.subject ? (
-      <value.link key={index} href={relationTargetHref(note.subject, value.locale, value.context)}>
-        {note.text}
-      </value.link>
-    ) : (
-      <span key={index} lang={note.language}>
-        {note.text}
+  const notes = [
+    ...keyFacts.map((fact, index) => (
+      <span key={index} lang={fact.lang} data-property={fact.property}>
+        {fact.text}
       </span>
-    ),
-  );
-  const card = (
+    )),
+    ...item.notes,
+  ];
+  const cover = {
+    subject,
+    cover: coverOf(item.summary),
+    src: coverSrc,
+    ...(listPresentation ? { listPresentation } : {}),
+    suitability: value.reader.suitability,
+    labels: value.labels.cover,
+  };
+  const href = relationTargetHref({ id: item.id, label: title }, value.locale, value.context);
+  const card = credit ? (
+    <QualifiedCredit
+      title={title}
+      titleLang={item.label.lang}
+      href={href}
+      cover={cover}
+      notes={notes}
+      qualified={item.qualified ?? []}
+      value={value}
+    />
+  ) : (
     <CoverCard
       link={value.link}
-      href={relationTargetHref({ id: item.id, label: title }, value.locale, value.context)}
+      href={href}
       title={title}
       {...(item.label.lang ? { titleLang: item.label.lang } : {})}
-      cover={{
-        subject,
-        cover: coverOf(item.summary),
-        src: coverSrc,
-        ...(listPresentation ? { listPresentation } : {}),
-        suitability: value.reader.suitability,
-        labels: value.labels.cover,
-      }}
-      {...(keyFacts.length > 0
-        ? {
-            secondary: (
-              <MetaLine
-                items={[
-                  ...keyFacts.map((fact, index) => (
-                    <span key={index} lang={fact.lang} data-property={fact.property}>
-                      {fact.text}
-                    </span>
-                  )),
-                  ...item.notes,
-                  ...qualified,
-                ]}
-              />
-            ),
-          }
-        : item.notes.length > 0 || qualified.length > 0
-          ? { secondary: <MetaLine items={[...item.notes, ...qualified]} /> }
-          : {})}
+      cover={cover}
+      {...(notes.length > 0 ? { secondary: <MetaLine items={notes} /> } : {})}
     />
   );
   return item.gated ? <SpoilerGate label={value.spoilerShow}>{card}</SpoilerGate> : card;
 }
 
 /**
- * The subjects of one list as cards. Each known member keeps its Type's list frame; the shared ratio is the fallback
- * composition for unknown Types. A Zone's appearance fixes that composition. A preview is one snapping row on a phone
- * and a grid from `sm` up; a full view is a grid at every width. `label` names the row for assistive technology.
+ * Qualified credits wrap in rows at every width; ordinary subjects remain cards with their Type's list frame.
+ * The shared ratio is the fallback for unknown Types; a Zone's appearance fixes that composition. Ordinary card
+ * previews snap on phones and use a grid from `sm` up. `label` names the list for assistive technology.
  */
 export function CoverList({
   items,
@@ -110,18 +105,28 @@ export function CoverList({
 }) {
   const ratio =
     value.ratio ?? sharedRatio(items.map((item) => coverSubject(item.id, item.label.text, item.summary, item.type)));
+  const credits = items.some((item) => (item.qualified?.length ?? 0) > 0);
   const cards = items.map((item, index) => {
     const facts = memberFacts && Object.hasOwn(memberFacts, item.id) ? memberFacts[item.id] : undefined;
-    return (
+    const card = (
       <ItemCard
         key={`${item.id}-${index}`}
         item={item}
         value={value}
+        credit={credits}
         {...(listPresentationFor ? { listPresentationFor } : {})}
         {...(facts ? { facts } : {})}
       />
     );
+    return credits ? <ListRow key={`${item.id}-${index}`}>{card}</ListRow> : card;
   });
+  if (credits) {
+    return (
+      <ul aria-label={label} className="grid min-w-0 gap-6 sm:grid-cols-2">
+        {cards}
+      </ul>
+    );
+  }
   return (
     <>
       {preview && (
