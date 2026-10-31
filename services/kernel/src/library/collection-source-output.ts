@@ -196,9 +196,12 @@ export async function completeCollectionSourceOutput(
     // Fresh native rereading on the actual authorized command, never a caller-supplied completion proof.
     const seal = await readCollectionPublicationStagingSeal(tx, staging.locator, staging.work);
     if (
-      !seal || seal.output.route !== input.route || seal.output.collectionId !== input.collectionId ||
+      !seal ||
+      seal.output.route !== input.route ||
+      seal.output.collectionId !== input.collectionId ||
       seal.output.generation !== input.generation
-    ) throw conflict();
+    )
+      throw conflict();
     await tx.query(
       `UPDATE library.collection_source_output SET expected_members=$4
        WHERE route=$1 AND collection_id=$2 AND generation=$3 AND output_mode='whole_query' AND expected_members IS NULL`,
