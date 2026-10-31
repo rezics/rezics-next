@@ -89,7 +89,9 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
     path: string;
     method: string;
     authorization: string | null;
+    /** Decoded native command key, alongside its exact structured-field wire value. */
     key: string | null;
+    keyHeader: string | null;
     session: string | null;
     body: string;
     cache: string;
@@ -109,12 +111,22 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
     const url = new URL(request.url);
     const path = url.pathname;
     const authorization = request.headers.get('authorization');
-    const key = request.headers.get('idempotency-key');
+    const keyHeader = request.headers.get('idempotency-key');
+    let key: string | null = null;
+    if (keyHeader !== null) {
+      try {
+        const value: unknown = JSON.parse(keyHeader);
+        if (typeof value === 'string') key = value;
+      } catch {
+        // Native commands require a structured-field string, rather than an unquoted token.
+      }
+    }
     calls.push({
       path,
       method: request.method,
       authorization,
       key,
+      keyHeader,
       session: request.headers.get('rezics-session-token'),
       body: await request.clone().text(),
       cache: request.cache,
@@ -148,6 +160,7 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
       (path === `/v1/statements/${candidateId}/disclose` || path === `/v1/statements/${candidateId}/retract`)
     ) {
       if (authorization !== 'Bearer target-owner') return json({ code: 'forbidden' }, 403);
+      if (!key) return json({ code: 'invalid_request' }, 400);
       if (scenario === 'deleted' || scenario === 'lagging-deletion') return json({ code: 'not_found' }, 404);
       const failure = { denied: 403, missing: 404, invalid: 400, conflict: 409, unavailable: 503 }[
         scenario as 'denied'
