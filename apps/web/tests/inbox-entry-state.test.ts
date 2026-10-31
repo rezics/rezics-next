@@ -4,7 +4,13 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router';
 import * as start from '../.storybook/react-start';
 import { getServerAsyncLocalStorage, locales, overwriteServerAsyncLocalStorage } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
@@ -144,7 +150,12 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
       const session = client.getQueryData(sessionQuery.queryKey)!;
       expect(session.state).toBe('signed-out');
       expect(inboxEntryState(session.state, client.getQueryState(sessionQuery.queryKey))).toBe('signed-out');
-      expect(client.getQueryCache().getAll().map((query) => query.queryKey)).toEqual([sessionQuery.queryKey]);
+      expect(
+        client
+          .getQueryCache()
+          .getAll()
+          .map((query) => query.queryKey),
+      ).toEqual([sessionQuery.queryKey]);
       expect(headers).toContain('Cache-Control: private, no-store');
     } finally {
       requestFails = false;
@@ -176,7 +187,12 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
       expect(alice.subject).toBe('alice');
       const oldPageKey = inboxPageQuery(alice, 'old-cursor').queryKey;
       const oldBadgeKey = unreadCountQueryFor(alice).queryKey;
-      client.setQueryData(oldPageKey, { signedIn: true, state: 'ready', items: [{ text: 'old private row' }], next: 'old-next' });
+      client.setQueryData(oldPageKey, {
+        signedIn: true,
+        state: 'ready',
+        items: [{ text: 'old private row' }],
+        next: 'old-next',
+      });
       client.setQueryData(oldBadgeKey, { signedIn: true, state: 'ready', count: 7, capped: false });
       for (const state of ['unknown', 'signed-out', 'unavailable'] as const) {
         const sessionKey: readonly unknown[] = sessionQuery.queryKey;
@@ -184,10 +200,18 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
         expect(store.snapshot()).toBeNull();
         expect(unreadCountQueryFor(store.snapshot()).enabled).toBe(false);
         await expect(forInboxViewer(alice, async () => ++privateReads)).rejects.toThrow('Inbox viewer changed');
-        await expect(markInboxViewerSeen(client, alice, { through: 'old-row', idempotencyKey: 'old-intent' }, 'same-token', async () => {
-          privateReads++;
-          return { signedIn: true };
-        })).rejects.toThrow('Inbox viewer changed');
+        await expect(
+          markInboxViewerSeen(
+            client,
+            alice,
+            { through: 'old-row', idempotencyKey: 'old-intent' },
+            'same-token',
+            async () => {
+              privateReads++;
+              return { signedIn: true };
+            },
+          ),
+        ).rejects.toThrow('Inbox viewer changed');
       }
       expect(privateReads).toBe(0);
       await retryInboxSession(client);
@@ -197,10 +221,12 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
       expect(client.getQueryData(inboxPageQuery(recovered, 'old-cursor').queryKey)).toBeUndefined();
       expect(client.getQueryData(unreadCountQueryFor(recovered).queryKey)).toBeUndefined();
       expect(alice.isCurrent()).toBe(false);
-      await client.fetchQuery(inboxPageQuery(recovered, undefined, async () => {
-        privateReads++;
-        return { signedIn: true, state: 'ready', items: [], next: null };
-      }));
+      await client.fetchQuery(
+        inboxPageQuery(recovered, undefined, async () => {
+          privateReads++;
+          return { signedIn: true, state: 'ready', items: [], next: null };
+        }),
+      );
       expect(privateReads).toBe(1);
     } finally {
       unsubscribe();
