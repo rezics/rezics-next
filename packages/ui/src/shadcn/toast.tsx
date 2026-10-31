@@ -8,15 +8,9 @@ import { Button } from "@rezics/ui/shadcn/button"
 import { XIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 const toast = ToastPrimitive.createToastManager()
-const ToastOwnerContext = React.createContext<ToastPrimitive.Provider.Props["toastManager"]>(undefined)
 
 function ToastProvider({ ...props }: ToastPrimitive.Provider.Props) {
-  // A manually composed provider starts its own scope without claiming a viewport.
-  return (
-    <ToastOwnerContext.Provider value={undefined}>
-      <ToastPrimitive.Provider {...props} />
-    </ToastOwnerContext.Provider>
-  )
+  return <ToastPrimitive.Provider {...props} />
 }
 
 function ToastPortal({ ...props }: ToastPrimitive.Portal.Props) {
@@ -208,23 +202,14 @@ function Toaster({
   toastManager = toast,
   ...props
 }: ToastPrimitive.Provider.Props) {
-  const owner = React.useContext(ToastOwnerContext)
-
-  // Reuse the actual ancestor provider, including its timeout, actions and viewport.
-  if (owner === toastManager) {
-    return <>{children}</>
-  }
-
   return (
     <ToastProvider toastManager={toastManager} {...props}>
-      <ToastOwnerContext.Provider value={toastManager}>
-        {children}
-        <ToastPortal>
-          <ToastViewport>
-            <ToastList />
-          </ToastViewport>
-        </ToastPortal>
-      </ToastOwnerContext.Provider>
+      {children}
+      <ToastPortal>
+        <ToastViewport>
+          <ToastList />
+        </ToastViewport>
+      </ToastPortal>
     </ToastProvider>
   )
 }
