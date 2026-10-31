@@ -58,7 +58,9 @@ test('request and response barriers hold actual same-prefix engine I/O without r
       try {
         await Promise.race([
           barrier.reached,
-          pending.then(() => { throw new Error('Native operation completed before its transport boundary'); }),
+          pending.then(() => {
+            throw new Error('Native operation completed before its transport boundary');
+          }),
         ]);
         expect(completed).toBe(false);
       } finally {
@@ -101,6 +103,7 @@ test('SIGKILL observes actual child exit and restarts the same world without a n
   // A locator alone neither creates a durable preparation nor confers completeness.
   expect(await native.readPreparation(randomUUID())).toBeNull();
   expect(await native.preparePublication(1, context())).toMatchObject({
-    status: 'unready', reason: 'source_pending',
+    status: 'unready',
+    reason: 'source_pending',
   });
 }, 180_000);

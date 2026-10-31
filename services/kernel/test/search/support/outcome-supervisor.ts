@@ -98,11 +98,13 @@ export async function searchProxy(endpoint: string) {
         },
         (response) => {
           // Retain the native stream under Node's backpressure while delivery is paused.
-          void boundary('response', incoming.method, incoming.url).then(() => {
-            if (outgoing.destroyed) return response.destroy();
-            outgoing.writeHead(response.statusCode!, response.statusMessage, response.rawHeaders);
-            response.pipe(outgoing);
-          }).catch(() => outgoing.destroy());
+          void boundary('response', incoming.method, incoming.url)
+            .then(() => {
+              if (outgoing.destroyed) return response.destroy();
+              outgoing.writeHead(response.statusCode!, response.statusMessage, response.rawHeaders);
+              response.pipe(outgoing);
+            })
+            .catch(() => outgoing.destroy());
         },
       );
       upstreams.add(upstream);

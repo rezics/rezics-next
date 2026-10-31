@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { Access } from '../../../src/request/access.ts';
-import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } from '../../../src/search/public-runtime.ts';
+import {
+  createDefaultPublicFilterRuntime,
+  type DefaultPublicFilterRuntime,
+} from '../../../src/search/public-runtime.ts';
 import type { PublicFilterConsumerOperations } from '../../../src/search/public-filter-consumer-contract.ts';
 import { createPublicPreparationStore, type PreparationRecord } from '../../../src/search/public-preparation-store.ts';
 import type { OpenSearch } from '../../../src/search/opensearch.ts';
@@ -84,10 +87,11 @@ export function releasedDiscoveryRuntime(
   // Allocate the transport lazily; service() remains synchronous like createSearchService.
   let proxy: Awaited<ReturnType<typeof searchProxy>> | undefined;
   let transport: Promise<OpenSearch> | undefined;
-  const connect = () => (transport ??= searchProxy(url).then((value) => {
-    proxy = value;
-    return createOpenSearch(value.url);
-  }));
+  const connect = () =>
+    (transport ??= searchProxy(url).then((value) => {
+      proxy = value;
+      return createOpenSearch(value.url);
+    }));
   const search: OpenSearch = {
     async request<T>(...args: Parameters<OpenSearch['request']>) {
       return (await connect()).request<T>(...args);
@@ -127,7 +131,10 @@ export function releasedDiscoveryRuntime(
   }
   function workerOperation<T>(run: () => Promise<T>): Promise<T> {
     const pending = workerTail.then(run);
-    workerTail = pending.then(() => {}, () => {});
+    workerTail = pending.then(
+      () => {},
+      () => {},
+    );
     return pending;
   }
   function workerRequest<T>(method: string, params?: unknown): Promise<T> {
@@ -155,14 +162,15 @@ export function releasedDiscoveryRuntime(
       return proxy.barrier(boundary);
     },
     preparePublic: (job) => operation(() => retain(job)),
-    readPreparation: (id) => operation(async () => {
-      const result = await config!.pool.query<PreparationRecord>(
-        `SELECT id, revision::text, locator, expires_at::text FROM search.public_preparation
+    readPreparation: (id) =>
+      operation(async () => {
+        const result = await config!.pool.query<PreparationRecord>(
+          `SELECT id, revision::text, locator, expires_at::text FROM search.public_preparation
          WHERE partition_no = 0 AND prefix = $1 AND id = $2`,
-        [prefix, id],
-      );
-      return result.rows[0] ?? null;
-    }),
+          [prefix, id],
+        );
+        return result.rows[0] ?? null;
+      }),
     workerStats: () => operation(() => workerOperation(() => workerRequest<WorkerStats>('stats'))),
     async crash() {
       ownership.requireOwnedChild();
@@ -170,16 +178,21 @@ export function releasedDiscoveryRuntime(
     },
     async restart() {
       ownership.requireOwnedChild();
-      return operation(() => workerOperation(async () => {
-        if (!worker?.exited) throw new Error('Restart requires confirmed actual worker exit');
-        // Reuse the original environment, database, prefix and durable preparations verbatim.
-        worker = startOutcomeWorkerProcess(env!);
-        return worker.ready;
-      }));
+      return operation(() =>
+        workerOperation(async () => {
+          if (!worker?.exited) throw new Error('Restart requires confirmed actual worker exit');
+          // Reuse the original environment, database, prefix and durable preparations verbatim.
+          worker = startOutcomeWorkerProcess(env!);
+          return worker.ready;
+        }),
+      );
     },
-    indexing: (state) => operation(() => workerOperation(async () => {
-      await workerRequest('indexing', { state });
-    })),
+    indexing: (state) =>
+      operation(() =>
+        workerOperation(async () => {
+          await workerRequest('indexing', { state });
+        }),
+      ),
     converge: (subjects) =>
       operation(async () => {
         for (const subject of subjects) {
@@ -207,9 +220,10 @@ export function releasedDiscoveryRuntime(
           }
         }
       }),
-    rebuild: () => operation(() => workerOperation(() =>
-      workerRequest<Awaited<ReturnType<ReleasedDiscoveryRuntime['rebuild']>>>('rebuild'),
-    )),
+    rebuild: () =>
+      operation(() =>
+        workerOperation(() => workerRequest<Awaited<ReturnType<ReleasedDiscoveryRuntime['rebuild']>>>('rebuild')),
+      ),
   };
   return {
     control,
