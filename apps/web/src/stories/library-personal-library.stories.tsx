@@ -57,9 +57,10 @@ export const ContinueAbsent: Story = {
         window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches
           ? 'link'
           : 'menuitem';
-      await expect(
-        await within(document.body).findByRole(role, { name: m.library_continue() }),
-      ).toHaveAttribute('href', `/${getLocale()}/library/continue`);
+      await expect(await within(document.body).findByRole(role, { name: m.library_continue() })).toHaveAttribute(
+        'href',
+        `/${getLocale()}/library/continue`,
+      );
       await userEvent.keyboard('{Escape}');
     }
   },
