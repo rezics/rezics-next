@@ -640,3 +640,106 @@ test('a changed source clears images synchronously and late media cannot replace
   expect(controller.snapshot().source).toBeNull();
   expect(controller.snapshot().failure).toMatchObject({ kind: 'unavailable', reason: 'binding' });
 });
+
+test('A temporarily unavailable exact-revision edition entry can explicitly retry the existing current admission read without presenting a stale successful entry after a failed refresh', async () => {
+  const { mock } = await import('bun:test');
+  const { Children, createElement, isValidElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { Button } = await import('@rezics/ui/shadcn/button');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { getLocale } = await import('../src/paraglide/runtime.js');
+  type Result = { kind: 'available' } | { kind: 'unavailable' | 'refused' | 'missing'; status: number };
+  const requests: {
+    data: typeof identity;
+    resolve: (result: Result) => void;
+    reject: (error: Error) => void;
+  }[] = [];
+  const session = { state: 'signed-in', subject: creator, csrfToken: 'entry-test' };
+  mock.module('../src/session/query', () => ({ useSession: () => session }));
+  mock.module('../src/content-editions/edition-create-actions', () => ({
+    readEditionCreateEntry: ({ data }: { data: typeof identity }) =>
+      new Promise<Result>((resolve, reject) => requests.push({ data, resolve, reject })),
+  }));
+  const { EditionCreateEntry } = await import('../src/content-editions/edition-create-entry');
+  const client = new QueryClient({ defaultOptions: { queries: { refetchOnMount: false, retryOnMount: false } } });
+  let entry: ReturnType<typeof EditionCreateEntry> = null;
+  function Surface() {
+    return (entry = EditionCreateEntry({ identity }));
+  }
+  const render = () =>
+    renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(Surface)));
+  type Props = { children?: import('react').ReactNode; disabled?: boolean; onClick?: () => void };
+  function retry(node: import('react').ReactNode = entry): Props | undefined {
+    if (!isValidElement<Props>(node)) return;
+    if (node.type === Button) return node.props;
+    return Children.toArray(node.props.children).map(retry).find(Boolean);
+  }
+  const unavailable = () => {
+    const html = render();
+    expect(html).toContain(m.edition_publication_unavailable());
+    expect(html).not.toContain('href=');
+    return html;
+  };
+  try {
+    expect(render()).toBe(''); // Initial loading makes no admission claim or automatic retry request.
+    const query = client.getQueryCache().getAll()[0]!;
+    expect(query.queryKey).toEqual(['edition-create-entry', identity.postId, identity.revisionId, creator, 'signed-in']);
+    expect(query.options.retry).toBe(false);
+    const initial = query.fetch();
+    requests[0]!.resolve({ kind: 'unavailable', status: 503 });
+    await initial;
+    expect(unavailable()).toContain(m.edition_publication_retry());
+    expect(retry()?.disabled).toBe(false);
+
+    retry()!.onClick!();
+    const recovery = query.fetch(undefined, { cancelRefetch: false });
+    unavailable();
+    expect(retry()?.disabled).toBe(true);
+    retry()!.onClick!(); // Even a duplicate invocation shares the current read rather than restarting it.
+    expect(requests).toHaveLength(2);
+    expect(requests.every((request) => request.data === identity)).toBe(true);
+    requests[1]!.resolve({ kind: 'available' });
+    await recovery;
+    expect(render()).toContain(`href="${editionCreateHref(identity, getLocale()).replaceAll('&', '&amp;')}"`);
+    expect(retry()).toBeUndefined();
+
+    const refresh = query.fetch();
+    unavailable();
+    requests[2]!.reject(new Error('Temporary entry read failure'));
+    await expect(refresh).rejects.toThrow('Temporary entry read failure');
+    expect(query.state.data).toEqual({ kind: 'available' }); // React Query retains stale success after rejection.
+    unavailable();
+    expect(retry()?.disabled).toBe(false);
+    expect(requests).toHaveLength(3);
+
+    retry()!.onClick!();
+    const recovered = query.fetch(undefined, { cancelRefetch: false });
+    unavailable();
+    expect(retry()?.disabled).toBe(true);
+    requests[3]!.resolve({ kind: 'available' });
+    await recovered;
+    expect(render()).toContain(m.edition_publication_entry_action());
+
+    for (const kind of ['missing', 'refused'] as const) {
+      const read = query.fetch();
+      requests.at(-1)!.resolve({ kind, status: 404 });
+      await read;
+      const html = render();
+      expect(html).not.toContain('href=');
+      expect(retry()).toBeUndefined();
+      if (kind === 'refused') expect(html).toBe('');
+    }
+    client.setQueryData(query.queryKey, { kind: 'available' });
+    for (const state of ['signed-out', 'unknown']) {
+      session.state = state;
+      expect(render()).toBe('');
+    }
+    session.state = 'signed-in';
+    session.subject = id(91);
+    expect(render()).toBe('');
+    expect(requests).toHaveLength(6);
+  } finally {
+    client.clear();
+  }
+});
