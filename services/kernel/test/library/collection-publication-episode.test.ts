@@ -75,6 +75,7 @@ test('Whole-query publication begins with a real authorized immutable operation 
   expect(rows[0]).toMatchObject({ original: true, expected_members: null, visibility: 'private', revision: input.revision });
   for (const privateField of ['filter','scopes','bearer','authnEpoch','originalAccount']) expect(JSON.parse(rows[0].bytes)).not.toHaveProperty(privateField);
   expect((await episodes().begin(actor, input, key)).value).toEqual(command.value);
+  await expect(episodes().begin(actor,{...input,visibility:'unlisted'},key)).rejects.toMatchObject({name:'IdempotencyConflictError'});
   expect((await f.database.pool.query('SELECT 1 FROM library.collection_publication_operation WHERE route=$1 AND publication_id=$2',
     [command.value.locator.route,command.value.locator.publicationId])).rowCount).toBe(1);
   await expect(f.database.admin.query('UPDATE library.collection_publication_source SET bytes=$3 WHERE route=$1 AND source_id=$2',
@@ -88,7 +89,7 @@ test('replay rejects current revoked native family scope and changed accepted Co
   const reduced = await f.runtime.identity.access.authenticate(f.reduced, { pool: f.database.pool, deadline: Date.now()+30000 });
   await expect(episodes().begin(reduced,input,key)).rejects.toThrow();
   const updated = await f.send('PUT', `/v1/collections/${input.collectionId}/rule`, {
-    revision: input.revision+1, rule: { filter: { not: { owner: { presence: true } } }, sort: 'id' },
+    revision: input.revision, rule: { filter: { not: { owner: { presence: true } } }, sort: 'id' },
   });
   expect(updated.status).toBe(200);
   expect(await readCollectionPublicationRule(f.database.pool,created.value.locator)).toBeNull();

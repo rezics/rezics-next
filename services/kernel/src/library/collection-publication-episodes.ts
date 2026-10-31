@@ -11,7 +11,7 @@ import { shareAccount } from '../access/account-share.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, currentCommand, currentCommandReceipt, principalCommandIdentity, runCommand,
+import { authoritativeTimeValue, currentCommand, currentCommandReceipt, IdempotencyConflictError, principalCommandIdentity, runCommand,
   type CommandAuthorization, type CommandOutcome, type CommandTransaction } from '../command/command.ts';
 import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import erasureScope from './erasure-scope.sql';
@@ -255,18 +255,20 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
            FROM library.collection_publication_operation WHERE route=$1 AND owner_account_id=$2 AND creation_key=$3`,
           [route, actor.accountId, requestKey],
         )).rows[0];
-        const initialized=prior ? {rows:[]} : await tx.query(`INSERT INTO library.fact_source_head(route,account_id,generation)
-          VALUES($1,$2,1) ON CONFLICT DO NOTHING RETURNING generation`,[route,actor.accountId]);
+        const initialized=!prior && (await tx.query(`INSERT INTO library.fact_source_head(route,account_id,generation)
+          VALUES($1,$2,1) ON CONFLICT DO NOTHING RETURNING generation`,[route,actor.accountId])).rows.length===1;
         const fact = (await tx.query<{ generation: string }>(
           'SELECT generation::text FROM library.fact_source_head WHERE route=$1 AND account_id=$2 FOR SHARE',
           [route, actor.accountId],
         )).rows[0];
         if (!fact || (prepared.metadata && !(prepared.metadata.factFence===fact.generation ||
-          (prepared.metadata.factFence===null && initialized.rows.length===1 && fact.generation==='1')))) throw unavailable();
+          (prepared.metadata.factFence===null && initialized && fact.generation==='1')))) throw unavailable();
         if (prior) {
           const original = await load(tx, { route, id: prior.publicationId, kind: COLLECTION_PUBLICATION_COMMAND, sourceId: prior.sourceId });
-          if (!original || original.creation.initiator.creation.requestDigest !== requestDigest.toString('hex') ||
-            !await readCollectionPublicationRule(tx, original.creation.source.locator) ||
+          if (!original) throw unavailable();
+          if (original.creation.initiator.creation.requestDigest!==requestDigest.toString('hex'))
+            throw new IdempotencyConflictError(partitionOf(route));
+          if (!await readCollectionPublicationRule(tx, original.creation.source.locator) ||
             !prepared.metadata || !isDeepStrictEqual(original.creation.source.input.identity, await readCurrentInput(tx, prepared.metadata))) throw unavailable();
         }
         const current = await readCurrentMeaning(tx,route,input.collectionId);
