@@ -24,6 +24,7 @@ import { workerTestEnv } from '../../support/worker-env.ts';
 import { createOutcomeRpc, type OutcomeRpc } from './outcome-rpc.ts';
 import type { WorkerStats } from './outcome-worker.ts';
 import { createReleasedBookImport } from './released-imports.ts';
+import type { ReleasedTransportBarrier, ReleasedTransportBoundary } from './released-discovery-runtime.ts';
 
 export type OwnedResource =
   | OwnedSemanticResource
@@ -61,32 +62,58 @@ function empty(params: unknown) {
 }
 
 /** The proxy retains a stable port across a genuine connectivity outage. */
-async function searchProxy(endpoint: string) {
+export async function searchProxy(endpoint: string) {
   const target = new URL(endpoint);
   const forward = target.protocol === 'https:' ? httpsRequest : httpRequest;
   const upstreams = new Set<ReturnType<typeof httpRequest>>();
-  const server = createServer((incoming, outgoing) => {
-    const upstream = forward(
-      {
-        protocol: target.protocol,
-        hostname: target.hostname,
-        port: target.port,
-        method: incoming.method,
-        path: incoming.url,
-        headers: incoming.rawHeaders,
-      },
-      (response) => {
-        outgoing.writeHead(response.statusCode!, response.statusMessage, response.rawHeaders);
-        response.pipe(outgoing);
-      },
+  type Gate = ReleasedTransportBoundary & {
+    hit(): void;
+    wait: Promise<void>;
+    release(): void;
+    claimed: boolean;
+  };
+  const gates = new Set<Gate>();
+  let closed = false;
+  async function boundary(phase: Gate['phase'], method: string | undefined, path: string | undefined) {
+    const gate = [...gates].find(
+      (gate) => !gate.claimed && gate.phase === phase && gate.method === method && gate.path === path,
     );
-    upstreams.add(upstream);
-    upstream.once('close', () => upstreams.delete(upstream));
-    upstream.on('error', () => {
-      if (!outgoing.headersSent) outgoing.writeHead(502);
-      outgoing.end();
-    });
-    incoming.pipe(upstream);
+    if (!gate) return;
+    gate.claimed = true;
+    gate.hit();
+    await gate.wait;
+  }
+  const server = createServer((incoming, outgoing) => {
+    void (async () => {
+      await boundary('request', incoming.method, incoming.url);
+      if (incoming.destroyed || outgoing.destroyed) return;
+      const upstream = forward(
+        {
+          protocol: target.protocol,
+          hostname: target.hostname,
+          port: target.port,
+          method: incoming.method,
+          path: incoming.url,
+          headers: incoming.rawHeaders,
+        },
+        (response) => {
+          // Retain the native stream under Node's backpressure while delivery is paused.
+          void boundary('response', incoming.method, incoming.url).then(() => {
+            if (outgoing.destroyed) return response.destroy();
+            outgoing.writeHead(response.statusCode!, response.statusMessage, response.rawHeaders);
+            response.pipe(outgoing);
+          }).catch(() => outgoing.destroy());
+        },
+      );
+      upstreams.add(upstream);
+      upstream.once('close', () => upstreams.delete(upstream));
+      upstream.on('error', () => {
+        if (!outgoing.headersSent) outgoing.writeHead(502);
+        outgoing.end();
+      });
+      incoming.pipe(upstream);
+      outgoing.once('close', () => upstream.destroy());
+    })().catch(() => outgoing.destroy());
   });
   let port = 0;
   async function up() {
@@ -107,7 +134,41 @@ async function searchProxy(endpoint: string) {
     await stopped;
   }
   await up();
-  return { url: `http://127.0.0.1:${port}`, up, down };
+  return {
+    url: `http://127.0.0.1:${port}`,
+    up,
+    down,
+    barrier(input: ReleasedTransportBoundary): ReleasedTransportBarrier {
+      if (closed) throw new Error('Search proxy is closed');
+      if (!['request', 'response'].includes(input.phase) || !input.path.startsWith('/'))
+        throw new Error('Search transport barriers require a phase and an exact absolute HTTP path');
+      if (gates.size >= 16) throw new Error('Search proxy permits at most 16 retained transport barriers');
+      let hit!: () => void;
+      let release!: () => void;
+      const reached = new Promise<void>((resolve) => (hit = resolve));
+      const wait = new Promise<void>((resolve) => (release = resolve));
+      const gate: Gate = {
+        ...input,
+        hit,
+        wait,
+        claimed: false,
+        release() {
+          gates.delete(gate);
+          release();
+        },
+      };
+      gates.add(gate);
+      return { reached, release: gate.release };
+    },
+    releaseBarriers() {
+      for (const gate of gates) gate.release();
+    },
+    async close() {
+      closed = true;
+      for (const gate of gates) gate.release();
+      await down();
+    },
+  };
 }
 
 function supervise(parent: OutcomeRpc) {

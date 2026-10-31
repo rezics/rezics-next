@@ -161,7 +161,7 @@ if (import.meta.main) {
       const config = readSearchConfig(context.env);
       if (!config) throw new Error('Default search configuration is missing');
       const routeKey = readMembershipRouteKey(context.env);
-      const { generation } = await rebuildSubjects({
+      const { generation, previous } = await rebuildSubjects({
         publication: 'native',
         pool: context.pool,
         search: createOpenSearch(config.url),
@@ -169,7 +169,7 @@ if (import.meta.main) {
         source: createRatedSubjectSource(context.pool, routeKey).source,
         runner,
       });
-      return { generation };
+      return { generation, previous };
     });
   }
 

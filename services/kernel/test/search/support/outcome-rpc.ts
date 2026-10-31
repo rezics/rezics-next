@@ -1,4 +1,110 @@
 import { randomUUID } from 'node:crypto';
+import { fork } from 'node:child_process';
+import type { WorkerStats } from './outcome-worker.ts';
+
+/** Owns only the existing native worker executable; it never provisions fixture state. */
+export function startOutcomeWorkerProcess(env: Record<string, string | undefined>) {
+  const child = fork(`${import.meta.dir}/outcome-worker.ts`, [], {
+    execPath: process.execPath,
+    env: {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => /^(PATH|HOME|TMPDIR|TEMP|LANG|TZ|BUN_.+)$/.test(key)),
+      ),
+      // Database imports execute before init. They must already address this exact world.
+      ...env,
+    },
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  });
+  let output = '';
+  let exited = false;
+  const append = (chunk: unknown) => (output = (output + String(chunk)).slice(-65_536));
+  child.stdout!.on('data', append);
+  child.stderr!.on('data', append);
+  const exit = new Promise<{ code: number | null; signal: string | null }>((resolve) =>
+    child.once('close', (code, signal) => {
+      exited = true;
+      resolve({ code, signal });
+    }),
+  );
+  const rpc = createOutcomeRpc(
+    {
+      send: (packet) =>
+        new Promise<void>((resolve, reject) =>
+          child.send(packet as object, (error) => (error ? reject(error) : resolve())),
+        ),
+      subscribe(message, failure) {
+        const disconnected = () => failure(new Error(`Worker IPC disconnected: ${output}`));
+        const stopped = () => failure(new Error(`Worker exited: ${output}`));
+        child.on('message', message);
+        child.on('error', failure);
+        child.on('disconnect', disconnected);
+        child.on('exit', stopped);
+        return () => {
+          child.off('message', message);
+          child.off('error', failure);
+          child.off('disconnect', disconnected);
+          child.off('exit', stopped);
+        };
+      },
+    },
+    {
+      onRequest() {
+        throw new Error('Worker cannot control released fixture');
+      },
+      timeoutMs: 90_000,
+    },
+  );
+  const ready = rpc.request<WorkerStats>('init', { env });
+  let closing: Promise<void> | undefined;
+  let crashing: Promise<{ code: number | null; signal: string | null }> | undefined;
+  return {
+    rpc,
+    ready,
+    get exited() {
+      return exited;
+    },
+    crash() {
+      if (closing) return Promise.reject(new Error('Worker is already closing'));
+      return (crashing ??= (async () => {
+        await ready;
+        if (exited || !child.kill('SIGKILL')) throw new Error(`Owned worker could not be killed: ${output}`);
+        const result = await exit;
+        rpc.close();
+        if (result.signal !== 'SIGKILL')
+          throw new Error(`Owned worker did not exit from SIGKILL: ${JSON.stringify(result)}: ${output}`);
+        return result;
+      })());
+    },
+    close() {
+      return (closing ??= (async () => {
+        if (crashing) {
+          await crashing;
+          return;
+        }
+        const failures: unknown[] = [];
+        const timer = setTimeout(() => {
+          if (!exited) child.kill('SIGKILL');
+        }, 90_000);
+        try {
+          try {
+            await ready;
+            if (!exited) await rpc.request<WorkerStats>('close', undefined, 60_000);
+          } catch (error) {
+            failures.push(error);
+          }
+          if (child.connected) child.disconnect();
+          const result = await exit;
+          if (result.code !== 0 || result.signal !== null)
+            failures.push(new Error(`Worker did not drain: ${JSON.stringify(result)}: ${output}`));
+        } finally {
+          clearTimeout(timer);
+          rpc.close();
+        }
+        if (failures.length) throw new AggregateError(failures, 'Owned released worker cleanup failed');
+      })());
+    },
+  };
+}
 
 /**
  * Test-only bidirectional request/response peer for plain-data IPC between a fixture supervisor and a worker
