@@ -154,6 +154,25 @@ is50,000 keys per returning viewer; one million×5,000 follows is five billion e
 global byte admission and resumable work. Shared reference decks plus read-time bounded merge are an alternative
 with lower replication and more merge work; do not select per-viewer inbox storage before that owner tradeoff.
 
+Bind continuation to viewer/scope/query/order version and source generation, with bounded expiry and stable session
+order plus an explicit new-items action. Follow/unfollow, mute/block, visibility reduction, source withdrawal,
+Realm revocation and identity merge require current eligibility checks; asynchronous cleanup is not permission to
+serve stale reasons. Hard exclusions differ from later soft feedback. Public ranking must not use private progress,
+inbox membership, sparse hidden population scores or withheld facts that final-card filtering cannot conceal.
+
+Historical comparison needs a precise correction. Old REZICS at
+`apps/web/features/explore/home.tsx` already used one `ApiFeedList`,20-item pages and sort/content/language/Realm/tag
+URL state. Its Realm/tag controls only fetched50 choices without demonstrated continuation, and accumulated loaded
+pages have no retained-page bound. The backend's latest32-placement window before eight visible context summaries
+is bounded but not complete membership. `legacy-final:apps/web/features/home/home-page.tsx` also renders **one**
+mixed `HomePostsFeedList`, not a separate stream for every Realm. `home/tabs.tsx` has More and
+`work-page/scope-bar.tsx` has top-four-plus-selected with a paged other-community picker. Remaining limits include
+`work-page/ratings.tsx` mapping every question Context, feed-control O(SR) selected-label lookup/O(R) options and
+moderated-community rail entries with no local cap. The followed-concept page defaults20/max64 and the has-follow
+probe asks for one; it is not an all-follows scan. Retain those genuine mitigations and fix the residual enumeration
+class. Historical main-feed budgets excluded large Continue/rail budgets and are not current measurements or a
+budget to import. Both [home](home-feed-current.md) [reports](home-feed-deep.md) provide exact source traces.
+
 Space is a specialized native community/catalogue entry; Zone configures bounded shared views over authorized
 sources. Books need edition/language/translation and actual reading-session continuation; anime needs schedule,
 episode/season structure and spoiler controls; games need platform/release/edition and acquisition context.
