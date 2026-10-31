@@ -59,6 +59,29 @@ async function variantReady(context: { canvasElement: HTMLElement }, title: stri
     });
 }
 
+async function menuForTrigger(trigger: HTMLElement) {
+  const view = trigger.ownerDocument.defaultView!;
+  const sheet = view.matchMedia('(max-width: 767px)').matches || view.matchMedia('(pointer: coarse)').matches;
+  const panel = await waitFor(() => {
+    if (sheet) {
+      const dialog = within(trigger.ownerDocument.body).getByRole('dialog', {
+        name: m.library_collection_actions(),
+        exact: true,
+      });
+      expect(dialog).toBeVisible();
+      return dialog;
+    }
+    const controlledId = trigger.getAttribute('aria-controls');
+    expect(controlledId).toBeTruthy();
+    const menu = trigger.ownerDocument.getElementById(controlledId!);
+    expect(menu).toHaveAttribute('role', 'menu');
+    expect(menu).toHaveAttribute('aria-labelledby', trigger.id);
+    expect(menu).toBeVisible();
+    return menu!;
+  });
+  return within(panel);
+}
+
 async function collectionReadyWithHover(context: { canvasElement: HTMLElement }) {
   await libraryCollectionReady(context);
   const member = context.canvasElement.querySelector('[data-slot="collection-member-card"], [data-slot="list-row"]');
@@ -228,9 +251,9 @@ export const OwnerMenu: Story = {
     await expect(canvas.getByRole('button', { name: m.reaction_like() })).toBeDisabled();
     const menu = canvas.getByRole('button', { name: m.library_collection_actions() });
     await userEvent.click(menu);
-    const body = within(context.canvasElement.ownerDocument.body);
-    await expect(await body.findByText(m.library_collection_edit(), { exact: true })).toBeVisible();
-    await expect(body.getByText(m.report_action(), { exact: true })).toBeVisible();
+    const actions = await menuForTrigger(menu);
+    await expect(actions.getByText(m.library_collection_edit(), { exact: true })).toBeVisible();
+    await expect(actions.getByText(m.report_action(), { exact: true })).toBeVisible();
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(menu).toHaveFocus());
   },
@@ -248,9 +271,8 @@ export const MixedTypes: Story = {
       name: new RegExp(`${m.library_collection_actions()}:`),
     })[0]!;
     await userEvent.click(rowMenu);
-    await expect(
-      await within(context.canvasElement.ownerDocument.body).findByText(m.library_collection_copy(), { exact: true }),
-    ).toBeVisible();
+    const actions = await menuForTrigger(rowMenu);
+    await expect(actions.getByText(m.library_collection_copy(), { exact: true })).toBeVisible();
     await userEvent.keyboard('{Escape}');
   },
 };
@@ -294,10 +316,11 @@ export const AnotherReader: Story = {
   play: async (context) => {
     await variantReady(context, variants.ReaderPublicMany.title);
     const canvas = within(context.canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_actions() }));
-    const body = within(context.canvasElement.ownerDocument.body);
-    await expect(await body.findByText(m.report_action(), { exact: true })).toBeVisible();
-    await expect(body.queryByText(m.library_collection_edit(), { exact: true })).toBeNull();
+    const trigger = canvas.getByRole('button', { name: m.library_collection_actions() });
+    await userEvent.click(trigger);
+    const actions = await menuForTrigger(trigger);
+    await expect(actions.getByText(m.report_action(), { exact: true })).toBeVisible();
+    await expect(actions.queryByText(m.library_collection_edit(), { exact: true })).toBeNull();
     await userEvent.keyboard('{Escape}');
   },
 };

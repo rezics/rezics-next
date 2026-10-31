@@ -67,17 +67,43 @@ function renderEditor(mode: CollectionStoryMode = 'private') {
 async function openEditor(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await canvas.findByRole('heading', { level: 1, name: 'Books I come back to' });
-  await userEvent.click(canvas.getAllByRole('button', { name: m.library_collection_actions() })[0]!);
-  const body = within(document.body);
-  const edit = await body.findByText(m.library_collection_edit(), { exact: true });
+  const trigger = canvas.getByRole('button', { name: m.library_collection_actions(), exact: true });
+  await userEvent.click(trigger);
+  const menu = await menuForTrigger(trigger, m.library_collection_actions());
+  const edit = menu.getByText(m.library_collection_edit(), { exact: true });
   await userEvent.click(edit);
   await canvas.findByRole('textbox', { name: m.library_collection_title() });
   return canvas;
+}
+async function menuForTrigger(trigger: HTMLElement, title: string) {
+  const view = trigger.ownerDocument.defaultView!;
+  const sheet = view.matchMedia('(max-width: 767px)').matches || view.matchMedia('(pointer: coarse)').matches;
+  const panel = await waitFor(() => {
+    if (sheet) {
+      const dialog = within(trigger.ownerDocument.body).getByRole('dialog', { name: title, exact: true });
+      expect(dialog).toBeVisible();
+      return dialog;
+    }
+    const controlledId = trigger.getAttribute('aria-controls');
+    expect(controlledId).toBeTruthy();
+    const menu = trigger.ownerDocument.getElementById(controlledId!);
+    expect(menu).toHaveAttribute('role', 'menu');
+    expect(menu).toHaveAttribute('aria-labelledby', trigger.id);
+    expect(menu).toBeVisible();
+    return menu!;
+  });
+  return within(panel);
 }
 function firstRow(canvasElement: HTMLElement) {
   const row = canvasElement.querySelector<HTMLElement>('[data-collection-members] [data-slot="list-row"]');
   if (!row) throw new Error('Missing member row');
   return row;
+}
+function rowAction(row: HTMLElement, action: string) {
+  const title = within(row).getByRole('link').textContent!;
+  const position = Array.from(row.parentElement!.children).indexOf(row) + 1;
+  const context = m.library_member_occurrence({ title, position });
+  return within(row).getByRole('button', { name: `${action}: ${context}`, exact: true });
 }
 
 export const Details: Story = {
@@ -100,6 +126,62 @@ export const Members: Story = {
     }
   },
 };
+export const RowActionContext: Story = {
+  render: () => renderEditor('notes-duplicates'),
+  play: async ({ canvasElement }) => {
+    const canvas = await openEditor(canvasElement);
+    const rows = Array.from(canvasElement.querySelectorAll<HTMLElement>('[data-collection-members] [data-member]'));
+    await expect(rows).toHaveLength(5);
+    const actions = [
+      m.library_collection_actions(),
+      m.library_member_move_up(),
+      m.library_member_move_down(),
+      m.library_member_remove(),
+    ];
+    for (const action of actions) {
+      const names = new Set<string>();
+      for (const row of rows) {
+        const control = rowAction(row, action);
+        const name = control.getAttribute('aria-label')!;
+        names.add(name);
+        await expect(control).toHaveAttribute('title', name);
+        const minimumTarget = window.matchMedia('(min-width: 640px)').matches ? 36 : 44;
+        await expect(control.getBoundingClientRect().width).toBeGreaterThanOrEqual(minimumTarget);
+        await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(minimumTarget);
+      }
+      await expect(names.size).toBe(rows.length);
+    }
+    await expect(rowAction(rows[0]!, m.library_member_move_up())).toBeDisabled();
+    await expect(rowAction(rows.at(-1)!, m.library_member_move_down())).toBeDisabled();
+    const duplicate = rows[1]!;
+    const originalNote = within(duplicate).getByRole('textbox') as HTMLTextAreaElement;
+    const noteId = originalNote.id;
+    const noteValue = originalNote.value;
+    await userEvent.click(within(duplicate).getByRole('checkbox'));
+    const trigger = rowAction(duplicate, m.library_collection_actions());
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    const menu = await menuForTrigger(trigger, trigger.getAttribute('aria-label')!);
+    const copy = menu.getByText(m.library_collection_copy(), { exact: true });
+    await expect(copy).toBeVisible();
+    await expect(menu.queryByText(m.library_collection_edit(), { exact: true })).toBeNull();
+    await expect(menu.queryByText(m.report_action(), { exact: true })).toBeNull();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(copy).not.toBeVisible());
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await expect(within(duplicate).getByRole('textbox')).toHaveValue(noteValue);
+    rowAction(duplicate, m.library_member_move_up()).focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(firstRow(canvasElement)).toHaveAttribute('data-member', duplicate.dataset.member);
+    await expect(within(firstRow(canvasElement)).getByRole('checkbox')).toBeChecked();
+    await expect(within(firstRow(canvasElement)).getByRole('textbox')).toHaveAttribute('id', noteId);
+    await expect(within(firstRow(canvasElement)).getByRole('textbox')).toHaveValue(noteValue);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_cancel() }));
+    await openEditor(canvasElement);
+    await expect(firstRow(canvasElement)).toHaveAttribute('data-member', rows[0]!.dataset.member);
+    await expect(within(firstRow(canvasElement)).getByRole('textbox')).toHaveValue('');
+  },
+};
 export const Selection: Story = {
   render: () => renderEditor(),
   play: async ({ canvasElement }) => {
@@ -113,9 +195,9 @@ export const Reordering: Story = {
   render: () => renderEditor(),
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
-    const row = within(firstRow(canvasElement));
+    const row = firstRow(canvasElement);
     const controls = [m.library_member_move_up(), m.library_member_move_down(), m.library_member_remove()].map((name) =>
-      row.getByRole('button', { name }),
+      rowAction(row, name),
     );
     const minimumTarget = window.matchMedia('(min-width: 640px)').matches ? 36 : 44;
     for (const control of controls) {
@@ -129,7 +211,7 @@ export const Reordering: Story = {
       const gap = Math.max(current.left - previous.right, previous.left - current.right, current.top - previous.bottom);
       await expect(gap).toBeGreaterThanOrEqual(index === 2 && current.top < previous.bottom ? 16 : 8);
     }
-    const down = within(firstRow(canvasElement)).getByRole('button', { name: m.library_member_move_down() });
+    const down = rowAction(firstRow(canvasElement), m.library_member_move_down());
     down.focus();
     await expect(down).toHaveFocus();
     await userEvent.keyboard('{Enter}');
@@ -225,8 +307,8 @@ export const RemovalAndUndo: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
     await userEvent.type(canvas.getByRole('textbox', { name: m.library_collection_title() }), ' — revised');
-    await userEvent.click(within(firstRow(canvasElement)).getByRole('button', { name: m.library_member_remove() }));
-    await userEvent.click(within(firstRow(canvasElement)).getByRole('button', { name: m.library_member_remove() }));
+    await userEvent.click(rowAction(firstRow(canvasElement), m.library_member_remove()));
+    await userEvent.click(rowAction(firstRow(canvasElement), m.library_member_remove()));
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
     await expect(canvas.queryByText('Snow Country', { exact: true })).toBeNull();
@@ -240,7 +322,7 @@ export const ExpiredUndo: Story = {
   render: () => renderEditor('expired-undo'),
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
-    await userEvent.click(within(firstRow(canvasElement)).getByRole('button', { name: m.library_member_remove() }));
+    await userEvent.click(rowAction(firstRow(canvasElement), m.library_member_remove()));
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await userEvent.click(await canvas.findByRole('button', { name: m.editor_undo() }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_restore_expired());

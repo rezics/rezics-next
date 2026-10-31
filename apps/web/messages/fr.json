@@ -541,6 +541,7 @@
   "library_member_move_down": "Descendre",
   "library_member_move_to_top": "Placer en tête",
   "library_member_move_up": "Monter",
+  "library_member_occurrence": "{title} (élément {position} sur cette page)",
   "library_member_note": "Note",
   "library_member_note_save": "Enregistrer la note",
   "library_member_remove": "Retirer le membre",

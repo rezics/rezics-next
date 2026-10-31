@@ -542,6 +542,7 @@
   "library_member_move_down": "下移",
   "library_member_move_to_top": "移到顶部",
   "library_member_move_up": "上移",
+  "library_member_occurrence": "{title}（本页第 {position} 项）",
   "library_member_note": "备注",
   "library_member_note_save": "保存备注",
   "library_member_remove": "移除成员",

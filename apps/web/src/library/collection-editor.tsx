@@ -37,6 +37,7 @@ export function CollectionSubjectList({
         const localizedTitle = subject ? pageText(libraryTitleValue(subject.label), getLocale()) : null;
         const title = localizedTitle?.text ?? m.library_subject_unavailable();
         const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()) : null;
+        const actionsLabel = `${m.library_collection_actions()}: ${m.library_member_occurrence({ title, position: index + 1 })}`;
         return (
           <ListRow key={subject?.id ?? `unavailable-${index}`} className="flex min-w-0 items-start gap-4 py-2">
             {href ? <ListRowLink href={href.href}>{title}</ListRowLink> : null}
@@ -56,9 +57,16 @@ export function CollectionSubjectList({
             {subject && onCopy ? (
               <ListRowControl>
                 <Menu
-                  title={m.library_collection_actions()}
+                  title={actionsLabel}
                   trigger={
-                    <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
+                    <Button
+                      type="button"
+                      aria-label={actionsLabel}
+                      title={actionsLabel}
+                      size="icon-lg"
+                      className="size-11 sm:size-9"
+                      variant="ghost"
+                    >
                       <EllipsisIcon aria-hidden="true" />
                     </Button>
                   }
@@ -169,6 +177,8 @@ export function CollectionMemberList({
         const localizedTitle = member.subject ? pageText(libraryTitleValue(member.subject.label), getLocale()) : null;
         const title = localizedTitle?.text ?? m.library_subject_unavailable();
         const href = member.subject ? subjectHref({ id: member.subject.id, label: title }, getLocale()) : null;
+        const actionContext = m.library_member_occurrence({ title, position: index + 1 });
+        const actionLabel = (action: string) => `${action}: ${actionContext}`;
         const noteId = `collection-member-note-${member.id}`;
         const rowRatio = collectionMemberRatio(member.subject, typeRatios, listPresentations);
         const landscape = rowRatio === '16:9' || rowRatio === '4:3';
@@ -227,7 +237,7 @@ export function CollectionMemberList({
                 <Checkbox
                   checked={selectedIds.has(member.id)}
                   disabled={busy || !onSelectionChange}
-                  aria-label={m.library_collection_select_member({ title })}
+                  aria-label={m.library_collection_select_member({ title: actionContext })}
                   onCheckedChange={(checked) => onSelectionChange?.(member.id, checked === true)}
                 />
               </ListRowControl>
@@ -264,9 +274,16 @@ export function CollectionMemberList({
             <ListRowControl className={`col-start-2 flex flex-wrap items-center gap-2 ${editing ? 'col-span-2' : ''}`}>
               {onCopy && member.subject ? (
                 <Menu
-                  title={m.library_collection_actions()}
+                  title={actionLabel(m.library_collection_actions())}
                   trigger={
-                    <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
+                    <Button
+                      type="button"
+                      aria-label={actionLabel(m.library_collection_actions())}
+                      title={actionLabel(m.library_collection_actions())}
+                      size="icon-lg"
+                      className="size-11 sm:size-9"
+                      variant="ghost"
+                    >
                       <EllipsisIcon aria-hidden="true" />
                     </Button>
                   }
@@ -280,7 +297,8 @@ export function CollectionMemberList({
                     variant="ghost"
                     size="icon-lg"
                     className="size-11 sm:size-9"
-                    aria-label={m.library_member_move_up()}
+                    aria-label={actionLabel(m.library_member_move_up())}
+                    title={actionLabel(m.library_member_move_up())}
                     disabled={busy || moveUpAfter === undefined}
                     onClick={() => moveUpAfter !== undefined && onMove?.(member.id, moveUpAfter)}
                   >
@@ -291,7 +309,8 @@ export function CollectionMemberList({
                     variant="ghost"
                     size="icon-lg"
                     className="size-11 sm:size-9"
-                    aria-label={m.library_member_move_down()}
+                    aria-label={actionLabel(m.library_member_move_down())}
+                    title={actionLabel(m.library_member_move_down())}
                     disabled={busy || nextAfter === undefined || (!firstPage && index === 0)}
                     onClick={() => nextAfter !== undefined && onMove?.(member.id, nextAfter)}
                   >
@@ -302,7 +321,8 @@ export function CollectionMemberList({
                     variant="ghost"
                     size="icon-lg"
                     className="ms-2 size-11 sm:size-9"
-                    aria-label={m.library_member_remove()}
+                    aria-label={actionLabel(m.library_member_remove())}
+                    title={actionLabel(m.library_member_remove())}
                     disabled={busy}
                     onClick={() => onRemove?.(member.id)}
                   >

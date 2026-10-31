@@ -571,6 +571,7 @@
   "library_member_move_down": "Move down",
   "library_member_move_to_top": "Move to top",
   "library_member_move_up": "Move up",
+  "library_member_occurrence": "{title} (item {position} on this page)",
   "library_member_note": "Note",
   "library_member_note_save": "Save note",
   "library_member_remove": "Remove member",
