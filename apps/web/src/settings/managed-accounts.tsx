@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Badge } from '@rezics/ui/shadcn/badge';
@@ -10,6 +10,7 @@ import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import { initials } from '../threads/initials';
 import { readManagedAccountsInventory } from './actions';
+import { usePreferenceRetry } from './preference-failure-retry';
 import {
   ManagedAccountsInventory,
   managedAccountHref,
@@ -51,13 +52,42 @@ function IdentityRow({
   );
 }
 
-function Failure({ failure, retry }: { failure: ManagedAccountsFailure; retry: () => void }) {
+function Failure({
+  failure,
+  retry,
+  busy,
+  scope,
+}: {
+  failure: ManagedAccountsFailure;
+  retry: () => void;
+  busy: boolean;
+  scope: 'inventory' | ManagedFeed;
+}) {
+  const retryMetadata = useMemo(
+    () => ({ status: failure.status, ...(failure.retryAfter ? { retryAfter: failure.retryAfter } : {}) }),
+    [failure],
+  );
+  const waiting = usePreferenceRetry(retryMetadata);
   return (
-    <Alert variant="destructive" data-response-status={failure.status ?? ''} data-response-code={failure.code ?? ''}>
+    <Alert
+      variant="destructive"
+      data-response-status={failure.status ?? ''}
+      data-response-code={failure.code ?? ''}
+      data-retry-after={failure.retryAfter}
+    >
       <AlertTitle>{failure.kind === 'denied' ? m.managed_denied_title() : m.managed_unavailable_title()}</AlertTitle>
       <AlertDescription className="space-y-3">
         <p>{failure.kind === 'denied' ? m.managed_denied_text() : m.managed_unavailable_text()}</p>
-        <Button type="button" variant="outline" className="min-h-11" onClick={retry}>
+        {waiting ? (
+          <p role="status">
+            {scope === 'inventory'
+              ? m.settings_managed_inventory_retry_wait()
+              : scope === 'organizations'
+                ? m.settings_managed_organizations_retry_wait()
+                : m.settings_managed_responsibilities_retry_wait()}
+          </p>
+        ) : null}
+        <Button type="button" variant="outline" className="min-h-11" disabled={busy || waiting} onClick={retry}>
           {m.settings_retry()}
         </Button>
       </AlertDescription>
@@ -67,16 +97,18 @@ function Failure({ failure, retry }: { failure: ManagedAccountsFailure; retry: (
 
 function FeedActions({
   feed,
+  scope,
   preparing = false,
   retry,
 }: {
   feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure'>;
+  scope: ManagedFeed;
   preparing?: boolean;
   retry: () => void;
 }) {
   return (
     <>
-      {feed.failure ? <Failure failure={feed.failure} retry={retry} /> : null}
+      {feed.failure ? <Failure failure={feed.failure} retry={retry} busy={feed.busy} scope={scope} /> : null}
       {!feed.failure && (feed.next !== null || preparing) ? (
         <Button type="button" variant="outline" className="min-h-11" disabled={feed.busy} onClick={retry}>
           {feed.busy ? m.settings_managed_loading() : preparing ? m.settings_retry() : m.settings_managed_load_more()}
@@ -101,7 +133,9 @@ export function ManagedAccountsView({
   return (
     <div className="space-y-6" data-slot="managed-accounts">
       {snapshot.loading || (!account && !snapshot.failure) ? <p role="status">{m.settings_managed_loading()}</p> : null}
-      {snapshot.failure ? <Failure failure={snapshot.failure} retry={retry} /> : null}
+      {snapshot.failure ? (
+        <Failure failure={snapshot.failure} retry={retry} busy={snapshot.loading} scope="inventory" />
+      ) : null}
       {account ? (
         <>
           <Card>
@@ -141,6 +175,7 @@ export function ManagedAccountsView({
               )}
               <FeedActions
                 feed={organizations}
+                scope="organizations"
                 preparing={organizations.state === 'preparing'}
                 retry={() => more('organizations')}
               />
@@ -182,7 +217,7 @@ export function ManagedAccountsView({
                     : m.managed_no_responsibilities()}
                 </p>
               )}
-              <FeedActions feed={responsibilities} retry={() => more('responsibilities')} />
+              <FeedActions feed={responsibilities} scope="responsibilities" retry={() => more('responsibilities')} />
             </CardContent>
           </Card>
         </>

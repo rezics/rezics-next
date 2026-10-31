@@ -31,6 +31,9 @@ export type ManagedAccountsFailure = {
   kind: 'denied' | 'unavailable';
   status: number | null;
   code: string | null;
+  retryAfter?: string;
+  retryable?: boolean;
+  requestId?: string;
 };
 export type ManagedAccountsResult = { ok: true; page: ManagedAccountsPage } | ManagedAccountsFailure;
 export type ManagedAccountsIO = (cursors: ManagedAccountsCursors) => Promise<ManagedAccountsResult>;
@@ -50,18 +53,34 @@ export function parseManagedAccountsCursors(value: unknown): ManagedAccountsCurs
   };
 }
 
-export function managedAccountsFailure(status: number | null, body?: unknown): ManagedAccountsFailure {
+export function managedAccountsFailure(
+  status: number | null,
+  body?: unknown,
+  headers?: HeadersInit,
+): ManagedAccountsFailure {
   const code = body && typeof body === 'object' && 'code' in body && typeof body.code === 'string' ? body.code : null;
+  const retryAfter = new Headers(headers).get('retry-after');
+  const retryable =
+    body && typeof body === 'object' && 'retryable' in body && typeof body.retryable === 'boolean'
+      ? body.retryable
+      : undefined;
+  const requestId =
+    body && typeof body === 'object' && 'request_id' in body && typeof body.request_id === 'string'
+      ? body.request_id
+      : undefined;
   return {
     ok: false,
     kind: status !== null && [401, 403, 404, 410].includes(status) ? 'denied' : 'unavailable',
     status,
     code,
+    ...(retryAfter ? { retryAfter } : {}),
+    ...(retryable === undefined ? {} : { retryable }),
+    ...(requestId ? { requestId } : {}),
   };
 }
 export function managedAccountsException(error: unknown): ManagedAccountsFailure {
   if (isPlatformClosedError(error)) return managedAccountsFailure(error.status, error.problem);
-  if (error instanceof MediaProblem) return managedAccountsFailure(error.problem.status, error.problem);
+  if (error instanceof MediaProblem) return managedAccountsFailure(error.problem.status, error.problem, error.headers);
   return managedAccountsFailure(null);
 }
 
@@ -78,17 +97,17 @@ export async function loadManagedAccounts(
       headers: { authorization, 'cache-control': 'no-store' },
       fetch: { cache: 'no-store' },
     });
-    if (result.error) return managedAccountsFailure(result.status, result.error.value);
+    if (result.error) return managedAccountsFailure(result.status, result.error.value, result.headers);
     const parsed = v.safeParse(schema, result.data);
-    if (!parsed.success) return managedAccountsFailure(result.status);
+    if (!parsed.success) return managedAccountsFailure(result.status, undefined, result.headers);
     const page = parsed.output;
     if (page.account.id !== viewerId || page.account.kind !== 'actor')
-      return { ...managedAccountsFailure(result.status), kind: 'denied' };
+      return { ...managedAccountsFailure(result.status, undefined, result.headers), kind: 'denied' };
     if (
       page.organizations.items.some((item) => item.account.kind !== 'organization') ||
       page.responsibilities.items.some((item) => item.account && item.account.id !== item.accountId)
     )
-      return managedAccountsFailure(result.status);
+      return managedAccountsFailure(result.status, undefined, result.headers);
     return { ok: true, page };
   } catch (error) {
     return managedAccountsException(error);
@@ -128,6 +147,7 @@ function append<T>(before: T[], after: T[], key: (item: T) => string): T[] {
 export class ManagedAccountsInventory {
   private value = empty();
   private epoch = 0;
+  private loadingEpoch = -1;
   private listeners = new Set<() => void>();
   constructor(
     private readonly viewerId: string,
@@ -162,7 +182,9 @@ export class ManagedAccountsInventory {
     this.publish({ ...empty(), failure });
   }
   async load() {
+    if (this.value.loading && this.loadingEpoch === this.epoch) return;
     const epoch = ++this.epoch;
+    this.loadingEpoch = epoch;
     this.publish({ ...empty(), loading: true });
     const result = await this.request({});
     if (epoch !== this.epoch) return;

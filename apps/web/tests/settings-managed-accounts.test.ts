@@ -4,9 +4,14 @@ import {
   ManagedAccountsInventory,
   loadManagedAccounts,
   managedAccountHref,
+  managedAccountsException,
+  managedAccountsFailure,
+  type ManagedAccountsCursors,
   type ManagedAccountsPage,
   type ManagedAccountsResult,
 } from '../src/settings/managed-accounts-read';
+import { MediaProblem } from '../src/media/kernel';
+import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 
 const viewer = '019a0000-0000-7000-8000-000000000001';
 const organization = '019a0000-0000-7000-8000-000000000002';
@@ -175,4 +180,157 @@ test('native reads validate the exact bounded schema, preserve literal failures 
     status: 403,
     code: 'account_suspended',
   });
+});
+
+test('Respect native retry delays in managed account inventory with current native response and viewer isolation contracts', async () => {
+  const requests: Request[] = [];
+  for (const [status, retryAfter, retryable] of [
+    [429, '12', true],
+    [503, 'Sat, 31 Oct 2026 12:00:00 GMT', false],
+  ] as const) {
+    const body = { status, code: 'overloaded', retryable, request_id: `native-${status}` };
+    const client = createKernelClient('https://kernel.test', {
+      fetch: (async (input, init) => {
+        requests.push(new Request(input, init));
+        expect(init?.cache).toBe('no-store');
+        return Response.json(body, { status, headers: { 'Retry-After': retryAfter } });
+      }) as typeof fetch,
+    });
+    const failure = {
+      ok: false,
+      kind: 'unavailable',
+      status,
+      code: body.code,
+      retryAfter,
+      retryable,
+      requestId: body.request_id,
+    };
+    expect(await loadManagedAccounts(client, 'Bearer viewer', viewer, {})).toEqual(failure);
+    expect(
+      managedAccountsException(
+        new MediaProblem({ ...body, title: 'Unavailable', type: 'about:blank' }, { 'Retry-After': retryAfter }),
+      ),
+    ).toEqual(failure);
+  }
+  expect(requests).toHaveLength(2);
+  for (const request of requests) {
+    expect(request.method).toBe('GET');
+    expect(request.headers.get('authorization')).toBe('Bearer viewer');
+    expect(request.headers.get('cache-control')).toBe('no-store');
+    expect(new URL(request.url).pathname).toBe('/v1/me/managedAccounts');
+    expect(new URL(request.url).search).toBe('');
+  }
+  expect(managedAccountsFailure(403, { code: 'forbidden', retryable: false })).toEqual({
+    ok: false,
+    kind: 'denied',
+    status: 403,
+    code: 'forbidden',
+    retryable: false,
+  });
+  expect(managedAccountsFailure(503, { retryable: 'true', request_id: 42 })).toEqual({
+    ok: false,
+    kind: 'unavailable',
+    status: 503,
+    code: null,
+  });
+});
+
+test('inventory retry metadata uses the shared seconds and HTTP-date deadlines without inventing a delay', () => {
+  const now = Date.parse('Sat, 31 Oct 2026 12:00:00 GMT');
+  for (const [header, deadline] of [
+    ['12', now + 12_000],
+    ['Sat, 31 Oct 2026 12:00:20 GMT', now + 20_000],
+    [undefined, 0],
+    ['', 0],
+    ['0', 0],
+    ['-1', 0],
+    ['1.5', 0],
+    ['later', 0],
+    ['Sat, 31 Oct 2026 11:59:59 GMT', 0],
+  ] as const) {
+    const failure = managedAccountsFailure(
+      503,
+      undefined,
+      header === undefined ? undefined : { 'Retry-After': header },
+    );
+    expect(preferenceRetryDeadline(failure.retryAfter, now)).toBe(deadline);
+  }
+});
+
+test('independent delayed feed failures keep exact cursors, retained rows and reconciliation while explicit recovery advances only its feed', async () => {
+  const calls: ManagedAccountsCursors[] = [];
+  const failed = new Set<string>();
+  const organizationFailure = managedAccountsFailure(
+    429,
+    { code: 'rate_limited', retryable: true },
+    { 'Retry-After': '2' },
+  );
+  const responsibilityFailure = managedAccountsFailure(
+    503,
+    { code: 'overloaded', request_id: 'operator-page' },
+    { 'Retry-After': 'Sat, 31 Oct 2026 12:00:20 GMT' },
+  );
+  const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
+    calls.push(cursors);
+    const feed = cursors.organizationsCursor ? 'organizations' : cursors.operatorsCursor ? 'responsibilities' : null;
+    if (!feed) return ready(page());
+    if (!failed.has(feed)) {
+      failed.add(feed);
+      return feed === 'organizations' ? organizationFailure : responsibilityFailure;
+    }
+    return ready({ ...page(), [feed]: { ...page()[feed], items: [], next: null } });
+  });
+  await inventory.load();
+  await Promise.all([inventory.more('organizations'), inventory.more('responsibilities')]);
+  const bothFailed = inventory.snapshot();
+  expect(bothFailed.organizations.failure).toBe(organizationFailure);
+  expect(bothFailed.responsibilities.failure).toBe(responsibilityFailure);
+  expect(bothFailed.organizations.items).toEqual(page().organizations.items);
+  expect(bothFailed.responsibilities.items).toEqual(page().responsibilities.items);
+  await inventory.more('organizations');
+  expect(inventory.snapshot().organizations.next).toBeNull();
+  expect(inventory.snapshot().responsibilities).toBe(bothFailed.responsibilities);
+  await inventory.more('responsibilities');
+  expect(inventory.snapshot().organizations.next).toBeNull();
+  expect(inventory.snapshot().responsibilities.next).toBeNull();
+  expect(inventory.snapshot().responsibilities.items[0]?.state).toBe('reconciling');
+  expect(calls).toEqual([
+    {},
+    { organizationsCursor: 'signed organization +/=' },
+    { operatorsCursor: 'signed operator +/=' },
+    { organizationsCursor: 'signed organization +/=' },
+    { operatorsCursor: 'signed operator +/=' },
+  ]);
+});
+
+test('busy initial and selected-feed actions make one request while disposal still permits a fresh lifecycle load', async () => {
+  const calls: ManagedAccountsCursors[] = [];
+  let finish: (result: ManagedAccountsResult) => void = () => {};
+  const inventory = new ManagedAccountsInventory(viewer, (cursors) => {
+    calls.push(cursors);
+    return new Promise((resolve) => {
+      finish = resolve;
+    });
+  });
+  const loading = inventory.load();
+  await inventory.load();
+  expect(calls).toEqual([{}]);
+  finish(ready(page()));
+  await loading;
+  const paging = inventory.more('organizations');
+  await inventory.more('organizations');
+  expect(calls).toHaveLength(2);
+  finish(unavailable);
+  await paging;
+  expect(inventory.snapshot().organizations.next).toBe('signed organization +/=');
+  const abandoned = inventory.load();
+  const finishAbandoned = finish;
+  inventory.dispose();
+  const fresh = inventory.load();
+  finish(ready(page()));
+  await fresh;
+  finishAbandoned({ ok: false, kind: 'denied', status: 403, code: 'forbidden' });
+  await abandoned;
+  expect(inventory.snapshot().account?.id).toBe(viewer);
+  expect(calls).toHaveLength(4);
 });
