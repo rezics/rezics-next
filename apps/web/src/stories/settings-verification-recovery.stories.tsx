@@ -7,7 +7,11 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
 import { VerificationCard } from '../settings/verification';
-import { VerificationReadError, type AgentVerificationRequest } from '../settings/verification-core';
+import {
+  VerificationReadError,
+  type AgentVerificationRequest,
+  type VerificationInput,
+} from '../settings/verification-core';
 import { VerificationRecovery } from '../settings/verification-recovery';
 import { PageStory, PatternStory } from './page';
 
@@ -175,13 +179,14 @@ function readRecoveryTransport(fallback: typeof fetch) {
   const collections = collectionsRecording.collections;
   const subject = demoAgentSubjects[0]!;
   const reads = { collections: [] as (string | null)[], verification: 0 };
-  const commands: Request[] = [];
+  const commands: { method: string; path: string; key: string | null }[] = [];
   let current: AgentVerificationRequest | null = null;
-  const fetcher: typeof fetch = async (input, init) => {
+  const fetcher = (async (input, init) => {
     const request = new Request(input instanceof Request ? input : new URL(String(input), window.location.href), init);
     const url = new URL(request.url);
     if (url.origin !== 'http://kernel.local') return fallback(input, init);
-    if (request.method !== 'GET' && request.method !== 'HEAD') commands.push(request.clone());
+    if (request.method !== 'GET' && request.method !== 'HEAD')
+      commands.push({ method: request.method, path: url.pathname, key: request.headers.get('idempotency-key') });
     if (request.method === 'GET' && url.pathname === '/v1/accounts/story-viewer/collections') {
       reads.collections.push(url.searchParams.get('cursor'));
       if (reads.collections.length === 2)
@@ -208,7 +213,7 @@ function readRecoveryTransport(fallback: typeof fetch) {
       return Response.json({ verificationRequest: current });
     }
     if (request.method === 'POST' && url.pathname === '/v1/accounts/story-viewer:requestVerification') {
-      const draft = await request.json();
+      const draft = (await request.json()) as Omit<VerificationInput, 'idempotencyKey'>;
       current = {
         ...draft,
         id: 'read-recovery-request',
@@ -231,7 +236,7 @@ function readRecoveryTransport(fallback: typeof fetch) {
       return Response.json({ subjects: [subject] });
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${subject.id}`) return Response.json({ subject });
     return fallback(input, init);
-  };
+  }) as typeof fetch;
   return { fetcher, reads, commands };
 }
 
@@ -275,7 +280,7 @@ export const DefaultReadRecovery: StoryObj = {
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_submit() }));
     await view.findByText(m.settings_verification_uncertain_request());
     await expect(fixture.commands).toHaveLength(1);
-    const originalKey = JSON.parse(fixture.commands[0]!.headers.get('idempotency-key')!);
+    const originalKey = JSON.parse(fixture.commands[0]!.key!);
     await userEvent.click(view.getByText(m.settings_verification_original()));
     await view.findByText(originalKey);
     await userEvent.clear(statement);
