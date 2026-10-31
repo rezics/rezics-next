@@ -232,9 +232,7 @@ export async function readContinueOwnerPage(
     }
     return {
       subjects:
-        summaries === null
-          ? shown
-          : shown.map((row) => ({ ...row, subject: summaries.get(row.subjectId) ?? null })),
+        summaries === null ? shown : shown.map((row) => ({ ...row, subject: summaries.get(row.subjectId) ?? null })),
       next:
         completed.length > input.limit
           ? await encodeListCursor(

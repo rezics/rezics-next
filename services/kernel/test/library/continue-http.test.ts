@@ -56,7 +56,9 @@ function observePool(connectionString: string, statements: string[]): Pool {
         };
       if (property === 'connect')
         return (...args: unknown[]) =>
-          ((target.connect as (...connectArgs: unknown[]) => Promise<PoolClient>).apply(target, args).then(observeClient));
+          (target.connect as (...connectArgs: unknown[]) => Promise<PoolClient>)
+            .apply(target, args)
+            .then(observeClient);
       const value = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
     },
@@ -91,93 +93,87 @@ test('Continue FULL preserves the unavailable result when the current native Sou
   }
 }, 180_000);
 
-test(
-  'Continue FULL adds current bounded subject summaries while BASIC and view-independent cursors stay unchanged',
-  async () => {
-    const statements: string[] = [];
-    const f = await createReleasedDiscoveryFixture({
-      version: 1,
-      kernelPool: (url) => observePool(url, statements),
-    });
-    try {
-      const type = 'schema:Book';
-      const profileId = f.release.definition.types[type]!.library!.profileId;
-      const active = f.release.definition.libraryProfiles![profileId]!.entryStateSet!.states.find(
-        (candidate) => candidate.role === 'active',
-      )!.id;
-      for (const name of ['Continue FULL first', 'Continue FULL second']) {
-        const subject = await f.createSubject(type, name);
-        const saved = await f.request(
-          'alice',
-          'PUT',
-          `/v1/libraryEntries/${subject.id}`,
-          { state: active },
-          discoveryKey(),
-        );
-        status(saved, 201);
-      }
-
-      const request = (suffix = '', headers: Record<string, string> = {}) =>
-        f.request('alice', 'GET', `/v1/libraryContinue?limit=1${suffix}`, undefined, headers);
-      const basic = await request();
-      status(basic, 200);
-      const basicPage = page(basic);
-      expect(Object.keys(basic.body).sort()).toEqual(['next', 'subjects']);
-      expect(Object.keys(basicPage.subjects[0]!).sort()).toEqual([
-        'activeProgressSession',
-        'lastActivityAt',
-        'state',
-        'subjectId',
-      ]);
-      expect(basic.headers.get('cache-control')).toContain('private');
-      expect(basic.headers.get('cache-control')).toContain('no-store');
-
-      const explicitlyBasic = await request('&view=BASIC');
-      status(explicitlyBasic, 200);
-      const explicitlyBasicPage = page(explicitlyBasic);
-      expect(explicitlyBasicPage.subjects).toEqual(basicPage.subjects);
-      expect(explicitlyBasicPage.subjects[0]).not.toHaveProperty('subject');
-
-      statements.length = 0;
-      const full = await request('&view=FULL', { 'accept-language': 'en' });
-      status(full, 200);
-      const fullPage = page(full);
-      const first = fullPage.subjects[0]!;
-      const firstSummary = first.subject!;
-      expect(firstSummary.id).toBe(first.subjectId);
-      expect(firstSummary.type).toBe(type);
-      expect(firstSummary.label?.value).toContain('Continue FULL');
-      expect(Object.keys(firstSummary).sort()).toEqual(['cover', 'creativeWork', 'id', 'label', 'type', 'types']);
-      expect(full.headers.get('cache-control')).toContain('private');
-      expect(full.headers.get('cache-control')).toContain('no-store');
-      expect(statements.filter((statement) => statement === readSummaries.sql)).toHaveLength(
-        new Set([partitionOf(routeOf(first.subjectId)!)]).size,
+test('Continue FULL adds current bounded subject summaries while BASIC and view-independent cursors stay unchanged', async () => {
+  const statements: string[] = [];
+  const f = await createReleasedDiscoveryFixture({
+    version: 1,
+    kernelPool: (url) => observePool(url, statements),
+  });
+  try {
+    const type = 'schema:Book';
+    const profileId = f.release.definition.types[type]!.library!.profileId;
+    const active = f.release.definition.libraryProfiles![profileId]!.entryStateSet!.states.find(
+      (candidate) => candidate.role === 'active',
+    )!.id;
+    for (const name of ['Continue FULL first', 'Continue FULL second']) {
+      const subject = await f.createSubject(type, name);
+      const saved = await f.request(
+        'alice',
+        'PUT',
+        `/v1/libraryEntries/${subject.id}`,
+        { state: active },
+        discoveryKey(),
       );
-
-      const next = basicPage.next;
-      if (typeof next !== 'string') throw new Error('Two active subjects require a next cursor at limit 1');
-      statements.length = 0;
-      const secondPage = await request(`&view=FULL&cursor=${encodeURIComponent(next)}`);
-      status(secondPage, 200);
-      const resumed = page(secondPage);
-      expect(resumed.subjects).toHaveLength(1);
-      expect(resumed.subjects[0]!.subject!.id).toBe(resumed.subjects[0]!.subjectId);
-      expect(resumed.subjects[0]!.subjectId).not.toBe(first.subjectId);
-
-      const secondHomes = new Set(
-        resumed.subjects.map((row) => partitionOf(routeOf(row.subjectId)!)),
-      );
-      expect(statements.filter((statement) => statement === readSummaries.sql)).toHaveLength(secondHomes.size);
-
-      for (const suffix of ['&view=COMPACT', '&accountId=anything', '&orderBy=subject']) {
-        const invalid = await request(suffix);
-        status(invalid, 400, 'invalid_request');
-      }
-      const invalidCursor = await request('&view=FULL&cursor=not-a-cursor');
-      status(invalidCursor, 400, 'invalid_cursor');
-    } finally {
-      await f.close();
+      status(saved, 201);
     }
-  },
-  180_000,
-);
+
+    const request = (suffix = '', headers: Record<string, string> = {}) =>
+      f.request('alice', 'GET', `/v1/libraryContinue?limit=1${suffix}`, undefined, headers);
+    const basic = await request();
+    status(basic, 200);
+    const basicPage = page(basic);
+    expect(Object.keys(basic.body).sort()).toEqual(['next', 'subjects']);
+    expect(Object.keys(basicPage.subjects[0]!).sort()).toEqual([
+      'activeProgressSession',
+      'lastActivityAt',
+      'state',
+      'subjectId',
+    ]);
+    expect(basic.headers.get('cache-control')).toContain('private');
+    expect(basic.headers.get('cache-control')).toContain('no-store');
+
+    const explicitlyBasic = await request('&view=BASIC');
+    status(explicitlyBasic, 200);
+    const explicitlyBasicPage = page(explicitlyBasic);
+    expect(explicitlyBasicPage.subjects).toEqual(basicPage.subjects);
+    expect(explicitlyBasicPage.subjects[0]).not.toHaveProperty('subject');
+
+    statements.length = 0;
+    const full = await request('&view=FULL', { 'accept-language': 'en' });
+    status(full, 200);
+    const fullPage = page(full);
+    const first = fullPage.subjects[0]!;
+    const firstSummary = first.subject!;
+    expect(firstSummary.id).toBe(first.subjectId);
+    expect(firstSummary.type).toBe(type);
+    expect(firstSummary.label?.value).toContain('Continue FULL');
+    expect(Object.keys(firstSummary).sort()).toEqual(['cover', 'creativeWork', 'id', 'label', 'type', 'types']);
+    expect(full.headers.get('cache-control')).toContain('private');
+    expect(full.headers.get('cache-control')).toContain('no-store');
+    expect(statements.filter((statement) => statement === readSummaries.sql)).toHaveLength(
+      new Set([partitionOf(routeOf(first.subjectId)!)]).size,
+    );
+
+    const next = basicPage.next;
+    if (typeof next !== 'string') throw new Error('Two active subjects require a next cursor at limit 1');
+    statements.length = 0;
+    const secondPage = await request(`&view=FULL&cursor=${encodeURIComponent(next)}`);
+    status(secondPage, 200);
+    const resumed = page(secondPage);
+    expect(resumed.subjects).toHaveLength(1);
+    expect(resumed.subjects[0]!.subject!.id).toBe(resumed.subjects[0]!.subjectId);
+    expect(resumed.subjects[0]!.subjectId).not.toBe(first.subjectId);
+
+    const secondHomes = new Set(resumed.subjects.map((row) => partitionOf(routeOf(row.subjectId)!)));
+    expect(statements.filter((statement) => statement === readSummaries.sql)).toHaveLength(secondHomes.size);
+
+    for (const suffix of ['&view=COMPACT', '&accountId=anything', '&orderBy=subject']) {
+      const invalid = await request(suffix);
+      status(invalid, 400, 'invalid_request');
+    }
+    const invalidCursor = await request('&view=FULL&cursor=not-a-cursor');
+    status(invalidCursor, 400, 'invalid_cursor');
+  } finally {
+    await f.close();
+  }
+}, 180_000);
