@@ -241,14 +241,18 @@ export function CreateSubjectForm({
               </Button>
             </div>
           )}
-          {!profile && <LiteraryProfileEntry locale={locale} />}
-          {!profile && <GameProfileEntry locale={locale} />}
-          {!profile && <RecipeEditorEntry locale={locale} />}
-          {!profile && <CharacterProfileEntry locale={locale} />}
-          {!profile && <ScreenProfileEntry locale={locale} />}
-          {!profile && <MangaProfileEntry locale={locale} />}
-          {!profile && <PeopleProfileEntry locale={locale} />}
-          {!profile && <AlbumProfileEntry locale={locale} />}
+          {!profile && (
+            <div className="flex flex-wrap gap-2 [&>a]:h-auto [&>a]:max-w-full [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:whitespace-normal">
+              <LiteraryProfileEntry locale={locale} />
+              <GameProfileEntry locale={locale} />
+              <RecipeEditorEntry locale={locale} />
+              <CharacterProfileEntry locale={locale} />
+              <ScreenProfileEntry locale={locale} />
+              <MangaProfileEntry locale={locale} />
+              <PeopleProfileEntry locale={locale} />
+              <AlbumProfileEntry locale={locale} />
+            </div>
+          )}
           {definitions.data?.ok && types.length === 0 && <p role="status">{m.catalogue_create_empty({}, options)}</p>}
           {definitions.data?.ok && types.length > 0 && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
