@@ -187,6 +187,18 @@ These are proposed review obligations; this audit did not execute an accessibili
 
 ### Collection page, covers and facts
 
+**Defect class: broken phone grid action; owner seam: Library shelf consumer and UI CoverGrid.**
+The enlarged `shots/pages-library-label-shelf--three-works--390.png` shows the unavailable member's
+“Remove label from…” button cut off at the right viewport edge. The corresponding forty-works, shelf-actions
+and retained-undo phone observations share the defect. The document width is 470 at a requested viewport of 390;
+the screenshot confirms visible clipping rather than relying on that measurement alone. `LabelShelfEntries`
+in `apps/web/src/library/shelf-view.tsx` places a plain `LabelAssignmentRemoveForm` below the unavailable-member
+tombstone. Its single-line Button does not fit the fixed-density three-column phone grid in
+`packages/ui/src/components/cover-card.tsx`. Normal member actions use a compact menu instead. The user loses a
+readable/reachable removal action exactly when a member is unavailable. Keep that lifecycle action, but make it
+fit the card through a compact labelled menu or a wrapping bounded control. Review the unavailable-card branch
+alongside ordinary cards; shared grid reuse did not cover this consumer's different intrinsic width.
+
 **Defect class: missing cover integration and inconsistent presentation; owner seam: Commerce/Library DTO, Semantic
 presentation and Web Collection page.** The required `pages-library-collection--signed-in` pair renders members
 and personal actions. Member covers are visibly present; it would be false to report that this current pair has no
@@ -383,16 +395,21 @@ was used. Product text/images remain their owners' copyrighted material; no lice
 | [StoryGraph official site](https://www.thestorygraph.com/) | Product illustrations show mood/pace/genre refinement, tags/lists and reading statistics. | Useful presentation evidence; marketing illustrations do not prove live authenticated backend behavior. |
 | [Goodreads subject](https://www.goodreads.com/book/show/199510278-glorious-exploits) | Live access failed; supplied top/full images were actually inspected. Bounded synopsis, cover/actions and expandable details are visible there. | Visual reference only; no claim of current logged-in behavior or current implementation. |
 | [Bangumi subject](https://bgm.tv/subject/253) | Public subject has grouped overview, chapters, characters/staff, relations, comments, reviews and discussion navigation. | Chinese reference for dense catalogue information with hierarchy; no private actions exercised. |
-| [Douban book](https://book.douban.com/subject/1007305/) | Public fetch timed out/failed; help endpoint also unavailable. | Relevant Chinese catalogue comparator, but no unsupported current layout claim. |
-| [AniList search](https://anilist.co/search/anime) | Public access returned 403. | No asserted current filter or phone layout from this attempt. |
-| [MyAnimeList catalogue](https://myanimelist.net/anime.php) | Public access failed. | Coverage gap retained, not filled with remembered designs. |
-| [VNDB catalogue](https://vndb.org/v/all) | Public access failed. | Relevant kind/facet comparator; no current design claim. |
+| [Douban book help](https://help.douban.com/tiaomu?app=4) | Official help distinguishes book search from movie/music/community search, supports title/author/translator/ISBN, and describes separate version relationships. The subject URL failed, but this different official help URL was readable. | Chinese primary evidence for explicit search coverage and edition hierarchy, not a current subject screenshot. |
+| [AniList query reference](https://docs.anilist.co/reference/query) | The public search UI returned 403; official API documentation describes media filters and a page maximum of 50. | Technical support for bounded discovery, with no claim that the inaccessible current UI exposes every documented filter. |
 | [Letterboxd Parasite](https://letterboxd.com/film/parasite-2019/) | Public page groups cast, crew, details, genres and releases, with progressive cast disclosure. | Subject hierarchy and secondary information; authenticated diary/ratings not exercised. |
-| [Trakt discovery](https://trakt.tv/shows) | Redirected app discovery could not be fetched. | No invented current feed or filter behavior. |
-| [Discogs search](https://www.discogs.com/search/) | Public access returned 403. | Relevant edition/release comparator; access limit, not implementation evidence. |
-| [Apple Books guide](https://support.apple.com/guide/books/welcome/mac) | Guide fetch unavailable in this attempt. | No claim about current collection/search interaction. |
-| [WeRead](https://weread.qq.com/) | Public web page supplied no readable content through the research tool. | Chinese reading-product coverage limit; private/mobile behavior not inferred. |
-| [Qidian](https://www.qidian.com/) and [Bilibili](https://www.bilibili.com/) | Qidian supplied no readable page; Bilibili returned a browser-upgrade wall. | Additional Chinese references attempted; neither wall is treated as its product design. |
+| [Apple Books iPhone guide](https://support.apple.com/en-ae/guide/iphone/iphab219b91/ios) | The Mac guide failed; the iPhone guide documents custom collections, display/sort and a Library cover view. | Product documentation with an illustrated view; no device session or cross-region availability claim. |
+| [Qidian publisher product page](https://www.yuewen.com/app/?type=appqd) | The catalogue home supplied no readable page; the publisher describes a private customised shelf, synchronised progress, recommendations, book lists and chapter discussion. | Chinese reference separating personal continuation from discovery/community; publisher description is not measured working behavior. |
+| [Google Search refinements](https://support.google.com/websearch/answer/2466433?co=GENIE.PlatformDesktop&hl=en) | Refinements stay below search; available filter order varies with query. Advanced Search is a distinct deeper control. | Progressive disclosure with query-dependent controls; not a requirement to copy its placement over REZICS's settled right-end Filters. |
+| [Netflix browsing](https://help.netflix.com/en/node/47765) and [My List](https://help.netflix.com/en/node/10523) | Browsing rows and personal saved titles have separate semantics. The documented list has a 2,000-title bound and mobile sort/filter; availability changes can hide titles. | Separate discovery from personal state and lifecycle. This capacity is far below a million and supplies no REZICS growth proof. |
+| [Obsidian Search](https://obsidian.md/help/plugins/search) | Vault search and current-note find differ; empty search exposes recents, and structured properties have explicit syntax. | Coverage, private history and structured refinement; local-vault costs do not transfer to partitioned server queries. |
+| [Kobo collections](https://help.kobo.com/hc/en-us/articles/360033887953-Organize-your-eBooks-on-your-Kobo-eReader) and [filters](https://help.kobo.com/hc/en-us/articles/360017676993-Use-the-search-filter-on-your-Kobo-eReader) | My Books contains collections and explicit purchased/downloaded/read-state filters; collections synchronise across devices with possible delay. | Personal grouping, state and synchronisation are distinct from catalogue identity; no live eReader session exercised. |
+| [Google Play Books library](https://support.google.com/googleplay/answer/9402600?co=GENIE.Platform%3DAndroid&hl=en) | Shelves, Series, progress/author/genre filters, multi-filter Apply and list sorting are documented separately; some controls require named Android versions. | Explicit action and surface/version boundaries, rather than assuming a screenshot proves every platform. |
+
+Additional access limits were preserved rather than counted as observed designs: [MyAnimeList](https://myanimelist.net/anime.php),
+[VNDB](https://vndb.org/v/all), [Trakt](https://trakt.tv/shows) and [Discogs](https://www.discogs.com/search/) failed or refused access;
+[WeRead](https://weread.qq.com/) returned no readable content; [Bilibili](https://www.bilibili.com/) returned a browser-upgrade wall.
+No current layout, authenticated behavior or missing capability is inferred from those failures.
 
 The accessible sources share a small number of explicit modes/scopes, progressive filters, bounded first-page
 results, and a hierarchy that separates identity/actions from details. They disagree about density, feed ranking,
