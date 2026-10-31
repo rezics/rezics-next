@@ -1,5 +1,6 @@
 import type { AttemptRecord, StepClass, TaskClass } from './types.ts';
 import type { LifecycleMetrics } from './lifecycle-metrics.ts';
+import { formatWidthSnapshot } from './width-governor.ts';
 
 type Percentiles = { count: number; p50: number | null; p90: number | null };
 type PoolReport = { attempts: number; passedTasks: number; input: number; cached: number; output: number };
@@ -247,5 +248,6 @@ export function formatLifecycleMetrics(metrics: LifecycleMetrics): string[] {
     'Conflict-to-landed duration: unknown; open conflict count/oldest age: unknown; resolution owner/rerere/replay: unknown.',
     `Trailing-hour outcome observations to landed${outcomes?.available && !outcomes.complete ? ' (sample)' : ''}: ${observedTiming?.count ?? 'unknown'} timed; p50 ${age(observedTiming?.p50Ms ?? null)}; p90 ${age(observedTiming?.p90Ms ?? null)}; unlanded ${outcomes?.unlandedCount ?? 'unknown'}; oldest observation age ${age(outcomes?.oldestUnlandedObservationAgeMs ?? null)}; unknown timing ${outcomes?.unknownTimingCount ?? 'unknown'}.`,
     `Conflict-created attempts in trailing hour: ${created?.observedCount ?? 'unknown'} observed; ${created?.unknownCauseCount ?? 'unknown'} unknown causes; total unknown; ${coverage(created)}.`,
+    ...formatWidthSnapshot(metrics.width),
   ];
 }

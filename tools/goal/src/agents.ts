@@ -73,6 +73,10 @@ export function withAgentAdapter<T>(adapter: AgentAdapter, run: () => T): T {
 export function isAgentCli(cli: unknown): cli is Cli {
   return typeof cli === 'string' && Object.hasOwn(adapters, cli);
 }
+/** Reporting classification belongs with provider identities, including unrecognized historical values. */
+export function agentReportingEvidence(cli: unknown): { codex: boolean; unknown: boolean } {
+  return { codex: cli === codexAdapter.cli, unknown: !isAgentCli(cli) };
+}
 export function cleanAgentEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const result = { ...env };
   for (const adapter of [...Object.values(adapters), ...allAgentAdapters()])

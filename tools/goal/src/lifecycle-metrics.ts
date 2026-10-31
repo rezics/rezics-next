@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
 import { ensureFlow } from './flow.ts';
 import { completeRebaseConflictContext, completeWorkerSourceBaseline } from './conflict-progress.ts';
+import { readWidthSnapshot, type WidthSnapshot } from './width-governor.ts';
 
 const HOUR_MS = 60 * 60_000;
 const CONFLICT_WINDOW_LIMIT = 1_000;
@@ -91,6 +92,8 @@ export type LifecycleMetricEntry = {
 export type LifecycleMetrics = {
   /** Time at which the snapshot was read. */
   asOf: string;
+  /** Current process-identity-backed running width, including explicit unknown evidence. */
+  width: WidthSnapshot;
   /** Inclusive start and end timestamps for the actual launch window. */
   trailingHour: {
     startsAt: string;
@@ -547,6 +550,17 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
 /** Read hourly lifecycle measurements using durable launch, queue, task and quarantine records. */
 export function lifecycleMetrics(db: Database, at: Date | number = new Date()): LifecycleMetrics {
   const now = dateValue(at);
+  return lifecycleMetricsWithWidth(db, now, readWidthSnapshot(db, now));
+}
+
+/** Async variant for the manager host; width reads yield between bounded SQLite pages. */
+export async function lifecycleMetricsAsync(db: Database, at: Date | number = new Date()): Promise<LifecycleMetrics> {
+  const now = dateValue(at);
+  const width = await readWidthSnapshot(db, now, { yieldBetweenPages: true });
+  return lifecycleMetricsWithWidth(db, now, width);
+}
+
+function lifecycleMetricsWithWidth(db: Database, now: Date, width: WidthSnapshot): LifecycleMetrics {
   const nowMs = now.getTime();
   const start = new Date(nowMs - HOUR_MS);
   ensureFlow(db);
@@ -566,6 +580,7 @@ export function lifecycleMetrics(db: Database, at: Date | number = new Date()): 
   const unknownAgeCount = entries.length - knownAges.length;
   return {
     asOf: now.toISOString(),
+    width,
     trailingHour: { startsAt: start.toISOString(), endsAt: now.toISOString(), durationMs: HOUR_MS },
     attemptsPerTaskPerTrailingHour: launchCounts(db, start.toISOString(), now.toISOString()),
     waiting: {

@@ -37,7 +37,8 @@ import {
   readFlow,
   readFlowTasks,
 } from './flow.ts';
-import { emitHourlyLifecycleMetrics, lifecycleMetrics } from './lifecycle-metrics.ts';
+import { emitHourlyLifecycleMetrics, lifecycleMetricsAsync } from './lifecycle-metrics.ts';
+import { sweepWidthGovernor } from './width-governor.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
 export type ConfiguredSettings = Settings & { integrationChecks: IntegrationCheck[] };
@@ -605,17 +606,21 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         )
       );
     },
+    sweepWidth: async () => {
+      await sweepWidthGovernor(db, inbox);
+    },
     promote: () => promoteNow(),
     verify: () => verifyDev({ settings, store, inbox, runGate: verifierGate }),
-    evaluateFlow() {
+    async evaluateFlow() {
       const flowInbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
       const now = new Date();
+      const metrics = await lifecycleMetricsAsync(db, now);
       const flow = flowReport(
         readFlow(db, new Date(now.getTime() - 30 * 86400_000).toISOString()),
         readFlowTasks(db),
         now.getTime(),
       );
-      emitHourlyLifecycleMetrics(db, lifecycleMetrics(db, now), now);
+      emitHourlyLifecycleMetrics(db, metrics, now);
       checkFlowAlarms(
         db,
         flow,

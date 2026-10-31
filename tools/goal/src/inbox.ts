@@ -7,6 +7,7 @@ import type { ManagerEvent, ManagerEventKind, ManagerInbox } from './contracts.t
 import { migrateSharedInbox, sharedInboxFields } from './inbox-shared.ts';
 
 const wakingKinds = new Set<ManagerEventKind>([
+  'width',
   'spec-conflict',
   'scope-growth',
   'environment',
