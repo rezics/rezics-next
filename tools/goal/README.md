@@ -809,6 +809,8 @@ The independent manager-host sweep checks worker width every minute and delivers
 Goal in each UTC 15-minute bucket when fewer than ten current attempts have live process identities and known ready,
 pending-start, held or stopped work exists. The event reports the current running and Codex counts, unknown process
 evidence, and known work counts. Ready, held, waiting and stale-identity attempts do not count as running. The manager
+is alerted based on confirmed live workers only; unknown process identities remain explicit evidence and do not
+suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The manager
 chooses whether to recover, reshape or dispatch real work under the existing source-ownership, current-attempt and
 physical-custody guards; stopped work is never restarted automatically. Runtime metadata cannot observe unsubmitted
 work, so Markdown files outside the task inventory are not counted. The notice uses the existing manager turn

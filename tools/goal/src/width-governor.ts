@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import type { ManagerEvent, ManagerInbox } from './contracts.ts';
+import { agentReportingEvidence } from './agents.ts';
 import { migrate } from './db.ts';
 import { sameProcess, type ProcessIdentity } from './process.ts';
 
@@ -30,7 +31,7 @@ export type WidthCounts = {
   unknownRunning: number;
   /** Unknown process identity among attempts explicitly routed to Codex. */
   unknownCodexRunning: number;
-  /** Live workers whose attempt profile does not identify a CLI. */
+  /** Current running attempts whose profile does not identify a recognized CLI. */
   unknownCodexClassification: number;
   ready: number;
   pendingStarts: number;
@@ -172,18 +173,18 @@ function addRow(
   const attemptRunning = taskState === 'running' && row.attempt_state === 'running';
   if (attemptRunning) {
     const identity = isProcessIdentity(row);
+    const evidence = agentReportingEvidence(row.cli);
     if (!identity) {
       increment('unknownRunning');
-      if (row.cli === 'codex') increment('unknownCodexRunning');
-      else if (!row.cli) increment('unknownCodexClassification');
+      if (evidence.codex) increment('unknownCodexRunning');
+      if (evidence.unknown) increment('unknownCodexClassification');
     } else if (processIsLive(identity)) {
       increment('running');
-      if (row.cli === 'codex') increment('codexRunning');
-      else if (!row.cli) increment('unknownCodexClassification');
+      if (evidence.codex) increment('codexRunning');
+      if (evidence.unknown) increment('unknownCodexClassification');
     }
   }
 
-  if (!goal) return;
   if (taskState === 'ready') increment('ready');
   else if (taskState === 'held') increment('held');
   else if (taskState === 'stopped') increment('stopped');
@@ -320,17 +321,19 @@ export async function sweepWidthGovernor(
   const bucket = Math.floor(date.getTime() / WIDTH_BUCKET_MS);
   const deliveredGoals: string[] = [];
   for (let index = 0; index < snapshot.goals.length; index++) {
+    if (index > 0 && index % 8 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     const goal = snapshot.goals[index]!;
     if (
       !goal.managerId ||
       goal.managerConflict ||
-      goal.running + goal.unknownRunning >= WIDTH_WORKER_THRESHOLD ||
+      goal.running >= WIDTH_WORKER_THRESHOLD ||
       !hasUndispatchedWork(goal)
     )
       continue;
 
     const event: ManagerEvent = {
       managerId: goal.managerId,
+      goalId: goal.goal,
       kind: 'width',
       summary: widthEventSummary(goal),
     };
@@ -348,13 +351,17 @@ export async function sweepWidthGovernor(
       })
       .immediate();
     if (delivered) deliveredGoals.push(goal.goal);
-    if ((index + 1) % 8 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
   }
   return { snapshot, deliveredGoals };
 }
 
 /** Lines shared by the hourly lifecycle report and its human-readable flow output. */
-export function formatWidthSnapshot(snapshot: WidthSnapshot): string[] {
+export function formatWidthSnapshot(snapshot: WidthSnapshot | null | undefined): string[] {
+  if (!snapshot)
+    return [
+      'Actual system-wide running workers: unknown; this snapshot did not record width evidence.',
+      'Actual Codex running workers: unknown; this snapshot did not record width evidence.',
+    ];
   const { system } = snapshot;
   return [
     `Actual system-wide running workers: ${system.running} confirmed live; ${system.unknownRunning} current running attempts have unknown process identity.`,
