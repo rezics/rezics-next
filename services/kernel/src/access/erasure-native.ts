@@ -8,6 +8,7 @@ import {
 } from './erasure-native-consumers.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { reverseDeletedAccountAgent } from './agent-verification.ts';
+import { consumeAccountDiscoveryClaim, deliverAccountDiscoveryIntent } from './account-discovery-work.ts';
 import { continueErasureDeletion, ContinuationDeniedError } from './committed-continuations.ts';
 import type { Pool, PoolClient } from 'pg';
 import { withConnection } from '../database/pool.ts';
@@ -183,6 +184,31 @@ export async function advanceNativeErasure(pool: Pool, progressId: string): Prom
 
   let consumerPending: string | null = null;
   let consumerIndex = 0;
+  if ((store === 'account_discovery_intent' || store === 'account_discovery_claim_intent') && page.keys.length) {
+    const cursor = await withConnection(pool, (tx) =>
+      tx.query<{ consumer_index: number }>(
+        'SELECT consumer_index FROM access.erasure_native_blocked WHERE progress_id=$1 AND phase=$2',
+        [progressId, expected.phase],
+      ),
+    );
+    const index = (cursor.rows[0]?.consumer_index ?? 0) % page.keys.length;
+    const key = page.keys[index]!;
+    const intent = await withConnection(pool, async (tx) =>
+      (
+        await tx.query<{ revision: string }>(
+          `SELECT revision::text FROM access.${store} WHERE route=$1 AND account_id=$2`,
+          [...key],
+        )
+      ).rows[0],
+    );
+    if (intent) {
+      const input = { route: Number(key[0]), accountId: key[1]!, revision: intent.revision };
+      const deps = { pool };
+      if (store === 'account_discovery_intent' || (await consumeAccountDiscoveryClaim(deps, input)))
+        await deliverAccountDiscoveryIntent(deps, input, store === 'account_discovery_intent' ? 'account' : 'claim');
+    }
+    consumerIndex = (index + 1) % page.keys.length;
+  }
   if (store === 'committed_continuation' && page.keys.length) {
     const cursor = await withConnection(pool, (tx) =>
       tx.query<{ consumer_index: number }>(
@@ -297,7 +323,16 @@ export async function advanceNativeErasure(pool: Pool, progressId: string): Prom
         foreignBlocked.get(JSON.stringify(key)) ??
         effectBlocked.get(JSON.stringify(key)) ??
         (store === 'erasure_continuation_role' ? await continuationRoleBlocker(tx, key) : null) ??
-        (await terminalStoreBlocker(tx, store, role, key, current.account_id, progressId, expected.phase)) ??
+        (await terminalStoreBlocker(
+          tx,
+          store,
+          role,
+          key,
+          current.account_id,
+          progressId,
+          expected.phase,
+          current.phase === NATIVE_ERASURE_GROUPS.length,
+        )) ??
         (await nativeStoreBlocker(tx, store, key, current.account_id));
       if (blocker) return pending(blocker);
     }

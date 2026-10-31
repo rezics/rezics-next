@@ -80,7 +80,11 @@ export async function consumeAccountDiscoveryClaim(deps: { pool: Pool; clock?: (
 /** Delete an exact producer obligation only by atomically replacing it with an
  * ordinary durable source event. This is delivery, never a Search repair ACK.
  */
-async function deliver(deps: { pool: Pool; clock?: () => Date }, input: Intent, source: 'account' | 'claim') {
+export async function deliverAccountDiscoveryIntent(
+  deps: { pool: Pool; clock?: () => Date },
+  input: Intent,
+  source: 'account' | 'claim',
+) {
   validate(input);
   return runCommand(deps.pool, { partition: partitionOf(input.route), clock: deps.clock, basis }, async (tx) => {
     const table = source === 'account' ? 'account_discovery_intent' : 'account_discovery_claim_intent';
@@ -135,10 +139,10 @@ export async function redriveAccountDiscovery(
   let delivered = 0;
   for (const input of foreign) {
     if (await consumeAccountDiscoveryClaim(deps, input))
-      delivered += (await deliver(deps, input, 'claim')).value ? 1 : 0;
+      delivered += (await deliverAccountDiscoveryIntent(deps, input, 'claim')).value ? 1 : 0;
   }
   const local = await read('account_discovery_intent');
-  for (const input of local) delivered += (await deliver(deps, input, 'account')).value ? 1 : 0;
+  for (const input of local) delivered += (await deliverAccountDiscoveryIntent(deps, input, 'account')).value ? 1 : 0;
   return { delivered, more: foreign.length === limit || local.length === limit };
 }
 

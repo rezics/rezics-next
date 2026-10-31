@@ -765,7 +765,7 @@ export async function recordPendingAgentVerification(
           survivor: input.catalogueSubjectId,
           release: accepted.digest,
         },
-        requestedBy: input.requestedBy,
+        requestedBy: verificationRequester(input),
         decidedBy: decision.decided_by,
         requestId: input.id,
         pendingReceipt: transactionId,

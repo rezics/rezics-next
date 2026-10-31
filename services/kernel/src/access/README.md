@@ -3527,6 +3527,7 @@ extends no lifetime and supplies no current user disclosure, approval or session
 authority. Existing activation, recovery, public replay and security checks keep
 their current semantics. Consumer/minimizer integration remains with its owner;
 this source port does not settle unknown consumers or authorize witness deletion.
+
 ### Native erasure groups
 
 The default `account_erasure` module also registers `account_erasure_native` for the committed tombstone event.
@@ -3559,6 +3560,12 @@ forwarding and operation fields are null. Its enabled trigger validates the perm
 handle operations in the erasure transaction, then prevents updates/deletion/reallocation permanently. A
 pending/active claim, outstanding hold or published operation retains its page as `handle-consumer`; expiry never
 proves consumption.
+
+Discovery invalidation follows the native producer path before its source intent is removed. Cleanup delivers an
+exact account or claim intent through the existing atomic outbox command, consuming foreign claims at the account
+anchor first. It also removes deleted-account claim cursors. Ownerless retired claims still advance partition
+revision without creating a null-owner intent. Final account minimization advances revision without recreating a
+previously delivered tombstone intent. These changes preserve source notification, not Search completion proof.
 
 `erasure_native_blocked` retains each blocked phase's page and exact fixed reason while independent later phases
 continue. Advancing the scheduling phase does not certify destructive completion. The unpurged discovery result
@@ -3606,7 +3613,17 @@ existence, TTL or a caller-side leave.
 
 A surviving verification applicant keeps its decision and application when only its requester or reviewer is
 erased: cleanup removes that attribution, and reviewer reason/problem fields, instead of deleting the survivor's
-request. A deleted verification subject retains its request until actual account-agent reversal has finished.
+request. An approved decision must additionally have its actual original identity job published, including its
+mapping and native participants, before that attribution can be removed. The earlier approved state alone is
+insufficient. A deleted verification subject retains its request until actual account-agent reversal has finished.
+
+Current source roles also include identity intents and recovery associations in subject, requester and reviewer
+roles, plus Realm erasure succession in subject, candidate and cursor-subject roles. The immutable source guards
+require their actual receiving custody before those rows can be scrubbed. Selected rows remain specifically
+`verification-source-custody` or `realm-succession-source-custody`; a published identity job does not discharge future
+undo/recovery reads. These appended phases retain the original scheduling identities, reopen earlier local
+completion for the added coverage, and run before the terminal account retry. Realm source consumers also retain
+their original tombstone fence; Auth consumption discharges only Auth's dependency.
 
 Account minimization waits for every other native phase, including retried blocked phases. It removes private
 fields, historical handles/reservations, verification pointers and timestamps while preserving deleted identity,

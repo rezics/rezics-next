@@ -575,10 +575,9 @@ CREATE FUNCTION access.native_terminal_account_ready(value access.account) RETUR
   AND EXISTS (SELECT 1 FROM access.erasure e WHERE e.route=value.route AND e.account_id=value.account_id)
   AND EXISTS (SELECT 1 FROM access.erasure_native_progress p WHERE p.route=value.route AND p.account_id=value.account_id
     AND p.progress_id::text=current_setting('rezics.erasure_progress',true)
-    -- Durable phases 0..60 precede the terminal account page (61); 62 is
-    -- the blocked-page retry scheduler. No earlier page can minimize identity.
-    AND p.phase IN (61,62)
-    AND NOT EXISTS (SELECT 1 FROM access.erasure_native_blocked b WHERE b.progress_id=p.progress_id AND b.reason<>'terminal-inventory'));
+    -- Original terminal phase 61 runs only after all appended source phases.
+    AND p.phase=74
+    AND NOT EXISTS (SELECT 1 FROM access.erasure_native_blocked b WHERE b.progress_id=p.progress_id AND b.phase<>61));
 $$;
 
 
@@ -1006,7 +1005,7 @@ CREATE TABLE access.erasure_native_blocked (
     CONSTRAINT erasure_native_blocked_consumer_index_check CHECK (((consumer_index >= 0) AND (consumer_index < 100))),
     CONSTRAINT erasure_native_blocked_page_check CHECK ((page >= 0)),
     CONSTRAINT erasure_native_blocked_phase_check CHECK ((phase >= 0)),
-    CONSTRAINT erasure_native_blocked_reason_check CHECK ((reason = ANY (ARRAY['handle-consumer'::text, 'membership-terminal-consumer'::text, 'organization-close-consumer'::text, 'verification-decision-consumer'::text, 'verification-reversal-consumer'::text, 'controller-transition-consumer'::text, 'rating-controller-projection-custody'::text, 'organization-cursor-cutover'::text, 'rate-binding-deployment-coverage'::text, 'auth-fence-release-witness-unavailable'::text, 'continuation-barrier-consumer'::text, 'deletion-local-consumer'::text, 'native-terminal-consumer'::text, 'approval-consumer-proof-unavailable'::text, 'opening-consumer-proof-unavailable'::text, 'credential-consumer-proof-unavailable'::text, 'continuation-child-consumer'::text, 'operator-page-consumer'::text, 'terminal-inventory'::text])))
+    CONSTRAINT erasure_native_blocked_reason_check CHECK ((reason = ANY (ARRAY['handle-consumer'::text, 'membership-terminal-consumer'::text, 'organization-close-consumer'::text, 'verification-decision-consumer'::text, 'verification-reversal-consumer'::text, 'controller-transition-consumer'::text, 'rating-controller-projection-custody'::text, 'organization-cursor-cutover'::text, 'rate-binding-deployment-coverage'::text, 'auth-fence-release-witness-unavailable'::text, 'continuation-barrier-consumer'::text, 'deletion-local-consumer'::text, 'native-terminal-consumer'::text, 'approval-consumer-proof-unavailable'::text, 'opening-consumer-proof-unavailable'::text, 'credential-consumer-proof-unavailable'::text, 'continuation-child-consumer'::text, 'operator-page-consumer'::text, 'terminal-inventory'::text, 'account-discovery-consumer'::text, 'verification-source-custody'::text, 'realm-succession-source-custody'::text])))
 );
 
 
@@ -3169,8 +3168,10 @@ BEGIN
     r := OLD.route; a := OLD.account_id; v := nextval('access.account_discovery_revision');
   END IF;
   UPDATE access.account_discovery_population SET population = population + delta, revision = v WHERE partition_no = r >> 4;
-  INSERT INTO access.account_discovery_intent VALUES (r, a, v)
-    ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
+  IF TG_OP <> 'UPDATE' OR NOT access.native_terminal_account_ready(OLD) THEN
+    INSERT INTO access.account_discovery_intent VALUES (r, a, v)
+      ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
+  END IF;
   IF TG_OP = 'DELETE' OR NEW.state = 'deleted' THEN
     DELETE FROM access.account_discovery_claim_cursor WHERE route = r AND account_id = a;
   END IF;
@@ -3200,11 +3201,11 @@ BEGIN
   IF TG_OP = 'DELETE' THEN r := OLD.route; v := nextval('access.account_discovery_revision');
   ELSE r := NEW.route; v := NEW.discovery_revision; END IF;
   UPDATE access.account_discovery_population SET claim_revision = v WHERE partition_no = r >> 4;
-  IF TG_OP <> 'INSERT' THEN
+  IF TG_OP <> 'INSERT' AND OLD.account_id IS NOT NULL THEN
     INSERT INTO access.account_discovery_claim_intent VALUES (r, OLD.account_id, v)
       ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
   END IF;
-  IF TG_OP <> 'DELETE' THEN
+  IF TG_OP <> 'DELETE' AND NEW.account_id IS NOT NULL THEN
     INSERT INTO access.account_discovery_claim_intent VALUES (r, NEW.account_id, v)
       ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
   END IF;

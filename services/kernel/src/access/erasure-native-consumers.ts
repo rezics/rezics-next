@@ -4,6 +4,8 @@ import { withConnection } from '../database/pool.ts';
 import type { ErasureDiscoveryPage } from './erasure-progress.ts';
 import { routeOf } from '../route/route.ts';
 import { readAuthNativeConsumption } from './shared-history-auth.ts';
+import { publishedAccountIdentityUndo } from './agent-verification-identity.ts';
+import { IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
 import type { NativeStoreBlocker } from './erasure-native-stores.ts';
 
 /** Read only the fixed Auth-native phase, anchored to the original source. An
@@ -61,6 +63,7 @@ export async function terminalStoreBlocker(
   accountId: string,
   progressId: string,
   phase = -1,
+  forwardComplete = true,
 ): Promise<NativeStoreBlocker | null> {
   if (store === 'membership_inverse') {
     const row = await tx.query(
@@ -151,6 +154,17 @@ export async function terminalStoreBlocker(
     }
   }
   if (store === 'lifecycle_fence_receipt') {
+    // Source Realm succession still reads the original tombstone fence. First
+    // discover its actual roles; Auth consumption discharges only Auth's need.
+    if (!forwardComplete) return 'native-terminal-consumer';
+    const realm = await tx.query(
+      `SELECT 1 FROM access.erasure_native_blocked WHERE progress_id=$1
+       AND reason IN ('membership-terminal-consumer','realm-succession-source-custody') LIMIT 1`,
+      [progressId],
+    );
+    // Keep this phase distinct from its prerequisites: a retained fence must
+    // never become its own membership-consumer dependency on the next retry.
+    if (realm.rowCount) return 'native-terminal-consumer';
     const root = await tx.query<{ continuation_id: string }>(
       `SELECT continuation_id FROM access.committed_continuation
        WHERE route=$1 AND account_id=$2 AND barrier_receipt_id=$3 LIMIT 1`,
@@ -179,6 +193,7 @@ export async function terminalStoreBlocker(
       if (related.rowCount) return 'controller-transition-consumer';
     }
     if (role === 'account_id') {
+      if (!forwardComplete) return 'terminal-inventory';
       const blocked = await tx.query(
         'SELECT 1 FROM access.erasure_native_blocked WHERE progress_id=$1 AND phase<>$2 LIMIT 1',
         [progressId, phase],
@@ -220,11 +235,27 @@ export async function foreignTerminalBlockers(
   for (const key of page.keys) {
     if (store === 'agent_verification_request') {
       const request = await withConnection(pool, (tx) =>
-        tx.query<{ account_id: string }>(
-          'SELECT account_id FROM access.agent_verification_request WHERE route=$1 AND request_id=$2',
+        tx.query<{ account_id: string; state: string; decision_receipt_id: string | null }>(
+          'SELECT account_id,state,decision_receipt_id FROM access.agent_verification_request WHERE route=$1 AND request_id=$2',
           [...key],
         ),
       );
+      const decision = request.rows[0];
+      if (decision?.state === 'approved') {
+        // The approved state precedes final publication in the real workflow.
+        // Verify the exact original published job before removing its caller or
+        // review attribution. This also works for a fenced verification subject.
+        if (!decision.decision_receipt_id) {
+          blocked.set(JSON.stringify(key), 'verification-decision-consumer');
+        } else {
+          try {
+            await publishedAccountIdentityUndo(pool, decision.account_id, decision.decision_receipt_id);
+          } catch (error) {
+            if (!(error instanceof IdentityEpochStoreError)) throw error;
+            blocked.set(JSON.stringify(key), 'verification-decision-consumer');
+          }
+        }
+      }
       if (request.rows[0]?.account_id === erasedAccountId) {
         // This is another partition. Observe its monotonic deleted-account
         // reversal witness before opening the Global request purge transaction.

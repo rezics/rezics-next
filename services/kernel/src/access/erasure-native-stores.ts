@@ -61,6 +61,20 @@ export const ADDITIONAL_NATIVE_ERASURE_GROUPS = [
   ['committed_continuation', 'prior_operator_account_id'],
   ['agent_page', 'account_id'],
   ...TERMINAL_NATIVE_ERASURE_GROUPS,
+  // New source stores append after the original scheduling identities. The
+  // terminal account page waits for this forward pass and all blocked pages.
+  ['account_discovery_intent', 'account_id'],
+  ['account_discovery_claim_intent', 'account_id'],
+  ['account_discovery_claim_cursor', 'account_id'],
+  ['agent_identity_intent', 'account_id'],
+  ['agent_identity_intent', 'requested_by'],
+  ['agent_identity_intent', 'decided_by'],
+  ['agent_identity_recovery', 'account_id'],
+  ['agent_identity_recovery', 'requested_by'],
+  ['agent_identity_recovery', 'decided_by'],
+  ['realm_erasure_succession', 'account_id'],
+  ['realm_erasure_succession', 'best_account_id'],
+  ['realm_erasure_succession', 'cursor_subject_id'],
 ] as const;
 
 export type NativeStoreBlocker =
@@ -78,6 +92,9 @@ export type NativeStoreBlocker =
   | 'continuation-barrier-consumer'
   | 'auth-fence-release-witness-unavailable'
   | 'operator-page-consumer'
+  | 'account-discovery-consumer'
+  | 'verification-source-custody'
+  | 'realm-succession-source-custody'
   | 'terminal-inventory';
 
 /** Validate even a durable replay before its raw keys reach a proof consumer. */
@@ -123,6 +140,28 @@ export async function nativeStoreBlocker(
   key: readonly string[],
   accountId: string,
 ): Promise<NativeStoreBlocker | null> {
+  if (store === 'account_discovery_intent' || store === 'account_discovery_claim_intent') {
+    // Source notifications must commit their actual outbox delivery. Deleting an
+    // intent alone would suppress Search's tombstone/revision invalidation.
+    const row = await tx.query(`SELECT 1 FROM access.${store} WHERE route=$1 AND account_id=$2`, [...key]);
+    if (row.rowCount) return 'account-discovery-consumer';
+  }
+  if (store === 'agent_identity_intent' || store === 'agent_identity_recovery') {
+    const row = await tx.query(
+      `SELECT 1 FROM access.${store} WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
+      [...key],
+    );
+    // The source's immutable-row guard explicitly requires receiving erasure
+    // custody. A published job alone cannot release later undo/recovery reads.
+    if (row.rowCount) return 'verification-source-custody';
+  }
+  if (store === 'realm_erasure_succession') {
+    const row = await tx.query(
+      'SELECT 1 FROM access.realm_erasure_succession WHERE route=$1 AND resource_id=$2 AND account_id=$3',
+      [...key],
+    );
+    if (row.rowCount) return 'realm-succession-source-custody';
+  }
   if (store === 'organization_member') {
     const row = await tx.query<{ live: boolean; held: boolean; closing: boolean }>(
       `SELECT (upper_inf(m.valid) OR m.valid @> statement_timestamp()) AS live,
