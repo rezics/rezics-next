@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PageStory } from '../../page';
+import { communityCurrentClaimStory } from '../../community-current-claim';
 import { chooseSubject, openPicker } from './realm-publication.stories';
 
 const meta = {
@@ -10,5 +11,5 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Selection: Story = { play: openPicker };
-export const Chosen: Story = { play: chooseSubject };
+export const Selection: Story = { beforeEach: communityCurrentClaimStory, play: openPicker };
+export const Chosen: Story = { beforeEach: communityCurrentClaimStory, play: chooseSubject };
