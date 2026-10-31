@@ -23,6 +23,39 @@ SET row_security = off;
 CREATE SCHEMA search;
 
 
+--
+-- Name: enroll_retained_copy(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.enroll_retained_copy() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE target_name text;
+BEGIN
+  IF TG_TABLE_NAME='public_filter_registration' THEN
+    target_name := NEW.physical_target;
+  ELSE
+    SELECT physical_target INTO target_name FROM search.public_filter_registration
+      WHERE (partition_no,id)=(NEW.partition_no,NEW.registration);
+  END IF;
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended(target_name,741));
+  IF EXISTS(SELECT 1 FROM search.identity_writer_gate
+    WHERE partition_no=0 AND physical_target=target_name AND publication_fence IS NOT NULL) THEN
+    RAISE EXCEPTION 'Search generation is fenced for native publication';
+  END IF;
+  IF TG_TABLE_NAME='public_filter_registration' THEN
+    UPDATE search.public_filter_target SET copy_revision=copy_revision+1
+      WHERE partition_no=NEW.partition_no AND physical_target=NEW.physical_target;
+  ELSE
+    UPDATE search.public_filter_target t SET copy_revision=t.copy_revision+1
+      FROM search.public_filter_registration r
+      WHERE (r.partition_no,r.id)=(NEW.partition_no,NEW.registration)
+        AND (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target);
+  END IF;
+  RETURN NEW;
+END $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -104,6 +137,77 @@ CREATE TABLE search.discovery_population (
     CONSTRAINT discovery_population_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT discovery_population_position_check CHECK (("position" >= 0)),
     CONSTRAINT discovery_population_revision_check CHECK ((revision >= 0))
+);
+
+
+--
+-- Name: erasure_effect; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.erasure_effect (
+    partition_no integer NOT NULL,
+    account_id uuid NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    incarnation text NOT NULL COLLATE pg_catalog."C",
+    job uuid DEFAULT gen_random_uuid() NOT NULL,
+    source_basis text NOT NULL,
+    consumer jsonb NOT NULL,
+    barrier jsonb NOT NULL,
+    native_revision text NOT NULL,
+    record_key text,
+    key_offset integer DEFAULT 0 NOT NULL,
+    fence text,
+    phase text DEFAULT 'repair'::text NOT NULL,
+    CONSTRAINT erasure_effect_barrier_check CHECK ((octet_length((barrier)::text) <= 4096)),
+    CONSTRAINT erasure_effect_consumer_check CHECK ((octet_length((consumer)::text) <= 8192)),
+    CONSTRAINT erasure_effect_fence_check CHECK ((octet_length(fence) <= 4096)),
+    CONSTRAINT erasure_effect_key_offset_check CHECK ((key_offset >= 0)),
+    CONSTRAINT erasure_effect_phase_check CHECK ((phase = ANY (ARRAY['repair'::text, 'fence'::text, 'drain'::text, 'adopt'::text, 'compact'::text, 'settled'::text, 'released'::text]))),
+    CONSTRAINT erasure_effect_record_key_check CHECK ((octet_length(record_key) <= 4096)),
+    CONSTRAINT erasure_effect_source_basis_check CHECK ((octet_length(source_basis) <= 4096))
+);
+
+
+--
+-- Name: erasure_progress; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.erasure_progress (
+    partition_no integer NOT NULL,
+    account_id uuid NOT NULL,
+    version integer NOT NULL,
+    at timestamp with time zone NOT NULL,
+    protocol integer NOT NULL,
+    phase text NOT NULL,
+    pending_reason text,
+    ever_applied boolean DEFAULT false NOT NULL,
+    frontier text,
+    source_complete boolean DEFAULT false NOT NULL,
+    personal_complete boolean DEFAULT false NOT NULL,
+    acked boolean DEFAULT false NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT erasure_progress_frontier_check CHECK ((octet_length(frontier) <= 2048)),
+    CONSTRAINT erasure_progress_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['sealing'::text, 'source'::text, 'copies'::text, 'repair'::text, 'drain'::text, 'finalize'::text, 'done'::text]))),
+    CONSTRAINT erasure_progress_protocol_check CHECK ((protocol = 1)),
+    CONSTRAINT erasure_progress_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: erasure_target; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.erasure_target (
+    partition_no integer NOT NULL,
+    account_id uuid NOT NULL,
+    copy_home integer NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    incarnation text NOT NULL COLLATE pg_catalog."C",
+    copy_revision bigint NOT NULL,
+    registration_after text COLLATE pg_catalog."C",
+    copies_complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT erasure_target_copy_home_check CHECK (((copy_home >= 0) AND (copy_home <= 4095)))
 );
 
 
@@ -478,8 +582,10 @@ CREATE TABLE search.public_filter_prepared (
     build text NOT NULL COLLATE pg_catalog."C",
     generation numeric NOT NULL,
     rows text NOT NULL,
+    state text DEFAULT 'active'::text NOT NULL,
     CONSTRAINT public_filter_prepared_generation_check CHECK (((generation > (0)::numeric) AND (scale(generation) = 0))),
-    CONSTRAINT public_filter_prepared_rows_check CHECK ((octet_length(rows) <= 1048576))
+    CONSTRAINT public_filter_prepared_rows_check CHECK ((octet_length(rows) <= 1048576)),
+    CONSTRAINT public_filter_prepared_state_check CHECK ((state = ANY (ARRAY['active'::text, 'erasing'::text])))
 );
 
 
@@ -556,6 +662,7 @@ CREATE TABLE search.public_filter_target (
     partition_no integer NOT NULL,
     physical_target text NOT NULL COLLATE pg_catalog."C",
     incarnation text NOT NULL,
+    copy_revision bigint DEFAULT 1 NOT NULL,
     CONSTRAINT public_filter_target_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
 );
 
@@ -743,6 +850,38 @@ ALTER TABLE ONLY search.discovery_generation
 
 ALTER TABLE ONLY search.discovery_population
     ADD CONSTRAINT discovery_population_pkey PRIMARY KEY (partition_no, prefix, generation, owner);
+
+
+--
+-- Name: erasure_effect erasure_effect_job_key; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.erasure_effect
+    ADD CONSTRAINT erasure_effect_job_key UNIQUE (job);
+
+
+--
+-- Name: erasure_effect erasure_effect_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.erasure_effect
+    ADD CONSTRAINT erasure_effect_pkey PRIMARY KEY (partition_no, account_id, physical_target, incarnation);
+
+
+--
+-- Name: erasure_progress erasure_progress_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.erasure_progress
+    ADD CONSTRAINT erasure_progress_pkey PRIMARY KEY (partition_no, account_id);
+
+
+--
+-- Name: erasure_target erasure_target_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.erasure_target
+    ADD CONSTRAINT erasure_target_pkey PRIMARY KEY (partition_no, account_id, copy_home, physical_target, incarnation);
 
 
 --
@@ -1056,6 +1195,13 @@ CREATE INDEX public_filter_observation_publication ON search.public_filter_obser
 
 
 --
+-- Name: public_filter_observation_registration; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_observation_registration ON search.public_filter_observation USING btree (partition_no, registration, observation);
+
+
+--
 -- Name: public_filter_pit_owned; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -1084,10 +1230,24 @@ CREATE INDEX public_filter_registration_publication ON search.public_filter_regi
 
 
 --
+-- Name: public_filter_registration_target; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_registration_target ON search.public_filter_registration USING btree (partition_no, physical_target, id);
+
+
+--
 -- Name: public_filter_repair_page_effects; Type: INDEX; Schema: search; Owner: -
 --
 
 CREATE INDEX public_filter_repair_page_effects ON search.public_filter_repair_page USING btree (partition_no, observation, execution, ordinal) WHERE has_repairs;
+
+
+--
+-- Name: public_filter_target_physical; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_target_physical ON search.public_filter_target USING btree (physical_target, partition_no);
 
 
 --
@@ -1158,6 +1318,27 @@ CREATE INDEX trending_term_rank ON search.trending_term USING btree (route, lang
 --
 
 CREATE INDEX trending_term_source ON search.trending_term USING btree (route, source_id, term_key);
+
+
+--
+-- Name: public_filter_observation erasure_enroll_observation; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER erasure_enroll_observation AFTER INSERT ON search.public_filter_observation FOR EACH ROW EXECUTE FUNCTION search.enroll_retained_copy();
+
+
+--
+-- Name: public_filter_prepared erasure_enroll_prepared; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER erasure_enroll_prepared AFTER INSERT ON search.public_filter_prepared FOR EACH ROW EXECUTE FUNCTION search.enroll_retained_copy();
+
+
+--
+-- Name: public_filter_registration erasure_enroll_registration; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER erasure_enroll_registration AFTER INSERT ON search.public_filter_registration FOR EACH ROW EXECUTE FUNCTION search.enroll_retained_copy();
 
 
 --

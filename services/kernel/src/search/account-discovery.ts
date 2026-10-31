@@ -10,7 +10,6 @@ import {
 } from '../access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../access/account-discovery-work.ts';
 import {
-  acknowledgeErasure,
   readErasureStatus,
   recordLateErasureItem,
   resolveLateErasureItem,
@@ -488,9 +487,11 @@ export async function eraseDiscoveryAccount(
   search: OpenSearch,
   registry: DiscoveryRegistry,
   accountId: string,
+  inputLimit = 100,
 ) {
   const route = routeOf(accountId);
   if (route === null) throw new TypeError('Invalid erasure Account key');
+  if (!Number.isInteger(inputLimit) || inputLimit < 1 || inputLimit > 100) throw new RangeError('Invalid erasure copy limit');
   const copies = await withConnection(pool, async (client) => {
     if (!(await readErasureStatus(client, accountId))) return null;
     return (
@@ -498,8 +499,8 @@ export async function eraseDiscoveryAccount(
         `SELECT c.prefix,c.generation::float8 AS generation,
       g.index_uuid AS uuid,g.incarnation::text,c.position::text,g.state FROM search.discovery_copy c
       JOIN search.discovery_generation g ON g.partition_no=0 AND g.prefix=c.prefix AND g.generation=c.generation
-      WHERE c.route=$1 AND c.source_id=$2 AND c.kind='account' ORDER BY c.prefix,c.generation LIMIT 100`,
-        [route, accountId],
+      WHERE c.route=$1 AND c.source_id=$2 AND c.kind='account' ORDER BY c.prefix,c.generation LIMIT $3`,
+        [route, accountId, inputLimit],
       )
     ).rows;
   });
@@ -546,28 +547,9 @@ export async function eraseDiscoveryAccount(
     );
     await resolveLateErasureItem({ pool }, { accountId, participant: 'search', locator: copyLocator(target) });
   }
-  if (copies.length === 100) return; // A bounded page is never an all-copy acknowledgement.
-  const status = await withConnection(pool, (client) => readErasureStatus(client, accountId));
-  if (status?.participants.search?.outcome === 'pending')
-    await acknowledgeErasure(
-      { pool },
-      {
-        accountId,
-        participant: 'search',
-        outcome: (await withConnection(
-          pool,
-          async (client) =>
-            (
-              await client.query('SELECT 1 FROM search.discovery_erasure WHERE route=$1 AND account_id=$2', [
-                route,
-                accountId,
-              ])
-            ).rowCount,
-        ))
-          ? 'erased'
-          : 'none',
-      },
-    );
+  if (copies.length === inputLimit) return; // A bounded page is never an all-copy acknowledgement.
+  // All-copy Search participation owns the final ACK, including Source and retained snapshots.
+
 }
 
 /** A physically deleted generation may still own an open erasure locator. */

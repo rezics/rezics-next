@@ -34,6 +34,7 @@ import { compileText } from './text.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { createOpenSearch, OpenSearchError, type OpenSearch } from './opensearch.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import { assertRetainedPitDeletion } from './erasure-pit.ts';
 import type { PublicFilterConsumer, PublicFilterDependencyKey } from '../semantic/public-filter-source-contract.ts';
 import type {
   PublicCanonicalCaptureInput,
@@ -920,7 +921,7 @@ export function createPublicFilterCustody(
       meter,
       `WITH retained AS (INSERT INTO search.public_filter_observation (partition_no,observation,registration,queried,covered,expires_at,state,prepared_rows)
       SELECT r.partition_no,$3,r.id,$4,$5,$6,'open',$7 FROM search.public_filter_registration r JOIN search.public_filter_target t USING (partition_no,physical_target)
-      WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active' AND t.incarnation=$8 FOR SHARE OF r,t RETURNING partition_no,observation), owned AS (INSERT INTO search.public_filter_pit SELECT partition_no,observation,$9,$10,'owned' FROM retained WHERE $10::text IS NOT NULL) SELECT observation FROM retained`,
+      WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active' AND t.incarnation=$8 FOR SHARE OF r FOR UPDATE OF t RETURNING partition_no,observation), owned AS (INSERT INTO search.public_filter_pit SELECT partition_no,observation,$9,$10,'owned' FROM retained WHERE $10::text IS NOT NULL) SELECT observation FROM retained`,
       [
         value.partition,
         value.id,
@@ -1033,8 +1034,8 @@ export function createPublicFilterCustody(
           const saved = await sql(
             client,
             meter,
-            `INSERT INTO search.public_filter_prepared VALUES ($1,$2,$3,$4,$5)
-            ON CONFLICT (partition_no,registration,build,generation) DO UPDATE SET build=EXCLUDED.build WHERE public_filter_prepared.rows=EXCLUDED.rows RETURNING build`,
+            `INSERT INTO search.public_filter_prepared(partition_no,registration,build,generation,rows) VALUES ($1,$2,$3,$4,$5)
+            ON CONFLICT (partition_no,registration,build,generation) DO UPDATE SET build=EXCLUDED.build WHERE public_filter_prepared.state='active' AND public_filter_prepared.rows=EXCLUDED.rows RETURNING build`,
             [
               input.registration.partition,
               input.registration.id,
@@ -1359,10 +1360,238 @@ function addCost(target: Meter, value: CustodyCost) {
   for (const key of Object.keys(target) as (keyof Meter)[]) target[key] += value[key];
 }
 async function deletePit(pit: string, search: OpenSearch, context: PublicFilterConsumerContext, meter: Meter) {
+  const receipt = await engine(search, meter, context, 'DELETE', '/_search/point_in_time', { pit_id: [pit] });
+  assertRetainedPitDeletion(pit, receipt);
+}
+
+/** Exact located native copy, supplied by inventory receiving custody. No payload in workflow input. */
+export type RetainedErasureCopy = Readonly<{
+  partition: number;
+  registration: string;
+  observation: string;
+  incarnation: string;
+}>;
+export type RetainedErasureProgress = Readonly<{
+  state: 'more' | 'removed' | 'pending';
+  reason?: 'in-use' | 'configuration-unavailable' | 'binding-mismatch' | 'native-ambiguous' | 'deadline';
+  cost: CustodyCost;
+}>;
+
+/** One finite cleanup unit in existing custody. `removed` covers THIS observation only, never account
+ * coverage, source reconciliation or an ACK. Replays remove one child at a time, returning no payload.
+ * Existing calls admitted before the barrier drain through their native leases. No connection spans I/O.
+ */
+export async function stepRetainedObservationErasure(
+  pool: Pool,
+  copy: RetainedErasureCopy,
+  search: OpenSearch | undefined,
+  context: PublicFilterConsumerContext,
+): Promise<RetainedErasureProgress> {
+  context = { deadline: Math.min(context.deadline, Date.now() + 5000) };
+  home(copy.partition);
+  requireValue(partition(copy.observation) === copy.partition);
+  registration({ partition: copy.partition, id: copy.registration });
+  text(copy.incarnation);
+  const meter = cost();
+  const keys = [copy.partition, copy.observation];
+  let q: PublicFilterQueriedObservation | undefined;
   try {
-    await engine(search, meter, context, 'DELETE', '/_search/point_in_time', { pit_id: [pit] });
+    check(context);
+    // The observation lock serializes acquire, renew, execution append and final erasure.
+    // Compare against the observation's original UUID; a newer public_filter_target cannot certify it.
+    const barrier = await withConnection(pool, async (tx) => {
+      await sql(tx, meter, 'BEGIN');
+      try {
+        await sql(tx, meter, "SET LOCAL statement_timeout='5000ms'");
+        const found = await sql(
+          tx,
+          meter,
+          `SELECT registration,queried FROM search.public_filter_observation
+           WHERE (partition_no,observation)=($1,$2) FOR UPDATE`,
+          keys,
+        );
+        if (!found.rowCount) {
+          await sql(tx, meter, 'COMMIT');
+          return 'absent';
+        }
+        const row = found.rows[0];
+        q = decode<PublicFilterQueriedObservation>(row.queried);
+        queried(q);
+        if (
+          row.registration !== copy.registration ||
+          q.snapshot.observation !== copy.observation ||
+          q.consumer.incarnation !== copy.incarnation
+        ) {
+          await sql(tx, meter, 'ROLLBACK');
+          return 'mismatch';
+        }
+        await sql(
+          tx,
+          meter,
+          `UPDATE search.public_filter_observation SET state=CASE WHEN state='closed' THEN state ELSE 'closing' END
+           WHERE (partition_no,observation)=($1,$2)`,
+          keys,
+        );
+        if (q.snapshot.kind === 'prepared') {
+          // The payload is shared with other retained observations. Refuse recapture of this generation
+          // before scrubbing its duplicate; their own observation payloads remain separate work items.
+          await sql(
+            tx,
+            meter,
+            `UPDATE search.public_filter_prepared SET state='erasing'
+             WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4)`,
+            [copy.partition, copy.registration, q.snapshot.build, q.snapshot.generation.toString()],
+          );
+        }
+        await sql(tx, meter, 'COMMIT');
+        return 'found';
+      } catch (error) {
+        await sql(tx, meter, 'ROLLBACK');
+        throw error;
+      }
+    });
+    if (barrier === 'mismatch') return { state: 'pending', reason: 'binding-mismatch', cost: meter };
+    if (barrier === 'absent') return { state: 'removed', cost: meter };
+    check(context);
+    const live = await sql(
+      pool,
+      meter,
+      `SELECT token FROM search.public_filter_reference
+       WHERE (partition_no,observation)=($1,$2) AND expires_at>$3 ORDER BY expires_at DESC LIMIT 1`,
+      [...keys, Date.now()],
+    );
+    if (live.rowCount) return { state: 'pending', reason: 'in-use', cost: meter };
+    // Delete one expired lease per unit; don't disguise a large DELETE as a bounded probe.
+    const refs = await sql(
+      pool,
+      meter,
+      `DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token) IN
+       (SELECT partition_no,observation,token FROM search.public_filter_reference
+        WHERE (partition_no,observation)=($1,$2) ORDER BY token LIMIT 1) RETURNING token`,
+      keys,
+    );
+    if (refs.rowCount) return { state: 'more', cost: meter };
+    const pits = await sql(
+      pool,
+      meter,
+      `SELECT id,locator,state FROM search.public_filter_pit
+       WHERE (partition_no,observation)=($1,$2) ORDER BY id LIMIT 1`,
+      keys,
+    );
+    if (pits.rowCount) {
+      const pit = pits.rows[0];
+      if (pit.state === 'owned') {
+        if (!search) return { state: 'pending', reason: 'configuration-unavailable', cost: meter };
+        await deletePit(pit.locator, search, context, meter);
+        check(context);
+      }
+      await sql(pool, meter, 'DELETE FROM search.public_filter_pit WHERE (partition_no,observation,id)=($1,$2,$3)', [
+        ...keys,
+        pit.id,
+      ]);
+      return { state: 'more', cost: meter };
+    }
+    const effect = await sql(pool, meter,
+      `DELETE FROM search.public_filter_repair_effect WHERE (partition_no,observation,execution,page,item) IN
+       (SELECT partition_no,observation,execution,page,item FROM search.public_filter_repair_effect
+        WHERE (partition_no,observation)=($1,$2) ORDER BY execution,page,item LIMIT 1) RETURNING item`, keys);
+    if (effect.rowCount) return { state: 'more', cost: meter };
+    const page = await sql(pool, meter,
+      `DELETE FROM search.public_filter_repair_page WHERE (partition_no,observation,execution,ordinal) IN
+       (SELECT partition_no,observation,execution,ordinal FROM search.public_filter_repair_page
+        WHERE (partition_no,observation)=($1,$2) ORDER BY execution,ordinal LIMIT 1) RETURNING ordinal`, keys);
+    if (page.rowCount) return { state: 'more', cost: meter };
+    const executions = await sql(
+      pool,
+      meter,
+      `DELETE FROM search.public_filter_execution WHERE (partition_no,observation,id) IN
+       (SELECT partition_no,observation,id FROM search.public_filter_execution
+        WHERE (partition_no,observation)=($1,$2) ORDER BY id LIMIT 1) RETURNING id`,
+      keys,
+    );
+    if (executions.rowCount) return { state: 'more', cost: meter };
+    check(context);
+    if (q?.snapshot.kind === 'prepared') {
+      await sql(
+        pool,
+        meter,
+        `UPDATE search.public_filter_prepared SET rows=$5
+         WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4) AND state='erasing'`,
+        [copy.partition, copy.registration, q.snapshot.build, q.snapshot.generation.toString(), encode([])],
+      );
+    }
+    await sql(
+      pool,
+      meter,
+      `DELETE FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2)
+       AND state IN ('closing','closed')`,
+      keys,
+    );
+    return { state: 'removed', cost: meter };
   } catch (error) {
-    if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+    // Lost native responses and missing endpoints retain the locator for retry. A generic 404 isn't proof.
+    if (error instanceof TypeError) throw error;
+    return {
+      state: 'pending',
+      reason: error instanceof Failure && error.reason === 'deadline' ? 'deadline' : 'native-ambiguous',
+      cost: meter,
+    };
+  }
+}
+
+/** One registration range of ALL retained populations, including excluded/zero-hit observations and
+ * prepared payloads whose last observation was already closed. The stored consumer supplies the UUID;
+ * a reused physical name never makes an old PIT belong to the new incarnation.
+ */
+export async function stepRetainedTargetErasure(
+  pool: Pool,
+  target: Readonly<{ partition: number; physicalTarget: string; after: string | null }>,
+  search: OpenSearch | undefined,
+  context: PublicFilterConsumerContext,
+): Promise<Readonly<{
+  state: 'more' | 'complete' | 'pending'; after: string | null;
+  reason?: RetainedErasureProgress['reason']; cost: CustodyCost;
+}>> {
+  home(target.partition);
+  text(target.physicalTarget);
+  const meter = cost();
+  try {
+    check(context);
+    const registrations = await sql(pool, meter,
+      `SELECT id,consumer FROM search.public_filter_registration
+       WHERE partition_no=$1 AND physical_target=$2 AND ($3::text IS NULL OR id>$3)
+       ORDER BY id LIMIT 1`, [target.partition, target.physicalTarget, target.after]);
+    const row = registrations.rows[0];
+    if (!row) return { state: 'complete', after: target.after, cost: meter };
+    const consumer = decode<PublicFilterConsumer>(row.consumer);
+    requireValue(consumer.physicalTarget === target.physicalTarget);
+    const observation = await sql(pool, meter,
+      `SELECT observation FROM search.public_filter_observation
+       WHERE (partition_no,registration)=($1,$2) ORDER BY observation LIMIT 1`,
+      [target.partition, row.id]);
+    if (observation.rowCount) {
+      const progress = await stepRetainedObservationErasure(pool, {
+        partition: target.partition, registration: row.id,
+        observation: observation.rows[0].observation, incarnation: consumer.incarnation,
+      }, search, context);
+      addCost(meter, progress.cost);
+      return { state: progress.state === 'pending' ? 'pending' : 'more', after: target.after,
+        reason: progress.reason, cost: meter };
+    }
+    // Prepared has independent custody after the observation disappeared. Lock its own immutable
+    // key and refuse recapture BEFORE clearing it, under the same lock used by retainPrepared's UPSERT.
+    const prepared = await sql(pool, meter,
+      `WITH candidate AS (SELECT partition_no,registration,build,generation
+        FROM search.public_filter_prepared WHERE (partition_no,registration)=($1,$2)
+          AND (state<>'erasing' OR rows<>$3) ORDER BY build,generation LIMIT 1 FOR UPDATE)
+       UPDATE search.public_filter_prepared p SET state='erasing',rows=$3 FROM candidate c
+       WHERE (p.partition_no,p.registration,p.build,p.generation)=
+             (c.partition_no,c.registration,c.build,c.generation) RETURNING p.build`,
+      [target.partition, row.id, encode([])]);
+    return { state: 'more', after: prepared.rowCount ? target.after : row.id, cost: meter };
+  } catch (error) {
+    if (error instanceof TypeError) throw error;
+    return { state: 'pending', after: target.after, reason: 'native-ambiguous', cost: meter };
   }
 }
 
@@ -1425,4 +1654,21 @@ export async function readGenerationPublicationCustody(
   } catch (error) {
     return failure(error, meter);
   }
+}
+
+/** Native keyed custody probe used by the SAME writer gate after copy admission is fenced.
+ * Erasing markers alone are insufficient: the independent prepared payload must actually be empty.
+ */
+export async function hasRetainedWriterPublicationCopies(
+  tx: Pick<import('pg').PoolClient, 'query'>, partition: number, physicalTarget: string,
+): Promise<boolean> {
+  const retained = await tx.query(`SELECT 1 FROM search.public_filter_observation o
+    JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
+    WHERE r.partition_no=$1 AND r.physical_target=$2
+    UNION ALL
+    SELECT 1 FROM search.public_filter_prepared p
+    JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(p.partition_no,p.registration)
+    WHERE r.partition_no=$1 AND r.physical_target=$2 AND (p.state<>'erasing' OR p.rows<>$3)
+    LIMIT 1`, [partition, physicalTarget, encode([])]);
+  return retained.rowCount !== 0;
 }

@@ -1,7 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { runCommand, noEffect } from '../command/command.ts';
-import { acknowledgeErasure, readErasureStatus } from '../access/erasure.ts';
+import { readErasureStatus } from '../access/erasure.ts';
 import { routeOf, partitionOf, PARTITIONS } from '../route/route.ts';
 import './recent-searches.ts';
 import { trendingSearchStore } from './trending-searches.ts';
@@ -19,6 +19,7 @@ import type { WorkModule } from '../work/registry.ts';
 import { createOpenSearch, SearchUnavailableError } from './opensearch.ts';
 import { startSearchIndexing } from './runner.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
+import { registerSearchErasure, markSearchPersonalErasure, stepSearchErasure } from './erasure.ts';
 
 export type SearchConfig = { url: string; prefix: string };
 
@@ -51,7 +52,7 @@ export const searchWorkModule: WorkModule = {
     );
     const acknowledge = DBOS.registerStep(
       async (accountId: string) =>
-        acknowledgeErasure({ pool: context.pool }, { accountId, participant: 'search', outcome: 'erased' }),
+        markSearchPersonalErasure(context.pool, accountId),
       { name: 'search.acknowledgeErasure', ...COMMAND_STEP_RETRIES },
     );
     const enqueueWithdrawal = async (input: Withdrawal) => {
@@ -70,7 +71,7 @@ export const searchWorkModule: WorkModule = {
       ...COMMAND_STEP_RETRIES,
     });
     const withdrawSegment = async (input: Withdrawal) => {
-      // Bound both each command and its durable workflow history; ACK follows the final committed page.
+      // Bound each command and workflow history; this records only personal-copy completion.
       for (let page = 0; page < 100; page++) {
         if ((await withdraw(input.kind, input.identity)) === 'complete') {
           if (input.kind === 'account') await acknowledge(input.identity);
@@ -85,6 +86,7 @@ export const searchWorkModule: WorkModule = {
       async (accountId: string) => {
         const route = routeOf(accountId);
         if (route === null) throw new TypeError('Invalid erasure account');
+        await stepSearchErasure(context.pool, accountId, false);
         await runCommand(context.pool, { partition: partitionOf(route) }, async (tx) => {
           const status = await readErasureStatus(tx, accountId);
           if (!status || !status.participants.search)
@@ -95,6 +97,11 @@ export const searchWorkModule: WorkModule = {
           );
           if (account.rows[0]?.state !== 'deleted' || !account.rows[0]?.authn_fenced)
             throw new Error('Search erasure requires the terminal account fence');
+          // Capture personal applicability before either owner removes its last native row.
+          await tx.query(`UPDATE search.erasure_progress SET ever_applied=ever_applied OR
+            EXISTS(SELECT 1 FROM search.recent_search_state WHERE partition_no=$1 AND route=$2 AND account_id=$3)
+            OR EXISTS(SELECT 1 FROM search.trending_member WHERE route=0 AND account_id=$3)
+            WHERE partition_no=$1 AND account_id=$3`, [partitionOf(route), route, accountId]);
           await tx.query(
             'DELETE FROM search.recent_search_state WHERE partition_no=$1 AND route=$2 AND account_id=$3',
             [partitionOf(route), route, accountId],
@@ -221,6 +228,7 @@ export const searchWorkModule: WorkModule = {
       };
     });
     const config = readSearchConfig(context.env);
+    const bindErasureAccess = registerSearchErasure(context, config);
     if (!config) return;
     const routeKey = readMembershipRouteKey(context.env);
     const search = createOpenSearch(config.url);
@@ -267,6 +275,7 @@ export const searchWorkModule: WorkModule = {
         ...defaults,
         workClient: context.client,
         onAccessReady(access) {
+          bindErasureAccess(access);
           scoped = createScopePreparation({
             pool: context.pool,
             prefix: config.prefix,

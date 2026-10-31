@@ -178,6 +178,36 @@ private-data removal and retained public-contribution de-identification. A hold 
 disclosure. Search neither starts a second restore clock nor preserves hidden data as evidence.
 
 Search's account-erasure inventory follows the actual stores and producers:
+The version-1 `search` account-erasure wakeup is registered in the existing work module before the optional
+indexing-config return. It validates native envelopes, rereads the exact Access obligation, persists Search's
+account-home progress and enqueues the stable maintenance workflow. Missing configuration stays pending even
+when indexing is disabled. This is not final participant closure. The
+[implementation contract](../../../../docs/search-index-erasure-plan.md#brief-actual-account-erasure-participation-and-all-copy-closure)
+requires owner inventory with source-disposition and receiving receipts, plus the existing identity
+participant's durable writer guard. The delivered native Source page and terminal-proof ports are consumed
+from their canonical module paths. `SubjectSource.read/count`, Semantic local erasure and callback
+coverage hooks cannot supply those proofs. The worker performs native copy work independently; the final ACK
+requires the actual sealed all-home Source terminal proof in addition to page custody, retained-copy cleanup
+and native writer drain. The proof reader needs only the pool and optional clock; full Access/route configuration
+is used only by the page factory, bound through the existing kernel Access composition.
+
+`stepRetainedObservationErasure(pool, {partition,registration,observation,incarnation}, search, context)`
+is the native finite cleanup primitive for inventory-located observations. It validates the original retained
+UUID, closes observation admission, yields while a use lease remains, then removes one lease, PIT or execution
+per step. PIT removal requires its exact native successful receipt; missing configuration or ambiguous cleanup
+retains custody. Prepared generations enter `erasing` before their duplicate payload is scrubbed, preventing
+late recapture of that immutable generation. The observation's own payload is removed child-first, including retained repair effects and page intents
+before their execution parent. Reusable
+registration definitions and other observations survive; owner inventory must separately locate any applicable
+definition or sibling copy. `removed` describes this one observation, never sealed population or account erasure.
+Expired leases do not certify unknown first-apply requests: source receiving and the writer guard still own
+their reconciliation. This primitive supplies no retirement or alternate ordinary writer.
+
+Retained PIT cleanup validates the exact native `pits[].pit_id` and `successful:true` receipt before releasing
+custody. HTTP success alone, a generic 404, a missing receipt or another PIT's result leaves cleanup unresolved;
+OpenSearch reports shard cleanup failure inside an HTTP 200 response. This local receipt is not a participant ACK.
+
+Search stores distinct record classes:
 
 | Class                        | Actual custody and erasure disposition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1539,9 +1569,11 @@ The Source binding/key-page modules publish the selected owner declarations and 
 unavailable adapters. The delivered ordinary writer retains its real native admission, dispatch, uncertainty
 and settlement implementation. Publication extends the same admission gate: a durable global target fence
 blocks new enrollment, and one bounded retained frontier visits all home-local writer copies, cancelling
-only undispatched enrollment. Dispatched uncertainty remains retained. The delivered native barrier still
-reports first-apply and prepared-copy custody unavailable, so `drainPublication` remains draining and
-`adoptPublication` remains typed unready even after ordinary copies have been visited. No native or
+only undispatched enrollment. Dispatched uncertainty remains retained. Generation publication still requires its separate owner receiving protocol. For erasure, the same gate
+resolves the actual retained physical-home job, checks each home for writer and retained-copy custody, and
+consumes the native Source all-home terminal proof before returning drained or held. Native copy enrollment
+takes the same admission lock and refuses creation while this fence is held. Dispatched uncertainty remains
+draining; neither an elapsed deadline nor an ordinary writer scan supplies missing Source proof. No native or
 public-runtime acceptance pass is inferred from compilation.
 
 Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits and meter public-filter costs;
@@ -1604,3 +1636,22 @@ scan pages do not require rescanning all native homes. Every effect lookup, owne
 request and byte, including owner verification and both local snapshots, is charged against the consumer's
 existing allowance. `withPublicFilterRepairAllowance` carries already-spent caller work into all reader phases. An over-allowance closure remains
 unavailable rather than receiving a second verification budget.
+The all-copy erasure worker now consumes the agreed `semantic/account-erasure-source` page port. It passes the
+producer's opaque receipt unchanged to its native verifier in the receiving command, and advances a raw frontier
+only after exact physical effects settle. Page verification transfers native custody, so it runs in the
+same command as frontier advancement. Until then the native unconsumed page remains replayable. The final
+complete-page receipt ID remains the replay frontier while independent personal cleanup finishes. The native producer supplies sealed page custody and separate all-home terminal proof;
+page completion alone cannot authorize acknowledgement. Accounts' `HistoryBarrier` is only a locator.
+
+Native retained-copy admission advances `public_filter_target.copy_revision` atomically with registration,
+observation and prepared creation. Erasure traverses those actual homes and immutable registration ranges,
+closes observations, drains their real references and scrubs independent prepared payloads. A changed admission
+revision reopens the range, including empty/excluded captures and older incarnations retained under a reused name.
+The native Account Discovery purge remains separate; its local cleanup no longer acknowledges all of Search.
+Personal recent/trending cleanup records its own progress; only the all-copy worker can send the final ACK.
+
+Physical reconciliation uses current Source through the same ordinary Search writer, then its publication
+fence/drain/adopt extension before compaction. Fence strings are persisted locators and are revalidated by that
+native guard. Active, building and retiring physical UUIDs remain required. Unregistered native generations,
+incomplete population, missing deployment configuration, producer or native guard remain pending. The existing native Search writer supplies its extended guard through
+`SearchErasureRuntime.writerGuard`; no callback can certify completion.

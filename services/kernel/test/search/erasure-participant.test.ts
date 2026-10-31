@@ -593,3 +593,35 @@ test(
   () => erasure(() => personas.bob, false),
   360_000,
 );
+
+import { assertRetainedPitDeletion } from '../../src/search/erasure-pit.ts';
+import { SearchUnavailableError } from '../../src/search/opensearch.ts';
+
+// Receipt validation is one cleanup boundary, not an all-copy participant completion oracle.
+test('retained PIT custody can be released only by its exact native successful cleanup receipt', () => {
+  const receipt = { pits: [{ pit_id: 'owned-pit', successful: true }] };
+  expect(() => assertRetainedPitDeletion('owned-pit', receipt)).not.toThrow();
+});
+
+test('failed partial missing and foreign PIT receipts cannot release retained custody', () => {
+  const unconfirmed: unknown[] = [
+    undefined,
+    null,
+    {},
+    { pits: [] },
+    { pits: [{ pit_id: 'owned-pit', successful: false }] },
+    { pits: [{ pit_id: 'owned-pit' }] },
+    { pits: [{ pit_id: 'other-pit', successful: true }] },
+    { pits: [{ pit_id: 'owned-pit', successful: 'true' }] },
+    {
+      pits: [
+        { pit_id: 'owned-pit', successful: true },
+        { pit_id: 'other-pit', successful: false },
+      ],
+    },
+    { pits: [{ pit_id: 'owned-pit', successful: true }], error: {} },
+    { pits: [{ pit_id: 'owned-pit', successful: true, error: {} }] },
+  ];
+  for (const receipt of unconfirmed)
+    expect(() => assertRetainedPitDeletion('owned-pit', receipt)).toThrow(SearchUnavailableError);
+});
