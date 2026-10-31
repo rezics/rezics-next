@@ -316,7 +316,7 @@ export function PresentationViewEditor({
         <p className="text-sm text-muted-foreground">{m.curation_instructions()}</p>
         <p role="status" className="text-sm">
           {invalidPublication && pendingPublication
-            ? laterChanges
+            ? laterChanges && dirty
               ? m.curation_invalid_later()
               : m.curation_invalid_retained()
             : dirty
