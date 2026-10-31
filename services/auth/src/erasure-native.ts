@@ -4,6 +4,7 @@ import type { AuthErasureBarrier, AuthErasureSource } from '@rezics/auth-contrac
 import {
   NATIVE_PHASE_VERSION,
   nativePhases,
+  nativePhaseExtensions,
   nativeV1ClientPhases,
   nativeV1RequestRoles,
   requireNativePhaseVersion,
@@ -357,7 +358,7 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
     await connection.query<{ key: string | null; client_key: string | null }>(
       `SELECT CASE WHEN octet_length(${quote(store.key)})${store.client ? `+COALESCE(octet_length(${quote(store.client)}),0)` : ''}<=1024 THEN ${quote(store.key)} END AS key,
        ${store.client ? `CASE WHEN octet_length(${quote(store.client)})<=1024 THEN ${quote(store.client)} END` : 'NULL::text'} AS client_key FROM ${quote(store.table)}
-     WHERE ${quote(role)}=$1 AND ${quote(store.key)}>$2 ORDER BY ${quote(store.key)} LIMIT $3 FOR UPDATE`,
+     WHERE ${quote(role)}=$1 AND ${quote(store.key)}>$2 ORDER BY ${quote(store.key)} LIMIT $3 ${store.client ? '' : 'FOR UPDATE'}`,
       [
         owner,
         after,
@@ -385,6 +386,16 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
     if (key === null || Buffer.byteLength(key) > 1024) return { after, keys, blocked: 'locator-size' };
     if (client_key)
       await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-client:${client_key}`]);
+    if (store.client) {
+      // Issuance/consumer writes take the client lock before a row lock. Recheck
+      // this exact locator under that order, including its original client.
+      const locked = await connection.query(
+        `SELECT 1 FROM ${quote(store.table)} WHERE ${quote(store.key)}=$1 AND ${quote(role)}=$2
+         AND ${quote(store.client)} IS NOT DISTINCT FROM $3 FOR UPDATE`,
+        [key, owner, client_key],
+      );
+      if (!locked.rowCount) return { after, keys, blocked: 'native-row-changed' };
+    }
     for (const query of store.children ?? []) {
       if ((await connection.query(query, [key])).rowCount) return { after, keys, blocked: 'native-child' };
     }
@@ -617,7 +628,7 @@ export async function nativeErasurePage(
       const consents = (
         await connection.query<{ traversal_ordinal: string }>(
           'SELECT traversal_ordinal FROM auth_consent WHERE client_id=$1 ORDER BY traversal_ordinal LIMIT $2 FOR UPDATE',
-          [row.client_id, ERASURE_PAGE_SIZE - 10],
+          [row.client_id, Math.floor((ERASURE_PAGE_SIZE - 10) / 2)],
         )
       ).rows;
       if (consents.length) {
@@ -628,6 +639,11 @@ export async function nativeErasurePage(
           ]);
         await checkpoint(connection, row, {});
         return answer('more', 'client-consent');
+      }
+      const unavailable = nativePhaseExtensions.find((phase) => phase.kind === 'unavailable');
+      if (unavailable?.kind === 'unavailable') {
+        await checkpoint(connection, row, { code: unavailable.code });
+        return answer('pending', unavailable.code);
       }
       // Every native client child has been drained. The guard checks actual stores,
       // including rows predating typed protocol attribution, before the FK action.
@@ -781,6 +797,10 @@ export async function nativeErasurePage(
         [restoreGeneration, id],
       );
       return answer('pending', 'shared-copy-custody');
+    }
+    if (!covered || row.native_role_version !== 1) {
+      await checkpoint(connection, row, { code: 'native-role-coverage' });
+      return answer('pending', 'native-role-coverage');
     }
     // Native closure is independent of local-copy closure and its trusted proof.
     // The permanent obligation remains the shared-copy continuation anchor.

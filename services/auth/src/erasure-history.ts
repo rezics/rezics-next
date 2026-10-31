@@ -1,7 +1,7 @@
 import type { AuthErasureBarrier, AuthErasureSource, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { nativePhaseComplete } from './erasure-role-upgrade.ts';
+import { NATIVE_PHASE_END, nativePhaseComplete } from './erasure-role-upgrade.ts';
 import { nativeRoleCoverageComplete } from './erasure-coverage.ts';
 import { copyTransaction, completeCopy, eraseCopy } from './erasure-copy.ts';
 
@@ -67,7 +67,7 @@ export async function erasureHistoryPage(database: Pool, id: string, restoreGene
   if (restoreGeneration) {
     const replay = (
       await database.query(
-        `SELECT 1 FROM auth_restore_replay WHERE generation=$1 AND obligation_id=$2 AND phase=90
+        `SELECT 1 FROM auth_restore_replay WHERE generation=$1 AND obligation_id=$2 AND phase=${NATIVE_PHASE_END}
        AND native_completed_at IS NOT NULL AND consent_completed_at IS NOT NULL`,
         [restoreGeneration, id],
       )

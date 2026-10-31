@@ -1,3 +1,4 @@
+import { NATIVE_PHASE_END } from './erasure-role-upgrade.ts';
 import type {
   AuthErasureBarrier,
   AuthErasureObligation,
@@ -523,7 +524,7 @@ export async function replayRestoredAuthPage(
     return { pending: 'native-replay-pending' };
   }
   if (await reconcileNativeRoleCoveragePage(database)) return { pending: 'native-replay-pending' };
-  if (row.phase !== 90 || !row.native_completed_at || !row.consent_completed_at) {
+  if (row.phase !== NATIVE_PHASE_END || !row.native_completed_at || !row.consent_completed_at) {
     const page = await nativeErasurePage(database, id, runtime, restored.generation);
     return { pending: page.code === 'native-source' ? 'source-consumer-pending' : 'native-replay-pending' };
   }
