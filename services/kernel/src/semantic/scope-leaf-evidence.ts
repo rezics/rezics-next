@@ -158,7 +158,7 @@ async function prepareLeafAccess(pool: Pool, subject: string, options: LeafOptio
       id: subject,
       eligibility: subjectReadEligibility({ route, id: subject }),
     },
-    { pool, deadline: options.deadline, work: work.accounting },
+    { pool, deadline: options.deadline, time: options.nativeT, work: work.accounting },
   );
 }
 function liveAnchor(anchor: NativeAnchor | null): anchor is NativeAnchor {
