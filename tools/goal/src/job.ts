@@ -51,7 +51,7 @@ import type { RunningWorker } from './launch.ts';
 import { capacityWaiters, checkWaitMs, launch, workerCheckProtocol, workerPrompt } from './launch.ts';
 import { awaitHostCapacity, startsFirst } from './launch.ts';
 import { agentAdapter, agentCommands } from './agents.ts';
-import { removeFinishedWorktree } from './worktree-lifetime.ts';
+import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetime.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -164,6 +164,7 @@ export class WorkerJob implements GateOutcomeSink {
     readonly consultation: typeof consult = consult,
     readonly afterSettle: () => Promise<void> = async () => {},
     private readonly acquireOrphanLease: (path: string) => DirectoryLease = acquireDirectoryLease,
+    private readonly worktreeLifetimeRuntime?: LifetimeRuntime,
   ) {}
   private track(work: Promise<void>): void {
     const handled = work.catch((error) => {
@@ -951,7 +952,21 @@ export class WorkerJob implements GateOutcomeSink {
           // Optional evidence cannot assert native terminal status from missing reader/records.
         }
       }
-    if (adoptRunning) this.track(removeFinishedWorktree(this.tasks.settings, store).then(() => {}));
+    if (adoptRunning)
+      this.track(
+        removeFinishedWorktree(this.tasks.settings, store, this.worktreeLifetimeRuntime, (task, disposition) => {
+          const owner = disposition.owner ? `${disposition.owner.uid}:${disposition.owner.gid}` : 'unknown';
+          this.inbox.deliver({
+            managerId: task.brief.manager,
+            kind: 'environment',
+            taskId: task.id,
+            summary:
+              `environment: finished worktree cleanup for ${task.id} is blocked at ${disposition.path} (owner ${owner}); it will retry after the path's ownership or permissions change.`
+                .replace(/[\r\n]+/g, ' ')
+                .slice(0, 1000),
+          });
+        }).then(() => {}),
+      );
     // A held task released by a train that then ended, or handed off to newer code, has no driver: the host starts
     // it. Commands leave it to the host, so released tasks are not started from every command at once. The host
     // also releases tasks whose dependency reached their branch later, through a stabilize-to-dev merge.

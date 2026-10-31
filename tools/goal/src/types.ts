@@ -271,6 +271,16 @@ export type RetryIntent = AttemptRef & {
   status: 'pending' | 'started';
   nextAttempt?: number;
 };
+export type WorktreeCleanupDisposition = {
+  taskId: string;
+  /** Fingerprint of the exact offending path and its in-worktree ancestors. */
+  generation: string;
+  path: string;
+  owner: { uid: number; gid: number } | null;
+  worktreeIdentity: { dev: string; ino: string };
+  detail: string;
+  recordedAt: string;
+};
 export type PromotionGateResult = {
   commit: string;
   command: string[];
