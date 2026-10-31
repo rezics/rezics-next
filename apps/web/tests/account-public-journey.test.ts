@@ -223,7 +223,8 @@ test('Default public identity and management presentation keeps long phone ident
   expect(description[1]).toContain('col-span-full');
   expect(description[1]).toContain('sm:col-start-2');
   expect(html).toContain(bio);
-  for (const link of links) expect(html).toContain(`href="${link.url}" rel="nofollow noopener noreferrer ugc">${link.label}</a>`);
+  for (const link of links)
+    expect(html).toContain(`href="${link.url}" rel="nofollow noopener noreferrer ugc">${link.label}</a>`);
   expect(html).not.toContain('followers');
 
   const realms = renderToString(
@@ -257,8 +258,12 @@ test('Default public identity and management presentation keeps long phone ident
   for (const link of destinations) expect(link.classes).toContain('min-h-11');
 
   // Keep the original pattern on the established provider, with the same viewer as its reader.
-  const story = await Bun.file(new URL('../src/stories/patterns/managed-account-detail.stories.tsx', import.meta.url)).text();
-  expect(story).toMatch(/<PatternStory visitor="Signed In"[^>]*>\s*<ConnectedDetail \{\.\.\.props\} \/>\s*<\/PatternStory>/);
+  const story = await Bun.file(
+    new URL('../src/stories/patterns/managed-account-detail.stories.tsx', import.meta.url),
+  ).text();
+  expect(story).toMatch(
+    /<PatternStory visitor="Signed In"[^>]*>\s*<ConnectedDetail \{\.\.\.props\} \/>\s*<\/PatternStory>/,
+  );
   expect(story).toContain('client.setQueryData(sessionQuery.queryKey,');
   expect(story).toContain('subject: human.id');
   expect(story).toContain('new ManagedAccountReader(human.id, organization.id, read)');

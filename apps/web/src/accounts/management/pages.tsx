@@ -10,7 +10,8 @@ import { PageHeading } from '../../shell/page-heading';
 import { managedAccountHref } from '../../settings/managed-accounts-read';
 import { issuerPage, type Cursors, type Detail, type Identity, type Inventory, type Page } from './data';
 
-const linkClass = 'inline-flex min-h-11 max-w-full items-center wrap-anywhere text-primary underline underline-offset-4';
+const linkClass =
+  'inline-flex min-h-11 max-w-full items-center wrap-anywhere text-primary underline underline-offset-4';
 export function managementHref(account: Identity) {
   return `/${getLocale()}/${account.kind === 'organization' ? 'organizations' : 'accounts'}/${encodeURIComponent(account.id)}`;
 }
