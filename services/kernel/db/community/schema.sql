@@ -254,6 +254,9 @@ CREATE FUNCTION community.guard_realm_member_terminal() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP = 'DELETE' AND current_setting('community.member_erasure_account', true) = OLD.account_id::text THEN
+    RETURN OLD;
+  END IF;
   RAISE EXCEPTION 'Realm membership terminal slots are immutable' USING ERRCODE = '23514';
 END;
 $$;
@@ -590,6 +593,24 @@ $$;
 
 
 --
+-- Name: record_member_locator_pending(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.record_member_locator_pending() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_setting('community.member_erasure_account', true) IS DISTINCT FROM NEW.account_id::text THEN
+    INSERT INTO community.member_locator_pending (account_id, route, realm_id, transaction_id)
+    VALUES (NEW.account_id, NEW.route, NEW.realm_id, NEW.transaction_id)
+    ON CONFLICT DO NOTHING;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: seed_realm_member_count(integer, uuid); Type: FUNCTION; Schema: community; Owner: -
 --
 
@@ -790,6 +811,36 @@ CREATE TABLE community.erasure_fence (
     closed_at timestamp with time zone,
     CONSTRAINT erasure_fence_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT erasure_fence_closed_at_check CHECK (((closed_at IS NULL) OR isfinite(closed_at)))
+);
+
+
+--
+-- Name: member_locator; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.member_locator (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    realm_route integer NOT NULL,
+    realm_id uuid NOT NULL,
+    CONSTRAINT member_locator_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT member_locator_check1 CHECK ((realm_route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
+    CONSTRAINT member_locator_realm_route_check CHECK (((realm_route >= 0) AND (realm_route <= 65535))),
+    CONSTRAINT member_locator_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: member_locator_pending; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.member_locator_pending (
+    account_id uuid NOT NULL,
+    route integer NOT NULL,
+    realm_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT member_locator_pending_check CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
+    CONSTRAINT member_locator_pending_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -1399,6 +1450,22 @@ ALTER TABLE ONLY community.erasure_fence
 
 
 --
+-- Name: member_locator_pending member_locator_pending_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.member_locator_pending
+    ADD CONSTRAINT member_locator_pending_pkey PRIMARY KEY (account_id, route, realm_id, transaction_id);
+
+
+--
+-- Name: member_locator member_locator_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.member_locator
+    ADD CONSTRAINT member_locator_pkey PRIMARY KEY (route, account_id, realm_id);
+
+
+--
 -- Name: party_locator party_locator_pkey; Type: CONSTRAINT; Schema: community; Owner: -
 --
 
@@ -1739,6 +1806,20 @@ CREATE STATISTICS community.realm_member_key_mcv (mcv) ON route, realm_id, accou
 --
 
 CREATE TRIGGER follow_count_new_space AFTER INSERT ON community.space FOR EACH ROW EXECUTE FUNCTION library.initialize_follow_count_total();
+
+
+--
+-- Name: realm_member member_locator_pending; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER member_locator_pending AFTER INSERT OR UPDATE OF valid ON community.realm_member FOR EACH ROW EXECUTE FUNCTION community.record_member_locator_pending();
+
+
+--
+-- Name: realm_member_terminal member_locator_terminal_pending; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER member_locator_terminal_pending AFTER INSERT ON community.realm_member_terminal FOR EACH ROW EXECUTE FUNCTION community.record_member_locator_pending();
 
 
 --

@@ -1,8 +1,17 @@
 import type { Pool } from 'pg';
 import { createRealmOwnershipCommands, type RealmErasureSuccessionResult } from '../access/realm-ownership.ts';
-import { noEffect, runCommand, type CommandOutcome } from '../command/command.ts';
+import { authoritativeTimeValue, noEffect, runCommand, type CommandOutcome } from '../command/command.ts';
+import { withConnection } from '../database/pool.ts';
 import type { Access } from '../request/access.ts';
+import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { memberLocatorQuery } from './member-locator-query.ts';
+import obligation from './account-erasure-memberships-obligation.sql';
+import page from './member-locator-page.sql';
+import close from './account-erasure-memberships-close.sql';
+import purge from './account-erasure-memberships-purge.sql';
+import unlink from './account-erasure-memberships-unlink.sql';
+import status from './account-erasure-memberships-status.sql';
 
 /** One Realm segment for the membership producer's retained owner locator.
  * The locator selects work only: Accounts prepares the genuine committed root
@@ -32,15 +41,79 @@ export async function eraseAccountRealmOwnership(
   );
 }
 
-/** Provisional consumer contract; the membership producer owns the cursor and page implementation. */
+/** Internal platform phase, authorized by the permanent terminal erasure obligation.
+ * Every checkout ends before entering another partition. Source intents prevent
+ * completion before delayed interval events have published their locators.
+ * Pending counts up to 50 outstanding source events per call.
+ */
 export type MembershipErasureCursor = string;
 
+const beginning = '00000000-0000-0000-0000-000000000000';
+
 export async function eraseAccountMembershipsPage(
-  _deps: { pool: Pool },
-  _accountId: string,
-  _after: MembershipErasureCursor | null,
+  { pool }: { pool: Pool },
+  accountId: string,
+  after: MembershipErasureCursor | null,
 ): Promise<{ next: MembershipErasureCursor | null; found: number; pending: number }> {
-  const error = new Error('Community erasure phase unavailable: membership producer has not landed');
-  error.name = 'CommunityErasureProducerUnavailableError';
-  throw error;
+  const route = routeOf(accountId);
+  if (route === null || (after !== null && after !== beginning && routeOf(after) === null))
+    throw new TypeError('Invalid account membership erasure key');
+  const args = { route, account_id: accountId };
+  const keys = await withConnection(pool, async (client) => {
+    const anchor = await readPartition(client, partitionOf(route));
+    if (!anchor || anchor.writeState === 'moved') throw new Error('Account partition is unavailable');
+    if (!(await memberLocatorQuery(client, obligation, args)).rowCount)
+      throw new Error('Membership erasure requires a committed terminal account erasure');
+    return (await memberLocatorQuery<{ realm_route: number; realm_id: string }>(client, page, { ...args, after })).rows;
+  });
+  for (const key of keys) {
+    await runCommand(pool, { partition: partitionOf(key.realm_route) }, async (tx, command) => {
+      const realmArgs = {
+        route: key.realm_route,
+        realm_id: key.realm_id,
+        account_id: accountId,
+        at: authoritativeTimeValue(command.time),
+        transaction_id: command.transactionId,
+      };
+      await memberLocatorQuery(tx, close, realmArgs);
+      await memberLocatorQuery(tx, purge, realmArgs);
+      return {
+        value: null,
+        events: [
+          {
+            type: 'com.rezics.community.realm.memberships-erased.v1',
+            subject: key.realm_id,
+            data: { accountId, realmId: key.realm_id, at: realmArgs.at, transactionId: command.transactionId },
+          },
+        ],
+      };
+    });
+  }
+  if (keys.length) {
+    await runCommand(pool, { partition: partitionOf(route) }, async (tx) => {
+      await memberLocatorQuery(tx, unlink, { ...args, realm_ids: keys.map((key) => key.realm_id) });
+      return {
+        value: null,
+        events: [
+          {
+            type: 'com.rezics.community.member-locators.erased.v1',
+            subject: accountId,
+            data: { accountId, realmIds: keys.map((key) => key.realm_id) },
+          },
+        ],
+      };
+    });
+  }
+  const state = await withConnection(
+    pool,
+    async (client) =>
+      (await memberLocatorQuery<{ pending: number; first: string | null }>(client, status, args)).rows[0]!,
+  );
+  const last = keys.at(-1)?.realm_id ?? after ?? beginning;
+  // A delayed effect can insert behind the cursor. Wrap before signalling EOF.
+  return {
+    next: state.first === null ? null : state.first <= last ? beginning : last,
+    found: keys.length,
+    pending: state.pending,
+  };
 }

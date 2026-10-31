@@ -146,6 +146,22 @@ export const COMMUNITY_EVENTS = {
     { realmId: id, accountId: id, reservationId: id, transactionId: id, at: instant },
     { additionalProperties: false },
   ),
+  'com.rezics.community.member-locator.projected.v1': Type.Object(
+    { accountId: id, realmId: id },
+    { additionalProperties: false },
+  ),
+  'com.rezics.community.member-locator.settled.v1': Type.Object(
+    { accountId: id, realmId: id, transactionId: id },
+    { additionalProperties: false },
+  ),
+  'com.rezics.community.realm.memberships-erased.v1': Type.Object(
+    { accountId: id, realmId: id, at: instant, transactionId: id },
+    { additionalProperties: false },
+  ),
+  'com.rezics.community.member-locators.erased.v1': Type.Object(
+    { accountId: id, realmIds: Type.Array(id, { minItems: 1, maxItems: 50 }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.community.realm.board-scheme.v1': Type.Object(
     { realmId: id, revisionId: id, schemeId: id },
     { additionalProperties: false },

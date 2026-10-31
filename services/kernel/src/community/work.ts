@@ -11,6 +11,7 @@ import { enqueueMembership } from '../access/membership-work.ts';
 import { AuthenticationError, type Access } from '../request/access.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
+import { createMemberLocatorEffect } from './member-locator.ts';
 import { createFollowCommands } from '../library/follows.ts';
 import { REALM_JOIN_WORKFLOW, REALM_LEAVE_WORKFLOW, type RealmMembershipWorkInput } from './join.ts';
 
@@ -44,7 +45,8 @@ const followAccess: Access = {
 };
 
 /** Registers the Realm join and leave workflows. Accounts must already be registered. */
-export function registerCommunityWork({ pool, client, clock }: WorkContext): void {
+export function registerCommunityWork({ pool, client, clock, addEffects }: WorkContext): void {
+  addEffects([createMemberLocatorEffect(pool)]);
   const follows = createFollowCommands({ pool, access: followAccess, clock });
   const enqueueJoin = DBOS.registerStep(
     async (input: RealmMembershipWorkInput, childId: string) => {
