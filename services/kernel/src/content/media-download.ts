@@ -19,7 +19,7 @@ import type { DownloadDecision, DownloadVariant, MediaDependencies } from './med
 import read from './read-download-media.sql';
 import readWork from './read-download-media-work.sql';
 import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
-import type { AccessWorkAccounting } from '../access/work.ts';
+import { AccessWorkUnavailableError, type AccessWorkAccounting } from '../access/work.ts';
 import { coverPreparedAccessWork } from './cover-prepared-access-work.ts';
 import { COVER_MEDIA_WORK_DEPENDENCY, mediaEligibilityCallbacks } from './media-eligibility-access-work.ts';
 
@@ -262,10 +262,15 @@ async function authorizeDownload(
       const resource = { route: r, id: initial.container_id };
       const subjectResource = { ...resource, eligibility: subjectReadEligibility(resource) };
       const accessContext = {
-        pool: dependencies.pool, deadline: context.deadline,
+        pool: dependencies.pool,
+        deadline: context.deadline,
         ...(context.time === undefined ? {} : { time: context.time }),
         ...(context.work === undefined ? {} : { work: context.work }),
       };
+      if (context.work) {
+        if (!context.time) throw new AccessWorkUnavailableError(COVER_MEDIA_WORK_DEPENDENCY);
+        authoritativeTimeValue(context.time);
+      }
       const subject = await accessCheck(dependencies.access, actor, 'subject:read', subjectResource, accessContext);
       const publicSubject = original
         ? null
@@ -293,8 +298,14 @@ async function authorizeDownload(
             ...mediaEligibilityCallbacks({
               evidence: initial,
               dependency: COVER_MEDIA_WORK_DEPENDENCY,
-              media: { kind: 'download', route: r, id: mediaId, ...slot,
-                credit: initial.credit !== null, provenance: initial.provenance !== null },
+              media: {
+                kind: 'download',
+                route: r,
+                id: mediaId,
+                ...slot,
+                credit: initial.credit !== null,
+                provenance: initial.provenance !== null,
+              },
               cover: { ...resource, access: prepared },
               async verify({ client }, reads) {
                 const current = await reads.media((bounded) =>
@@ -304,16 +315,19 @@ async function authorizeDownload(
                   throw new GrantDeniedError();
                 // Existence is a hard prerequisite even when an independent grant
                 // could satisfy the subject formula without a public floor.
-                if (!(await reads.subject(async (bounded) => {
-                  const input = { route: r, subject_id: initial.container_id };
-                  if (!bounded) return subjectExists.run(client, input);
-                  // Dispatch only the existing exact native statement: the SQL
-                  // convenience wrapper may perform catalogue freshness reads.
-                  const result = await client.query<{ found: number }>(
-                    subjectExists.sql, subjectExists.params.map((name) => input[name]),
-                  );
-                  return result.rows[0] ?? null;
-                })))
+                if (
+                  !(await reads.subject(async (bounded) => {
+                    const input = { route: r, subject_id: initial.container_id };
+                    if (!bounded) return subjectExists.run(client, input);
+                    // Dispatch only the existing exact native statement: the SQL
+                    // convenience wrapper may perform catalogue freshness reads.
+                    const result = await client.query<{ found: number }>(
+                      subjectExists.sql,
+                      subjectExists.params.map((name) => input[name]),
+                    );
+                    return result.rows[0] ?? null;
+                  }))
+                )
                   throw new GrantDeniedError();
                 if (!(await reads.prepared(subject))) throw new GrantDeniedError();
                 // Anonymous viewing and public visibility use the same prepared
@@ -331,7 +345,12 @@ async function authorizeDownload(
       if (!currentFence || currentFence.takenDown || signature(currentFence) !== signature(fence)) return null;
       return await snapshot(r, async (client) => {
         const current = await point(client, mediaId, slot);
-        if (!current || !usable(current) || signature(current) !== signature(initial) || !(await media(client, context.time)))
+        if (
+          !current ||
+          !usable(current) ||
+          signature(current) !== signature(initial) ||
+          !(await media(client, context.time))
+        )
           return null;
         return authorizedDecision(current, mediaId, variant, publiclyVisible, context.deadline);
       });

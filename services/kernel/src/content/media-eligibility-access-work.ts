@@ -226,7 +226,10 @@ export function mediaEligibilityCallbacks<E>(
   // semantic/subject-exists.sql selects the constant found=1 by the complete
   // subject PK. Even a miss dispatches one native point, with no payload read.
   const subject = cover && {
-    keys: 1, points: 1, witnesses: 0, rows: 1,
+    keys: 1,
+    points: 1,
+    witnesses: 0,
+    rows: 1,
     bytes: bytes({ route: cover.route, subject_id: cover.id }) + bytes({ found: 1 }),
     emptySeeks: 1,
   };
@@ -235,7 +238,8 @@ export function mediaEligibilityCallbacks<E>(
       const input = { route: mediaPlan.route, id: node.id, kind: index === 0 ? ('container' as const) : node.kind };
       return { input, work: parentWork({ ...input, author: false }) };
     }) ?? [];
-  if (ancestors.length > 34 || (plan && mediaPlan) || (cover && (!mediaPlan || mediaPlan.kind !== 'download'))) throw new TypeError('Invalid media eligibility plan');
+  if (ancestors.length > 34 || (plan && mediaPlan) || (cover && (!mediaPlan || mediaPlan.kind !== 'download')))
+    throw new TypeError('Invalid media eligibility plan');
   let bound = parent ? sum(parent, author ?? EMPTY_ACCESS_WORK) : media;
   if (bound) for (const node of ancestors) bound = sum(bound, node.work);
   if (bound && subject) bound = sum(bound, subject);

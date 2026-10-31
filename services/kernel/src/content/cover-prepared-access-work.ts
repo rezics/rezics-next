@@ -77,7 +77,11 @@ export function coverPreparedAccessWork(
       Date.now() >= context.deadline
     )
       return false;
-    return authoritativeTimeValue(context.time) === context.at;
+    try {
+      return authoritativeTimeValue(context.time) === context.at;
+    } catch {
+      return false;
+    }
   }
   return {
     bound(context) {
@@ -87,7 +91,12 @@ export function coverPreparedAccessWork(
       let total = EMPTY_ACCESS_WORK;
       for (const check of checks) {
         const producer = check.work;
-        if (!producer || typeof producer.bound !== 'function' || typeof producer.actual !== 'function' || typeof producer.run !== 'function')
+        if (
+          !producer ||
+          typeof producer.bound !== 'function' ||
+          typeof producer.actual !== 'function' ||
+          typeof producer.run !== 'function'
+        )
           return undefined;
         // live() narrowed the optional native fields; no time is reconstructed.
         if (!context.time || !context.work) return undefined;
@@ -102,7 +111,7 @@ export function coverPreparedAccessWork(
     },
     async run(context, check) {
       const entry = invocations.get(context)?.get(check);
-      if (!entry || !live(context)) return unavailable();
+      if (!entry || entry.input.client !== context.client || !live(context)) return unavailable();
       if (entry.receipt) return entry.result!;
       if (entry.started) return unavailable();
       entry.started = true;
