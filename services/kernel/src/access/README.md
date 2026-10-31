@@ -2635,6 +2635,42 @@ operator and exact reservation still match, while `reconciling` means the hold r
 state asserts a workflow's completion or cancellation. Responses are allowlisted and `private, no-store`, with no
 credentials, approval references, private profile or suspension reason. These read endpoints add no write capability.
 
+The detail DTO adds optional `authActions`: `{state: "ready", operations: [...]}` or
+`{state: "unavailable"}`. Each positive entry contains only `operationId`, `action` and
+`resource: {route, id}`. Older DTOs may omit the field. The native producer emits its current observation;
+missing or unavailable metadata supplies no entry. Known denial or inapplicability omits the operation from
+`ready.operations`. Unavailable action dependencies do not block independently admitted read-only detail.
+
+The closed native identities reuse the original workflow approval descriptors:
+
+| Operation ID                   | Domain restriction                                                                          | Action and exact authority resource             |
+| ------------------------------ | ------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `auth.account.rename`          | Selected self, active unfenced human without an operator                                    | `account:update` on that human                  |
+| `auth.organization.membership` | Selected active unfenced organization and current native membership                         | `organization:membership` on that organization  |
+| `auth.operator.transfer`       | Active native operated actor with the genuine current slot, reservation and version         | `account:manage` on its current source operator |
+| `auth.organization.delete`     | Selected active unfenced organization, actual current human/principal and native membership | `account:delete` on that organization           |
+
+These restrictions only narrow candidates. Each positive runs the installed native action-general Access formula
+on the genuine caller, client, consented scopes, current principal assignment, floors, grants and denials at the
+read's authoritative time. Native account, operator, membership, relation and home observations are validated before
+and after released foreign preparation. Missing native opaque action evidence yields `unavailable`; a raw callback,
+role name, owner equality, profile `account.update` viewer action or cached observation cannot create an entry.
+Transfer reads reuse the original source slot interpretation and never check an unrelated operated target as its
+authority anchor. Destination admission and acceptance remain separate.
+
+This metadata observes workflow ENTRY only. It conveys no approval, result, pending workflow, private body, reference,
+key, credential or URL, and does not assert that an Auth route is deployed. Consumers independently require the
+explicit deployed Auth path. Auth retains exact-profile consent, fresh same-human step-up, second submission and
+all original payload, execution and replay validation.
+
+Cost: a fixed set of at most four native entry action checks on known exact targets (this surface currently selects
+one self, two organization or one transfer entry), plus bounded before/final account, assignment, operator slot,
+membership and home point reads. Each action retains the existing O((1 + K) log N) permission preparation/formula
+cost and membership cap. Foreign preparation holds no source connection, and final validation uses one bounded
+snapshot with no second checkout. No holder, account or private-list scan or per-row HTTP is added. Existing
+20-row candidate limits, signed viewer keyset cursors, raw work limits and request deadlines remain unchanged;
+there is no new numerical allowance or ledger.
+
 ## Viewer preferences
 
 Access stores one optional `account_preferences` row on the account's route and partition. Missing storage means

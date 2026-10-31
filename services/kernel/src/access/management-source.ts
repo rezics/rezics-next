@@ -64,6 +64,14 @@ function relation(row: SourceRow | null, subjectAccountId: string): OperatorTran
   };
 }
 
+/** The original slot/lifecycle interpretation, shared by native entry observations. */
+export async function readNativeOperatorTransferRelation(client: AccessClient, subjectAccountId: string) {
+  return relation(
+    await operatorRead.run(client, { route: routeOf(subjectAccountId)!, subject_id: subjectAccountId }),
+    subjectAccountId,
+  );
+}
+
 /** Preparation releases the subject source before any foreign authority read.
  * Final disclosure rechecks the exact native slot/version and ordinary Access
  * formula in one bounded snapshot. Caller tuples, scopes and profiles are never
@@ -107,7 +115,7 @@ export async function readOperatorTransferState(
       time = await mintReadTime(client, deps.clock ?? accessClock(deps.access));
       return {
         epoch,
-        state: relation(await operatorRead.run(client, { route, subject_id: subjectAccountId }), subjectAccountId),
+        state: await readNativeOperatorTransferRelation(client, subjectAccountId),
       };
     });
     if (!source.state) return null;

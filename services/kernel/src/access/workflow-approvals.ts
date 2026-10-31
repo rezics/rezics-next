@@ -147,6 +147,22 @@ type Descriptor = {
   target: string;
   targetKind: 'actor' | 'organization' | 'either' | 'global';
 };
+/** Shared native workflow identity only; payload validation remains in operationSnapshot. */
+export function managedAuthWorkflowDescriptor(
+  kind: 'rename' | 'membership' | 'transfer' | 'delete',
+  target: string,
+): Descriptor {
+  switch (kind) {
+    case 'rename':
+      return { action: 'account:update', target, targetKind: 'either' };
+    case 'membership':
+      return { action: 'organization:membership', target, targetKind: 'organization' };
+    case 'transfer':
+      return { action: 'account:manage', target, targetKind: 'either' };
+    case 'delete':
+      return { action: 'account:delete', target, targetKind: 'either' };
+  }
+}
 /** Server-owned closed descriptors. Missing adapters deny explicitly; a catalogue
  * entry alone can never manufacture native authority for one of these kinds. */
 const unavailableAdapters = {
@@ -246,7 +262,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
             (typeof operation.expectedHandle === 'string' && HANDLE_LOOKUP_PATTERN.test(operation.expectedHandle))),
       );
       fields = ['kind', 'accountId', 'handle', 'expectedHandle', 'authorization'];
-      descriptor = { action: 'account:update', target: operation.accountId, targetKind: 'either' };
+      descriptor = managedAuthWorkflowDescriptor('rename', operation.accountId);
       break;
     case 'delete':
       requireAllowed(id(operation.accountId));
@@ -262,7 +278,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
         requireAllowed(Object.keys(r).sort().join(',') === 'operatorAccountId,reservationId,subjectAccountId');
       }
       fields = ['kind', 'accountId', 'responsibility', 'authorization'];
-      descriptor = { action: 'account:delete', target: operation.accountId, targetKind: 'either' };
+      descriptor = managedAuthWorkflowDescriptor('delete', operation.accountId);
       break;
     case 'transfer':
       requireAllowed(
@@ -278,11 +294,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
           (operation.acceptance === undefined || text(operation.acceptance, 4096)),
       );
       fields = ['kind', 'previous', 'expectedVersion', 'operatorAccountId', 'acceptance', 'authorization'];
-      descriptor = {
-        action: 'account:manage',
-        target: operation.previous.operatorAccountId,
-        targetKind: 'either',
-      };
+      descriptor = managedAuthWorkflowDescriptor('transfer', operation.previous.operatorAccountId);
       break;
     case 'transfer-acceptance':
       requireAllowed(
@@ -308,7 +320,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
       );
       requireAllowed(operation.reservationId === undefined || text(operation.reservationId));
       fields = ['kind', 'organizationId', 'memberAccountId', 'role', 'reservationId', 'authorization'];
-      descriptor = { action: 'organization:membership', target: operation.organizationId, targetKind: 'organization' };
+      descriptor = managedAuthWorkflowDescriptor('membership', operation.organizationId);
       break;
     default:
       throw denied();

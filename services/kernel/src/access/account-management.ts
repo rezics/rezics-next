@@ -1,3 +1,4 @@
+import { readManagedAuthActions } from './account-management-auth-actions.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { Pool } from 'pg';
@@ -66,7 +67,11 @@ const managedAuthActions = t.Union([
       state: t.Literal('ready'),
       operations: t.Array(
         t.Object(
-          { operationId: managedAuthOperationId, action: t.String(), resource: t.Object({ route: t.Number(), id }, closed) },
+          {
+            operationId: managedAuthOperationId,
+            action: t.String(),
+            resource: t.Object({ route: t.Number(), id }, closed),
+          },
           closed,
         ),
       ),
@@ -96,7 +101,12 @@ export const accountManagementSchema = t.Object(
   closed,
 );
 export type ManagedAccountsPage = Static<typeof managedAccountsSchema>;
-export type AccountManagementPage = Static<typeof accountManagementSchema>;
+type ManagedAuthActions = Static<typeof managedAuthActions>;
+export type AccountManagementPage = Omit<Static<typeof accountManagementSchema>, 'authActions'> & {
+  authActions?:
+    | { state: 'ready'; operations: readonly Extract<ManagedAuthActions, { state: 'ready' }>['operations'][number][] }
+    | { state: 'unavailable' };
+};
 type Identity = Static<typeof identity>;
 type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: () => Date };
 export type ManagementQuery = { organizationsCursor?: string; membersCursor?: string; operatorsCursor?: string };
@@ -336,6 +346,22 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
         members,
         responsibilities:
           canManage && !target.operatorAccountId ? await responsibilities(accountId, query.operatorsCursor) : null,
+        authActions: await readManagedAuthActions(
+          { pool: deps.pool, access: deps.access() },
+          actor,
+          {
+            account: target,
+            relation:
+              relation?.operatorAccountId && relation.reservationId
+                ? {
+                    operatorAccountId: relation.operatorAccountId,
+                    reservationId: relation.reservationId,
+                    version: relation.version,
+                  }
+                : null,
+          },
+          { deadline, time },
+        ),
       };
     },
   };

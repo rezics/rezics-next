@@ -7,6 +7,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { LIFECYCLE_ACTIONS, createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import {
   createWorkflowApprovals,
+  managedAuthWorkflowDescriptor,
   workflowApprovalBinding,
   sweepWorkflowApprovals,
 } from '../../src/access/workflow-approvals.ts';
@@ -502,4 +503,29 @@ test('native approval proof, reference purpose, integrity key and all original r
     [locator.route >>> 4, f.actor, `${locator.route}:${locator.id}`],
   );
   await denied(build().resolve(a.reference, f.operation, context()));
+});
+
+test('managed entry descriptors retain the original exact workflow authority anchors', () => {
+  const selected = newId(0x1234);
+  const sourceOperator = newId(0x5678);
+  expect(managedAuthWorkflowDescriptor('rename', selected)).toEqual({
+    action: 'account:update',
+    target: selected,
+    targetKind: 'either',
+  });
+  expect(managedAuthWorkflowDescriptor('membership', selected)).toEqual({
+    action: 'organization:membership',
+    target: selected,
+    targetKind: 'organization',
+  });
+  expect(managedAuthWorkflowDescriptor('delete', selected)).toEqual({
+    action: 'account:delete',
+    target: selected,
+    targetKind: 'either',
+  });
+  expect(managedAuthWorkflowDescriptor('transfer', sourceOperator)).toEqual({
+    action: 'account:manage',
+    target: sourceOperator,
+    targetKind: 'either',
+  });
 });
