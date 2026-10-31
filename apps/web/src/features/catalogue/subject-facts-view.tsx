@@ -344,44 +344,44 @@ export function SubjectFacts({
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6" aria-busy={busy}>
       {!embedded && (
-      <header className="space-y-3">
-        {profile ? (
-          <h1 className="font-sans text-2xl font-semibold">{profile.title}</h1>
-        ) : (
-          <h1 className="text-2xl font-semibold">{m.facts_title({}, o)}</h1>
-        )}
-        {subject && (
-          <p>
-            <span lang={pageText(subject.labels, locale).lang}>
-              <a href={href} className="underline underline-offset-4">
-                {label}
-              </a>
-            </span>
-            <span lang={pageText(current?.release.types[subject.type]?.labels, locale).lang}>
-              <span className="ms-2 text-muted-foreground">
-                {pageText(current?.release.types[subject.type]?.labels, locale).text}
+        <header className="space-y-3">
+          {profile ? (
+            <h1 className="font-sans text-2xl font-semibold">{profile.title}</h1>
+          ) : (
+            <h1 className="text-2xl font-semibold">{m.facts_title({}, o)}</h1>
+          )}
+          {subject && (
+            <p>
+              <span lang={pageText(subject.labels, locale).lang}>
+                <a href={href} className="underline underline-offset-4">
+                  {label}
+                </a>
               </span>
-            </span>
-          </p>
-        )}
-        {profile ? (
-          <p className="text-sm text-muted-foreground">{profile.intro}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground">{m.facts_intro({}, o)}</p>
-        )}
-        <p className="text-sm text-muted-foreground">{m.correction_global({}, o)}</p>
-        {profileIntro}
-        {profile && subject && (
-          <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: editorHref! }} />
-        )}
-        {!profile && (
-          <>
-            {subject && (
-              <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: `${href}/edit` }} />
-            )}
-          </>
-        )}
-      </header>
+              <span lang={pageText(current?.release.types[subject.type]?.labels, locale).lang}>
+                <span className="ms-2 text-muted-foreground">
+                  {pageText(current?.release.types[subject.type]?.labels, locale).text}
+                </span>
+              </span>
+            </p>
+          )}
+          {profile ? (
+            <p className="text-sm text-muted-foreground">{profile.intro}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">{m.facts_intro({}, o)}</p>
+          )}
+          <p className="text-sm text-muted-foreground">{m.correction_global({}, o)}</p>
+          {profileIntro}
+          {profile && subject && (
+            <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: editorHref! }} />
+          )}
+          {!profile && (
+            <>
+              {subject && (
+                <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: `${href}/edit` }} />
+              )}
+            </>
+          )}
+        </header>
       )}
       {!read.ok && <EditorFailure reason={read.reason} locale={locale} />}
       {current && (

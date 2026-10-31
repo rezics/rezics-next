@@ -284,11 +284,7 @@ export function RelationEditor({
         {composition ? (
           <h2 className="font-sans text-2xl font-semibold">{m.relation_title({}, options)}</h2>
         ) : (
-          <>
-            {!embedded && (
-            <h1 className="text-2xl font-semibold">{m.relation_title({}, options)}</h1>
-            )}
-          </>
+          <>{!embedded && <h1 className="text-2xl font-semibold">{m.relation_title({}, options)}</h1>}</>
         )}
         <p className="text-sm text-muted-foreground">{m.relation_intro({}, options)}</p>
       </header>
