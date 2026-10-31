@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Toaster } from '@rezics/ui/shadcn/toast';
 import { expect, userEvent, within } from 'storybook/test';
 import { PersonalLibraryPage } from '../library/entries-page';
 import { continueProgress } from '../library/continue-read';
@@ -10,6 +11,13 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
 const meta = {
+  decorators: [
+    (Story) => (
+      <Toaster>
+        <Story />
+      </Toaster>
+    ),
+  ],
   title: 'Patterns/Library/Personal Library',
   parameters: { layout: 'fullscreen', admitted: ['personal_library', 'reading_progress', 'collections'] },
 } satisfies Meta;

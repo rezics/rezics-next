@@ -2,9 +2,9 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Toaster, ToastProvider, createToastManager, useToastManager } from '../src/shadcn/toast';
+import { Toaster, createToastManager, useToastManager } from '../src/shadcn/toast';
 
-test('nested regions reuse the actual default or explicitly matching provider; distinct managers stay isolated', () => {
+test('one root supplies the default or explicit manager to descendant regions; distinct managers stay isolated', () => {
   const first = createToastManager();
   const second = createToastManager();
   for (const manager of [undefined, first]) {
@@ -16,23 +16,22 @@ test('nested regions reuse the actual default or explicitly matching provider; d
     renderToStaticMarkup(
       <Toaster toastManager={manager}>
         <Observe />
-        <Toaster toastManager={manager}>
+        <section>
           <Observe />
-        </Toaster>
+          <div>
+            <Observe />
+          </div>
+        </section>
         <Toaster toastManager={second}>
           <Observe />
         </Toaster>
-        <ToastProvider toastManager={second}>
-          <Toaster toastManager={manager}>
-            <Observe />
-          </Toaster>
-        </ToastProvider>
       </Toaster>,
     );
     expect(observed).toHaveLength(4);
     expect(observed[1]!.add).toBe(observed[0]!.add);
     expect(observed[1]!.toasts).toBe(observed[0]!.toasts);
-    expect(observed[2]!.add).not.toBe(observed[0]!.add);
+    expect(observed[2]!.add).toBe(observed[0]!.add);
+    expect(observed[2]!.toasts).toBe(observed[0]!.toasts);
     expect(observed[3]!.add).not.toBe(observed[0]!.add);
   }
 });

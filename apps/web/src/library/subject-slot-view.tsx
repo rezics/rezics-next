@@ -1,6 +1,5 @@
 import { SubjectLabelMore } from './subject-labels.tsx';
 import { labelReadMessage, SubjectLabelReadNotice } from './subject-labels.tsx';
-import { Toaster } from '@rezics/ui/shadcn/toast';
 import { EntryUndoForm, EntryRemoveForm, EntryRestoreFeedback } from './entry-undo';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { undoToast } from '@rezics/ui/undo-toast';
@@ -538,400 +537,397 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   }
 
   return (
-    <Toaster>
-      <section aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
-        {data.undo ? (
-          <EntryUndoForm undo={data.undo} locale={locale} csrfToken={data.csrfToken} returnTo={action} />
-        ) : null}
-        {data.restore ? <EntryRestoreFeedback restore={data.restore} locale={locale} /> : null}
-        {entry && data.session === 'signed-in' ? (
-          <noscript>
-            <EntryRemoveForm
-              subjectId={subject.id}
-              revision={entry.revision}
-              {...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId })}
-              idempotencyKey={removeKey}
-              locale={locale}
-              csrfToken={data.csrfToken}
-              returnTo={action}
-            />
-          </noscript>
-        ) : null}
-        {data.session === 'signed-in' && data.entryAvailable && stateOptions.length > 0 && entryPutAdmitted ? (
-          <Exposure operation="library_entry.put">
-            <form
-              data-library-entry
-              method="get"
-              action={action}
-              onSubmit={(event) => event.preventDefault()}
-              className="flex flex-wrap items-center gap-2"
-            >
-              <input type="hidden" name="subjectId" value={subject.id} />
-              {entry ? <input type="hidden" name="revision" value={entry.revision} /> : null}
-              {typeof entry?.incarnationId === 'string' ? (
-                <input type="hidden" name="incarnationId" value={entry.incarnationId} />
-              ) : null}
-              <LibraryStateSelect
-                busy={pending}
-                disabled={!hydrated || pending}
-                hasEntry={entry !== null}
-                onChoose={choose}
-                selectedState={selectedState}
-                selectedStateLabel={data.entryStateLabel ?? m.library_other()}
-                stateOptions={stateOptions}
-              />
-            </form>
-          </Exposure>
-        ) : null}
-
-        {data.session === 'signed-in' && data.entryAvailable && entry && (!stateOptions.length || !entryPutAdmitted) ? (
-          <div data-library-entry className="flex items-center gap-2">
-            <span data-library-entry-state>{data.entryStateLabel ?? m.library_other()}</span>
-            {entryDeleteAdmitted ? (
-              <Exposure operation="library_entry.delete">
-                <button
-                  type="button"
-                  className={buttonClass}
-                  disabled={!hydrated || pending}
-                  onClick={() => choose('remove')}
-                >
-                  {m.library_subject_remove()}
-                </button>
-              </Exposure>
+    <section aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
+      {data.undo ? (
+        <EntryUndoForm undo={data.undo} locale={locale} csrfToken={data.csrfToken} returnTo={action} />
+      ) : null}
+      {data.restore ? <EntryRestoreFeedback restore={data.restore} locale={locale} /> : null}
+      {entry && data.session === 'signed-in' ? (
+        <noscript>
+          <EntryRemoveForm
+            subjectId={subject.id}
+            revision={entry.revision}
+            {...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId })}
+            idempotencyKey={removeKey}
+            locale={locale}
+            csrfToken={data.csrfToken}
+            returnTo={action}
+          />
+        </noscript>
+      ) : null}
+      {data.session === 'signed-in' && data.entryAvailable && stateOptions.length > 0 && entryPutAdmitted ? (
+        <Exposure operation="library_entry.put">
+          <form
+            data-library-entry
+            method="get"
+            action={action}
+            onSubmit={(event) => event.preventDefault()}
+            className="flex flex-wrap items-center gap-2"
+          >
+            <input type="hidden" name="subjectId" value={subject.id} />
+            {entry ? <input type="hidden" name="revision" value={entry.revision} /> : null}
+            {typeof entry?.incarnationId === 'string' ? (
+              <input type="hidden" name="incarnationId" value={entry.incarnationId} />
             ) : null}
-          </div>
-        ) : null}
-
-        {data.session === 'signed-in' ? (
-          <Exposure operation="collection_member.create">
-            <Menu
-              title={m.library_subject_add_collection()}
-              closeOnNavigation
-              trigger={
-                <button data-add-to-collection type="button" className={buttonClass}>
-                  {m.library_subject_add_collection()}
-                </button>
-              }
-              entries={[]}
-              content={
-                <div className="max-h-[70vh] w-full min-w-0 overflow-y-auto p-4 sm:w-72">
-                  <p className="mb-3 text-sm text-muted-foreground">
-                    {m.library_subject_add_subject()} <SubjectRef subject={subject} />
-                  </p>
-                  {collectionsLoaded && collections ? (
-                    collections.length ? (
-                      <ul className="space-y-2">
-                        {collections.map((collection) => (
-                          <li key={collection.id}>
-                            <button
-                              className={`${linkClass} inline-flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-2 text-start hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60`}
-                              type="button"
-                              disabled={!hydrated}
-                              onClick={() => void addToCollection(collection.id)}
-                            >
-                              <span className="truncate">{collection.title}</span>
-                              <span className="shrink-0 text-muted-foreground">{collection.memberCount}</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">{m.library_subject_no_collections()}</p>
-                    )
-                  ) : (
-                    <form method="get" action={action} onSubmit={(event) => void loadCollections(event)}>
-                      <input type="hidden" name="slot" value="collections" />
-                      <button className={buttonClass} type="submit">
-                        {m.library_subject_load_collections()}
-                      </button>
-                    </form>
-                  )}
-                  {collectionsProblem ? (
-                    <p role="alert" className="mt-3 text-sm text-muted-foreground">
-                      {collectionsProblem === 'closed' ? m.library_subject_closed() : m.library_subject_unavailable()}
-                    </p>
-                  ) : null}
-                </div>
-              }
+            <LibraryStateSelect
+              busy={pending}
+              disabled={!hydrated || pending}
+              hasEntry={entry !== null}
+              onChoose={choose}
+              selectedState={selectedState}
+              selectedStateLabel={data.entryStateLabel ?? m.library_other()}
+              stateOptions={stateOptions}
             />
-          </Exposure>
-        ) : data.session === 'signed-out' ? (
-          <Exposure operation="library_entry.put">
-            <a
-              data-library-sign-in
-              className={primaryClass}
-              href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
-            >
-              {m.account_sign_in()}
+          </form>
+        </Exposure>
+      ) : null}
+
+      {data.session === 'signed-in' && data.entryAvailable && entry && (!stateOptions.length || !entryPutAdmitted) ? (
+        <div data-library-entry className="flex items-center gap-2">
+          <span data-library-entry-state>{data.entryStateLabel ?? m.library_other()}</span>
+          {entryDeleteAdmitted ? (
+            <Exposure operation="library_entry.delete">
+              <button
+                type="button"
+                className={buttonClass}
+                disabled={!hydrated || pending}
+                onClick={() => choose('remove')}
+              >
+                {m.library_subject_remove()}
+              </button>
+            </Exposure>
+          ) : null}
+        </div>
+      ) : null}
+
+      {data.session === 'signed-in' ? (
+        <Exposure operation="collection_member.create">
+          <Menu
+            title={m.library_subject_add_collection()}
+            closeOnNavigation
+            trigger={
+              <button data-add-to-collection type="button" className={buttonClass}>
+                {m.library_subject_add_collection()}
+              </button>
+            }
+            entries={[]}
+            content={
+              <div className="max-h-[70vh] w-full min-w-0 overflow-y-auto p-4 sm:w-72">
+                <p className="mb-3 text-sm text-muted-foreground">
+                  {m.library_subject_add_subject()} <SubjectRef subject={subject} />
+                </p>
+                {collectionsLoaded && collections ? (
+                  collections.length ? (
+                    <ul className="space-y-2">
+                      {collections.map((collection) => (
+                        <li key={collection.id}>
+                          <button
+                            className={`${linkClass} inline-flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-2 text-start hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60`}
+                            type="button"
+                            disabled={!hydrated}
+                            onClick={() => void addToCollection(collection.id)}
+                          >
+                            <span className="truncate">{collection.title}</span>
+                            <span className="shrink-0 text-muted-foreground">{collection.memberCount}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{m.library_subject_no_collections()}</p>
+                  )
+                ) : (
+                  <form method="get" action={action} onSubmit={(event) => void loadCollections(event)}>
+                    <input type="hidden" name="slot" value="collections" />
+                    <button className={buttonClass} type="submit">
+                      {m.library_subject_load_collections()}
+                    </button>
+                  </form>
+                )}
+                {collectionsProblem ? (
+                  <p role="alert" className="mt-3 text-sm text-muted-foreground">
+                    {collectionsProblem === 'closed' ? m.library_subject_closed() : m.library_subject_unavailable()}
+                  </p>
+                ) : null}
+              </div>
+            }
+          />
+        </Exposure>
+      ) : data.session === 'signed-out' ? (
+        <Exposure operation="library_entry.put">
+          <a
+            data-library-sign-in
+            className={primaryClass}
+            href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
+          >
+            {m.account_sign_in()}
+          </a>
+        </Exposure>
+      ) : null}
+
+      {data.session === 'signed-in' ? (
+        <nav
+          data-library-subject-links
+          aria-label={m.library_subject_more_options()}
+          className="mt-4 flex flex-col gap-2 border-t border-border pt-3 empty:hidden"
+        >
+          <Exposure operation="progress_session.create">
+            <a className={linkClass} href={`/library/progress?subjectId=${encodeURIComponent(subject.id)}`}>
+              {m.library_subject_start_progress()}
             </a>
           </Exposure>
-        ) : null}
-
-        {data.session === 'signed-in' ? (
-          <nav
-            data-library-subject-links
-            aria-label={m.library_subject_more_options()}
-            className="mt-4 flex flex-col gap-2 border-t border-border pt-3 empty:hidden"
-          >
-            <Exposure operation="progress_session.create">
-              <a className={linkClass} href={`/library/progress?subjectId=${encodeURIComponent(subject.id)}`}>
-                {m.library_subject_start_progress()}
-              </a>
-            </Exposure>
-            <Exposure operation="copy.list">
-              <a className={linkClass} href={`/library/copies?subjectId=${encodeURIComponent(subject.id)}`}>
-                {m.library_subject_your_copies()}
-              </a>
-            </Exposure>
-          </nav>
-        ) : null}
-        {data.publicCollections ? (
-          <Exposure operation="subject_collection.list">
-            <details data-public-collections className="relative">
-              <summary className={`${buttonClass} cursor-pointer list-none`}>
-                {m.library_subject_public_collections({ count: data.publicCollections.length })}
-              </summary>
-              <div className="absolute end-0 z-20 mt-2 w-80 max-w-[90vw] rounded-xl border border-border bg-background p-4 shadow-xl">
-                {data.publicCollections.length ? (
-                  <ul className="space-y-3">
-                    {data.publicCollections.map((collection) => (
-                      <li key={collection.id} className="flex flex-col gap-1">
-                        <a
-                          className={linkClass}
-                          href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(collection.id)}`}
-                        >
-                          {collection.title}
-                        </a>
-                        <span className="text-sm text-muted-foreground">
-                          <AccountRef account={collection.curator} />
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {m.library_subject_multiplicity({ count: collection.multiplicity })}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">{m.library_subject_no_public_collections()}</p>
-                )}
-              </div>
-            </details>
+          <Exposure operation="copy.list">
+            <a className={linkClass} href={`/library/copies?subjectId=${encodeURIComponent(subject.id)}`}>
+              {m.library_subject_your_copies()}
+            </a>
           </Exposure>
-        ) : null}
-        {data.session === 'signed-in' && data.labels === null ? (
-          <Exposure operation="library_label.assignment_list">
-            <p role="alert" className="basis-full text-sm text-muted-foreground">
-              {m.library_subject_label_unavailable()}
-            </p>
-          </Exposure>
-        ) : null}
-        {data.session === 'signed-in' && data.labels !== null ? (
-          <Exposure operation="library_label.assignment_list">
-            <div data-subject-labels className="basis-full space-y-2">
-              {labels.length ? (
-                <ul className="flex flex-wrap items-center gap-2">
-                  {labels.map((label) => (
-                    <li
-                      key={label.id}
-                      data-subject-label-chip
-                      className="inline-flex min-w-0 items-center gap-1 rounded-full border bg-muted/60 px-3 py-1 text-sm"
-                    >
+        </nav>
+      ) : null}
+      {data.publicCollections ? (
+        <Exposure operation="subject_collection.list">
+          <details data-public-collections className="relative">
+            <summary className={`${buttonClass} cursor-pointer list-none`}>
+              {m.library_subject_public_collections({ count: data.publicCollections.length })}
+            </summary>
+            <div className="absolute end-0 z-20 mt-2 w-80 max-w-[90vw] rounded-xl border border-border bg-background p-4 shadow-xl">
+              {data.publicCollections.length ? (
+                <ul className="space-y-3">
+                  {data.publicCollections.map((collection) => (
+                    <li key={collection.id} className="flex flex-col gap-1">
                       <a
-                        href={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(label.labelId)}`}
-                        className="max-w-48 truncate text-primary underline-offset-4 hover:underline"
+                        className={linkClass}
+                        href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(collection.id)}`}
                       >
-                        {label.name}
+                        {collection.title}
                       </a>
-                      <Exposure operation="library_label.unassign">
-                        <form
-                          data-subject-label-remove
-                          method="post"
-                          action={action}
-                          onSubmit={(event) => onRemoveForm(event, label)}
-                          className="m-0"
-                        >
-                          <input type="hidden" name="intent" value="unassign" />
-                          <input type="hidden" name="subjectId" value={subject.id} />
-                          <input type="hidden" name="labelId" value={label.labelId} />
-                          <input type="hidden" name="assignmentId" value={label.id} />
-                          <input type="hidden" name="idempotencyKey" value={data.labelRemoveKeys?.[label.id]} />
-                          <input type="hidden" name="revision" value={label.revision} />
-                          <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
-                          <button
-                            type="submit"
-                            disabled={hydrated && labelPending}
-                            aria-label={m.library_subject_label_remove({ name: label.name })}
-                            className="rounded-full px-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
-                          >
-                            ×
-                          </button>
-                        </form>
-                      </Exposure>
+                      <span className="text-sm text-muted-foreground">
+                        <AccountRef account={collection.curator} />
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {m.library_subject_multiplicity({ count: collection.multiplicity })}
+                      </span>
                     </li>
                   ))}
                 </ul>
-              ) : null}
-              <Exposure operation="library_label.list">
-                <details
-                  data-subject-label-picker-details
-                  open={labelPickerOpen}
-                  onToggle={(event) => setLabelPickerOpen(event.currentTarget.open)}
-                  className="min-w-0 max-w-md"
-                >
-                  <summary
-                    ref={labelPickerTrigger}
-                    role="button"
-                    aria-expanded={hydrated ? labelPickerOpen : undefined}
-                    className={`${buttonClass} cursor-pointer list-none`}
-                  >
-                    {m.library_subject_label_add()}
-                  </summary>
-                  {/* Keep the no-script form; hydrated closed pickers have no inactive required controls. */}
-                  {!hydrated || labelPickerOpen ? (
-                    <form
-                      data-subject-label-picker
-                      method="post"
-                      action={action}
-                      onSubmit={(event) => void submitLabelName(event)}
-                      className="mt-2 space-y-2 rounded-lg border bg-background p-3"
-                    >
-                      <input type="hidden" name="intent" value="assign-by-name" />
-                      <input type="hidden" name="idempotencyKey" value={data.labelAssignKey} />
-                      <input type="hidden" name="createKey" value={data.labelCreateKey} />
-                      <input type="hidden" name="subjectId" value={subject.id} />
-                      <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
-                      <label className="grid gap-1 text-sm font-medium">
-                        {m.library_subject_label_input()}
-                        <input
-                          name="name"
-                          aria-label={m.library_subject_label_name()}
-                          autoComplete="off"
-                          maxLength={200}
-                          required
-                          value={labelQuery}
-                          onChange={(event) => {
-                            latestLabelQuery.current = event.currentTarget.value;
-                            setLabelQuery(event.currentTarget.value);
-                          }}
-                          className="h-11 w-full min-w-0 rounded-md border bg-background px-3 text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                        />
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        <Exposure operation="library_label.create">
-                          <button type="submit" disabled={hydrated && labelPending} className={buttonClass}>
-                            {m.library_subject_label_add()}
-                          </button>
-                        </Exposure>
-                        <button
-                          type="button"
-                          className={buttonClass}
-                          onClick={() => {
-                            setLabelPickerOpen(false);
-                            setLabelQuery('');
-                            latestLabelQuery.current = '';
-                            labelPickerTrigger.current?.focus();
-                          }}
-                        >
-                          {m.library_collection_cancel()}
-                        </button>
-                      </div>
-                      <SubjectLabelMore
-                        query={labelQuery}
-                        next={labelNext}
-                        onPage={(page) => {
-                          setLabelNext(page.next ?? null);
-                          setLabelChoices(page.labels);
-                          setLabelSearchState(page.state);
-                        }}
-                      />
-                      <SubjectLabelReadNotice {...(labelReadReason !== undefined ? { reason: labelReadReason } : {})} />
-                      {labelSearchState === 'loaded' ? (
-                        <ul aria-label={m.library_subject_label_input()} className="space-y-1">
-                          {labelChoices.map((choice) => (
-                            <li key={choice.id}>
-                              <Exposure operation="library_label.assign">
-                                <button
-                                  type="button"
-                                  disabled={hydrated && labelPending}
-                                  onClick={() => void writeLabel({ intent: 'assign', label: choice })}
-                                  className="w-full rounded px-2 py-1 text-start text-sm hover:bg-muted disabled:opacity-50"
-                                >
-                                  {choice.name}
-                                </button>
-                              </Exposure>
-                            </li>
-                          ))}
-                          {normalizeLibraryLabelName(labelQuery) &&
-                          !labelChoices.some(
-                            (choice) =>
-                              normalizeLibraryLabelName(choice.name) === normalizeLibraryLabelName(labelQuery),
-                          ) ? (
-                            <li>
-                              <Exposure operation="library_label.create">
-                                <button
-                                  type="button"
-                                  disabled={hydrated && labelPending}
-                                  onClick={() => void writeLabel({ intent: 'create-and-assign', name: labelQuery })}
-                                  className="w-full rounded px-2 py-1 text-start text-sm font-medium text-primary hover:bg-muted disabled:opacity-50"
-                                >
-                                  {m.library_subject_label_create({ name: normalizeLibraryLabelName(labelQuery) })}
-                                </button>
-                              </Exposure>
-                            </li>
-                          ) : null}
-                          {labelChoices.length === 0 ? (
-                            <li className="px-2 py-1 text-sm text-muted-foreground">
-                              {m.library_subject_label_no_results()}
-                            </li>
-                          ) : null}
-                        </ul>
-                      ) : labelSearchState === 'closed' ? (
-                        <p role="status" className="text-sm text-muted-foreground">
-                          {m.library_subject_label_closed()}
-                        </p>
-                      ) : labelSearchState === 'unavailable' ? (
-                        <p role="alert" className="text-sm text-muted-foreground">
-                          {m.library_subject_label_unavailable()}
-                        </p>
-                      ) : null}
-                    </form>
-                  ) : null}
-                </details>
-              </Exposure>
-              <SubjectLabelNotice {...(labelNotice !== undefined ? { result: labelNotice } : {})} />
-              {labelUndo ? (
-                <form data-label-undo method="post" action={action} className="flex items-center gap-2 text-sm">
-                  <input type="hidden" name="intent" value="restore" />
-                  <input type="hidden" name="subjectId" value={subject.id} />
-                  <input type="hidden" name="labelId" value={labelUndo.labelId} />
-                  <input type="hidden" name="assignmentId" value={labelUndo.assignmentId} />
-                  <input
-                    type="hidden"
-                    name="idempotencyKey"
-                    value={labelUndoKeyFor(labelUndo.assignmentId, labelUndo.revision)}
-                  />
-                  <input type="hidden" name="revision" value={labelUndo.revision} />
-                  <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
-                  <span>{m.library_subject_label_removed_status()}</span>
-                  <button type="submit" className={linkClass}>
-                    {m.library_subject_label_undo()}
-                  </button>
-                </form>
-              ) : null}
+              ) : (
+                <p className="text-sm text-muted-foreground">{m.library_subject_no_public_collections()}</p>
+              )}
             </div>
-          </Exposure>
-        ) : null}
-        {resultText ? (
+          </details>
+        </Exposure>
+      ) : null}
+      {data.session === 'signed-in' && data.labels === null ? (
+        <Exposure operation="library_label.assignment_list">
           <p role="alert" className="basis-full text-sm text-muted-foreground">
-            {resultText}
+            {m.library_subject_label_unavailable()}
           </p>
-        ) : null}
-        {restoreMessage ? (
-          <p role="status" className="basis-full text-sm text-muted-foreground">
-            {restoreMessage}
-          </p>
-        ) : null}
-      </section>
-    </Toaster>
+        </Exposure>
+      ) : null}
+      {data.session === 'signed-in' && data.labels !== null ? (
+        <Exposure operation="library_label.assignment_list">
+          <div data-subject-labels className="basis-full space-y-2">
+            {labels.length ? (
+              <ul className="flex flex-wrap items-center gap-2">
+                {labels.map((label) => (
+                  <li
+                    key={label.id}
+                    data-subject-label-chip
+                    className="inline-flex min-w-0 items-center gap-1 rounded-full border bg-muted/60 px-3 py-1 text-sm"
+                  >
+                    <a
+                      href={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(label.labelId)}`}
+                      className="max-w-48 truncate text-primary underline-offset-4 hover:underline"
+                    >
+                      {label.name}
+                    </a>
+                    <Exposure operation="library_label.unassign">
+                      <form
+                        data-subject-label-remove
+                        method="post"
+                        action={action}
+                        onSubmit={(event) => onRemoveForm(event, label)}
+                        className="m-0"
+                      >
+                        <input type="hidden" name="intent" value="unassign" />
+                        <input type="hidden" name="subjectId" value={subject.id} />
+                        <input type="hidden" name="labelId" value={label.labelId} />
+                        <input type="hidden" name="assignmentId" value={label.id} />
+                        <input type="hidden" name="idempotencyKey" value={data.labelRemoveKeys?.[label.id]} />
+                        <input type="hidden" name="revision" value={label.revision} />
+                        <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
+                        <button
+                          type="submit"
+                          disabled={hydrated && labelPending}
+                          aria-label={m.library_subject_label_remove({ name: label.name })}
+                          className="rounded-full px-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        >
+                          ×
+                        </button>
+                      </form>
+                    </Exposure>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <Exposure operation="library_label.list">
+              <details
+                data-subject-label-picker-details
+                open={labelPickerOpen}
+                onToggle={(event) => setLabelPickerOpen(event.currentTarget.open)}
+                className="min-w-0 max-w-md"
+              >
+                <summary
+                  ref={labelPickerTrigger}
+                  role="button"
+                  aria-expanded={hydrated ? labelPickerOpen : undefined}
+                  className={`${buttonClass} cursor-pointer list-none`}
+                >
+                  {m.library_subject_label_add()}
+                </summary>
+                {/* Keep the no-script form; hydrated closed pickers have no inactive required controls. */}
+                {!hydrated || labelPickerOpen ? (
+                  <form
+                    data-subject-label-picker
+                    method="post"
+                    action={action}
+                    onSubmit={(event) => void submitLabelName(event)}
+                    className="mt-2 space-y-2 rounded-lg border bg-background p-3"
+                  >
+                    <input type="hidden" name="intent" value="assign-by-name" />
+                    <input type="hidden" name="idempotencyKey" value={data.labelAssignKey} />
+                    <input type="hidden" name="createKey" value={data.labelCreateKey} />
+                    <input type="hidden" name="subjectId" value={subject.id} />
+                    <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
+                    <label className="grid gap-1 text-sm font-medium">
+                      {m.library_subject_label_input()}
+                      <input
+                        name="name"
+                        aria-label={m.library_subject_label_name()}
+                        autoComplete="off"
+                        maxLength={200}
+                        required
+                        value={labelQuery}
+                        onChange={(event) => {
+                          latestLabelQuery.current = event.currentTarget.value;
+                          setLabelQuery(event.currentTarget.value);
+                        }}
+                        className="h-11 w-full min-w-0 rounded-md border bg-background px-3 text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <Exposure operation="library_label.create">
+                        <button type="submit" disabled={hydrated && labelPending} className={buttonClass}>
+                          {m.library_subject_label_add()}
+                        </button>
+                      </Exposure>
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        onClick={() => {
+                          setLabelPickerOpen(false);
+                          setLabelQuery('');
+                          latestLabelQuery.current = '';
+                          labelPickerTrigger.current?.focus();
+                        }}
+                      >
+                        {m.library_collection_cancel()}
+                      </button>
+                    </div>
+                    <SubjectLabelMore
+                      query={labelQuery}
+                      next={labelNext}
+                      onPage={(page) => {
+                        setLabelNext(page.next ?? null);
+                        setLabelChoices(page.labels);
+                        setLabelSearchState(page.state);
+                      }}
+                    />
+                    <SubjectLabelReadNotice {...(labelReadReason !== undefined ? { reason: labelReadReason } : {})} />
+                    {labelSearchState === 'loaded' ? (
+                      <ul aria-label={m.library_subject_label_input()} className="space-y-1">
+                        {labelChoices.map((choice) => (
+                          <li key={choice.id}>
+                            <Exposure operation="library_label.assign">
+                              <button
+                                type="button"
+                                disabled={hydrated && labelPending}
+                                onClick={() => void writeLabel({ intent: 'assign', label: choice })}
+                                className="w-full rounded px-2 py-1 text-start text-sm hover:bg-muted disabled:opacity-50"
+                              >
+                                {choice.name}
+                              </button>
+                            </Exposure>
+                          </li>
+                        ))}
+                        {normalizeLibraryLabelName(labelQuery) &&
+                        !labelChoices.some(
+                          (choice) => normalizeLibraryLabelName(choice.name) === normalizeLibraryLabelName(labelQuery),
+                        ) ? (
+                          <li>
+                            <Exposure operation="library_label.create">
+                              <button
+                                type="button"
+                                disabled={hydrated && labelPending}
+                                onClick={() => void writeLabel({ intent: 'create-and-assign', name: labelQuery })}
+                                className="w-full rounded px-2 py-1 text-start text-sm font-medium text-primary hover:bg-muted disabled:opacity-50"
+                              >
+                                {m.library_subject_label_create({ name: normalizeLibraryLabelName(labelQuery) })}
+                              </button>
+                            </Exposure>
+                          </li>
+                        ) : null}
+                        {labelChoices.length === 0 ? (
+                          <li className="px-2 py-1 text-sm text-muted-foreground">
+                            {m.library_subject_label_no_results()}
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : labelSearchState === 'closed' ? (
+                      <p role="status" className="text-sm text-muted-foreground">
+                        {m.library_subject_label_closed()}
+                      </p>
+                    ) : labelSearchState === 'unavailable' ? (
+                      <p role="alert" className="text-sm text-muted-foreground">
+                        {m.library_subject_label_unavailable()}
+                      </p>
+                    ) : null}
+                  </form>
+                ) : null}
+              </details>
+            </Exposure>
+            <SubjectLabelNotice {...(labelNotice !== undefined ? { result: labelNotice } : {})} />
+            {labelUndo ? (
+              <form data-label-undo method="post" action={action} className="flex items-center gap-2 text-sm">
+                <input type="hidden" name="intent" value="restore" />
+                <input type="hidden" name="subjectId" value={subject.id} />
+                <input type="hidden" name="labelId" value={labelUndo.labelId} />
+                <input type="hidden" name="assignmentId" value={labelUndo.assignmentId} />
+                <input
+                  type="hidden"
+                  name="idempotencyKey"
+                  value={labelUndoKeyFor(labelUndo.assignmentId, labelUndo.revision)}
+                />
+                <input type="hidden" name="revision" value={labelUndo.revision} />
+                <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
+                <span>{m.library_subject_label_removed_status()}</span>
+                <button type="submit" className={linkClass}>
+                  {m.library_subject_label_undo()}
+                </button>
+              </form>
+            ) : null}
+          </div>
+        </Exposure>
+      ) : null}
+      {resultText ? (
+        <p role="alert" className="basis-full text-sm text-muted-foreground">
+          {resultText}
+        </p>
+      ) : null}
+      {restoreMessage ? (
+        <p role="status" className="basis-full text-sm text-muted-foreground">
+          {restoreMessage}
+        </p>
+      ) : null}
+    </section>
   );
 }

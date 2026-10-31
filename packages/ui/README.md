@@ -29,6 +29,12 @@ Fields that choose one value from a fixed list use `NativeSelect` from `@rezics/
 choices native, consistent with other fields, and available before hydration. `Menu` is for actions and navigation,
 not form values.
 
+For ordinary sliders, associate a visible label with `aria-labelledby` and use the supported `locale` and `format`
+props for numeric value text. The rating components compose [Base UI slider parts](https://base-ui.com/react/components/slider)
+directly because the native range needs question-specific value text, including the unrated state. The actual
+`Slider.Thumb` supplies its native input's label and formatted value; the root remains a group. This specialization
+belongs in the rating components, not in a generic slider wrapper.
+
 ## Menu
 
 Use `Menu` from `@rezics/ui/menu` for package menus. It takes one ordered entry list for items, links, radio groups,
@@ -97,7 +103,9 @@ makes no request. `labels` accepts English-default message, Restore and deadline
 use `LocaleProvider`.
 
 Call `undoToast('Post deleted', onUndo)` from `@rezics/ui/undo-toast` after a successful action, with the existing
-shadcn `Toaster` mounted once. It announces the result politely and offers Undo for eight seconds, including while
+shadcn `Toaster` mounted once at the application composition root (`AppShell` on the web). Pages and their Library
+regions share that provider without adding a Toaster. Standalone stories and fixtures must supply one provider;
+intentionally independent managers may each own a separate Toaster. It announces the result politely and offers Undo for eight seconds, including while
 hovered or focused. A second call replaces the previous result and invalidates its callback; Undo calls the current
 callback at most once. Pass a third `labels` argument to translate Undo. This immediate feedback complements the
 owner's longer restore window; the site supplies all delete and restore calls.

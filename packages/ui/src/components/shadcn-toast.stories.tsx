@@ -11,7 +11,15 @@ const meta = {
   component: Toaster,
   tags: ['autodocs'],
   decorators: [withSurface],
-  parameters: { docs: { story: { inline: false, iframeHeight: 360 } } },
+  parameters: {
+    docs: {
+      story: { inline: false, iframeHeight: 360 },
+      description: {
+        component:
+          'Mount one Toaster at the composition root. Descendant regions share its manager without mounting another viewport. A deliberately independent manager can own its own isolated region.',
+      },
+    },
+  },
 } satisfies Meta<typeof Toaster>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -23,11 +31,14 @@ const Trigger = ({ label, options }: { label: string; options: Options }) => {
   return <Button onClick={() => manager.add(options)}>{label}</Button>;
 };
 
-const Example = ({ label, options }: { label: string; options: Options }) => (
-  <Toaster toastManager={createToastManager()} timeout={0}>
-    <Trigger label={label} options={options} />
-  </Toaster>
-);
+function Example({ label, options }: { label: string; options: Options }) {
+  const [manager] = useState(createToastManager);
+  return (
+    <Toaster toastManager={manager} timeout={0}>
+      <Trigger label={label} options={options} />
+    </Toaster>
+  );
+}
 
 const toastItem = () => screen.findByRole('dialog');
 
@@ -104,12 +115,12 @@ function ComposedExample() {
   const [undos, setUndos] = useState(0);
   return (
     <Toaster timeout={0}>
-      <Toaster>
+      <section aria-label="Shelf actions">
         <Button onClick={() => undoToast('Removed from shelf', () => setUndos((count) => count + 1))}>
           Remove from shelf
         </Button>
         <p>Undo count: {undos}</p>
-      </Toaster>
+      </section>
     </Toaster>
   );
 }
@@ -138,9 +149,9 @@ function SameManagerExample() {
   const [manager] = useState(createToastManager);
   return (
     <Toaster toastManager={manager} timeout={0}>
-      <Toaster toastManager={manager}>
+      <section aria-label="Shelf actions">
         <Trigger label="Save locally" options={{ title: 'Local shelf saved' }} />
-      </Toaster>
+      </section>
     </Toaster>
   );
 }

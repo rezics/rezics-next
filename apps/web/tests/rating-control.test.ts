@@ -91,7 +91,7 @@ test.each([
   },
 );
 
-test('the native input retains the question scale and question-specific label through the shared thumb props', () => {
+test('the native input retains the question scale and question-specific label through its specialized Base UI thumb', () => {
   const question: RatingQuestion = {
     ...ratingQuestion,
     label: 'How much did you like this work?',

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Toaster } from '@rezics/ui/shadcn/toast';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { Suspense } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
@@ -21,6 +22,13 @@ const viewports = {
 };
 
 const meta = {
+  decorators: [
+    (Story) => (
+      <Toaster>
+        <Story />
+      </Toaster>
+    ),
+  ],
   title: 'Patterns/Library/Entry layouts',
   parameters: { layout: 'fullscreen', viewport: { options: viewports } },
 } satisfies Meta;

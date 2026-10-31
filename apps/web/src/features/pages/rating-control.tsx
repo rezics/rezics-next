@@ -1,5 +1,5 @@
 import { Button } from '@rezics/ui/shadcn/button';
-import { Slider } from '@rezics/ui/shadcn/slider';
+import { Slider } from '@base-ui/react/slider';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -119,12 +119,7 @@ export function RatingControlView({
         );
   const valueText = display(value);
   const clearOnKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (
-      event.key === 'Home' &&
-      !pending &&
-      event.target instanceof HTMLElement &&
-      event.target.getAttribute('role') === 'slider'
-    ) {
+    if (event.key === 'Home' && !pending && event.target instanceof HTMLInputElement && event.target.type === 'range') {
       editing.current = true;
       setDraft(scale.min);
     }
@@ -149,9 +144,12 @@ export function RatingControlView({
           {valueText}
         </output>
       </div>
-      <Slider
+      <Slider.Root
         className="[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary"
+        data-slot="slider"
         disabled={pending}
+        locale={locale}
+        thumbAlignment="edge"
         max={question.scale.max}
         min={question.scale.min}
         onValueChange={(next) => {
@@ -170,9 +168,23 @@ export function RatingControlView({
           }
         }}
         step={question.scale.displayStep}
-        thumbProps={{ 'aria-label': question.label, 'aria-valuetext': valueText }}
         value={[sliderValue]}
-      />
+      >
+        <Slider.Control className="relative flex min-h-11 w-full touch-none items-center select-none data-disabled:opacity-50">
+          <Slider.Track
+            data-slot="slider-track"
+            className="relative h-1 w-full grow overflow-hidden rounded-2xl bg-input/90"
+          >
+            <Slider.Indicator data-slot="slider-range" className="h-full bg-primary" />
+          </Slider.Track>
+          <Slider.Thumb
+            aria-label={question.label}
+            aria-valuetext={valueText}
+            data-slot="slider-thumb"
+            className="block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+          />
+        </Slider.Control>
+      </Slider.Root>
       <div aria-hidden="true" className="flex justify-between text-muted-foreground text-xs tabular-nums">
         <span>{displayRating(scale.min, scale)}</span>
         <span>{displayRating(scale.max, scale)}</span>

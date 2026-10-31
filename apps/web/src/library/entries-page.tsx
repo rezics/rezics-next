@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
-import { Toaster } from '@rezics/ui/shadcn/toast';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -184,87 +183,85 @@ export function PersonalLibraryPage({
     ? m.library_tracked_entries_state({ status: page.stateLabel ?? m.library_other() })
     : m.library_tracked_entries();
   return (
-    <Toaster>
-      <div className="w-full min-w-0 space-y-5">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <PageHeading>{m.library_heading()}</PageHeading>
-          <Exposure operation="library_label.list">
-            <a href={`/${locale}/library/labels`} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-              {m.library_nav_labels()}
-            </a>
-          </Exposure>
-        </header>
-        <LibraryNavigation
-          current="tracked"
+    <div className="w-full min-w-0 space-y-5">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <PageHeading>{m.library_heading()}</PageHeading>
+        <Exposure operation="library_label.list">
+          <a href={`/${locale}/library/labels`} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+            {m.library_nav_labels()}
+          </a>
+        </Exposure>
+      </header>
+      <LibraryNavigation
+        current="tracked"
+        locale={locale}
+        pins={navigation.data?.pins ?? { state: navigation.isError ? 'unavailable' : 'preparing' }}
+        collections={navigation.data?.collections ?? []}
+        collectionsState={navigation.data?.collectionsState ?? (navigation.isError ? 'unavailable' : 'preparing')}
+      />
+      {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken ?? null} /> : null}
+      {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
+      {continueAbsent ? null : (
+        <ContinueSection
+          {...(currentContinue ? { state: currentContinue } : continueEntries ? { entries: continueEntries } : {})}
+          onRetry={() => void resume.refresh()}
+          busy={resume.busy}
           locale={locale}
-          pins={navigation.data?.pins ?? { state: navigation.isError ? 'unavailable' : 'preparing' }}
-          collections={navigation.data?.collections ?? []}
-          collectionsState={navigation.data?.collectionsState ?? (navigation.isError ? 'unavailable' : 'preparing')}
+          density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
         />
-        {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken ?? null} /> : null}
-        {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
-        {continueAbsent ? null : (
-          <ContinueSection
-            {...(currentContinue ? { state: currentContinue } : continueEntries ? { entries: continueEntries } : {})}
-            onRetry={() => void resume.refresh()}
-            busy={resume.busy}
+      )}
+      <section aria-labelledby="tracked-entries-heading" className="space-y-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2 id="tracked-entries-heading" className="text-2xl font-semibold">
+            {heading}
+          </h2>
+          <Exposure operation="library_entry.list">
+            <DisplayControls {...(page.state ? { state: page.state } : {})} locale={locale} display={display} />
+          </Exposure>
+        </div>
+        {page.state ? (
+          <p className="text-sm text-muted-foreground">
+            {m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}
+          </p>
+        ) : null}
+        {page.entries.length ? (
+          <ShelfEntries
+            key={`${page.state ?? 'all'}:${cursor ?? ''}`}
+            entries={page.entries}
             locale={locale}
-            density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
+            {...display}
+          />
+        ) : (
+          <ShelfEmpty
+            kind={page.state ? 'no-match' : 'library'}
+            title={
+              page.state
+                ? m.library_filter_empty_title({ status: page.stateLabel ?? m.library_other() })
+                : m.library_empty_title()
+            }
+            description={page.state ? m.library_filter_empty_description() : m.library_empty_description()}
+            actions={
+              <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
+                {m.library_browse()}
+              </a>
+            }
           />
         )}
-        <section aria-labelledby="tracked-entries-heading" className="space-y-5">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <h2 id="tracked-entries-heading" className="text-2xl font-semibold">
-              {heading}
-            </h2>
-            <Exposure operation="library_entry.list">
-              <DisplayControls {...(page.state ? { state: page.state } : {})} locale={locale} display={display} />
-            </Exposure>
-          </div>
-          {page.state ? (
-            <p className="text-sm text-muted-foreground">
-              {m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}
-            </p>
-          ) : null}
-          {page.entries.length ? (
-            <ShelfEntries
-              key={`${page.state ?? 'all'}:${cursor ?? ''}`}
-              entries={page.entries}
-              locale={locale}
-              {...display}
-            />
-          ) : (
-            <ShelfEmpty
-              kind={page.state ? 'no-match' : 'library'}
-              title={
-                page.state
-                  ? m.library_filter_empty_title({ status: page.stateLabel ?? m.library_other() })
-                  : m.library_empty_title()
-              }
-              description={page.state ? m.library_filter_empty_description() : m.library_empty_description()}
-              actions={
-                <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
-                  {m.library_browse()}
-                </a>
-              }
-            />
-          )}
-          {page.next ? (
-            <a
-              className={buttonVariants({ variant: 'outline' })}
-              href={shelfHref(locale, {
-                ...(page.state ? { state: page.state } : {}),
-                cursor: page.next,
-                layout: display.layout,
-                size: display.size,
-              })}
-            >
-              {m.library_next_page()}
-            </a>
-          ) : null}
-        </section>
-      </div>
-    </Toaster>
+        {page.next ? (
+          <a
+            className={buttonVariants({ variant: 'outline' })}
+            href={shelfHref(locale, {
+              ...(page.state ? { state: page.state } : {}),
+              cursor: page.next,
+              layout: display.layout,
+              size: display.size,
+            })}
+          >
+            {m.library_next_page()}
+          </a>
+        ) : null}
+      </section>
+    </div>
   );
 }
 

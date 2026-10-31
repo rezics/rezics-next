@@ -1,13 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Slider } from '@rezics/ui/shadcn/slider';
+import { Slider } from '@base-ui/react/slider';
 import { cn } from '../utils.ts';
 import { MetaLine } from './meta-line.tsx';
 
 /**
  * Rating display and input. shadcn has no rating pattern (its `chart` is a general plotting layer, and a vote
- * distribution of a few dozen bars needs none of it); these compose `badge`, `button` and `slider` and follow the
+ * distribution of a few dozen bars needs none of it); these compose `badge`, `button` and Base UI slider parts and follow the
  * Display rules of the rating module: a score always comes with its population and count, populations are listed
  * separately and never averaged, and a distribution stays hidden below the aggregate's threshold.
  */
@@ -546,16 +546,16 @@ export function RatingInput(props: RatingInputProps) {
           </Button>
         </div>
       </div>
-      <Slider
-        // Unrated, the slider's name carries the readout, because its resting position is not a vote.
-        aria-labelledby={units === null ? `${id}-label ${id}-value` : `${id}-label`}
+      <Slider.Root
         className={cn(
           '[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary',
           units === null &&
             '**:data-[slot=slider-range]:opacity-0 **:data-[slot=slider-thumb]:bg-muted **:data-[slot=slider-thumb]:ring-primary/50',
         )}
         disabled={props.disabled}
+        data-slot="slider"
         locale={locale}
+        thumbAlignment="edge"
         // The slider works in displayed points, so assistive technology reads 8.5 rather than the stored 17.
         max={topOf(scale)}
         min={scale.minimum / scale.unitsPerPoint}
@@ -563,7 +563,23 @@ export function RatingInput(props: RatingInputProps) {
         onValueCommitted={(next) => void save(toUnits(next, scale))}
         step={1 / scale.unitsPerPoint}
         value={[(units ?? middle) / scale.unitsPerPoint]}
-      />
+      >
+        <Slider.Control className="relative flex min-h-11 w-full touch-none items-center select-none data-disabled:opacity-50">
+          <Slider.Track
+            data-slot="slider-track"
+            className="relative h-1 w-full grow overflow-hidden rounded-2xl bg-input/90"
+          >
+            <Slider.Indicator data-slot="slider-range" className="h-full bg-primary" />
+          </Slider.Track>
+          <Slider.Thumb
+            // An unrated resting position is not a vote. Name and value text belong to the native range.
+            aria-labelledby={units === null ? `${id}-label ${id}-value` : `${id}-label`}
+            aria-valuetext={text}
+            data-slot="slider-thumb"
+            className="block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+          />
+        </Slider.Control>
+      </Slider.Root>
       <div aria-hidden="true" className="flex justify-between text-muted-foreground text-xs tabular-nums">
         <span>{display(scale.minimum)}</span>
         <span>{display(scale.maximum)}</span>
