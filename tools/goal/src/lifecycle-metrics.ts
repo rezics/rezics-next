@@ -454,7 +454,8 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
 
   // The sink accepts one outcome per task/attempt/stage. Re-delivery cannot move it into another hour or add a count.
   // LIMIT bounds returned evidence even in a busy hour; incomplete counts are explicitly lower bounds.
-  const rows = db.query(`
+  const rows = db
+    .query(`
     SELECT e.task_id, e.attempt, e.at, e.body FROM worker_events AS e
     WHERE e.kind='gate-outcome' AND e.at >= ? AND e.at <= ?
       AND json_extract(CASE WHEN json_valid(e.body) THEN e.body ELSE '{}' END, '$.stage')='rebase'
@@ -465,7 +466,8 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
           AND json_extract(CASE WHEN json_valid(previous.body) THEN previous.body ELSE '{}' END, '$.stage')='rebase'
       )
     ORDER BY e.at, e.sequence LIMIT ?
-  `).all(start, end, CONFLICT_WINDOW_LIMIT + 1) as { task_id: string; attempt: number; at: string; body: string }[];
+  `)
+    .all(start, end, CONFLICT_WINDOW_LIMIT + 1) as { task_id: string; attempt: number; at: string; body: string }[];
   const durations: number[] = [];
   const openAges: number[] = [];
   let observedCount = 0;
@@ -479,10 +481,12 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
       continue;
     }
     observedCount++;
-    const landed = db.query(`
+    const landed = db
+      .query(`
       SELECT MIN(at) AS at FROM flow_events
       WHERE task_id=? AND attempt >= ? AND stage='integration' AND action='integrated' AND at >= ? AND at <= ?
-    `).get(row.task_id, row.attempt, row.at, end) as { at: string | null };
+    `)
+      .get(row.task_id, row.attempt, row.at, end) as { at: string | null };
     if (landed.at === null) unlandedCount++;
     const elapsed = Date.parse(landed.at ?? end) - Date.parse(row.at);
     // These are observation-clock durations, not the unsupported conflict-occurrence clock above.
@@ -500,27 +504,30 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
     unknownTimingCount,
     observationToLandedMs: { count: durations.length, p50Ms: percentile(0.5), p90Ms: percentile(0.9) },
     unlandedCount,
-    oldestUnlandedObservationAgeMs:
-      openAges.length && openAges.length === unlandedCount ? Math.max(...openAges) : null,
+    oldestUnlandedObservationAgeMs: openAges.length && openAges.length === unlandedCount ? Math.max(...openAges) : null,
   };
 
   if (!hasColumns(db, 'worker_attempts', ['task_id', 'attempt', 'body'])) return result;
   db.exec(`CREATE INDEX IF NOT EXISTS lifecycle_metrics_attempt_window
     ON worker_attempts(json_extract(body, '$.startedAt'), task_id, attempt)`);
-  const attempts = db.query(`
+  const attempts = db
+    .query(`
     SELECT task_id, attempt, json_extract(body, '$.startedAt') AS started_at FROM worker_attempts
     WHERE json_extract(body, '$.startedAt') >= ? AND json_extract(body, '$.startedAt') <= ?
     ORDER BY json_extract(body, '$.startedAt'), task_id, attempt LIMIT ?
-  `).all(start, end, CONFLICT_WINDOW_LIMIT + 1) as { task_id: string; attempt: number; started_at: string }[];
+  `)
+    .all(start, end, CONFLICT_WINDOW_LIMIT + 1) as { task_id: string; attempt: number; started_at: string }[];
   let createdCount = 0;
   let unknownCauseCount = 0;
   for (const attempt of attempts.slice(0, CONFLICT_WINDOW_LIMIT)) {
     // Attempt.escalation is mutable: the attempt that encountered a conflict is also marked rebase-conflict.
     // Only the new retry receives worker-source-baseline, from the rebase-conflict branch in Tasks.retryTask.
-    const baseline = db.query(`
+    const baseline = db
+      .query(`
       SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='worker-source-baseline' AND at >= ? AND at <= ?
       ORDER BY sequence LIMIT 1
-    `).get(attempt.task_id, attempt.attempt, attempt.started_at, end) as { body: string } | null;
+    `)
+      .get(attempt.task_id, attempt.attempt, attempt.started_at, end) as { body: string } | null;
     if (baseline && completeWorkerSourceBaseline(objectBody(baseline.body))) {
       createdCount++;
       continue;

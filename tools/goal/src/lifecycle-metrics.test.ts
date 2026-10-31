@@ -367,7 +367,11 @@ const sourceBaseline = { workerCommit: 'b'.repeat(40), controllerHead: 'c'.repea
 
 function metricEvent(db: Database, taskId: string, attempt: number, at: string, kind: string, body: unknown): void {
   db.query('INSERT INTO worker_events(task_id, attempt, kind, at, body) VALUES (?, ?, ?, ?, ?)').run(
-    taskId, attempt, kind, at, JSON.stringify(body),
+    taskId,
+    attempt,
+    kind,
+    at,
+    JSON.stringify(body),
   );
 }
 
@@ -397,17 +401,29 @@ test('Hourly report measures conflict count, conflict-to-landed time and attempt
   recordFlow(db, { taskId: 'open', attempt: 0, stage: 'integration', action: 'integrated', at: at(-5) });
   recordFlow(db, { taskId: 'open', attempt: 2, stage: 'integration', action: 'integrated', at: at(2) });
 
-  for (const [attempt, minutes] of [[1, -60], [2, -50], [3, -30]] as const) {
+  for (const [attempt, minutes] of [
+    [1, -60],
+    [2, -50],
+    [3, -30],
+  ] as const) {
     db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)').run(
-      'landed', attempt,
-      JSON.stringify({ taskId: 'landed', attempt, state: 'exited', startedAt: at(minutes), escalation: 'rebase-conflict' }),
+      'landed',
+      attempt,
+      JSON.stringify({
+        taskId: 'landed',
+        attempt,
+        state: 'exited',
+        startedAt: at(minutes),
+        escalation: 'rebase-conflict',
+      }),
     );
   }
   metricEvent(db, 'landed', 2, at(-49), 'worker-source-baseline', sourceBaseline);
   metricEvent(db, 'landed', 2, at(-48), 'worker-source-baseline', sourceBaseline);
   // Mutable escalation on the original attempt and a reconciled intent do not prove another creation cause.
   db.query('INSERT INTO worker_retry_intents VALUES (?, ?, ?)').run(
-    'landed', 2,
+    'landed',
+    2,
     JSON.stringify({ status: 'started', nextAttempt: 3, options: { escalation: 'rebase-conflict' } }),
   );
   for (const minutes of [-49, -45])
@@ -454,10 +470,15 @@ test('missing conflict sources and historical snapshots remain unavailable inste
   expect(old.createdAttempts).toMatchObject({ available: false, observedCount: null, totalCount: null });
   insertTask(db, 'unknown-clock', 1, 'landing');
   metricEvent(db, 'unknown-clock', 1, '2026-10-30T11:xx:00.000Z', 'gate-outcome', {
-    passed: false, stage: 'rebase', rebaseConflict: conflictContext,
+    passed: false,
+    stage: 'rebase',
+    rebaseConflict: conflictContext,
   });
   expect(lifecycleMetrics(db, now).conflicts.recordedOutcomes).toMatchObject({
-    observedCount: 1, unknownTimingCount: 1, unlandedCount: 1, oldestUnlandedObservationAgeMs: null,
+    observedCount: 1,
+    unknownTimingCount: 1,
+    unlandedCount: 1,
+    oldestUnlandedObservationAgeMs: null,
   });
   db.exec('DROP TABLE worker_events');
   expect(lifecycleMetrics(db, now).conflicts.recordedOutcomes).toMatchObject({ available: false, observedCount: null });
@@ -473,7 +494,9 @@ test('an overflowing hourly evidence window reports lower bounds without certify
       insertTask(db, id, i, 'landing', 2);
       metricEvent(db, id, 1, at, 'gate-outcome', { passed: false, stage: 'rebase', rebaseConflict: conflictContext });
       db.query('INSERT INTO worker_attempts VALUES (?, ?, ?)').run(
-        id, 2, JSON.stringify({ state: 'exited', startedAt: at }),
+        id,
+        2,
+        JSON.stringify({ state: 'exited', startedAt: at }),
       );
       metricEvent(db, id, 2, at, 'worker-source-baseline', sourceBaseline);
     }
@@ -481,7 +504,10 @@ test('an overflowing hourly evidence window reports lower bounds without certify
   const conflicts = lifecycleMetrics(db, now).conflicts;
   expect(conflicts.recordedOutcomes).toMatchObject({ available: true, complete: false, observedCount: 1_000 });
   expect(conflicts.createdAttempts).toMatchObject({
-    available: true, complete: false, observedCount: 1_000, totalCount: null,
+    available: true,
+    complete: false,
+    observedCount: 1_000,
+    totalCount: null,
   });
   expect(conflicts.totalCount).toBeNull();
   expect(conflicts.resolutionMethods).toEqual({ owner: null, rerere: null, replay: null });
