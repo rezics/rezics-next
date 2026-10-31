@@ -17,6 +17,7 @@ import {
   readCollectionKindPreparationWorkDefinition,
   readMembersPreparationWorkDefinition,
   type CollectionKindPreparationWorkContext,
+  type CollectionPublicationWorkContext,
   type MembersPreparationWorkContext,
   type ScopeWorkContext,
 } from '../../src/search/scope-work-context.ts';
@@ -31,7 +32,7 @@ test('Kind has its exact native locator and a distinct actor-free Source work br
     }>
   >();
   expectTypeOf<ScopeWorkContext>().toEqualTypeOf<
-    MembersPreparationWorkContext | CollectionKindPreparationWorkContext
+    MembersPreparationWorkContext | CollectionKindPreparationWorkContext | CollectionPublicationWorkContext
   >();
   expectTypeOf<PrepareCollectionSource['work']>().toEqualTypeOf<ScopeWorkContext | undefined>();
   expectTypeOf<Exclude<LeafOptions['work'], undefined>>().toEqualTypeOf<ScopeWorkContext>();
