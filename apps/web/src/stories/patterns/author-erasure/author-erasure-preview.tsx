@@ -99,6 +99,7 @@ function EntryThread({ state, onAccepted }: { state: ErasureStoryState; onAccept
             authorErasure: {
               ...(state === 'available-entry' || state === 'denied-entry'
                 ? {
+                    send: async () => ({ kind: 'unavailable' as const }),
                     readAdmission: async (threadId: string) =>
                       parseAuthorErasureAdmission(
                         {
