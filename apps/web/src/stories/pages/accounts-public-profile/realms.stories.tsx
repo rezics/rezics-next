@@ -5,18 +5,31 @@ import type { PublicRealms } from '../../../accounts/public-profile/read';
 import realmRecording from '../../../kernel/recorded/realm.json';
 import { getLocale } from '../../../paraglide/runtime.js';
 import { m } from '../../../paraglide/messages.js';
+import { AppShell } from '../../../shell/shell';
 import { PatternStory } from '../../page';
 
 function Example({ result }: { result: PublicRealms }) {
   return (
-    <PatternStory>
-      <PublicRealmsPage handle="mira" title="Mira" locale={getLocale()} result={result} retry={() => {}} />
+    <PatternStory visitor="Signed Out" path="/@mira/realms">
+      <AppShell>
+        <PublicRealmsPage handle="mira" title="Mira" locale={getLocale()} result={result} retry={() => {}} />
+      </AppShell>
     </PatternStory>
   );
 }
+
+async function realmsPageReady({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement);
+  const main = await canvas.findByRole('main');
+  await expect(canvas.getAllByRole('main')).toHaveLength(1);
+  const page = within(main);
+  await expect(page.getByRole('heading', { level: 1, name: m.public_account_realms() })).toBeVisible();
+}
+
 const meta = {
   title: 'Pages/Accounts/Public Realms',
   component: Example,
+  play: realmsPageReady,
   parameters: {
     layout: 'fullscreen',
     viewport: {
@@ -45,6 +58,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Populated: Story = {
   play: async ({ canvasElement }) => {
+    await realmsPageReady({ canvasElement });
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: realmRecording.realm.title })).toHaveAttribute(
       'href',
@@ -59,10 +73,27 @@ export const Empty: Story = { args: { result: { state: 'ready', realms: [], next
 export const HiddenRows: Story = {
   args: { result: { state: 'ready', realms: [], next: 'signed-continuation' } },
   play: async ({ canvasElement }) => {
+    await realmsPageReady({ canvasElement });
+    const page = within(within(canvasElement).getByRole('main'));
     await expect(within(canvasElement).getByRole('link', { name: m.public_account_next() })).toBeVisible();
     await expect(within(canvasElement).queryByText(m.public_account_realms_empty())).toBeNull();
+    await expect(page.getByRole('link', { name: m.public_account_next() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/@mira/realms?cursor=signed-continuation`,
+    );
   },
 };
 export const ExpiredContinuation: Story = { args: { result: { state: 'invalid-cursor' } } };
-export const Denied: Story = { args: { result: { state: 'denied' } } };
+export const Denied: Story = {
+  args: { result: { state: 'denied' } },
+  play: async ({ canvasElement }) => {
+    await realmsPageReady({ canvasElement });
+    const page = within(within(canvasElement).getByRole('main'));
+    await expect(page.getByRole('status')).toHaveTextContent(m.public_account_denied());
+    await expect(page.queryByRole('list', { name: m.public_account_realms() })).toBeNull();
+    await expect(page.queryByRole('link', { name: realmRecording.realm.title })).toBeNull();
+    await expect(page.queryByRole('link', { name: m.public_account_next() })).toBeNull();
+    await expect(page.queryByText(m.public_account_realms_empty())).toBeNull();
+  },
+};
 export const Unavailable: Story = { args: { result: { state: 'unavailable' } } };
