@@ -31,6 +31,11 @@ every Context a page could be scored in. A layout with one block, tab or section
 those numbers; so does ranking that only works for a handful of Contexts. Show what the design renders and costs at
 the limit, not only in the fixture.
 
+When a set is open-ended (kinds, Contexts, presentation types), the design core is its configuration: the
+specification of what each member declares (for a kind, its filter conditions and presentation), storage that holds
+at the upper bound, and versioning so the specification can be extended and iterated without breaking stored
+configuration. Behaviour reads the configuration; code never enumerates the members.
+
 Write acceptance in user terms. For Collections, examples include light novels tagged harem, books over one million
 words and combined filters. Name missing properties, indexes and owner ports before claiming support.
 

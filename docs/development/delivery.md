@@ -1,7 +1,9 @@
 # Delivery
 
-Start from the tracked Goal brief and current owner contracts. Estimate a large outcome before dispatch and identify
-a smaller viable slice without silently reducing scope.
+Start from the tracked Goal brief and current owner contracts. Size a task by its outcome, not by a line limit: a
+large task is fine when it is clear. State what it delivers in user terms and design it on the best abstraction before
+dispatch. A failure must not lose work: a retry resumes the same session with its commits and evidence and continues
+from where it stopped, so the cost of failing is the remaining work, never a restart.
 
 Prepare user and API outcome acceptance before implementation. A brief states the outcome, owner links, boundaries,
 dependencies, affected consumers, acceptance and estimated size. Use the schema in
