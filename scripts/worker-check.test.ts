@@ -2922,6 +2922,8 @@ test('controller proof execution derivation admits only the selected saved wrapp
   expect(binding.argv).toEqual(['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test', 'tests/once.test.ts']);
   for (const argv of [
     ['bun', 'test', 'tests/once.test.ts'],
+    ['bun', '-e', "console.log('scripts/worker-check.ts')", 'scripts/worker-check.ts'],
+    ['bun', 'test', 'tests/worker-check.ts.test.ts'],
     ['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/once.test.ts'],
     ['--local', process.execPath, '-e', 'process.exit(0)', '', '$literal; `text`'],
   ]) {

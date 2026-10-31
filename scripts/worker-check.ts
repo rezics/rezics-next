@@ -587,10 +587,24 @@ function validateProofOwner(binding: ControllerProofBindingV1): void {
 /** Derive execution without changing the saved original or interpreting shell text. */
 export function controllerProofExecutionArgv(binding: ControllerProofBindingV1): string[] {
   const { argv } = validateControllerProofBinding(binding);
-  const namedWrapper = argv.some((arg) => /(?:^|[/\\\s"'=])worker-check\.ts(?:$|[/\\\s"';])/.test(arg));
-  const aliasedWrapper = argv[0] === 'bun' && argv[1] !== 'test' && argv.some((arg, index) =>
-    index >= 2 && arg === '--local' && argv[index + 1] === '--' &&
-    argv[index + 2] === 'bun' && argv[index + 3] === 'test');
+  let index = 0;
+  while (argv[index] === '--local' || argv[index] === '--returns') index += argv[index] === '--returns' ? 2 : 1;
+  if (argv[index] === '--') index += 1;
+  const command = splitEnvironmentCommand(argv.slice(index))?.command ?? argv.slice(index);
+  const isBun = command[0] === 'bun' || command[0] === process.execPath || command[0]?.endsWith('/bun');
+  // Test arguments and eval program text are ordinary argv, not executable wrapper paths.
+  if (isBun && ['test', '-e', '--eval', '-p', '--print'].includes(command[1] ?? '')) return [...argv];
+  const namesWrapper = (arg: string) => /(?:^|[/\\\s"'=])worker-check\.ts(?:$|[/\\\s"';])/.test(arg);
+  let entry = command[1] === 'run' ? 2 : 1;
+  while (command[entry]?.startsWith('-')) {
+    entry += command[entry] === '--cwd' || command[entry] === '-C' ? 2 : 1;
+  }
+  const namedWrapper = isBun
+    ? namesWrapper(command[entry] ?? '')
+    : command.some(namesWrapper);
+  const aliasedWrapper = isBun && command.some((arg, position) =>
+    position >= 2 && arg === '--local' && command[position + 1] === '--' &&
+    command[position + 2] === 'bun' && command[position + 3] === 'test');
   if (!namedWrapper && !aliasedWrapper) return [...argv];
   const prefix = ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test'];
   const files = argv.slice(prefix.length);
