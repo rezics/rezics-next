@@ -1,14 +1,21 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { parseText } from '../../src/search/text.ts';
-import {
-  type CreatedSubject,
-  type ReleasedDiscoveryFixture,
-} from '../support/released-discovery.ts';
+import { type CreatedSubject, type ReleasedDiscoveryFixture } from '../support/released-discovery.ts';
 import type { ReleasedNativeBoundRequest } from './support/released-discovery-runtime.ts';
 
 import assert from 'node:assert/strict';
-import { PROFILE_FORMAT, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
+import {
+  PROFILE_FORMAT,
+  planReads,
+  platformRegistry,
+  type CompositionDocument,
+  type ZoneStarter,
+} from '@rezics/composition';
+import bookZone from '../../../../packages/definitions/presentation/book/zone.json';
+import { Compile } from 'typebox/compile';
+import { ZonePageResponseSchema } from '../../src/zones/contract.ts';
+import { ZonePageReadProgressSchema } from '../../src/zones/page-continuation.ts';
 import type { FilterDocument } from '@rezics/filter';
 import type { CollectionView, DynamicCollectionView } from '../../../../specs/dynamic-collections-driver.ts';
 import type { HttpResponse } from '../../../../specs/semantic-driver.ts';
@@ -1001,7 +1008,10 @@ test('a genuine explicit retain expiry releases native work without claiming the
         await Bun.sleep(25);
       }
       // Expiry of scheduling state is not Source publication, coverage or an expired success response.
-      const response = await fixture.request('anonymous', 'POST', '/v1/subjects:search', { text: timingMarker, limit: 1 });
+      const response = await fixture.request('anonymous', 'POST', '/v1/subjects:search', {
+        text: timingMarker,
+        limit: 1,
+      });
       expect(response.status).toBe(200);
       expect((response.body.subjects as { id: string }[]).map(({ id }) => id)).toEqual([witness.id]);
     } finally {
@@ -1061,7 +1071,10 @@ test(
           throw new Error(`Real database Source lag did not age past its threshold: ${JSON.stringify(observed)}`);
         await Bun.sleep(Math.min(1_000, Math.max(1, recordedAt + SOURCE_LAG_THRESHOLD_MS + 1 - now)));
       }
-      const stale = await fixture.request('anonymous', 'POST', '/v1/subjects:search', { text: timingMarker, limit: 10 });
+      const stale = await fixture.request('anonymous', 'POST', '/v1/subjects:search', {
+        text: timingMarker,
+        limit: 10,
+      });
       expect(stale.status).toBe(503);
       expect(stale.body.code).toBe('index_not_ready');
       expect(stale.headers.get('retry-after')).toBeTruthy();
@@ -1078,7 +1091,10 @@ test(
     expect(recovered.asOf.getTime()).toBeGreaterThanOrEqual(beforeRead);
     expect(recovered.asOf.getTime()).toBeLessThanOrEqual(await databaseNow());
     expect(native.indexPrefix).toBe(prefix);
-    const response = await fixture.request('anonymous', 'POST', '/v1/subjects:search', { text: timingMarker, limit: 10 });
+    const response = await fixture.request('anonymous', 'POST', '/v1/subjects:search', {
+      text: timingMarker,
+      limit: 10,
+    });
     expect(response.status).toBe(200);
     expect((response.body.subjects as { id: string }[]).map(({ id }) => id).sort()).toEqual(
       [witness.id, committed!.id].sort(),
@@ -1086,3 +1102,633 @@ test(
   },
   SOURCE_LAG_PRECONDITION_GUARD_MS + 60_000,
 );
+
+// These are query/assertion helpers over population.base, never another fixture or authority.
+// A real public keyword isolates the original catalogue population from the preceding edit controls.
+let catalogueInput: Promise<Awaited<ReturnType<typeof originalCatalogueInput>>> | undefined;
+async function originalCatalogueInput() {
+  const sources = await population.sources();
+  const curated = sources.sources.find(({ source }) => source.visibility === 'public');
+  assert(curated, 'The current producer must supply its actual public curated Collection');
+  const books = await fixture.books();
+  const recipes = await fixture.recipes();
+  const filters = fixture.filters(await fixture.classification(), await fixture.diet());
+  const group = await fixture.createSubject('skos:Concept', marker('Originalfreshnesspopulation'));
+  const subjects = [...Object.values(books.subjects), books.edition, ...Object.values(recipes.subjects)];
+  for (const subject of subjects) await fixture.adopt(subject, discoveryStatement('schema:keywords', group.id));
+  await fixture.catchUp([...subjects, group]);
+  const within = (filter: FilterDocument): FilterDocument => ({
+    and: [filter, { statement: { property: 'schema:keywords', in: [group.id] } }],
+  });
+  const jobs = [
+    {
+      name: 'word count over one million',
+      type: 'schema:Book',
+      filter: within(filters.words),
+      ids: [books.subjects['B-long'].id],
+    },
+    {
+      name: 'light-novel form and harem',
+      type: 'schema:Book',
+      filter: within(filters.formHarem),
+      ids: ['B-long', 'B-edge', 'B-characters']
+        .map((name) => books.subjects[name as keyof typeof books.subjects].id)
+        .sort(),
+    },
+    {
+      name: 'combined words form and harem',
+      type: 'schema:Book',
+      filter: within(filters.combined),
+      ids: [books.subjects['B-long'].id],
+    },
+    {
+      name: 'vegetarian cooking within thirty minutes',
+      type: 'schema:Recipe',
+      filter: within(filters.dietTime),
+      ids: ['R-quick', 'R-edge', 'R-cooked', 'R-other-cooked']
+        .map((name) => recipes.subjects[name as keyof typeof recipes.subjects].id)
+        .sort(),
+    },
+  ];
+  return { sources, curated, books, recipes, subjects, jobs };
+}
+const catalogueInputForRead = () => (catalogueInput ??= originalCatalogueInput());
+
+function usefulMembers(response: HttpResponse, size: number) {
+  status(response, 200);
+  noCounts(response.body);
+  assert(Array.isArray(response.body.members));
+  assert(response.body.next === null || (typeof response.body.next === 'string' && response.body.next.length > 0));
+  expect(response.body.members.length).toBeLessThanOrEqual(size);
+  if (response.body.next !== null) expect(response.body.members).toHaveLength(size);
+  return {
+    ids: response.body.members.map((row: { subjectId: string }) => row.subjectId),
+    next: response.body.next as string | null,
+  };
+}
+
+async function exactCollectionPages(id: string, filter: FilterDocument, expected: string[], persona: DiscoveryPersona) {
+  const ids: string[] = [];
+  const cursors = new Set<string>();
+  const deadline = performance.now() + 60_000;
+  let cursor: string | undefined;
+  for (;;) {
+    assert(performance.now() < deadline, 'The fixed finite original Collection population did not complete');
+    const query = new URLSearchParams({
+      filter: JSON.stringify(filter),
+      sort: 'id',
+      limit: '2',
+      ...(cursor ? { cursor } : {}),
+    });
+    const response = await population.request(persona, 'GET', `/v1/collections/${id}/members?${query}`);
+    if (response.status === 202) {
+      expect(response.body).toEqual({ preparing: true });
+      expect(response.headers.get('retry-after')).toBe('1');
+      await Bun.sleep(25);
+      continue;
+    }
+    const page = usefulMembers(response, 2);
+    ids.push(...page.ids);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual(expected.slice(0, ids.length));
+    expect(ids.length).toBeLessThanOrEqual(expected.length);
+    if (page.next === null) {
+      expect(ids).toEqual(expected);
+      return;
+    }
+    expect(cursors.has(page.next)).toBe(false);
+    cursors.add(page.next);
+    expect(cursors.size).toBeLessThanOrEqual(Math.ceil(expected.length / 2));
+    cursor = page.next;
+  }
+}
+
+// Each cell calls its actual owner HTTP consumer. Catalogue matching is never used as a substitute.
+for (let jobIndex = 0; jobIndex < 4; jobIndex++) {
+  const title = [
+    'word count over one million',
+    'light-novel form and harem',
+    'combined words form and harem',
+    'vegetarian cooking within thirty minutes',
+  ][jobIndex]!;
+  test(`original catalogue baseline: ${title} has full ordered pages and exact exhaustion`, async () => {
+    const { jobs } = await catalogueInputForRead();
+    const job = jobs[jobIndex]!;
+    const ids: string[] = [];
+    const cursors = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const page = searchPage(
+        await population.request('anonymous', 'POST', '/v1/subjects:search', {
+          filter: job.filter,
+          sort: 'id',
+          limit: 2,
+          ...(cursor ? { cursor } : {}),
+        }),
+        2,
+      );
+      ids.push(...page.ids);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids).toEqual(job.ids.slice(0, ids.length));
+      expect(ids.length).toBeLessThanOrEqual(job.ids.length);
+      cursor = page.next ?? undefined;
+      if (cursor) {
+        expect(cursors.has(cursor)).toBe(false);
+        cursors.add(cursor);
+        expect(cursors.size).toBeLessThanOrEqual(Math.ceil(job.ids.length / 2));
+      }
+    } while (cursor);
+    expect(ids).toEqual(job.ids);
+  }, 180_000);
+
+  test(`public curated freshness consumer: ${title} preserves native occurrence identity and useful pages`, async () => {
+    const { curated, jobs, books } = await catalogueInputForRead();
+    const job = jobs[jobIndex]!;
+    await exactCollectionPages(curated.source.id, job.filter, job.ids, 'anonymous');
+    const duplicates = curated.occurrences.filter(({ member }) => member.subjectId === books.subjects['B-long'].id);
+    expect(duplicates).toHaveLength(2);
+    expect(new Set(duplicates.map(({ member }) => member.id)).size).toBe(2);
+    const edit = status(
+      await population.request('alice', 'GET', `/v1/collections/${curated.source.id}/members?limit=100`),
+      200,
+    );
+    expect(edit.body.next).toBeNull();
+    expect(edit.body.members).toEqual(curated.occurrences.map(({ member }) => member));
+  }, 120_000);
+}
+
+let supported: Promise<string> | undefined;
+async function supportOriginalWithoutState() {
+  const { subjects } = await catalogueInputForRead();
+  const response = status(
+    await population.request(
+      'alice',
+      'POST',
+      '/v1/libraryLabels',
+      { name: marker('Freshnesssupport') },
+      discoveryKey(),
+    ),
+    201,
+  );
+  const label = response.body.label as { id: string };
+  assert(typeof label.id === 'string');
+  for (const subject of subjects) {
+    status(
+      await population.request(
+        'alice',
+        'POST',
+        `/v1/libraryLabels/${label.id}:assign`,
+        { subjectId: subject.id },
+        discoveryKey(),
+      ),
+      200,
+    );
+    status(await population.request('alice', 'GET', `/v1/libraryEntries/${subject.id}`), 404);
+  }
+  return everything();
+}
+for (let jobIndex = 0; jobIndex < 4; jobIndex++) {
+  const title = [
+    'word count over one million',
+    'light-novel form and harem',
+    'combined words form and harem',
+    'vegetarian cooking within thirty minutes',
+  ][jobIndex]!;
+  test(`OWN Everything freshness consumer without state: ${title} uses actual label support and hides it from Bob`, async () => {
+    const id = await (supported ??= supportOriginalWithoutState());
+    const { jobs, subjects } = await catalogueInputForRead();
+    const job = jobs[jobIndex]!;
+    for (const subject of subjects)
+      status(await population.request('alice', 'GET', `/v1/libraryEntries/${subject.id}`), 404);
+    await exactCollectionPages(id, job.filter, job.ids, 'alice');
+    for (const persona of ['anonymous', 'bob', 'outsider'] as const) {
+      const denied = status(
+        await population.request(
+          persona,
+          'GET',
+          `/v1/collections/${id}/members?filter=${encodeURIComponent(JSON.stringify(job.filter))}`,
+        ),
+        404,
+      );
+      for (const key of ['members', 'next', 'count', 'total']) expect(denied.body).not.toHaveProperty(key);
+    }
+  }, 120_000);
+}
+
+for (let jobIndex = 0; jobIndex < 4; jobIndex++) {
+  const title = [
+    'word count over one million',
+    'light-novel form and harem',
+    'combined words form and harem',
+    'vegetarian cooking within thirty minutes',
+  ][jobIndex]!;
+  test(`OWN accepted-state freshness consumer: ${title} reflects the commit or prepares on the very next read`, async () => {
+    const { jobs, subjects } = await catalogueInputForRead();
+    const job = jobs[jobIndex]!;
+    const { profile } = population.profile(job.type);
+    const set = profile.entryStateSet;
+    assert(set);
+    const active = set.states.find(({ role }) => role === 'active');
+    const completed = set.states.find(({ role }) => role === 'completed');
+    assert(active && completed);
+    for (const subject of subjects.filter(({ id }) => job.ids.includes(id))) {
+      const prior = await population.request('alice', 'GET', `/v1/libraryEntries/${subject.id}`);
+      expect([200, 404]).toContain(prior.status);
+      const revision = prior.status === 200 ? (prior.body.libraryEntry as EntryHandle).revision : undefined;
+      status(
+        await population.request(
+          'alice',
+          'PUT',
+          `/v1/libraryEntries/${subject.id}`,
+          { state: active.id, ...(revision ? { revision } : {}) },
+          discoveryKey(),
+        ),
+        prior.status === 200 ? 200 : 201,
+      );
+    }
+    const list = status(
+      await population.request(
+        'alice',
+        'GET',
+        `/v1/collections?${new URLSearchParams({ curatorAccountId: fixture.personas.alice.accountId, limit: '100' })}`,
+      ),
+      200,
+    );
+    expect(list.body.next).toBeNull();
+    assert(Array.isArray(list.body.collections));
+    const views = (list.body.collections as CollectionView[]).filter(
+      (row): row is DynamicCollectionView =>
+        row.membershipKind === 'dynamic' &&
+        row.builtin?.kind === 'state' &&
+        row.builtin.profileId === profile.id &&
+        row.builtin.stateSetId === set.id &&
+        row.builtin.stateId === active.id,
+    );
+    expect(views).toHaveLength(1);
+    const id = views[0]!.id;
+    await exactCollectionPages(id, job.filter, job.ids, 'alice');
+    const changed = job.ids[0]!;
+    const prior = status(await population.request('alice', 'GET', `/v1/libraryEntries/${changed}`), 200);
+    await fixture.search!.indexing('paused');
+    try {
+      status(
+        await population.request(
+          'alice',
+          'PUT',
+          `/v1/libraryEntries/${changed}`,
+          { state: completed.id, revision: (prior.body.libraryEntry as EntryHandle).revision },
+          discoveryKey(),
+        ),
+        200,
+      );
+      await exactCollectionPages(
+        id,
+        job.filter,
+        job.ids.filter((value) => value !== changed),
+        'alice',
+      );
+      status(await population.request('bob', 'GET', `/v1/collections/${id}/members`), 404);
+    } finally {
+      await fixture.search!.indexing('running');
+    }
+  }, 120_000);
+}
+
+function originalListDocument(filter: FilterDocument, type: string): CompositionDocument {
+  return {
+    root: { props: {} },
+    content: [
+      {
+        type: 'TypeList',
+        props: {
+          id: 'original-outcome',
+          title: { en: 'Original discovery outcome' },
+          types: [type],
+          filter,
+          sort: 'id',
+          limit: 2,
+        },
+      },
+    ],
+  };
+}
+
+for (let jobIndex = 0; jobIndex < 4; jobIndex++) {
+  const title = [
+    'word count over one million',
+    'light-novel form and harem',
+    'combined words form and harem',
+    'vegetarian cooking within thirty minutes',
+  ][jobIndex]!;
+  test(`public mounted Zone freshness consumer: ${title} unions overlapping actual sources without duplicates`, async () => {
+    const { curated, jobs } = await catalogueInputForRead();
+    const job = jobs[jobIndex]!;
+    const current = status(await population.request('alice', 'GET', `/v1/collections/${curated.source.id}`), 200);
+    expect((current.body.collection as CollectionView).revision).toBeGreaterThan(curated.source.revision);
+    const memberSource = { kind: 'collection', id: curated.source.id } as const;
+    const document = originalListDocument(job.filter, job.type);
+    const configuration = structuredClone(bookZone) as ZoneStarter;
+    expect(configuration.scope).toContain('book/all');
+    configuration.pages = [{ route: '', document }];
+    await fixture.grant('editor', ['zone:create'], GLOBAL_CONTEXT);
+    await fixture.setup.openFeatures(['zone_sources']);
+    const created = status(
+      await population.request(
+        'editor',
+        'POST',
+        '/v1/zones',
+        { configuration, mounts: [memberSource.id], visibility: 'private' },
+        discoveryKey(),
+      ),
+      201,
+    );
+    const zone = created.body.zone as { id: string; revision: string };
+    const published = status(
+      await population.request(
+        'editor',
+        'POST',
+        `/v1/zones/${zone.id}:publish`,
+        { visibility: 'public' },
+        { ...discoveryKey(), 'if-match': `"${zone.revision}"` },
+      ),
+      200,
+    );
+    const revision = (published.body.zone as { revision: string }).revision;
+    const ids: string[] = [];
+    const cursors = new Set<string>();
+    const deadline = performance.now() + 60_000;
+    let cursor: string | undefined;
+    for (;;) {
+      assert(performance.now() < deadline, 'Fixed finite original mounted Zone remained unfinished');
+      const answer = await population.request(
+        'anonymous',
+        'POST',
+        `/v1/zones/${zone.id}:readPage${cursor ? `?${new URLSearchParams({ cursor })}` : ''}`,
+        { target: { route: '' }, languages: ['en'] },
+      );
+      expect(answer.headers.get('cache-control')).toBe('private, no-store');
+      if (answer.status === 202) {
+        expect(Compile(ZonePageReadProgressSchema).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
+        const next = answer.body.next as string;
+        expect(cursors.has(next)).toBe(false);
+        cursors.add(next);
+        cursor = next;
+        continue;
+      }
+      status(answer, 200);
+      expect(Compile(ZonePageResponseSchema).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
+      expect(answer.body.document).toEqual(document);
+      expect(answer.body.zone).toMatchObject({ id: zone.id, revision });
+      const key = planReads(platformRegistry, document, { subject: null }).nodes['original-outcome'];
+      assert(key);
+      const result = (answer.body.reads as Record<string, { status: number; body: Record<string, unknown> }>)[key];
+      assert(result);
+      expect(result.status, JSON.stringify(result.body)).toBe(200);
+      noCounts(result.body);
+      assert(Array.isArray(result.body.subjects));
+      ids.push(...result.body.subjects.map((row: { id: string }) => row.id));
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids).toEqual(job.ids.slice(0, ids.length));
+      expect(ids.length).toBeLessThanOrEqual(job.ids.length);
+      assert(result.body.next === null || typeof result.body.next === 'string');
+      if (result.body.next === null) {
+        expect(ids).toEqual(job.ids);
+        break;
+      }
+      expect(result.body.subjects).toHaveLength(2);
+      const next = result.body.next;
+      expect(cursors.has(next)).toBe(false);
+      cursors.add(next);
+      cursor = next;
+    }
+    expect(JSON.stringify(ids)).not.toContain('Second occurrence with a distinct note');
+    // The Zone grants no new rights to its source; source owner discovery remains independent.
+    status(await population.request('anonymous', 'GET', `/v1/collections/${memberSource.id}`), 200);
+  }, 120_000);
+
+  test(`configured TypeList freshness consumer: ${title} uses native aggregate continuation and exact released facts`, async () => {
+    const { jobs, subjects } = await catalogueInputForRead();
+    const job = jobs[jobIndex]!;
+    const document = originalListDocument(job.filter, job.type);
+    await fixture.grant('steward', ['presentation:publish', 'presentation:activate'], GLOBAL_CONTEXT);
+    const published = status(
+      await population.request(
+        'steward',
+        'POST',
+        '/v1/presentation/profiles',
+        { profile: { format: PROFILE_FORMAT, generic: document, bases: [], types: [], routes: [] } },
+        discoveryKey(),
+      ),
+      201,
+    );
+    const current = status(await population.request('anonymous', 'GET', '/v1/presentation/active'), 200);
+    status(
+      await population.request(
+        'steward',
+        'POST',
+        `/v1/presentation/profiles/${published.body.digest}:activate`,
+        { expected_head: current.body.head },
+        discoveryKey(),
+      ),
+      200,
+    );
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const continuation = cursor ? { node: 'original-outcome', cursor } : undefined;
+      const response = status(
+        await population.request('anonymous', 'POST', '/v1/pages:read', {
+          target: { route: '/original-outcome' },
+          ...(continuation ? { continuation } : {}),
+        }),
+        200,
+      );
+      expect(response.body.profile).toBe(published.body.digest);
+      expect(response.body.document).toEqual(document);
+      const plan = planReads(platformRegistry, document, { subject: null, ...(continuation ? { continuation } : {}) });
+      const key = plan.nodes['original-outcome'];
+      assert(key);
+      const reads = response.body.reads as Record<string, { status: number; body: Record<string, unknown> }>;
+      expect(Object.keys(reads)).toEqual([key]);
+      const result = reads[key]!;
+      expect(result.status, JSON.stringify(result.body)).toBe(200);
+      noCounts(result.body);
+      assert(Array.isArray(result.body.subjects));
+      assert(result.body.next === null || typeof result.body.next === 'string');
+      expect(result.body.subjects.length).toBeLessThanOrEqual(2);
+      if (result.body.next !== null) expect(result.body.subjects).toHaveLength(2);
+      ids.push(...result.body.subjects.map((row: { id: string }) => row.id));
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids).toEqual(job.ids.slice(0, ids.length));
+      expect(ids.length).toBeLessThanOrEqual(job.ids.length);
+      cursor = (result.body.next as string | null) ?? undefined;
+      if (cursor) {
+        expect(seen.has(cursor)).toBe(false);
+        seen.add(cursor);
+      }
+    } while (cursor);
+    expect(ids).toEqual(job.ids);
+    for (const subject of subjects.filter(({ id }) => job.ids.includes(id))) status(await fixture.read(subject), 200);
+  }, 120_000);
+}
+
+for (const owner of ['imported Source tuple', 'native statement consent'] as const) {
+  test(`${owner}: actual positive negative ordering and retained executions lose disclosure immediately and recover only after native FOREIGN repair`, async () => {
+    const native = fixture.search!;
+    const imported = owner === 'imported Source tuple' ? await fixture.importedHarem() : undefined;
+    const consent = owner === 'native statement consent' ? await fixture.statementConsent() : undefined;
+    if (consent) status(await consent.disclose(), 200);
+    const subject = imported?.subject ?? consent!.subject;
+    const positive: FilterDocument = imported
+      ? { statement: { property: 'schema:keywords', in: [imported.sourceConcept] } }
+      : { statement: { property: 'rezics:penNameOf', in: [consent!.target] } };
+    const dependency = imported?.dependency ?? consent!.dependency;
+    expect(dependency.kind).toBe(imported ? 'sourceTuple' : 'consent');
+    if (imported) {
+      expect(imported.bulk.length).toBeGreaterThan(0);
+      expect(imported.current.next).toBeNull();
+      expect(imported.current.adoption?.mode).toBe('replace');
+      expect(imported.current.candidates.some((candidate) => candidate.id === imported.candidate)).toBe(true);
+    }
+    const deadline = performance.now() + 60_000;
+    for (;;) {
+      const response = await population.request('anonymous', 'POST', '/v1/subjects:search', {
+        filter: positive,
+        sort: 'id',
+        limit: 2,
+      });
+      if (response.status === 200) {
+        const page = searchPage(response, 2);
+        if (page.ids.includes(subject)) {
+          expect(page.next).toBeNull();
+          break;
+        }
+      } else readiness(response);
+      assert(performance.now() < deadline, `${owner} required native positive never became searchable`);
+      await Bun.sleep(25);
+    }
+    const requests: ReleasedNativeBoundRequest[] = [];
+    const executions: {
+      request: ReleasedNativeBoundRequest;
+      query: Extract<Awaited<ReturnType<PublicFilterConsumerOperations['query']>>, { status: 'queried' }>;
+    }[] = [];
+    const context = () => ({ deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) });
+    await native.indexing('paused');
+    try {
+      for (const [filter, sort] of [
+        [positive, 'id'],
+        [{ not: positive }, 'id'],
+        [positive, 'name'],
+      ] as const) {
+        const bound = await native.bindRequest(
+          { plan: { filterDocument: filter, text: undefined, sort, size: 2, pageSize: 2 }, snapshot: 'pit' },
+          context(),
+        );
+        requests.push(bound);
+        expect(bound.capture.status).toBe('captured');
+        assert(bound.capture.status === 'captured');
+        const query = await bound.operations.query(bound.capture.queried, context());
+        expect(query.status).toBe('queried');
+        assert(query.status === 'queried');
+        if (filter === positive) expect(query.result.hits.map(({ id }) => id)).toEqual([subject]);
+        else expect(query.result.hits.map(({ id }) => id)).not.toContain(subject);
+        const start = await bound.operations.readStatus(
+          { queried: query.queried, execution: query.execution },
+          context(),
+        );
+        expect(start.status).toBe('observed');
+        assert(start.status === 'observed');
+        expect(start.pending).toEqual([]);
+        expect(start.changed).toEqual([]);
+        expect(start.blocking).toEqual([]);
+        executions.push({ request: bound, query });
+      }
+      status(imported ? await imported.takedown() : await consent!.retract(), 200);
+      const reductions = [];
+      for (const { request, query } of executions) {
+        const reduced = await request.operations.readStatus(
+          { queried: query.queried, execution: query.execution },
+          context(),
+        );
+        expect(reduced.status).toBe('observed');
+        assert(reduced.status === 'observed');
+        expect(reduced.pending.length).toBeGreaterThan(0);
+        expect(reduced.blocking.length).toBeGreaterThan(0);
+        reductions.push(reduced.pending);
+      }
+      for (const persona of ['anonymous', 'editor'] as const)
+        for (const [filter, sort] of [
+          [positive, 'id'],
+          [{ not: positive }, 'id'],
+          [positive, 'name'],
+        ] as const)
+          readiness(await population.request(persona, 'POST', '/v1/subjects:search', { filter, sort, limit: 2 }));
+      // The real owner returns these repair locators. No caller ACK, Source tuple or safety cut is invented.
+      for (const { request } of executions) {
+        assert(request.capture.status === 'captured');
+        for (;;) {
+          assert(performance.now() < deadline, `${owner} finite native repair never settled`);
+          const repaired = await request.operations.repairStep(request.capture.repair, context());
+          expect(['progress', 'settled']).toContain(repaired.status);
+          assert(repaired.status === 'progress' || repaired.status === 'settled');
+          expect(repaired.job).toEqual(request.capture.repair);
+          preparationCost(repaired.cost);
+          if (repaired.status === 'settled') break;
+        }
+      }
+      // Repair must not erase a retained execution's start-to-final privacy change.
+      for (let index = 0; index < executions.length; index++) {
+        const { request, query } = executions[index]!;
+        const old = await request.operations.readStatus(
+          { queried: query.queried, execution: query.execution },
+          context(),
+        );
+        expect(old.status).toBe('observed');
+        assert(old.status === 'observed');
+        for (const head of reductions[index]!) expect(old.changed).toContainEqual(head);
+        expect(old.blocking.length).toBeGreaterThan(0);
+      }
+    } finally {
+      for (const request of requests) {
+        try {
+          if (request.capture.status === 'captured')
+            await request.operations.closeObservation(request.capture.queried, context());
+        } finally {
+          await request.operations.close();
+        }
+      }
+      await native.indexing('running');
+    }
+    const recovered = searchPage(
+      await population.request('anonymous', 'POST', '/v1/subjects:search', { filter: positive, sort: 'id', limit: 2 }),
+      2,
+    );
+    expect(recovered).toEqual({ ids: [], next: null });
+    const fresh = await native.bindRequest(
+      { plan: { filterDocument: positive, text: undefined, sort: 'id', size: 2, pageSize: 2 }, snapshot: 'pit' },
+      context(),
+    );
+    try {
+      expect(fresh.capture.status).toBe('captured');
+      assert(fresh.capture.status === 'captured');
+      const current = await fresh.operations.query(fresh.capture.queried, context());
+      expect(current.status).toBe('queried');
+      assert(current.status === 'queried');
+      expect(current.result.hits).toEqual([]);
+      expect(current.window.exhausted).toBe(true);
+      const observed = await fresh.operations.readStatus(
+        { queried: current.queried, execution: current.execution },
+        context(),
+      );
+      expect(observed.status).toBe('observed');
+      assert(observed.status === 'observed');
+      expect(observed.pending).toEqual([]);
+      expect(observed.changed).toEqual([]);
+      expect(observed.blocking).toEqual([]);
+      await fresh.operations.closeObservation(current.queried, context());
+    } finally {
+      await fresh.operations.close();
+    }
+  }, 180_000);
+}
