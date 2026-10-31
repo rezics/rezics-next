@@ -4303,6 +4303,66 @@ CREATE TABLE semantic.identity_epoch_source_consumer_custody (
 
 
 --
+-- Name: identity_epoch_source_consumer_terminal; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_source_consumer_terminal (
+    partition_no integer NOT NULL,
+    custody_key bigint NOT NULL,
+    sequence bigint NOT NULL,
+    previous_sequence bigint,
+    state text NOT NULL,
+    directory_after jsonb,
+    ticket_key text,
+    effect_after jsonb,
+    seal_digest text,
+    scope_partition integer,
+    scope_epoch integer,
+    scope_position bigint,
+    scope_transaction_id uuid,
+    replay_generation bigint CONSTRAINT identity_epoch_source_consumer_termi_replay_generation_not_null NOT NULL,
+    undo_generation bigint CONSTRAINT identity_epoch_source_consumer_termina_undo_generation_not_null NOT NULL,
+    restore_generation bigint CONSTRAINT identity_epoch_source_consumer_term_restore_generation_not_null NOT NULL,
+    owner_epoch integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    receiving_partition integer,
+    receiving_epoch integer,
+    receiving_position bigint,
+    receiving_transaction_id uuid,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT identity_epoch_source_consumer_termin_receiving_partition_check CHECK (((receiving_partition >= 0) AND (receiving_partition <= 4095))),
+    CONSTRAINT identity_epoch_source_consumer_termina_receiving_position_check CHECK ((receiving_position > 0)),
+    CONSTRAINT identity_epoch_source_consumer_termina_restore_generation_check CHECK ((restore_generation >= 0)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_check CHECK ((((sequence = 1) AND (previous_sequence IS NULL)) OR ((sequence > 1) AND (previous_sequence IS NOT NULL) AND (previous_sequence = (sequence - 1))))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_check1 CHECK (((COALESCE((jsonb_array_length((directory_after -> 'after'::text)) + 1), 0) +
+CASE
+    WHEN (effect_after IS NULL) THEN 0
+    ELSE 2
+END) <= 8)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_check2 CHECK ((octet_length((jsonb_build_array(directory_after, effect_after))::text) <= 2048)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_check3 CHECK ((((scope_partition IS NULL) AND (scope_epoch IS NULL) AND (scope_position IS NULL) AND (scope_transaction_id IS NULL)) OR ((scope_partition IS NOT NULL) AND (scope_epoch IS NOT NULL) AND (scope_position IS NOT NULL) AND (scope_transaction_id IS NOT NULL)))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_check4 CHECK ((((state = 'transferred'::text) AND (receiving_partition = partition_no) AND (receiving_epoch = owner_epoch) AND (receiving_partition IS NOT NULL) AND (receiving_epoch IS NOT NULL) AND (receiving_position IS NOT NULL) AND (receiving_transaction_id IS NOT NULL)) OR ((state <> 'transferred'::text) AND (receiving_partition IS NULL) AND (receiving_epoch IS NULL) AND (receiving_position IS NULL) AND (receiving_transaction_id IS NULL)))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_check5 CHECK (((state = 'scope'::text) OR (effect_after IS NULL))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_check6 CHECK (((state <> ALL (ARRAY['discharged'::text, 'transferred'::text])) OR (directory_after IS NOT NULL))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_check7 CHECK (((scope_transaction_id IS NULL) OR ((ticket_key IS NOT NULL) AND (seal_digest IS NOT NULL)))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_directory_after_check CHECK (((directory_after IS NULL) OR ((jsonb_typeof(directory_after) = 'object'::text) AND (jsonb_typeof((directory_after -> 'after'::text)) = 'array'::text) AND (jsonb_array_length((directory_after -> 'after'::text)) <= 8)))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_effect_after_check CHECK (((effect_after IS NULL) OR ((jsonb_typeof(effect_after) = 'object'::text) AND (effect_after ? 'effectKey'::text) AND ((effect_after ->> 'disposition'::text) = ANY (ARRAY['OLD'::text, 'NEW'::text, 'first-apply'::text, 'handoff'::text]))))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_receiving_epoch_check CHECK ((receiving_epoch > 0)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_replay_generation_check CHECK ((replay_generation >= 0)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_scope_epoch_check CHECK ((scope_epoch > 0)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_scope_partition_check CHECK (((scope_partition >= 0) AND (scope_partition <= 4095))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_scope_position_check CHECK ((scope_position > 0)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_seal_digest_check CHECK ((seal_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_sequence_check CHECK ((sequence > 0)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_state_check CHECK ((state = ANY (ARRAY['scope'::text, 'directory'::text, 'discharged'::text, 'transferred'::text]))),
+    CONSTRAINT identity_epoch_source_consumer_terminal_ticket_key_check CHECK ((ticket_key ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_epoch_source_consumer_terminal_undo_generation_check CHECK ((undo_generation >= 0))
+);
+
+
+--
 -- Name: identity_epoch_step; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -6533,6 +6593,22 @@ ALTER TABLE ONLY semantic.identity_epoch_receiving_record
 
 ALTER TABLE ONLY semantic.identity_epoch_source_consumer_custody
     ADD CONSTRAINT identity_epoch_source_consumer_custody_pkey PRIMARY KEY (partition_no, receipt_key, source_digest, barrier_account_id, barrier_version, barrier_at, erased_role, binding_generation);
+
+
+--
+-- Name: identity_epoch_source_consumer_terminal identity_epoch_source_consumer_ter_partition_no_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_source_consumer_terminal
+    ADD CONSTRAINT identity_epoch_source_consumer_ter_partition_no_erasure_key_key UNIQUE (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_source_consumer_terminal identity_epoch_source_consumer_terminal_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_source_consumer_terminal
+    ADD CONSTRAINT identity_epoch_source_consumer_terminal_pkey PRIMARY KEY (partition_no, custody_key, sequence);
 
 
 --
@@ -9359,6 +9435,27 @@ CREATE TRIGGER identity_epoch_source_consumer_custody_no_truncate BEFORE TRUNCAT
 
 
 --
+-- Name: identity_epoch_source_consumer_terminal identity_epoch_source_consumer_terminal_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_source_consumer_terminal_erasure_capture AFTER INSERT ON semantic.identity_epoch_source_consumer_terminal DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_source_consumer_custody_erasure();
+
+
+--
+-- Name: identity_epoch_source_consumer_terminal identity_epoch_source_consumer_terminal_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_source_consumer_terminal_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_source_consumer_terminal FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_source_consumer_terminal identity_epoch_source_consumer_terminal_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_source_consumer_terminal_no_truncate BEFORE TRUNCATE ON semantic.identity_epoch_source_consumer_terminal FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
 -- Name: identity_epoch_step identity_epoch_step_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -10144,6 +10241,14 @@ ALTER TABLE ONLY semantic.identity_epoch_receiving_record
 
 
 --
+-- Name: identity_epoch_source_consumer_terminal identity_epoch_source_consume_partition_no_custody_key_pre_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_source_consumer_terminal
+    ADD CONSTRAINT identity_epoch_source_consume_partition_no_custody_key_pre_fkey FOREIGN KEY (partition_no, custody_key, previous_sequence) REFERENCES semantic.identity_epoch_source_consumer_terminal(partition_no, custody_key, sequence);
+
+
+--
 -- Name: identity_epoch_source_consumer_custody identity_epoch_source_consume_partition_no_receipt_key_bin_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -10152,11 +10257,27 @@ ALTER TABLE ONLY semantic.identity_epoch_source_consumer_custody
 
 
 --
+-- Name: identity_epoch_source_consumer_terminal identity_epoch_source_consume_partition_no_transaction_id_fkey1; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_source_consumer_terminal
+    ADD CONSTRAINT identity_epoch_source_consume_partition_no_transaction_id_fkey1 FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.erasure_source_commit(partition_no, transaction_id);
+
+
+--
 -- Name: identity_epoch_source_consumer_custody identity_epoch_source_consumer_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_source_consumer_custody
     ADD CONSTRAINT identity_epoch_source_consumer_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.erasure_source_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_source_consumer_terminal identity_epoch_source_consumer_te_partition_no_custody_key_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_source_consumer_terminal
+    ADD CONSTRAINT identity_epoch_source_consumer_te_partition_no_custody_key_fkey FOREIGN KEY (partition_no, custody_key) REFERENCES semantic.identity_epoch_source_consumer_custody(partition_no, erasure_key);
 
 
 --
@@ -10341,69 +10462,6 @@ ALTER TABLE ONLY semantic.statement_disclosure
 
 ALTER TABLE ONLY semantic.term_head
     ADD CONSTRAINT term_head_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
-
-
--- Append-only bounded consumer continuation. Parent custody remains immutable and retained.
--- The original accepted binding lock serializes every append and the terminal transition.
-CREATE TABLE semantic.identity_epoch_source_consumer_terminal (
- partition_no integer NOT NULL CHECK(partition_no BETWEEN 0 AND 4095),
- custody_key bigint NOT NULL,
- sequence bigint NOT NULL CHECK(sequence>0),
- previous_sequence bigint,
- state text NOT NULL CHECK(state IN ('scope','directory','discharged','transferred')),
- directory_after jsonb,
- ticket_key text CHECK(ticket_key ~ '^[0-9a-f]{64}$'),
- effect_after jsonb,
- seal_digest text CHECK(seal_digest ~ '^[0-9a-f]{64}$'),
- scope_partition integer CHECK(scope_partition BETWEEN 0 AND 4095),
- scope_epoch integer CHECK(scope_epoch>0),
- scope_position bigint CHECK(scope_position>0),
- scope_transaction_id uuid,
- replay_generation bigint NOT NULL CHECK(replay_generation>=0),
- undo_generation bigint NOT NULL CHECK(undo_generation>=0),
- restore_generation bigint NOT NULL CHECK(restore_generation>=0),
- owner_epoch integer NOT NULL CHECK(owner_epoch>0),
- transaction_id uuid NOT NULL,
- receiving_partition integer CHECK(receiving_partition BETWEEN 0 AND 4095),
- receiving_epoch integer CHECK(receiving_epoch>0),
- receiving_position bigint CHECK(receiving_position>0),
- receiving_transaction_id uuid,
- erasure_key bigint NOT NULL DEFAULT nextval('semantic.erasure_record_key'),
- PRIMARY KEY(partition_no,custody_key,sequence),
- UNIQUE(partition_no,erasure_key),
- FOREIGN KEY(partition_no,custody_key) REFERENCES semantic.identity_epoch_source_consumer_custody(partition_no,erasure_key),
- FOREIGN KEY(partition_no,custody_key,previous_sequence)
-  REFERENCES semantic.identity_epoch_source_consumer_terminal(partition_no,custody_key,sequence),
- FOREIGN KEY(partition_no,transaction_id) REFERENCES semantic.erasure_source_commit(partition_no,transaction_id),
- CHECK((sequence=1 AND previous_sequence IS NULL) OR (sequence>1 AND previous_sequence IS NOT NULL AND previous_sequence=sequence-1)),
- CHECK(directory_after IS NULL OR (jsonb_typeof(directory_after)='object'
-  AND jsonb_typeof(directory_after->'after')='array'
-  AND jsonb_array_length(directory_after->'after')<=8)),
- CHECK(effect_after IS NULL OR (jsonb_typeof(effect_after)='object'
-  AND effect_after ? 'effectKey' AND effect_after->>'disposition' IN ('OLD','NEW','first-apply','handoff'))),
- CHECK(COALESCE(jsonb_array_length(directory_after->'after')+1,0)
-  +CASE WHEN effect_after IS NULL THEN 0 ELSE 2 END<=8),
- CHECK(octet_length(jsonb_build_array(directory_after,effect_after)::text)<=2048),
- CHECK((scope_partition IS NULL AND scope_epoch IS NULL AND scope_position IS NULL AND scope_transaction_id IS NULL)
-  OR (scope_partition IS NOT NULL AND scope_epoch IS NOT NULL AND scope_position IS NOT NULL AND scope_transaction_id IS NOT NULL)),
- CHECK((state='transferred' AND receiving_partition=partition_no AND receiving_epoch=owner_epoch
-  AND receiving_partition IS NOT NULL AND receiving_epoch IS NOT NULL AND receiving_position IS NOT NULL
-  AND receiving_transaction_id IS NOT NULL) OR (state<>'transferred' AND receiving_partition IS NULL
-  AND receiving_epoch IS NULL AND receiving_position IS NULL AND receiving_transaction_id IS NULL)),
- CHECK(state='scope' OR effect_after IS NULL),
- CHECK(state NOT IN ('discharged','transferred') OR directory_after IS NOT NULL),
- CHECK(scope_transaction_id IS NULL OR (ticket_key IS NOT NULL AND seal_digest IS NOT NULL))
-);
-CREATE TRIGGER identity_epoch_source_consumer_terminal_immutable BEFORE UPDATE OR DELETE
- ON semantic.identity_epoch_source_consumer_terminal
- FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
-CREATE TRIGGER identity_epoch_source_consumer_terminal_no_truncate BEFORE TRUNCATE
- ON semantic.identity_epoch_source_consumer_terminal
- FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
-CREATE CONSTRAINT TRIGGER identity_epoch_source_consumer_terminal_erasure_capture
- AFTER INSERT ON semantic.identity_epoch_source_consumer_terminal
- DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
- EXECUTE FUNCTION semantic.capture_identity_source_consumer_custody_erasure();
 
 
 --

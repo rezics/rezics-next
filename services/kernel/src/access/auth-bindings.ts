@@ -1,3 +1,4 @@
+import { createAuthErasureLiveBindings } from './auth-erasure-live.ts';
 import { createAuthErasureObligationBindings } from './auth-erasure-obligations.ts';
 import { accessClock } from './access-clock.ts';
 import { systemClock } from '../clock.ts';
@@ -5,6 +6,8 @@ import type { Access } from '../request/access.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import type {
   AuthErasureProofPorts,
+  AuthErasureLivePorts,
+  AuthErasureLiveReceiver,
   AuthErasureObligationPorts,
   AccessAccount,
   ProvisioningReceiptMetadata,
@@ -129,9 +132,20 @@ function translate(account: Account | null, mode: ReadMode = 'open'): AccessAcco
  * account cache, policy evaluator, fence clearing or cross-account workflow runs here.
  * Callback fixtures establish this structural contract only, not product authorization.
  */
+type AuthBindingConfig = {
+  pool: Pool;
+  access?: Access;
+  authErasureLiveReceiver?: AuthErasureLiveReceiver;
+} & AuthBindingCapabilities;
 export function createAuthBindings(
-  config: { pool: Pool; access?: Access } & AuthBindingCapabilities,
-): PasskeyTrustedAccessPorts & AuthErasureObligationPorts {
+  config: AuthBindingConfig & { authErasureLiveReceiver: AuthErasureLiveReceiver },
+): PasskeyTrustedAccessPorts & AuthErasureObligationPorts & AuthErasureLivePorts;
+export function createAuthBindings(
+  config: AuthBindingConfig,
+): PasskeyTrustedAccessPorts & AuthErasureObligationPorts & Partial<AuthErasureLivePorts>;
+export function createAuthBindings(
+  config: AuthBindingConfig,
+): PasskeyTrustedAccessPorts & AuthErasureObligationPorts & Partial<AuthErasureLivePorts> {
   const {
     pool,
     verifyPendingIdentity,
@@ -313,6 +327,7 @@ export function createAuthBindings(
   }
   return {
     ...createAuthErasureObligationBindings(pool),
+    ...(config.authErasureLiveReceiver ? createAuthErasureLiveBindings(pool, config.authErasureLiveReceiver) : {}),
     passkeys: true,
     async readAuthErasureBarrier(id) {
       if (!config.readAuthErasureBarrier) throw new AuthBindingUnavailableError('readAuthErasureBarrier');

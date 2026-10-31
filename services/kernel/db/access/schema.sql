@@ -24,6 +24,186 @@ CREATE SCHEMA access;
 
 
 --
+-- Name: account_discovery_after(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.account_discovery_after() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r integer; a uuid; v bigint; delta integer := 0;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    IF OLD.state = 'active' AND NOT OLD.authn_fenced THEN delta := delta - 1; END IF;
+  END IF;
+  IF TG_OP <> 'DELETE' THEN
+    IF NEW.state = 'active' AND NOT NEW.authn_fenced THEN delta := delta + 1; END IF;
+    r := NEW.route; a := NEW.account_id; v := NEW.discovery_revision;
+  ELSE
+    r := OLD.route; a := OLD.account_id; v := nextval('access.account_discovery_revision');
+  END IF;
+  UPDATE access.account_discovery_population SET population = population + delta, revision = v WHERE partition_no = r >> 4;
+  IF TG_OP <> 'UPDATE' OR NOT access.native_terminal_account_ready(OLD) THEN
+    INSERT INTO access.account_discovery_intent VALUES (r, a, v)
+      ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
+  END IF;
+  IF TG_OP = 'DELETE' OR NEW.state = 'deleted' THEN
+    DELETE FROM access.account_discovery_claim_cursor WHERE route = r AND account_id = a;
+  END IF;
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: account_discovery_before(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.account_discovery_before() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE p integer;
+BEGIN
+  IF TG_OP = 'UPDATE' AND (NEW.route, NEW.account_id) IS DISTINCT FROM (OLD.route, OLD.account_id) THEN
+    RAISE EXCEPTION 'Account discovery source keys are immutable';
+  END IF;
+  p := CASE WHEN TG_OP = 'DELETE' THEN OLD.route >> 4 ELSE NEW.route >> 4 END;
+  -- Serialize allocation with the native head; a late commit must advance it too.
+  PERFORM 1 FROM access.account_discovery_population WHERE partition_no = p FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Account discovery census is not installed'; END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  NEW.discovery_revision := nextval('access.account_discovery_revision');
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: account_discovery_claim_after(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.account_discovery_claim_after() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r integer; v bigint;
+BEGIN
+  IF TG_OP = 'DELETE' THEN r := OLD.route; v := nextval('access.account_discovery_revision');
+  ELSE r := NEW.route; v := NEW.discovery_revision; END IF;
+  UPDATE access.account_discovery_population SET claim_revision = v WHERE partition_no = r >> 4;
+  IF TG_OP <> 'INSERT' AND OLD.account_id IS NOT NULL THEN
+    INSERT INTO access.account_discovery_claim_intent VALUES (r, OLD.account_id, v)
+      ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
+  END IF;
+  IF TG_OP <> 'DELETE' AND NEW.account_id IS NOT NULL THEN
+    INSERT INTO access.account_discovery_claim_intent VALUES (r, NEW.account_id, v)
+      ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
+  END IF;
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: account_discovery_claim_before(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.account_discovery_claim_before() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE p integer;
+BEGIN
+  IF TG_OP = 'UPDATE' AND (NEW.route, NEW.normalized_handle) IS DISTINCT FROM (OLD.route, OLD.normalized_handle) THEN
+    RAISE EXCEPTION 'Account discovery claim keys are immutable';
+  END IF;
+  p := CASE WHEN TG_OP = 'DELETE' THEN OLD.route >> 4 ELSE NEW.route >> 4 END;
+  PERFORM 1 FROM access.account_discovery_population WHERE partition_no = p FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Account discovery census is not installed'; END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  NEW.discovery_revision := nextval('access.account_discovery_revision');
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: account_discovery_preferences(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.account_discovery_preferences() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    UPDATE access.account SET discovery_revision = discovery_revision WHERE route = OLD.route AND account_id = OLD.account_id;
+  ELSE
+    UPDATE access.account SET discovery_revision = discovery_revision WHERE route = NEW.route AND account_id = NEW.account_id;
+  END IF;
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: account_discovery_truncate(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.account_discovery_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'account' THEN
+    UPDATE access.account_discovery_population SET population = 0, revision = nextval('access.account_discovery_revision');
+  ELSE
+    UPDATE access.account_discovery_population SET claim_revision = nextval('access.account_discovery_revision');
+  END IF;
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: advance_current_resource_roles(timestamp with time zone); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.advance_current_resource_roles(p_at timestamp with time zone DEFAULT clock_timestamp()) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE install access.current_resource_role_install; source access.resource_role_grant;
+  item access.current_resource_role_due; anchor timestamptz; touched integer := 0;
+BEGIN
+  SELECT * INTO STRICT install FROM access.current_resource_role_install WHERE singleton FOR UPDATE;
+  IF NOT install.complete THEN
+    FOR source IN SELECT * FROM access.resource_role_grant
+      WHERE erasure_key > install.after_key AND erasure_key <= install.cut
+      ORDER BY erasure_key LIMIT 100 FOR UPDATE
+    LOOP
+      PERFORM access.index_current_resource_role(source);
+      install.after_key := source.erasure_key;
+      touched := touched+1;
+    END LOOP;
+    UPDATE access.current_resource_role_install SET after_key=install.after_key,
+      complete=(touched < 100 OR install.after_key=install.cut) WHERE singleton;
+    RETURN touched;
+  END IF;
+  -- Each iteration removes one exact due reference. The index supplies its next start key.
+  FOR counter IN 1..100 LOOP
+    SELECT * INTO item FROM access.current_resource_role_due WHERE due_at <= p_at
+      ORDER BY due_at,route,resource_id,interval_key LIMIT 1;
+    EXIT WHEN NOT FOUND;
+    SELECT processed_at INTO STRICT anchor FROM access.current_resource_role_frontier
+      WHERE route=item.route AND resource_id=item.resource_id FOR UPDATE;
+    -- A concurrent source writer may have removed/replaced this boundary before the frontier lock.
+    DELETE FROM access.current_resource_role_due WHERE route=item.route AND resource_id=item.resource_id
+      AND due_at=item.due_at AND interval_key=item.interval_key;
+    IF NOT FOUND THEN CONTINUE; END IF;
+    anchor := greatest(anchor,item.due_at);
+    DELETE FROM access.current_resource_role_key WHERE interval_key=item.interval_key;
+    INSERT INTO access.current_resource_role_key
+      SELECT route,resource_id,grant_role,subject_kind,subject_id,subject_role,erasure_key
+      FROM access.resource_role_grant WHERE erasure_key=item.interval_key AND valid @> anchor
+      ON CONFLICT DO NOTHING;
+    UPDATE access.current_resource_role_frontier SET processed_at=anchor,version=version+1
+      WHERE route=item.route AND resource_id=item.resource_id;
+    touched := touched+1;
+  END LOOP;
+  RETURN touched;
+END; $$;
+
+
+--
 -- Name: advance_operator_relation(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -45,6 +225,489 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+
+--
+-- Name: agent_identity_original_source_valid(integer, jsonb); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.agent_identity_original_source_valid(home integer, s jsonb) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+ SELECT EXISTS (
+  SELECT 1 FROM semantic.identity_epoch_receipt_binding b
+  JOIN semantic.identity_epoch_receipt_claim c
+    ON (c.partition_no,c.receipt_key,c.generation)=(b.partition_no,b.receipt_key,b.generation)
+  JOIN semantic.identity_epoch_receipt_claim_commit k
+    ON (k.partition_no,k.receipt_key,k.generation,k.transaction_id)=
+       (c.partition_no,c.receipt_key,c.generation,c.transaction_id)
+  JOIN semantic.identity_epoch_native_commit n
+    ON (n.partition_no,n.transaction_id)=(c.partition_no,c.transaction_id)
+    AND n.purpose='admission' AND n.xmin=k.xmin AND n.xmin=c.xmin
+  JOIN core.partition p ON p.partition_no=c.partition_no AND p.write_state='active'
+    AND p.epoch=n.epoch AND p.position>=n.position AND n.position>0
+  WHERE b.partition_no=home AND b.receipt_key=s->'claim'->>'key'
+    AND b.account_id::text=s->'input'->'receipt'->>'account' AND b.state='accepted'
+    AND b.intent_digest=c.intent_digest AND (b.accepted_job,b.accepted_epoch)=(c.job_id,c.job_epoch)
+    AND NOT c.imported AND c.xmin::text<>pg_current_xact_id()::text
+    AND c.intent=s->'input'->'intent' AND c.receipt=s->'input'->'receipt' AND c.intent_digest=s->>'digest'
+    AND s->'native'=jsonb_build_object('partition',n.partition_no,'epoch',n.epoch,
+      'position',n.position::text,'transactionId',n.transaction_id::text)
+    AND s->'job'=jsonb_build_object('jobId',c.job_id::text,'epoch',c.job_epoch::text)
+    AND s->'claim'=jsonb_build_object('partition',c.partition_no,'key',c.receipt_key,
+      'generation',c.generation::text,'transactionId',c.transaction_id::text,
+      'home',c.job_home,'scope',c.scope_digest,'sources',c.sources)
+ );
+$$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: agent_identity_intent; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.agent_identity_intent (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    direction text NOT NULL,
+    receipt_id uuid NOT NULL,
+    agent_id uuid NOT NULL,
+    account_kind text NOT NULL,
+    catalogue_id uuid NOT NULL,
+    request_id uuid,
+    requested_by uuid,
+    decided_by uuid,
+    decision_route integer,
+    decision_receipt_id uuid,
+    decision_epoch integer,
+    decision_position bigint,
+    decision_transaction_id uuid,
+    pending_receipt_id uuid NOT NULL,
+    verification_receipt_id uuid,
+    disposition text,
+    reason text,
+    release text NOT NULL,
+    intent jsonb NOT NULL,
+    intent_digest text NOT NULL,
+    source_partition integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    source_transaction_id uuid NOT NULL,
+    undo_job_id uuid,
+    undo_job_epoch bigint,
+    delivery_key text NOT NULL,
+    workflow_id text NOT NULL,
+    native_command_kind text NOT NULL,
+    native_receipt_key text NOT NULL,
+    minimized boolean DEFAULT false NOT NULL,
+    CONSTRAINT agent_identity_intent_account_kind_check CHECK ((account_kind = ANY (ARRAY['actor'::text, 'organization'::text]))),
+    CONSTRAINT agent_identity_intent_check CHECK ((((direction = 'account-agent.verify'::text) AND (native_command_kind = 'access.agent-verification.pending'::text)) OR ((direction = 'account-agent.unverify'::text) AND (native_command_kind = ANY (ARRAY['access.agent-verification.released'::text, 'access.agent-verification.revoked'::text, 'access.agent-verification.deleted'::text]))))),
+    CONSTRAINT agent_identity_intent_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT agent_identity_intent_check2 CHECK ((source_partition = (route / 16))),
+    CONSTRAINT agent_identity_intent_check3 CHECK ((((direction = 'account-agent.verify'::text) AND (request_id IS NOT NULL) AND (decision_route = 0) AND (decision_receipt_id = receipt_id) AND (decision_epoch > 0) AND (decision_position > 0) AND (decision_transaction_id = receipt_id) AND (verification_receipt_id IS NULL) AND (undo_job_id IS NULL) AND (undo_job_epoch IS NULL) AND (disposition IS NULL)) OR ((direction = 'account-agent.unverify'::text) AND (verification_receipt_id IS NOT NULL) AND (source_transaction_id = receipt_id) AND (disposition IS NOT NULL) AND (undo_job_id IS NOT NULL) AND (undo_job_epoch > 0)))),
+    CONSTRAINT agent_identity_intent_check4 CHECK (((direction <> 'account-agent.verify'::text) OR (source_transaction_id = pending_receipt_id))),
+    CONSTRAINT agent_identity_intent_direction_check CHECK ((direction = ANY (ARRAY['account-agent.verify'::text, 'account-agent.unverify'::text]))),
+    CONSTRAINT agent_identity_intent_disposition_check CHECK ((disposition = ANY (ARRAY['released'::text, 'revoked'::text]))),
+    CONSTRAINT agent_identity_intent_intent_digest_check CHECK ((intent_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT agent_identity_intent_reason_check CHECK ((char_length(reason) <= 500)),
+    CONSTRAINT agent_identity_intent_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT agent_identity_intent_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
+-- Name: agent_identity_recovery_valid(access.agent_identity_intent); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.agent_identity_recovery_valid(i access.agent_identity_intent) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+ SELECT CASE WHEN NOT EXISTS (
+   SELECT 1 FROM access.agent_identity_recovery a WHERE
+     (a.route,a.account_id,a.direction,a.receipt_id)=(i.route,i.account_id,i.direction,i.receipt_id)
+     AND a.original_source IS NOT NULL
+ ) THEN access.agent_identity_retained_recovery_valid(i) ELSE EXISTS (
+  SELECT 1 FROM access.agent_identity_recovery a
+  JOIN core.receipt r ON r.partition_no=a.source_partition AND r.principal_kind='account'
+    AND r.principal_id=a.requested_by AND r.command_kind=i.native_command_kind
+    AND r.idempotency_key=i.native_receipt_key AND r.transaction_id=a.source_transaction_id
+    AND r.epoch=a.source_epoch AND r.position=a.source_position AND r.payload_state='present'
+    AND r.xmin::text<>pg_current_xact_id()::text
+  JOIN core.receipt c ON c.partition_no=a.source_partition AND c.principal_kind='account'
+    AND c.principal_id=a.requested_by AND c.command_kind='access.agent-identity.recover'
+    AND c.idempotency_key=a.recovery_receipt_key AND c.transaction_id=a.recovery_transaction_id
+    AND c.epoch=a.recovery_epoch AND c.position=a.recovery_position
+    AND c.xmin::text=pg_current_xact_id()::text AND c.payload_state='present'
+    AND encode(c.request_digest,'hex')=a.recovery_digest
+    AND c.request_digest=sha256(convert_to(format('[%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s]',
+      to_json(i.delivery_key),to_json(i.source_transaction_id::text),i.source_epoch,to_json(i.source_position::text),
+      to_json(i.intent_digest),COALESCE(to_json(a.verification_intent_digest)::text,'null'),
+      (a.original_source->'native'->'transactionId')::text,(a.original_source->'native'->'epoch')::text,
+      (a.original_source->'native'->'position')::text,(a.original_source->'claim'->'generation')::text,
+      (a.original_source->'job'->'jobId')::text,(a.original_source->'job'->'epoch')::text,
+      (a.original_source->'claim'->'scope')::text,COALESCE(to_json(i.decision_transaction_id::text)::text,'null'),
+      COALESCE(i.decision_epoch::text,'null'),COALESCE(to_json(i.decision_position::text)::text,'null')),'UTF8'))
+  JOIN core.partition p ON p.partition_no=a.source_partition AND p.write_state='active'
+    AND p.epoch=a.source_epoch AND p.position>=a.recovery_position
+  WHERE (a.route,a.account_id,a.direction,a.receipt_id)=(i.route,i.account_id,i.direction,i.receipt_id)
+    AND a.xmin::text=pg_current_xact_id()::text
+    AND a.requested_by=i.requested_by AND a.decided_by IS NOT DISTINCT FROM i.decided_by
+    AND a.source_partition=i.source_partition AND a.source_epoch=i.source_epoch
+    AND a.source_position=i.source_position AND a.source_transaction_id=i.source_transaction_id
+    AND a.intent_digest=i.intent_digest AND NOT i.minimized
+    AND i.pending_receipt_id=r.transaction_id
+    AND i.delivery_key=format('["%s","%s","%s"]',i.direction,i.account_id::text,i.receipt_id::text)
+    AND a.original_source->'input'=jsonb_build_object('intent',i.intent,'receipt',
+      jsonb_build_object('account',i.account_id::text,'kind',i.direction,'receipt',i.receipt_id::text))
+    AND a.original_source->>'digest'=i.intent_digest
+    AND i.intent->>'release'=i.release
+    AND access.agent_identity_original_source_valid(i.source_partition,a.original_source)
+    -- The original Source admission must never masquerade as the Account command.
+    AND a.original_source->'native'->>'transactionId'<>i.source_transaction_id::text
+    AND a.original_source->'native'->>'transactionId'<>a.recovery_transaction_id::text
+    AND (a.original_source->'native'->>'position')::bigint>i.source_position
+    AND (a.original_source->'native'->>'position')::bigint<a.recovery_position
+    AND ((i.direction='account-agent.verify'
+      AND a.original_source->'priorVerification'='null'::jsonb
+      AND a.verification_intent_digest IS NULL AND i.verification_receipt_id IS NULL
+      AND i.decided_by IS NOT NULL AND i.decision_route=0 AND i.decision_receipt_id=i.receipt_id
+      AND i.decision_transaction_id=i.receipt_id AND i.decision_epoch>0 AND i.decision_position>0
+      AND i.intent=jsonb_build_object('kind','merge','redirected',i.agent_id::text,
+        'survivor',i.catalogue_id::text,'release',i.release)
+      AND i.workflow_id='accounts.agent-verification:'||i.request_id::text||':'||i.receipt_id::text
+      AND r.command_kind='access.agent-verification.pending'
+      AND r.response=jsonb_build_object('requestId',i.request_id::text,'accountId',i.account_id::text)
+      AND r.request_digest=sha256(convert_to(format('[%s,%s,%s,%s,%s]',to_json(i.request_id::text),
+        to_json(i.account_id::text),to_json(i.account_kind),to_json(i.catalogue_id::text),
+        to_json(i.receipt_id::text)),'UTF8')))
+    OR (i.direction='account-agent.unverify'
+      AND access.agent_identity_original_source_valid(i.source_partition,a.original_source->'priorVerification')
+      AND (a.original_source->'priorVerification'->'native'->>'position')::bigint<i.source_position
+      AND a.original_source->'priorVerification'->>'verificationReceipt'=i.verification_receipt_id::text
+      AND a.original_source->'priorVerification'->>'digest'=a.verification_intent_digest
+      AND a.original_source->'priorVerification'->'input'=jsonb_build_object('intent',
+        jsonb_build_object('kind','merge','redirected',i.agent_id::text,'survivor',i.catalogue_id::text,'release',i.release),
+        'receipt',jsonb_build_object('account',i.account_id::text,'kind','account-agent.verify',
+          'receipt',i.verification_receipt_id::text))
+      AND a.original_source->'priorVerification'->'job'=i.intent->'undoJob'
+      AND i.intent=jsonb_build_object('kind','unmerge','original',i.agent_id::text,'release',i.release,
+        'verificationReceipt',i.verification_receipt_id::text,'undoJob',
+        jsonb_build_object('jobId',i.undo_job_id::text,'epoch',i.undo_job_epoch::text))
+      AND i.request_id IS NULL AND i.decision_route IS NULL AND i.decision_receipt_id IS NULL
+      AND i.decision_epoch IS NULL AND i.decision_position IS NULL AND i.decision_transaction_id IS NULL
+      AND i.workflow_id='accounts.agent-verification-reversal:'||i.account_id::text||':'||i.receipt_id::text
+      AND r.response=jsonb_build_object('accountId',i.account_id::text,'receiptId',i.receipt_id::text,
+        'requestedBy',i.requested_by::text,'kind',i.disposition,'reason',i.reason,
+        'catalogueSubjectId',i.catalogue_id::text,'verificationReceiptId',i.verification_receipt_id::text)
+      AND i.decided_by IS NOT DISTINCT FROM CASE WHEN i.disposition='revoked' THEN i.requested_by END
+      AND ((r.command_kind='access.agent-verification.deleted' AND i.disposition='revoked'
+        AND i.reason='Account deleted' AND i.requested_by=i.account_id
+        AND r.request_digest=sha256(convert_to(i.account_id::text,'UTF8'))
+        AND EXISTS (SELECT 1 FROM access.account t WHERE t.route=i.route AND t.account_id=i.account_id AND t.state='deleted'))
+      OR (r.command_kind='access.agent-verification.'||i.disposition AND EXISTS (
+        SELECT 1 FROM editorial.write_basis b WHERE b.partition_no=r.partition_no AND b.transaction_id=r.transaction_id
+          AND b.principal_kind='account' AND b.principal_id=r.principal_id AND b.epoch=r.epoch AND b.position=r.position)))))
+ ) END;
+$$;
+
+
+--
+-- Name: agent_identity_retained_recovery_valid(access.agent_identity_intent); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.agent_identity_retained_recovery_valid(i access.agent_identity_intent) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+ SELECT EXISTS (
+  SELECT 1 FROM access.agent_identity_recovery a
+  JOIN core.receipt r ON r.partition_no=a.source_partition AND r.principal_kind='account'
+    AND r.principal_id=a.requested_by AND r.command_kind=i.native_command_kind
+    AND r.idempotency_key=i.native_receipt_key AND r.transaction_id=a.source_transaction_id
+    AND r.epoch=a.source_epoch AND r.position=a.source_position AND r.payload_state='present'
+    AND r.xmin::text<>pg_current_xact_id()::text
+  JOIN core.receipt c ON c.partition_no=a.source_partition AND c.principal_kind='account'
+    AND c.principal_id=a.requested_by AND c.command_kind='access.agent-identity.recover'
+    AND c.idempotency_key=a.recovery_receipt_key
+    AND c.transaction_id=a.recovery_transaction_id AND c.epoch=a.recovery_epoch
+    AND c.position=a.recovery_position AND c.xmin::text=pg_current_xact_id()::text
+    AND c.payload_state='present'
+    AND c.request_digest=sha256(convert_to(format('[%s,%s,%s,%s,%s,%s]',
+      to_json(i.delivery_key),to_json(i.source_transaction_id::text),i.source_epoch,
+      to_json(i.source_position::text),to_json(i.intent_digest),to_json(a.verification_intent_digest)), 'UTF8'))
+  JOIN core.partition p ON p.partition_no=a.source_partition AND p.write_state='active'
+    AND p.epoch=a.source_epoch AND p.position>=a.recovery_position
+  JOIN access.agent_identity_intent v ON v.route=i.route AND v.account_id=i.account_id
+    AND v.direction='account-agent.verify' AND v.receipt_id=i.verification_receipt_id
+    AND v.intent_digest=a.verification_intent_digest AND NOT v.minimized
+    AND v.xmin::text<>pg_current_xact_id()::text
+    AND v.source_epoch=i.source_epoch AND v.catalogue_id=i.catalogue_id
+    AND v.source_position<r.position
+    AND v.agent_id=i.agent_id AND v.account_kind=i.account_kind AND v.release=i.release
+  WHERE (a.route,a.account_id,a.direction,a.receipt_id)=(i.route,i.account_id,i.direction,i.receipt_id)
+    AND a.xmin::text=pg_current_xact_id()::text
+    AND a.requested_by=i.requested_by AND a.decided_by IS NOT DISTINCT FROM i.decided_by
+    AND a.source_partition=i.source_partition AND a.source_epoch=i.source_epoch
+    AND a.source_position=i.source_position AND a.source_transaction_id=i.source_transaction_id
+    AND a.intent_digest=i.intent_digest AND NOT i.minimized
+    AND i.direction='account-agent.unverify' AND i.pending_receipt_id=i.receipt_id
+    AND i.request_id IS NULL AND i.decision_route IS NULL AND i.decision_receipt_id IS NULL
+    AND i.decision_epoch IS NULL AND i.decision_position IS NULL AND i.decision_transaction_id IS NULL
+    AND i.delivery_key=format('["%s","%s","%s"]',i.direction,i.account_id::text,i.receipt_id::text)
+    AND i.workflow_id='accounts.agent-verification-reversal:'||i.account_id::text||':'||i.receipt_id::text
+    AND i.intent=jsonb_build_object('kind','unmerge','original',i.agent_id::text,
+      'undoJob',jsonb_build_object('jobId',i.undo_job_id::text,'epoch',i.undo_job_epoch::text),
+      'verificationReceipt',i.verification_receipt_id::text,'release',v.release)
+    AND i.intent_digest=encode(sha256(convert_to(format(
+      '[{"kind":"unmerge","original":%s,"release":%s,"undoJob":{"epoch":%s,"jobId":%s},"verificationReceipt":%s},{"account":%s,"kind":"account-agent.unverify","receipt":%s}]',
+      to_json(i.agent_id::text),to_json(i.release),to_json(i.undo_job_epoch::text),to_json(i.undo_job_id::text),
+      to_json(i.verification_receipt_id::text),to_json(i.account_id::text),to_json(i.receipt_id::text)), 'UTF8')), 'hex')
+    AND r.response=jsonb_build_object('accountId',i.account_id::text,'receiptId',i.receipt_id::text,
+      'requestedBy',i.requested_by::text,'kind',i.disposition,'reason',i.reason,
+      'catalogueSubjectId',i.catalogue_id::text,'verificationReceiptId',i.verification_receipt_id::text)
+    AND i.decided_by IS NOT DISTINCT FROM CASE WHEN i.disposition='revoked' THEN i.requested_by END
+    AND ((r.command_kind='access.agent-verification.deleted' AND i.disposition='revoked'
+       AND i.reason='Account deleted' AND i.requested_by=i.account_id
+       AND r.request_digest=sha256(convert_to(i.account_id::text,'UTF8'))
+       AND EXISTS (SELECT 1 FROM access.account t WHERE t.route=i.route AND t.account_id=i.account_id
+         AND t.state='deleted'))
+     OR (r.command_kind='access.agent-verification.'||i.disposition AND EXISTS (
+       SELECT 1 FROM editorial.write_basis b WHERE b.partition_no=r.partition_no
+         AND b.transaction_id=r.transaction_id AND b.principal_kind='account' AND b.principal_id=r.principal_id
+         AND b.epoch=r.epoch AND b.position=r.position)))
+ );
+$$;
+
+
+--
+-- Name: auth_erasure_cut_guard(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_erasure_cut_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth erasure cut is permanent'; END IF;
+ IF (NEW.cut_id,NEW.participant,NEW.inventory_version,NEW.producer_version)
+    IS DISTINCT FROM (OLD.cut_id,OLD.participant,OLD.inventory_version,OLD.producer_version)
+    OR NEW.sealed_partitions<>OLD.sealed_partitions+1
+    OR NOT EXISTS(SELECT 1 FROM access.auth_erasure_cut_partition
+                  WHERE cut_id=OLD.cut_id AND partition_no=OLD.sealed_partitions) THEN
+  RAISE EXCEPTION 'Auth erasure cut must advance by one retained native partition' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: auth_erasure_immutable(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_erasure_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ RAISE EXCEPTION 'Auth erasure source evidence is permanent and immutable' USING ERRCODE='23514';
+END; $$;
+
+
+--
+-- Name: auth_erasure_index_guard(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_erasure_index_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF (TG_OP='UPDATE' AND OLD.auth_obligation_indexed AND NOT NEW.auth_obligation_indexed)
+    OR (NEW.auth_obligation_indexed AND NOT EXISTS(
+      SELECT 1 FROM access.auth_erasure_obligation WHERE route=NEW.route AND account_id=NEW.account_id)) THEN
+  RAISE EXCEPTION 'Auth erasure index cannot discard source evidence' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: auth_erasure_live_partition_guard(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_erasure_live_partition_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  RAISE EXCEPTION 'Auth live enrollment is permanent' USING ERRCODE='23514';
+ END IF;
+ IF TG_OP='INSERT' THEN
+  IF NOT NEW.lineage_valid OR NEW.enrollment_floor<>NEW.enrolled_through OR NOT EXISTS(
+   SELECT 1 FROM access.auth_erasure_source s JOIN core.partition p USING(partition_no)
+    WHERE s.partition_no=NEW.partition_no AND s.initialized AND s.head=NEW.enrolled_through
+     AND (s.generation,s.source_epoch,s.source_owner)=(NEW.generation,NEW.source_epoch,NEW.source_owner)
+     AND p.write_state='active' AND p.epoch=s.source_epoch AND p.node=s.source_owner) THEN
+   RAISE EXCEPTION 'Auth live enrollment requires current native source' USING ERRCODE='23514';
+  END IF;
+ ELSE
+  IF (NEW.partition_no,NEW.generation,NEW.source_epoch,NEW.source_owner,NEW.enrollment_floor)
+    IS DISTINCT FROM (OLD.partition_no,OLD.generation,OLD.source_epoch,OLD.source_owner,OLD.enrollment_floor)
+    OR NEW.enrolled_through<>OLD.enrolled_through+1 OR (NOT OLD.lineage_valid AND NEW.lineage_valid)
+    OR NOT EXISTS(SELECT 1 FROM access.auth_erasure_obligation
+                  WHERE partition_no=NEW.partition_no AND ordinal=NEW.enrolled_through) THEN
+   RAISE EXCEPTION 'Auth live enrollment cannot repin, skip or regress' USING ERRCODE='23514';
+  END IF;
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: auth_erasure_live_subscription_guard(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_erasure_live_subscription_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS(
+  SELECT 1 FROM access.auth_erasure_cut_partition c
+   JOIN access.auth_erasure_source s USING(partition_no)
+   JOIN core.partition p USING(partition_no)
+   JOIN access.auth_erasure_live_partition l USING(partition_no)
+  WHERE c.cut_id=NEW.cut_id AND c.partition_no=NEW.partition_no
+   AND (c.generation,c.source_epoch,c.source_owner,c.high_water)=
+       (NEW.generation,NEW.source_epoch,NEW.source_owner,NEW.high_water)
+   AND (s.generation,s.source_epoch,s.source_owner)=(c.generation,c.source_epoch,c.source_owner)
+   AND (l.generation,l.source_epoch,l.source_owner)=(c.generation,c.source_epoch,c.source_owner)
+   AND s.initialized AND s.head=NEW.arm_high_water AND l.enrolled_through=s.head AND l.lineage_valid
+   AND p.write_state='active' AND p.epoch=c.source_epoch AND p.node=c.source_owner AND p.position>=c.source_position
+   AND NOT EXISTS(SELECT 1 FROM access.auth_erasure_obligation o
+                  WHERE o.partition_no=c.partition_no AND o.minimum_authn_epoch IS NULL)) THEN
+  RAISE EXCEPTION 'Auth live subscription requires retained native cut and enrollment' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: auth_erasure_producer(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_erasure_producer() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ PERFORM access.capture_auth_erasure_obligation(NEW.route,NEW.account_id,true);
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: auth_erasure_source_guard(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_erasure_source_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth erasure source is permanent'; END IF;
+ IF (NEW.partition_no,NEW.generation,NEW.source_epoch,NEW.source_owner)
+    IS DISTINCT FROM (OLD.partition_no,OLD.generation,OLD.source_epoch,OLD.source_owner)
+    OR NEW.head<OLD.head OR (OLD.initialized AND NOT NEW.initialized) THEN
+  RAISE EXCEPTION 'Auth erasure source cannot change lineage or regress' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_auth_erasure_obligation(integer, uuid, boolean); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.capture_auth_erasure_obligation(r integer, a uuid, native boolean) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE source access.auth_erasure_source; root access.erasure; terminal access.account;
+ original access.lifecycle_fence_receipt; candidate access.lifecycle_fence_receipt; found_count integer:=0;
+BEGIN
+ -- Even while source lineage recovery is pending, current native deletion still
+ -- commits and retains its exact obligation in the same ordinal feed. It cannot
+ -- relabel the old source epoch or release a stale cut.
+ source:=access.lock_auth_erasure_source(r/16,NOT native);
+ SELECT * INTO root FROM access.erasure WHERE route=r AND account_id=a FOR UPDATE;
+ IF NOT FOUND OR root.auth_obligation_indexed THEN RETURN; END IF;
+ SELECT * INTO terminal FROM access.account WHERE route=r AND account_id=a;
+ -- A receipt's original native tombstone kind is retained independently of the
+ -- mutable current floor. Never infer the original floor from terminal or T.
+ FOR candidate IN SELECT * FROM access.lifecycle_fence_receipt
+  WHERE route=r AND account_id=a AND kind='tombstone' LIMIT 2
+ LOOP
+  found_count:=found_count+1; original:=candidate;
+ END LOOP;
+ IF found_count<>1 OR terminal.state<>'deleted' OR NOT terminal.authn_fenced
+    OR terminal.minimum_authn_epoch<original.minimum_authn_epoch THEN
+  original.minimum_authn_epoch:=NULL; original.receipt_id:=NULL;
+ ELSIF native THEN
+  -- New native capture must belong to the actual tombstone transaction, not a
+  -- later read/relabel of the current floor or a fabricated old receipt.
+  IF NOT EXISTS(SELECT 1 FROM access.lifecycle_fence_receipt f
+     WHERE f.route=r AND f.account_id=a AND f.receipt_id=original.receipt_id
+       AND f.transaction_id=terminal.transaction_id AND f.xmin::text=pg_current_xact_id()::text)
+     OR terminal.fence_receipt_id<>original.receipt_id THEN
+   original.minimum_authn_epoch:=NULL; original.receipt_id:=NULL;
+  END IF;
+ END IF;
+ UPDATE access.auth_erasure_source SET head=head+1 WHERE partition_no=r/16 RETURNING * INTO source;
+ INSERT INTO access.auth_erasure_obligation(partition_no,ordinal,route,account_id,version,at,minimum_authn_epoch,receipt_id)
+ VALUES(r/16,source.head,r,a,root.version,root.at,original.minimum_authn_epoch,original.receipt_id);
+ UPDATE access.erasure SET auth_obligation_indexed=true WHERE route=r AND account_id=a;
+END; $$;
+
+
+--
+-- Name: capture_current_resource_role(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.capture_current_resource_role() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    -- Even deletion of the final source row advances the native resource version.
+    INSERT INTO access.current_resource_role_frontier(route,resource_id,processed_at)
+    SELECT OLD.route,OLD.resource_id,initialized_at FROM access.current_resource_role_install WHERE singleton
+    ON CONFLICT DO NOTHING;
+    UPDATE access.current_resource_role_frontier SET version=version+1
+    WHERE route=OLD.route AND resource_id=OLD.resource_id;
+    DELETE FROM access.current_resource_role_key WHERE interval_key=OLD.erasure_key;
+    DELETE FROM access.current_resource_role_due WHERE interval_key=OLD.erasure_key;
+  END IF;
+  IF TG_OP <> 'DELETE' THEN PERFORM access.index_current_resource_role(NEW); END IF;
+  RETURN NULL;
+END; $$;
+
+
+--
+-- Name: capture_resource_role_provenance(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.capture_resource_role_provenance() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r access.resource_role_grant; i access.resource_initialization; native_tx uuid;
+BEGIN
+ IF TG_OP='DELETE' THEN r:=OLD; ELSE r:=NEW; END IF;
+ IF r.subject_kind<>'identity' OR r.subject_role<>'' THEN RETURN r; END IF;
+ SELECT * INTO i FROM access.resource_initialization WHERE route=r.route AND resource_id=r.resource_id;
+ IF NOT FOUND THEN RETURN r; END IF;
+ native_tx:=coalesce(nullif(current_setting('access.role_native_transaction',true),'' )::uuid,r.transaction_id);
+ INSERT INTO access.resource_role_provenance(route,resource_id,resource_type,original_creator,account_id,
+   grant_role,valid,side,grant_transaction,source_transaction)
+ VALUES(r.route,r.resource_id,i.resource_type,i.creator_id,r.subject_id,r.grant_role,r.valid,
+   CASE WHEN TG_OP='DELETE' THEN 'former' ELSE 'new' END,r.transaction_id,native_tx);
+ RETURN r;
+END; $$;
 
 
 --
@@ -152,6 +815,41 @@ $$;
 
 
 --
+-- Name: deliver_resource_role_provenance(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.deliver_resource_role_provenance() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ PERFORM access.try_deliver_resource_role_provenance(NEW.route,NEW.occurrence);
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: enroll_auth_erasure_live(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.enroll_auth_erasure_live() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ -- capture_auth_erasure_obligation already holds the native home/source locks.
+ -- A changed home keeps ordinary deletion working, but poisons this old lineage
+ -- permanently until an actual native lineage handoff is implemented by its owner.
+ UPDATE access.auth_erasure_live_partition l SET enrolled_through=NEW.ordinal,
+  lineage_valid=l.lineage_valid AND EXISTS(
+   SELECT 1 FROM access.auth_erasure_source s JOIN core.partition p USING(partition_no)
+    WHERE s.partition_no=NEW.partition_no AND s.head=NEW.ordinal
+     AND (s.generation,s.source_epoch,s.source_owner)=(l.generation,l.source_epoch,l.source_owner)
+     AND p.write_state='active' AND p.epoch=l.source_epoch AND p.node=l.source_owner)
+ WHERE l.partition_no=NEW.partition_no;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: erasure_entry_account(text, text); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -211,6 +909,22 @@ BEGIN
     RAISE EXCEPTION 'Authentication epoch floor cannot decrease' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_agent_identity_intent(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_agent_identity_intent() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF TG_OP='DELETE' THEN
+        RAISE EXCEPTION 'Account identity source requires receiving erasure custody';
+    END IF;
+    RAISE EXCEPTION 'Immutable account identity source';
 END;
 $$;
 
@@ -296,6 +1010,18 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+
+--
+-- Name: guard_identity_technical_source(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_identity_technical_source() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ RAISE EXCEPTION 'Accepted Accounts technical custody requires its native consumer release';
+END; $$;
 
 
 --
@@ -405,6 +1131,88 @@ $$;
 
 
 --
+-- Name: guard_realm_erasure_succession(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_realm_erasure_succession() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Realm succession source custody has no consumer closure' USING ERRCODE = '23514';
+  END IF;
+  IF ROW(NEW.route,NEW.resource_id,NEW.account_id,NEW.source_route,NEW.source_version,NEW.source_at,
+         NEW.source_ownership_state,NEW.source_orphaned_at,NEW.source_claim_eligible_at)
+       IS DISTINCT FROM ROW(OLD.route,OLD.resource_id,OLD.account_id,OLD.source_route,OLD.source_version,OLD.source_at,
+         OLD.source_ownership_state,OLD.source_orphaned_at,OLD.source_claim_eligible_at)
+     OR (OLD.decision_state IS NOT NULL AND NEW IS DISTINCT FROM OLD) THEN
+    RAISE EXCEPTION 'Realm succession source and terminal decision are immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END; $$;
+
+
+--
+-- Name: guard_realm_membership_transition(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_realm_membership_transition() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.proof_transaction_id IS NULL AND NEW.proof_transaction_id IS NOT NULL
+    AND NEW.outcome IS NOT NULL AND NEW.consumed_transaction_id IS NOT NULL
+    AND (to_jsonb(OLD) - 'proof_transaction_id' - 'outcome' - 'consumed_transaction_id') =
+        (to_jsonb(NEW) - 'proof_transaction_id' - 'outcome' - 'consumed_transaction_id')
+  THEN RETURN NEW; END IF;
+  RAISE EXCEPTION 'Realm transition provenance and consumption are immutable' USING ERRCODE = '23514';
+END; $$;
+
+
+--
+-- Name: guard_resource_role_provenance(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_resource_role_provenance() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE enrolled record;
+BEGIN
+ IF ROW(NEW.route,NEW.occurrence,NEW.resource_id,NEW.resource_type,NEW.original_creator,NEW.account_id,
+        NEW.grant_role,NEW.valid,NEW.side,NEW.grant_transaction,NEW.source_transaction)
+    IS DISTINCT FROM
+    ROW(OLD.route,OLD.occurrence,OLD.resource_id,OLD.resource_type,OLD.original_creator,OLD.account_id,
+        OLD.grant_role,OLD.valid,OLD.side,OLD.grant_transaction,OLD.source_transaction) THEN
+   RAISE EXCEPTION 'Native role occurrence metadata is immutable' USING ERRCODE='23514';
+ END IF;
+ IF NEW.resource_type='semantic.context' AND
+    (NEW.context_key IS DISTINCT FROM OLD.context_key OR NEW.delivery IS DISTINCT FROM OLD.delivery) THEN
+   IF OLD.delivery<>'pending' OR NEW.delivery='pending' THEN
+     RAISE EXCEPTION 'Invalid native Context delivery transition' USING ERRCODE='23514';
+   END IF;
+   -- Re-run the real, idempotent Source port rather than trusting a supplied result/key.
+   -- This also protects direct SQL updates without reading any Source-owned table.
+   IF to_regprocedure('semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)') IS NULL THEN
+     RAISE EXCEPTION 'Context historical-party receiver unavailable' USING ERRCODE='23514';
+   END IF;
+   SELECT * INTO enrolled FROM semantic.enroll_context_role_provenance(
+     OLD.route,OLD.occurrence,OLD.resource_id,OLD.original_creator,OLD.account_id,OLD.grant_role,
+     OLD.valid::text,OLD.side,OLD.grant_transaction,OLD.source_transaction);
+   IF NOT FOUND THEN
+     RAISE EXCEPTION 'Context historical-party enrollment unresolved' USING ERRCODE='23514';
+   END IF;
+   IF NOT coalesce(
+     (NEW.delivery='delivered' AND enrolled.state='enrolled' AND enrolled.context_key>0
+       AND NEW.context_key=enrolled.context_key)
+     OR (NEW.delivery='not-applicable' AND enrolled.state='not-applicable' AND NEW.context_key IS NULL),false) THEN
+     RAISE EXCEPTION 'Context delivery requires actual native Source enrollment' USING ERRCODE='23514';
+   END IF;
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: guard_retired_handle(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -440,6 +1248,82 @@ $$;
 
 
 --
+-- Name: resource_role_grant; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.resource_role_grant (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    subject_kind text DEFAULT 'identity'::text NOT NULL,
+    subject_id uuid NOT NULL,
+    subject_role text DEFAULT ''::text NOT NULL,
+    grant_role text NOT NULL,
+    valid tstzrange NOT NULL,
+    transaction_id uuid NOT NULL,
+    erasure_key bigint NOT NULL,
+    CONSTRAINT resource_role_grant_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
+    CONSTRAINT resource_role_grant_check1 CHECK ((((subject_kind = 'identity'::text) AND (subject_id <> '00000000-0000-0000-0000-000000000000'::uuid)) OR ((subject_kind = 'active_accounts'::text) AND (subject_id = '00000000-0000-0000-0000-000000000000'::uuid) AND (subject_role = ''::text)))),
+    CONSTRAINT resource_role_grant_grant_role_check CHECK ((grant_role ~ '^[a-z][a-z0-9_.-]*$'::text)),
+    CONSTRAINT resource_role_grant_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT resource_role_grant_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['identity'::text, 'active_accounts'::text]))),
+    CONSTRAINT resource_role_grant_subject_role_check CHECK ((subject_role = ANY (ARRAY[''::text, 'owner'::text, 'member'::text]))),
+    CONSTRAINT resource_role_grant_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
+);
+
+
+--
+-- Name: index_current_resource_role(access.resource_role_grant); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.index_current_resource_role(source access.resource_role_grant) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE anchor timestamptz;
+BEGIN
+  INSERT INTO access.current_resource_role_frontier(route,resource_id,processed_at)
+  SELECT source.route,source.resource_id,initialized_at FROM access.current_resource_role_install WHERE singleton
+  ON CONFLICT DO NOTHING;
+  UPDATE access.current_resource_role_frontier SET version=version+1
+  WHERE route=source.route AND resource_id=source.resource_id RETURNING processed_at INTO STRICT anchor;
+  DELETE FROM access.current_resource_role_key WHERE interval_key=source.erasure_key;
+  DELETE FROM access.current_resource_role_due WHERE interval_key=source.erasure_key;
+  IF source.valid @> anchor THEN
+    INSERT INTO access.current_resource_role_key VALUES
+      (source.route,source.resource_id,source.grant_role,source.subject_kind,source.subject_id,source.subject_role,source.erasure_key);
+  END IF;
+  INSERT INTO access.current_resource_role_due
+    SELECT source.route,source.resource_id,boundary,source.erasure_key
+    FROM (VALUES (lower(source.valid)),(upper(source.valid))) b(boundary)
+    WHERE boundary > anchor ON CONFLICT DO NOTHING;
+END; $$;
+
+
+--
+-- Name: initialize_auth_erasure_partition(integer); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.initialize_auth_erasure_partition(p integer) RETURNS boolean
+    LANGUAGE plpgsql
+    AS $$
+DECLARE source access.auth_erasure_source; item record;
+BEGIN
+ source:=access.lock_auth_erasure_source(p);
+ IF source.initialized THEN RETURN true; END IF;
+ FOR item IN SELECT route,account_id FROM access.erasure
+   WHERE route BETWEEN p*16 AND p*16+15 AND NOT auth_obligation_indexed
+   ORDER BY route,account_id LIMIT 48
+ LOOP
+  PERFORM access.capture_auth_erasure_obligation(item.route,item.account_id,false);
+ END LOOP;
+ IF EXISTS(SELECT 1 FROM access.erasure WHERE route BETWEEN p*16 AND p*16+15 AND NOT auth_obligation_indexed) THEN
+  RETURN false;
+ END IF;
+ UPDATE access.auth_erasure_source SET initialized=true WHERE partition_no=p;
+ RETURN true;
+END; $$;
+
+
+--
 -- Name: initialize_membership_inverse(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -452,6 +1336,98 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+
+--
+-- Name: auth_erasure_source; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_erasure_source (
+    partition_no integer NOT NULL,
+    generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    source_epoch integer NOT NULL,
+    source_owner text NOT NULL,
+    head bigint DEFAULT 0 NOT NULL,
+    initialized boolean DEFAULT false NOT NULL,
+    CONSTRAINT auth_erasure_source_head_check CHECK ((head >= 0)),
+    CONSTRAINT auth_erasure_source_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT auth_erasure_source_source_epoch_check CHECK ((source_epoch > 0))
+);
+
+
+--
+-- Name: lock_auth_erasure_source(integer, boolean); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.lock_auth_erasure_source(p integer, require_lineage boolean DEFAULT true) RETURNS access.auth_erasure_source
+    LANGUAGE plpgsql
+    AS $$
+DECLARE home core.partition; source access.auth_erasure_source;
+BEGIN
+ SELECT * INTO home FROM core.partition WHERE partition_no=p AND p BETWEEN 0 AND 4095 FOR UPDATE;
+ IF NOT FOUND OR home.write_state<>'active' THEN
+  RAISE EXCEPTION 'Auth erasure source home unavailable' USING ERRCODE='40001';
+ END IF;
+ INSERT INTO access.auth_erasure_source(partition_no,source_epoch,source_owner)
+ VALUES(p,home.epoch,home.node) ON CONFLICT DO NOTHING;
+ SELECT * INTO source FROM access.auth_erasure_source WHERE partition_no=p FOR UPDATE;
+ IF require_lineage AND (source.source_epoch<>home.epoch OR source.source_owner<>home.node) THEN
+  RAISE EXCEPTION 'Auth erasure source lineage recovery required' USING ERRCODE='40001';
+ END IF;
+ RETURN source;
+END; $$;
+
+
+--
+-- Name: resource_role_provenance; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.resource_role_provenance (
+    route integer NOT NULL,
+    occurrence bigint NOT NULL,
+    resource_id uuid NOT NULL,
+    resource_type text NOT NULL,
+    original_creator uuid NOT NULL,
+    account_id uuid NOT NULL,
+    grant_role text NOT NULL,
+    valid tstzrange,
+    side text NOT NULL,
+    grant_transaction uuid,
+    source_transaction uuid NOT NULL,
+    context_key bigint,
+    delivery text DEFAULT 'pending'::text NOT NULL,
+    CONSTRAINT resource_role_provenance_delivery_check CHECK ((delivery = ANY (ARRAY['pending'::text, 'delivered'::text, 'not-applicable'::text]))),
+    CONSTRAINT resource_role_provenance_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT resource_role_provenance_side_check CHECK ((side = ANY (ARRAY['creator'::text, 'new'::text, 'former'::text])))
+);
+
+
+--
+-- Name: lock_resource_role_provenance(integer, bigint); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.lock_resource_role_provenance(p_route integer, p_occurrence bigint) RETURNS SETOF access.resource_role_provenance
+    LANGUAGE plpgsql
+    AS $$
+DECLARE source access.resource_role_provenance;
+BEGIN
+ IF p_route IS NULL OR p_route NOT BETWEEN 0 AND 65535 OR p_occurrence IS NULL OR p_occurrence<=0 THEN
+   RAISE EXCEPTION 'Invalid native role occurrence key' USING ERRCODE='22023';
+ END IF;
+ PERFORM 1 FROM core.partition WHERE partition_no=p_route/16 AND write_state='active' FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Native Context home unavailable' USING ERRCODE='40001'; END IF;
+ SELECT * INTO source FROM access.resource_role_provenance
+   WHERE route=p_route AND occurrence=p_occurrence FOR UPDATE;
+ IF NOT FOUND THEN RETURN; END IF;
+ IF source.route<>(get_byte(uuid_send(source.resource_id),10)*256+get_byte(uuid_send(source.resource_id),11))
+    OR source.source_transaction='00000000-0000-0000-0000-000000000000'::uuid
+    OR (source.side='creator' AND (source.account_id<>source.original_creator OR source.grant_role<>''
+        OR source.grant_transaction IS NOT NULL OR source.valid IS NOT NULL))
+    OR (source.side IN ('new','former') AND (source.grant_transaction IS NULL OR source.valid IS NULL)) THEN
+   RAISE EXCEPTION 'Invalid native role occurrence provenance' USING ERRCODE='23514';
+ END IF;
+ RETURN NEXT source;
+END; $$;
 
 
 --
@@ -494,16 +1470,11 @@ END;
 $$;
 
 
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
 --
 -- Name: account; Type: TABLE; Schema: access; Owner: -
 --
 
 CREATE TABLE access.account (
-    discovery_revision bigint DEFAULT 0 NOT NULL,
     route integer NOT NULL,
     account_id uuid NOT NULL,
     kind text NOT NULL,
@@ -541,6 +1512,7 @@ CREATE TABLE access.account (
     public_changed_at timestamp with time zone DEFAULT statement_timestamp(),
     handle_change_times timestamp with time zone[] DEFAULT '{}'::timestamp with time zone[] NOT NULL,
     membership_time timestamp with time zone,
+    discovery_revision bigint DEFAULT 0 NOT NULL,
     CONSTRAINT account_agent_verification_check CHECK ((((pending_agent_subject_id IS NULL) = (pending_agent_receipt_id IS NULL)) AND ((agent_verified AND (agent_subject_id IS NOT NULL) AND (agent_verification_receipt_id IS NOT NULL) AND (pending_agent_subject_id IS NULL)) OR ((NOT agent_verified) AND (agent_subject_id IS NULL) AND (agent_verification_receipt_id IS NULL))))),
     CONSTRAINT account_avatar_route_check CHECK (((avatar IS NULL) OR (route = ((get_byte(uuid_send(avatar), 10) * 256) + get_byte(uuid_send(avatar), 11))))),
     CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
@@ -690,6 +1662,112 @@ $$;
 
 
 --
+-- Name: try_deliver_resource_role_provenance(integer, bigint); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.try_deliver_resource_role_provenance(p_route integer, p_occurrence bigint) RETURNS text
+    LANGUAGE plpgsql
+    AS $$
+DECLARE source access.resource_role_provenance; enrolled record;
+BEGIN
+ SELECT * INTO source FROM access.lock_resource_role_provenance(p_route,p_occurrence);
+ IF NOT FOUND THEN RETURN 'missing'; END IF;
+ IF source.delivery<>'pending' THEN RETURN source.delivery; END IF;
+ IF source.resource_type='semantic.context' THEN
+   IF to_regprocedure('semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)') IS NULL THEN
+     RETURN 'receiver-unavailable';
+   END IF;
+   -- At the original deferred trigger the executor has already written its genuine
+   -- editorial basis. No setting or made-up Source commit substitutes for that basis.
+   SELECT * INTO enrolled FROM semantic.enroll_context_role_provenance(
+     source.route,source.occurrence,source.resource_id,source.original_creator,source.account_id,source.grant_role,
+     source.valid::text,source.side,source.grant_transaction,source.source_transaction);
+   IF NOT FOUND THEN RETURN 'pending'; END IF;
+   IF enrolled.state='pending' THEN RETURN 'pending'; END IF;
+   IF enrolled.state='enrolled' AND enrolled.context_key>0 THEN
+     UPDATE access.resource_role_provenance SET delivery='delivered',context_key=enrolled.context_key
+       WHERE route=source.route AND occurrence=source.occurrence AND delivery='pending';
+     RETURN 'delivered';
+   ELSIF enrolled.state='not-applicable' THEN
+     UPDATE access.resource_role_provenance SET delivery='not-applicable',context_key=NULL
+       WHERE route=source.route AND occurrence=source.occurrence AND delivery='pending';
+     RETURN 'not-applicable';
+   END IF;
+   RAISE EXCEPTION 'Invalid native Context enrollment result' USING ERRCODE='23514';
+ END IF;
+ UPDATE access.resource_role_provenance SET delivery='not-applicable'
+   WHERE route=source.route AND occurrence=source.occurrence AND delivery='pending';
+ RETURN 'not-applicable';
+END; $$;
+
+
+--
+-- Name: validate_agent_identity_intent(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.validate_agent_identity_intent() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NEW.minimized OR NEW.requested_by IS NULL OR
+       (NOT EXISTS (SELECT 1 FROM core.receipt r
+          WHERE r.partition_no=NEW.source_partition AND r.principal_kind='account'
+            AND r.principal_id=NEW.requested_by AND r.command_kind=NEW.native_command_kind
+            AND r.idempotency_key=NEW.native_receipt_key
+            AND r.transaction_id=NEW.source_transaction_id AND r.epoch=NEW.source_epoch
+            AND r.position=NEW.source_position AND r.xmin::text=pg_current_xact_id()::text)
+        AND NOT access.agent_identity_recovery_valid(NEW)) THEN
+        RAISE EXCEPTION 'Account identity intent lacks original same-command native receipt or verified native recovery' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: validate_agent_identity_recovery(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.validate_agent_identity_recovery() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE i access.agent_identity_intent;
+BEGIN
+    SELECT * INTO i FROM access.agent_identity_intent
+      WHERE (route,account_id,direction,receipt_id)=(NEW.route,NEW.account_id,NEW.direction,NEW.receipt_id);
+    IF NOT access.agent_identity_recovery_valid(i) THEN
+        RAISE EXCEPTION 'Account identity recovery lacks genuine original and actual recovery custody' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: validate_identity_technical_source(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.validate_identity_technical_source() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.receiving_transaction_id::text IS DISTINCT FROM current_setting('access.identity_technical_transaction',true)
+  OR NOT EXISTS(SELECT 1 FROM core.outbox o JOIN core.partition p USING(partition_no)
+    WHERE o.partition_no=NEW.source_partition AND o.epoch=NEW.receiving_epoch
+      AND o.position=NEW.receiving_position AND o.event_seq=0
+      AND o.xmin::text=pg_current_xact_id()::text
+      AND p.epoch=o.epoch AND p.position=o.position AND p.write_state='active')
+  OR NOT EXISTS(SELECT 1 FROM access.agent_identity_technical_role r
+    WHERE (r.route,r.account_id,r.direction,r.receipt_id)=
+      (NEW.route,NEW.account_id,NEW.direction,NEW.receipt_id)
+      AND r.role_account_id=NEW.account_id AND r.roles=32) THEN
+  RAISE EXCEPTION 'Accounts technical custody lacks same-command native receiving fence/inventory' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: workflow_approval_immutable(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -705,6 +1783,72 @@ BEGIN
   RAISE EXCEPTION 'Workflow approvals are immutable';
 END;
 $$;
+
+
+--
+-- Name: account_discovery_claim_cursor; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.account_discovery_claim_cursor (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    claim_partition integer NOT NULL,
+    revision bigint NOT NULL,
+    CONSTRAINT account_discovery_claim_cursor_claim_partition_check CHECK (((claim_partition >= 0) AND (claim_partition <= 4095))),
+    CONSTRAINT account_discovery_claim_cursor_revision_check CHECK ((revision > 0))
+);
+
+
+--
+-- Name: account_discovery_claim_intent; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.account_discovery_claim_intent (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    revision bigint NOT NULL,
+    CONSTRAINT account_discovery_claim_intent_revision_check CHECK ((revision > 0)),
+    CONSTRAINT account_discovery_claim_intent_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: account_discovery_intent; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.account_discovery_intent (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    revision bigint NOT NULL,
+    CONSTRAINT account_discovery_intent_revision_check CHECK ((revision > 0)),
+    CONSTRAINT account_discovery_intent_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: account_discovery_population; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.account_discovery_population (
+    partition_no integer NOT NULL,
+    population bigint NOT NULL,
+    revision bigint NOT NULL,
+    claim_revision bigint NOT NULL,
+    CONSTRAINT account_discovery_population_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT account_discovery_population_population_check CHECK ((population >= 0))
+);
+
+
+--
+-- Name: account_discovery_revision; Type: SEQUENCE; Schema: access; Owner: -
+--
+
+CREATE SEQUENCE access.account_discovery_revision
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
 
 --
@@ -726,6 +1870,105 @@ CREATE TABLE access.account_preferences (
     CONSTRAINT account_preferences_spoiler_level_check CHECK (((spoiler_level >= 0) AND (spoiler_level <= 2))),
     CONSTRAINT account_preferences_suitability_check CHECK ((suitability = ANY (ARRAY['blur'::text, 'show'::text]))),
     CONSTRAINT account_preferences_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: agent_identity_recovery; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.agent_identity_recovery (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    direction text NOT NULL,
+    receipt_id uuid NOT NULL,
+    requested_by uuid NOT NULL,
+    decided_by uuid,
+    source_partition integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    source_transaction_id uuid NOT NULL,
+    intent_digest text NOT NULL,
+    verification_intent_digest text,
+    recovery_transaction_id uuid NOT NULL,
+    recovery_epoch integer NOT NULL,
+    recovery_position bigint NOT NULL,
+    recovery_receipt_key text NOT NULL,
+    original_source jsonb,
+    recovery_digest text,
+    CONSTRAINT agent_identity_recovery_check CHECK ((source_partition = (route / 16))),
+    CONSTRAINT agent_identity_recovery_check1 CHECK (((direction <> 'account-agent.unverify'::text) OR (source_transaction_id = receipt_id))),
+    CONSTRAINT agent_identity_recovery_check2 CHECK ((recovery_transaction_id <> source_transaction_id)),
+    CONSTRAINT agent_identity_recovery_check3 CHECK ((recovery_epoch = source_epoch)),
+    CONSTRAINT agent_identity_recovery_check4 CHECK ((recovery_position > source_position)),
+    CONSTRAINT agent_identity_recovery_check5 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT agent_identity_recovery_check6 CHECK (((original_source IS NOT NULL) OR ((direction = 'account-agent.unverify'::text) AND (verification_intent_digest IS NOT NULL) AND (recovery_digest IS NULL)))),
+    CONSTRAINT agent_identity_recovery_check7 CHECK (((original_source IS NULL) = (recovery_digest IS NULL))),
+    CONSTRAINT agent_identity_recovery_direction_check CHECK ((direction = ANY (ARRAY['account-agent.verify'::text, 'account-agent.unverify'::text]))),
+    CONSTRAINT agent_identity_recovery_intent_digest_check CHECK ((intent_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT agent_identity_recovery_recovery_digest_check CHECK ((recovery_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT agent_identity_recovery_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT agent_identity_recovery_source_position_check CHECK ((source_position > 0)),
+    CONSTRAINT agent_identity_recovery_verification_intent_digest_check CHECK ((verification_intent_digest ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: agent_identity_technical_role; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.agent_identity_technical_role (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    direction text NOT NULL,
+    receipt_id uuid NOT NULL,
+    role_account_id uuid NOT NULL,
+    roles integer NOT NULL,
+    CONSTRAINT agent_identity_technical_role_roles_check CHECK (((roles >= 1) AND (roles <= 262143))),
+    CONSTRAINT identity_technical_retained_subject CHECK (((role_account_id = account_id) AND (roles = 32)))
+);
+
+
+--
+-- Name: agent_identity_technical_source; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.agent_identity_technical_source (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    direction text NOT NULL,
+    receipt_id uuid NOT NULL,
+    intent jsonb NOT NULL,
+    source_digest text NOT NULL,
+    source_partition integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    source_transaction_id uuid NOT NULL,
+    accepted_job_id uuid NOT NULL,
+    accepted_job_epoch bigint NOT NULL,
+    binding_generation bigint NOT NULL,
+    binding_transaction_id uuid NOT NULL,
+    workflow_id text NOT NULL,
+    receiving_transaction_id uuid CONSTRAINT agent_identity_technical_sour_receiving_transaction_id_not_null NOT NULL,
+    receiving_epoch integer NOT NULL,
+    domain_generation bigint NOT NULL,
+    receiving_position bigint NOT NULL,
+    CONSTRAINT agent_identity_technical_source_accepted_job_epoch_check CHECK ((accepted_job_epoch > 0)),
+    CONSTRAINT agent_identity_technical_source_binding_generation_check CHECK ((binding_generation > 0)),
+    CONSTRAINT agent_identity_technical_source_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT agent_identity_technical_source_check1 CHECK ((source_partition = (route / 16))),
+    CONSTRAINT agent_identity_technical_source_check2 CHECK ((receiving_transaction_id <> source_transaction_id)),
+    CONSTRAINT agent_identity_technical_source_check3 CHECK ((((direction = 'account-agent.verify'::text) AND ((intent ->> 'kind'::text) = 'merge'::text) AND (intent ?& ARRAY['kind'::text, 'redirected'::text, 'survivor'::text, 'release'::text]) AND ((intent - ARRAY['kind'::text, 'redirected'::text, 'survivor'::text, 'release'::text]) = '{}'::jsonb)) OR ((direction = 'account-agent.unverify'::text) AND ((intent ->> 'kind'::text) = 'unmerge'::text) AND (intent ?& ARRAY['kind'::text, 'original'::text, 'undoJob'::text, 'verificationReceipt'::text, 'release'::text]) AND ((intent - ARRAY['kind'::text, 'original'::text, 'undoJob'::text, 'verificationReceipt'::text, 'release'::text]) = '{}'::jsonb) AND ((intent -> 'undoJob'::text) ?& ARRAY['jobId'::text, 'epoch'::text]) AND (((intent -> 'undoJob'::text) - ARRAY['jobId'::text, 'epoch'::text]) = '{}'::jsonb)))),
+    CONSTRAINT agent_identity_technical_source_direction_check CHECK ((direction = ANY (ARRAY['account-agent.verify'::text, 'account-agent.unverify'::text]))),
+    CONSTRAINT agent_identity_technical_source_domain_generation_check CHECK ((domain_generation > 0)),
+    CONSTRAINT agent_identity_technical_source_intent_check CHECK ((octet_length((intent)::text) <= 2048)),
+    CONSTRAINT agent_identity_technical_source_receiving_epoch_check CHECK ((receiving_epoch > 0)),
+    CONSTRAINT agent_identity_technical_source_receiving_position_check CHECK ((receiving_position > 0)),
+    CONSTRAINT agent_identity_technical_source_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT agent_identity_technical_source_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT agent_identity_technical_source_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT agent_identity_technical_source_source_position_check CHECK ((source_position > 0)),
+    CONSTRAINT agent_identity_technical_source_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
 );
 
 
@@ -777,6 +2020,112 @@ CREATE TABLE access.agent_verification_request (
     CONSTRAINT agent_verification_request_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'approving'::text, 'approved'::text, 'rejected'::text, 'withdrawn'::text, 'failed'::text]))),
     CONSTRAINT agent_verification_request_statement_check CHECK (((char_length(statement) >= 1) AND (char_length(statement) <= 2000))),
     CONSTRAINT agent_verification_request_updated_at_check CHECK (isfinite(updated_at))
+);
+
+
+--
+-- Name: auth_erasure_cut; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_erasure_cut (
+    cut_id uuid NOT NULL,
+    participant text DEFAULT 'auth'::text NOT NULL,
+    inventory_version integer DEFAULT 1 NOT NULL,
+    producer_version integer DEFAULT 1 NOT NULL,
+    sealed_partitions integer DEFAULT 0 NOT NULL,
+    CONSTRAINT auth_erasure_cut_inventory_version_check CHECK ((inventory_version = 1)),
+    CONSTRAINT auth_erasure_cut_participant_check CHECK ((participant = 'auth'::text)),
+    CONSTRAINT auth_erasure_cut_producer_version_check CHECK ((producer_version = 1)),
+    CONSTRAINT auth_erasure_cut_sealed_partitions_check CHECK (((sealed_partitions >= 0) AND (sealed_partitions <= 4096)))
+);
+
+
+--
+-- Name: auth_erasure_cut_partition; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_erasure_cut_partition (
+    cut_id uuid NOT NULL,
+    partition_no integer NOT NULL,
+    generation uuid NOT NULL,
+    source_epoch integer NOT NULL,
+    source_owner text NOT NULL,
+    source_position bigint NOT NULL,
+    high_water bigint NOT NULL,
+    CONSTRAINT auth_erasure_cut_partition_high_water_check CHECK ((high_water >= 0)),
+    CONSTRAINT auth_erasure_cut_partition_source_position_check CHECK ((source_position >= 0))
+);
+
+
+--
+-- Name: auth_erasure_live_partition; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_erasure_live_partition (
+    partition_no integer NOT NULL,
+    generation uuid NOT NULL,
+    source_epoch integer NOT NULL,
+    source_owner text NOT NULL,
+    enrollment_floor bigint NOT NULL,
+    enrolled_through bigint NOT NULL,
+    lineage_valid boolean DEFAULT true NOT NULL,
+    CONSTRAINT auth_erasure_live_partition_check CHECK ((enrolled_through >= enrollment_floor)),
+    CONSTRAINT auth_erasure_live_partition_enrollment_floor_check CHECK ((enrollment_floor >= 0))
+);
+
+
+--
+-- Name: auth_erasure_live_receiver; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_erasure_live_receiver (
+    cut_id uuid NOT NULL,
+    auth_generation text NOT NULL,
+    database_identity text NOT NULL,
+    inventory_entry text NOT NULL,
+    inventory_version text NOT NULL,
+    CONSTRAINT auth_erasure_live_receiver_auth_generation_check CHECK (((octet_length(auth_generation) >= 1) AND (octet_length(auth_generation) <= 1024))),
+    CONSTRAINT auth_erasure_live_receiver_database_identity_check CHECK (((octet_length(database_identity) >= 1) AND (octet_length(database_identity) <= 1024))),
+    CONSTRAINT auth_erasure_live_receiver_inventory_entry_check CHECK (((octet_length(inventory_entry) >= 1) AND (octet_length(inventory_entry) <= 1024))),
+    CONSTRAINT auth_erasure_live_receiver_inventory_version_check CHECK (((octet_length(inventory_version) >= 1) AND (octet_length(inventory_version) <= 1024)))
+);
+
+
+--
+-- Name: auth_erasure_live_subscription; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_erasure_live_subscription (
+    cut_id uuid NOT NULL,
+    partition_no integer NOT NULL,
+    generation uuid NOT NULL,
+    source_epoch integer NOT NULL,
+    source_owner text NOT NULL,
+    high_water bigint NOT NULL,
+    arm_high_water bigint NOT NULL,
+    CONSTRAINT auth_erasure_live_subscription_check CHECK ((arm_high_water >= high_water)),
+    CONSTRAINT auth_erasure_live_subscription_high_water_check CHECK ((high_water >= 0))
+);
+
+
+--
+-- Name: auth_erasure_obligation; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_erasure_obligation (
+    partition_no integer NOT NULL,
+    ordinal bigint NOT NULL,
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    version integer NOT NULL,
+    at timestamp with time zone NOT NULL,
+    minimum_authn_epoch bigint,
+    receipt_id uuid,
+    CONSTRAINT auth_erasure_obligation_check CHECK ((partition_no = (route / 16))),
+    CONSTRAINT auth_erasure_obligation_check1 CHECK (((minimum_authn_epoch IS NULL) = (receipt_id IS NULL))),
+    CONSTRAINT auth_erasure_obligation_minimum_authn_epoch_check CHECK ((minimum_authn_epoch > 0)),
+    CONSTRAINT auth_erasure_obligation_ordinal_check CHECK ((ordinal > 0)),
+    CONSTRAINT auth_erasure_obligation_version_check CHECK ((version > 0))
 );
 
 
@@ -912,6 +2261,59 @@ CREATE TABLE access.credential_floor_receipt (
 
 
 --
+-- Name: current_resource_role_due; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.current_resource_role_due (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    due_at timestamp with time zone NOT NULL,
+    interval_key bigint NOT NULL
+);
+
+
+--
+-- Name: current_resource_role_frontier; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.current_resource_role_frontier (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    version bigint DEFAULT 0 NOT NULL,
+    processed_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: current_resource_role_install; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.current_resource_role_install (
+    singleton boolean DEFAULT true NOT NULL,
+    cut bigint NOT NULL,
+    after_key bigint DEFAULT 0 NOT NULL,
+    initialized_at timestamp with time zone NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT current_resource_role_install_singleton_check CHECK (singleton)
+);
+
+
+--
+-- Name: current_resource_role_key; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.current_resource_role_key (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    grant_role text NOT NULL,
+    subject_kind text NOT NULL,
+    subject_id uuid NOT NULL,
+    subject_role text NOT NULL,
+    interval_key bigint NOT NULL
+);
+
+
+--
 -- Name: erasure; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -923,6 +2325,7 @@ CREATE TABLE access.erasure (
     completed_at timestamp with time zone,
     frontier jsonb,
     workflow_until bigint,
+    auth_obligation_indexed boolean DEFAULT false NOT NULL,
     CONSTRAINT erasure_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT erasure_check1 CHECK (((completed_at IS NULL) OR (completed_at >= at))),
     CONSTRAINT erasure_frontier_check CHECK (((frontier IS NULL) OR (jsonb_typeof(frontier) = 'array'::text))),
@@ -1130,7 +2533,6 @@ CREATE TABLE access.governance_reach (
 --
 
 CREATE TABLE access.handle_claim (
-    discovery_revision bigint DEFAULT 0 NOT NULL,
     route integer NOT NULL,
     normalized_handle text NOT NULL COLLATE pg_catalog."C",
     account_id uuid,
@@ -1142,6 +2544,7 @@ CREATE TABLE access.handle_claim (
     hold_operation_id text,
     hold_expected_handle text,
     former_until timestamp with time zone,
+    discovery_revision bigint DEFAULT 0 NOT NULL,
     CONSTRAINT handle_claim_check CHECK ((route = ((get_byte(sha256(convert_to(normalized_handle, 'UTF8'::name)), 0) * 256) + get_byte(sha256(convert_to(normalized_handle, 'UTF8'::name)), 1)))),
     CONSTRAINT handle_claim_disposition CHECK ((((state = 'retired'::text) AND (account_id IS NULL) AND (transaction_id IS NULL) AND (expires_at IS NULL) AND (reserved_until IS NULL) AND (reservation_id IS NULL) AND (hold_operation_id IS NULL) AND (hold_expected_handle IS NULL) AND (former_until IS NULL)) OR ((state = ANY (ARRAY['pending'::text, 'active'::text, 'reserved'::text])) AND (account_id IS NOT NULL) AND (transaction_id IS NOT NULL) AND (((state = 'pending'::text) AND (expires_at IS NOT NULL) AND (reserved_until IS NULL)) OR ((state = 'active'::text) AND (expires_at IS NULL) AND (reserved_until IS NULL)) OR ((state = 'reserved'::text) AND (expires_at IS NULL) AND (reserved_until IS NOT NULL)))))),
     CONSTRAINT handle_claim_former_until_check CHECK (((former_until IS NULL) OR (state = ANY (ARRAY['pending'::text, 'reserved'::text])))),
@@ -1443,6 +2846,103 @@ CREATE TABLE access.rating_counter_controller (
 
 
 --
+-- Name: realm_erasure_succession; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.realm_erasure_succession (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    source_route integer NOT NULL,
+    source_version integer NOT NULL,
+    source_at timestamp with time zone NOT NULL,
+    frontier jsonb,
+    cursor_role text,
+    cursor_kind text,
+    cursor_subject_id uuid,
+    cursor_subject_role text,
+    cursor_interval_key bigint,
+    best_account_id uuid,
+    best_role text,
+    best_valid tstzrange,
+    best_interval_key bigint,
+    decision_state text,
+    decision_operation_id uuid,
+    decided_at timestamp with time zone,
+    source_ownership_state text,
+    source_orphaned_at timestamp with time zone,
+    source_claim_eligible_at timestamp with time zone,
+    result_orphaned_at timestamp with time zone,
+    result_claim_eligible_at timestamp with time zone,
+    CONSTRAINT realm_erasure_succession_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
+    CONSTRAINT realm_erasure_succession_check1 CHECK ((source_route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT realm_erasure_succession_check2 CHECK (((decision_state IS NULL) = (decision_operation_id IS NULL))),
+    CONSTRAINT realm_erasure_succession_check3 CHECK (((decision_state IS NULL) = (decided_at IS NULL))),
+    CONSTRAINT realm_erasure_succession_check4 CHECK (((decision_state IS DISTINCT FROM 'owned'::text) OR (best_account_id IS NOT NULL))),
+    CONSTRAINT realm_erasure_succession_check5 CHECK (((decision_state IS DISTINCT FROM 'orphaned'::text) OR (best_account_id IS NULL))),
+    CONSTRAINT realm_erasure_succession_decision_state_check CHECK ((decision_state = ANY (ARRAY['owned'::text, 'orphaned'::text]))),
+    CONSTRAINT realm_erasure_succession_result_episode CHECK (((source_ownership_state IS NULL) OR ((decision_state IS DISTINCT FROM 'orphaned'::text) AND (result_orphaned_at IS NULL) AND (result_claim_eligible_at IS NULL)) OR ((decision_state = 'orphaned'::text) AND (result_orphaned_at IS NOT NULL) AND (result_claim_eligible_at IS NOT NULL) AND (result_orphaned_at = COALESCE(source_orphaned_at, source_at)) AND (result_claim_eligible_at = (result_orphaned_at + '720:00:00'::interval))))),
+    CONSTRAINT realm_erasure_succession_source_episode CHECK (((source_ownership_state IS NULL) OR ((source_ownership_state = 'owned'::text) AND (source_orphaned_at IS NULL) AND (source_claim_eligible_at IS NULL)) OR ((source_ownership_state = 'orphaned'::text) AND (source_orphaned_at IS NOT NULL) AND (source_claim_eligible_at IS NOT NULL) AND (source_claim_eligible_at = (source_orphaned_at + '720:00:00'::interval))))),
+    CONSTRAINT realm_erasure_succession_source_ownership_state_check CHECK ((source_ownership_state = ANY (ARRAY['owned'::text, 'orphaned'::text]))),
+    CONSTRAINT realm_erasure_succession_source_version_check CHECK ((source_version > 0))
+);
+
+
+--
+-- Name: realm_membership_reconciliation; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.realm_membership_reconciliation (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    barrier_id text NOT NULL,
+    after_id uuid,
+    completed boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: realm_membership_reconciliation_item; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.realm_membership_reconciliation_item (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    barrier_id text NOT NULL,
+    reservation_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    hold_transaction_id uuid CONSTRAINT realm_membership_reconciliation_it_hold_transaction_id_not_null NOT NULL,
+    state text NOT NULL,
+    CONSTRAINT realm_membership_reconciliation_item_state_check CHECK ((state = ANY (ARRAY['published'::text, 'cancelled'::text, 'pending'::text, 'uncertain'::text])))
+);
+
+
+--
+-- Name: realm_membership_transition; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.realm_membership_transition (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    operation_id text NOT NULL,
+    hold_transaction_id uuid NOT NULL,
+    legacy boolean DEFAULT false NOT NULL,
+    proof_transaction_id uuid,
+    outcome text,
+    consumed_transaction_id uuid,
+    CONSTRAINT realm_membership_transition_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT realm_membership_transition_check1 CHECK (((proof_transaction_id IS NULL) = (outcome IS NULL))),
+    CONSTRAINT realm_membership_transition_check2 CHECK (((proof_transaction_id IS NULL) = (consumed_transaction_id IS NULL))),
+    CONSTRAINT realm_membership_transition_operation_id_check CHECK (((length(operation_id) >= 1) AND (length(operation_id) <= 256))),
+    CONSTRAINT realm_membership_transition_outcome_check CHECK ((outcome = ANY (ARRAY['published'::text, 'cancelled'::text]))),
+    CONSTRAINT realm_membership_transition_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: resource_denial; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -1534,35 +3034,25 @@ CREATE TABLE access.resource_initialization (
 
 
 --
--- Name: resource_role_grant; Type: TABLE; Schema: access; Owner: -
---
-
-CREATE TABLE access.resource_role_grant (
-    route integer NOT NULL,
-    resource_id uuid NOT NULL,
-    subject_kind text DEFAULT 'identity'::text NOT NULL,
-    subject_id uuid NOT NULL,
-    subject_role text DEFAULT ''::text NOT NULL,
-    grant_role text NOT NULL,
-    valid tstzrange NOT NULL,
-    transaction_id uuid NOT NULL,
-    erasure_key bigint NOT NULL,
-    CONSTRAINT resource_role_grant_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
-    CONSTRAINT resource_role_grant_check1 CHECK ((((subject_kind = 'identity'::text) AND (subject_id <> '00000000-0000-0000-0000-000000000000'::uuid)) OR ((subject_kind = 'active_accounts'::text) AND (subject_id = '00000000-0000-0000-0000-000000000000'::uuid) AND (subject_role = ''::text)))),
-    CONSTRAINT resource_role_grant_grant_role_check CHECK ((grant_role ~ '^[a-z][a-z0-9_.-]*$'::text)),
-    CONSTRAINT resource_role_grant_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT resource_role_grant_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['identity'::text, 'active_accounts'::text]))),
-    CONSTRAINT resource_role_grant_subject_role_check CHECK ((subject_role = ANY (ARRAY[''::text, 'owner'::text, 'member'::text]))),
-    CONSTRAINT resource_role_grant_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
-);
-
-
---
 -- Name: resource_role_grant_erasure_key_seq; Type: SEQUENCE; Schema: access; Owner: -
 --
 
 ALTER TABLE access.resource_role_grant ALTER COLUMN erasure_key ADD GENERATED ALWAYS AS IDENTITY (
     SEQUENCE NAME access.resource_role_grant_erasure_key_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: resource_role_provenance_occurrence_seq; Type: SEQUENCE; Schema: access; Owner: -
+--
+
+ALTER TABLE access.resource_role_provenance ALTER COLUMN occurrence ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME access.resource_role_provenance_occurrence_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1712,6 +3202,38 @@ CREATE UNLOGGED TABLE access.write_rate_counter (
 
 
 --
+-- Name: account_discovery_claim_cursor account_discovery_claim_cursor_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.account_discovery_claim_cursor
+    ADD CONSTRAINT account_discovery_claim_cursor_pkey PRIMARY KEY (route, account_id, claim_partition);
+
+
+--
+-- Name: account_discovery_claim_intent account_discovery_claim_intent_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.account_discovery_claim_intent
+    ADD CONSTRAINT account_discovery_claim_intent_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: account_discovery_intent account_discovery_intent_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.account_discovery_intent
+    ADD CONSTRAINT account_discovery_intent_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: account_discovery_population account_discovery_population_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.account_discovery_population
+    ADD CONSTRAINT account_discovery_population_pkey PRIMARY KEY (partition_no);
+
+
+--
 -- Name: account account_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1728,6 +3250,38 @@ ALTER TABLE ONLY access.account_preferences
 
 
 --
+-- Name: agent_identity_intent agent_identity_intent_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.agent_identity_intent
+    ADD CONSTRAINT agent_identity_intent_pkey PRIMARY KEY (route, account_id, direction, receipt_id);
+
+
+--
+-- Name: agent_identity_recovery agent_identity_recovery_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.agent_identity_recovery
+    ADD CONSTRAINT agent_identity_recovery_pkey PRIMARY KEY (route, account_id, direction, receipt_id);
+
+
+--
+-- Name: agent_identity_technical_role agent_identity_technical_role_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.agent_identity_technical_role
+    ADD CONSTRAINT agent_identity_technical_role_pkey PRIMARY KEY (route, account_id, direction, receipt_id, role_account_id);
+
+
+--
+-- Name: agent_identity_technical_source agent_identity_technical_source_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.agent_identity_technical_source
+    ADD CONSTRAINT agent_identity_technical_source_pkey PRIMARY KEY (route, account_id, direction, receipt_id);
+
+
+--
 -- Name: agent_page agent_page_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1741,6 +3295,70 @@ ALTER TABLE ONLY access.agent_page
 
 ALTER TABLE ONLY access.agent_verification_request
     ADD CONSTRAINT agent_verification_request_pkey PRIMARY KEY (route, request_id);
+
+
+--
+-- Name: auth_erasure_cut_partition auth_erasure_cut_partition_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_cut_partition
+    ADD CONSTRAINT auth_erasure_cut_partition_pkey PRIMARY KEY (cut_id, partition_no);
+
+
+--
+-- Name: auth_erasure_cut auth_erasure_cut_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_cut
+    ADD CONSTRAINT auth_erasure_cut_pkey PRIMARY KEY (cut_id);
+
+
+--
+-- Name: auth_erasure_live_partition auth_erasure_live_partition_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_live_partition
+    ADD CONSTRAINT auth_erasure_live_partition_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: auth_erasure_live_receiver auth_erasure_live_receiver_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_live_receiver
+    ADD CONSTRAINT auth_erasure_live_receiver_pkey PRIMARY KEY (cut_id);
+
+
+--
+-- Name: auth_erasure_live_subscription auth_erasure_live_subscription_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_live_subscription
+    ADD CONSTRAINT auth_erasure_live_subscription_pkey PRIMARY KEY (cut_id, partition_no);
+
+
+--
+-- Name: auth_erasure_obligation auth_erasure_obligation_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_obligation
+    ADD CONSTRAINT auth_erasure_obligation_pkey PRIMARY KEY (partition_no, ordinal);
+
+
+--
+-- Name: auth_erasure_obligation auth_erasure_obligation_route_account_id_key; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_obligation
+    ADD CONSTRAINT auth_erasure_obligation_route_account_id_key UNIQUE (route, account_id);
+
+
+--
+-- Name: auth_erasure_source auth_erasure_source_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_source
+    ADD CONSTRAINT auth_erasure_source_pkey PRIMARY KEY (partition_no);
 
 
 --
@@ -1789,6 +3407,38 @@ ALTER TABLE ONLY access.committed_continuation
 
 ALTER TABLE ONLY access.credential_floor_receipt
     ADD CONSTRAINT credential_floor_receipt_pkey PRIMARY KEY (route, account_id, opening_receipt_id);
+
+
+--
+-- Name: current_resource_role_due current_resource_role_due_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.current_resource_role_due
+    ADD CONSTRAINT current_resource_role_due_pkey PRIMARY KEY (route, resource_id, due_at, interval_key);
+
+
+--
+-- Name: current_resource_role_frontier current_resource_role_frontier_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.current_resource_role_frontier
+    ADD CONSTRAINT current_resource_role_frontier_pkey PRIMARY KEY (route, resource_id);
+
+
+--
+-- Name: current_resource_role_install current_resource_role_install_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.current_resource_role_install
+    ADD CONSTRAINT current_resource_role_install_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: current_resource_role_key current_resource_role_key_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.current_resource_role_key
+    ADD CONSTRAINT current_resource_role_key_pkey PRIMARY KEY (route, resource_id, grant_role, subject_kind, subject_id, subject_role, interval_key);
 
 
 --
@@ -2032,6 +3682,46 @@ ALTER TABLE ONLY access.rating_counter_controller
 
 
 --
+-- Name: realm_erasure_succession realm_erasure_succession_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.realm_erasure_succession
+    ADD CONSTRAINT realm_erasure_succession_pkey PRIMARY KEY (route, resource_id, account_id);
+
+
+--
+-- Name: realm_membership_reconciliation_item realm_membership_reconciliation_item_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.realm_membership_reconciliation_item
+    ADD CONSTRAINT realm_membership_reconciliation_item_pkey PRIMARY KEY (route, account_id, barrier_id, reservation_id);
+
+
+--
+-- Name: realm_membership_reconciliation realm_membership_reconciliation_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.realm_membership_reconciliation
+    ADD CONSTRAINT realm_membership_reconciliation_pkey PRIMARY KEY (route, account_id, barrier_id);
+
+
+--
+-- Name: realm_membership_transition realm_membership_transition_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.realm_membership_transition
+    ADD CONSTRAINT realm_membership_transition_pkey PRIMARY KEY (route, account_id, generation_id);
+
+
+--
+-- Name: realm_membership_transition realm_membership_transition_route_account_id_realm_id_opera_key; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.realm_membership_transition
+    ADD CONSTRAINT realm_membership_transition_route_account_id_realm_id_opera_key UNIQUE (route, account_id, realm_id, operation_id);
+
+
+--
 -- Name: resource_denial resource_denial_erasure_key_key; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -2085,6 +3775,14 @@ ALTER TABLE ONLY access.resource_role_grant
 
 ALTER TABLE ONLY access.resource_role_grant
     ADD CONSTRAINT resource_role_grant_pkey PRIMARY KEY (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid WITHOUT OVERLAPS);
+
+
+--
+-- Name: resource_role_provenance resource_role_provenance_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.resource_role_provenance
+    ADD CONSTRAINT resource_role_provenance_pkey PRIMARY KEY (route, occurrence);
 
 
 --
@@ -2142,6 +3840,27 @@ CREATE INDEX account_agent_pages ON access.account USING btree (route, account_i
 
 
 --
+-- Name: account_discovery_claim_intent_account; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX account_discovery_claim_intent_account ON access.account_discovery_claim_intent USING btree (account_id, route);
+
+
+--
+-- Name: account_discovery_intent_account; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX account_discovery_intent_account ON access.account_discovery_intent USING btree (account_id, route);
+
+
+--
+-- Name: agent_identity_decision_original; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX agent_identity_decision_original ON access.agent_verification_request USING btree (route, account_id, decision_receipt_id) WHERE (decision_receipt_id IS NOT NULL);
+
+
+--
 -- Name: agent_verification_account_latest_idx; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -2160,6 +3879,27 @@ CREATE UNIQUE INDEX agent_verification_active_account_idx ON access.agent_verifi
 --
 
 CREATE INDEX agent_verification_pending_page_idx ON access.agent_verification_request USING btree (route, created_at, request_id) WHERE (state = 'pending'::text);
+
+
+--
+-- Name: auth_erasure_bootstrap; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX auth_erasure_bootstrap ON access.erasure USING btree (route, account_id) WHERE (NOT auth_obligation_indexed);
+
+
+--
+-- Name: auth_erasure_original_floor; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX auth_erasure_original_floor ON access.lifecycle_fence_receipt USING btree (route, account_id, kind) INCLUDE (receipt_id, minimum_authn_epoch, transaction_id) WHERE (kind = 'tombstone'::text);
+
+
+--
+-- Name: auth_erasure_pending; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX auth_erasure_pending ON access.auth_erasure_obligation USING btree (partition_no, ordinal) WHERE (minimum_authn_epoch IS NULL);
 
 
 --
@@ -2205,6 +3945,27 @@ CREATE INDEX committed_continuation_operator_latest ON access.committed_continua
 
 
 --
+-- Name: current_resource_role_due_source; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX current_resource_role_due_source ON access.current_resource_role_due USING btree (interval_key);
+
+
+--
+-- Name: current_resource_role_due_work; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX current_resource_role_due_work ON access.current_resource_role_due USING btree (due_at, route, resource_id, interval_key);
+
+
+--
+-- Name: current_resource_role_key_source; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX current_resource_role_key_source ON access.current_resource_role_key USING btree (interval_key);
+
+
+--
 -- Name: erasure_account_account_id; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -2230,6 +3991,69 @@ CREATE INDEX erasure_account_operator_account_id ON access.account USING btree (
 --
 
 CREATE INDEX erasure_account_preferences_account_id ON access.account_preferences USING btree (account_id, route);
+
+
+--
+-- Name: erasure_agent_identity_intent_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_identity_intent_account_id ON access.agent_identity_intent USING btree (account_id, route, direction, receipt_id);
+
+
+--
+-- Name: erasure_agent_identity_intent_decided_by; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_identity_intent_decided_by ON access.agent_identity_intent USING btree (decided_by, route, account_id, direction, receipt_id);
+
+
+--
+-- Name: erasure_agent_identity_intent_requested_by; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_identity_intent_requested_by ON access.agent_identity_intent USING btree (requested_by, route, account_id, direction, receipt_id);
+
+
+--
+-- Name: erasure_agent_identity_recovery_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_identity_recovery_account_id ON access.agent_identity_recovery USING btree (account_id, route, direction, receipt_id);
+
+
+--
+-- Name: erasure_agent_identity_recovery_decided_by; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_identity_recovery_decided_by ON access.agent_identity_recovery USING btree (decided_by, route, account_id, direction, receipt_id);
+
+
+--
+-- Name: erasure_agent_identity_recovery_requested_by; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_identity_recovery_requested_by ON access.agent_identity_recovery USING btree (requested_by, route, account_id, direction, receipt_id);
+
+
+--
+-- Name: erasure_agent_identity_technical_role_account; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_identity_technical_role_account ON access.agent_identity_technical_role USING btree (role_account_id, route, account_id, direction, receipt_id);
+
+
+--
+-- Name: erasure_agent_identity_technical_role_owner; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_identity_technical_role_owner ON access.agent_identity_technical_role USING btree (account_id, route, direction, receipt_id, role_account_id);
+
+
+--
+-- Name: erasure_agent_identity_technical_source_account; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_identity_technical_source_account ON access.agent_identity_technical_source USING btree (account_id, route, direction, receipt_id);
 
 
 --
@@ -2744,6 +4568,55 @@ CREATE INDEX principal_assignment_speakers ON access.principal_assignment USING 
 
 
 --
+-- Name: realm_claim_current_owner; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX realm_claim_current_owner ON access.resource_role_grant USING gist (route, resource_id, valid) WHERE ((subject_kind = 'identity'::text) AND (subject_role = ''::text) AND (grant_role = 'community.realm.owner'::text));
+
+
+--
+-- Name: realm_erasure_succession_account; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX realm_erasure_succession_account ON access.realm_erasure_succession USING btree (account_id, route, resource_id);
+
+
+--
+-- Name: realm_erasure_succession_candidate; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX realm_erasure_succession_candidate ON access.realm_erasure_succession USING btree (best_account_id, route, resource_id, account_id) WHERE (best_account_id IS NOT NULL);
+
+
+--
+-- Name: realm_erasure_succession_cursor; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX realm_erasure_succession_cursor ON access.realm_erasure_succession USING btree (cursor_subject_id, route, resource_id, account_id) WHERE (cursor_subject_id IS NOT NULL);
+
+
+--
+-- Name: realm_membership_reconciliation_pending; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX realm_membership_reconciliation_pending ON access.realm_membership_reconciliation_item USING btree (route, account_id, barrier_id, reservation_id) WHERE (state = ANY (ARRAY['pending'::text, 'uncertain'::text]));
+
+
+--
+-- Name: realm_membership_transition_open; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX realm_membership_transition_open ON access.realm_membership_transition USING btree (route, account_id, realm_id) WHERE (proof_transaction_id IS NULL);
+
+
+--
+-- Name: realm_owner_continuity; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX realm_owner_continuity ON access.resource_role_grant USING gist (route, resource_id, valid) INCLUDE (subject_id) WHERE ((subject_kind = 'identity'::text) AND (subject_role = ''::text) AND (grant_role = 'community.realm.owner'::text) AND upper_inf(valid));
+
+
+--
 -- Name: resource_denial_open; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -2784,11 +4657,26 @@ CREATE UNIQUE INDEX resource_role_grant_open ON access.resource_role_grant USING
 
 CREATE INDEX resource_role_grant_point_lookup ON access.resource_role_grant USING btree (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid);
 
-CREATE INDEX realm_owner_continuity ON access.resource_role_grant USING gist (route, resource_id, valid) INCLUDE (subject_id) WHERE ((subject_kind = 'identity'::text) AND (subject_role = ''::text) AND (grant_role = 'community.realm.owner'::text) AND upper_inf(valid));
 
-CREATE INDEX realm_claim_current_owner ON access.resource_role_grant
-USING gist (route, resource_id, valid)
-WHERE subject_kind = 'identity' AND subject_role = '' AND grant_role = 'community.realm.owner';
+--
+-- Name: resource_role_grant_predecessor; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX resource_role_grant_predecessor ON access.resource_role_grant USING btree (route, resource_id, subject_kind, subject_id, subject_role, grant_role, COALESCE(lower(valid), '-infinity'::timestamp with time zone)) INCLUDE (valid);
+
+
+--
+-- Name: resource_role_provenance_account; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX resource_role_provenance_account ON access.resource_role_provenance USING btree (route, account_id, occurrence);
+
+
+--
+-- Name: resource_role_provenance_delivery; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX resource_role_provenance_delivery ON access.resource_role_provenance USING btree (route, occurrence) WHERE (delivery = 'pending'::text);
 
 
 --
@@ -2820,6 +4708,55 @@ CREATE TRIGGER account_creation_time BEFORE UPDATE ON access.account FOR EACH RO
 
 
 --
+-- Name: account account_discovery_after; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_discovery_after AFTER INSERT OR DELETE OR UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.account_discovery_after();
+
+
+--
+-- Name: account account_discovery_before; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_discovery_before BEFORE INSERT OR DELETE OR UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.account_discovery_before();
+
+
+--
+-- Name: handle_claim account_discovery_claim_after; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_discovery_claim_after AFTER INSERT OR DELETE OR UPDATE ON access.handle_claim FOR EACH ROW EXECUTE FUNCTION access.account_discovery_claim_after();
+
+
+--
+-- Name: handle_claim account_discovery_claim_before; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_discovery_claim_before BEFORE INSERT OR DELETE OR UPDATE ON access.handle_claim FOR EACH ROW EXECUTE FUNCTION access.account_discovery_claim_before();
+
+
+--
+-- Name: handle_claim account_discovery_claim_truncate; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_discovery_claim_truncate AFTER TRUNCATE ON access.handle_claim FOR EACH STATEMENT EXECUTE FUNCTION access.account_discovery_truncate();
+
+
+--
+-- Name: account_preferences account_discovery_preferences; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_discovery_preferences AFTER INSERT OR DELETE OR UPDATE ON access.account_preferences FOR EACH ROW EXECUTE FUNCTION access.account_discovery_preferences();
+
+
+--
+-- Name: account account_discovery_truncate; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_discovery_truncate AFTER TRUNCATE ON access.account FOR EACH STATEMENT EXECUTE FUNCTION access.account_discovery_truncate();
+
+
+--
 -- Name: account account_identity; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -2841,10 +4778,115 @@ CREATE TRIGGER account_public_change BEFORE INSERT OR UPDATE ON access.account F
 
 
 --
+-- Name: agent_identity_intent agent_identity_intent_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER agent_identity_intent_immutable BEFORE DELETE OR UPDATE ON access.agent_identity_intent FOR EACH ROW EXECUTE FUNCTION access.guard_agent_identity_intent();
+
+
+--
+-- Name: agent_identity_intent agent_identity_intent_native_commit; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER agent_identity_intent_native_commit AFTER INSERT ON access.agent_identity_intent DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.validate_agent_identity_intent();
+
+
+--
+-- Name: agent_identity_recovery agent_identity_recovery_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER agent_identity_recovery_immutable BEFORE DELETE OR UPDATE ON access.agent_identity_recovery FOR EACH ROW EXECUTE FUNCTION access.guard_agent_identity_intent();
+
+
+--
+-- Name: agent_identity_recovery agent_identity_recovery_native_commit; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER agent_identity_recovery_native_commit AFTER INSERT ON access.agent_identity_recovery DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.validate_agent_identity_recovery();
+
+
+--
 -- Name: principal_assignment assignment_identity; Type: TRIGGER; Schema: access; Owner: -
 --
 
 CREATE TRIGGER assignment_identity BEFORE INSERT OR UPDATE ON access.principal_assignment FOR EACH ROW EXECUTE FUNCTION access.guard_assignment_identity();
+
+
+--
+-- Name: auth_erasure_cut auth_erasure_cut_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_cut_guard BEFORE DELETE OR UPDATE ON access.auth_erasure_cut FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_cut_guard();
+
+
+--
+-- Name: auth_erasure_cut_partition auth_erasure_cut_partition_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_cut_partition_immutable BEFORE DELETE OR UPDATE ON access.auth_erasure_cut_partition FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_immutable();
+
+
+--
+-- Name: erasure auth_erasure_index_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_index_guard BEFORE INSERT OR UPDATE ON access.erasure FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_index_guard();
+
+
+--
+-- Name: auth_erasure_obligation auth_erasure_live_enrollment; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_live_enrollment AFTER INSERT ON access.auth_erasure_obligation FOR EACH ROW EXECUTE FUNCTION access.enroll_auth_erasure_live();
+
+
+--
+-- Name: auth_erasure_live_partition auth_erasure_live_partition_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_live_partition_guard BEFORE INSERT OR DELETE OR UPDATE ON access.auth_erasure_live_partition FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_live_partition_guard();
+
+
+--
+-- Name: auth_erasure_live_receiver auth_erasure_live_receiver_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_live_receiver_immutable BEFORE DELETE OR UPDATE ON access.auth_erasure_live_receiver FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_immutable();
+
+
+--
+-- Name: auth_erasure_live_subscription auth_erasure_live_subscription_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_live_subscription_guard BEFORE INSERT ON access.auth_erasure_live_subscription FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_live_subscription_guard();
+
+
+--
+-- Name: auth_erasure_live_subscription auth_erasure_live_subscription_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_live_subscription_immutable BEFORE DELETE OR UPDATE ON access.auth_erasure_live_subscription FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_immutable();
+
+
+--
+-- Name: auth_erasure_obligation auth_erasure_obligation_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_obligation_immutable BEFORE DELETE OR UPDATE ON access.auth_erasure_obligation FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_immutable();
+
+
+--
+-- Name: erasure auth_erasure_producer; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER auth_erasure_producer AFTER INSERT ON access.erasure DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_producer();
+
+
+--
+-- Name: auth_erasure_source auth_erasure_source_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_source_guard BEFORE DELETE OR UPDATE ON access.auth_erasure_source FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_source_guard();
 
 
 --
@@ -2883,6 +4925,13 @@ CREATE TRIGGER context_directory_owner_dirty AFTER INSERT OR DELETE OR UPDATE ON
 
 
 --
+-- Name: resource_role_grant current_resource_role_writer; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER current_resource_role_writer AFTER INSERT OR DELETE OR UPDATE ON access.resource_role_grant FOR EACH ROW EXECUTE FUNCTION access.capture_current_resource_role();
+
+
+--
 -- Name: erasure_acknowledgement erasure_acknowledgement_guard; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -2897,10 +4946,59 @@ CREATE TRIGGER erasure_guard BEFORE DELETE OR UPDATE ON access.erasure FOR EACH 
 
 
 --
+-- Name: account follow_count_new_account; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER follow_count_new_account AFTER INSERT ON access.account FOR EACH ROW EXECUTE FUNCTION library.initialize_follow_count_owner();
+
+
+--
 -- Name: handle_claim guard_retired_handle; Type: TRIGGER; Schema: access; Owner: -
 --
 
 CREATE TRIGGER guard_retired_handle BEFORE INSERT OR DELETE OR UPDATE ON access.handle_claim FOR EACH ROW EXECUTE FUNCTION access.guard_retired_handle();
+
+
+--
+-- Name: auth_history_proof history_auth_changed; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER history_auth_changed AFTER INSERT ON access.auth_history_proof FOR EACH ROW EXECUTE FUNCTION core.history_auth_changed();
+
+
+--
+-- Name: agent_identity_technical_role identity_technical_role_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER identity_technical_role_immutable BEFORE DELETE OR UPDATE ON access.agent_identity_technical_role FOR EACH ROW EXECUTE FUNCTION access.guard_identity_technical_source();
+
+
+--
+-- Name: agent_identity_technical_role identity_technical_role_no_truncate; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER identity_technical_role_no_truncate BEFORE TRUNCATE ON access.agent_identity_technical_role FOR EACH STATEMENT EXECUTE FUNCTION access.guard_identity_technical_source();
+
+
+--
+-- Name: agent_identity_technical_source identity_technical_source_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER identity_technical_source_immutable BEFORE DELETE OR UPDATE ON access.agent_identity_technical_source FOR EACH ROW EXECUTE FUNCTION access.guard_identity_technical_source();
+
+
+--
+-- Name: agent_identity_technical_source identity_technical_source_native_commit; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_technical_source_native_commit AFTER INSERT ON access.agent_identity_technical_source DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.validate_identity_technical_source();
+
+
+--
+-- Name: agent_identity_technical_source identity_technical_source_no_truncate; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER identity_technical_source_no_truncate BEFORE TRUNCATE ON access.agent_identity_technical_source FOR EACH STATEMENT EXECUTE FUNCTION access.guard_identity_technical_source();
 
 
 --
@@ -2988,6 +5086,13 @@ CREATE TRIGGER native_erasure_roles AFTER INSERT ON access.operator_fence_page F
 
 
 --
+-- Name: account native_source_account_writer; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER native_source_account_writer AFTER INSERT OR DELETE OR UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
 -- Name: operator_fence_page operator_fence_page_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -3009,6 +5114,48 @@ CREATE TRIGGER rating_controller AFTER INSERT OR UPDATE OF operator_account_id O
 
 
 --
+-- Name: realm_erasure_succession realm_erasure_succession_custody; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER realm_erasure_succession_custody BEFORE DELETE OR UPDATE ON access.realm_erasure_succession FOR EACH ROW EXECUTE FUNCTION access.guard_realm_erasure_succession();
+
+
+--
+-- Name: realm_membership_transition realm_membership_transition_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER realm_membership_transition_guard BEFORE DELETE OR UPDATE ON access.realm_membership_transition FOR EACH ROW EXECUTE FUNCTION access.guard_realm_membership_transition();
+
+
+--
+-- Name: resource_role_provenance resource_role_provenance_deliver; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER resource_role_provenance_deliver AFTER INSERT ON access.resource_role_provenance DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.deliver_resource_role_provenance();
+
+
+--
+-- Name: resource_role_provenance resource_role_provenance_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER resource_role_provenance_immutable BEFORE UPDATE ON access.resource_role_provenance FOR EACH ROW EXECUTE FUNCTION access.guard_resource_role_provenance();
+
+
+--
+-- Name: resource_role_grant resource_role_provenance_new; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER resource_role_provenance_new AFTER INSERT ON access.resource_role_grant FOR EACH ROW EXECUTE FUNCTION access.capture_resource_role_provenance();
+
+
+--
+-- Name: resource_role_grant resource_role_provenance_old; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER resource_role_provenance_old BEFORE DELETE ON access.resource_role_grant FOR EACH ROW EXECUTE FUNCTION access.capture_resource_role_provenance();
+
+
+--
 -- Name: resource_role_grant semantic_resource_role_erasure; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -3020,6 +5167,94 @@ CREATE CONSTRAINT TRIGGER semantic_resource_role_erasure AFTER INSERT OR UPDATE 
 --
 
 CREATE TRIGGER workflow_approval_immutable BEFORE UPDATE ON access.workflow_approval FOR EACH ROW EXECUTE FUNCTION access.workflow_approval_immutable();
+
+
+--
+-- Name: account_discovery_claim_cursor account_discovery_claim_cursor_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.account_discovery_claim_cursor
+    ADD CONSTRAINT account_discovery_claim_cursor_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.account(route, account_id) ON DELETE CASCADE;
+
+
+--
+-- Name: agent_identity_recovery agent_identity_recovery_route_account_id_direction_receipt_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.agent_identity_recovery
+    ADD CONSTRAINT agent_identity_recovery_route_account_id_direction_receipt_fkey FOREIGN KEY (route, account_id, direction, receipt_id) REFERENCES access.agent_identity_intent(route, account_id, direction, receipt_id);
+
+
+--
+-- Name: agent_identity_technical_role agent_identity_technical_role_route_account_id_direction_r_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.agent_identity_technical_role
+    ADD CONSTRAINT agent_identity_technical_role_route_account_id_direction_r_fkey FOREIGN KEY (route, account_id, direction, receipt_id) REFERENCES access.agent_identity_technical_source(route, account_id, direction, receipt_id);
+
+
+--
+-- Name: auth_erasure_cut_partition auth_erasure_cut_partition_cut_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_cut_partition
+    ADD CONSTRAINT auth_erasure_cut_partition_cut_id_fkey FOREIGN KEY (cut_id) REFERENCES access.auth_erasure_cut(cut_id);
+
+
+--
+-- Name: auth_erasure_cut_partition auth_erasure_cut_partition_partition_no_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_cut_partition
+    ADD CONSTRAINT auth_erasure_cut_partition_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES access.auth_erasure_source(partition_no);
+
+
+--
+-- Name: auth_erasure_live_partition auth_erasure_live_partition_partition_no_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_live_partition
+    ADD CONSTRAINT auth_erasure_live_partition_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES access.auth_erasure_source(partition_no);
+
+
+--
+-- Name: auth_erasure_live_receiver auth_erasure_live_receiver_cut_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_live_receiver
+    ADD CONSTRAINT auth_erasure_live_receiver_cut_id_fkey FOREIGN KEY (cut_id) REFERENCES access.auth_erasure_cut(cut_id);
+
+
+--
+-- Name: auth_erasure_live_subscription auth_erasure_live_subscription_cut_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_live_subscription
+    ADD CONSTRAINT auth_erasure_live_subscription_cut_id_fkey FOREIGN KEY (cut_id) REFERENCES access.auth_erasure_live_receiver(cut_id);
+
+
+--
+-- Name: auth_erasure_live_subscription auth_erasure_live_subscription_cut_id_partition_no_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_live_subscription
+    ADD CONSTRAINT auth_erasure_live_subscription_cut_id_partition_no_fkey FOREIGN KEY (cut_id, partition_no) REFERENCES access.auth_erasure_cut_partition(cut_id, partition_no);
+
+
+--
+-- Name: auth_erasure_live_subscription auth_erasure_live_subscription_partition_no_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_live_subscription
+    ADD CONSTRAINT auth_erasure_live_subscription_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES access.auth_erasure_live_partition(partition_no);
+
+
+--
+-- Name: auth_erasure_obligation auth_erasure_obligation_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_erasure_obligation
+    ADD CONSTRAINT auth_erasure_obligation_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
 
 
 --
@@ -3036,6 +5271,22 @@ ALTER TABLE ONLY access.auth_history_proof
 
 ALTER TABLE ONLY access.committed_continuation
     ADD CONSTRAINT committed_continuation_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.account(route, account_id);
+
+
+--
+-- Name: current_resource_role_due current_resource_role_due_interval_key_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.current_resource_role_due
+    ADD CONSTRAINT current_resource_role_due_interval_key_fkey FOREIGN KEY (interval_key) REFERENCES access.resource_role_grant(erasure_key) ON DELETE CASCADE;
+
+
+--
+-- Name: current_resource_role_key current_resource_role_key_interval_key_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.current_resource_role_key
+    ADD CONSTRAINT current_resource_role_key_interval_key_fkey FOREIGN KEY (interval_key) REFERENCES access.resource_role_grant(erasure_key) ON DELETE CASCADE;
 
 
 --
@@ -3107,1153 +5358,3 @@ ALTER TABLE ONLY access.operator_fence_page
 --
 
 
-
-CREATE SEQUENCE access.account_discovery_revision AS bigint NO CYCLE;
-
-CREATE TABLE access.account_discovery_population (
-  partition_no integer PRIMARY KEY CHECK (partition_no BETWEEN 0 AND 4095),
-  population bigint NOT NULL CHECK (population >= 0),
-  revision bigint NOT NULL,
-  claim_revision bigint NOT NULL
-);
--- One coalescing source intent per Account key on each native anchor. No public
--- profile/text copies, receipts or history. The worker acknowledges only an exact
--- revision, so a concurrent writer cannot lose a newer obligation.
-CREATE TABLE access.account_discovery_intent (
-  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
-  account_id uuid NOT NULL,
-  revision bigint NOT NULL CHECK (revision > 0),
-  PRIMARY KEY (route, account_id)
-);
-CREATE INDEX account_discovery_intent_account ON access.account_discovery_intent(account_id, route);
-CREATE TABLE access.account_discovery_claim_intent (
-  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
-  account_id uuid NOT NULL,
-  revision bigint NOT NULL CHECK (revision > 0),
-  PRIMARY KEY (route, account_id)
-);
-CREATE INDEX account_discovery_claim_intent_account ON access.account_discovery_claim_intent(account_id, route);
-CREATE TABLE access.account_discovery_claim_cursor (
-  route integer NOT NULL,
-  account_id uuid NOT NULL,
-  claim_partition integer NOT NULL CHECK (claim_partition BETWEEN 0 AND 4095),
-  revision bigint NOT NULL CHECK (revision > 0),
-  PRIMARY KEY (route, account_id, claim_partition),
-  FOREIGN KEY (route, account_id) REFERENCES access.account(route, account_id) ON DELETE CASCADE
-);
-CREATE FUNCTION access.account_discovery_before() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE p integer;
-BEGIN
-  IF TG_OP = 'UPDATE' AND (NEW.route, NEW.account_id) IS DISTINCT FROM (OLD.route, OLD.account_id) THEN
-    RAISE EXCEPTION 'Account discovery source keys are immutable';
-  END IF;
-  p := CASE WHEN TG_OP = 'DELETE' THEN OLD.route >> 4 ELSE NEW.route >> 4 END;
-  -- Serialize allocation with the native head; a late commit must advance it too.
-  PERFORM 1 FROM access.account_discovery_population WHERE partition_no = p FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Account discovery census is not installed'; END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-  NEW.discovery_revision := nextval('access.account_discovery_revision');
-  RETURN NEW;
-END $$;
-CREATE FUNCTION access.account_discovery_after() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE r integer; a uuid; v bigint; delta integer := 0;
-BEGIN
-  IF TG_OP <> 'INSERT' THEN
-    IF OLD.state = 'active' AND NOT OLD.authn_fenced THEN delta := delta - 1; END IF;
-  END IF;
-  IF TG_OP <> 'DELETE' THEN
-    IF NEW.state = 'active' AND NOT NEW.authn_fenced THEN delta := delta + 1; END IF;
-    r := NEW.route; a := NEW.account_id; v := NEW.discovery_revision;
-  ELSE
-    r := OLD.route; a := OLD.account_id; v := nextval('access.account_discovery_revision');
-  END IF;
-  UPDATE access.account_discovery_population SET population = population + delta, revision = v WHERE partition_no = r >> 4;
-  IF TG_OP <> 'UPDATE' OR NOT access.native_terminal_account_ready(OLD) THEN
-    INSERT INTO access.account_discovery_intent VALUES (r, a, v)
-      ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
-  END IF;
-  IF TG_OP = 'DELETE' OR NEW.state = 'deleted' THEN
-    DELETE FROM access.account_discovery_claim_cursor WHERE route = r AND account_id = a;
-  END IF;
-  RETURN NULL;
-END $$;
-CREATE TRIGGER account_discovery_before BEFORE INSERT OR UPDATE OR DELETE ON access.account
-FOR EACH ROW EXECUTE FUNCTION access.account_discovery_before();
-CREATE TRIGGER account_discovery_after AFTER INSERT OR UPDATE OR DELETE ON access.account
-FOR EACH ROW EXECUTE FUNCTION access.account_discovery_after();
-
-CREATE FUNCTION access.account_discovery_claim_before() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE p integer;
-BEGIN
-  IF TG_OP = 'UPDATE' AND (NEW.route, NEW.normalized_handle) IS DISTINCT FROM (OLD.route, OLD.normalized_handle) THEN
-    RAISE EXCEPTION 'Account discovery claim keys are immutable';
-  END IF;
-  p := CASE WHEN TG_OP = 'DELETE' THEN OLD.route >> 4 ELSE NEW.route >> 4 END;
-  PERFORM 1 FROM access.account_discovery_population WHERE partition_no = p FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Account discovery census is not installed'; END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-  NEW.discovery_revision := nextval('access.account_discovery_revision');
-  RETURN NEW;
-END $$;
-CREATE FUNCTION access.account_discovery_claim_after() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE r integer; v bigint;
-BEGIN
-  IF TG_OP = 'DELETE' THEN r := OLD.route; v := nextval('access.account_discovery_revision');
-  ELSE r := NEW.route; v := NEW.discovery_revision; END IF;
-  UPDATE access.account_discovery_population SET claim_revision = v WHERE partition_no = r >> 4;
-  IF TG_OP <> 'INSERT' AND OLD.account_id IS NOT NULL THEN
-    INSERT INTO access.account_discovery_claim_intent VALUES (r, OLD.account_id, v)
-      ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
-  END IF;
-  IF TG_OP <> 'DELETE' AND NEW.account_id IS NOT NULL THEN
-    INSERT INTO access.account_discovery_claim_intent VALUES (r, NEW.account_id, v)
-      ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
-  END IF;
-  RETURN NULL;
-END $$;
-CREATE TRIGGER account_discovery_claim_before BEFORE INSERT OR UPDATE OR DELETE ON access.handle_claim
-FOR EACH ROW EXECUTE FUNCTION access.account_discovery_claim_before();
-CREATE TRIGGER account_discovery_claim_after AFTER INSERT OR UPDATE OR DELETE ON access.handle_claim
-FOR EACH ROW EXECUTE FUNCTION access.account_discovery_claim_after();
-
--- Preferences share the Account anchor. All writers, including native internal
--- commands, dirty current summaries through the same source revision hook.
-CREATE FUNCTION access.account_discovery_preferences() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP = 'DELETE' THEN
-    UPDATE access.account SET discovery_revision = discovery_revision WHERE route = OLD.route AND account_id = OLD.account_id;
-  ELSE
-    UPDATE access.account SET discovery_revision = discovery_revision WHERE route = NEW.route AND account_id = NEW.account_id;
-  END IF;
-  RETURN NULL;
-END $$;
-CREATE TRIGGER account_discovery_preferences AFTER INSERT OR UPDATE OR DELETE ON access.account_preferences
-FOR EACH ROW EXECUTE FUNCTION access.account_discovery_preferences();
-
--- TRUNCATE is an administrative writer too; preserve sequence high water and
--- invalidate all observations while clearing the finite census in this cut.
-CREATE FUNCTION access.account_discovery_truncate() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_TABLE_NAME = 'account' THEN
-    UPDATE access.account_discovery_population SET population = 0, revision = nextval('access.account_discovery_revision');
-  ELSE
-    UPDATE access.account_discovery_population SET claim_revision = nextval('access.account_discovery_revision');
-  END IF;
-  RETURN NULL;
-END $$;
-CREATE TRIGGER account_discovery_truncate AFTER TRUNCATE ON access.account
-FOR EACH STATEMENT EXECUTE FUNCTION access.account_discovery_truncate();
-CREATE TRIGGER account_discovery_claim_truncate AFTER TRUNCATE ON access.handle_claim
-FOR EACH STATEMENT EXECUTE FUNCTION access.account_discovery_truncate();
-
-CREATE TABLE access.realm_membership_transition (
-  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
-  account_id uuid NOT NULL,
-  realm_id uuid NOT NULL,
-  reservation_id uuid NOT NULL,
-  generation_id uuid NOT NULL,
-  operation_id text NOT NULL CHECK (length(operation_id) BETWEEN 1 AND 256),
-  hold_transaction_id uuid NOT NULL,
-  legacy boolean NOT NULL DEFAULT false,
-  proof_transaction_id uuid,
-  outcome text CHECK (outcome IN ('published', 'cancelled')),
-  consumed_transaction_id uuid,
-  PRIMARY KEY (route, account_id, generation_id),
-  UNIQUE (route, account_id, realm_id, operation_id),
-  CHECK (route = (get_byte(uuid_send(account_id),10)*256 + get_byte(uuid_send(account_id),11))),
-  CHECK ((proof_transaction_id IS NULL) = (outcome IS NULL)),
-  CHECK ((proof_transaction_id IS NULL) = (consumed_transaction_id IS NULL))
-);
-CREATE UNIQUE INDEX realm_membership_transition_open
-  ON access.realm_membership_transition (route, account_id, realm_id) WHERE proof_transaction_id IS NULL;
-CREATE FUNCTION access.guard_realm_membership_transition() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP = 'UPDATE' AND OLD.proof_transaction_id IS NULL AND NEW.proof_transaction_id IS NOT NULL
-    AND NEW.outcome IS NOT NULL AND NEW.consumed_transaction_id IS NOT NULL
-    AND (to_jsonb(OLD) - 'proof_transaction_id' - 'outcome' - 'consumed_transaction_id') =
-        (to_jsonb(NEW) - 'proof_transaction_id' - 'outcome' - 'consumed_transaction_id')
-  THEN RETURN NEW; END IF;
-  RAISE EXCEPTION 'Realm transition provenance and consumption are immutable' USING ERRCODE = '23514';
-END; $$;
-CREATE TRIGGER realm_membership_transition_guard BEFORE UPDATE OR DELETE ON access.realm_membership_transition
-  FOR EACH ROW EXECUTE FUNCTION access.guard_realm_membership_transition();
-CREATE TABLE access.realm_membership_reconciliation (
-  route integer NOT NULL, account_id uuid NOT NULL, barrier_id text NOT NULL,
-  after_id uuid, completed boolean NOT NULL DEFAULT false,
-  PRIMARY KEY (route, account_id, barrier_id)
-);
-CREATE TABLE access.realm_membership_reconciliation_item (
-  route integer NOT NULL, account_id uuid NOT NULL, barrier_id text NOT NULL,
-  reservation_id uuid NOT NULL, realm_id uuid NOT NULL, hold_transaction_id uuid NOT NULL,
-  state text NOT NULL CHECK (state IN ('published','cancelled','pending','uncertain')),
-  PRIMARY KEY (route, account_id, barrier_id, reservation_id)
-);
-CREATE INDEX realm_membership_reconciliation_pending ON access.realm_membership_reconciliation_item
- (route, account_id, barrier_id, reservation_id) WHERE state IN ('pending','uncertain');
-
-
--- Freeze the install cut and install writer hooks in the same native transaction.
-CREATE INDEX resource_role_grant_predecessor ON access.resource_role_grant
-  (route, resource_id, subject_kind, subject_id, subject_role, grant_role,
-   (COALESCE(lower(valid), '-infinity'::timestamptz))) INCLUDE (valid);
-
-CREATE TABLE access.current_resource_role_install (
-  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
-  cut bigint NOT NULL, after_key bigint NOT NULL DEFAULT 0,
-  initialized_at timestamptz NOT NULL, complete boolean NOT NULL DEFAULT false
-);
-INSERT INTO access.current_resource_role_install(singleton,cut,initialized_at)
-SELECT true, COALESCE(max(erasure_key),0), clock_timestamp() FROM access.resource_role_grant;
-CREATE TABLE access.current_resource_role_frontier (
-  route integer NOT NULL, resource_id uuid NOT NULL,
-  version bigint NOT NULL DEFAULT 0, processed_at timestamptz NOT NULL,
-  PRIMARY KEY (route,resource_id)
-);
-CREATE TABLE access.current_resource_role_key (
-  route integer NOT NULL, resource_id uuid NOT NULL, grant_role text NOT NULL,
-  subject_kind text NOT NULL, subject_id uuid NOT NULL, subject_role text NOT NULL,
-  interval_key bigint NOT NULL REFERENCES access.resource_role_grant(erasure_key) ON DELETE CASCADE,
-  PRIMARY KEY (route,resource_id,grant_role,subject_kind,subject_id,subject_role,interval_key)
-);
--- No copied principal data in the pending temporal work; at most two boundaries per source interval.
-CREATE TABLE access.current_resource_role_due (
-  route integer NOT NULL, resource_id uuid NOT NULL, due_at timestamptz NOT NULL,
-  interval_key bigint NOT NULL REFERENCES access.resource_role_grant(erasure_key) ON DELETE CASCADE,
-  PRIMARY KEY (route,resource_id,due_at,interval_key)
-);
-CREATE INDEX current_resource_role_due_work ON access.current_resource_role_due(due_at,route,resource_id,interval_key);
-CREATE INDEX current_resource_role_key_source ON access.current_resource_role_key(interval_key);
-CREATE INDEX current_resource_role_due_source ON access.current_resource_role_due(interval_key);
-
-CREATE FUNCTION access.index_current_resource_role(source access.resource_role_grant) RETURNS void
-LANGUAGE plpgsql AS $$
-DECLARE anchor timestamptz;
-BEGIN
-  INSERT INTO access.current_resource_role_frontier(route,resource_id,processed_at)
-  SELECT source.route,source.resource_id,initialized_at FROM access.current_resource_role_install WHERE singleton
-  ON CONFLICT DO NOTHING;
-  UPDATE access.current_resource_role_frontier SET version=version+1
-  WHERE route=source.route AND resource_id=source.resource_id RETURNING processed_at INTO STRICT anchor;
-  DELETE FROM access.current_resource_role_key WHERE interval_key=source.erasure_key;
-  DELETE FROM access.current_resource_role_due WHERE interval_key=source.erasure_key;
-  IF source.valid @> anchor THEN
-    INSERT INTO access.current_resource_role_key VALUES
-      (source.route,source.resource_id,source.grant_role,source.subject_kind,source.subject_id,source.subject_role,source.erasure_key);
-  END IF;
-  INSERT INTO access.current_resource_role_due
-    SELECT source.route,source.resource_id,boundary,source.erasure_key
-    FROM (VALUES (lower(source.valid)),(upper(source.valid))) b(boundary)
-    WHERE boundary > anchor ON CONFLICT DO NOTHING;
-END; $$;
-CREATE FUNCTION access.capture_current_resource_role() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP <> 'INSERT' THEN
-    -- Even deletion of the final source row advances the native resource version.
-    INSERT INTO access.current_resource_role_frontier(route,resource_id,processed_at)
-    SELECT OLD.route,OLD.resource_id,initialized_at FROM access.current_resource_role_install WHERE singleton
-    ON CONFLICT DO NOTHING;
-    UPDATE access.current_resource_role_frontier SET version=version+1
-    WHERE route=OLD.route AND resource_id=OLD.resource_id;
-    DELETE FROM access.current_resource_role_key WHERE interval_key=OLD.erasure_key;
-    DELETE FROM access.current_resource_role_due WHERE interval_key=OLD.erasure_key;
-  END IF;
-  IF TG_OP <> 'DELETE' THEN PERFORM access.index_current_resource_role(NEW); END IF;
-  RETURN NULL;
-END; $$;
-CREATE TRIGGER current_resource_role_writer AFTER INSERT OR UPDATE OR DELETE ON access.resource_role_grant
-FOR EACH ROW EXECUTE FUNCTION access.capture_current_resource_role();
-
--- One bounded default-upkeep transaction: <=100 installation rows OR <=100 due boundaries.
--- Only installation discovers history, using the immutable erasure-key high water captured above.
--- Default work uses database time; an explicit trusted time supports deterministic boundary fixtures.
-CREATE FUNCTION access.advance_current_resource_roles(p_at timestamptz DEFAULT clock_timestamp()) RETURNS integer LANGUAGE plpgsql AS $$
-DECLARE install access.current_resource_role_install; source access.resource_role_grant;
-  item access.current_resource_role_due; anchor timestamptz; touched integer := 0;
-BEGIN
-  SELECT * INTO STRICT install FROM access.current_resource_role_install WHERE singleton FOR UPDATE;
-  IF NOT install.complete THEN
-    FOR source IN SELECT * FROM access.resource_role_grant
-      WHERE erasure_key > install.after_key AND erasure_key <= install.cut
-      ORDER BY erasure_key LIMIT 100 FOR UPDATE
-    LOOP
-      PERFORM access.index_current_resource_role(source);
-      install.after_key := source.erasure_key;
-      touched := touched+1;
-    END LOOP;
-    UPDATE access.current_resource_role_install SET after_key=install.after_key,
-      complete=(touched < 100 OR install.after_key=install.cut) WHERE singleton;
-    RETURN touched;
-  END IF;
-  -- Each iteration removes one exact due reference. The index supplies its next start key.
-  FOR counter IN 1..100 LOOP
-    SELECT * INTO item FROM access.current_resource_role_due WHERE due_at <= p_at
-      ORDER BY due_at,route,resource_id,interval_key LIMIT 1;
-    EXIT WHEN NOT FOUND;
-    SELECT processed_at INTO STRICT anchor FROM access.current_resource_role_frontier
-      WHERE route=item.route AND resource_id=item.resource_id FOR UPDATE;
-    -- A concurrent source writer may have removed/replaced this boundary before the frontier lock.
-    DELETE FROM access.current_resource_role_due WHERE route=item.route AND resource_id=item.resource_id
-      AND due_at=item.due_at AND interval_key=item.interval_key;
-    IF NOT FOUND THEN CONTINUE; END IF;
-    anchor := greatest(anchor,item.due_at);
-    DELETE FROM access.current_resource_role_key WHERE interval_key=item.interval_key;
-    INSERT INTO access.current_resource_role_key
-      SELECT route,resource_id,grant_role,subject_kind,subject_id,subject_role,erasure_key
-      FROM access.resource_role_grant WHERE erasure_key=item.interval_key AND valid @> anchor
-      ON CONFLICT DO NOTHING;
-    UPDATE access.current_resource_role_frontier SET processed_at=anchor,version=version+1
-      WHERE route=item.route AND resource_id=item.resource_id;
-    touched := touched+1;
-  END LOOP;
-  RETURN touched;
-END; $$;
-
-
--- Native Library custody must observe account termination and authentication-floor changes.
-CREATE TRIGGER native_source_account_writer AFTER INSERT OR UPDATE OR DELETE ON access.account
-  FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
-
--- Native Access provenance. A historical row is evidence of an occurrence, never current authority.
-CREATE TABLE access.resource_role_provenance (
-  route integer NOT NULL, occurrence bigint GENERATED ALWAYS AS IDENTITY,
-  resource_id uuid NOT NULL, resource_type text NOT NULL, original_creator uuid NOT NULL,
-  account_id uuid NOT NULL, grant_role text NOT NULL, valid tstzrange,
-  side text NOT NULL CHECK(side IN ('creator','new','former')),
-  grant_transaction uuid, source_transaction uuid NOT NULL,
-  context_key bigint,
-  delivery text NOT NULL DEFAULT 'pending' CHECK(delivery IN ('pending','delivered','not-applicable')),
-  PRIMARY KEY(route,occurrence),
-  CHECK(route BETWEEN 0 AND 65535)
-);
-CREATE INDEX resource_role_provenance_account ON access.resource_role_provenance(route,account_id,occurrence);
-CREATE INDEX resource_role_provenance_delivery ON access.resource_role_provenance(route,occurrence) WHERE delivery='pending';
-
-CREATE FUNCTION access.capture_resource_role_provenance() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE r access.resource_role_grant; i access.resource_initialization; native_tx uuid;
-BEGIN
- IF TG_OP='DELETE' THEN r:=OLD; ELSE r:=NEW; END IF;
- IF r.subject_kind<>'identity' OR r.subject_role<>'' THEN RETURN r; END IF;
- SELECT * INTO i FROM access.resource_initialization WHERE route=r.route AND resource_id=r.resource_id;
- IF NOT FOUND THEN RETURN r; END IF;
- native_tx:=coalesce(nullif(current_setting('access.role_native_transaction',true),'' )::uuid,r.transaction_id);
- INSERT INTO access.resource_role_provenance(route,resource_id,resource_type,original_creator,account_id,
-   grant_role,valid,side,grant_transaction,source_transaction)
- VALUES(r.route,r.resource_id,i.resource_type,i.creator_id,r.subject_id,r.grant_role,r.valid,
-   CASE WHEN TG_OP='DELETE' THEN 'former' ELSE 'new' END,r.transaction_id,native_tx);
- RETURN r;
-END; $$;
-CREATE FUNCTION access.lock_resource_role_provenance(p_route integer,p_occurrence bigint)
- RETURNS SETOF access.resource_role_provenance LANGUAGE plpgsql AS $$
-DECLARE source access.resource_role_provenance;
-BEGIN
- IF p_route IS NULL OR p_route NOT BETWEEN 0 AND 65535 OR p_occurrence IS NULL OR p_occurrence<=0 THEN
-   RAISE EXCEPTION 'Invalid native role occurrence key' USING ERRCODE='22023';
- END IF;
- PERFORM 1 FROM core.partition WHERE partition_no=p_route/16 AND write_state='active' FOR UPDATE;
- IF NOT FOUND THEN RAISE EXCEPTION 'Native Context home unavailable' USING ERRCODE='40001'; END IF;
- SELECT * INTO source FROM access.resource_role_provenance
-   WHERE route=p_route AND occurrence=p_occurrence FOR UPDATE;
- IF NOT FOUND THEN RETURN; END IF;
- IF source.route<>(get_byte(uuid_send(source.resource_id),10)*256+get_byte(uuid_send(source.resource_id),11))
-    OR source.source_transaction='00000000-0000-0000-0000-000000000000'::uuid
-    OR (source.side='creator' AND (source.account_id<>source.original_creator OR source.grant_role<>''
-        OR source.grant_transaction IS NOT NULL OR source.valid IS NOT NULL))
-    OR (source.side IN ('new','former') AND (source.grant_transaction IS NULL OR source.valid IS NULL)) THEN
-   RAISE EXCEPTION 'Invalid native role occurrence provenance' USING ERRCODE='23514';
- END IF;
- RETURN NEXT source;
-END; $$;
-
-CREATE FUNCTION access.guard_resource_role_provenance() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE enrolled record;
-BEGIN
- IF ROW(NEW.route,NEW.occurrence,NEW.resource_id,NEW.resource_type,NEW.original_creator,NEW.account_id,
-        NEW.grant_role,NEW.valid,NEW.side,NEW.grant_transaction,NEW.source_transaction)
-    IS DISTINCT FROM
-    ROW(OLD.route,OLD.occurrence,OLD.resource_id,OLD.resource_type,OLD.original_creator,OLD.account_id,
-        OLD.grant_role,OLD.valid,OLD.side,OLD.grant_transaction,OLD.source_transaction) THEN
-   RAISE EXCEPTION 'Native role occurrence metadata is immutable' USING ERRCODE='23514';
- END IF;
- IF NEW.resource_type='semantic.context' AND
-    (NEW.context_key IS DISTINCT FROM OLD.context_key OR NEW.delivery IS DISTINCT FROM OLD.delivery) THEN
-   IF OLD.delivery<>'pending' OR NEW.delivery='pending' THEN
-     RAISE EXCEPTION 'Invalid native Context delivery transition' USING ERRCODE='23514';
-   END IF;
-   -- Re-run the real, idempotent Source port rather than trusting a supplied result/key.
-   -- This also protects direct SQL updates without reading any Source-owned table.
-   IF to_regprocedure('semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)') IS NULL THEN
-     RAISE EXCEPTION 'Context historical-party receiver unavailable' USING ERRCODE='23514';
-   END IF;
-   SELECT * INTO enrolled FROM semantic.enroll_context_role_provenance(
-     OLD.route,OLD.occurrence,OLD.resource_id,OLD.original_creator,OLD.account_id,OLD.grant_role,
-     OLD.valid::text,OLD.side,OLD.grant_transaction,OLD.source_transaction);
-   IF NOT FOUND THEN
-     RAISE EXCEPTION 'Context historical-party enrollment unresolved' USING ERRCODE='23514';
-   END IF;
-   IF NOT coalesce(
-     (NEW.delivery='delivered' AND enrolled.state='enrolled' AND enrolled.context_key>0
-       AND NEW.context_key=enrolled.context_key)
-     OR (NEW.delivery='not-applicable' AND enrolled.state='not-applicable' AND NEW.context_key IS NULL),false) THEN
-     RAISE EXCEPTION 'Context delivery requires actual native Source enrollment' USING ERRCODE='23514';
-   END IF;
- END IF;
- RETURN NEW;
-END; $$;
-
-CREATE TRIGGER resource_role_provenance_immutable BEFORE UPDATE ON access.resource_role_provenance
- FOR EACH ROW EXECUTE FUNCTION access.guard_resource_role_provenance();
-
-CREATE FUNCTION access.try_deliver_resource_role_provenance(p_route integer,p_occurrence bigint)
- RETURNS text LANGUAGE plpgsql AS $$
-DECLARE source access.resource_role_provenance; enrolled record;
-BEGIN
- SELECT * INTO source FROM access.lock_resource_role_provenance(p_route,p_occurrence);
- IF NOT FOUND THEN RETURN 'missing'; END IF;
- IF source.delivery<>'pending' THEN RETURN source.delivery; END IF;
- IF source.resource_type='semantic.context' THEN
-   IF to_regprocedure('semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)') IS NULL THEN
-     RETURN 'receiver-unavailable';
-   END IF;
-   -- At the original deferred trigger the executor has already written its genuine
-   -- editorial basis. No setting or made-up Source commit substitutes for that basis.
-   SELECT * INTO enrolled FROM semantic.enroll_context_role_provenance(
-     source.route,source.occurrence,source.resource_id,source.original_creator,source.account_id,source.grant_role,
-     source.valid::text,source.side,source.grant_transaction,source.source_transaction);
-   IF NOT FOUND THEN RETURN 'pending'; END IF;
-   IF enrolled.state='pending' THEN RETURN 'pending'; END IF;
-   IF enrolled.state='enrolled' AND enrolled.context_key>0 THEN
-     UPDATE access.resource_role_provenance SET delivery='delivered',context_key=enrolled.context_key
-       WHERE route=source.route AND occurrence=source.occurrence AND delivery='pending';
-     RETURN 'delivered';
-   ELSIF enrolled.state='not-applicable' THEN
-     UPDATE access.resource_role_provenance SET delivery='not-applicable',context_key=NULL
-       WHERE route=source.route AND occurrence=source.occurrence AND delivery='pending';
-     RETURN 'not-applicable';
-   END IF;
-   RAISE EXCEPTION 'Invalid native Context enrollment result' USING ERRCODE='23514';
- END IF;
- UPDATE access.resource_role_provenance SET delivery='not-applicable'
-   WHERE route=source.route AND occurrence=source.occurrence AND delivery='pending';
- RETURN 'not-applicable';
-END; $$;
-
-CREATE FUNCTION access.deliver_resource_role_provenance() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- PERFORM access.try_deliver_resource_role_provenance(NEW.route,NEW.occurrence);
- RETURN NEW;
-END; $$;
-
--- Capture OLD before its destructive removal, and NEW after its authoritative insert.
-CREATE TRIGGER resource_role_provenance_old BEFORE DELETE ON access.resource_role_grant
- FOR EACH ROW EXECUTE FUNCTION access.capture_resource_role_provenance();
-CREATE TRIGGER resource_role_provenance_new AFTER INSERT ON access.resource_role_grant
- FOR EACH ROW EXECUTE FUNCTION access.capture_resource_role_provenance();
--- Delivery observes the command's actual committed envelope position, after its fence writes.
-CREATE CONSTRAINT TRIGGER resource_role_provenance_deliver AFTER INSERT ON access.resource_role_provenance
- DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.deliver_resource_role_provenance();
-
--- Native work locators and decisions, never a second grant/owner authority.
-CREATE TABLE access.realm_erasure_succession (
-  route integer NOT NULL,
-  resource_id uuid NOT NULL,
-  account_id uuid NOT NULL,
-  source_route integer NOT NULL,
-  source_version integer NOT NULL CHECK (source_version > 0),
-  source_at timestamptz NOT NULL,
-  frontier jsonb,
-  cursor_role text,
-  cursor_kind text,
-  cursor_subject_id uuid,
-  cursor_subject_role text,
-  cursor_interval_key bigint,
-  best_account_id uuid,
-  best_role text,
-  best_valid tstzrange,
-  best_interval_key bigint,
-  decision_state text CHECK (decision_state IN ('owned', 'orphaned')),
-  decision_operation_id uuid,
-  decided_at timestamptz,
-  PRIMARY KEY (route, resource_id, account_id),
-  CHECK (route = (get_byte(uuid_send(resource_id),10)*256+get_byte(uuid_send(resource_id),11))),
-  CHECK (source_route = (get_byte(uuid_send(account_id),10)*256+get_byte(uuid_send(account_id),11))),
-  CHECK ((decision_state IS NULL) = (decision_operation_id IS NULL)),
-  CHECK ((decision_state IS NULL) = (decided_at IS NULL)),
-  CHECK (decision_state IS DISTINCT FROM 'owned' OR best_account_id IS NOT NULL),
-  CHECK (decision_state IS DISTINCT FROM 'orphaned' OR best_account_id IS NULL)
-);
-CREATE INDEX realm_erasure_succession_account ON access.realm_erasure_succession(account_id,route,resource_id);
-CREATE INDEX realm_erasure_succession_candidate ON access.realm_erasure_succession(best_account_id,route,resource_id,account_id)
-  WHERE best_account_id IS NOT NULL;
-CREATE INDEX realm_erasure_succession_cursor ON access.realm_erasure_succession(cursor_subject_id,route,resource_id,account_id)
-  WHERE cursor_subject_id IS NOT NULL;
-
-CREATE FUNCTION access.guard_realm_erasure_succession() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP = 'DELETE' THEN
-    RAISE EXCEPTION 'Realm succession source custody has no consumer closure' USING ERRCODE = '23514';
-  END IF;
-  IF ROW(NEW.route,NEW.resource_id,NEW.account_id,NEW.source_route,NEW.source_version,NEW.source_at)
-       IS DISTINCT FROM ROW(OLD.route,OLD.resource_id,OLD.account_id,OLD.source_route,OLD.source_version,OLD.source_at)
-     OR (OLD.decision_state IS NOT NULL AND NEW IS DISTINCT FROM OLD) THEN
-    RAISE EXCEPTION 'Realm succession source and terminal decision are immutable' USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END; $$;
-CREATE TRIGGER realm_erasure_succession_custody BEFORE UPDATE OR DELETE ON access.realm_erasure_succession
-  FOR EACH ROW EXECUTE FUNCTION access.guard_realm_erasure_succession();
-
--- Retain the exact Content-owned source episode with the native decision.
--- Null source fields identify older, unbound work; they never prove application.
-ALTER TABLE access.realm_erasure_succession
-  ADD COLUMN source_ownership_state text CHECK (source_ownership_state IN ('owned','orphaned')),
-  ADD COLUMN source_orphaned_at timestamptz,
-  ADD COLUMN source_claim_eligible_at timestamptz,
-  ADD COLUMN result_orphaned_at timestamptz,
-  ADD COLUMN result_claim_eligible_at timestamptz,
-  ADD CONSTRAINT realm_erasure_succession_source_episode CHECK (
-    source_ownership_state IS NULL OR
-    (source_ownership_state='owned' AND source_orphaned_at IS NULL AND source_claim_eligible_at IS NULL) OR
-    (source_ownership_state='orphaned' AND source_orphaned_at IS NOT NULL AND
-      source_claim_eligible_at IS NOT NULL AND
-      source_claim_eligible_at=source_orphaned_at+interval '720 hours')
-  ),
-  ADD CONSTRAINT realm_erasure_succession_result_episode CHECK (
-    source_ownership_state IS NULL OR
-    (decision_state IS DISTINCT FROM 'orphaned' AND
-      result_orphaned_at IS NULL AND result_claim_eligible_at IS NULL) OR
-    (decision_state='orphaned' AND result_orphaned_at IS NOT NULL AND
-      result_claim_eligible_at IS NOT NULL AND
-      result_orphaned_at=COALESCE(source_orphaned_at,source_at) AND
-      result_claim_eligible_at=result_orphaned_at+interval '720 hours')
-  );
-
-CREATE OR REPLACE FUNCTION access.guard_realm_erasure_succession() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP = 'DELETE' THEN
-    RAISE EXCEPTION 'Realm succession source custody has no consumer closure' USING ERRCODE = '23514';
-  END IF;
-  IF ROW(NEW.route,NEW.resource_id,NEW.account_id,NEW.source_route,NEW.source_version,NEW.source_at,
-         NEW.source_ownership_state,NEW.source_orphaned_at,NEW.source_claim_eligible_at)
-       IS DISTINCT FROM ROW(OLD.route,OLD.resource_id,OLD.account_id,OLD.source_route,OLD.source_version,OLD.source_at,
-         OLD.source_ownership_state,OLD.source_orphaned_at,OLD.source_claim_eligible_at)
-     OR (OLD.decision_state IS NOT NULL AND NEW IS DISTINCT FROM OLD) THEN
-    RAISE EXCEPTION 'Realm succession source and terminal decision are immutable' USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END; $$;
-
-CREATE TABLE access.agent_identity_intent (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    direction text NOT NULL CHECK (direction IN ('account-agent.verify','account-agent.unverify')),
-    receipt_id uuid NOT NULL,
-    agent_id uuid NOT NULL,
-    account_kind text NOT NULL CHECK (account_kind IN ('actor','organization')),
-    catalogue_id uuid NOT NULL,
-    request_id uuid,
-    requested_by uuid,
-    decided_by uuid,
-    decision_route integer,
-    decision_receipt_id uuid,
-    decision_epoch integer,
-    decision_position bigint,
-    decision_transaction_id uuid,
-    pending_receipt_id uuid NOT NULL,
-    verification_receipt_id uuid,
-    disposition text CHECK (disposition IN ('released','revoked')),
-    reason text CHECK (char_length(reason)<=500),
-    release text NOT NULL,
-    intent jsonb NOT NULL,
-    intent_digest text NOT NULL CHECK (intent_digest ~ '^[0-9a-f]{64}$'),
-    source_partition integer NOT NULL,
-    source_epoch integer NOT NULL CHECK (source_epoch>0),
-    source_position bigint NOT NULL CHECK (source_position>0),
-    source_transaction_id uuid NOT NULL,
-    undo_job_id uuid,
-    undo_job_epoch bigint,
-    delivery_key text NOT NULL,
-    workflow_id text NOT NULL,
-    native_command_kind text NOT NULL,
-    native_receipt_key text NOT NULL,
-    CHECK ((direction='account-agent.verify' AND native_command_kind='access.agent-verification.pending')
-        OR (direction='account-agent.unverify' AND native_command_kind IN
-          ('access.agent-verification.released','access.agent-verification.revoked','access.agent-verification.deleted'))),
-    minimized boolean NOT NULL DEFAULT false,
-    PRIMARY KEY(route,account_id,direction,receipt_id),
-    CHECK (route = get_byte(uuid_send(account_id),10)*256+get_byte(uuid_send(account_id),11)),
-    CHECK (source_partition = route / 16),
-    CHECK ((direction='account-agent.verify' AND request_id IS NOT NULL AND decision_route=0
-            AND decision_receipt_id=receipt_id AND decision_epoch>0 AND decision_position>0
-            AND decision_transaction_id=receipt_id AND verification_receipt_id IS NULL
-            AND undo_job_id IS NULL AND undo_job_epoch IS NULL AND disposition IS NULL)
-        OR (direction='account-agent.unverify' AND verification_receipt_id IS NOT NULL
-            AND source_transaction_id=receipt_id AND disposition IS NOT NULL
-            AND undo_job_id IS NOT NULL AND undo_job_epoch>0)),
-    CHECK (direction<>'account-agent.verify' OR source_transaction_id=pending_receipt_id)
-);
-CREATE INDEX erasure_agent_identity_intent_account_id ON access.agent_identity_intent
-    (account_id,route,direction,receipt_id);
-CREATE INDEX erasure_agent_identity_intent_requested_by ON access.agent_identity_intent
-    (requested_by,route,account_id,direction,receipt_id);
-CREATE INDEX erasure_agent_identity_intent_decided_by ON access.agent_identity_intent
-    (decided_by,route,account_id,direction,receipt_id);
-
-CREATE FUNCTION access.validate_agent_identity_intent() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW.minimized OR NEW.requested_by IS NULL OR
-       (NOT EXISTS (SELECT 1 FROM core.receipt r
-          WHERE r.partition_no=NEW.source_partition AND r.principal_kind='account'
-            AND r.principal_id=NEW.requested_by AND r.command_kind=NEW.native_command_kind
-            AND r.idempotency_key=NEW.native_receipt_key
-            AND r.transaction_id=NEW.source_transaction_id AND r.epoch=NEW.source_epoch
-            AND r.position=NEW.source_position AND r.xmin::text=pg_current_xact_id()::text)
-        AND NOT access.agent_identity_recovery_valid(NEW)) THEN
-        RAISE EXCEPTION 'Account identity intent lacks original same-command native receipt or verified native recovery' USING ERRCODE='23514';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE CONSTRAINT TRIGGER agent_identity_intent_native_commit AFTER INSERT ON access.agent_identity_intent
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.validate_agent_identity_intent();
-
--- Keep source proof until a consumer-aware owner minimizer supplies receiving custody.
-CREATE FUNCTION access.guard_agent_identity_intent() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP='DELETE' THEN
-        RAISE EXCEPTION 'Account identity source requires receiving erasure custody';
-    END IF;
-    RAISE EXCEPTION 'Immutable account identity source';
-END;
-$$;
-CREATE TRIGGER agent_identity_intent_immutable BEFORE UPDATE OR DELETE ON access.agent_identity_intent
-    FOR EACH ROW EXECUTE FUNCTION access.guard_agent_identity_intent();
-
-CREATE UNIQUE INDEX agent_identity_decision_original ON access.agent_verification_request
- (route,account_id,decision_receipt_id) WHERE decision_receipt_id IS NOT NULL;
-
-CREATE TABLE access.agent_identity_recovery (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    direction text NOT NULL CHECK (direction='account-agent.unverify'),
-    receipt_id uuid NOT NULL,
-    requested_by uuid NOT NULL,
-    decided_by uuid,
-    source_partition integer NOT NULL CHECK (source_partition=route/16),
-    source_epoch integer NOT NULL CHECK (source_epoch>0),
-    source_position bigint NOT NULL CHECK (source_position>0),
-    source_transaction_id uuid NOT NULL CHECK (source_transaction_id=receipt_id),
-    intent_digest text NOT NULL CHECK (intent_digest ~ '^[0-9a-f]{64}$'),
-    verification_intent_digest text NOT NULL CHECK (verification_intent_digest ~ '^[0-9a-f]{64}$'),
-    recovery_transaction_id uuid NOT NULL CHECK (recovery_transaction_id<>source_transaction_id),
-    recovery_epoch integer NOT NULL CHECK (recovery_epoch=source_epoch),
-    recovery_position bigint NOT NULL CHECK (recovery_position>source_position),
-    recovery_receipt_key text NOT NULL,
-    PRIMARY KEY(route,account_id,direction,receipt_id),
-    FOREIGN KEY(route,account_id,direction,receipt_id)
-      REFERENCES access.agent_identity_intent(route,account_id,direction,receipt_id),
-    CHECK (route=get_byte(uuid_send(account_id),10)*256+get_byte(uuid_send(account_id),11))
-);
-CREATE INDEX erasure_agent_identity_recovery_account_id ON access.agent_identity_recovery
- (account_id,route,direction,receipt_id);
-CREATE INDEX erasure_agent_identity_recovery_requested_by ON access.agent_identity_recovery
- (requested_by,route,account_id,direction,receipt_id);
-CREATE INDEX erasure_agent_identity_recovery_decided_by ON access.agent_identity_recovery
- (decided_by,route,account_id,direction,receipt_id);
-
--- An association alone is DATA. Both the retained original and this actual recovery command must exist.
--- The native released undo reader additionally verifies publication before this command is entered.
-CREATE FUNCTION access.agent_identity_recovery_valid(i access.agent_identity_intent) RETURNS boolean
-LANGUAGE sql STABLE AS $$
- SELECT EXISTS (
-  SELECT 1 FROM access.agent_identity_recovery a
-  JOIN core.receipt r ON r.partition_no=a.source_partition AND r.principal_kind='account'
-    AND r.principal_id=a.requested_by AND r.command_kind=i.native_command_kind
-    AND r.idempotency_key=i.native_receipt_key AND r.transaction_id=a.source_transaction_id
-    AND r.epoch=a.source_epoch AND r.position=a.source_position AND r.payload_state='present'
-    AND r.xmin::text<>pg_current_xact_id()::text
-  JOIN core.receipt c ON c.partition_no=a.source_partition AND c.principal_kind='account'
-    AND c.principal_id=a.requested_by AND c.command_kind='access.agent-identity.recover'
-    AND c.idempotency_key=a.recovery_receipt_key
-    AND c.transaction_id=a.recovery_transaction_id AND c.epoch=a.recovery_epoch
-    AND c.position=a.recovery_position AND c.xmin::text=pg_current_xact_id()::text
-    AND c.payload_state='present'
-    AND c.request_digest=sha256(convert_to(format('[%s,%s,%s,%s,%s,%s]',
-      to_json(i.delivery_key),to_json(i.source_transaction_id::text),i.source_epoch,
-      to_json(i.source_position::text),to_json(i.intent_digest),to_json(a.verification_intent_digest)), 'UTF8'))
-  JOIN core.partition p ON p.partition_no=a.source_partition AND p.write_state='active'
-    AND p.epoch=a.source_epoch AND p.position>=a.recovery_position
-  JOIN access.agent_identity_intent v ON v.route=i.route AND v.account_id=i.account_id
-    AND v.direction='account-agent.verify' AND v.receipt_id=i.verification_receipt_id
-    AND v.intent_digest=a.verification_intent_digest AND NOT v.minimized
-    AND v.xmin::text<>pg_current_xact_id()::text
-    AND v.source_epoch=i.source_epoch AND v.catalogue_id=i.catalogue_id
-    AND v.source_position<r.position
-    AND v.agent_id=i.agent_id AND v.account_kind=i.account_kind AND v.release=i.release
-  WHERE (a.route,a.account_id,a.direction,a.receipt_id)=(i.route,i.account_id,i.direction,i.receipt_id)
-    AND a.xmin::text=pg_current_xact_id()::text
-    AND a.requested_by=i.requested_by AND a.decided_by IS NOT DISTINCT FROM i.decided_by
-    AND a.source_partition=i.source_partition AND a.source_epoch=i.source_epoch
-    AND a.source_position=i.source_position AND a.source_transaction_id=i.source_transaction_id
-    AND a.intent_digest=i.intent_digest AND NOT i.minimized
-    AND i.direction='account-agent.unverify' AND i.pending_receipt_id=i.receipt_id
-    AND i.request_id IS NULL AND i.decision_route IS NULL AND i.decision_receipt_id IS NULL
-    AND i.decision_epoch IS NULL AND i.decision_position IS NULL AND i.decision_transaction_id IS NULL
-    AND i.delivery_key=format('["%s","%s","%s"]',i.direction,i.account_id::text,i.receipt_id::text)
-    AND i.workflow_id='accounts.agent-verification-reversal:'||i.account_id::text||':'||i.receipt_id::text
-    AND i.intent=jsonb_build_object('kind','unmerge','original',i.agent_id::text,
-      'undoJob',jsonb_build_object('jobId',i.undo_job_id::text,'epoch',i.undo_job_epoch::text),
-      'verificationReceipt',i.verification_receipt_id::text,'release',v.release)
-    AND i.intent_digest=encode(sha256(convert_to(format(
-      '[{"kind":"unmerge","original":%s,"release":%s,"undoJob":{"epoch":%s,"jobId":%s},"verificationReceipt":%s},{"account":%s,"kind":"account-agent.unverify","receipt":%s}]',
-      to_json(i.agent_id::text),to_json(i.release),to_json(i.undo_job_epoch::text),to_json(i.undo_job_id::text),
-      to_json(i.verification_receipt_id::text),to_json(i.account_id::text),to_json(i.receipt_id::text)), 'UTF8')), 'hex')
-    AND r.response=jsonb_build_object('accountId',i.account_id::text,'receiptId',i.receipt_id::text,
-      'requestedBy',i.requested_by::text,'kind',i.disposition,'reason',i.reason,
-      'catalogueSubjectId',i.catalogue_id::text,'verificationReceiptId',i.verification_receipt_id::text)
-    AND i.decided_by IS NOT DISTINCT FROM CASE WHEN i.disposition='revoked' THEN i.requested_by END
-    AND ((r.command_kind='access.agent-verification.deleted' AND i.disposition='revoked'
-       AND i.reason='Account deleted' AND i.requested_by=i.account_id
-       AND r.request_digest=sha256(convert_to(i.account_id::text,'UTF8'))
-       AND EXISTS (SELECT 1 FROM access.account t WHERE t.route=i.route AND t.account_id=i.account_id
-         AND t.state='deleted'))
-     OR (r.command_kind='access.agent-verification.'||i.disposition AND EXISTS (
-       SELECT 1 FROM editorial.write_basis b WHERE b.partition_no=r.partition_no
-         AND b.transaction_id=r.transaction_id AND b.principal_kind='account' AND b.principal_id=r.principal_id
-         AND b.epoch=r.epoch AND b.position=r.position)))
- );
-$$;
-
-CREATE FUNCTION access.validate_agent_identity_recovery() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE i access.agent_identity_intent;
-BEGIN
-    SELECT * INTO i FROM access.agent_identity_intent
-      WHERE (route,account_id,direction,receipt_id)=(NEW.route,NEW.account_id,NEW.direction,NEW.receipt_id);
-    IF NOT access.agent_identity_recovery_valid(i) THEN
-        RAISE EXCEPTION 'Account identity recovery lacks genuine original and actual recovery custody' USING ERRCODE='23514';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE CONSTRAINT TRIGGER agent_identity_recovery_native_commit AFTER INSERT ON access.agent_identity_recovery
- DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.validate_agent_identity_recovery();
-CREATE TRIGGER agent_identity_recovery_immutable BEFORE UPDATE OR DELETE ON access.agent_identity_recovery
- FOR EACH ROW EXECUTE FUNCTION access.guard_agent_identity_intent();
-
-
--- Native Auth erasure obligation feed.
--- Installation does not scan or rewrite the historical erasure domain. The partial
--- index is drained in batches of 48 under the same partition fence as live capture.
-ALTER TABLE access.erasure ADD COLUMN auth_obligation_indexed boolean NOT NULL DEFAULT false;
-CREATE INDEX auth_erasure_bootstrap ON access.erasure(route,account_id) WHERE NOT auth_obligation_indexed;
-CREATE INDEX auth_erasure_original_floor ON access.lifecycle_fence_receipt(route,account_id,kind)
- INCLUDE(receipt_id,minimum_authn_epoch,transaction_id) WHERE kind='tombstone';
-
-CREATE TABLE access.auth_erasure_source (
- partition_no integer PRIMARY KEY CHECK(partition_no BETWEEN 0 AND 4095),
- generation uuid NOT NULL DEFAULT gen_random_uuid(),
- source_epoch integer NOT NULL CHECK(source_epoch>0),
- source_owner text NOT NULL,
- head bigint NOT NULL DEFAULT 0 CHECK(head>=0),
- initialized boolean NOT NULL DEFAULT false
-);
-CREATE TABLE access.auth_erasure_obligation (
- partition_no integer NOT NULL CHECK(partition_no=route/16),
- ordinal bigint NOT NULL CHECK(ordinal>0),
- route integer NOT NULL,
- account_id uuid NOT NULL,
- version integer NOT NULL CHECK(version>0),
- at timestamptz NOT NULL,
- minimum_authn_epoch bigint CHECK(minimum_authn_epoch>0),
- receipt_id uuid,
- PRIMARY KEY(partition_no,ordinal),
- UNIQUE(route,account_id),
- FOREIGN KEY(route,account_id) REFERENCES access.erasure(route,account_id),
- CHECK((minimum_authn_epoch IS NULL)=(receipt_id IS NULL))
-);
-CREATE INDEX auth_erasure_pending ON access.auth_erasure_obligation(partition_no,ordinal)
- WHERE minimum_authn_epoch IS NULL;
-CREATE TABLE access.auth_erasure_cut (
- cut_id uuid PRIMARY KEY,
- participant text NOT NULL DEFAULT 'auth' CHECK(participant='auth'),
- inventory_version integer NOT NULL DEFAULT 1 CHECK(inventory_version=1),
- producer_version integer NOT NULL DEFAULT 1 CHECK(producer_version=1),
- sealed_partitions integer NOT NULL DEFAULT 0 CHECK(sealed_partitions BETWEEN 0 AND 4096)
-);
-CREATE TABLE access.auth_erasure_cut_partition (
- cut_id uuid NOT NULL REFERENCES access.auth_erasure_cut,
- partition_no integer NOT NULL REFERENCES access.auth_erasure_source,
- generation uuid NOT NULL,
- source_epoch integer NOT NULL,
- source_owner text NOT NULL,
- source_position bigint NOT NULL CHECK(source_position>=0),
- high_water bigint NOT NULL CHECK(high_water>=0),
- PRIMARY KEY(cut_id,partition_no)
-);
-CREATE FUNCTION access.auth_erasure_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- RAISE EXCEPTION 'Auth erasure source evidence is permanent and immutable' USING ERRCODE='23514';
-END; $$;
-CREATE TRIGGER auth_erasure_obligation_immutable BEFORE UPDATE OR DELETE ON access.auth_erasure_obligation
- FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_immutable();
-CREATE TRIGGER auth_erasure_cut_partition_immutable BEFORE UPDATE OR DELETE ON access.auth_erasure_cut_partition
- FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_immutable();
-CREATE FUNCTION access.auth_erasure_source_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth erasure source is permanent'; END IF;
- IF (NEW.partition_no,NEW.generation,NEW.source_epoch,NEW.source_owner)
-    IS DISTINCT FROM (OLD.partition_no,OLD.generation,OLD.source_epoch,OLD.source_owner)
-    OR NEW.head<OLD.head OR (OLD.initialized AND NOT NEW.initialized) THEN
-  RAISE EXCEPTION 'Auth erasure source cannot change lineage or regress' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER auth_erasure_source_guard BEFORE UPDATE OR DELETE ON access.auth_erasure_source
- FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_source_guard();
-CREATE FUNCTION access.auth_erasure_cut_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth erasure cut is permanent'; END IF;
- IF (NEW.cut_id,NEW.participant,NEW.inventory_version,NEW.producer_version)
-    IS DISTINCT FROM (OLD.cut_id,OLD.participant,OLD.inventory_version,OLD.producer_version)
-    OR NEW.sealed_partitions<>OLD.sealed_partitions+1
-    OR NOT EXISTS(SELECT 1 FROM access.auth_erasure_cut_partition
-                  WHERE cut_id=OLD.cut_id AND partition_no=OLD.sealed_partitions) THEN
-  RAISE EXCEPTION 'Auth erasure cut must advance by one retained native partition' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER auth_erasure_cut_guard BEFORE UPDATE OR DELETE ON access.auth_erasure_cut
- FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_cut_guard();
-
--- The existing native routing row serializes bootstrap, writers and cut capture.
--- There is no global erasure counter or new command/coordinator authority.
-CREATE FUNCTION access.lock_auth_erasure_source(p integer,require_lineage boolean DEFAULT true) RETURNS access.auth_erasure_source
- LANGUAGE plpgsql AS $$
-DECLARE home core.partition; source access.auth_erasure_source;
-BEGIN
- SELECT * INTO home FROM core.partition WHERE partition_no=p AND p BETWEEN 0 AND 4095 FOR UPDATE;
- IF NOT FOUND OR home.write_state<>'active' THEN
-  RAISE EXCEPTION 'Auth erasure source home unavailable' USING ERRCODE='40001';
- END IF;
- INSERT INTO access.auth_erasure_source(partition_no,source_epoch,source_owner)
- VALUES(p,home.epoch,home.node) ON CONFLICT DO NOTHING;
- SELECT * INTO source FROM access.auth_erasure_source WHERE partition_no=p FOR UPDATE;
- IF require_lineage AND (source.source_epoch<>home.epoch OR source.source_owner<>home.node) THEN
-  RAISE EXCEPTION 'Auth erasure source lineage recovery required' USING ERRCODE='40001';
- END IF;
- RETURN source;
-END; $$;
-
-CREATE FUNCTION access.capture_auth_erasure_obligation(r integer,a uuid,native boolean) RETURNS void
- LANGUAGE plpgsql AS $$
-DECLARE source access.auth_erasure_source; root access.erasure; terminal access.account;
- original access.lifecycle_fence_receipt; candidate access.lifecycle_fence_receipt; found_count integer:=0;
-BEGIN
- -- Even while source lineage recovery is pending, current native deletion still
- -- commits and retains its exact obligation in the same ordinal feed. It cannot
- -- relabel the old source epoch or release a stale cut.
- source:=access.lock_auth_erasure_source(r/16,NOT native);
- SELECT * INTO root FROM access.erasure WHERE route=r AND account_id=a FOR UPDATE;
- IF NOT FOUND OR root.auth_obligation_indexed THEN RETURN; END IF;
- SELECT * INTO terminal FROM access.account WHERE route=r AND account_id=a;
- -- A receipt's original native tombstone kind is retained independently of the
- -- mutable current floor. Never infer the original floor from terminal or T.
- FOR candidate IN SELECT * FROM access.lifecycle_fence_receipt
-  WHERE route=r AND account_id=a AND kind='tombstone' LIMIT 2
- LOOP
-  found_count:=found_count+1; original:=candidate;
- END LOOP;
- IF found_count<>1 OR terminal.state<>'deleted' OR NOT terminal.authn_fenced
-    OR terminal.minimum_authn_epoch<original.minimum_authn_epoch THEN
-  original.minimum_authn_epoch:=NULL; original.receipt_id:=NULL;
- ELSIF native THEN
-  -- New native capture must belong to the actual tombstone transaction, not a
-  -- later read/relabel of the current floor or a fabricated old receipt.
-  IF NOT EXISTS(SELECT 1 FROM access.lifecycle_fence_receipt f
-     WHERE f.route=r AND f.account_id=a AND f.receipt_id=original.receipt_id
-       AND f.transaction_id=terminal.transaction_id AND f.xmin::text=pg_current_xact_id()::text)
-     OR terminal.fence_receipt_id<>original.receipt_id THEN
-   original.minimum_authn_epoch:=NULL; original.receipt_id:=NULL;
-  END IF;
- END IF;
- UPDATE access.auth_erasure_source SET head=head+1 WHERE partition_no=r/16 RETURNING * INTO source;
- INSERT INTO access.auth_erasure_obligation(partition_no,ordinal,route,account_id,version,at,minimum_authn_epoch,receipt_id)
- VALUES(r/16,source.head,r,a,root.version,root.at,original.minimum_authn_epoch,original.receipt_id);
- UPDATE access.erasure SET auth_obligation_indexed=true WHERE route=r AND account_id=a;
-END; $$;
-CREATE FUNCTION access.auth_erasure_producer() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- PERFORM access.capture_auth_erasure_obligation(NEW.route,NEW.account_id,true);
- RETURN NEW;
-END; $$;
--- Deferred capture also sees the original fence receipt in the native lifecycle
--- transaction. It runs before COMMIT can expose the permanent erasure to Auth.
-CREATE CONSTRAINT TRIGGER auth_erasure_producer AFTER INSERT ON access.erasure
- DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_producer();
-CREATE FUNCTION access.auth_erasure_index_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF (TG_OP='UPDATE' AND OLD.auth_obligation_indexed AND NOT NEW.auth_obligation_indexed)
-    OR (NEW.auth_obligation_indexed AND NOT EXISTS(
-      SELECT 1 FROM access.auth_erasure_obligation WHERE route=NEW.route AND account_id=NEW.account_id)) THEN
-  RAISE EXCEPTION 'Auth erasure index cannot discard source evidence' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER auth_erasure_index_guard BEFORE INSERT OR UPDATE ON access.erasure
- FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_index_guard();
-
-CREATE FUNCTION access.initialize_auth_erasure_partition(p integer) RETURNS boolean LANGUAGE plpgsql AS $$
-DECLARE source access.auth_erasure_source; item record;
-BEGIN
- source:=access.lock_auth_erasure_source(p);
- IF source.initialized THEN RETURN true; END IF;
- FOR item IN SELECT route,account_id FROM access.erasure
-   WHERE route BETWEEN p*16 AND p*16+15 AND NOT auth_obligation_indexed
-   ORDER BY route,account_id LIMIT 48
- LOOP
-  PERFORM access.capture_auth_erasure_obligation(item.route,item.account_id,false);
- END LOOP;
- IF EXISTS(SELECT 1 FROM access.erasure WHERE route BETWEEN p*16 AND p*16+15 AND NOT auth_obligation_indexed) THEN
-  RETURN false;
- END IF;
- UPDATE access.auth_erasure_source SET initialized=true WHERE partition_no=p;
- RETURN true;
-END; $$;
-
-
--- Keep the retained native reversal branch intact. New Source references use the
--- same immutable association, with distinct Account, Source and recovery components.
--- PostgreSQL assigns a table-level name to the two-column equality check.
-DO $$ DECLARE original_check text;
-BEGIN
-  SELECT conname INTO STRICT original_check FROM pg_constraint
-  WHERE conrelid='access.agent_identity_recovery'::regclass AND contype='c'
-    AND pg_get_expr(conbin,conrelid)='(source_transaction_id = receipt_id)';
-  EXECUTE format('ALTER TABLE access.agent_identity_recovery DROP CONSTRAINT %I',original_check);
-END; $$;
-ALTER TABLE access.agent_identity_recovery
-  DROP CONSTRAINT agent_identity_recovery_direction_check,
-  ALTER COLUMN verification_intent_digest DROP NOT NULL,
-  ADD COLUMN original_source jsonb,
-  ADD COLUMN recovery_digest text,
-  ADD CHECK (direction IN ('account-agent.verify','account-agent.unverify')),
-  ADD CHECK (direction<>'account-agent.unverify' OR source_transaction_id=receipt_id),
-  ADD CHECK (original_source IS NOT NULL OR
-    (direction='account-agent.unverify' AND verification_intent_digest IS NOT NULL AND recovery_digest IS NULL)),
-  ADD CHECK ((original_source IS NULL)=(recovery_digest IS NULL)),
-  ADD CHECK (recovery_digest ~ '^[0-9a-f]{64}$');
-
-ALTER FUNCTION access.agent_identity_recovery_valid(access.agent_identity_intent)
-  RENAME TO agent_identity_retained_recovery_valid;
-
--- Local exact accepted claim only. Foreign job/source/participant reads belong to
--- readOriginalAccountAgentIdentity before this Account checkout is acquired.
-CREATE FUNCTION access.agent_identity_original_source_valid(home integer,s jsonb) RETURNS boolean
-LANGUAGE sql STABLE AS $$
- SELECT EXISTS (
-  SELECT 1 FROM semantic.identity_epoch_receipt_binding b
-  JOIN semantic.identity_epoch_receipt_claim c
-    ON (c.partition_no,c.receipt_key,c.generation)=(b.partition_no,b.receipt_key,b.generation)
-  JOIN semantic.identity_epoch_receipt_claim_commit k
-    ON (k.partition_no,k.receipt_key,k.generation,k.transaction_id)=
-       (c.partition_no,c.receipt_key,c.generation,c.transaction_id)
-  JOIN semantic.identity_epoch_native_commit n
-    ON (n.partition_no,n.transaction_id)=(c.partition_no,c.transaction_id)
-    AND n.purpose='admission' AND n.xmin=k.xmin AND n.xmin=c.xmin
-  JOIN core.partition p ON p.partition_no=c.partition_no AND p.write_state='active'
-    AND p.epoch=n.epoch AND p.position>=n.position AND n.position>0
-  WHERE b.partition_no=home AND b.receipt_key=s->'claim'->>'key'
-    AND b.account_id::text=s->'input'->'receipt'->>'account' AND b.state='accepted'
-    AND b.intent_digest=c.intent_digest AND (b.accepted_job,b.accepted_epoch)=(c.job_id,c.job_epoch)
-    AND NOT c.imported AND c.xmin::text<>pg_current_xact_id()::text
-    AND c.intent=s->'input'->'intent' AND c.receipt=s->'input'->'receipt' AND c.intent_digest=s->>'digest'
-    AND s->'native'=jsonb_build_object('partition',n.partition_no,'epoch',n.epoch,
-      'position',n.position::text,'transactionId',n.transaction_id::text)
-    AND s->'job'=jsonb_build_object('jobId',c.job_id::text,'epoch',c.job_epoch::text)
-    AND s->'claim'=jsonb_build_object('partition',c.partition_no,'key',c.receipt_key,
-      'generation',c.generation::text,'transactionId',c.transaction_id::text,
-      'home',c.job_home,'scope',c.scope_digest,'sources',c.sources)
- );
-$$;
-
-CREATE FUNCTION access.agent_identity_recovery_valid(i access.agent_identity_intent) RETURNS boolean
-LANGUAGE sql STABLE AS $$
- SELECT CASE WHEN NOT EXISTS (
-   SELECT 1 FROM access.agent_identity_recovery a WHERE
-     (a.route,a.account_id,a.direction,a.receipt_id)=(i.route,i.account_id,i.direction,i.receipt_id)
-     AND a.original_source IS NOT NULL
- ) THEN access.agent_identity_retained_recovery_valid(i) ELSE EXISTS (
-  SELECT 1 FROM access.agent_identity_recovery a
-  JOIN core.receipt r ON r.partition_no=a.source_partition AND r.principal_kind='account'
-    AND r.principal_id=a.requested_by AND r.command_kind=i.native_command_kind
-    AND r.idempotency_key=i.native_receipt_key AND r.transaction_id=a.source_transaction_id
-    AND r.epoch=a.source_epoch AND r.position=a.source_position AND r.payload_state='present'
-    AND r.xmin::text<>pg_current_xact_id()::text
-  JOIN core.receipt c ON c.partition_no=a.source_partition AND c.principal_kind='account'
-    AND c.principal_id=a.requested_by AND c.command_kind='access.agent-identity.recover'
-    AND c.idempotency_key=a.recovery_receipt_key AND c.transaction_id=a.recovery_transaction_id
-    AND c.epoch=a.recovery_epoch AND c.position=a.recovery_position
-    AND c.xmin::text=pg_current_xact_id()::text AND c.payload_state='present'
-    AND encode(c.request_digest,'hex')=a.recovery_digest
-    AND c.request_digest=sha256(convert_to(format('[%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s]',
-      to_json(i.delivery_key),to_json(i.source_transaction_id::text),i.source_epoch,to_json(i.source_position::text),
-      to_json(i.intent_digest),COALESCE(to_json(a.verification_intent_digest)::text,'null'),
-      (a.original_source->'native'->'transactionId')::text,(a.original_source->'native'->'epoch')::text,
-      (a.original_source->'native'->'position')::text,(a.original_source->'claim'->'generation')::text,
-      (a.original_source->'job'->'jobId')::text,(a.original_source->'job'->'epoch')::text,
-      (a.original_source->'claim'->'scope')::text,COALESCE(to_json(i.decision_transaction_id::text)::text,'null'),
-      COALESCE(i.decision_epoch::text,'null'),COALESCE(to_json(i.decision_position::text)::text,'null')),'UTF8'))
-  JOIN core.partition p ON p.partition_no=a.source_partition AND p.write_state='active'
-    AND p.epoch=a.source_epoch AND p.position>=a.recovery_position
-  WHERE (a.route,a.account_id,a.direction,a.receipt_id)=(i.route,i.account_id,i.direction,i.receipt_id)
-    AND a.xmin::text=pg_current_xact_id()::text
-    AND a.requested_by=i.requested_by AND a.decided_by IS NOT DISTINCT FROM i.decided_by
-    AND a.source_partition=i.source_partition AND a.source_epoch=i.source_epoch
-    AND a.source_position=i.source_position AND a.source_transaction_id=i.source_transaction_id
-    AND a.intent_digest=i.intent_digest AND NOT i.minimized
-    AND i.pending_receipt_id=r.transaction_id
-    AND i.delivery_key=format('["%s","%s","%s"]',i.direction,i.account_id::text,i.receipt_id::text)
-    AND a.original_source->'input'=jsonb_build_object('intent',i.intent,'receipt',
-      jsonb_build_object('account',i.account_id::text,'kind',i.direction,'receipt',i.receipt_id::text))
-    AND a.original_source->>'digest'=i.intent_digest
-    AND i.intent->>'release'=i.release
-    AND access.agent_identity_original_source_valid(i.source_partition,a.original_source)
-    -- The original Source admission must never masquerade as the Account command.
-    AND a.original_source->'native'->>'transactionId'<>i.source_transaction_id::text
-    AND a.original_source->'native'->>'transactionId'<>a.recovery_transaction_id::text
-    AND (a.original_source->'native'->>'position')::bigint>i.source_position
-    AND (a.original_source->'native'->>'position')::bigint<a.recovery_position
-    AND ((i.direction='account-agent.verify'
-      AND a.original_source->'priorVerification'='null'::jsonb
-      AND a.verification_intent_digest IS NULL AND i.verification_receipt_id IS NULL
-      AND i.decided_by IS NOT NULL AND i.decision_route=0 AND i.decision_receipt_id=i.receipt_id
-      AND i.decision_transaction_id=i.receipt_id AND i.decision_epoch>0 AND i.decision_position>0
-      AND i.intent=jsonb_build_object('kind','merge','redirected',i.agent_id::text,
-        'survivor',i.catalogue_id::text,'release',i.release)
-      AND i.workflow_id='accounts.agent-verification:'||i.request_id::text||':'||i.receipt_id::text
-      AND r.command_kind='access.agent-verification.pending'
-      AND r.response=jsonb_build_object('requestId',i.request_id::text,'accountId',i.account_id::text)
-      AND r.request_digest=sha256(convert_to(format('[%s,%s,%s,%s,%s]',to_json(i.request_id::text),
-        to_json(i.account_id::text),to_json(i.account_kind),to_json(i.catalogue_id::text),
-        to_json(i.receipt_id::text)),'UTF8')))
-    OR (i.direction='account-agent.unverify'
-      AND access.agent_identity_original_source_valid(i.source_partition,a.original_source->'priorVerification')
-      AND (a.original_source->'priorVerification'->'native'->>'position')::bigint<i.source_position
-      AND a.original_source->'priorVerification'->>'verificationReceipt'=i.verification_receipt_id::text
-      AND a.original_source->'priorVerification'->>'digest'=a.verification_intent_digest
-      AND a.original_source->'priorVerification'->'input'=jsonb_build_object('intent',
-        jsonb_build_object('kind','merge','redirected',i.agent_id::text,'survivor',i.catalogue_id::text,'release',i.release),
-        'receipt',jsonb_build_object('account',i.account_id::text,'kind','account-agent.verify',
-          'receipt',i.verification_receipt_id::text))
-      AND a.original_source->'priorVerification'->'job'=i.intent->'undoJob'
-      AND i.intent=jsonb_build_object('kind','unmerge','original',i.agent_id::text,'release',i.release,
-        'verificationReceipt',i.verification_receipt_id::text,'undoJob',
-        jsonb_build_object('jobId',i.undo_job_id::text,'epoch',i.undo_job_epoch::text))
-      AND i.request_id IS NULL AND i.decision_route IS NULL AND i.decision_receipt_id IS NULL
-      AND i.decision_epoch IS NULL AND i.decision_position IS NULL AND i.decision_transaction_id IS NULL
-      AND i.workflow_id='accounts.agent-verification-reversal:'||i.account_id::text||':'||i.receipt_id::text
-      AND r.response=jsonb_build_object('accountId',i.account_id::text,'receiptId',i.receipt_id::text,
-        'requestedBy',i.requested_by::text,'kind',i.disposition,'reason',i.reason,
-        'catalogueSubjectId',i.catalogue_id::text,'verificationReceiptId',i.verification_receipt_id::text)
-      AND i.decided_by IS NOT DISTINCT FROM CASE WHEN i.disposition='revoked' THEN i.requested_by END
-      AND ((r.command_kind='access.agent-verification.deleted' AND i.disposition='revoked'
-        AND i.reason='Account deleted' AND i.requested_by=i.account_id
-        AND r.request_digest=sha256(convert_to(i.account_id::text,'UTF8'))
-        AND EXISTS (SELECT 1 FROM access.account t WHERE t.route=i.route AND t.account_id=i.account_id AND t.state='deleted'))
-      OR (r.command_kind='access.agent-verification.'||i.disposition AND EXISTS (
-        SELECT 1 FROM editorial.write_basis b WHERE b.partition_no=r.partition_no AND b.transaction_id=r.transaction_id
-          AND b.principal_kind='account' AND b.principal_id=r.principal_id AND b.epoch=r.epoch AND b.position=r.position)))))
- ) END;
-$$;
-
-
--- Access owns accepted technical undo custody. This is personal technical data and
--- deliberately remains pending in the native inventory, never a nonpersonal disposition.
-CREATE TABLE access.agent_identity_technical_source (
- route integer NOT NULL CHECK(route BETWEEN 0 AND 65535),
- account_id uuid NOT NULL,
- direction text NOT NULL CHECK(direction IN ('account-agent.verify','account-agent.unverify')),
- receipt_id uuid NOT NULL,
- intent jsonb NOT NULL CHECK(octet_length(intent::text)<=2048),
- source_digest text NOT NULL CHECK(source_digest ~ '^[0-9a-f]{64}$'),
- source_partition integer NOT NULL,
- source_epoch integer NOT NULL CHECK(source_epoch>0),
- source_position bigint NOT NULL CHECK(source_position>0),
- source_transaction_id uuid NOT NULL,
- accepted_job_id uuid NOT NULL,
- accepted_job_epoch bigint NOT NULL CHECK(accepted_job_epoch>0),
- binding_generation bigint NOT NULL CHECK(binding_generation>0),
- binding_transaction_id uuid NOT NULL,
- workflow_id text NOT NULL CHECK(octet_length(workflow_id)<=256),
- receiving_transaction_id uuid NOT NULL,
- receiving_epoch integer NOT NULL CHECK(receiving_epoch>0),
- domain_generation bigint NOT NULL CHECK(domain_generation>0),
- receiving_position bigint NOT NULL CHECK(receiving_position>0),
- PRIMARY KEY(route,account_id,direction,receipt_id),
- CHECK(route=get_byte(uuid_send(account_id),10)*256+get_byte(uuid_send(account_id),11)),
- CHECK(source_partition=route/16),
- CHECK(receiving_transaction_id<>source_transaction_id),
- CHECK((direction='account-agent.verify' AND intent->>'kind'='merge'
-   AND intent ?& ARRAY['kind','redirected','survivor','release']
-   AND intent-ARRAY['kind','redirected','survivor','release']='{}'::jsonb)
-  OR (direction='account-agent.unverify' AND intent->>'kind'='unmerge'
-   AND intent ?& ARRAY['kind','original','undoJob','verificationReceipt','release']
-   AND intent-ARRAY['kind','original','undoJob','verificationReceipt','release']='{}'::jsonb
-   AND intent->'undoJob' ?& ARRAY['jobId','epoch']
-   AND (intent->'undoJob')-ARRAY['jobId','epoch']='{}'::jsonb))
-);
-CREATE INDEX erasure_agent_identity_technical_source_account ON access.agent_identity_technical_source
- (account_id,route,direction,receipt_id);
-
--- Native inventory of the Account subject actually retained in the technical payload.
--- Original requester/decider and inherited History attribution are not technical input.
-CREATE TABLE access.agent_identity_technical_role (
- route integer NOT NULL,
- account_id uuid NOT NULL,
- direction text NOT NULL,
- receipt_id uuid NOT NULL,
- role_account_id uuid NOT NULL,
- roles integer NOT NULL CHECK(roles BETWEEN 1 AND 262143),
- CONSTRAINT identity_technical_retained_subject CHECK(role_account_id=account_id AND roles=32),
- PRIMARY KEY(route,account_id,direction,receipt_id,role_account_id),
- FOREIGN KEY(route,account_id,direction,receipt_id)
-  REFERENCES access.agent_identity_technical_source(route,account_id,direction,receipt_id)
-);
-CREATE INDEX erasure_agent_identity_technical_role_account ON access.agent_identity_technical_role
- (role_account_id,route,account_id,direction,receipt_id);
-CREATE INDEX erasure_agent_identity_technical_role_owner ON access.agent_identity_technical_role
- (account_id,route,direction,receipt_id,role_account_id);
-
-CREATE FUNCTION access.validate_identity_technical_source() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- -- The finalizer appends the actual eventful fence in this PostgreSQL transaction.
- -- A predicted position alone (or a replayed/caller-supplied transaction stamp) cannot commit.
- IF NEW.receiving_transaction_id::text IS DISTINCT FROM current_setting('access.identity_technical_transaction',true)
-  OR NOT EXISTS(SELECT 1 FROM core.outbox o JOIN core.partition p USING(partition_no)
-    WHERE o.partition_no=NEW.source_partition AND o.epoch=NEW.receiving_epoch
-      AND o.position=NEW.receiving_position AND o.event_seq=0
-      AND o.xmin::text=pg_current_xact_id()::text
-      AND p.epoch=o.epoch AND p.position=o.position AND p.write_state='active')
-  OR NOT EXISTS(SELECT 1 FROM access.agent_identity_technical_role r
-    WHERE (r.route,r.account_id,r.direction,r.receipt_id)=
-      (NEW.route,NEW.account_id,NEW.direction,NEW.receipt_id)
-      AND r.role_account_id=NEW.account_id AND r.roles=32) THEN
-  RAISE EXCEPTION 'Accounts technical custody lacks same-command native receiving fence/inventory' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-CREATE CONSTRAINT TRIGGER identity_technical_source_native_commit
- AFTER INSERT ON access.agent_identity_technical_source DEFERRABLE INITIALLY DEFERRED
- FOR EACH ROW EXECUTE FUNCTION access.validate_identity_technical_source();
-CREATE FUNCTION access.guard_identity_technical_source() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- RAISE EXCEPTION 'Accepted Accounts technical custody requires its native consumer release';
-END; $$;
-CREATE TRIGGER identity_technical_source_immutable BEFORE UPDATE OR DELETE
- ON access.agent_identity_technical_source FOR EACH ROW EXECUTE FUNCTION access.guard_identity_technical_source();
-CREATE TRIGGER identity_technical_role_immutable BEFORE UPDATE OR DELETE
- ON access.agent_identity_technical_role FOR EACH ROW EXECUTE FUNCTION access.guard_identity_technical_source();
-CREATE TRIGGER identity_technical_source_no_truncate BEFORE TRUNCATE
- ON access.agent_identity_technical_source FOR EACH STATEMENT EXECUTE FUNCTION access.guard_identity_technical_source();
-CREATE TRIGGER identity_technical_role_no_truncate BEFORE TRUNCATE
- ON access.agent_identity_technical_role FOR EACH STATEMENT EXECUTE FUNCTION access.guard_identity_technical_source();

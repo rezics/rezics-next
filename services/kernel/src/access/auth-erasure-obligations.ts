@@ -22,7 +22,7 @@ type Source = {
   initialized: boolean;
 };
 type Segment = { high_water: string };
-type NativeRow = {
+export type NativeRow = {
   route: number;
   accountId: string;
   version: number;
@@ -32,11 +32,11 @@ type NativeRow = {
   ordinal: string | null;
   valid: boolean;
 };
-const columns = `e.route,e.account_id::text AS "accountId",e.version,e.at::text AS at,
+export const columns = `e.route,e.account_id::text AS "accountId",e.version,e.at::text AS at,
  o.minimum_authn_epoch::text AS "minimumAuthnEpoch",o.receipt_id::text AS "receiptId",o.ordinal::text,
  (a.state='deleted' AND a.authn_fenced AND o.version=e.version AND o.at=e.at
   AND a.minimum_authn_epoch>=o.minimum_authn_epoch) AS valid`;
-function point(row: NativeRow): AuthErasureObligationPoint {
+export function point(row: NativeRow): AuthErasureObligationPoint {
   const { route, accountId, version, at } = row;
   if (!row.minimumAuthnEpoch || !row.receiptId || !row.ordinal)
     return { state: 'pending', route, accountId, version, at, reason: 'original-floor-unavailable' };
@@ -70,35 +70,38 @@ async function header(client: PoolClient, cutId: string, lock = false): Promise<
     sealedPartitions: row.sealed_partitions,
   };
 }
+export function authErasureTransaction<T>(pool: Pool, deadline: number, work: (client: PoolClient) => Promise<T>) {
+  requireInput(Number.isSafeInteger(deadline));
+  return within(deadline, () =>
+    withConnection(pool, async (connection) => {
+      const client = deadlineClient(connection, deadline) as PoolClient;
+      try {
+        await client.query('BEGIN');
+        await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [
+          String(Math.max(1, deadline - Date.now())),
+        ]);
+        const result = await work(client);
+        requireInput(Buffer.byteLength(JSON.stringify(result)) <= 65536);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          await connection.query('ROLLBACK');
+        } catch (rollback) {
+          discardConnection(connection, rollback as Error);
+        }
+        throw error;
+      }
+    }),
+  );
+}
+
 /** Native, fixed Auth-only producer readers. No pool, actor proof, maintenance or
  * acknowledgement capability crosses this closure. Cut writes retain source metadata only.
  */
 export function createAuthErasureObligationBindings(pool: Pool): AuthErasureObligationPorts {
-  const transaction = <T>(deadline: number, work: (client: PoolClient) => Promise<T>) => {
-    requireInput(Number.isSafeInteger(deadline));
-    return within(deadline, () =>
-      withConnection(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline) as PoolClient;
-        try {
-          await client.query('BEGIN');
-          await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [
-            String(Math.max(1, deadline - Date.now())),
-          ]);
-          const result = await work(client);
-          requireInput(Buffer.byteLength(JSON.stringify(result)) <= 65536);
-          await client.query('COMMIT');
-          return result;
-        } catch (error) {
-          try {
-            await connection.query('ROLLBACK');
-          } catch (rollback) {
-            discardConnection(connection, rollback as Error);
-          }
-          throw error;
-        }
-      }),
-    );
-  };
+  const transaction = <T>(deadline: number, work: (client: PoolClient) => Promise<T>) =>
+    authErasureTransaction(pool, deadline, work);
   return {
     readAuthErasureObligation(input) {
       const route = routeOf(input.accountId);

@@ -3287,8 +3287,9 @@ reports current only after all 4096 partitions have native seals. Auth must reta
 its own consumed cursors and verify every partition; no header is Source proof.
 New committed erasures necessarily enter the same producer/feed before becoming
 visible. A later head invalidates current verification without changing an old cut;
-reconcile a new cut to consume that tail. Ordinary current sign-in still checks
-Access's live account fence, including during restore admission cutover.
+finite-only consumers reconcile a new cut to consume that tail. The additive live
+handoff below retains the original cut while enrolling its native tail. Ordinary current
+sign-in still checks Access's live account fence, including during restore admission cutover.
 
 Source generation/ownership epoch and inventory/producer versions are independent
 of account barrier versions. A missing, moved, fenced or changed-epoch source stays
@@ -3299,6 +3300,55 @@ Auth custody contract. It does not certify recovery of an older Access database,
 physical backup/restore lineage, external receiving closure, Auth native replay,
 consent due evidence or final cleanup. Those authorities remain with their owners;
 this native discovery feed cannot release an isolated restore by itself.
+
+### Native Auth live obligation handoff
+
+The additive `authErasureLiveReceiver` trusted composition option on `createAuthBindings`
+mounts the closed `AuthErasureLivePorts` from
+`packages/auth-contract/src/auth-erasure-live.ts`, implemented by
+`createAuthErasureLiveBindings(pool, receiver)`. Composition supplies the actual restored
+Auth generation, verified database identity, inventory entry/version and original cut ID.
+The four receiver identifiers retain Auth inventory's nonempty string format (at most
+1 KiB each); its inventory version is independent of the native feed version.
+These immutable binding values are data, never a certificate of physical receiving or
+restore admission. Existing callers and finite obligation ports keep their original meaning.
+
+`armAuthErasureLivePartition` arms one already sealed original cut partition. It takes
+exactly the native `core.partition` writer lock used by tombstone capture, checks the
+original source generation/epoch/owner/position and persists the receiver, subscription
+and enrollment before committing. The subscription records both the original cut high
+water and the immutable arm high water. Obligations committed between those frontiers
+are already in the permanent original ordinal feed; later obligations advance a durable
+partition enrollment frontier through an `AFTER INSERT` trigger in the same transaction
+as original native capture. There is no receiver fanout at append, account enumeration,
+account cursor, global cut update or lock across partitions. Failed transactions roll
+back the tombstone, original receipt, feed and enrollment together. Exact retries retain
+the original subscription; changing any receiver binding for that cut refuses, including
+when arming a different partition.
+
+`readAuthErasureLivePage` begins at the original cut high water and seeks native ordinals
+in that same feed. It returns at most 48 original tuples, each at most 1 KiB, and at most
+64 KiB overall. `next` stays on the same partition even at `tail-end`; it is never an ACK,
+consumption proof or instruction to discard tail. A pending original floor retains its
+exact tuple and the continuation stops before the first pending item. Missing receiver
+composition leaves all native obligations retained. There is no tail deletion operation.
+
+`verifyAuthErasureLivePartition` rechecks the actual current native writer lineage,
+retained original cut, exact receiver, immutable subscription and transactionally
+maintained late enrollment. It can stay current as the native head advances because
+that advancement is enrolled durably, rather than because a snapshot or current maximum
+was observed. Verification and arm are per partition; other partitions can continue
+while one source is unavailable. An epoch/owner change keeps the old provenance pending,
+including when genuine native confirmations continue. Enrollment records that mismatch
+without stopping ordinary native deletion; it cannot automatically repin or reset an old
+lineage. A native lineage handoff remains the source owner's responsibility.
+
+`test/access/auth-erasure-live.test.ts` covers cut/arm/append races, retry, page bounds,
+continued tail after EOF, source lineage changes, partition independence, transaction
+rollback and precise unknown-floor pending. These ports supply Source enrollment only.
+Auth owns its database, consumed checkpoints, maintenance and gate. External receiving,
+backup/tail custody, replay/restore admission and final erasure ACK remain unproven by
+this subscription and require their existing owning evidence.
 
 ## Delivered preference history coverage
 
