@@ -1,4 +1,4 @@
 types:
   schema:MusicAlbum: 앨범
 typeDescriptions:
-  schema:MusicAlbum: "여러 곡을 묶은 음악 앨범 작품입니다. 특정 소장본이나 유통 판본과는 독립적입니다."
+  schema:MusicAlbum: '여러 곡을 묶은 음악 앨범 작품입니다. 특정 소장본이나 유통 판본과는 독립적입니다.'

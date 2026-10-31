@@ -18,13 +18,13 @@ inverseProperties:
   schema:keywords: 'Sujets portant cette étiquette'
   skos:closeMatch: 'Concepts proches'
 typeDescriptions:
-  skos:Concept: "Un concept de classification servant de genre, mot-clé, rôle ou autre catégorie nommée ; son objet central peut renvoyer à un sujet."
-  skos:ConceptScheme: "Un schéma nommé organisant des concepts ; le schéma et chacun de ses concepts sont des sujets distincts du catalogue."
+  skos:Concept: 'Un concept de classification servant de genre, mot-clé, rôle ou autre catégorie nommée ; son objet central peut renvoyer à un sujet.'
+  skos:ConceptScheme: 'Un schéma nommé organisant des concepts ; le schéma et chacun de ses concepts sont des sujets distincts du catalogue.'
 propertyDescriptions:
-  wdt:P7937: "Un concept précisant la forme de l’œuvre, comme roman ; distinct du genre et du type de catalogue."
-  skos:inScheme: "Le schéma de concepts auquel appartient ce concept."
-  skos:broader: "Un concept plus général dans la hiérarchie, par exemple fiction au-dessus de science-fiction."
-  foaf:focus: "Le sujet du catalogue que représente ce concept de classification."
-  schema:keywords: "Un concept de mot-clé classant le sujet ; ni texte séparé par des virgules ni étiquette personnelle de bibliothèque."
-  schema:genre: "Un concept de genre classant cette œuvre, comme science-fiction."
-  skos:closeMatch: "Un autre concept au sens très proche ; ni équivalence ni élargissement automatique des filtres."
+  wdt:P7937: 'Un concept précisant la forme de l’œuvre, comme roman ; distinct du genre et du type de catalogue.'
+  skos:inScheme: 'Le schéma de concepts auquel appartient ce concept.'
+  skos:broader: 'Un concept plus général dans la hiérarchie, par exemple fiction au-dessus de science-fiction.'
+  foaf:focus: 'Le sujet du catalogue que représente ce concept de classification.'
+  schema:keywords: 'Un concept de mot-clé classant le sujet ; ni texte séparé par des virgules ni étiquette personnelle de bibliothèque.'
+  schema:genre: 'Un concept de genre classant cette œuvre, comme science-fiction.'
+  skos:closeMatch: 'Un autre concept au sens très proche ; ni équivalence ni élargissement automatique des filtres.'

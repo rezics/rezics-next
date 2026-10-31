@@ -33,10 +33,10 @@ libraryProfiles:
       digital:
         owned: 'Im Besitz'
 typeDescriptions:
-  schema:Recipe: "Anleitung und Zutaten zur Zubereitung von Speisen; getrennt vom Lebensmittel selbst und vom persönlichen Kochvorgang."
+  schema:Recipe: 'Anleitung und Zutaten zur Zubereitung von Speisen; getrennt vom Lebensmittel selbst und vom persönlichen Kochvorgang.'
 propertyDescriptions:
-  schema:suitableForDiet: "Ein Konzept für die angegebene Ernährungseignung, etwa vegetarisch; nicht aus Zutatennamen ableiten."
-  schema:recipeInstructions: "Ein verfasstes Dokument mit den Zubereitungsschritten; erwartet wird ein Dokumentwert statt einfachem Text oder einer URL."
-  schema:recipeIngredient: "Eine Zutat als Text mit Sprachangabe, etwa 200 g Mehl; strukturierte Lebensmittelverweise verwenden die Materialbeziehung."
-  schema:cookTime: "Reine Garzeit als nichtnegative ganze Zahl in Minuten (wd:Q7727), etwa 25; keine Uhrzeit und keine gesamte Vorbereitungs- oder Ruhezeit."
-  schema:recipeYield: "Anzahl der Portionen als einheitenlose ganzzahlige Menge von mindestens 1, etwa 4; keine frei formulierte Portionsangabe."
+  schema:suitableForDiet: 'Ein Konzept für die angegebene Ernährungseignung, etwa vegetarisch; nicht aus Zutatennamen ableiten.'
+  schema:recipeInstructions: 'Ein verfasstes Dokument mit den Zubereitungsschritten; erwartet wird ein Dokumentwert statt einfachem Text oder einer URL.'
+  schema:recipeIngredient: 'Eine Zutat als Text mit Sprachangabe, etwa 200 g Mehl; strukturierte Lebensmittelverweise verwenden die Materialbeziehung.'
+  schema:cookTime: 'Reine Garzeit als nichtnegative ganze Zahl in Minuten (wd:Q7727), etwa 25; keine Uhrzeit und keine gesamte Vorbereitungs- oder Ruhezeit.'
+  schema:recipeYield: 'Anzahl der Portionen als einheitenlose ganzzahlige Menge von mindestens 1, etwa 4; keine frei formulierte Portionsangabe.'

@@ -1,4 +1,4 @@
 types:
   schema:MusicAlbum: Album
 typeDescriptions:
-  schema:MusicAlbum: "Ein Musikalbum als Werk mit zusammengehörigen Titeln, unabhängig von einem bestimmten Exemplar oder einer vertriebenen Ausgabe."
+  schema:MusicAlbum: 'Ein Musikalbum als Werk mit zusammengehörigen Titeln, unabhängig von einem bestimmten Exemplar oder einer vertriebenen Ausgabe.'

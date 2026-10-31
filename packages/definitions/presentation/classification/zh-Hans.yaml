@@ -18,13 +18,13 @@ inverseProperties:
   schema:keywords: '使用此标签的主体'
   skos:closeMatch: '近似概念'
 typeDescriptions:
-  skos:Concept: "用于题材、标签、职务等分类的概念，也可通过焦点关系指向具体对象。"
-  skos:ConceptScheme: "组织分类概念的具名体系；体系与其中每个概念都是独立的目录对象。"
+  skos:Concept: '用于题材、标签、职务等分类的概念，也可通过焦点关系指向具体对象。'
+  skos:ConceptScheme: '组织分类概念的具名体系；体系与其中每个概念都是独立的目录对象。'
 propertyDescriptions:
-  wdt:P7937: "表明作品形式的概念，如小说；与题材及目录类型分开。"
-  skos:inScheme: "此概念所属的概念体系。"
-  skos:broader: "分类层级中更广泛的上位概念，如科幻之上的虚构作品。"
-  foaf:focus: "此分类概念所代表的目录对象。"
-  schema:keywords: "用于分类此对象的标签概念，不是逗号分隔的字符串或个人书库标签。"
-  schema:genre: "用于分类此作品的题材概念，如科幻。"
-  skos:closeMatch: "含义相近的另一个独立概念，不表示等同，也不会自动扩展筛选条件。"
+  wdt:P7937: '表明作品形式的概念，如小说；与题材及目录类型分开。'
+  skos:inScheme: '此概念所属的概念体系。'
+  skos:broader: '分类层级中更广泛的上位概念，如科幻之上的虚构作品。'
+  foaf:focus: '此分类概念所代表的目录对象。'
+  schema:keywords: '用于分类此对象的标签概念，不是逗号分隔的字符串或个人书库标签。'
+  schema:genre: '用于分类此作品的题材概念，如科幻。'
+  skos:closeMatch: '含义相近的另一个独立概念，不表示等同，也不会自动扩展筛选条件。'

@@ -7,8 +7,8 @@ properties:
 inverseProperties:
   wdt:P1433: 'Obras publicadas aquí'
 typeDescriptions:
-  wd:Q7725310: "Una serie de obras con nombre, también de no ficción o medios distintos; una lista personal seleccionada es una Collection."
-  schema:BookSeries: "Una serie de libros; cada miembro se vincula con parte de la serie y puede indicar su posición."
+  wd:Q7725310: 'Una serie de obras con nombre, también de no ficción o medios distintos; una lista personal seleccionada es una Collection.'
+  schema:BookSeries: 'Una serie de libros; cada miembro se vincula con parte de la serie y puede indicar su posición.'
 propertyDescriptions:
-  wdt:P2635: "Número declarado de partes como cantidad entera no negativa en volúmenes (wd:Q1238720) o capítulos (wd:Q1980247)."
-  wdt:P1433: "La obra mayor en la que se publicó esta serie, como una revista."
+  wdt:P2635: 'Número declarado de partes como cantidad entera no negativa en volúmenes (wd:Q1238720) o capítulos (wd:Q1980247).'
+  wdt:P1433: 'La obra mayor en la que se publicó esta serie, como una revista.'

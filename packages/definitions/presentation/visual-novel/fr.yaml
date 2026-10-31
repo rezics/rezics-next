@@ -30,9 +30,9 @@ libraryProfiles:
       digital:
         owned: 'Possédé'
 typeDescriptions:
-  wd:Q689445: "Un roman visuel en tant qu’œuvre, indépendant de ses éditions par langue ou plateforme ; personnages et équipe sont liés par les énoncés de l’œuvre."
+  wd:Q689445: 'Un roman visuel en tant qu’œuvre, indépendant de ses éditions par langue ou plateforme ; personnages et équipe sont liés par les énoncés de l’œuvre.'
 propertyDescriptions:
-  wdt:P144: "L’œuvre sur laquelle repose ce roman visuel ; identifie la source plutôt qu’un lien indéterminé entre médias."
-  wdt:P1889: "Un autre roman visuel dans le même univers ou la même continuité ; les deux restent des œuvres distinctes."
-  wdt:P361: "L’œuvre plus vaste contenant celle-ci, par exemple un récit principal ou une compilation."
-  rezics:spinOffOf: "L’œuvre d’origine dont dérive cette œuvre secondaire."
+  wdt:P144: 'L’œuvre sur laquelle repose ce roman visuel ; identifie la source plutôt qu’un lien indéterminé entre médias.'
+  wdt:P1889: 'Un autre roman visuel dans le même univers ou la même continuité ; les deux restent des œuvres distinctes.'
+  wdt:P361: 'L’œuvre plus vaste contenant celle-ci, par exemple un récit principal ou une compilation.'
+  rezics:spinOffOf: 'L’œuvre d’origine dont dérive cette œuvre secondaire.'

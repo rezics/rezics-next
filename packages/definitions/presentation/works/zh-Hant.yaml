@@ -1,4 +1,4 @@
 types:
   schema:MusicAlbum: 音樂專輯
 typeDescriptions:
-  schema:MusicAlbum: "彙集曲目的音樂專輯作品，獨立於特定實體副本或發行版本。"
+  schema:MusicAlbum: '彙集曲目的音樂專輯作品，獨立於特定實體副本或發行版本。'

@@ -22,11 +22,11 @@ inverseProperties:
   schema:isPartOf: 'Episodios'
   wdt:P449: 'Emisiones originales'
 typeDescriptions:
-  rezics:AnimeRelease: "Una publicación o versión distribuida de contenido de anime con identidad propia. Distinta de la obra, episodio, archivo o copia personal; los idiomas y formatos por sí solos no crean lanzamientos separados."
-  schema:Episode: "Una entrega identificada de una obra de anime, como el episodio 3 o un especial; no un archivo ni una temporada completa."
-  schema:Movie: "Un largometraje o cortometraje de animación como obra, independiente de sus ediciones distribuidas."
-  schema:TVSeason: "Una temporada identificada de una serie de animación televisiva, distinta de la serie completa y del episodio."
-  schema:TVSeries: "Una serie de animación televisiva como obra que abarca temporadas y episodios, distinta de una edición distribuida concreta."
+  rezics:AnimeRelease: 'Una publicación o versión distribuida de contenido de anime con identidad propia. Distinta de la obra, episodio, archivo o copia personal; los idiomas y formatos por sí solos no crean lanzamientos separados.'
+  schema:Episode: 'Una entrega identificada de una obra de anime, como el episodio 3 o un especial; no un archivo ni una temporada completa.'
+  schema:Movie: 'Un largometraje o cortometraje de animación como obra, independiente de sus ediciones distribuidas.'
+  schema:TVSeason: 'Una temporada identificada de una serie de animación televisiva, distinta de la serie completa y del episodio.'
+  schema:TVSeries: 'Una serie de animación televisiva como obra que abarca temporadas y episodios, distinta de una edición distribuida concreta.'
 libraryProfiles:
   anime.series:
     states:
@@ -125,14 +125,14 @@ libraryProfiles:
       digital:
         owned: 'En propiedad'
 propertyDescriptions:
-  bf:hasPart: "Una obra de anime identificada e incluida en esta antología; enlaza la serie, película, temporada o episodio real."
-  marcrel:fds: "Una persona u organización acreditada por distribuir esta publicación audiovisual; no se copian créditos ajenos de la obra."
-  schema:copyrightNotice: "El aviso de derechos de autor declarado por la fuente; no establece una licencia de reutilización."
-  schema:duration: "Duración declarada como cantidad entera no negativa en segundos (wd:Q11574), por ejemplo 1440 para 24 minutos."
-  schema:endDate: "El final del período original de emisión o lanzamiento, conservando la precisión de la fuente."
-  schema:episodeNumber: "El ordinal del episodio en la fuente como texto, incluidos 0, especiales o fracciones; separado de su identificador."
-  schema:isPartOf: "La serie televisiva o temporada que contiene este episodio."
-  schema:numberOfEpisodes: "Número de episodios de esta obra o temporada como cantidad entera no negativa y sin unidad."
-  schema:startDate: "El inicio del período original de emisión o lanzamiento, conservando la precisión de la fuente."
-  wdt:P449: "La organización que la fuente identifica como emisora original; no cualquier distribuidor posterior."
-  wdt:P973: "Una URL de una página que describe esta obra de anime; no equivale a una coincidencia exacta de identidad."
+  bf:hasPart: 'Una obra de anime identificada e incluida en esta antología; enlaza la serie, película, temporada o episodio real.'
+  marcrel:fds: 'Una persona u organización acreditada por distribuir esta publicación audiovisual; no se copian créditos ajenos de la obra.'
+  schema:copyrightNotice: 'El aviso de derechos de autor declarado por la fuente; no establece una licencia de reutilización.'
+  schema:duration: 'Duración declarada como cantidad entera no negativa en segundos (wd:Q11574), por ejemplo 1440 para 24 minutos.'
+  schema:endDate: 'El final del período original de emisión o lanzamiento, conservando la precisión de la fuente.'
+  schema:episodeNumber: 'El ordinal del episodio en la fuente como texto, incluidos 0, especiales o fracciones; separado de su identificador.'
+  schema:isPartOf: 'La serie televisiva o temporada que contiene este episodio.'
+  schema:numberOfEpisodes: 'Número de episodios de esta obra o temporada como cantidad entera no negativa y sin unidad.'
+  schema:startDate: 'El inicio del período original de emisión o lanzamiento, conservando la precisión de la fuente.'
+  wdt:P449: 'La organización que la fuente identifica como emisora original; no cualquier distribuidor posterior.'
+  wdt:P973: 'Una URL de una página que describe esta obra de anime; no equivale a una coincidencia exacta de identidad.'

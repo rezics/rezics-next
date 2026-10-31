@@ -10,10 +10,10 @@ inverseProperties:
   schema:gender: 'Sujets de ce genre'
   wdt:P1853: 'Sujets de ce groupe sanguin'
 typeDescriptions:
-  wd:Q95074: "Un personnage fictif identifiable, y compris une machine, un vaisseau ou une organisation fictive ; apparitions et crédits vocaux sont portés par les œuvres."
+  wd:Q95074: 'Un personnage fictif identifiable, y compris une machine, un vaisseau ou une organisation fictive ; apparitions et crédits vocaux sont portés par les œuvres.'
 propertyDescriptions:
-  schema:gender: "Le genre explicitement décrit du personnage fictif sous forme de concept ; ne pas en déduire un sexe biologique."
-  schema:height: "La taille indiquée, en quantité non négative de centimètres (wd:Q174728) ou de mètres (wd:Q11573), en conservant l’unité."
-  schema:weight: "La masse indiquée, en quantité non négative de kilogrammes (wd:Q11570) ou de grammes (wd:Q41803), en conservant l’unité."
-  wdt:P1853: "Le groupe sanguin explicitement indiqué sous forme de concept, par exemple A ; une valeur inconnue reste inconnue."
-  wdt:P6296: "L’identifiant numérique positif de personnage Bangumi ; ni identifiant de titre ou de personne ni URL de page."
+  schema:gender: 'Le genre explicitement décrit du personnage fictif sous forme de concept ; ne pas en déduire un sexe biologique.'
+  schema:height: 'La taille indiquée, en quantité non négative de centimètres (wd:Q174728) ou de mètres (wd:Q11573), en conservant l’unité.'
+  schema:weight: 'La masse indiquée, en quantité non négative de kilogrammes (wd:Q11570) ou de grammes (wd:Q41803), en conservant l’unité.'
+  wdt:P1853: 'Le groupe sanguin explicitement indiqué sous forme de concept, par exemple A ; une valeur inconnue reste inconnue.'
+  wdt:P6296: 'L’identifiant numérique positif de personnage Bangumi ; ni identifiant de titre ou de personne ni URL de page.'

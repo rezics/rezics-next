@@ -32,10 +32,10 @@ libraryProfiles:
       digital:
         owned: '所持'
 typeDescriptions:
-  schema:Recipe: "食品を調理するための手順と材料。食品そのものや個人の調理記録とは別の対象です。"
+  schema:Recipe: '食品を調理するための手順と材料。食品そのものや個人の調理記録とは別の対象です。'
 propertyDescriptions:
-  schema:suitableForDiet: "ベジタリアン向けなど、明示された食事制限への適合を示す概念。材料名から推定しません。"
-  schema:recipeInstructions: "調理手順を執筆したドキュメント。単なる文字列やURLではなくドキュメント値を使います。"
-  schema:recipeIngredient: "「小麦粉200 g」など、言語付きテキストで記した材料。食品への構造化された参照には材料の関連を使います。"
-  schema:cookTime: "実際に加熱・調理する所要時間。分（wd:Q7727）単位の0以上の整数で、例えば25と記録します。時刻や下準備・休ませる時間を含む総時間ではありません。"
-  schema:recipeYield: "出来上がる人数分の数。単位なしの1以上の整数の数量で、例えば4と記録します。自由記述の分量説明ではありません。"
+  schema:suitableForDiet: 'ベジタリアン向けなど、明示された食事制限への適合を示す概念。材料名から推定しません。'
+  schema:recipeInstructions: '調理手順を執筆したドキュメント。単なる文字列やURLではなくドキュメント値を使います。'
+  schema:recipeIngredient: '「小麦粉200 g」など、言語付きテキストで記した材料。食品への構造化された参照には材料の関連を使います。'
+  schema:cookTime: '実際に加熱・調理する所要時間。分（wd:Q7727）単位の0以上の整数で、例えば25と記録します。時刻や下準備・休ませる時間を含む総時間ではありません。'
+  schema:recipeYield: '出来上がる人数分の数。単位なしの1以上の整数の数量で、例えば4と記録します。自由記述の分量説明ではありません。'

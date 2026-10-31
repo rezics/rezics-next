@@ -32,10 +32,10 @@ libraryProfiles:
       digital:
         owned: '擁有'
 typeDescriptions:
-  schema:Recipe: "製作食物所需的步驟與食材，與食物本身及個人烹調紀錄分開。"
+  schema:Recipe: '製作食物所需的步驟與食材，與食物本身及個人烹調紀錄分開。'
 propertyDescriptions:
-  schema:suitableForDiet: "表明食譜適用飲食的概念，例如素食；不可僅從食材名稱推定。"
-  schema:recipeInstructions: "撰寫的製作步驟文件，接受文件值，而非一般字串或 URL。"
-  schema:recipeIngredient: "帶語言的食材文字，例如麵粉 200 公克；結構化的食物連結另用材料關係。"
-  schema:cookTime: "實際烹調所需的時長，以分（wd:Q7727）為單位的非負整數數量記錄，例如 25；不是一天中的時刻，也不是包含備料與靜置的總時間。"
-  schema:recipeYield: "製作出的份數，以無單位且至少為 1 的整數數量記錄，例如 4；不是自由文字的分量說明。"
+  schema:suitableForDiet: '表明食譜適用飲食的概念，例如素食；不可僅從食材名稱推定。'
+  schema:recipeInstructions: '撰寫的製作步驟文件，接受文件值，而非一般字串或 URL。'
+  schema:recipeIngredient: '帶語言的食材文字，例如麵粉 200 公克；結構化的食物連結另用材料關係。'
+  schema:cookTime: '實際烹調所需的時長，以分（wd:Q7727）為單位的非負整數數量記錄，例如 25；不是一天中的時刻，也不是包含備料與靜置的總時間。'
+  schema:recipeYield: '製作出的份數，以無單位且至少為 1 的整數數量記錄，例如 4；不是自由文字的分量說明。'

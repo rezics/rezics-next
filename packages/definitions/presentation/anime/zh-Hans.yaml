@@ -22,11 +22,11 @@ inverseProperties:
   schema:isPartOf: '集数'
   wdt:P449: '首播作品'
 typeDescriptions:
-  rezics:AnimeRelease: "独立标识的动画出版或发行版本，与作品本身分开。也与单集、播放文件和个人副本区分，不因语言或格式不同就自动创建多个发行版。"
-  schema:Episode: "可独立识别的一集动画或其他单篇，如第 3 集或特别篇；不是播放文件，也不是整季。"
-  schema:Movie: "作为作品的动画长片或短片，独立于各个出版发行版本。"
-  schema:TVSeason: "电视动画中可单独识别的一季，与整个系列和单集分开。"
-  schema:TVSeries: "包含各季和各集的电视动画作品系列，与某一具体发行版分开。"
+  rezics:AnimeRelease: '独立标识的动画出版或发行版本，与作品本身分开。也与单集、播放文件和个人副本区分，不因语言或格式不同就自动创建多个发行版。'
+  schema:Episode: '可独立识别的一集动画或其他单篇，如第 3 集或特别篇；不是播放文件，也不是整季。'
+  schema:Movie: '作为作品的动画长片或短片，独立于各个出版发行版本。'
+  schema:TVSeason: '电视动画中可单独识别的一季，与整个系列和单集分开。'
+  schema:TVSeries: '包含各季和各集的电视动画作品系列，与某一具体发行版分开。'
 libraryProfiles:
   anime.series:
     states:
@@ -117,14 +117,14 @@ libraryProfiles:
       digital:
         owned: '拥有'
 propertyDescriptions:
-  bf:hasPart: "此合集发行版收录的独立动画作品，链接实际的系列、电影、季或单集。"
-  marcrel:fds: "被署名为此影像出版物发行者的个人或组织，不照搬作品上无关的署名。"
-  schema:copyrightNotice: "来源记载的版权声明，本身不构成再利用许可。"
-  schema:duration: "来源明确给出的片长，以秒（wd:Q11574）为单位的非负整数数量记录；例如 24 分钟写作 1440。"
-  schema:endDate: "最初播出或发行期间的结束日期，保留来源精度。"
-  schema:episodeNumber: "来源中的单集序号，以文本保存，可含 0、特别篇或小数编号；与单集标识分开。"
-  schema:isPartOf: "此单集所属的电视系列或季。"
-  schema:numberOfEpisodes: "此作品或季的集数，以无单位的非负整数数量记录。"
-  schema:startDate: "最初播出或发行期间的开始日期，保留来源精度。"
-  wdt:P449: "来源明确标识的首播机构，不泛指后来所有发行者。"
-  wdt:P973: "介绍此动画作品的页面 URL，描述性链接不等于身份精确匹配。"
+  bf:hasPart: '此合集发行版收录的独立动画作品，链接实际的系列、电影、季或单集。'
+  marcrel:fds: '被署名为此影像出版物发行者的个人或组织，不照搬作品上无关的署名。'
+  schema:copyrightNotice: '来源记载的版权声明，本身不构成再利用许可。'
+  schema:duration: '来源明确给出的片长，以秒（wd:Q11574）为单位的非负整数数量记录；例如 24 分钟写作 1440。'
+  schema:endDate: '最初播出或发行期间的结束日期，保留来源精度。'
+  schema:episodeNumber: '来源中的单集序号，以文本保存，可含 0、特别篇或小数编号；与单集标识分开。'
+  schema:isPartOf: '此单集所属的电视系列或季。'
+  schema:numberOfEpisodes: '此作品或季的集数，以无单位的非负整数数量记录。'
+  schema:startDate: '最初播出或发行期间的开始日期，保留来源精度。'
+  wdt:P449: '来源明确标识的首播机构，不泛指后来所有发行者。'
+  wdt:P973: '介绍此动画作品的页面 URL，描述性链接不等于身份精确匹配。'

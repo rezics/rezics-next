@@ -22,11 +22,11 @@ inverseProperties:
   schema:isPartOf: '集數'
   wdt:P449: '首播作品'
 typeDescriptions:
-  rezics:AnimeRelease: "具有獨立識別身分的動畫出版或發行版本，與作品本身分開。也與單集、播放檔案及個人副本區別，不因語言或格式不同就自動建立多個發行版。"
-  schema:Episode: "可獨立識別的一集動畫或其他單篇，例如第 3 集或特別篇；不是播放檔案，也不是整季。"
-  schema:Movie: "作為作品的動畫長片或短片，獨立於各個出版發行版本。"
-  schema:TVSeason: "電視動畫中可單獨識別的一季，與完整系列及單集分開。"
-  schema:TVSeries: "包含各季與各集的電視動畫作品系列，與某個具體發行版分開。"
+  rezics:AnimeRelease: '具有獨立識別身分的動畫出版或發行版本，與作品本身分開。也與單集、播放檔案及個人副本區別，不因語言或格式不同就自動建立多個發行版。'
+  schema:Episode: '可獨立識別的一集動畫或其他單篇，例如第 3 集或特別篇；不是播放檔案，也不是整季。'
+  schema:Movie: '作為作品的動畫長片或短片，獨立於各個出版發行版本。'
+  schema:TVSeason: '電視動畫中可單獨識別的一季，與完整系列及單集分開。'
+  schema:TVSeries: '包含各季與各集的電視動畫作品系列，與某個具體發行版分開。'
 libraryProfiles:
   anime.series:
     states:
@@ -117,14 +117,14 @@ libraryProfiles:
       digital:
         owned: '擁有'
 propertyDescriptions:
-  bf:hasPart: "這個合集發行版收錄的獨立動畫作品，連結實際的系列、電影、季或單集。"
-  marcrel:fds: "被署名為這份影像出版物發行者的個人或組織，不照搬作品上無關的署名。"
-  schema:copyrightNotice: "來源記載的著作權聲明，本身不構成再利用授權。"
-  schema:duration: "來源明示的片長，以秒（wd:Q11574）為單位的非負整數數量記錄；例如 24 分鐘寫為 1440。"
-  schema:endDate: "原始播出或發行期間的結束日期，維持來源的日期精度。"
-  schema:episodeNumber: "來源的單集序號，以文字保存，可含 0、特別篇或小數編號；與單集識別碼分開。"
-  schema:isPartOf: "此單集所屬的電視系列或季。"
-  schema:numberOfEpisodes: "此作品或季的集數，以無單位的非負整數數量記錄。"
-  schema:startDate: "原始播出或發行期間的開始日期，維持來源的日期精度。"
-  wdt:P449: "來源明確指出的首播機構，不泛指後續所有發行者。"
-  wdt:P973: "介紹這部動畫作品的頁面 URL，描述性連結不等於身分精確對應。"
+  bf:hasPart: '這個合集發行版收錄的獨立動畫作品，連結實際的系列、電影、季或單集。'
+  marcrel:fds: '被署名為這份影像出版物發行者的個人或組織，不照搬作品上無關的署名。'
+  schema:copyrightNotice: '來源記載的著作權聲明，本身不構成再利用授權。'
+  schema:duration: '來源明示的片長，以秒（wd:Q11574）為單位的非負整數數量記錄；例如 24 分鐘寫為 1440。'
+  schema:endDate: '原始播出或發行期間的結束日期，維持來源的日期精度。'
+  schema:episodeNumber: '來源的單集序號，以文字保存，可含 0、特別篇或小數編號；與單集識別碼分開。'
+  schema:isPartOf: '此單集所屬的電視系列或季。'
+  schema:numberOfEpisodes: '此作品或季的集數，以無單位的非負整數數量記錄。'
+  schema:startDate: '原始播出或發行期間的開始日期，維持來源的日期精度。'
+  wdt:P449: '來源明確指出的首播機構，不泛指後續所有發行者。'
+  wdt:P973: '介紹這部動畫作品的頁面 URL，描述性連結不等於身分精確對應。'
