@@ -26,7 +26,9 @@ type Evidence = {
 };
 
 /** Native Source capability; the pool remains inside Access. Receiver identity is
- * trusted composition data, never request JSON or a caller-ready certificate. */
+ * trusted composition data, never request JSON or a caller-ready certificate.
+ * This factory implements the original auth-contract module's closed live ABI;
+ * createAuthBindings mounts it only with a separately supplied receiver binding. */
 export function createAuthErasureLiveBindings(pool: Pool, identity: AuthErasureLiveReceiver): AuthErasureLivePorts {
   requireInput(
     /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(identity.cutId) &&

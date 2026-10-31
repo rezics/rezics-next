@@ -9,6 +9,8 @@ export type AuthErasureLiveReceiver = Readonly<{
   inventoryVersion: string;
   cutId: string;
 }>;
+/** Native ordinal continuation, starting at the original finite partition high water.
+ * Tail-end retains this cursor so the same subscription can observe later commits. */
 export type AuthErasureLiveCursor = Readonly<{ partition: number; afterOrdinal: string }>;
 export type AuthErasureLivePendingReason =
   | 'receiver-unavailable'
@@ -43,7 +45,9 @@ export type AuthErasureLivePage = Readonly<{
  * are absolute Unix milliseconds. Current means durable Source enrollment, never Auth
  * consumption, restore admission, backup/tail custody or final erasure completion. */
 export type AuthErasureLivePorts = {
+  /** Idempotent for the exact original receiver binding; never a delivery receipt. */
   armAuthErasureLivePartition(input: { partition: number; deadline: number }): Promise<AuthErasureLivePartition>;
   readAuthErasureLivePage(input: { cursor: AuthErasureLiveCursor; deadline: number }): Promise<AuthErasureLivePage>;
+  /** Rechecks durable enrollment and native lineage independently of page consumption. */
   verifyAuthErasureLivePartition(input: { partition: number; deadline: number }): Promise<AuthErasureLiveVerification>;
 };
