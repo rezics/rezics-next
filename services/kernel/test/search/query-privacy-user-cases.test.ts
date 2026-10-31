@@ -2,6 +2,16 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import assert from 'node:assert/strict';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { FilterDocument } from '@rezics/filter';
+import {
+  PROFILE_FORMAT,
+  planReads,
+  platformRegistry,
+  type CompositionDocument,
+  type MemberSource,
+  type ZoneStarter,
+} from '@rezics/composition';
+import bookZoneStarter from '../../../../packages/definitions/presentation/book/zone.json';
+import type { ZoneConfigurationResponse, ZoneResponse } from '../../src/zones/contract.ts';
 import type { HttpResponse, Subject } from '../../../../specs/semantic-driver.ts';
 import type {
   CollectionMemberView,
@@ -990,6 +1000,474 @@ test('old positive and negative native HTTP cursors remain invalid after the rel
   }
 }, 240_000);
 
+type OriginalJob = 'word-count' | 'light-novel-harem' | 'combined-books' | 'vegetarian-time' | 'light-novel-not-harem';
+const originalJobs: readonly OriginalJob[] = ['word-count', 'light-novel-harem', 'combined-books', 'vegetarian-time'];
+const ownerSurfaces = [
+  'public-curated',
+  'own-everything-without-state',
+  'own-state',
+  'public-mounted-zone',
+  'configured-TypeList',
+] as const;
+
+// This is an assertion description over the original released IDs, not a fixture
+// constructor or matcher. Every membership decision below is an owner HTTP call.
+async function originalJob(job: OriginalJob) {
+  const recipes = await fixture.recipes();
+  const recipe = job === 'vegetarian-time';
+  const subjects = recipe ? Object.values(recipes.subjects) : Object.values(books.subjects);
+  const selected = recipe
+    ? ['R-quick', 'R-edge', 'R-cooked', 'R-other-cooked'].map(
+        (name) => recipes.subjects[name as keyof typeof recipes.subjects],
+      )
+    : (job === 'light-novel-not-harem'
+        ? negativeNames
+        : job === 'light-novel-harem'
+          ? formNames
+          : (['B-long'] as BookName[])
+      ).map((name) => books.subjects[name]);
+  const reduced = recipe ? recipes.subjects['R-quick'] : books.subjects['B-long'];
+  const property = recipe ? fixture.meaning.diet : job === 'word-count' ? fixture.meaning.words : 'schema:keywords';
+  const fact = (recipe ? recipes.facts : books.facts).find(
+    (fact) => fact.subject === reduced.id && fact.property === property,
+  );
+  assert(fact);
+  return {
+    type: recipe ? 'schema:Recipe' : 'schema:Book',
+    subjects,
+    selected,
+    reduced,
+    fact,
+    filter:
+      job === 'light-novel-not-harem'
+        ? ({
+            and: [notHarem, { statement: { property: fixture.meaning.form, in: [classification.lightNovel.id] } }],
+          } as FilterDocument)
+        : job === 'word-count'
+          ? filters.words
+          : job === 'light-novel-harem'
+            ? filters.formHarem
+            : job === 'combined-books'
+              ? filters.combined
+              : filters.dietTime,
+  };
+}
+
+function originalListDocument(type: string, filter: FilterDocument): CompositionDocument {
+  return {
+    root: { props: {} },
+    content: [
+      {
+        type: 'TypeList',
+        props: { id: 'catalogue', title: { en: 'Released discovery' }, types: [type], filter, sort: 'name', limit: 2 },
+      },
+    ],
+  };
+}
+
+type NativeListRead = { status: number; body: Record<string, unknown>; headers?: Record<string, string> };
+function configuredRead(
+  response: HttpResponse,
+  document: CompositionDocument,
+  continuation?: { node: string; cursor: string },
+): NativeListRead {
+  status(response, 200);
+  expect(response.body.document).toEqual(document);
+  const plan = planReads(platformRegistry, document, { subject: null, ...(continuation ? { continuation } : {}) });
+  const reads = response.body.reads as Record<string, NativeListRead>;
+  const result = reads[plan.nodes.catalogue!];
+  assert(result);
+  return result;
+}
+
+for (const job of originalJobs) {
+  test(`catalogue: original ${job} returns its exact released native set before any privacy reduction`, async () => {
+    const input = await originalJob(job);
+    const labels: string[] = [];
+    for (const subject of input.subjects)
+      labels.push(JSON.stringify((status(await fixture.read(subject), 200).body.subject as Subject).labels.en));
+    for (const persona of ['anonymous', 'editor', 'alice'] as const)
+      await exactNativeSearch(
+        persona,
+        { filter: input.filter, text: labels.join(' | '), sort: 'id' },
+        input.selected.map(({ id }) => id).sort(),
+      );
+  }, 180_000);
+}
+
+for (const surface of ownerSurfaces) {
+  for (const job of [
+    ...originalJobs,
+    ...(surface === 'public-mounted-zone' || surface === 'configured-TypeList'
+      ? (['light-novel-not-harem'] as const)
+      : []),
+  ]) {
+    test(`${surface}: original ${job} has exact native useful pages and withholds reduced membership until repair`, async () => {
+      await fixture.setup.openFeatures(['personal_library', 'reading_progress']);
+      const input = await originalJob(job);
+      const sources = await population.sources();
+      const publicSource = sources.sources.find(({ source }) => source.visibility === 'public');
+      assert(publicSource);
+      let collectionId = publicSource.source.id;
+      const privateOwner = surface === 'own-everything-without-state' || surface === 'own-state';
+      if (privateOwner) {
+        if (surface === 'own-everything-without-state') {
+          const labelResponse = status(
+            await population.request('alice', 'POST', '/v1/libraryLabels', { name: `Released ${job}` }, discoveryKey()),
+            201,
+          );
+          const label = labelResponse.body.label as { id: string };
+          for (const subject of input.subjects) {
+            const existing = await population.request('alice', 'GET', `/v1/libraryEntries/${subject.id}`);
+            if (existing.status === 200) {
+              const entry = existing.body.libraryEntry as { revision: number };
+              status(
+                await population.request(
+                  'alice',
+                  'DELETE',
+                  `/v1/libraryEntries/${subject.id}?revision=${entry.revision}`,
+                  undefined,
+                  discoveryKey(),
+                ),
+                204,
+              );
+            } else status(existing, 404);
+            status(
+              await population.request(
+                'alice',
+                'POST',
+                `/v1/libraryLabels/${label.id}:assign`,
+                { subjectId: subject.id },
+                discoveryKey(),
+              ),
+              200,
+            );
+            status(await population.request('alice', 'GET', `/v1/libraryEntries/${subject.id}`), 404);
+          }
+        }
+        const accepted = population.profile(input.type);
+        const set = accepted.profile.entryStateSet;
+        assert(set);
+        const active = set.states.find(({ role }) => role === 'active');
+        assert(active);
+        if (surface === 'own-state') {
+          for (const subject of input.subjects) {
+            const previous = await population.request('alice', 'GET', `/v1/libraryEntries/${subject.id}`);
+            status(previous, 404);
+            status(
+              await population.request(
+                'alice',
+                'PUT',
+                `/v1/libraryEntries/${subject.id}`,
+                { state: active.id },
+                discoveryKey(),
+              ),
+              201,
+            );
+          }
+        }
+        const discovered = status(
+          await population.request(
+            'alice',
+            'GET',
+            `/v1/collections?curatorAccountId=${fixture.personas.alice.accountId}&limit=100`,
+          ),
+          200,
+        );
+        expect(discovered.body.next).toBeNull();
+        const choices = (discovered.body.collections as CollectionView[]).filter(
+          (row): row is DynamicCollectionView =>
+            row.membershipKind === 'dynamic' &&
+            (surface === 'own-everything-without-state'
+              ? row.builtinKind === 'everything'
+              : row.builtin?.kind === 'state' &&
+                row.builtin.profileId === accepted.profile.id &&
+                row.builtin.stateSetId === set.id &&
+                row.builtin.stateId === active.id),
+        );
+        expect(choices).toHaveLength(1);
+        collectionId = choices[0]!.id;
+        for (const persona of ['anonymous', 'bob'] as const)
+          status(await population.request(persona, 'GET', collectionPrivacyPath(collectionId, input.filter)), 404);
+      }
+      const document = originalListDocument(input.type, input.filter);
+      const route = `/released-${job}`;
+      let zoneId: string | undefined;
+      if (surface === 'public-mounted-zone') {
+        const source: MemberSource = { kind: 'collection', id: publicSource.source.id };
+        // Occurrence writes changed this header after CREATE. Mount its actual ID,
+        // rereading current owner metadata rather than treating revision as publication.
+        const currentHeader = status(await population.request('alice', 'GET', `/v1/collections/${source.id}`), 200).body
+          .collection as { id: string; revision: number };
+        expect(currentHeader.id).toBe(source.id);
+        expect(currentHeader.revision).toBeGreaterThan(publicSource.source.revision);
+        expect(
+          publicSource.occurrences.filter(({ member }) => member.subjectId === books.subjects['B-long'].id),
+        ).toHaveLength(2);
+        await fixture.grant('editor', ['zone:create'], GLOBAL_CONTEXT);
+        await fixture.setup.openFeatures(['zone_sources']);
+        const configuration = structuredClone(bookZoneStarter) as ZoneStarter;
+        // The released saved scopes overlap the mounted public books. Recipes
+        // come from the same public mount; no private owner predicate is published.
+        for (const saved of configuration.scope) expect(fixture.release.definition.filters?.[saved]).toBeDefined();
+        configuration.pages = [{ route: '', document }];
+        const created = status(
+          await population.request(
+            'editor',
+            'POST',
+            '/v1/zones',
+            { configuration, mounts: [source.id], visibility: 'private' },
+            discoveryKey(),
+          ),
+          201,
+        ).body as ZoneResponse;
+        zoneId = created.zone.id;
+        const published = status(
+          await population.request(
+            'editor',
+            'POST',
+            `/v1/zones/${zoneId}:publish`,
+            { visibility: 'public' },
+            { ...discoveryKey(), 'if-match': JSON.stringify(created.zone.revision) },
+          ),
+          200,
+        ).body as ZoneResponse;
+        const configured = status(await population.request('editor', 'GET', `/v1/zones/${zoneId}/configuration`), 200)
+          .body as ZoneConfigurationResponse;
+        expect(configured.configuration).toEqual(configuration);
+        expect(configured.mounts).toEqual([source.id]);
+        expect(configured.zone.revision).toBe(published.zone.revision);
+      } else if (surface === 'configured-TypeList') {
+        await fixture.grant('steward', ['presentation:publish', 'presentation:activate'], GLOBAL_CONTEXT);
+        const published = status(
+          await fixture.request(
+            'steward',
+            'POST',
+            '/v1/presentation/profiles',
+            {
+              profile: {
+                format: PROFILE_FORMAT,
+                generic: document,
+                bases: [],
+                types: [],
+                routes: [{ route, document }],
+              },
+            },
+            discoveryKey(),
+          ),
+          201,
+        );
+        const active = status(await fixture.request('anonymous', 'GET', '/v1/presentation/active'), 200);
+        status(
+          await fixture.request(
+            'steward',
+            'POST',
+            `/v1/presentation/profiles/${published.body.digest}:activate`,
+            { expected_head: active.body.head },
+            discoveryKey(),
+          ),
+          200,
+        );
+      }
+      const expected = input.selected.map(({ id }) => id).sort();
+      const after =
+        job === 'light-novel-not-harem'
+          ? [...expected, input.reduced.id].sort()
+          : expected.filter((id) => id !== input.reduced.id);
+      const personas = privateOwner ? (['alice'] as const) : (['anonymous', 'editor', 'alice'] as const);
+      // Common Collection occurrence DTOs retain the original duplicate assertion;
+      // the Zone and configured catalogue list independently require canonical rows.
+      const occurrenceIds = (selected: readonly string[]) =>
+        publicSource.occurrences
+          .map(({ member }) => member.subjectId)
+          .filter((id) => selected.includes(id))
+          .sort();
+      const labels = new Map<string, string>();
+      for (const subject of [...input.selected, input.reduced]) {
+        const read = status(await fixture.read(subject), 200).body.subject as Subject;
+        labels.set(subject.id, read.labels.en!);
+      }
+      const ordered = (selected: readonly string[]) =>
+        [...selected].sort((a, b) => labels.get(a)!.localeCompare(labels.get(b)!));
+      // Only assertion ordering uses these native labels, never membership or truth.
+      const requestPage = (persona: DiscoveryPersona, cursor?: string) =>
+        zoneId
+          ? population.request(
+              persona,
+              'POST',
+              `/v1/zones/${zoneId}:readPage${cursor ? `?${new URLSearchParams({ cursor })}` : ''}`,
+              { target: { route: '' }, languages: ['en'] },
+            )
+          : fixture.request(persona, 'POST', '/v1/pages:read', {
+              target: { route },
+              languages: ['en'],
+              ...(cursor ? { continuation: { node: 'catalogue', cursor } } : {}),
+            });
+      const pageReadiness = (response: HttpResponse, cursor?: string) => {
+        if (response.status === 503) privateReadiness(response);
+        else if (zoneId && response.status === 202) {
+          expect(Object.keys(response.body)).toEqual(['next']);
+          assert(typeof response.body.next === 'string' && response.body.next.length > 0);
+          expect(response.headers.get('cache-control')).toBe('private, no-store');
+        } else {
+          const result = configuredRead(response, document, cursor ? { node: 'catalogue', cursor } : undefined);
+          expect(result.status, JSON.stringify(result.body)).toBe(503);
+          // Composed reads preserve the problem body and Retry-After, not the
+          // internal response's Content-Type. Assert only the actual public DTO.
+          expect(result.body.status).toBe(503);
+          expect(['index_not_ready', 'semantic_not_ready']).toContain(result.body.code);
+          expect(result.headers?.['retry-after']).toBeTruthy();
+          for (const key of [
+            'subjects',
+            'facets',
+            'next',
+            'as_of',
+            'total',
+            'count',
+            'labels',
+            'facts',
+            'cursor',
+            'repair',
+            'snapshot',
+            'queried',
+            'execution',
+            'observation',
+            'job',
+          ])
+            expect(result.body).not.toHaveProperty(key);
+        }
+      };
+      const completePage = async (persona: DiscoveryPersona, selected: readonly string[]) => {
+        const found: string[] = [];
+        const cursors = new Set<string>();
+        let cursor: string | undefined;
+        const deadline = Date.now() + 60_000;
+        for (let page = 0; page < Math.max(1, Math.ceil(selected.length / 2)); page++) {
+          let result: NativeListRead;
+          for (;;) {
+            const response = await requestPage(persona, cursor);
+            if (response.status === 200) {
+              result = configuredRead(
+                response,
+                document,
+                !zoneId && cursor ? { node: 'catalogue', cursor } : undefined,
+              );
+              if (result.status === 200) break;
+            }
+            pageReadiness(response, !zoneId ? cursor : undefined);
+            if (response.status === 202) {
+              const next = response.body.next as string;
+              expect(cursors.has(next)).toBe(false);
+              cursors.add(next);
+              cursor = next;
+            }
+            assert(Date.now() < deadline, 'The fixed original configured result never completed preparation');
+            await Bun.sleep(25);
+          }
+          countFreeList(result.body);
+          assert(Array.isArray(result.body.subjects));
+          const rows = result.body.subjects as SearchHit[];
+          expect(rows.map(({ id }) => id)).toEqual(selected.slice(page * 2, page * 2 + 2));
+          for (const row of rows) {
+            expect(row.type).toBe(input.type);
+            expect(row.labels).toEqual({ en: labels.get(row.id) });
+          }
+          found.push(...rows.map(({ id }) => id));
+          expect(new Set(found).size).toBe(found.length);
+          if (result.body.next === null) {
+            expect(found).toEqual([...selected]);
+            return;
+          }
+          expect(rows).toHaveLength(2);
+          assert(typeof result.body.next === 'string' && result.body.next.length > 0);
+          expect(cursors.has(result.body.next)).toBe(false);
+          cursor = result.body.next;
+          cursors.add(cursor);
+        }
+        assert.fail('Original configured list did not exhaust within its exact useful-page bound');
+      };
+      for (const persona of personas) {
+        if (surface === 'public-mounted-zone' || surface === 'configured-TypeList')
+          await completePage(persona, ordered(expected));
+        else
+          await collectionPrivacyPages(
+            persona,
+            collectionId,
+            input.filter,
+            surface === 'public-curated' ? occurrenceIds(expected) : expected,
+          );
+      }
+      await fixture.search!.indexing('paused');
+      let hidden = false;
+      try {
+        status(
+          await fixture.request(
+            'editor',
+            'POST',
+            `/v1/subjects/${input.reduced.id}/candidates/${input.fact.candidate}:hide`,
+            { reason: 'Withhold the original released query evidence' },
+            discoveryKey(),
+          ),
+          200,
+        );
+        hidden = true;
+        const currentSubject = status(await fixture.read(input.reduced), 200).body.subject as Subject;
+        expect(currentSubject.statements[input.fact.property] ?? []).toEqual([]);
+        for (const persona of personas) {
+          if (surface === 'public-mounted-zone' || surface === 'configured-TypeList')
+            pageReadiness(await requestPage(persona));
+          else
+            collectionReadiness(
+              await population.request(persona, 'GET', collectionPrivacyPath(collectionId, input.filter)),
+            );
+        }
+        await fixture.search!.indexing('running');
+        for (const persona of personas) {
+          if (surface === 'public-mounted-zone' || surface === 'configured-TypeList')
+            await completePage(persona, ordered(after));
+          else
+            await collectionPrivacyPages(
+              persona,
+              collectionId,
+              input.filter,
+              surface === 'public-curated' ? occurrenceIds(after) : after,
+            );
+        }
+      } finally {
+        if (hidden)
+          status(
+            await fixture.request(
+              'editor',
+              'POST',
+              `/v1/subjects/${input.reduced.id}/candidates/${input.fact.candidate}:restore`,
+              { reason: 'Restore the original released query evidence' },
+              discoveryKey(),
+            ),
+            200,
+          );
+        await fixture.search!.indexing('running');
+        if (surface === 'own-state') {
+          for (const subject of input.subjects) {
+            const entry = status(await population.request('alice', 'GET', `/v1/libraryEntries/${subject.id}`), 200).body
+              .libraryEntry as { revision: number };
+            status(
+              await population.request(
+                'alice',
+                'DELETE',
+                `/v1/libraryEntries/${subject.id}?revision=${entry.revision}`,
+                undefined,
+                discoveryKey(),
+              ),
+              204,
+            );
+            status(await population.request('alice', 'GET', `/v1/libraryEntries/${subject.id}`), 404);
+          }
+        }
+      }
+    }, 300_000);
+  }
+}
+
 test('a healthy real adopted word-count edit becomes filterable within the sixty-second catalogue deadline', async () => {
   const marker = `Privacyfresh${crypto.randomUUID().replaceAll('-', '').replace(/[0-9]/g, 'a')}`;
   const subject = await fixture.createSubject('schema:Book', marker);
@@ -1186,3 +1664,195 @@ for (const surface of ['public-curated', 'own-everything-without-state', 'own-st
 // is descriptive, not such a constructor. Subject detail is factual projection,
 // not an invented seventh filter endpoint. Original hidden/terminal and codec suites
 // remain independently required. No absent owner-query or Source-control wire is sent.
+
+// These delivered owner ports supersede the missing-binding note above. They use
+// population.base, including its installed Auth/Access, Source and owned worker.
+async function exactNativeSearch(persona: DiscoveryPersona, request: SearchRequest, expected: readonly string[]) {
+  const found: string[] = [];
+  const cursors = new Set<string>();
+  let cursor: string | undefined;
+  for (let page = 0; page < Math.max(1, Math.ceil(expected.length / 2)); page++) {
+    const response = await current(persona, '/v1/subjects:search', {
+      ...request,
+      limit: 2,
+      languages: ['en'],
+      ...(cursor ? { cursor } : {}),
+    });
+    countFreeList(response.body);
+    assert(typeof response.body.as_of === 'string' && Number.isFinite(Date.parse(response.body.as_of)));
+    assert(Array.isArray(response.body.subjects));
+    const rows = response.body.subjects as SearchHit[];
+    expect(rows.map(({ id }) => id)).toEqual(expected.slice(page * 2, page * 2 + 2));
+    for (const row of rows) {
+      expect(Object.keys(row.labels)).toEqual(['en']);
+      expect(row.labels.en).toBeTruthy();
+    }
+    found.push(...rows.map(({ id }) => id));
+    expect(new Set(found).size).toBe(found.length);
+    if (response.body.next === null) {
+      expect(found).toEqual([...expected]);
+      return;
+    }
+    expect(rows).toHaveLength(2);
+    assert(typeof response.body.next === 'string' && response.body.next.length > 0);
+    expect(cursors.has(response.body.next)).toBe(false);
+    cursor = response.body.next;
+    cursors.add(cursor);
+  }
+  assert.fail('Native finite Search did not exhaust its exact useful-page bound');
+}
+
+for (const reduction of ['imported-source-fence', 'statement-consent-retraction'] as const) {
+  test(`${reduction}: actual FOREIGN provenance blocks positive and excluded-subject disclosure through refresh-visible repair`, async () => {
+    const control =
+      reduction === 'imported-source-fence' ? await fixture.importedHarem() : await fixture.statementConsent();
+    const property = 'sourceConcept' in control ? 'schema:keywords' : 'rezics:penNameOf';
+    const target = 'sourceConcept' in control ? control.sourceConcept : control.target;
+    if ('sourceConcept' in control) {
+      expect(control.bulk.length).toBeGreaterThan(0);
+      const selected = control.current.candidates.find(({ id }) => id === control.candidate);
+      assert(selected && 'statement' in selected);
+      expect(selected.source).toEqual(control.source);
+      expect(selected.decision).toBe('accepted');
+      expect(control.current.adoption?.selection).toContainEqual({ candidate: control.candidate, rank: 'preferred' });
+      expect(control.dependency.kind).toBe('sourceTuple');
+      expect(control.dependency.tuple).toMatchObject({
+        source: control.source.source,
+        external_id: control.source.external_id,
+        field_group: control.source.field_group,
+      });
+    } else {
+      expect(control.dependency).toMatchObject({
+        kind: 'consent',
+        subject: control.subject,
+        candidate: control.candidate,
+      });
+      status(await control.disclose(), 200);
+    }
+    const holder = status(await fixture.request('anonymous', 'GET', `/v1/subjects/${control.subject}`), 200).body
+      .subject as Subject;
+    const text = JSON.stringify(holder.labels.en);
+    expect(
+      holder.statements[property]?.some(
+        (statement) => statement.id === control.candidate && statement.value.content === target,
+      ),
+    ).toBe(true);
+    const positive: FilterDocument = { statement: { property, in: [target] } };
+    const negative: FilterDocument = { not: positive };
+    for (const persona of ['anonymous', 'editor', 'alice'] as const) {
+      await exactNativeSearch(persona, { text, filter: positive, sort: 'id', properties: [property] }, [
+        control.subject,
+      ]);
+      await exactNativeSearch(persona, { text, filter: negative, sort: 'name' }, []);
+    }
+    const observations: (Awaited<ReturnType<typeof capturedNative>> & {
+      queried: import('../../src/search/public-filter-consumer-contract.ts').PublicFilterQueriedObservation;
+      execution?: string;
+    })[] = [];
+    try {
+      // Retain BOTH actual immutable kinds before the single terminal reduction.
+      for (const snapshot of ['pit', 'prepared'] as const) {
+        const bound = await capturedNative(
+          { filterDocument: negative, text: parseText(text), sort: 'name', size: 5, pageSize: 2 },
+          snapshot,
+        );
+        // Retain cleanup ownership even when the required positive fails.
+        const retained = { ...bound, queried: bound.capture.queried, execution: undefined as string | undefined };
+        observations.push(retained);
+        const query = await bound.operations.query(retained.queried, nativeContext());
+        expect(query.status, JSON.stringify(query)).toBe('queried');
+        assert(query.status === 'queried');
+        retained.queried = query.queried;
+        retained.execution = query.execution;
+        expect(query.result.hits).toEqual([]);
+      }
+      await fixture.search!.indexing('paused');
+      const barrier = fixture.search!.barrier({
+        phase: 'response',
+        method: 'POST',
+        path: '/_search?allow_partial_search_results=false',
+      });
+      const pending = fixture.request('anonymous', 'POST', '/v1/subjects:search', {
+        text,
+        filter: negative,
+        sort: 'name',
+        limit: 2,
+        languages: ['en'],
+        properties: [property],
+      });
+      const outcome = Promise.allSettled([pending]);
+      try {
+        await Promise.race([
+          barrier.reached,
+          outcome.then(() => assert.fail('Native FOREIGN request completed before its engine response boundary')),
+        ]);
+        status('takedown' in control ? await control.takedown() : await control.retract(), 200);
+        for (const bound of observations) {
+          const observed = await bound.operations.readStatus(
+            { queried: bound.queried, execution: bound.execution },
+            nativeContext(),
+          );
+          expect(observed.status).toBe('observed');
+          assert(observed.status === 'observed');
+          expect(observed.pending.length).toBeGreaterThan(0);
+          expect(observed.blocking.length).toBeGreaterThan(0);
+        }
+        barrier.release();
+        privateReadiness(await pending);
+        for (const persona of ['anonymous', 'editor', 'alice'] as const) {
+          for (const filter of [positive, negative])
+            privateReadiness(
+              await fixture.request(persona, 'POST', '/v1/subjects:search', {
+                text,
+                filter,
+                sort: 'name',
+                properties: [property],
+              }),
+            );
+          privateReadiness(
+            await fixture.request(persona, 'POST', '/v1/subjects:facets', {
+              text,
+              filter: positive,
+              facets: [{ property }],
+              languages: ['en'],
+            }),
+          );
+        }
+        await fixture.search!.indexing('running');
+        for (const bound of observations) await settleNativeRepair(bound.capture.repair);
+        for (const persona of ['anonymous', 'editor', 'alice'] as const) {
+          await exactNativeSearch(persona, { text, filter: positive, sort: 'id', properties: [property] }, []);
+          await exactNativeSearch(persona, { text, filter: negative, sort: 'name', properties: [property] }, [
+            control.subject,
+          ]);
+        }
+        for (const bound of observations) {
+          const final = await bound.operations.readStatus(
+            { queried: bound.queried, execution: bound.execution },
+            nativeContext(),
+          );
+          expect(final.status).toBe('observed');
+          assert(final.status === 'observed');
+          expect(final.pending).toEqual([]);
+          expect(final.changed.length).toBeGreaterThan(0);
+          expect(final.blocking.some(({ phase }) => phase === 'changed')).toBe(true);
+          const stale = await bound.operations.query(bound.queried, nativeContext());
+          expect(stale.status).toBe('preparing');
+          expect(stale).not.toHaveProperty('result');
+        }
+      } finally {
+        barrier.release();
+        await outcome;
+        await fixture.search!.indexing('running');
+      }
+    } finally {
+      for (const bound of observations) {
+        try {
+          await bound.operations.closeObservation(bound.queried, nativeContext());
+        } finally {
+          await bound.operations.close();
+        }
+      }
+    }
+  }, 300_000);
+}
