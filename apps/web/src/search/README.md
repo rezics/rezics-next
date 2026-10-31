@@ -1,0 +1,29 @@
+# Search interface
+
+AppShell mounts one ShellSearch. At desktop widths of at least 64rem, equal side tracks reserve 21rem each for
+navigation and the bounded language, theme and account controls; the middle track grows to 40rem. This centres
+global search on the viewport regardless of navigation width or sidebar state. Account labels truncate within
+their existing control. Below 64rem, search rests as a compact trigger and opens the same input in a full-screen
+search surface.
+
+The expanded composer inherits the panel's `background` surface in both themes. Its separator divides entry from
+discovery without painting a second card. Keyboard focus outlines the actual input or action using `foreground`;
+the composer has no enclosing focus ring. Shared Aura tokens and danger styling retain their existing meaning.
+
+The phone surface contains focus, returns it on Back/Escape, retains the draft and locks background scrolling.
+Safe-area padding and the active visual viewport bound the surface while its discovery/results region scrolls.
+Viewport listeners exist only for the active search owner, with cleanup on dismissal; no result gains requests
+or listeners. Crossing the compact breakpoint while editing preserves the input and query.
+
+Filters stays at the left of the composer's second row. `HeaderSearchFilterProvider` and
+`useRegisterHeaderSearchFilters` connect it to the current route's actual editor and active count. Search owns
+result filters; Collection's dialog remains a separate delivery slice. No new filter state or backend operation
+is introduced here. Scope labels require a supported scoped action and suggestion loader; otherwise they remain
+explicitly unavailable until removed, without falling back to global search.
+
+The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
+filter entry and phone interaction. `tests/header-search-composition.test.tsx` exercises the existing routed
+Search page and default shell across desktop/phone, English/Simplified Chinese and light/dark. It protects actual
+geometry, surface paint, focused controls, registered filter entry and retained phone drafts. Execution of that
+acceptance and native/browser evidence is deferred under the current delivery policy; workspace typing alone
+does not establish those outcomes.

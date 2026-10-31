@@ -35,7 +35,7 @@ export function initialHeaderSearchState(scope?: SearchScope, query = ''): Heade
 export function reduceHeaderSearchState(state: HeaderSearchState, event: HeaderSearchEvent): HeaderSearchState {
   switch (event.type) {
     case 'focus':
-      return { ...state, expanded: true };
+      return { ...state, expanded: true, phoneSheet: false };
     case 'open-phone':
       return { ...state, expanded: true, phoneSheet: true };
     case 'escape':

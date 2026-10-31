@@ -487,21 +487,28 @@ function ShellContent({ children, search }: Pick<AppShellProps, 'children' | 'se
           </a>
           <link rel="preload" href={manropeFontUrl} as="font" type="font/woff2" crossOrigin="anonymous" />
           <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 has-[[data-expanded=true]]:z-50">
-            <div className="flex h-16 items-center gap-2 px-3">
-              <NavigationToggle
-                collapsed={railCollapsed}
-                onToggle={() => setCollapsed(!railCollapsed)}
-                pathname={location.pathname}
-                session={session}
-              />
-              <div className="hidden md:block">
-                <Logo />
+            {/* Equal side tracks reserve the wider control group's bounded width (language, theme, account).
+                Below lg the search deliberately becomes a compact trigger instead of squeezing this field. */}
+            <div className="flex h-16 items-center gap-2 px-3 lg:grid lg:grid-cols-[minmax(21rem,1fr)_minmax(0,40rem)_minmax(21rem,1fr)]">
+              <div className="flex shrink-0 items-center gap-2">
+                <NavigationToggle
+                  collapsed={railCollapsed}
+                  onToggle={() => setCollapsed(!railCollapsed)}
+                  pathname={location.pathname}
+                  session={session}
+                />
+                <div className="hidden md:block">
+                  <Logo />
+                </div>
               </div>
-              <div className="min-w-0 flex-1 md:ms-6 md:max-w-[40rem]">{search ?? <ShellSearch />}</div>
-              <div className="ms-auto hidden items-center gap-2 md:flex">
+              <div className="min-w-0 flex-1">{search ?? <ShellSearch />}</div>
+              <div className="ms-auto hidden w-max shrink-0 items-center gap-2 md:flex">
                 <LanguageControl />
                 <ThemeControl />
-                <div data-session-slot className="relative flex h-9 w-10 shrink-0 items-center justify-center sm:w-36">
+                <div
+                  data-session-slot
+                  className="relative flex h-9 w-10 shrink-0 items-center justify-center sm:w-36 [&_button_span]:min-w-0 [&_button_span]:truncate"
+                >
                   <AccountMenu session={session} csrfToken={csrfToken} />
                   <noscript>
                     <a

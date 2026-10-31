@@ -19,7 +19,7 @@ export function ScopeChip({ scope, onRemove }: { scope: SearchScope; onRemove: (
       <button
         type="button"
         aria-label={m.header_search_remove_scope({ scope: scope.name })}
-        className="grid size-6 shrink-0 place-items-center rounded-full hover:bg-background focus-visible:outline-2 focus-visible:outline-ring"
+        className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-background focus-visible:outline-2 focus-visible:outline-foreground"
         onClick={onRemove}
       >
         <X aria-hidden="true" className="size-3" />

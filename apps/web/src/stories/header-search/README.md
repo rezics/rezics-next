@@ -3,6 +3,8 @@
 The reusable region lives in `search/header-search/`. AppShell mounts it once. The same native input stays in the
 pill, expanded panel and phone sheet. Route query and facet data enter through the ordinary GET form. ScopeChip
 and ShellSearch remain re-exports for existing callers.
+The [search interface contract](../../search/README.md) owns desktop centring, the compact transition, coherent
+surface paint and control focus. Filters remains on the left of the second row.
 
 A scope label never grants authority. A caller must supply its existing localized scoped search route; without
 one, scoped submission and suggestions stay unavailable. Removing the chip explicitly returns to global search.
@@ -34,16 +36,19 @@ Root screenshot review is pending for every cell:
 | patterns-header-search--error         | pending  | pending     |
 | patterns-header-search--phone-sheet   | pending  | pending     |
 
-PhoneSheet opens the same supported sheet presentation through the input/trigger at either viewport; it is an
-interaction state, with focus containment and Escape return. Other states choose presentation responsively.
+PhoneSheet and PhoneSheetKeyboardSubmission use the phone390 viewport global for the active phone state, with
+focus containment and Escape return. Other states choose presentation responsively. Expanded covers keyboard
+focus and recent discovery; Suggestions covers active-descendant selection. Canonical IDs remain unchanged;
+viewport, locale and theme variations use toolbar globals.
 
 Extra story callsites declared for this slice: `src/stories/header-search/header-search.stories.tsx` and
 `src/stories/header-search/HeaderSearch.mdx`, discovered by the existing Storybook glob. They give the reusable
 region one complete Patterns folder without changing Storybook configuration or sibling sources.
 
-Reference read: Primer React `AutocompleteInput.tsx` and `AutocompleteOverlay.tsx` in the indexed
-`storybook-practice/primer-react` checkout. Relevant behavior: one input, active-descendant keyboard navigation,
-outside dismissal and focus return. REZICS supplies its own native form, composer region and tokens.
+Reference sources: Primer React `SelectPanel.tsx`, Discourse `search-menu.scss` and Open Library's selected-facet
+template in the indexed read-only clones. These supply responsive panel, scrolling and explicit context patterns;
+REZICS supplies its own native form, composer region and tokens. The supplied search/mobile images and adopted
+resume correction inform surface hierarchy and the retained second-row Filters placement.
 
 Implementation decisions: unsupported scopes stay visibly unavailable until explicitly removed; supported route
 filters keep their own forms and named concept choices; new query submission retains the route's supported
@@ -57,5 +62,6 @@ acceptance, unit execution, native/browser/remote checks, publication and screen
 regressions cover the real presenter, transition reducer and request boundary. A typecheck pass is not their pass
 or Root visual approval.
 
-The final local Web typecheck completed with no errors in 561 files. Focused acceptance and story plays were not
-executed on this worker; Root screenshot review remains pending for all listed IDs and globals.
+The default-composition regression is `apps/web/tests/header-search-composition.test.tsx`. It uses the existing
+Search PageStory route assembly and default ShellSearch, not an injected presenter. It is written for later
+integration execution; acceptance, story plays and screenshot review remain deferred for this change.

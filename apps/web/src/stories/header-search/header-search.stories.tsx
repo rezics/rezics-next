@@ -130,7 +130,7 @@ type Story = StoryObj<typeof meta>;
 
 async function expand({ canvasElement }: { canvasElement: HTMLElement }, triggerName = m.header_search_global()) {
   const canvas = within(canvasElement);
-  if (window.matchMedia('(max-width: 767px)').matches)
+  if (window.matchMedia('(max-width: 1023px)').matches)
     await userEvent.click(await canvas.findByRole('button', { name: triggerName }));
   else await userEvent.click(await canvas.findByRole('combobox', { name: m.search_label() }));
   const input = await canvas.findByRole('combobox', { name: m.search_label() });
@@ -160,15 +160,19 @@ async function populated(canvasElement: HTMLElement) {
   const composer = input.closest('[data-search-composer]');
   if (!composer) throw new globalThis.Error('The input must share the composer surface.');
   await expect(input).toHaveFocus();
-  const focusedShadow = getComputedStyle(composer).boxShadow;
-  canvas.getByRole('button', { name: m.header_search_history() }).focus();
-  await expect(getComputedStyle(composer).boxShadow).not.toBe(focusedShadow);
+  await expect(getComputedStyle(composer).boxShadow).toBe('none');
+  const history = canvas.getByRole('button', { name: m.header_search_history() });
+  history.focus();
+  await expect(history).toHaveFocus();
+  await expect(getComputedStyle(composer).boxShadow).toBe('none');
   await userEvent.click(input);
+  await userEvent.keyboard('{Tab}{Shift>}{Tab}{/Shift}');
   await expect(input).toHaveFocus();
   const style = getComputedStyle(input);
   await expect(style.boxShadow).toBe('none');
   await expect(style.borderTopWidth).toBe('0px');
-  await expect(style.outlineStyle).toBe('none');
+  await expect(style.outlineStyle).toBe('solid');
+  await expect(Number.parseFloat(style.outlineWidth)).toBeGreaterThanOrEqual(2);
   await expect(Number.parseFloat(style.paddingLeft)).toBeGreaterThan(0);
 }
 
@@ -180,11 +184,11 @@ export const Rest: Story = {
       'aria-expanded',
       'false',
     );
-    const returnTarget = window.matchMedia('(max-width: 767px)').matches
+    const returnTarget = window.matchMedia('(max-width: 1023px)').matches
       ? canvas.getByRole('button', { name: m.header_search_global() })
       : input;
     await waitFor(() => expect(returnTarget).toHaveFocus());
-    if (!window.matchMedia('(max-width: 767px)').matches) {
+    if (!window.matchMedia('(max-width: 1023px)').matches) {
       await expand(context);
       await userEvent.click(context.canvasElement);
       await expect(input).toHaveAttribute('aria-expanded', 'false');
@@ -198,7 +202,7 @@ export const ScopeChip: Story = {
     await expect(
       canvas.getByRole('button', { name: m.header_search_remove_scope({ scope: scope.name }) }),
     ).toBeVisible();
-    if (!window.matchMedia('(max-width: 767px)').matches) await userEvent.keyboard('{Escape}');
+    if (!window.matchMedia('(max-width: 1023px)').matches) await userEvent.keyboard('{Escape}');
   },
 };
 export const Expanded: Story = {
@@ -310,6 +314,7 @@ export const CommunitiesClosed: Story = {
   },
 };
 export const PhoneSheet: Story = {
+  globals: { viewport: { value: 'phone390' } },
   render: () => <Example presentation="sheet" />,
   play: async (context) => {
     const { canvas, input } = await expand(context);
@@ -323,6 +328,7 @@ export const PhoneSheet: Story = {
 };
 
 export const PhoneSheetKeyboardSubmission: Story = {
+  globals: { viewport: { value: 'phone390' } },
   args: { onNavigate: fn() },
   render: (args) => (
     <Example presentation="sheet" fields={[['type', 'schema:Book']]} onNavigate={(href) => args.onNavigate?.(href)} />
@@ -341,7 +347,7 @@ export const PhoneSheetKeyboardSubmission: Story = {
 
     await userEvent.keyboard('{Escape}');
     await expect(canvas.queryByRole('dialog')).toBeNull();
-    const returnTarget = window.matchMedia('(max-width: 767px)').matches
+    const returnTarget = window.matchMedia('(max-width: 1023px)').matches
       ? canvas.getByRole('button', { name: m.header_search_global() })
       : input;
     await waitFor(() => expect(returnTarget).toHaveFocus());

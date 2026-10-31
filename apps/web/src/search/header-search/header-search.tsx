@@ -22,6 +22,10 @@ import type { RecentEntry, RecentHistory } from '../recent-history';
 import { nextSuggestion, startTypeahead, validSuggestionText } from '../typeahead';
 import type { SearchScope } from './types';
 
+const controlFocus =
+  'focus-visible:ring-0 focus-visible:border-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-2';
+const compactSearch = '(max-width: 1023px)';
+
 export type HeaderSearchProps = {
   locale: string;
   history?: RecentHistory | undefined;
@@ -140,7 +144,8 @@ export function HeaderSearchView({
         aria-expanded={expanded}
         aria-controls={`${id}-form`}
         className={cn(
-          'header-search-trigger flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-border/60 bg-muted/50 px-4 text-start text-sm text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring md:hidden',
+          'header-search-trigger flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-border/60 bg-muted/50 px-4 text-start text-sm text-muted-foreground outline-none hover:bg-accent lg:hidden',
+          controlFocus,
           expanded && 'hidden',
         )}
       >
@@ -162,11 +167,11 @@ export function HeaderSearchView({
           'header-search-surface bg-background text-foreground',
           expanded
             ? cn(
-                'fixed inset-0 z-50 flex h-dvh flex-col overflow-y-auto overscroll-contain p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]',
+                'fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden overscroll-contain p-3 pt-[max(.75rem,env(safe-area-inset-top))] pb-[max(.75rem,env(safe-area-inset-bottom))] ps-[max(.75rem,env(safe-area-inset-left))] pe-[max(.75rem,env(safe-area-inset-right))]',
                 !phoneSheet &&
-                  'md:absolute md:inset-auto md:top-0 md:h-auto md:max-h-[min(80dvh,42rem)] md:w-full md:rounded-3xl md:border md:border-border md:p-0 md:shadow-xl',
+                  'lg:absolute lg:inset-auto lg:top-0 lg:h-auto lg:max-h-[min(80dvh,42rem)] lg:w-full lg:rounded-3xl lg:border lg:border-border lg:p-0 lg:shadow-xl',
               )
-            : 'hidden rounded-full border border-border md:block',
+            : 'hidden rounded-full border border-border lg:block',
         )}
       >
         {retained.map(([name, value], index) => (
@@ -174,11 +179,7 @@ export function HeaderSearchView({
         ))}
         <div
           data-search-composer
-          className={cn(
-            'rounded-full focus-within:ring-2 focus-within:ring-ring',
-            expanded && 'shrink-0 rounded-3xl bg-card shadow-lg',
-            expanded && !phoneSheet && 'md:bg-popover md:text-popover-foreground md:shadow-xl',
-          )}
+          className={cn('rounded-full', expanded && 'shrink-0 rounded-t-3xl border-b border-border/60')}
         >
           <div className={cn('flex min-h-11 min-w-0 items-center gap-2 px-4', expanded && 'py-2')}>
             {expanded ? (
@@ -187,8 +188,9 @@ export function HeaderSearchView({
                 onClick={onClose}
                 aria-label={m.header_search_close()}
                 className={cn(
-                  'grid size-11 shrink-0 place-items-center rounded-full outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
-                  !phoneSheet && 'md:hidden',
+                  'grid size-11 shrink-0 place-items-center rounded-full outline-none hover:bg-accent',
+                  controlFocus,
+                  !phoneSheet && 'lg:hidden',
                 )}
               >
                 <ArrowLeft aria-hidden="true" className="size-5" />
@@ -198,7 +200,7 @@ export function HeaderSearchView({
               aria-hidden="true"
               className={cn(
                 'size-4 shrink-0 text-muted-foreground',
-                expanded && (phoneSheet ? 'hidden' : 'hidden md:block'),
+                expanded && (phoneSheet ? 'hidden' : 'hidden lg:block'),
               )}
             />
             {scope && <ScopeChip scope={scope} onRemove={onRemoveScope} />}
@@ -219,7 +221,7 @@ export function HeaderSearchView({
               value={query}
               autoComplete="off"
               maxLength={256}
-              className="h-11 min-w-0 flex-1 border-0 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-muted-foreground"
+              className="h-11 min-w-0 flex-1 rounded-lg border-0 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:-outline-offset-2"
             />
           </div>
           {expanded && (
@@ -228,6 +230,7 @@ export function HeaderSearchView({
                 type="button"
                 variant="outline"
                 size="default"
+                className={cn('min-h-11', controlFocus)}
                 disabled={!region}
                 onClick={onFilters}
                 title={!region ? m.header_search_filters_unavailable() : undefined}
@@ -239,7 +242,7 @@ export function HeaderSearchView({
               <Button
                 type="submit"
                 size="icon"
-                className="rounded-full"
+                className={cn('size-11 rounded-full', controlFocus)}
                 disabled={!action || !query.trim()}
                 aria-label={m.search_submit()}
               >
@@ -249,7 +252,7 @@ export function HeaderSearchView({
           )}
         </div>
         {expanded && (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {!query.trim() && (
               <RecentPanel
                 recent={recent}
@@ -278,7 +281,7 @@ export function HeaderSearchView({
               role="listbox"
               aria-label={m.header_search_suggestions()}
               aria-busy={suggestions === 'loading'}
-              className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
+              className="px-2 py-2"
             >
               {subjects.map((suggestion, index) => {
                 const label = localizedLabel(suggestion.labels, locale);
@@ -419,7 +422,7 @@ function HeaderSearchController({
       returningFocus.current = true;
       if (state.phoneSheet)
         requestAnimationFrame(() => {
-          if (window.matchMedia('(max-width: 767px)').matches) trigger.current?.focus();
+          if (window.matchMedia(compactSearch).matches) trigger.current?.focus();
           else input.current?.focus();
           returningFocus.current = false;
         });
@@ -431,7 +434,7 @@ function HeaderSearchController({
   };
   const open = () => {
     dispatch({
-      type: presentation === 'sheet' || window.matchMedia('(max-width: 767px)').matches ? 'open-phone' : 'focus',
+      type: presentation === 'sheet' || window.matchMedia(compactSearch).matches ? 'open-phone' : 'focus',
     });
     if (state.query.trim() && state.suggestions === 'idle') dispatch({ type: 'query', query: state.query });
     requestAnimationFrame(() => input.current?.focus());
@@ -445,11 +448,33 @@ function HeaderSearchController({
     return () => document.removeEventListener('pointerdown', outside);
   }, [state.expanded]);
   useEffect(() => {
+    if (!state.expanded || presentation === 'sheet') return;
+    const compact = window.matchMedia(compactSearch);
+    const sync = () => dispatch({ type: compact.matches ? 'open-phone' : 'focus' });
+    compact.addEventListener('change', sync);
+    return () => compact.removeEventListener('change', sync);
+  }, [state.expanded, presentation]);
+  useEffect(() => {
     if (!state.phoneSheet) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    const viewport = window.visualViewport;
+    const panel = form.current;
+    // Mobile keyboards can shrink the visual viewport without changing dvh.
+    const fit = () => {
+      if (!viewport || !panel) return;
+      panel.style.height = `${viewport.height}px`;
+      panel.style.top = `${viewport.offsetTop}px`;
+    };
+    fit();
+    viewport?.addEventListener('resize', fit);
+    viewport?.addEventListener('scroll', fit);
     return () => {
       document.body.style.overflow = previous;
+      viewport?.removeEventListener('resize', fit);
+      viewport?.removeEventListener('scroll', fit);
+      panel?.style.removeProperty('height');
+      panel?.style.removeProperty('top');
     };
   }, [state.phoneSheet]);
   useEffect(() => {
