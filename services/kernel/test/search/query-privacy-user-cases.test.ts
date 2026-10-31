@@ -877,7 +877,10 @@ test('SIGKILL preserves the same native preparation job expiry prefix and immuta
     expect(query.status).toBe('queried');
     assert(query.status === 'queried');
     queried = query.queried;
-    await native.indexing('paused');
+    // This crash needs a live child executing actual durable preparation. The
+    // response barrier holds refresh-visible I/O; stopping the runner would also
+    // stop its preparation service and could never reach the crash boundary.
+    await native.indexing('running');
     await setOriginalTagHidden(true);
     hidden = true;
     // Retain the ACTUAL native job; no caller manufactures a frontier or receipt.
