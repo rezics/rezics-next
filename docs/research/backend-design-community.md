@@ -135,6 +135,40 @@ independently because native fixture setup and public production setup are diffe
 | Inbox, unread and seen marker | Recipient only; newest-first opaque cursor; current disclosure; monotone marker | `notice-inbox.ts`: 4L scan, native post disclosure, capped raw unread probe | GET account notifications/count; POST `:markSeen` | `inbox/inbox-page.tsx`, badge and per-target resolution | `content/notice-inbox-http.test.ts`, Web `notifications-inbox.test.ts` (injected reads/mocks), `tests/native/native-notifications.host.test.ts` (native host/browser source); all unrun, count/list semantics differ as discussed below |
 | Email, push, digests, notification campaigns | Explicitly outside minimal scope; no adopted all-channel design here | Not established by in-app effects | Not established | Not established | No in-app test establishes external delivery, unsubscribe or provider custody |
 
+### Test existence, coverage and execution are different columns
+
+The matrix's shorter test-family references resolve to the following concrete sources. This is a coverage
+map, not a catalogue of every test in those directories. Native-looking names alone are not sufficient:
+the notification outcome binding, its effect host and the Web host test were read to distinguish real owner
+composition from injected reads. None of these sources supplies an executed passing result for this revision.
+
+| Named behavior | Exact test/driver source | What the source covers; what remains unestablished |
+| --- | --- | --- |
+| Auth registry, redirects, PKCE, code reuse, refresh and revocation | [services/auth/test/website-security.test.ts](../../services/auth/test/website-security.test.ts), cases around 184–399 | Explicit protocol refusal/race assertions; not an external provider or deployed browser-login run |
+| Operated account creation | [automated-account-transport.test.ts](../../services/auth/test/automated-account-transport.test.ts), cases 86/145 | Exact operator/original workflow key and refusal before staging; does not establish every operator transfer/erasure role |
+| Managed organization/account reads | [account-management-read-transport.test.ts](../../services/auth/test/account-management-read-transport.test.ts), cases 21/53 | Malformed/private transport refusal and absent native wiring returning typed unavailable; especially not evidence of successful default wiring |
+| Membership workflow custody | [membership-workflows.test.ts](../../services/auth/test/membership-workflows.test.ts), cases 58–85; [Realm transitions](../../services/kernel/test/access/realm-membership-transition.test.ts) | Sealed locators, original approval and failure diagnostics/transition coordination; fixtures do not prove live mail/recovery/last-holder deployment |
+| Current public Account/profile | [account-public-views.test.ts](../../services/kernel/test/access/account-public-views.test.ts), [Web public journey](../../apps/web/tests/account-public-journey.test.ts), [profile editor](../../apps/web/tests/accounts-profile-editor.test.ts) | Owner DTO/view and consumer behavior; not a substitute for canonical page, verified-subject reversal and protected activity in a single native journey |
+| Follows and private counts | [follows.test.ts](../../services/kernel/test/library/follows.test.ts), [follow-counts-outcomes.test.ts](../../services/kernel/test/library/follow-counts-outcomes.test.ts) | Native follow factory binding and edge/count behavior; no following-feed ordering, selection, delivery or consent contract |
+| Library/private progress/copies | [progress-http.test.ts](../../services/kernel/test/library/progress-http.test.ts), [copies.test.ts](../../services/kernel/test/library/copies.test.ts), [erasure-owned-graph.test.ts](../../services/kernel/test/library/erasure-owned-graph.test.ts) | Concrete private owner operations/erasure graph; all-type structure migration and million-item behavior cannot be inferred from a unit case |
+| Collection Source order and retained work | [collection-source-native.test.ts](../../services/kernel/test/library/collection-source-native.test.ts), [collection-source-native-ordinal.test.ts](../../services/kernel/test/library/collection-source-native-ordinal.test.ts), [collection-source-native-growth.test.ts](../../services/kernel/test/library/collection-source-native-growth.test.ts) | Source-specific native/order/growth scenarios exist; even a growth-named file is not a measured result and cannot activate unsupported Source kinds |
+| Mixed discovery and fenced population | [mixed-discovery.test.ts](../../services/kernel/test/search/mixed-discovery.test.ts), cases 64/109; [facet continuation](../../services/kernel/test/search/facet-continuation.test.ts) | Current Person/Account summaries, bound cursor and stale-membership fence refusal; not saved/private scope or all-owner content search |
+| Ordered Scope and source progress | [scope-ordered.test.ts](../../services/kernel/test/search/scope-ordered.test.ts), [scope-progress.test.ts](../../services/kernel/test/search/scope-progress.test.ts) | Specific owner ordered/preparation contracts; declarations and these cases do not remove refusal branches inspected in scope-source.ts |
+| Public rating population/prior | [public-figure-native-publication-http.test.ts](../../services/kernel/test/rating/public-figure-native-publication-http.test.ts), case167 | Named native Global threshold/prior/current-disclosure scenario; not Realm rating sort, arbitrary Context preload or external/native vote equivalence |
+| Content appeal and notification acceptance | [specs/content-notification-outcomes.test.ts](../../specs/content-notification-outcomes.test.ts), [native binding](../../services/kernel/test/content/notification-outcomes.test.ts), [driver](../../services/kernel/test/content/notification-driver.ts), [effect host](../../services/kernel/test/content/support/notification-effect-host.ts) | Shared contract is bound to an actual driver, not merely its TypeScript interface; execution and default production worker placement remain unproved here |
+| Content report/appeal enforcement | [appeals-http.test.ts](../../services/kernel/test/content/appeals-http.test.ts), [container lifecycle authority](../../services/kernel/test/community/container-lifecycle-authority.test.ts) | Native HTTP/committed effects and seeded role cases; neither generalizes to a semantic/account/commerce universal appeal policy |
+| Zone public/static versus admitted source use | [public-slice-exposure.test.ts](../../services/kernel/test/zones/public-slice-exposure.test.ts), [static-page-runtime.test.ts](../../services/kernel/test/zones/static-page-runtime.test.ts) | Public static200, gate403, admitted source/preparation cases exist; selectively opened fixture branches are not public dynamic activation |
+| Web inbox mocked consumer | [notifications-inbox.test.ts](../../apps/web/tests/notifications-inbox.test.ts) | Injected post/decision/report readers, pagination and rendered state; this is not a kernel/Auth/effect-host pass |
+| Web inbox native journey source | [native-notifications.host.test.ts](../../apps/web/tests/native/native-notifications.host.test.ts), case76; [fixture](../../apps/web/tests/native/native-notifications-fixture.ts) | Scenario names separate Auth sessions, native notices, Inbox/Settings and current access; twenty replies exercise a cursor. It is unrun and does not prove thousand-follow delivery or external custody |
+| Subject region and adjacent Commerce/definitions | [subject-community.test.ts](../../apps/web/tests/subject-community.test.ts), [order-reconcile.test.ts](../../services/kernel/test/commerce/order-reconcile.test.ts), [definitions.test.ts](../../services/kernel/test/semantic/definitions.test.ts) | Exact examples behind adjacent family labels; not whole-owner or cross-owner acceptance coverage |
+
+The existing shared notification contract explicitly names parent/thread-author replies without self-notices,
+first-published mentions capped at ten, no edit notification, send-time access/preference/deleted-recipient
+refusal, replay deduplication, private current-readable inbox, cap100/monotone marker, mandatory author/reporter
+outcomes, one timely author appeal and another moderator's uphold/reverse. This is stronger specification than
+“has inbox tests,” but covers only the contract's content targets and fixture personas. Missing whole-owner
+cases should later be additive; existing/frozen acceptance must not be weakened to turn refusals into success.
+
 ## Exhaustive inventory and scope accounting
 
 This ledger maps **all 22 inventory systems** and **all 20 scope rows**, including closed/deferred rows, so that
@@ -354,6 +388,19 @@ identity/custody graph, or replacing current native proof with a cached Boolean.
 existing DBOS work/receipts and owner Source/Scope contracts before inventing another scheduler, index or query
 interpreter. A queued proof is not failed proof; no runtime proof was attempted here.
 
+The historical accepted design also clarifies what “one graph” does and does not require. The retained
+discussion clone `library-query-bulk/rezics-next-discussion` was read with `git show` at
+`f0850c4de99e6f2aea0ac9ea9bf771cd2b88ada4`: accepted
+[ADR-0007](https://github.com/rezics/rezics-next-discussion/blob/f0850c4de99e6f2aea0ac9ea9bf771cd2b88ada4/docs/adr/0007-access-owns-membership.md)
+puts membership/roles in Access and treats partitioned join/follow as durable coordination;
+[ADR-0016](https://github.com/rezics/rezics-next-discussion/blob/f0850c4de99e6f2aea0ac9ea9bf771cd2b88ada4/docs/adr/0016-identity-layer-only.md)
+uses one Subject identity layer with type-bound edition/hosted-content capabilities;
+[ADR-0023](https://github.com/rezics/rezics-next-discussion/blob/f0850c4de99e6f2aea0ac9ea9bf771cd2b88ada4/docs/adr/0023-content-and-semantic-layers.md)
+separates Content and Semantic storage/ownership while sharing IDs, routing and platform services. The clone's
+licence is unspecified; no prose/code is copied. Current converted local contracts remain authoritative.
+Consequently generic definitions and shared summaries should replace avoidable type-specific paths, while
+independent Content/financial/credential authorities are intentional boundaries rather than a defect to merge.
+
 ## Legacy evidence and what it does not prove
 
 Old REZICS was read only at `/home/edge/projects/rezics/rezics`, revision
@@ -508,7 +555,7 @@ investigations. “Implemented” means inspected source, “exposed” means th
 its qualifications, and “tested” means the named test source, **not** an executed pass.
 
 Only this report is a tracked worktree change. Outside its declared path, the authorized shared reference
-`/home/edge/projects/rezics/rezics-next/.reference/INDEX.md` was updated to register the five reused pinned sources;
+`/home/edge/projects/rezics/rezics-next/.reference/INDEX.md` was updated to register the six reused pinned sources;
 the missing research authority/reference images were copied into identical ignored `.temp/goal/...` paths in
 this worktree so that actual image/source inspection was possible. No product code, existing acceptance test,
 frozen file, live capture/publisher or service configuration was changed. Documentation-only work changes no
