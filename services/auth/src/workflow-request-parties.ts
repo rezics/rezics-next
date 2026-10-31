@@ -1,10 +1,13 @@
-import type { AccountWorkflowPorts } from '@rezics/auth-contract';
+import type {
+  AccountWorkflowPorts,
+  NativeCreationContext as ApprovedNativeCreationContext,
+} from '@rezics/auth-contract';
 import type { PoolClient } from 'pg';
 import type { CopyRole } from './erasure-copy.ts';
 import type { AccountOperation } from './workflows.ts';
 
-/** Private structural adapter for the native producer. Never accepted from request JSON.
- * Keep this adapter local until the producer's shared type is composed. */
+/** Historical target-projection fixture shape. Runtime attribution is read only
+ * through the original producer's shared type and immutable approval request. */
 export type NativeCreationContext = Readonly<{
   version: 1;
   actorAccountId: string;
@@ -14,9 +17,6 @@ export type NativeCreationContext = Readonly<{
   clientId: string;
   commandKey: string;
 }>;
-type NativeContextPort<Context> = {
-  readNativeCreationContext?(context: Context): Promise<NativeCreationContext | null>;
-};
 export type NativeRequestActors = {
   initiator: string | null;
   delegate: string | null;
@@ -34,16 +34,31 @@ const nullableId = (value: unknown): value is string | null => value === null ||
 export async function readRequestCreationContext<Context>(
   access: AccountWorkflowPorts<Context>,
   context: Context | undefined,
-): Promise<NativeCreationContext> {
-  const port = access as AccountWorkflowPorts<Context> & NativeContextPort<Context>;
-  if (context === undefined || typeof port.readNativeCreationContext !== 'function') return refused();
-  const source = await port.readNativeCreationContext(context);
+  input?: AccountOperation,
+): Promise<ApprovedNativeCreationContext> {
   if (
-    !source ||
-    source.version !== 1 ||
+    context === undefined ||
+    !access.readNativeCreationContext ||
+    !input?.operationKey ||
+    input.kind === 'transfer-acceptance' ||
+    !('authorization' in input) ||
+    !input.authorization
+  )
+    return refused();
+  const result = await access.readNativeCreationContext({
+    approvalReference: input.authorization,
+    operationKey: input.operationKey,
+    operation: input,
+  });
+  if (result.kind !== 'available') return refused();
+  const source = result.context;
+  if (
     !id(source.actorAccountId) ||
-    !id(source.clientId) ||
+    !id(source.sourceClientId) ||
     !id(source.commandKey) ||
+    source.approvalReference !== input.authorization ||
+    source.operationKey !== input.operationKey ||
+    source.operation.kind !== input.kind ||
     !nullableId(source.actingHumanId) ||
     !nullableId(source.operatorAccountId) ||
     !nullableId(source.principalAccountId)
@@ -92,7 +107,7 @@ export const REQUEST_PARTY_COLUMNS = `erasure_subject_id,erasure_human_id,erasur
 
 /** Approved business variants supply targets, not acting identities. Exhaustive
  * switching keeps new operations closed until their source projection is added. */
-export function operationParties(input: AccountOperation, source: NativeCreationContext) {
+export function operationParties(input: AccountOperation, source: Pick<ApprovedNativeCreationContext, 'operatorAccountId'>) {
   const base = {
     subject: null as string | null,
     operator: source.operatorAccountId,
@@ -190,7 +205,7 @@ export async function captureWorkflowRequest<Context>(
 ): Promise<CopyRole[]> {
   const { workflowId, input, context, access, actors } = options;
   // Read the approved producer even on replay; it remains the current-T authority.
-  const source = await readRequestCreationContext(access, context);
+  const source = await readRequestCreationContext(access, context, input);
   if (actors.version !== 1) return refused();
   const original = async () =>
     (
@@ -235,13 +250,13 @@ export async function captureWorkflowRequest<Context>(
     erasure_actor_version: actors.version,
     erasure_actor_id: source.actorAccountId,
     erasure_principal_id: source.principalAccountId,
-    erasure_source_client_id: source.clientId,
+    erasure_source_client_id: source.sourceClientId,
     erasure_client_owner_id: null,
     erasure_source_client_owner_id: null,
     request_party_version: 1,
-    request_context_version: source.version,
+    request_context_version: 1,
   };
-  for (const clientId of [...new Set([target.client, source.clientId].filter(id))].sort()) {
+  for (const clientId of [...new Set([target.client, source.sourceClientId].filter(id))].sort()) {
     await connection.query('SELECT auth_erasure_admit_client($1)', [clientId]);
     const client = (
       await connection.query<{ owner: string | null }>(
@@ -251,7 +266,7 @@ export async function captureWorkflowRequest<Context>(
     ).rows[0];
     if (!client) return refused();
     if (clientId === target.client) row.erasure_client_owner_id = client.owner;
-    if (clientId === source.clientId) row.erasure_source_client_owner_id = client.owner;
+    if (clientId === source.sourceClientId) row.erasure_source_client_owner_id = client.owner;
   }
   await admitParties(connection, row);
   // Neither the business digest nor pg's request JSON serialization occurs

@@ -2511,3 +2511,42 @@ native binding authenticates the actual Auth-signed live proof. Missing native
 composition answers 503. Selection and returned labels are never approval or
 creation authority. The existing credentialless native creation writer, fresh
 approval/execute checks and shared opening profile remain unchanged.
+
+### Native creation parties
+
+New registration stages bind the preselected account, normalized handle, original
+request and source context before encrypting credentials. Automated creation uses
+only the trusted optional `workflowPorts.readNativeCreationContext` runtime port;
+`creation-party-context.ts` consumes the original producer types exported by
+`@rezics/auth-contract`. Missing producer, historical provenance and
+unavailable opening provenance produce distinct unavailable reasons. Approval
+resolution remains the authorization boundary at its existing source timing.
+
+`creation_context` stores the exact native projection, including original approval,
+operation key/digest, command prefix and permission target. Independent indexed
+actor, human, principal, target-client and source-client columns preserve its roles.
+`erasure_native_operator_id` records the source operator relation independently of
+`erasure_operator_id`, which continues to identify the creation's target operator.
+Existing creator, initiator and delegate attribution still comes from `nativeActors`
+and `copyActors`; it is not reconstructed from the new projection. Client-owner
+snapshots come from locked native client rows. No contact writer, ordinary session,
+permission or client expansion is introduced.
+
+Public human self-registration has a native preselected subject and credential
+binding but no authenticated approval actor, opening human/operator, delegated
+principal or producer client. Those approval roles are inapplicable and null.
+A separate source version distinguishes this from historical missing provenance.
+The new request binding participates in AES-GCM AAD and the credential HMAC. Old
+AAD remains unchanged; old rows are never decrypted or backfilled to discover roles
+and cannot receive new encrypted credentials or native provisioning receipts.
+
+Provisioning locks the exact stage before writing either credential model. Its
+receipt copies all source roles and scope from that same row in the credential
+transaction, for both password and credentialless automation. Native triggers
+reject immutable-source drift and admit every known role/client through existing
+erasure fences. The historical generic provisioning adapter with no native stage
+remains explicitly unknown, without a fabricated native source or complete role
+claim. Unknown old custody stays pending. Attribution never certifies consumer
+retirement; original release, activation, reservation and provisioning identities
+and deadlines remain authoritative. Phase-inventory upgrades and terminal-proof
+minimization are separate owner integrations.

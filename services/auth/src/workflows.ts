@@ -15,6 +15,12 @@ import {
   REQUEST_PARTY_COLUMNS,
   type RequestParties,
 } from './workflow-request-parties.ts';
+import {
+  creationContextUnavailable,
+  nativeCreationBinding,
+  readApprovedCreationContext,
+  type NativeCreationContext,
+} from './creation-party-context.ts';
 import { installNativeRoleProducer } from './erasure-coverage.ts';
 export type {
   AccountWorkflowPorts,
@@ -113,6 +119,8 @@ type Stage = {
   expires_at: Date | null;
   completed_at: Date | null;
   expired_at: Date | null;
+  creation_context_version: number;
+  creation_scope_digest: Buffer | null;
 };
 type RegistrationInput = { registrationId: string };
 type RegistrationStartEvent = RegistrationReference | { error: 'handle_unavailable' };
@@ -282,7 +290,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     return required(
       (
         await database.query<Stage>(
-          'SELECT registration_id, request_key, handle, account_id, reservation_id, expires_at, completed_at, expired_at FROM auth_registration_stage WHERE registration_id=$1',
+          'SELECT registration_id, request_key, handle, account_id, reservation_id, expires_at, completed_at, expired_at, creation_context_version, creation_scope_digest FROM auth_registration_stage WHERE registration_id=$1',
           [id],
         )
       ).rows[0],
@@ -294,7 +302,19 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     accountId: row.account_id,
     expiresAt: required(row.expires_at).toISOString(),
   });
-  function sealCredential(id: string, accountId: string, handle: string, input: { email: string; password: string }) {
+  function credentialAad(id: string, accountId: string, handle: string, scope: Buffer | null) {
+    // Old envelopes retain their original AAD. Only new writes require v1 scope.
+    return Buffer.from(
+      JSON.stringify(scope ? [id, accountId, handle, scope.toString('hex')] : [id, accountId, handle]),
+    );
+  }
+  function sealCredential(
+    id: string,
+    accountId: string,
+    handle: string,
+    scope: Buffer,
+    input: { email: string; password: string },
+  ) {
     if (
       typeof input.email !== 'string' ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email) ||
@@ -307,9 +327,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const credential = { email: input.email.toLowerCase(), password: input.password };
     const nonce = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', key, nonce);
-    cipher.setAAD(Buffer.from(JSON.stringify([id, accountId, handle])));
+    cipher.setAAD(credentialAad(id, accountId, handle, scope));
     const encrypted = Buffer.concat([cipher.update(JSON.stringify(credential)), cipher.final()]);
-    return { ciphertext: Buffer.concat([nonce, cipher.getAuthTag(), encrypted]), digest: bindingDigest(credential) };
+    return {
+      ciphertext: Buffer.concat([nonce, cipher.getAuthTag(), encrypted]),
+      digest: bindingDigest([scope.toString('hex'), credential]),
+    };
   }
   async function createStage(
     input: { key: string; handle: string },
@@ -319,17 +342,46 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const request = requestKey(input.key);
     const handle = normalized(input.handle);
     const creation = binding === undefined ? null : businessOperation(binding as AccountOperation);
-    const digest = hash(creation === null ? [handle] : [handle, creation]);
     const id = randomBytes(24).toString('base64url');
     const accountId = access.registrationTarget(request);
-    const sealed = credential ? sealCredential(id, accountId, handle, credential) : null;
     const operation = binding as AccountOperation | undefined;
     const context = operation && 'authorization' in operation ? await approved(operation) : undefined;
     const actors = await nativeActors(context, creation === null);
     const creator = actors.human ?? (context === undefined ? null : (access.actorAccountId?.(context) ?? null));
     const operator = operation?.kind === 'automated' ? operation.operatorAccountId : null;
+    const native =
+      operation?.kind === 'automated'
+        ? await readApprovedCreationContext(
+            access,
+            {
+              approvalReference: operation.authorization,
+              operationKey: required(operation.operationKey),
+              operation,
+            },
+            access.approvalBinding?.(required(context)),
+          )
+        : null;
+    if (native && actors.version !== 1)
+      throw Object.assign(new Error('Native creation actor source unavailable'), { status: 503 });
+    // The preselected target and original source binding are fixed before any
+    // encrypted copy. Public registration has no approved actor/client roles.
+    const scope = hash([
+      1,
+      request,
+      accountId,
+      handle,
+      creation,
+      native ? nativeCreationBinding(native) : null,
+      creator,
+      operator,
+      actors.initiator,
+      actors.delegate,
+      actors.version,
+    ]);
+    const digest = hash([handle, creation, scope.toString('hex')]);
+    const sealed = credential ? sealCredential(id, accountId, handle, scope, credential) : null;
     const result = await database.query<Stage & { request_digest: Buffer; credential_digest: Buffer | null }>(
-      'INSERT INTO auth_registration_stage (registration_id,request_key,handle,account_id,request_digest,ciphertext,credential_digest,creation_binding,erasure_creator_id,erasure_operator_id,consumer_workflow_id,activation_key,erasure_initiator_id,erasure_delegate_id,erasure_actor_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *',
+      'INSERT INTO auth_registration_stage (registration_id,request_key,handle,account_id,request_digest,ciphertext,credential_digest,creation_binding,erasure_creator_id,erasure_operator_id,consumer_workflow_id,activation_key,erasure_initiator_id,erasure_delegate_id,erasure_actor_version,creation_context_version,creation_scope_digest,creation_context,erasure_actor_id,erasure_human_id,erasure_principal_id,erasure_client_id,erasure_source_client_id,creation_approval_reference,erasure_native_operator_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,1,$16,$17,$18,$19,$20,$21,$22,$23,$24) ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *',
       [
         id,
         request,
@@ -349,16 +401,54 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         actors.initiator,
         actors.delegate,
         actors.version,
+        scope,
+        native,
+        native?.actorAccountId ?? null,
+        native?.actingHumanId ?? null,
+        native?.principalAccountId ?? null,
+        native?.operation.targetClientId ?? null,
+        native?.sourceClientId ?? null,
+        native?.approvalReference ?? null,
+        native?.operatorAccountId ?? null,
       ],
     );
     const row = required(result.rows[0]);
     if (
       !row.request_digest.equals(digest) ||
       row.account_id !== accountId ||
+      row.creation_context_version !== 1 ||
+      !row.creation_scope_digest?.equals(scope) ||
       (sealed && !row.credential_digest?.equals(sealed.digest))
     )
       throw new RegistrationFailure('registration_denied');
     return row;
+  }
+  async function assertCurrentCreation(id: string, request?: AccountOperation) {
+    const source = (
+      await database.query<{ creation_context_version: number; creation_context: NativeCreationContext | null }>(
+        'SELECT creation_context_version,creation_context FROM auth_registration_stage WHERE registration_id=$1',
+        [id],
+      )
+    ).rows[0];
+    if (source?.creation_context_version !== 1) creationContextUnavailable('historical-provenance');
+    if (request?.kind === 'automated') {
+      const context = await approved(request);
+      const current = await readApprovedCreationContext(
+        access,
+        {
+          approvalReference: request.authorization,
+          operationKey: required(request.operationKey),
+          operation: request,
+        },
+        access.approvalBinding?.(context),
+      );
+      if (
+        !source.creation_context ||
+        JSON.stringify(nativeCreationBinding(current)) !==
+          JSON.stringify(nativeCreationBinding(source.creation_context))
+      )
+        refused();
+    } else if (source.creation_context !== null) refused();
   }
   async function approved(input: AccountOperation): Promise<Context> {
     const executable = executableOperation(input);
@@ -487,6 +577,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         const row = await stage(id);
         if (row.expired_at || required(row.expires_at).getTime() <= now().getTime())
           return { accountId: row.account_id, expired: true as const };
+        await assertCurrentCreation(id, request);
         const authorization = await access.provisioningReference({
           accountId: row.account_id,
           reservationId: required(row.reservation_id),
@@ -501,7 +592,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           ).rows[0]?.ciphertext,
         );
         const decipher = createDecipheriv('aes-256-gcm', key, encrypted.subarray(0, 12));
-        decipher.setAAD(Buffer.from(JSON.stringify([id, row.account_id, row.handle])));
+        decipher.setAAD(
+          credentialAad(
+            id,
+            row.account_id,
+            row.handle,
+            row.creation_context_version === 1 ? required(row.creation_scope_digest) : null,
+          ),
+        );
         decipher.setAuthTag(encrypted.subarray(12, 28));
         const clear = Buffer.concat([decipher.update(encrypted.subarray(28)), decipher.final()]);
         try {
@@ -928,6 +1026,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     );
     const credentialless = step('credentialless-owner', async (claim: Reservation, request?: AccountOperation) => {
       if (request) await approved(request);
+      if (request?.kind === 'automated') await assertCurrentCreation(request.registrationId, request);
       const authorization = await access.provisioningReference({
         ...claim,
         ...(request ? { operation: await currentOperation(request) } : {}),
@@ -1296,10 +1395,32 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     active();
     const row = await stage(input.registrationId);
     if (row.expired_at || (!row.completed_at && required(row.expires_at).getTime() <= now().getTime())) denied();
-    const { ciphertext, digest } = sealCredential(row.registration_id, row.account_id, row.handle, input);
+    // Only the existing public registration producer installs credentials here.
+    // An old/automated stage cannot acquire a new public encrypted copy.
+    const source = (
+      await database.query<{ creation_binding: unknown; creation_context: unknown }>(
+        'SELECT creation_binding,creation_context FROM auth_registration_stage WHERE registration_id=$1',
+        [row.registration_id],
+      )
+    ).rows[0];
+    if (
+      row.creation_context_version !== 1 ||
+      !row.creation_scope_digest ||
+      source?.creation_context !== null ||
+      source.creation_binding !== null ||
+      access.registrationTarget(row.request_key) !== row.account_id
+    )
+      denied();
+    const { ciphertext, digest } = sealCredential(
+      row.registration_id,
+      row.account_id,
+      row.handle,
+      row.creation_scope_digest,
+      input,
+    );
     const changed = await database.query(
-      'UPDATE auth_registration_stage SET ciphertext=CASE WHEN credential_digest IS NULL THEN $2 ELSE ciphertext END, credential_digest=$3 WHERE registration_id=$1 AND (credential_digest IS NULL OR credential_digest=$3) RETURNING registration_id',
-      [row.registration_id, ciphertext, digest],
+      'UPDATE auth_registration_stage SET ciphertext=CASE WHEN credential_digest IS NULL THEN $2 ELSE ciphertext END, credential_digest=$3 WHERE registration_id=$1 AND creation_context_version=1 AND creation_scope_digest=$4 AND (credential_digest IS NULL OR credential_digest=$3) RETURNING registration_id',
+      [row.registration_id, ciphertext, digest, row.creation_scope_digest],
     );
     if (!changed.rowCount) throw new RegistrationFailure('registration_denied');
     const ref = reference(row);

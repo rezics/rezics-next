@@ -1745,6 +1745,29 @@ CREATE TABLE public.auth_provisioning_receipt (
     erasure_creator_id text,
     erasure_operator_id text,
     erasure_stage_id text,
+    creation_context_version smallint DEFAULT 0 NOT NULL,
+    creation_scope_digest bytea,
+    creation_context jsonb,
+    creation_approval_reference text,
+    erasure_actor_id text,
+    erasure_human_id text,
+    erasure_principal_id text,
+    erasure_native_operator_id text,
+    erasure_client_id text,
+    erasure_source_client_id text,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT auth_provisioning_receipt_creation_approval_reference_check CHECK (((octet_length(creation_approval_reference) >= 1) AND (octet_length(creation_approval_reference) <= 4096))),
+    CONSTRAINT auth_provisioning_receipt_creation_context_version_check CHECK ((creation_context_version = ANY (ARRAY[0, 1]))),
+    CONSTRAINT auth_provisioning_receipt_creation_scope_digest_check CHECK ((octet_length(creation_scope_digest) = 32)),
+    CONSTRAINT auth_provisioning_receipt_erasure_actor_id_check CHECK (((octet_length(erasure_actor_id) >= 1) AND (octet_length(erasure_actor_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_client_id_check CHECK (((octet_length(erasure_client_id) >= 1) AND (octet_length(erasure_client_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_client_owner_id_check CHECK (((octet_length(erasure_client_owner_id) >= 1) AND (octet_length(erasure_client_owner_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_human_id_check CHECK (((octet_length(erasure_human_id) >= 1) AND (octet_length(erasure_human_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_native_operator_id_check CHECK (((octet_length(erasure_native_operator_id) >= 1) AND (octet_length(erasure_native_operator_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_principal_id_check CHECK (((octet_length(erasure_principal_id) >= 1) AND (octet_length(erasure_principal_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_source_client_id_check CHECK (((octet_length(erasure_source_client_id) >= 1) AND (octet_length(erasure_source_client_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_source_client_owner_id_check CHECK (((octet_length(erasure_source_client_owner_id) >= 1) AND (octet_length(erasure_source_client_owner_id) <= 1024))),
     CONSTRAINT auth_provisioning_evidence_complete CHECK ((((registration_id IS NULL) AND (reservation_id IS NULL) AND (authn_epoch IS NULL) AND (expires_at IS NULL) AND (owner_id IS NULL) AND (credential_id IS NULL) AND (provisioning_kind IS NULL)) OR ((registration_id IS NOT NULL) AND (reservation_id IS NOT NULL) AND (authn_epoch IS NOT NULL) AND ((authn_epoch >= 1) AND (authn_epoch <= '9007199254740991'::bigint)) AND (expires_at IS NOT NULL) AND (owner_id IS NOT NULL) AND (owner_id = account_id) AND (credential_id IS NOT NULL) AND (provisioning_kind IS NOT NULL) AND (provisioning_kind = ANY (ARRAY['password'::text, 'credentialless'::text])))))
 );
 
@@ -1839,7 +1862,30 @@ CREATE TABLE public.auth_registration_stage (
     erasure_operator_id text,
     consumer_workflow_id text,
     activation_key text,
-    operator_reservation_id text
+    operator_reservation_id text,
+    creation_context_version smallint DEFAULT 0 NOT NULL,
+    creation_scope_digest bytea,
+    creation_context jsonb,
+    creation_approval_reference text,
+    erasure_actor_id text,
+    erasure_human_id text,
+    erasure_principal_id text,
+    erasure_native_operator_id text,
+    erasure_client_id text,
+    erasure_source_client_id text,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT auth_registration_stage_creation_approval_reference_check CHECK (((octet_length(creation_approval_reference) >= 1) AND (octet_length(creation_approval_reference) <= 4096))),
+    CONSTRAINT auth_registration_stage_creation_context_version_check CHECK ((creation_context_version = ANY (ARRAY[0, 1]))),
+    CONSTRAINT auth_registration_stage_creation_scope_digest_check CHECK ((octet_length(creation_scope_digest) = 32)),
+    CONSTRAINT auth_registration_stage_erasure_actor_id_check CHECK (((octet_length(erasure_actor_id) >= 1) AND (octet_length(erasure_actor_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_client_id_check CHECK (((octet_length(erasure_client_id) >= 1) AND (octet_length(erasure_client_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_client_owner_id_check CHECK (((octet_length(erasure_client_owner_id) >= 1) AND (octet_length(erasure_client_owner_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_human_id_check CHECK (((octet_length(erasure_human_id) >= 1) AND (octet_length(erasure_human_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_native_operator_id_check CHECK (((octet_length(erasure_native_operator_id) >= 1) AND (octet_length(erasure_native_operator_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_principal_id_check CHECK (((octet_length(erasure_principal_id) >= 1) AND (octet_length(erasure_principal_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_source_client_id_check CHECK (((octet_length(erasure_source_client_id) >= 1) AND (octet_length(erasure_source_client_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_source_client_owner_id_check CHECK (((octet_length(erasure_source_client_owner_id) >= 1) AND (octet_length(erasure_source_client_owner_id) <= 1024)))
 );
 
 
@@ -6288,4 +6334,253 @@ CREATE TRIGGER configuration_fields BEFORE INSERT OR UPDATE ON public."oauthClie
 
 CREATE TRIGGER configuration_fields BEFORE INSERT OR UPDATE ON public."oauthResource" FOR EACH ROW EXECUTE FUNCTION public.auth_configuration_resource_guard();
 
+--
+-- Name: auth_creation_parties_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
 
+CREATE FUNCTION public.auth_creation_parties_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE source auth_registration_stage%ROWTYPE; personal_id text; producer_client text;
+BEGIN
+  IF TG_OP='UPDATE' THEN
+    IF ROW(NEW.creation_context_version,NEW.creation_scope_digest,NEW.creation_context,NEW.creation_approval_reference,NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,NEW.erasure_native_operator_id,NEW.erasure_client_id,NEW.erasure_source_client_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id) IS DISTINCT FROM ROW(OLD.creation_context_version,OLD.creation_scope_digest,OLD.creation_context,OLD.creation_approval_reference,OLD.erasure_actor_id,OLD.erasure_human_id,OLD.erasure_principal_id,OLD.erasure_native_operator_id,OLD.erasure_client_id,OLD.erasure_source_client_id,OLD.erasure_client_owner_id,OLD.erasure_source_client_owner_id) THEN
+      RAISE EXCEPTION 'Auth creation source is immutable' USING ERRCODE='55000';
+    END IF;
+    IF TG_TABLE_NAME='auth_registration_stage' THEN
+      IF OLD.creation_context_version=1 AND (
+        ROW(NEW.registration_id,NEW.request_key,NEW.account_id,NEW.handle,NEW.request_digest,
+            NEW.erasure_creator_id,NEW.erasure_operator_id,NEW.erasure_initiator_id,NEW.erasure_delegate_id,NEW.erasure_actor_version)
+        IS DISTINCT FROM
+        ROW(OLD.registration_id,OLD.request_key,OLD.account_id,OLD.handle,OLD.request_digest,
+            OLD.erasure_creator_id,OLD.erasure_operator_id,OLD.erasure_initiator_id,OLD.erasure_delegate_id,OLD.erasure_actor_version)
+        OR (OLD.creation_context IS NOT NULL AND NEW.creation_binding IS DISTINCT FROM OLD.creation_binding)
+      ) THEN RAISE EXCEPTION 'Auth creation request is immutable' USING ERRCODE='55000'; END IF;
+      IF NEW.ciphertext IS NOT NULL AND NEW.ciphertext IS DISTINCT FROM OLD.ciphertext THEN
+        IF NEW.creation_context_version<>1 THEN
+          RAISE EXCEPTION 'Auth creation context unavailable: historical-provenance' USING ERRCODE='55000';
+        END IF;
+      ELSE RETURN NEW;
+      END IF;
+    ELSE RETURN NEW;
+    END IF;
+  ELSIF TG_TABLE_NAME='auth_provisioning_receipt' THEN
+    -- Exact source supplied by the native credential transaction, never a
+    -- descriptor search. The old generic no-stage adapter stays unknown.
+    IF NEW.erasure_stage_id IS NOT NULL THEN
+      SELECT * INTO source FROM auth_registration_stage
+        WHERE registration_id=NEW.erasure_stage_id AND account_id=NEW.account_id FOR UPDATE;
+      IF NOT FOUND OR source.creation_context_version<>1
+        OR NEW.creation_scope_digest IS DISTINCT FROM source.creation_scope_digest THEN
+        RAISE EXCEPTION 'Auth creation receipt source unavailable' USING ERRCODE='55000';
+      END IF;
+      IF ROW(NEW.registration_id,NEW.reservation_id,NEW.expires_at) IS DISTINCT FROM
+         ROW(source.reservation_id,source.reservation_id,source.expires_at) THEN
+        RAISE EXCEPTION 'Auth creation receipt source binding refused' USING ERRCODE='55000';
+      END IF;
+      NEW.creation_context_version:=source.creation_context_version;
+      NEW.creation_scope_digest:=source.creation_scope_digest;
+      NEW.creation_context:=source.creation_context;
+      NEW.creation_approval_reference:=source.creation_approval_reference;
+      NEW.erasure_actor_id:=source.erasure_actor_id;
+      NEW.erasure_human_id:=source.erasure_human_id;
+      NEW.erasure_principal_id:=source.erasure_principal_id;
+      NEW.erasure_native_operator_id:=source.erasure_native_operator_id;
+      NEW.erasure_client_id:=source.erasure_client_id;
+      NEW.erasure_source_client_id:=source.erasure_source_client_id;
+      NEW.erasure_client_owner_id:=source.erasure_client_owner_id;
+      NEW.erasure_source_client_owner_id:=source.erasure_source_client_owner_id;
+      NEW.erasure_creator_id:=source.erasure_creator_id;
+      NEW.erasure_operator_id:=source.erasure_operator_id;
+      NEW.erasure_initiator_id:=source.erasure_initiator_id;
+      NEW.erasure_delegate_id:=source.erasure_delegate_id;
+      NEW.erasure_actor_version:=source.erasure_actor_version;
+    ELSE
+      IF EXISTS (SELECT 1 FROM auth_registration_stage WHERE account_id=NEW.account_id) OR
+         NEW.creation_context_version<>0 OR NEW.creation_context IS NOT NULL THEN
+        RAISE EXCEPTION 'Auth creation receipt source unavailable' USING ERRCODE='55000';
+      END IF;
+      PERFORM auth_native_role_unknown('auth_provisioning_receipt','source-unavailable');
+      RETURN NEW;
+    END IF;
+  ELSE
+    IF current_setting('auth.native_role_producer',true) IS DISTINCT FROM '1' OR
+       NEW.creation_context_version<>1 THEN
+      RAISE EXCEPTION 'Auth creation context unavailable: producer-missing' USING ERRCODE='55000';
+    END IF;
+  END IF;
+  IF NEW.creation_scope_digest IS NULL OR NEW.erasure_actor_version<>1 THEN
+    RAISE EXCEPTION 'Auth creation context binding refused' USING ERRCODE='55000';
+  END IF;
+  IF NEW.creation_context IS NULL THEN
+    -- Public human registration has a preselected subject, with no authenticated
+    -- approval actor, delegated principal, opening operator or source client.
+    IF ROW(NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,
+       NEW.erasure_native_operator_id,NEW.erasure_client_id,NEW.erasure_source_client_id,
+       NEW.creation_approval_reference,NEW.erasure_creator_id,NEW.erasure_operator_id,
+       NEW.erasure_initiator_id,NEW.erasure_delegate_id) IS DISTINCT FROM
+       ROW(NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,
+           NULL::text,NULL::text,NULL::text,NULL::text,NULL::text) THEN
+      RAISE EXCEPTION 'Auth public creation provenance refused' USING ERRCODE='55000';
+    END IF;
+  ELSE
+    IF jsonb_typeof(NEW.creation_context)<>'object' OR
+       NEW.erasure_actor_id IS NULL OR NEW.erasure_source_client_id IS NULL OR NEW.creation_approval_reference IS NULL OR
+       ROW(NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,NEW.erasure_native_operator_id,
+           NEW.erasure_source_client_id,NEW.creation_approval_reference,NEW.erasure_client_id) IS DISTINCT FROM
+       ROW(NEW.creation_context->>'actorAccountId',NEW.creation_context->>'actingHumanId',
+           NEW.creation_context->>'principalAccountId',NEW.creation_context->>'operatorAccountId',
+           NEW.creation_context->>'sourceClientId',NEW.creation_context->>'approvalReference',
+           NEW.creation_context->'operation'->>'targetClientId') THEN
+      RAISE EXCEPTION 'Auth approved creation provenance refused' USING ERRCODE='55000';
+    END IF;
+    IF TG_TABLE_NAME='auth_registration_stage' THEN
+    IF (
+       NEW.creation_binding->>'kind' IS DISTINCT FROM 'automated' OR
+       NEW.creation_binding->>'operatorAccountId' IS DISTINCT FROM NEW.erasure_operator_id OR
+       NEW.creation_binding->>'operationKey' IS DISTINCT FROM NEW.creation_context->>'operationKey' OR
+       NEW.creation_context->'operation'->>'targetResourceId' IS DISTINCT FROM NEW.erasure_operator_id OR
+       NEW.creation_context->'operation'->>'kind' IS DISTINCT FROM 'automated' OR
+       NEW.creation_context->'operation'->>'action' IS DISTINCT FROM 'account:manage'
+    ) THEN RAISE EXCEPTION 'Auth approved creation target refused' USING ERRCODE='55000'; END IF;
+    END IF;
+  END IF;
+  FOREACH personal_id IN ARRAY ARRAY[NEW.account_id,NEW.erasure_creator_id,NEW.erasure_operator_id,NEW.erasure_initiator_id,NEW.erasure_delegate_id,NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,NEW.erasure_native_operator_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id] LOOP
+    PERFORM auth_erasure_admit(personal_id);
+  END LOOP;
+  FOREACH producer_client IN ARRAY ARRAY[NEW.erasure_client_id,NEW.erasure_source_client_id] LOOP
+    PERFORM auth_erasure_admit_client(producer_client);
+  END LOOP;
+  IF TG_OP='INSERT' AND TG_TABLE_NAME='auth_registration_stage' THEN
+    SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW.erasure_client_id FOR SHARE;
+    SELECT "userId" INTO NEW.erasure_source_client_owner_id FROM auth_client WHERE client_id=NEW.erasure_source_client_id FOR SHARE;
+    -- The fixed deployment client can be ownerless. An absent source client is
+    -- unavailable; only an actual public registration makes it inapplicable.
+    IF NEW.erasure_source_client_id IS NOT NULL AND NOT FOUND THEN
+      RAISE EXCEPTION 'Auth creation source client unavailable' USING ERRCODE='55000';
+    END IF;
+    PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+    PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  END IF;
+  RETURN NEW;
+END $$;
+
+--
+-- Name: creation_receipt_actor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_actor ON public.auth_provisioning_receipt USING btree (erasure_actor_id, idempotency_key);
+
+--
+-- Name: creation_receipt_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_client ON public.auth_provisioning_receipt USING btree (erasure_client_id, idempotency_key);
+
+--
+-- Name: creation_receipt_client_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_client_owner ON public.auth_provisioning_receipt USING btree (erasure_client_owner_id, idempotency_key);
+
+--
+-- Name: creation_receipt_human; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_human ON public.auth_provisioning_receipt USING btree (erasure_human_id, idempotency_key);
+
+--
+-- Name: creation_receipt_native_operator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_native_operator ON public.auth_provisioning_receipt USING btree (erasure_native_operator_id, idempotency_key);
+
+--
+-- Name: creation_receipt_principal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_principal ON public.auth_provisioning_receipt USING btree (erasure_principal_id, idempotency_key);
+
+--
+-- Name: creation_receipt_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_source_client ON public.auth_provisioning_receipt USING btree (erasure_source_client_id, idempotency_key);
+
+--
+-- Name: creation_receipt_source_client_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_source_client_owner ON public.auth_provisioning_receipt USING btree (erasure_source_client_owner_id, idempotency_key);
+
+--
+-- Name: creation_receipt_unknown; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_unknown ON public.auth_provisioning_receipt USING btree (idempotency_key) WHERE (creation_context_version = 0);
+
+--
+-- Name: creation_stage_actor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_actor ON public.auth_registration_stage USING btree (erasure_actor_id, registration_id);
+
+--
+-- Name: creation_stage_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_client ON public.auth_registration_stage USING btree (erasure_client_id, registration_id);
+
+--
+-- Name: creation_stage_client_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_client_owner ON public.auth_registration_stage USING btree (erasure_client_owner_id, registration_id);
+
+--
+-- Name: creation_stage_human; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_human ON public.auth_registration_stage USING btree (erasure_human_id, registration_id);
+
+--
+-- Name: creation_stage_native_operator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_native_operator ON public.auth_registration_stage USING btree (erasure_native_operator_id, registration_id);
+
+--
+-- Name: creation_stage_principal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_principal ON public.auth_registration_stage USING btree (erasure_principal_id, registration_id);
+
+--
+-- Name: creation_stage_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_source_client ON public.auth_registration_stage USING btree (erasure_source_client_id, registration_id);
+
+--
+-- Name: creation_stage_source_client_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_source_client_owner ON public.auth_registration_stage USING btree (erasure_source_client_owner_id, registration_id);
+
+--
+-- Name: creation_stage_unknown; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_unknown ON public.auth_registration_stage USING btree (registration_id) WHERE (creation_context_version = 0);
+
+--
+-- Name: auth_provisioning_receipt a_creation_parties; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER a_creation_parties BEFORE INSERT OR UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_creation_parties_guard();
+
+--
+-- Name: auth_registration_stage a_creation_parties; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER a_creation_parties BEFORE INSERT OR UPDATE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_creation_parties_guard();

@@ -924,14 +924,62 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         `auth-owner:${account.accountId}`,
       ]);
       await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`auth-provision:${receiptKey}`]);
+      // Lock the exact source before touching credential models. The receipt's
+      // party INSERT below reads this same locked row in this transaction.
+      const creationStage = (
+        await connection.query<{
+          registration_id: string;
+          reservation_id: string | null;
+          expires_at: Date | null;
+          creation_context_version: number;
+          creation_scope_digest: Buffer | null;
+        }>(
+          `SELECT registration_id,reservation_id,expires_at,creation_context_version,creation_scope_digest
+           FROM auth_registration_stage WHERE account_id=$1
+             AND ($2::text IS NULL OR registration_id=$2) FOR UPDATE`,
+          [account.accountId, input.sourceRegistrationId ?? null],
+        )
+      ).rows[0];
+      if (input.sourceRegistrationId !== undefined && !creationStage) throw new Denied();
+      if (
+        creationStage &&
+        (creationStage.creation_context_version !== 1 ||
+          !creationStage.creation_scope_digest ||
+          (receipt &&
+            (creationStage.reservation_id !== receipt.reservationId ||
+              receipt.registrationId !== creationStage.reservation_id ||
+              creationStage.expires_at?.getTime() !== Date.parse(receipt.expiresAt))))
+      )
+        throw new Denied();
+      const digest = creationStage
+        ? createHmac('sha256', options.secret)
+            .update(input.digest)
+            .update(creationStage.creation_scope_digest!)
+            .update(creationStage.registration_id)
+            .digest()
+        : input.digest;
       const previous = (
-        await connection.query<{ account_id: string; digest: Buffer }>(
-          'SELECT account_id, digest FROM auth_provisioning_receipt WHERE idempotency_key=$1',
+        await connection.query<{
+          account_id: string;
+          digest: Buffer;
+          creation_context_version: number;
+          erasure_stage_id: string | null;
+          creation_scope_digest: Buffer | null;
+        }>(
+          'SELECT account_id,digest,creation_context_version,erasure_stage_id,creation_scope_digest FROM auth_provisioning_receipt WHERE idempotency_key=$1',
           [receiptKey],
         )
       ).rows[0];
       if (previous) {
-        if (previous.account_id !== account.accountId || !previous.digest.equals(input.digest)) throw new Denied();
+        if (
+          previous.account_id !== account.accountId ||
+          !previous.digest.equals(digest) ||
+          (previous.creation_context_version === 1 &&
+            (!creationStage ||
+              previous.erasure_stage_id !== creationStage.registration_id ||
+              !previous.creation_scope_digest?.equals(creationStage.creation_scope_digest!)))
+        )
+          throw new Denied();
       } else {
         // These are the installed Better Auth owner and credential models, not a
         // second credential registry. Their receipt commits in this same transaction.
@@ -944,24 +992,57 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           'INSERT INTO account (id,"accountId","providerId","userId",password,"updatedAt") VALUES ($1,$2,\'credential\',$2,$3,CURRENT_TIMESTAMP)',
           [credentialId, account.accountId, input.hash],
         );
-        await connection.query(
-          `INSERT INTO auth_provisioning_receipt
+        if (creationStage) {
+          const copied = await connection.query(
+            `INSERT INTO auth_provisioning_receipt
+             (idempotency_key,account_id,digest,registration_id,reservation_id,authn_epoch,expires_at,
+              owner_id,credential_id,provisioning_kind,erasure_stage_id,
+              erasure_creator_id,erasure_operator_id,erasure_initiator_id,erasure_delegate_id,erasure_actor_version,
+              creation_context_version,creation_scope_digest,creation_context,creation_approval_reference,
+              erasure_actor_id,erasure_human_id,erasure_principal_id,erasure_native_operator_id,
+              erasure_client_id,erasure_source_client_id,erasure_client_owner_id,erasure_source_client_owner_id)
+             SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,registration_id,
+              erasure_creator_id,erasure_operator_id,erasure_initiator_id,erasure_delegate_id,erasure_actor_version,
+              creation_context_version,creation_scope_digest,creation_context,creation_approval_reference,
+              erasure_actor_id,erasure_human_id,erasure_principal_id,erasure_native_operator_id,
+              erasure_client_id,erasure_source_client_id,erasure_client_owner_id,erasure_source_client_owner_id
+             FROM auth_registration_stage WHERE registration_id=$11 AND account_id=$2
+               AND creation_context_version=1 AND creation_scope_digest=$12`,
+            [
+              receiptKey,
+              account.accountId,
+              digest,
+              receipt?.registrationId ?? null,
+              receipt?.reservationId ?? null,
+              receipt?.authnEpoch ?? null,
+              receipt?.expiresAt ?? null,
+              receipt ? account.accountId : null,
+              receipt ? credentialId : null,
+              receipt ? (input.hash === null ? 'credentialless' : 'password') : null,
+              creationStage.registration_id,
+              creationStage.creation_scope_digest,
+            ],
+          );
+          if (copied.rowCount !== 1) throw new Denied();
+        } else
+          await connection.query(
+            `INSERT INTO auth_provisioning_receipt
             (idempotency_key,account_id,digest,registration_id,reservation_id,authn_epoch,expires_at,owner_id,credential_id,provisioning_kind,erasure_stage_id)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-          [
-            receiptKey,
-            account.accountId,
-            input.digest,
-            receipt?.registrationId ?? null,
-            receipt?.reservationId ?? null,
-            receipt?.authnEpoch ?? null,
-            receipt?.expiresAt ?? null,
-            receipt ? account.accountId : null,
-            receipt ? credentialId : null,
-            receipt ? (input.hash === null ? 'credentialless' : 'password') : null,
-            input.sourceRegistrationId ?? null,
-          ],
-        );
+            [
+              receiptKey,
+              account.accountId,
+              digest,
+              receipt?.registrationId ?? null,
+              receipt?.reservationId ?? null,
+              receipt?.authnEpoch ?? null,
+              receipt?.expiresAt ?? null,
+              receipt ? account.accountId : null,
+              receipt ? credentialId : null,
+              receipt ? (input.hash === null ? 'credentialless' : 'password') : null,
+              input.sourceRegistrationId ?? null,
+            ],
+          );
       }
       if (receipt) await recheck();
       await connection.query('COMMIT');
