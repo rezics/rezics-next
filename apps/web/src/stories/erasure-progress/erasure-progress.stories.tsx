@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { ErasureProgressView } from '../../accounts/erasure-progress/view';
+import { AccountErasurePage } from '../../accounts/erasure-progress/page';
 import type { ErasureStatus, Page } from '../../accounts/erasure-progress/data';
 import { m } from '../../paraglide/messages.js';
 import { AppShell } from '../../shell/shell';
@@ -107,6 +108,25 @@ export const Complete: Story = {
 };
 export const Missing: Story = { args: { page: { status: 'missing' } } };
 export const Denied: Story = { args: { page: { status: 'denied' } } };
-export const SignedOut: Story = { args: { page: { status: 'signed-out' } } };
+export const SignedOut: Story = {
+  args: { page: { status: 'signed-out' } },
+  render: () => (
+    <PatternStory visitor="Signed Out" path={`/platform/accounts/${value.accountId}/erasure`}>
+      <AppShell><AccountErasurePage accountId={value.accountId} /></AppShell>
+    </PatternStory>
+  ),
+};
 export const Unavailable: Story = { args: { page: { status: 'unavailable' } } };
 export const Loading: Story = { args: { page: { status: 'loading' } } };
+
+export const SessionUnavailable: Story = {
+  args: { page: { status: 'unavailable' } },
+  parameters: {
+    docs: { description: { story: 'The existing illustrative session has no valid current account subject. The default page offers a real session read retry without reading erasure data.' } },
+  },
+  render: () => (
+    <PatternStory visitor="Signed In" path={`/platform/accounts/${value.accountId}/erasure`}>
+      <AppShell><AccountErasurePage accountId={value.accountId} /></AppShell>
+    </PatternStory>
+  ),
+};

@@ -8,6 +8,7 @@ export class ErasureReader {
   constructor(
     private selection: Selection,
     private read: () => Promise<Page>,
+    private isCurrent: () => boolean = () => true,
   ) {}
   snapshot = () => this.page;
   subscribe = (listener: () => void) => {
@@ -24,16 +25,20 @@ export class ErasureReader {
     this.generation++;
     this.replace({ status: 'loading' });
   }
+  clearIfStale() {
+    if (!this.isCurrent()) this.clear();
+  }
   async reload() {
     const generation = ++this.generation;
     this.replace({ status: 'loading' });
+    if (!this.isCurrent()) return;
     let page: Page;
     try {
       page = await this.read();
     } catch {
       page = { status: 'unavailable' };
     }
-    if (generation !== this.generation) return;
+    if (generation !== this.generation || !this.isCurrent()) return;
     if (
       page.status === 'ready' &&
       (page.viewerId !== this.selection.viewerId || page.value.accountId !== this.selection.accountId)
