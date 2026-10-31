@@ -34,10 +34,11 @@ const collectionSummary = t.Unsafe<Pick<CollectionResourceView, 'id' | 'title' |
 const key = <Owner extends string, Kind extends string>(owner: Owner, kind: Kind) => t.Object({
   owner: t.Literal(owner), kind: t.Literal(kind), route: t.Integer({ minimum: 0, maximum: 65535 }), id: uuid,
 }, closed);
-const destination = (kind: 'subject' | 'account' | 'thread' | 'post' | 'collection') => t.Object({
+const destination = <Kind extends 'subject' | 'account' | 'thread' | 'collection'>(kind: Kind) => t.Object({
   kind: t.Literal(kind), id: uuid, title: nullable,
-  ...(kind === 'post' ? { threadId: uuid, postId: uuid } : {}),
 }, closed);
+const postDestination = t.Object({ kind: t.Literal('post'), id: uuid, title: nullable,
+  threadId: uuid, postId: uuid }, closed);
 const common = { id: t.String({ minLength: 1, maxLength: 512 }), occurredAt: nullable };
 const semanticKey = t.Object({ owner: t.Literal('semantic'), kind: t.String({ minLength: 1 }),
   route: t.Integer({ minimum: 0, maximum: 65535 }), id: uuid }, closed);
@@ -53,7 +54,7 @@ export const FeedItemSchema = t.Union([
   t.Object({ ...common, source: t.Literal('following'), key: key('content', 'thread'), summary: threadSummary,
     destination: destination('thread') }, closed),
   t.Object({ ...common, source: t.Literal('following'), key: key('content', 'post'), summary: postSummary,
-    destination: destination('post') }, closed),
+    destination: postDestination }, closed),
   t.Object({ ...common, source: t.Literal('following'), key: key('library', 'collection'), summary: collectionSummary,
     destination: destination('collection') }, closed),
 ]);
