@@ -1,5 +1,6 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import * as start from '../.storybook/react-start';
 import {
   commandSetup,
   readSetup,
@@ -410,5 +411,158 @@ test('cancelled directory reads and a disposed viewer cannot publish labels from
     expect(nextViewer.getSnapshot().selected).toEqual({ id: contextId, phase: 'denied', choice: null });
   } finally {
     nextViewer.dispose();
+  }
+});
+
+test('The existing setup Context picker reads the actual installed native directory through its production default while selection independently rechecks current Context authority and unavailable is never empty', async () => {
+  const entry: ContextDirectoryEntry = {
+    id: contextId,
+    kind: 'community',
+    labels: { en: 'Directory label' },
+    state: 'active',
+    deletedAt: null,
+    purgeAfter: null,
+  };
+  let accessToken = 'current-viewer';
+  let credentials = 0;
+  const responseHeaders = new Headers();
+  const sessionHeaders = { cookie: `__Host-rezics_session=${'a'.repeat(43)}` };
+  let request = new Request('https://site.test/en/realms/new', { headers: sessionHeaders });
+  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start/server', () => ({
+    ...start,
+    getRequest: () => request,
+    setResponseHeader: (name: string, value: string) => responseHeaders.set(name, value),
+  }));
+  mock.module('cloudflare:workers', () => ({
+    env: {
+      KERNEL_ORIGIN: 'https://kernel.test',
+      AUTH_ISSUER: 'https://auth.test',
+      API_RESOURCE: 'https://kernel.test',
+      WEBSITE_SCOPES: 'openid',
+      WEBSITE_CLIENT_ID: 'website',
+      WEBSITE_CLIENT_KEY: 'configured',
+      SESSIONS: {
+        idFromName: (id: string) => id,
+        get: () => ({
+          credential: async () => {
+            credentials++;
+            return { status: 'active', accessToken, subject: 'setup-viewer', csrfToken: 'server-csrf' };
+          },
+        }),
+      },
+    },
+  }));
+  const requests: Request[] = [];
+  let readable = true;
+  let directoryStatus = 200;
+  let directoryBody: unknown = { contexts: [entry], next: 'opaque-native-next' };
+  const late = deferred<Response>();
+  const entered = deferred<AbortSignal>();
+  const fetcher = spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const native = new Request(input, init);
+    requests.push(native);
+    const url = new URL(native.url);
+    if (url.pathname === '/v1/contexts') {
+      if (url.searchParams.get('query') === 'cancelled') {
+        entered.resolve(native.signal);
+        return late.promise;
+      }
+      return Response.json(directoryBody, { status: directoryStatus });
+    }
+    if (url.pathname === `/v1/contexts/${contextId}`)
+      return readable
+        ? Response.json({
+            context: {
+              id: contextId,
+              kind: 'community',
+              labels: { en: 'Current label' },
+              settings: null,
+              defaults: {},
+            },
+          })
+        : Response.json({ code: 'not_found' }, { status: 404 });
+    throw new Error(`Unexpected setup request: ${native.method} ${native.url}`);
+  });
+  let picker: ReturnType<typeof createSetupContextPicker> | undefined;
+  try {
+    const { searchSpaceSetupContexts, resolveSpaceSetupChoice } = await import('../src/community/space-actions');
+    picker = createSetupContextPicker(
+      nativeContextChoiceSource(
+        ({ query, cursor }) =>
+          searchSpaceSetupContexts({ data: { query, ...(cursor === undefined ? {} : { cursor }) } }),
+        (id) => resolveSpaceSetupChoice({ data: { kind: 'context', id } }),
+        'en',
+      ),
+    );
+    picker.search(' Reading ');
+    picker.retrySearch();
+    await tick();
+    expect(picker.getSnapshot().page).toMatchObject({
+      phase: 'ready',
+      contexts: [{ id: contextId, label: 'Directory label' }],
+      next: 'opaque-native-next',
+    });
+    expect(requests).toHaveLength(1);
+    expect(new URL(requests[0]!.url).pathname).toBe('/v1/contexts');
+    expect(Object.fromEntries(new URL(requests[0]!.url).searchParams)).toEqual({
+      query: 'Reading',
+      limit: '20',
+      deleted: 'false',
+    });
+    expect(requests[0]!.headers.get('authorization')).toBe('Bearer current-viewer');
+    expect(credentials).toBe(1);
+    expect(responseHeaders.get('cache-control')).toBe('private, no-store');
+
+    directoryBody = { contexts: [], next: null };
+    picker.next();
+    await tick();
+    expect(requests).toHaveLength(2);
+    expect(Object.fromEntries(new URL(requests[1]!.url).searchParams)).toEqual({
+      query: 'Reading',
+      limit: '20',
+      deleted: 'false',
+      cursor: 'opaque-native-next',
+    });
+    expect(picker.getSnapshot().page).toMatchObject({ phase: 'ready', contexts: [], next: null });
+    await picker.choose(contextId);
+    expect(picker.getSnapshot().selected?.choice).toEqual({ id: contextId, label: 'Current label' });
+    expect(requests).toHaveLength(3);
+    expect(new URL(requests[2]!.url).pathname).toBe(`/v1/contexts/${contextId}`);
+    readable = false;
+    accessToken = 'refreshed-viewer';
+    request = new Request(request.url, { headers: sessionHeaders });
+    await picker.choose(contextId);
+    expect(picker.getSnapshot().selected).toEqual({ id: contextId, phase: 'denied', choice: null });
+    expect(requests).toHaveLength(4);
+    expect(requests[3]!.headers.get('authorization')).toBe('Bearer refreshed-viewer');
+
+    directoryStatus = 503;
+    directoryBody = { code: 'semantic_not_ready' };
+    picker.retrySearch();
+    await tick();
+    expect(picker.getSnapshot().page).toMatchObject({ phase: 'unavailable', contexts: [], next: null });
+    directoryStatus = 200;
+    directoryBody = { contexts: [], next: null, preparing: true };
+    expect(await searchSpaceSetupContexts({ data: { query: '' } })).toEqual({ kind: 'unavailable' });
+    expect(new URL(requests.at(-1)!.url).searchParams.has('query')).toBe(false);
+
+    const cancellation = new AbortController();
+    request = new Request(request.url, { headers: sessionHeaders, signal: cancellation.signal });
+    const pending = searchSpaceSetupContexts({ data: { query: 'cancelled' } });
+    const nativeSignal = await entered.promise;
+    cancellation.abort();
+    expect(nativeSignal.aborted).toBe(true);
+    late.resolve(Response.json({ contexts: [entry], next: 'prior-viewer-cursor' }));
+    expect(await pending).toEqual({ kind: 'unavailable' });
+
+    const count = requests.length;
+    request = new Request(request.url);
+    await expect(searchSpaceSetupContexts({ data: { query: '' } })).rejects.toThrow('Sign in to set up a community');
+    expect(requests).toHaveLength(count);
+    expect(requests.every((native) => native.method === 'GET')).toBe(true);
+  } finally {
+    picker?.dispose();
+    fetcher.mockRestore();
   }
 });

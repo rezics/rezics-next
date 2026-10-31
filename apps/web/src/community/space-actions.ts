@@ -45,11 +45,7 @@ import {
 } from './container-lifecycle-native';
 import { readRealmClaim, writeRealmClaim } from './realm-claim-native';
 import { validateRealmClaimInput, type RealmClaimInput } from './realm-claim';
-import {
-  readSetupContextDirectory,
-  setupContextDirectorySchema,
-  unavailableNativeContextDirectory,
-} from './setup-context-native';
+import { readSetupContextDirectory, setupContextDirectorySchema } from './setup-context-native';
 import { boardChoiceReadSchema, readNativeBoardChoices } from './setup-board-native';
 import { requestLanguages } from '../kernel/languages';
 
@@ -213,8 +209,7 @@ export const resolveSpaceSetupChoice = createServerFn({ method: 'GET' })
 export const searchSpaceSetupContexts = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(setupContextDirectorySchema, input))
   .handler(async ({ data }) =>
-    // Bind the original generated contexts directory here when its GET declaration is delivered.
-    readSetupContextDirectory(unavailableNativeContextDirectory, await setupCredential(), {
+    readSetupContextDirectory(kernelClient().contexts, await setupCredential(), {
       query: data.query,
       ...(data.cursor !== undefined ? { cursor: data.cursor } : {}),
       signal: getRequest().signal,

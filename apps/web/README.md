@@ -2317,11 +2317,11 @@ makes one directory request; it never resolves result rows or fills a filtered p
 choices, including restored entries retaining their completed deletion window. The native directory owns current
 readability; its display page grants no authority to save a Realm.
 
-The installed generated `semantic/http/contexts.d.ts` has no directory GET or lifecycle GET declaration yet.
-`NativeContextDirectory` therefore isolates that exact declared GET shape, with a typed unavailable transport at
-the server binding. When the original generated directory is delivered, bind it there; do not add a fetch endpoint,
-Semantic writer or second native module. This declaration is not evidence of a delivered native directory.
-The declared `GET /v1/contexts/{id}/lifecycle -> { context: entry }` is independent of the existing point GET,
+The native directory producer and production consumer are connected through the installed generated
+`kernelClient().contexts.get` port. Response types come from that declaration; `NativeContextDirectory` retains
+only a narrow structural seam for explicit injection. The strict Web decoder validates the native entry schema.
+Source delivery and local typing leave native behavior, current privacy, physical cost, visual review and main
+proof pending. The generated `GET /v1/contexts/{id}/lifecycle -> { context: entry }` is independent of the existing point GET,
 creation, deletion and restoration commands; the picker issues none of those lifecycle reads or writes.
 Missing, preparing, malformed and 500/503 responses remain unavailable with Retry, never an empty final page.
 Both directory labels and independently verified selection labels use the shared `pickText` locale fallback,
@@ -2391,8 +2391,8 @@ light/dark through existing Storybook globals; there are no width, locale or the
 
 The page composition ID remains `pages-community-space-setup--new-community`. Plays advance, select, save, retry,
 refresh a conflict/refusal, pause/resume and reach links containing returned native IDs. They use explicit typed
-transport fixtures; production uses the native directory adapter's isolated unavailable transport until the
-generated GET is installed, the actual Context point reader, and the native board source above.
+transport fixtures; production uses the installed generated native directory GET, the actual Context point reader,
+and the native board source above.
 Native acceptance and Web screenshot review follow integration; local typing does not establish those outcomes.
 
 Focused Context review IDs are `patterns-community-space-setup-context--unavailable`, `--denied` and `--loading`.

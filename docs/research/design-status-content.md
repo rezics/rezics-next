@@ -118,8 +118,9 @@ current-state checking or explicit same-request retry. Accepted workflows still 
 
 **Next action and proof.** Review the repaired member Space route and existing setup at
 `pages-community-space--member` and `pages-community-space-setup--new-community`. The same setup now contains the
-Context directory picker, constrained scheme/concept picker and shared publication EntityPicker; native Context
-directory integration remains pending and unavailable until its original Semantic source is joined. The scheme/
+Context directory picker, constrained scheme/concept picker and shared publication EntityPicker; the native Context
+directory producer and production consumer are connected through the installed generated GET. Native behavior,
+current privacy, physical cost, visual review and main proof remain pending. The scheme/
 concept and publication consumers reuse their existing sources and commands. No second setup or publish writer is needed.
 Container lifecycle HTTP, binding fences and `container-lifecycle-native.ts` are integrated source: current
 `/lifecycle`, `/removal` and `/restoration` calls retain head/version CAS, independent Context authorization and

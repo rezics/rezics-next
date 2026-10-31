@@ -1,9 +1,14 @@
+import type { KernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import * as v from 'valibot';
 import { ContextChoiceError, unavailableContextChoiceSource, type ContextChoiceSource } from './setup-context-picker';
 import type { SetupChoice, SetupFailure } from './space-setup';
 
-/** Consumer-local declaration of GET /v1/contexts until its original generated route is installed. */
+type DirectoryGet = KernelClient['contexts']['get'];
+export type ContextDirectoryPage = NonNullable<Awaited<ReturnType<DirectoryGet>>['data']>;
+export type ContextDirectoryEntry = ContextDirectoryPage['contexts'][number];
+
+/** Strict wire validation of the installed native GET /v1/contexts response. */
 const directoryEntrySchema = v.strictObject({
   id: v.pipe(v.string(), v.uuid()),
   kind: v.picklist(['global', 'community']),
@@ -15,9 +20,7 @@ const directoryEntrySchema = v.strictObject({
 const directoryPageSchema = v.strictObject({
   contexts: v.pipe(v.array(directoryEntrySchema), v.maxLength(20)),
   next: v.nullable(v.string()),
-});
-export type ContextDirectoryEntry = v.InferOutput<typeof directoryEntrySchema>;
-export type ContextDirectoryPage = v.InferOutput<typeof directoryPageSchema>;
+}) satisfies v.GenericSchema<ContextDirectoryPage>;
 export type ContextDirectoryResult = ContextDirectoryPage | { kind: 'denied' | 'unavailable' };
 export type ContextDirectoryInput = { query: string; cursor?: string; signal?: AbortSignal };
 export const setupContextDirectorySchema = v.strictObject({
@@ -34,7 +37,7 @@ export type NativeContextDirectory = {
   }): Promise<{ data: ContextDirectoryPage | null; error: unknown; status: number }>;
 };
 
-/** The installed client has point reads and lifecycle writes, but no directory GET declaration yet. */
+/** Explicit unavailable injection for consumers without a directory dependency. */
 export const unavailableNativeContextDirectory: NativeContextDirectory = {
   async get() {
     return { data: null, error: 'unavailable', status: 503 };
