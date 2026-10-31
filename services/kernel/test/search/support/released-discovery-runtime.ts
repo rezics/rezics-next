@@ -164,19 +164,21 @@ export function releasedDiscoveryRuntime(
   }
   async function retain(job: ReleasedNativeRepairJob, options?: Readonly<{ expiresAt: number }>): Promise<string> {
     if (!config || !databaseUrl) throw new Error('Released discovery preparation has not started');
+    preparationClient ??= createWorkClient(databaseUrl, config.pool);
+    const client = await preparationClient;
+    const now = Date.now();
+    const expiresAt = options === undefined ? now + 24 * 60 * 60 * 1000 : options.expiresAt;
     if (options !== undefined) {
-      const now = Date.now();
       if (
-        !Number.isSafeInteger(options.expiresAt) ||
-        options.expiresAt <= now ||
-        options.expiresAt > now + 24 * 60 * 60 * 1000
+        !Number.isSafeInteger(expiresAt) ||
+        expiresAt <= now ||
+        expiresAt > now + 24 * 60 * 60 * 1000
       )
         throw new RangeError('Preparation expiresAt must be a safe future instant within 24 hours');
     }
-    preparationClient ??= createWorkClient(databaseUrl, config.pool);
-    return createPublicPreparationStore(config.pool, await preparationClient, prefix).retain(
+    return createPublicPreparationStore(config.pool, client, prefix).retain(
       { kind: 'repair', key: JSON.stringify(job), job },
-      options?.expiresAt ?? Date.now() + 24 * 60 * 60 * 1000,
+      expiresAt,
     );
   }
   const control: ReleasedDiscoveryRuntime = {

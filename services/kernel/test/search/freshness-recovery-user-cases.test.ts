@@ -53,23 +53,27 @@ test('a genuine explicit retain expiry releases native work without claiming the
   // Different admitted plans produce distinct native jobs; re-retaining one key must not rewrite its expiry.
   try {
     for (const size of [2, 3]) {
-      bound.push(await native.bindRequest({
-        plan: { filterDocument: undefined, text: parseText(marker), sort: 'id', size },
-        snapshot: 'pit',
-      }, context()));
+      bound.push(
+        await native.bindRequest(
+          {
+            plan: { filterDocument: undefined, text: parseText(marker), sort: 'id', size },
+            snapshot: 'pit',
+          },
+          context(),
+        ),
+      );
     }
     const [ordinary, short] = bound.map(({ capture }) => {
       if (capture.status !== 'captured' && capture.status !== 'preparing')
         throw new Error(`Original native producer did not admit repair work: ${JSON.stringify(capture)}`);
       return capture.repair;
     });
-    expect(ordinary).toBeDefined();
-    expect(short).toBeDefined();
+    if (!ordinary || !short) throw new Error('Expected two actual admitted native repair jobs');
     expect(short).not.toEqual(ordinary);
     await native.indexing('paused');
     try {
       const beforeDefault = Date.now();
-      const ordinaryId = await native.preparePublic(ordinary!);
+      const ordinaryId = await native.preparePublic(ordinary);
       const afterDefault = Date.now();
       const ordinaryRecord = await native.readPreparation(ordinaryId);
       expect(ordinaryRecord).not.toBeNull();
@@ -77,13 +81,15 @@ test('a genuine explicit retain expiry releases native work without claiming the
       expect(Number(ordinaryRecord!.expires_at)).toBeGreaterThanOrEqual(beforeDefault + DAY_MS);
       expect(Number(ordinaryRecord!.expires_at)).toBeLessThanOrEqual(afterDefault + DAY_MS);
 
-      for (const expiresAt of [NaN, Infinity, -Infinity, 0, Date.now() - 1, Date.now() + 0.5,
-        Number.MAX_SAFE_INTEGER + 1, Date.now() + DAY_MS + 60_000]) {
-        await expect(native.preparePublic(short!, { expiresAt })).rejects.toThrow('safe future instant within 24 hours');
+      for (const expiresAt of [
+        NaN, Infinity, -Infinity, 0, Date.now() - 1, Date.now() + 0.5,
+        Number.MAX_SAFE_INTEGER + 1, Date.now() + DAY_MS + 60_000,
+      ]) {
+        await expect(native.preparePublic(short, { expiresAt })).rejects.toThrow('safe future instant within 24 hours');
       }
 
       const expiresAt = Date.now() + 1_000;
-      const shortId = await native.preparePublic(short!, { expiresAt });
+      const shortId = await native.preparePublic(short, { expiresAt });
       expect(shortId).not.toBe(ordinaryId);
       const shortRecord = await native.readPreparation(shortId);
       expect(shortRecord).not.toBeNull();
@@ -91,13 +97,13 @@ test('a genuine explicit retain expiry releases native work without claiming the
       expect(Number(shortRecord!.expires_at)).toBe(expiresAt);
       expect(shortRecord!.revision).toBe('1');
       // Same-key retain keeps the actual frontier/revision/expiry rather than editing a stored row.
-      expect(await native.preparePublic(short!)).toBe(shortId);
+      expect(await native.preparePublic(short)).toBe(shortId);
       expect(await native.readPreparation(shortId)).toEqual(shortRecord);
 
       const expiryGuard = Date.now() + 5_000;
       while (Date.now() <= expiresAt) {
         if (Date.now() >= expiryGuard) throw new Error('Explicit native retain expiry did not elapse');
-        await Bun.sleep(Math.min(50, expiresAt - Date.now() + 1));
+        await Bun.sleep(Math.max(1, Math.min(50, expiresAt - Date.now() + 1)));
       }
       // Merely reading an expired locator never deletes it or certifies successful repair.
       expect(await native.readPreparation(shortId)).toEqual(shortRecord);
@@ -140,7 +146,8 @@ test('actual PostgreSQL Source lag over five minutes gives readiness and recover
     committed = await fixture.createSubject('schema:Book', `${marker} delayed`);
     const partition = partitionOf(routeOf(committed.id)!);
     const head = await fixture.inspect<{ position: string }>(
-      'SELECT position::text FROM core.partition WHERE partition_no = $1', [partition],
+      'SELECT position::text FROM core.partition WHERE partition_no = $1',
+      [partition],
     );
     const envelope = await fixture.inspect<{ recorded_at: Date }>(
       'SELECT recorded_at FROM core.outbox WHERE partition_no = $1 AND position = $2 AND event_seq = 0',
@@ -187,5 +194,7 @@ test('actual PostgreSQL Source lag over five minutes gives readiness and recover
   expect(native.indexPrefix).toBe(prefix);
   const response = await fixture.request('anonymous', 'POST', '/v1/subjects:search', { text: marker, limit: 10 });
   expect(response.status).toBe(200);
-  expect((response.body.subjects as { id: string }[]).map(({ id }) => id).sort()).toEqual([witness.id, committed!.id].sort());
+  expect((response.body.subjects as { id: string }[]).map(({ id }) => id).sort()).toEqual(
+    [witness.id, committed!.id].sort(),
+  );
 }, SOURCE_LAG_PRECONDITION_GUARD_MS + 60_000);
