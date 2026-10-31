@@ -52,10 +52,7 @@ function lstatIfPresent(path: string, fileSystem: StorybookCleanupFileSystem) {
   }
 }
 
-export function cleanupStorybookUiOutput(
-  worktreeRoot: string,
-  overrides: Partial<StorybookCleanupFileSystem> = {},
-) {
+export function cleanupStorybookUiOutput(worktreeRoot: string, overrides: Partial<StorybookCleanupFileSystem> = {}) {
   const fileSystem = { ...systemFileSystem, ...overrides };
   const ownerUid = process.getuid?.();
   if (ownerUid === undefined) {
@@ -97,16 +94,10 @@ export function cleanupStorybookUiOutput(
   inspect(outputRoot, outputStats);
 
   for (const directory of directories) {
-    const fd = fileSystem.openSync(
-      directory.path,
-      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-    );
+    const fd = fileSystem.openSync(directory.path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     try {
       const opened = fileSystem.fstatSync(fd);
-      if (
-        !sameDirectory(directory.stats, opened) ||
-        opened.uid !== ownerUid
-      ) {
+      if (!sameDirectory(directory.stats, opened) || opened.uid !== ownerUid) {
         throw new Error(`Refusing to change an unexpected Storybook output directory: ${directory.path}.`);
       }
       const permissions = opened.mode & 0o7777;
@@ -118,11 +109,7 @@ export function cleanupStorybookUiOutput(
   }
 
   const currentRoot = fileSystem.lstatSync(outputRoot);
-  if (
-    currentRoot.isSymbolicLink() ||
-    currentRoot.uid !== ownerUid ||
-    !sameDirectory(outputStats, currentRoot)
-  ) {
+  if (currentRoot.isSymbolicLink() || currentRoot.uid !== ownerUid || !sameDirectory(outputStats, currentRoot)) {
     throw new Error(`Refusing to remove an unexpected Storybook output directory: ${outputRoot}.`);
   }
   fileSystem.rmSync(outputRoot, { recursive: true, force: true });

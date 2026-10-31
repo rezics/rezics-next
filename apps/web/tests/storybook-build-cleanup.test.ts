@@ -13,10 +13,7 @@ import {
   type Stats,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import {
-  cleanupStorybookUiOutput,
-  type StorybookCleanupFileSystem,
-} from '../scripts/storybook-build-cleanup.ts';
+import { cleanupStorybookUiOutput, type StorybookCleanupFileSystem } from '../scripts/storybook-build-cleanup.ts';
 
 const worktree = resolve(import.meta.dir, '../../..');
 
