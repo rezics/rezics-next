@@ -181,3 +181,85 @@ test('the real generated page client retains source view privacy and canonical f
   expect(calls).toEqual(['/v1/pages:read']);
   expect(pageProfile(page)?.publicViews.realms).toBe(false);
 });
+
+test('Default public identity and management presentation keeps long phone identities readable, management links distinct and connected managed detail stories within their real session/query providers', async () => {
+  const { AccountManagementPage } = await import('../src/accounts/management/pages');
+  const { detailExample, human } = await import('../src/accounts/management/story-api');
+  const displayName = '閱讀者與翻譯者共同維護的獨立閱讀室'.repeat(256).slice(0, 4096);
+  const bio = 'Reading notes across languages.\n閱讀筆記與翻譯持續更新。\n'.repeat(128).slice(0, 4096);
+  const handle = 'international-reading-room'.padEnd(64, 'x');
+  const links = Array.from({ length: 5 }, (_, index) => ({
+    label: `${'閱讀紀錄與翻譯'.repeat(10).slice(0, 63)}${index + 1}`,
+    url: `https://example.test/journal/${index + 1}`.padEnd(2048, 'x'),
+  }));
+  const cache = new QueryClient();
+  cache.setQueryData(['exposure', 'anonymous'], []);
+  const html = renderToString(
+    createElement(QueryClientProvider, {
+      client: cache,
+      children: createElement(PublicProfilePage, {
+        page: profilePage({ profile: { displayName, handle, bio, links } }),
+        locale: 'en',
+        messages: {
+          unknown: 'Unknown',
+          none: 'None',
+          unlabelled: 'Account',
+          sources: 'Sources',
+          aliases: 'Aliases',
+          details: 'Details',
+        },
+        publicRealms: true,
+        renderJsonLd: false,
+      }),
+    }),
+  );
+  const heading = html.match(/<h1 class="([^"]+)">([\s\S]*?)<\/h1>/)!;
+  expect(heading[1]).toContain('font-sans');
+  expect(heading[1]).toContain('wrap-anywhere');
+  expect(heading[2]).toBe(displayName);
+  expect(html).toContain(`@${handle}</p></div><div data-slot="agent-description"`);
+  const description = html.match(/data-slot="agent-description" class="([^"]+)">/)!;
+  // The default phone body spans both avatar/name columns; desktop keeps its text column.
+  expect(description[1]).toContain('col-span-full');
+  expect(description[1]).toContain('sm:col-start-2');
+  expect(html).toContain(bio);
+  for (const link of links) expect(html).toContain(`href="${link.url}" rel="nofollow noopener noreferrer ugc">${link.label}</a>`);
+  expect(html).not.toContain('followers');
+
+  const realms = renderToString(
+    createElement(PublicRealmsPage, {
+      handle,
+      title: displayName,
+      locale: 'en',
+      result: { state: 'ready', realms: [], next: 'signed+/=' },
+    }),
+  );
+  expect(realms.match(/<h1 class="([^"]+)">/)![1]).toContain('font-sans');
+  expect(realms).toContain(`href="/en/@${handle}"`);
+  expect(realms).toContain(`href="/en/@${handle}/realms?cursor=signed%2B%2F%3D"`);
+
+  const detail = detailExample(human.id);
+  detail.account = { ...detail.account, handle, displayName };
+  const management = renderToString(
+    createElement(AccountManagementPage, {
+      page: { state: 'ready', value: detail, issuer: null, organizationsAvailable: null },
+      retry: () => {},
+    }),
+  );
+  const identity = management.match(/data-slot="account-management-identity" class="([^"]+)">([\s\S]*?)<\/div>/)!;
+  expect(identity[1]).toContain('grid');
+  expect(identity[1]).toContain('gap-3');
+  const destinations = [...identity[2]!.matchAll(/<a ([^>]+)>/g)].map((link) => ({
+    href: link[1]!.match(/href="([^"]+)"/)![1],
+    classes: link[1]!.match(/class="([^"]+)"/)![1],
+  }));
+  expect(destinations.map((link) => link.href)).toEqual([`/en/@${handle}`, '/en/settings']);
+  for (const link of destinations) expect(link.classes).toContain('min-h-11');
+
+  // Keep the original pattern on the established provider, with the same viewer as its reader.
+  const story = await Bun.file(new URL('../src/stories/patterns/managed-account-detail.stories.tsx', import.meta.url)).text();
+  expect(story).toMatch(/<PatternStory visitor="Signed In"[^>]*>\s*<ConnectedDetail \{\.\.\.props\} \/>\s*<\/PatternStory>/);
+  expect(story).toContain('client.setQueryData(sessionQuery.queryKey,');
+  expect(story).toContain('subject: human.id');
+  expect(story).toContain('new ManagedAccountReader(human.id, organization.id, read)');
+});

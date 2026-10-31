@@ -24,6 +24,7 @@ async function realmsPageReady({ canvasElement }: { canvasElement: HTMLElement }
   await expect(canvas.getAllByRole('main')).toHaveLength(1);
   const page = within(main);
   await expect(page.getByRole('heading', { level: 1, name: m.public_account_realms() })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: m.public_account_realms() })).toHaveClass('font-sans');
 }
 
 const meta = {

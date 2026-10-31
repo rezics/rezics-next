@@ -67,11 +67,14 @@ export function PublicRealmsPage({
   const base = accountHref(locale, handle, 'realms');
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-8 sm:py-10">
-      <header className="space-y-2">
-        <a href={accountHref(locale, handle)} className="text-sm text-primary underline underline-offset-4">
+      <header className="min-w-0 space-y-2 wrap-anywhere">
+        <a
+          href={accountHref(locale, handle)}
+          className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
+        >
           {title}
         </a>
-        <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">{m.public_account_realms()}</h1>
+        <h1 className="font-sans text-3xl font-semibold tracking-tight sm:text-4xl">{m.public_account_realms()}</h1>
       </header>
       {result.state !== 'ready' ? (
         <>

@@ -1,23 +1,44 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { detailExample, human, organization } from '../../accounts/management/story-api';
 import { m } from '../../paraglide/messages.js';
 import { ManagedAccountDetailCard } from '../../settings/managed-account-detail';
 import { ManagedAccountReader, type DetailRead, type DetailSection } from '../../settings/managed-account-detail-read';
+import { sessionQuery } from '../../session/query';
+import { PatternStory } from '../page';
 
-// Illustrative native DTOs for component review, not proof of native authorization or completed operations.
-function Example({
-  member = false,
-  paging = false,
-  failed,
-  waiting = false,
-}: {
+type ExampleProps = {
   member?: boolean;
   paging?: boolean;
   failed?: DetailSection;
   waiting?: boolean;
-}) {
+};
+
+function Example(props: ExampleProps) {
+  return (
+    <PatternStory visitor="Signed In" path={`/settings?managedAccount=${organization.id}#account`}>
+      <ConnectedDetail {...props} />
+    </PatternStory>
+  );
+}
+
+// Illustrative native DTOs for component review, not proof of native authorization or completed operations.
+function ConnectedDetail({
+  member = false,
+  paging = false,
+  failed,
+  waiting = false,
+}: ExampleProps) {
+  const client = useQueryClient();
+  useState(() => {
+    client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      csrfToken: 'story-csrf-token',
+      subject: human.id,
+    });
+  });
   const reader = useMemo(() => {
     const read: DetailRead = async (input) => {
       const value = detailExample(organization.id);
@@ -75,6 +96,12 @@ const meta = {
   title: 'Patterns/Account/Managed account detail',
   component: Example,
   parameters: { layout: 'padded' },
+  afterEach: async ({ canvasElement }) => {
+    // Every original state retains the actual session-connected action region.
+    await expect(
+      await within(canvasElement).findByRole('heading', { level: 3, name: m.managed_actions_title() }),
+    ).toBeVisible();
+  },
 } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;

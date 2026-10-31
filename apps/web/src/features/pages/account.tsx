@@ -129,20 +129,28 @@ export function AccountIdentity(props: Record<string, unknown>) {
       data-slot="agent-profile-card"
       className="rounded-2xl border border-border/60 bg-card p-4 shadow-(--aura-shadow-card) sm:p-6"
     >
-      <div data-slot="agent-header" className="flex min-w-0 gap-4 sm:gap-6">
-        <div className="shrink-0">
+      <div
+        data-slot="agent-header"
+        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-x-6"
+      >
+        <div className="sm:row-span-2">
           <div className="sm:hidden">{avatar('sm')}</div>
           <div className="hidden w-40 sm:block">{avatar('md')}</div>
         </div>
         <div className="min-w-0 flex-1 space-y-2 in-data-[density=compact]:space-y-1.5">
-          <h1 className="min-w-0 font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl in-data-[heading-scale=lg]:sm:text-5xl">
+          <h1 className="min-w-0 font-sans text-3xl font-semibold tracking-tight wrap-anywhere text-balance sm:text-4xl in-data-[heading-scale=lg]:sm:text-5xl">
             {name}
           </h1>
           {profile.handle && (
-            <p data-slot="agent-handle" className="truncate text-sm text-muted-foreground">
+            <p data-slot="agent-handle" className="text-sm wrap-anywhere text-muted-foreground">
               {`@${profile.handle}`}
             </p>
           )}
+        </div>
+        <div
+          data-slot="agent-description"
+          className="col-span-full min-w-0 space-y-3 wrap-anywhere sm:col-span-1 sm:col-start-2"
+        >
           {profile.bio && <p className="max-w-prose leading-7 text-pretty whitespace-pre-line">{profile.bio}</p>}
           {value.subject ? <AccountFollow targetId={value.subject} /> : null}
           <AccountManagementLinks key={profile.id} id={profile.id} value={value} />
@@ -178,12 +186,12 @@ export function AccountIdentity(props: Record<string, unknown>) {
           {links.length > 0 && (
             <ul
               aria-label={m.agent_links({}, { locale: value.locale as never })}
-              className="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+              className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-sm"
             >
               {links.map((link) => (
-                <li key={link.url}>
+                <li key={link.url} className="min-w-0 max-w-full">
                   <a
-                    className={`${linkClass} ${linkColor} font-medium`}
+                    className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center font-medium`}
                     href={link.url}
                     rel="nofollow noopener noreferrer ugc"
                   >

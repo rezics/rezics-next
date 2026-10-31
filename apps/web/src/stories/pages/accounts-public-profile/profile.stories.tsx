@@ -10,6 +10,11 @@ import { AppShell } from '../../../shell/shell';
 import { PatternStory, PageStory, pageReady } from '../../page';
 import { profilePage } from './fixtures';
 
+const longName = '世界各地的讀者與翻譯者共同維護的獨立閱讀室'.repeat(200).slice(0, 4096);
+const longBio = 'Readers and librarians share reading notes across languages.\n閱讀筆記與翻譯持續更新。\n'
+  .repeat(64)
+  .slice(0, 4096);
+
 function Example({
   mode = 'human',
 }: {
@@ -27,9 +32,13 @@ function Example({
     ...(mode === 'long'
       ? {
           profile: {
-            displayName: 'The International Reading Room and Translation Collective',
-            bio: 'Readers, translators and librarians meet here to exchange notes across languages.\nWe keep our reading lists public so others can join the conversation.',
-            links: [{ label: 'Reading journal and upcoming conversations', url: 'https://example.test/journal' }],
+            displayName: longName,
+            handle: 'international-reading-room'.padEnd(64, 'x'),
+            bio: longBio,
+            links: Array.from({ length: 5 }, (_, index) => ({
+              label: `${'閱讀紀錄與翻譯'.repeat(10).slice(0, 63)}${index + 1}`,
+              url: `https://example.test/journal/${index + 1}`.padEnd(2048, 'x'),
+            })),
           },
         }
       : {}),
@@ -118,7 +127,26 @@ export const PrivateActivity: Story = {
     await expect(canvasElement.querySelector('[data-slot="account-posts"]')).toBeNull();
   },
 };
-export const LongContent: Story = { render: () => <Example mode="long" /> };
+export const LongContent: Story = {
+  render: () => <Example mode="long" />,
+  play: async ({ canvasElement }) => {
+    await profileShellReady(canvasElement, longName);
+    const card = canvasElement.querySelector<HTMLElement>('[data-slot="agent-profile-card"]')!;
+    const description = card.querySelector<HTMLElement>('[data-slot="agent-description"]')!;
+    const heading = within(card).getByRole('heading', { level: 1, name: longName });
+    await expect(heading).toHaveClass('font-sans');
+    await expect(within(description).getByText(longBio, { normalizer: (text) => text })).toBeVisible();
+    await expect(within(description).getAllByRole('link')).toHaveLength(5);
+    await expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+    if (window.matchMedia('(max-width: 639px)').matches) {
+      const content = description.getBoundingClientRect();
+      const name = heading.getBoundingClientRect();
+      await expect(content.left).toBeLessThan(name.left);
+      await expect(content.width).toBeGreaterThan(name.width);
+      await expect(content.top).toBeGreaterThanOrEqual(name.bottom);
+    }
+  },
+};
 export const EmptyActivity: Story = { render: () => <Example mode="empty" /> };
 export const DeniedActivity: Story = { render: () => <Example mode="denied" /> };
 export const Preparing: Story = {
