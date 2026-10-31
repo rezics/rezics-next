@@ -127,6 +127,7 @@ function PersonalMembership({
       if (result.kind === 'settled' || result.kind === 'denied') {
         setPending(null);
         setRefresh(null);
+        setProblem((previous) => (previous?.outcome === 'closed' ? previous : null));
         attempt.current = null;
         await Promise.all([
           client.invalidateQueries({ queryKey: ['my-realms'] }),
@@ -222,7 +223,7 @@ function PersonalMembership({
         memberLabel={memberLabel}
         admittedAction={admittedAction}
         state={
-          pending
+          pending && !problem
             ? 'pending'
             : leaveRecovery && viewer
               ? viewer.state
@@ -241,8 +242,8 @@ function PersonalMembership({
         onRetry={() =>
           leaveRecovery
             ? void checkLeave()
-            : pending
-              ? setPending({ ...pending, cycle: pending.cycle + 1 })
+            : pending || problem?.outcome === 'refused'
+              ? setPending({ ...pending, cycle: (pending?.cycle ?? -1) + 1 })
               : void query.refetch()
         }
       />

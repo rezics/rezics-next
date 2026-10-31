@@ -42,7 +42,7 @@ function Journey({ delayed = false, unavailable = false }: { delayed?: boolean; 
     setRefresh('checking');
     const result = await refreshRealmMembership(
       async () => {
-        if (unavailable && !retry) throw new Error('Current read unavailable');
+        if (unavailable) throw new Error('Current read unavailable');
         return { state: delayed && !retry ? 'none' : next, idempotencyKey: 'fixture-key' };
       },
       next,
@@ -106,6 +106,9 @@ export const ReadUnavailable: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.realm_join() }));
     await expect(await canvas.findByText(m.realm_membership_pending_unavailable())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_membership_retry() }));
+    await expect(await canvas.findByText(m.realm_membership_pending_unavailable())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.realm_leave() })).not.toBeInTheDocument();
   },
 };
 export const Loading: Story = { args: { state: 'loading' } };
@@ -121,8 +124,25 @@ export const Protected: Story = {
   },
 };
 export const Banned: Story = { args: { state: 'banned' } };
-export const NativeDenial: Story = { args: { state: 'member', problem: { outcome: 'refused', detail: 'Forbidden' } } };
-export const Closed: Story = { args: { problem: { outcome: 'closed' } } };
+export const NativeDenial: Story = {
+  args: { state: 'member', problem: { outcome: 'refused', detail: 'Forbidden: internal Access decision' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('alert')).toHaveTextContent(m.realm_change_failed());
+    await expect(canvas.getByRole('alert')).not.toHaveTextContent('Forbidden');
+    await expect(canvas.queryByText(m.realm_state_member(), { exact: true })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: m.realm_leave() })).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: m.realm_membership_retry() })).toBeEnabled();
+  },
+};
+export const Closed: Story = {
+  args: { problem: { outcome: 'closed' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('alert')).toHaveTextContent(m.realm_change_closed());
+    await expect(canvas.queryByRole('button', { name: m.realm_join() })).not.toBeInTheDocument();
+  },
+};
 export const IndependentUnfollow: Story = {
   render: () => (
     <>

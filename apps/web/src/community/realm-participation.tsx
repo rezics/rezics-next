@@ -39,7 +39,7 @@ export function RealmParticipationView({
       aria-busy={busy || refresh === 'checking'}
     >
       <div className="flex flex-wrap items-center gap-3">
-        {state === 'member' ? (
+        {state === 'member' && !problem ? (
           <>
             <Badge>{memberLabel ?? m.realm_state_member()}</Badge>
             {admittedAction === undefined || admittedAction === 'leave' ? (
@@ -56,7 +56,10 @@ export function RealmParticipationView({
             ) : null}
           </>
         ) : null}
-        {state === 'none' && visibility === 'public' && (admittedAction === undefined || admittedAction === 'join') ? (
+        {state === 'none' &&
+        !problem &&
+        visibility === 'public' &&
+        (admittedAction === undefined || admittedAction === 'join') ? (
           <Button
             size="lg"
             type="button"
@@ -68,12 +71,12 @@ export function RealmParticipationView({
           </Button>
         ) : null}
         {pending ? <Badge variant="secondary">{m.realm_state_pending()}</Badge> : null}
-        {state === 'unavailable' || (pending && refresh !== 'checking') ? (
+        {problem?.outcome === 'refused' || state === 'unavailable' || (pending && refresh !== 'checking') ? (
           <Button
             type="button"
             variant="outline"
             className="bg-background text-foreground dark:bg-background"
-            disabled={busy}
+            disabled={busy || refresh === 'checking'}
             onClick={onRetry}
           >
             {m.realm_membership_retry()}
@@ -88,10 +91,14 @@ export function RealmParticipationView({
       {pending ? (
         <p role="status" className="max-w-prose text-sm text-muted-foreground">
           {refresh === 'checking'
-            ? m.realm_membership_checking()
-            : refresh === 'unavailable'
-              ? m.realm_membership_pending_unavailable()
-              : m.realm_membership_still_pending()}
+            ? problem
+              ? m.realm_membership_loading()
+              : m.realm_membership_checking()
+            : problem
+              ? m.realm_membership_current_pending()
+              : refresh === 'unavailable'
+                ? m.realm_membership_pending_unavailable()
+                : m.realm_membership_still_pending()}
         </p>
       ) : null}
       {state === 'unavailable' ? (
@@ -99,19 +106,19 @@ export function RealmParticipationView({
           {m.realm_membership_unavailable()}
         </p>
       ) : null}
-      {state === 'banned' ? (
+      {state === 'banned' && !problem ? (
         <p role="status" className="max-w-prose">
           {m.realm_banned()}
         </p>
       ) : null}
       {problem ? (
         <p role="alert" className="max-w-prose text-sm text-destructive">
-          {problem.outcome === 'closed' ? m.realm_change_closed() : (problem.detail ?? m.realm_change_failed())}
+          {problem.outcome === 'closed' ? m.realm_change_closed() : m.realm_change_failed()}
         </p>
       ) : null}
       {visibility === 'protected' ? (
         <p data-visibility="protected" className="max-w-prose text-sm text-muted-foreground">
-          {state === 'member' ? m.realm_protected_note() : m.realm_protected_admission()}
+          {state === 'member' && !problem ? m.realm_protected_note() : m.realm_protected_admission()}
         </p>
       ) : null}
     </section>
