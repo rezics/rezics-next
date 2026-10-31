@@ -1,6 +1,7 @@
-import type { DiscoveryPage } from '../../search/discovery';
+import { parseLegacySearchPage, type DiscoveryPage } from '../../search/discovery';
 import type { FakeRoute } from '../fake-modules';
-import { isRecord } from './languages';
+import typedSearch from '../recorded/search-typed.json';
+import { chosenLabels, isRecord } from './languages';
 
 const sameId = '00000000-0000-4000-8000-000000000811';
 const handlelessId = '00000000-0000-4000-8000-000000000812';
@@ -81,6 +82,52 @@ export const discoveryExample: DiscoveryPage = {
   next: null,
   as_of: '2026-10-31T00:00:00Z',
 };
+
+/** Recorded public content in the illustrative discovery wire, not a native mixed-search recording. */
+export function typedSearchDiscoveryExample(languages: readonly string[]): DiscoveryPage {
+  const recorded = parseLegacySearchPage(typedSearch);
+  if (!recorded) throw new Error('The typed Search recording is invalid.');
+  return {
+    hits: recorded.subjects.map(({ id, type, summary, labels, descriptions, facts }) => {
+      if (
+        !summary ||
+        !summary.label ||
+        summary.id !== id ||
+        summary.type !== type ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)
+      )
+        throw new Error('The typed Search recording needs its complete native Subject identity and summary.');
+      const selected = languages.length ? chosenLabels(labels, languages, summary.label.language) : labels;
+      const language = Object.keys(selected)[0] ?? summary.label.language;
+      return {
+        // Catalogue kinds belong to Semantic (search/discovery-registry.ts). The native UUID
+        // carries its route in bytes 10–11 (route/route.ts); it is not the example cast's route 0.
+        key: { owner: 'semantic', kind: type, route: Number.parseInt(id.slice(24, 28), 16), id },
+        summary: {
+          kind: 'subject',
+          value: { ...summary, label: languages.length ? { value: selected[language]!, language } : summary.label },
+        },
+        labels: selected,
+        ...(descriptions
+          ? {
+              descriptions: languages.length
+                ? chosenLabels(descriptions, languages, summary.label.language)
+                : descriptions,
+            }
+          : {}),
+        ...(facts ? { facts } : {}),
+      };
+    }),
+    kinds: {
+      values: discoveryExample.kinds.values
+        .filter(({ id }) => id === typedSearch.filterType)
+        .map((kind) => ({ ...kind, labels: languages.length ? chosenLabels(kind.labels, languages) : kind.labels })),
+      next: null,
+    },
+    next: typedSearch.next,
+    as_of: typedSearch.as_of,
+  };
+}
 
 export function currentLinkRefusal(): DiscoveryPage {
   const result = structuredClone(discoveryExample);

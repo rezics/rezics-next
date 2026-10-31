@@ -4,6 +4,7 @@ import type { FakeRoute } from '../fake-modules.ts';
 import emptySearch from '../recorded/search-empty.json';
 import typedSearch from '../recorded/search-typed.json';
 import { chosenLabels, isRecord, languageList } from './languages.ts';
+import { discoveryExample, typedSearchDiscoveryExample } from './search-discovery.ts';
 
 export const searchFacetStoryPaths = {
   results: '/search?q=Prince&type=schema%3ABook',
@@ -13,6 +14,9 @@ export const searchFacetStoryPaths = {
 };
 
 const storyValues: Record<string, { value: string; labels: Record<string, string> }[]> = {
+  type: discoveryExample.kinds.values
+    .filter(({ id }) => id === typedSearch.filterType)
+    .map(({ id, labels }) => ({ value: id, labels })),
   'schema:author': [
     {
       value: '00000000-0000-4000-8000-000000000101',
@@ -24,24 +28,39 @@ const storyValues: Record<string, { value: string; labels: Record<string, string
 };
 
 async function storySearch(request: Request): Promise<KernelRecording | undefined> {
-  let body: { text?: unknown };
-  try {
-    body = (await request.json()) as { text?: unknown };
-  } catch {
-    return;
+  const body = await requestBody(request);
+  if (!body) return;
+  if (body.text === typedSearch.query) {
+    return body.representation === 'discovery-v1'
+      ? { ...typedSearchDiscoveryExample(languageList(body.languages)), status: 200 }
+      : ({ ...typedSearch, status: 200 } as KernelRecording);
   }
-  if (body.text === typedSearch.query) return { ...typedSearch, status: 200 } as KernelRecording;
-  if (body.text === emptySearch.query) return emptySearch as KernelRecording;
+  if (body.text === emptySearch.query) {
+    return body.representation === 'discovery-v1'
+      ? { status: 200, hits: [], kinds: { values: [], next: null }, next: emptySearch.next, as_of: emptySearch.as_of }
+      : (emptySearch as KernelRecording);
+  }
 }
 
 function storyFacets(body: Record<string, unknown>): KernelRecording | undefined {
   const requested = Array.isArray(body.facets) ? body.facets.filter(isRecord) : [];
-  if (requested.some((facet) => facet.property === 'type')) return;
+  if (requested.some((facet) => facet.property === 'type') && body.text !== typedSearch.query) return;
+  const languages = languageList(body.languages);
   return {
     status: 200,
     facets: requested.map((facet) => {
       const property = typeof facet.property === 'string' ? facet.property : '';
-      return { property, values: storyValues[property] ?? [] };
+      const size = typeof facet.size === 'number' ? Math.max(1, Math.min(facet.size, 20)) : 10;
+      return {
+        property,
+        values: (storyValues[property] ?? [])
+          .slice(0, size)
+          .map((value) => ({
+            ...value,
+            labels: languages.length ? chosenLabels(value.labels, languages) : value.labels,
+          })),
+        next: null,
+      };
     }),
     as_of: '2026-10-26T18:21:56.818Z',
   };

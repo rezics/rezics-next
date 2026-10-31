@@ -16,6 +16,21 @@ const meta = { title: 'Pages/Discovery/Search', parameters: { layout: 'fullscree
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function openFacetControls(context: { canvasElement: HTMLElement }) {
+  const canvas = within(context.canvasElement);
+  if (window.matchMedia('(max-width: 767px)').matches)
+    await userEvent.click(canvas.getByRole('button', { name: m.search_label() }));
+  else await userEvent.click(canvas.getByRole('combobox', { name: m.search_label() }));
+  const search = canvas.getByRole(window.matchMedia('(max-width: 767px)').matches ? 'dialog' : 'search', {
+    name: m.search_label(),
+  });
+  await userEvent.click(within(search).getByRole('button', { name: new RegExp(`^${m.search_filters()}`) }));
+  // The existing phone filter sheet portals outside the canvas.
+  return within(context.canvasElement.ownerDocument.body).findByRole('checkbox', {
+    name: getLocale() === 'zh-Hans' ? '寓言' : 'Fable',
+  });
+}
+
 export const SignedOut: Story = {
   name: 'Signed out',
   play: searchReady,
@@ -52,7 +67,10 @@ export const NoResults: Story = {
 
 export const Facets: Story = {
   name: 'Results with facets',
-  play: searchTypedReady,
+  play: async (context) => {
+    await searchTypedReady(context);
+    await expect(await openFacetControls(context)).not.toBeChecked();
+  },
   render: () => <PageStory visitor="Signed Out" path={pagePaths['search-facets']} />,
 };
 
@@ -60,7 +78,7 @@ export const ActiveFacet: Story = {
   name: 'Fable facet selected',
   play: async (context) => {
     await searchTypedReady(context);
-    await expect(within(context.canvasElement).getByRole('checkbox', { name: 'Fable' })).toBeChecked();
+    await expect(await openFacetControls(context)).toBeChecked();
   },
   render: () => <PageStory visitor="Signed Out" path={pagePaths['search-facet-active']} />,
 };
