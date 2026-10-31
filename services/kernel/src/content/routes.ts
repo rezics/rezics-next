@@ -63,6 +63,7 @@ import {
   readPost,
   readThread,
   withReplayedRevision,
+  withThreadReadAdmission,
   type ItemView,
   type PostEntry,
   type ThreadView,
@@ -630,16 +631,12 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           admission.run('normal', job, async () => {
             let authorErasure: AuthorErasureAdmission | undefined;
             const context = { actor, deadline: job.deadline };
-            const result = await readThread(
-              dependencies,
-              id,
-              context,
-              actor.kind === 'account'
-                ? async () => {
-                    authorErasure = await readAuthorErasureAdmission(dependencies, id, { ...context, actor });
-                  }
-                : undefined,
-            );
+            const read = () => readThread(dependencies, id, context);
+            const result = await (actor.kind === 'account'
+              ? withThreadReadAdmission(async () => {
+                  authorErasure = await readAuthorErasureAdmission(dependencies, id, { ...context, actor });
+                }, read)
+              : read());
             if (!result.value) throw new ProblemError('not_found');
             session.record(sessionComponent(result.anchor));
             const [thread] = await withViewerReactions(dependencies, actor, [result.value], job.deadline);

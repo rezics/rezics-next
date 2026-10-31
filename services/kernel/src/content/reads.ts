@@ -89,6 +89,12 @@ export type RealmDisclosureScope = {
   accessCheck?: Promise<boolean>;
 };
 const realmDisclosure = new AsyncLocalStorage<RealmDisclosureScope>();
+const threadReadAdmission = new AsyncLocalStorage<() => Promise<void>>();
+
+/** Server-owned work between initial and final disclosure, without changing the published reader port. */
+export function withThreadReadAdmission<T>(beforeFinal: () => Promise<void>, read: () => Promise<T>): Promise<T> {
+  return threadReadAdmission.run(beforeFinal, read);
+}
 
 /** Share one containing-Realm proof across the thread and post checks in a disclosure. */
 export function currentRealmDisclosureScope(): RealmDisclosureScope | undefined {
@@ -1491,7 +1497,6 @@ export async function readThread(
   dependencies: ContentReadDependencies,
   threadId: ThreadId,
   context: ReadContext,
-  beforeFinal?: () => Promise<void>,
 ): Promise<Anchored<ThreadView | null>> {
   return withRealmDisclosureScope(
     async () =>
@@ -1505,7 +1510,7 @@ export async function readThread(
         undefined,
         undefined,
         true,
-        beforeFinal,
+        threadReadAdmission.getStore(),
       )) as Anchored<ThreadView | null>,
   );
 }
