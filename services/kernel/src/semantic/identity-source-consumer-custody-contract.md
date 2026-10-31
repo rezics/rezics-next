@@ -155,7 +155,9 @@ discharged/transferred row with real commit provenance. The returned opaque loca
 is reconstructed only after commit and same-home native verification. Verify checks
 the exact original reference, current accepted claim/owner, latest committed receipt,
 native replay/undo/restore fence and genuine technical receiver on the same command.
-It performs no foreign reads. Neither a retained row nor a later pending continuation
+It performs no foreign reads. The public read first resolves an already committed
+terminal receipt locally, so source minimization cannot force reconstruction of the
+erased original input before the technical receiver can be used. Neither a retained row nor a later pending continuation
 can satisfy it. A surviving requester's/decider's verification requires transfer.
 
 New continuation records still contain native personal locators through their parent

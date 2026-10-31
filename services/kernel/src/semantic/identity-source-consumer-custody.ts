@@ -111,13 +111,16 @@ function valid(reference: IdentitySourceConsumerReference): boolean {
     uuid.test(source.transactionId) &&
     Number.isSafeInteger(source.epoch) &&
     source.epoch > 0 &&
+    source.epoch <= 2147483647 &&
     typeof source.position === 'bigint' &&
     source.position > 0n &&
+    source.position <= 9223372036854775807n &&
     digest.test(reference.sourceDigest) &&
     uuid.test(reference.job.jobId) &&
     routeOf(reference.job.jobId) !== null &&
     typeof reference.job.epoch === 'bigint' &&
     reference.job.epoch > 0n &&
+    reference.job.epoch <= 9223372036854775807n &&
     uuid.test(barrier.accountId) &&
     routeOf(barrier.accountId) === barrier.accountRoute &&
     Number.isSafeInteger(barrier.version) &&
@@ -261,6 +264,18 @@ export async function readIdentitySourceConsumerCustody(
     barrier: Object.freeze({ ...reference.barrier }) });
   return withRequestDeadline(context.deadline, async () => {
     try {
+      // A genuine transferred source remains readable after Accounts minimizes its original
+      // bytes. Resolve terminal native custody before asking the old-source/undo reader.
+      const committed = (await runCommand(pool,
+        { partition: reference.source.partition, deadline: context.deadline }, async (tx) => {
+          const retained = (await tx.query<Retained>(select.sql, referenceValues(reference))).rows[0];
+          if (!retained) return noEffect(null);
+          const row = await latest(tx, retained);
+          if (!row || !terminal(row.state)) return noEffect(null);
+          const proof = nativeProof(reference, row);
+          return noEffect(await verifyIdentitySourceConsumerCustody(tx, reference, proof) ? proof : null);
+        })).value;
+      if (committed) return committed;
       const source = await original(pool, reference, context.deadline);
       if (!source) return null;
       const binding = (
@@ -385,7 +400,7 @@ const sameGeneration = (a: IdentitySourceConsumerGeneration, b: IdentitySourceCo
   a.restoreGeneration === b.restoreGeneration;
 const validGeneration = (value: IdentitySourceConsumerGeneration) =>
   [value.replayGeneration, value.undoGeneration, value.restoreGeneration].every(
-    (v) => typeof v === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(v),
+    (v) => typeof v === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(v) && BigInt(v) <= 9223372036854775807n,
   );
 function boundedFrontier(value: IdentityFrontier): boolean {
   return Number.isSafeInteger(value.segment) && value.segment >= 0 && value.after.length <= 8 &&

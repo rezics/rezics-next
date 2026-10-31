@@ -27,7 +27,7 @@ CREATE TABLE semantic.identity_epoch_source_consumer_terminal (
  FOREIGN KEY(partition_no,custody_key,previous_sequence)
   REFERENCES semantic.identity_epoch_source_consumer_terminal(partition_no,custody_key,sequence),
  FOREIGN KEY(partition_no,transaction_id) REFERENCES semantic.erasure_source_commit(partition_no,transaction_id),
- CHECK((sequence=1 AND previous_sequence IS NULL) OR previous_sequence=sequence-1),
+ CHECK((sequence=1 AND previous_sequence IS NULL) OR (sequence>1 AND previous_sequence IS NOT NULL AND previous_sequence=sequence-1)),
  CHECK(directory_after IS NULL OR (jsonb_typeof(directory_after)='object'
   AND jsonb_typeof(directory_after->'after')='array'
   AND jsonb_array_length(directory_after->'after')<=8)),
