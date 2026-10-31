@@ -49,9 +49,7 @@ export function CollectionAddMembers({
               ? m.library_collection_full()
               : result.reason === 'conflict'
                 ? m.library_collection_conflict()
-                : result.reason === 'forbidden' || result.reason === 'unauthorized'
-                  ? m.library_collection_not_owner()
-                  : m.error_message(),
+                : m.error_message(),
           );
           return;
         }
