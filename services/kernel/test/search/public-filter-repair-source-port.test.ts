@@ -1,3 +1,4 @@
+import '../../src/semantic/public-filter-source-binding.ts';
 import { expect, test } from 'bun:test';
 import { verifyPublicFilterRepairSourcePage } from '../../src/search/public-filter-custody.ts';
 import type {
@@ -7,7 +8,6 @@ import type {
   RetainedRepairPage,
   RetainedSourceRepair,
 } from '../../src/search/public-filter-custody-contract.ts';
-import type { PublicFilterQueriedObservation } from '../../src/search/public-filter-consumer-contract.ts';
 import type { PublicFilterCost } from '../../src/semantic/public-filter-source-contract.ts';
 import type { PublicSourceRepair } from '../../src/semantic/public-filter-source-binding.ts';
 
@@ -30,8 +30,9 @@ const request: NativeSourceRepairStepRead = {
   predecessor: 'prior-step',
   queried: {
     snapshot: { kind: 'pit', observation: '0:old-observation', pit: 'old-pit' },
-    consumer: {},
-  } as PublicFilterQueriedObservation,
+    consumer: { physicalTarget: 'subjects-g1', incarnation: 'original-uuid', consumerGeneration: 'generation',
+      projectionGeneration: 'projection', meaningDigest: 'meaning', readDefinition: 'definition' },
+  },
 };
 const locator = (digest: string): NativeSourceRepairLocator => ({
   bootstrap: request.bootstrap,
@@ -39,14 +40,14 @@ const locator = (digest: string): NativeSourceRepairLocator => ({
   step: 'native-step',
   locatorDigest: digest,
 });
-const repair = (digest: string): RetainedSourceRepair =>
-  ({
-    kind: 'foreign',
-    locator: { subject: 'subject' },
-    source: { subject: 'subject', position: 9n },
-    projection: { status: 'complete', records: [], frontier: null },
-    receipt: locator(digest),
-  }) as RetainedSourceRepair;
+const repair = (digest: string): RetainedSourceRepair => {
+  const source = { subject: 'subject', terminal: 'subject', partition: 1, epoch: 1, position: 9n,
+    revision: 1, securityRevision: 'revision', currentRelease: 'meaning' };
+  return { kind: 'foreign', locator: { subject: 'subject', slot: 'slot', candidate: digest, property: 'schema:author', dependencies: [] },
+    source, projection: { status: 'complete', source, records: [], repairLocators: [],
+      frontier: { build: 'original-build', generation: 1n, continuation: 'original-page' }, requiredHeads: [], cost },
+    receipt: locator(digest) };
+};
 const page = (repairs: readonly RetainedSourceRepair[] = []): RetainedRepairPage => ({
   sourceStep: 'native-step',
   predecessor: request.predecessor,
@@ -56,6 +57,8 @@ const page = (repairs: readonly RetainedSourceRepair[] = []): RetainedRepairPage
 });
 function port(expected: RetainedRepairPage, trace: string[] = []): PublicFilterRepairSourceBinding {
   return {
+    async resolve() { return { status: 'unavailable', reason: 'owner_unavailable', cost }; },
+    async join() { return { status: 'unavailable', reason: 'owner_unavailable', cost }; },
     async readRepairStep(input) {
       trace.push('step');
       expect(input).toEqual(request);
@@ -77,11 +80,11 @@ function port(expected: RetainedRepairPage, trace: string[] = []): PublicFilterR
         status: 'verified',
         repair: expected.repairs.find(
           (item) => item.receipt.locatorDigest === input.receipt.locatorDigest,
-        )! as PublicSourceRepair,
+        )! as unknown as PublicSourceRepair,
         cost,
       };
     },
-  } as PublicFilterRepairSourceBinding;
+  };
 }
 
 test('empty final closure requires the exact owner step and charges its actual work without an item receipt', async () => {
@@ -133,7 +136,7 @@ test('ordered original item locators and actual verified repair bodies are requi
     async readRepairReceipt() {
       return {
         status: 'verified' as const,
-        repair: { ...repair('first'), kind: 'local' } as PublicSourceRepair,
+        repair: { ...repair('first'), kind: 'local' } as unknown as PublicSourceRepair,
         cost,
       };
     },

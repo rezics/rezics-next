@@ -430,9 +430,6 @@ export async function readPublicFilterConsumerCustody(
 // settlement or retained state is cached here. Recovery must install the real owner binding again.
 const repairSources = new WeakMap<Pool, PublicFilterRepairSourceBinding>();
 const repairAllowance = new AsyncLocalStorage<CustodyCost>();
-export function configurePublicFilterRepairSource(pool: Pool, binding: PublicFilterRepairSourceBinding): void {
-  repairSources.set(pool, binding);
-}
 /** Keep all reader phases within the calling consumer's already-spent allowance. */
 export function withPublicFilterRepairAllowance<T>(spent: CustodyCost, work: () => Promise<T>): Promise<T> {
   return repairAllowance.run({ ...spent }, work);
@@ -549,7 +546,8 @@ export async function readPublicFilterRepairSettlement(
     text(input.execution);
     const binding = repairSources.get(pool);
     const url = process.env.OPENSEARCH_URL;
-    if (!url || !binding) throw new Failure('owner_unavailable');
+    if (!url || typeof binding?.readRepairStep !== 'function' || typeof binding.readRepairReceipt !== 'function')
+      throw new Failure('owner_unavailable');
     const transport = createOpenSearch(url);
     const admit = () => {
       check(context);
@@ -608,11 +606,10 @@ export async function readPublicFilterRepairSettlement(
         const raw = {
           query: (statement: string, values: unknown[] = []) => {
             admit();
-            return client.query({
-              text: statement,
-              values,
-              query_timeout: Math.max(1, context.deadline - Date.now()),
-            });
+            const request: import('pg').QueryConfig & { query_timeout: number } = {
+              text: statement, values, query_timeout: Math.max(1, context.deadline - Date.now()),
+            };
+            return client.query(request);
           },
         } as Pool;
         const db = {
@@ -917,7 +914,7 @@ export async function readPublicFilterRepairSettlement(
       )
         throw new Failure('binding_mismatch');
       const transaction = await repairTransaction.run(db);
-      if (!transaction) throw new Failure('owner_unavailable');
+      if (!transaction?.id) throw new Failure('owner_unavailable');
       const fenced: RetainedRepairSettlement = {
         ...final.state,
         fence: {
@@ -931,9 +928,9 @@ export async function readPublicFilterRepairSettlement(
       const stored = await repairFinish.run(db, {
         ...keys,
         next: encode(fenced),
-        previous: final.basis.stateRow.repair_settlement,
+        previous: final.basis.stateRow.repair_settlement!,
       });
-      if (!stored) throw new Failure('binding_mismatch');
+      if (stored.length !== 1) throw new Failure('binding_mismatch');
       admit();
       return {
         status: 'settled',
@@ -952,7 +949,8 @@ export async function readPublicFilterRepairSettlement(
 }
 
 /** No Source authority, ACK, permission or population completion is minted by this storage boundary. */
-export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
+export function createPublicFilterCustody(pool: Pool, sourceBinding?: PublicFilterRepairSourceBinding): PublicFilterCustody {
+  if (sourceBinding) repairSources.set(pool, sourceBinding);
   const pending = new Set<Promise<unknown>>();
   let closed = false;
   function run<T>(

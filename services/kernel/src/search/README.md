@@ -1573,7 +1573,7 @@ native page advancement from the original bootstrap cut, the actual final/effect
 finished retained-copy work, every actual writer receipt and
 current searchable winner, physical allocation and final locked writer/owner state before returning.
 The real Source binding is installed by the existing consumer constructor through
-`configurePublicFilterRepairSource(pool, binding)`. That weak association routes constructor configuration only;
+`createPublicFilterCustody(pool, binding)`. That weak association routes constructor configuration only;
 it stores no receipts, retained evidence or successful verification. Recovery installs the owner binding again.
 The temporary structural consumer declarations in `public-filter-custody-contract.ts` match the committed
 Source item ABI and selected step ABI until those original-module declarations arrive in this checkout.

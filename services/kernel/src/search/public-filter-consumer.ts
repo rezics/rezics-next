@@ -517,7 +517,6 @@ import {
   encodePublicFilterNativeState as encodeNative,
   decodePublicFilterNativeState as decodeNative,
   readPublicFilterRepairSettlement,
-  configurePublicFilterRepairSource,
   PublicFilterCustodyError,
   withPublicFilterRepairAllowance,
   verifyPublicFilterRepairSourcePage,
@@ -636,9 +635,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     throw new TypeError('Consumer requires an exact accepted meaning');
   const target = config.physicalTarget;
   if (!/^[a-z0-9][a-z0-9-]{0,95}$/.test(target)) throw new TypeError('Consumer requires a physical target');
-  const custody = createPublicFilterCustody(config.pool);
   const binding = config.binding;
-  configurePublicFilterRepairSource(config.pool, binding);
+  const custody = createPublicFilterCustody(config.pool, binding);
   const pending = new Set<Promise<unknown>>();
   const owned = new Map<string, PublicFilterQueriedObservation>();
   let closed = false;
@@ -1498,7 +1496,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       settlement: encodeNative(state),
       previous: previous ?? '',
     });
-    if (!saved) throw new ConsumerFailure('source_pending');
+    if (saved.length !== 1) throw new ConsumerFailure('source_pending');
     m.cost.frontierWrites++;
     return next;
   }
@@ -1706,13 +1704,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       );
       if (nativeSettlement.status !== 'settled') return m.unavailable('source_pending');
       const settled = m.take(
-        await binding.settle(
-          {
-            bootstrap: work.bootstrap.id,
-            queried: q,
-            execution: work.execution,
-          },
-          context,
+        await withPublicFilterRepairAllowance(m.cost, () =>
+          binding.settle({ bootstrap: work.bootstrap.id, queried: q, execution: work.execution! }, context),
         ),
       );
       if (settled.status !== 'joined') return m.unavailable('source_pending');
