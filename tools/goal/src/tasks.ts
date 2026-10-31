@@ -221,6 +221,19 @@ export type RetryOptions = {
   /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
   expectedAttempt?: number;
 };
+/** Registration is metadata only; the durable generation-zero intent is consumed by the normal host start. */
+export type ProofStartOptions = {
+  expectedAttempt: 0;
+  brief?: string;
+  /** Exact obsolete dependency edges explicitly approved for removal by this authenticated submission. */
+  removeAfter?: string[];
+};
+export type ProofStartRegistration = {
+  taskId: string;
+  attempt: 0;
+  status: 'created' | 'waiting' | 'pending';
+  reason?: string;
+};
 export class HeldTaskConflictError extends Error {
   constructor(readonly detail: string) {
     super(detail);
