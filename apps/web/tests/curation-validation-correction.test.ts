@@ -51,8 +51,9 @@ test('default presentation editor takes a native invalid publication to its actu
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
+  const lookupButton = (label: string) => [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label || item.getAttribute('title') === label);
   const button = (label: string) => {
-    const match = [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label || item.getAttribute('title') === label);
+    const match = lookupButton(label);
     expect(match).toBeDefined();
     return match!;
   };
@@ -79,6 +80,7 @@ test('default presentation editor takes a native invalid publication to its actu
     });
   };
   const heading = async (id: string) => {
+    await settle(() => !!lookupButton(m.curation_puck_outline()));
     await click(m.curation_puck_outline());
     await settle(() => !!host.querySelector(`[data-puck-layer-tree-id="${id}"]`));
     await act(async () => { host.querySelector(`[data-puck-layer-tree-id="${id}"] button`)!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
