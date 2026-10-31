@@ -12,6 +12,7 @@ const { searchContentSubjects } = await import('../src/threads/content-subject-s
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const originalFetch = globalThis.fetch;
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+const originalContext = Object.getOwnPropertyDescriptor(globalThis, '__rezicsStoryContext');
 const endpoint = 'https://storybook.test/api/search/suggestions';
 const calls: Request[] = [];
 const live = mock(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('live'));
@@ -40,6 +41,8 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
   if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
   else Reflect.deleteProperty(globalThis, 'window');
+  if (originalContext) Object.defineProperty(globalThis, '__rezicsStoryContext', originalContext);
+  else Reflect.deleteProperty(globalThis, '__rezicsStoryContext');
 });
 
 test('the real header and entity picker share recorded native suggestions and released type labels', async () => {
@@ -99,7 +102,11 @@ test('the BFF keeps locale order, numeric bounds, explicit identity and each sto
     expect(await response.json()).toHaveProperty('code', 'invalid_request');
   }
   await expect(
-    loadGlobalHeaderSuggestions('Prince', 'en', new AbortController().signal, { kind: 'realm', id: 'closed' }),
+    loadGlobalHeaderSuggestions('Prince', 'en', new AbortController().signal, {
+      kind: 'Realm',
+      id: 'closed',
+      name: 'Closed',
+    }),
   ).rejects.toThrow('Scoped suggestions are unavailable');
   expect(calls).toHaveLength(before);
 });
