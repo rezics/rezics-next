@@ -90,58 +90,164 @@ async function inspect(pool: Pool, workId: string): Promise<{ empty: boolean; bo
   });
 }
 
-/** SDK technical closure never retires the consumer. Only already-retired native receiving
- * custody can enter physical deletion. The durable source-transfer guard currently keeps
- * that transition closed. All original byte/row budgets and eight physical probes apply. */
+/** Source terminal custody and the native SDK writer receipt must both be durable before
+ * the receiving work can retire. Physical deletion keeps the original byte/row budgets and
+ * exact SDK probes. */
+async function prepareIdentitySDKWorkRetirement(
+  pool: Pool,
+  job: { partition_no: number; account_route: number; account_id: string },
+  custodyId: string,
+  locator: Buffer,
+  registry: HistoryRegistry,
+  barrier: HistoryBarrier,
+  context: HistoryReceivingContext,
+): Promise<string | null> {
+  historyDeadline(context, 0);
+  return withConnection(pool, async (tx) => {
+    await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+    try {
+      await tx.query("SELECT set_config('statement_timeout',$1,true)", [
+        `${Math.max(1, context.deadline - Date.now())}ms`,
+      ]);
+      historyDeadline(context, 0);
+      if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
+      const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
+      const mapping = await resolveAgentIdentitySDKWork(tx, custodyId);
+      if (!mapping || mapping.gap) {
+        await tx.query('COMMIT');
+        return mapping?.gap ?? 'identity-sdk-native-binding-unavailable';
+      }
+      await sealHistoryAccount(tx, job.partition_no, job.account_route, job.account_id);
+      const result = await tx.query('SELECT * FROM core.history_work WHERE partition_no=$1 AND work_id=$2 FOR UPDATE', [
+        job.partition_no,
+        custodyId,
+      ]);
+      const work = result.rows[0];
+      let gap: string | null = null;
+      if (!work) gap = 'work-native-custody-missing';
+      else if (work.state !== 'retired') {
+        if (!work.owner_ready) gap = 'work-owner-consumer-open';
+        const owner = registry.owner('durable-work/v1', work.owner);
+        if (!owner) gap = 'work-owner-unregistered';
+        if (!gap && owner) {
+          const associations = await tx.query(
+            `SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
+             WHERE partition_no=$1 AND artifact_type='durable-work/v1' AND locator=$2
+             ORDER BY account_route,account_id LIMIT 65`,
+            [job.partition_no, locator],
+          );
+          if (
+            associations.rows.length > 64 ||
+            associations.rows.some((ref) => ref.minimizer_version !== 1) ||
+            !associations.rows.some(
+              (ref) => ref.account_id === job.account_id && ref.account_route === job.account_route,
+            )
+          )
+            gap = 'work-role-scope-unavailable';
+          else {
+            const readiness = await owner.readiness(
+              tx,
+              {
+                partition: job.partition_no,
+                locator: decodeLocator('durable-work/v1', locator),
+                accounts: associations.rows.map((ref) => ({
+                  accountRoute: ref.account_route,
+                  accountId: ref.account_id,
+                  roles: ref.roles,
+                })),
+              },
+              barrier,
+            );
+            if (!readiness.ready) gap = readiness.gap;
+          }
+        }
+        if (!gap && job.partition_no !== 0) {
+          const destination = await tx.query(
+            'SELECT absence_verified FROM core.history_work WHERE partition_no=0 AND work_id=$1',
+            [custodyId],
+          );
+          if (!destination.rows[0]?.absence_verified) gap = 'work-destination-retirement-pending';
+        }
+        if (!gap)
+          await tx.query(
+            `UPDATE core.history_work SET state='retired',retired_at=clock_timestamp(),request=NULL,scope=NULL
+             WHERE partition_no=$1 AND work_id=$2`,
+            [job.partition_no, custodyId],
+          );
+      }
+      await tx.query('COMMIT');
+      return gap;
+    } catch (error) {
+      await tx.query('ROLLBACK');
+      throw error;
+    }
+  });
+}
+
 async function minimizeIdentitySDKWork(
   pool: Pool,
   client: WorkClient,
   job: { partition_no: number; account_route: number; account_id: string },
   custodyId: string,
   locator: Buffer,
+  registry: HistoryRegistry,
   barrier: HistoryBarrier,
   context: HistoryReceivingContext,
   maintenance?: Pick<WorkContext, 'env' | 'clock'> & { source: AgentIdentityWorkSource },
 ): Promise<string | null> {
-  const saved = await withConnection(
-    pool,
-    async (tx) =>
-      (
-        await tx.query<{
+  const readSaved = async () => {
+    historyDeadline(context, 0);
+    const saved = await withConnection(pool, async (tx) => {
+      const result = await tx.query<{
           sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null;
           state: string;
           owner_ready: boolean;
           request: unknown;
           scope: unknown;
         }>(
-          `SELECT m.sdk_retirement_receipt,w.state,w.owner_ready,w.request,w.scope
+        `SELECT m.sdk_retirement_receipt,w.state,w.owner_ready,w.request,w.scope
      FROM core.agent_identity_work m JOIN core.history_work w
        ON w.partition_no=0 AND w.work_id=m.custody_id AND w.owner='access.agent-identity'
          AND w.request_digest=m.request_digest WHERE m.custody_id=$1`,
-          [custodyId],
-        )
-      ).rows[0],
-  );
+        [custodyId],
+      );
+      return result.rows[0];
+    });
+    historyDeadline(context, 0);
+    return saved;
+  };
+  let saved = await readSaved();
+  if (
+    !saved?.sdk_retirement_receipt ||
+    !saved.owner_ready
+  ) {
+    if (!maintenance) return AGENT_IDENTITY_SDK_RETIREMENT.gap;
+    const advanced = await advanceAgentIdentityConsumerMaintenance(
+      { pool, client, env: maintenance.env, clock: maintenance.clock },
+      {
+        partition: job.partition_no,
+        locator: { artifactType: 'durable-work/v1', workId: custodyId },
+        accounts: maintenance.source.accounts,
+      },
+      barrier,
+      context,
+    );
+    if (advanced !== null) return advanced;
+    saved = await readSaved();
+  }
+  if (!saved?.sdk_retirement_receipt || !saved.owner_ready)
+    return AGENT_IDENTITY_SDK_RETIREMENT.gap;
+  const prepared = await prepareIdentitySDKWorkRetirement(pool, job, custodyId, locator, registry, barrier, context);
+  if (prepared) return prepared;
+  saved = await readSaved();
   if (
     !saved?.sdk_retirement_receipt ||
     saved.state !== 'retired' ||
     !saved.owner_ready ||
     saved.request !== null ||
     saved.scope !== null
-  ) {
-    if (maintenance)
-      return advanceAgentIdentityConsumerMaintenance(
-        { pool, client, env: maintenance.env, clock: maintenance.clock },
-        {
-          partition: job.partition_no,
-          locator: { artifactType: 'durable-work/v1', workId: custodyId },
-          accounts: maintenance.source.accounts,
-        },
-        barrier,
-        context,
-      );
+  )
     return AGENT_IDENTITY_SDK_RETIREMENT.gap;
-  }
   const receipt = saved.sdk_retirement_receipt;
   if (
     job.account_route !== barrier.accountRoute ||
@@ -226,6 +332,7 @@ export async function minimizeHistoryWork(
       job,
       key.workId,
       locator,
+      registry,
       barrier,
       { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) },
       maintenance && mapping.source ? { ...maintenance, source: mapping.source } : undefined,

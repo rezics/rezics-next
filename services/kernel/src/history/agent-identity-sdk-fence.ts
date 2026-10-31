@@ -4,6 +4,7 @@ import { DBOSClient } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
 import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
+import { settleHistoryWork } from '../work/history-enqueue.ts';
 import type { AgentIdentityWorkSource } from './agent-identity-source.ts';
 import type { AgentIdentityRetirementStage } from './agent-identity-retirement.ts';
 import { encodeLocator } from './locator.ts';
@@ -223,8 +224,8 @@ export async function readAgentIdentitySDKFence(
 }
 
 /** Source verification releases its home before receiver admission or SDK retirement.
- * The source verifier currently refuses until its owning durable terminal/undo transfer is
- * delivered. Neither the public boolean, an SDK receipt nor this entry point bypasses it. */
+ * The durable terminal/technical-source receipt must verify first. Neither the public
+ * boolean, an SDK receipt nor this entry point bypasses that source-local check. */
 export async function retireAgentIdentitySDKWork(
   pool: Pool,
   client: WorkClient,
@@ -284,8 +285,8 @@ export async function retireAgentIdentitySDKWork(
   };
   const observed = await readAgentIdentitySDKFence(pool, client, receipt, context);
   if (observed.state === 'pending') return observed;
-  // Recheck the source on a released checkout. Persistence below captures only SDK evidence;
-  // it cannot transition history_work or the source's future_writer_state to closed.
+  // Recheck the source on a released checkout. The receiving transaction below binds this
+  // durable SDK evidence to the exact owner handoff only after the source terminal fence holds.
   const currentSource = await sourceCheck();
   if (currentSource.state === 'pending') return currentSource;
   if (!same(currentSource, source)) return pending('identity-sdk-retirement-source-fence-changed');
@@ -319,6 +320,12 @@ export async function retireAgentIdentitySDKWork(
             receipt.binding.custodyId,
             receipt,
           ]);
+        await settleHistoryWork(tx, {
+          partition: 0,
+          workId: receipt.binding.custodyId,
+          digest: Buffer.from(receipt.binding.requestDigest, 'hex'),
+          owner: 'access.agent-identity',
+        });
         return noEffect(observed);
       },
     )

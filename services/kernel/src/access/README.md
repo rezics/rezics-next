@@ -704,12 +704,14 @@ the existing 64-operation, eight-event-key, 64-history-row, 64 KiB payload, 4 Ki
 Older SDK rows can be matched only to exact original arguments and remain marked as uncovered creation; missing old
 source-command associations remain pending. Recovery preserves its separate native transaction and does not mint a
 missing original SDK source intent. No status/string parsing supplies original Source or consumer authority. Consumer
-and technical Undo discharge remains exclusively Semantic's `identity-source-consumer-custody.ts`; its exhaustive
-closure producer is currently pending, so completed workflows retain bytes and `owner_ready=false`. Root, Source and
-shared-copy closure remain independent. Physical retirement resolves the genuine mapped SDK workflow ID. Mapped
-identity work now stops before cancellation/deletion because the pinned SDK has no supported permanent writer fence;
-neither an already retired native flag nor an absent SDK status bypasses this prerequisite. No foreign SDK tables
-are mutated directly.
+and technical Undo custody remains exclusively Semantic's `identity-source-consumer-custody.ts`. It walks the
+admitted scope directory, checks each Library expected-effect seal and receiving record, and commits its terminal
+receipt at the original Account source home. Requester/decider erasure can transfer the immutable technical input to
+the native Accounts receiver; subject discharge stays pending until the binding owner supplies a settled native
+reversal proof. The Library page API in this checkout still returns unavailable, so no missing scope or seal is
+treated as empty. Account root and shared-copy closure remain independent. Physical retirement resolves the genuine
+mapped SDK workflow ID and still requires the SDK's permanent writer fence. No foreign SDK tables are mutated
+directly.
 
 `history/agent-identity-retirement.ts` exports the original module's retirement staging and verification ports through
 `agent-identity-work.ts`. `readAgentIdentityRetirementStage(pool, reference, context)` checks the exact original native
@@ -718,9 +720,9 @@ in the source home, then releases that checkout before calling Semantic's exact
 `readIdentitySourceConsumerCustody`. It uses the existing undo-only source read for retirement after the account fence;
 this cannot admit a new verification. `verifyAgentIdentityRetirementStage(tx, stage)` rechecks the barrier and the
 entire source association in the SAME source transaction and invokes Semantic's native verifier there. It makes no
-foreign reads while held. Null/false Semantic evidence remains `identity-source-consumer-custody-pending`; even a
-public true result alone cannot replace a durable terminal/technical-undo transfer locator. The currently retained
-Semantic receipt grants no retirement, SDK closure, root-copy closure or Source discharge.
+foreign reads while held. Null/false Semantic evidence remains `identity-source-consumer-custody-pending`. A true
+result means the exact durable discharge/transfer was revalidated at the original source home; it is still separate
+from the SDK writer receipt, Account root and shared-copy closure.
 
 The default maintenance path is `shared-history-work.ts` → `advanceSharedHistory` → `minimizeHistoryWork` →
 `minimizeIdentitySDKWork`. For one selected current mapped identity unit requiring consumer maintenance, it calls
@@ -737,21 +739,22 @@ direct staging retains its compatible local handoff with a null consumer, withou
 funding validity, accounting and final invalidation. The final verifier runs before the same producer callback ends;
 exceptions propagate without opening another frame or resetting partial work.
 
-The original Source producer is not yet integrated in this base. The declaration-only adapter in
-`agent-identity-retirement.ts` repeats its published original module ABI exactly, including `KernelClock`; integration
-replaces these temporary declarations with original type aliases. Runtime loads only the original module/export.
-An absent module/export or its exact provisional funding refusal yields
-`identity-source-maintenance-funding-unavailable` before any Source lookup. There is no local fallback frame.
+The original Source producer is integrated in this base. The adapter in `agent-identity-retirement.ts` aliases its
+published original module ABI, including `KernelClock`; runtime loads only that original module/export. An absent
+module/export or its exact provisional funding refusal yields `identity-source-maintenance-funding-unavailable`
+before any Source lookup. There is no local fallback frame.
 The selected native association's closed key supplies the original receipt; the undo-only Accounts source read
 supplies its current tuple, digest and erased role, and the existing read-only accepted-source getter supplies its
 existing job. No fresh identity admission, source reconstruction or workflow-name parsing occurs.
 
 Funding-unavailable or still-pending consumer work keeps this one existing cursor and retries at the ordinary
 ten-second native lease cadence. Completed frontiers are not reset, unrelated ticks allocate no Source work, and
-unsupported terminal-transfer/SDK/root/copy branches retain their exact pending gaps. The original receiving,
+unavailable Library seals, SDK writer coverage, Account root and shared-copy branches retain their exact pending
+gaps. The original receiving,
 restore/writer/source generations, rollback and physical/raw/progress ceilings are unchanged. Caller wiring and
-local typing do not establish a funded Source body or native acceptance; the outcome test requires that original
-producer after integration and never substitutes a synthetic frame.
+local typing do not establish native acceptance. The producer and default History composition are present, but an
+unavailable Library page/seal or missing subject-reversal authority remains pending; the regression keeps the
+original bytes and receiving work intact when that evidence is absent.
 
 The native SDK producer publishes `WorkflowWriterFence` exactly as
 `Readonly<{ workflowID: string; generation: string; closureID: string; closedAt: number }>`, with
@@ -774,8 +777,9 @@ fence never supplies consumer, Source or Account-root cleanup authority.
 `history/agent-identity-sdk-fence.ts` defines the Kernel consumer entry point
 `retireAgentIdentitySDKWork(pool, client, stage, context)`. It first verifies the original source home and releases
 that command before entering the receiver or SDK. Retained or missing Semantic evidence stops before SDK retirement.
-Even a public true verifier result stops until Semantic supplies its durable terminal/technical-undo transfer literal
-and body. This prerequisite remains `identity-source-terminal-transfer-unavailable`; it is not an SDK API gap.
+After the durable Source terminal verifier and original SDK writer fence both pass, it records the exact SDK receipt
+and calls `settleHistoryWork` for that receiving owner. The ordinary History readiness/minimization path then clears
+the request payload and deletes only the mapped workflow after independent before/after receipt checks.
 
 The receiving binding is `access.agent-identity.sdk-retirement/v1`:
 `{ kind, custodyId, workflowId, requestDigest, source, receiver: { partition: 0, epoch, generation, writerVersion: 1 },
@@ -789,9 +793,9 @@ The exact first consumer receipt binding for Source and original-row minimizatio
 receipt, with generation exactly `"2"`. After genuine source discharge and independent receiver admission, the consumer
 calls the original retirement wrapper, rereads the native receipt and requires identical workflow ID, generation,
 closure ID and closure time. It rechecks source and receiver on released checkouts before capturing this immutable
-metadata in `core.agent_identity_work.sdk_retirement_receipt`. The capture cannot settle `history_work` or
-`agent_identity_sdk_obligation.future_writer_state`, minimize source bytes, or replace Semantic's missing durable
-transfer locator. Core's existing retirement and obligation guards remain closed until that producer is delivered.
+metadata in `core.agent_identity_work.sdk_retirement_receipt`. Only this transaction settles the exact History owner
+handoff, after the Source terminal discharge/transfer and SDK writer fence have both been rechecked. That receipt
+cannot minimize the original Account source bytes or replace the independent Account root and generated-copy proofs.
 
 `readAgentIdentitySDKFence` independently rereads the actual SDK through the original wrapper and rechecks the current
 receiving binding before and after that call. It returns only an observation. Caller fields, cached receipt shape,

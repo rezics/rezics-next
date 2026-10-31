@@ -21,7 +21,11 @@ import {
   type AgentIdentityReceipt,
   type AgentIdentityWorkSource,
 } from './agent-identity-source.ts';
-import { AGENT_IDENTITY_SDK_FENCE_CONSUMER, readAgentIdentitySDKReceivingBinding } from './agent-identity-sdk-fence.ts';
+import {
+  AGENT_IDENTITY_SDK_FENCE_CONSUMER,
+  readAgentIdentitySDKReceivingBinding,
+  type AgentIdentitySDKRetirementReceipt,
+} from './agent-identity-sdk-fence.ts';
 import { historyDeadline, lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
 import type { HistoryArtifact, HistoryBarrier, HistoryReadiness } from './registry.ts';
 import sourceSelect from './agent-identity-retirement-source.sql';
@@ -48,8 +52,8 @@ export type AgentIdentityRetirementResult =
   | Readonly<{ state: 'pending'; gap: string }>
   | Readonly<{ state: 'verified'; gap: null; custodyId: string; workflowId: string }>;
 
-/** The SDK producer supplies technical closure. Semantic durable source discharge remains
- * a separate prerequisite; no SDK receipt can authorize retirement of a live consumer. */
+/** Semantic terminal custody and the SDK writer fence are separate prerequisites to
+ * retiring the retained receiving work. */
 export const AGENT_IDENTITY_SDK_RETIREMENT = Object.freeze({
   sdkVersion: '5.4.6-preview',
   futureWriters: 'native-sdk-fence-requires-source-transfer',
@@ -101,7 +105,7 @@ export async function advanceAgentIdentityConsumerMaintenance(
   artifact: HistoryArtifact,
   barrier: HistoryBarrier,
   context: HistoryReceivingContext,
-): Promise<string> {
+): Promise<string | null> {
   historyDeadline(context, artifact.partition);
   if (artifact.partition !== 0 || artifact.locator.artifactType !== 'durable-work/v1')
     return 'identity-sdk-receiving-home-mismatch';
@@ -187,8 +191,7 @@ export async function advanceAgentIdentityConsumerMaintenance(
               return 'identity-sdk-retirement-source-fence-changed';
             const { retireAgentIdentitySDKWork } = await import('./agent-identity-sdk-fence.ts');
             const verified = await retireAgentIdentitySDKWork(deps.pool, deps.client, stage, funded);
-            // A public verifier/SDK observation cannot supply the missing terminal transfer.
-            return verified.state === 'pending' ? verified.gap : AGENT_IDENTITY_SDK_RETIREMENT.gap;
+            return verified.state === 'pending' ? verified.gap : null;
           });
         } finally {
           maintenanceCallbacks.delete(funded);
@@ -240,8 +243,8 @@ async function sourceHandoff(
 }
 
 /** Stage only on RELEASED checkouts. Semantic performs its own exact accepted-job,
- * publication and technical-undo probes; no receiver/source transaction is held during them.
- * Its currently null proof is intentionally carried as pending, retaining every byte. */
+ * publication and consumer-cut probes; no receiver/source transaction is held during them.
+ * An unavailable or incomplete native cut remains null and retains every byte. */
 export async function readAgentIdentityRetirementStage(
   pool: Pool,
   reference: IdentitySourceConsumerReference,
@@ -268,9 +271,8 @@ export async function readAgentIdentityRetirementStage(
 }
 
 /** Foreign staging cannot grant source retirement. Recheck its exact barrier, source
- * generation/restore/writer and native Semantic proof in this SAME source transaction.
- * No foreign reads occur here. A true public verifier alone still cannot supply the missing
- * durable terminal/technical-undo transfer locator or permanent SDK writer fence. */
+ * generation/restore/writer and native Semantic terminal receipt in this SAME source
+ * transaction. No foreign reads occur here. SDK writer retirement remains separate. */
 export async function verifyAgentIdentityRetirementStage(
   tx: CommandTransaction,
   stage: AgentIdentityRetirementStage,
@@ -285,24 +287,39 @@ export async function verifyAgentIdentityRetirementStage(
   const { verifyIdentitySourceConsumerCustody } = await import('../semantic/identity-source-consumer-custody.ts');
   if (!stage.consumer || !(await verifyIdentitySourceConsumerCustody(tx, stage.reference, stage.consumer)))
     return pending('identity-source-consumer-custody-pending');
-  // The owning Semantic table currently admits only immutable `retained` receipts.
-  // Neither that receipt nor the public verifier's return is a terminal transfer locator.
-  return pending('identity-source-terminal-transfer-unavailable');
+  return {
+    state: 'verified',
+    gap: null,
+    custodyId: handoff.custodyId,
+    workflowId: handoff.source.workflowId,
+  };
 }
 
-/** Receiver-local preconditions only. Never inspect a foreign source while holding this
- * transaction. Source retirement and SDK writer closure will each need durable native proof;
- * the durable source transfer is still unavailable, so owner_ready/retired stays closed. */
+/** Receiver-local preconditions only. A durable SDK receipt is recorded only after Semantic
+ * terminal custody has been verified on the original source home and the SDK writer fence
+ * has been installed. This check makes no foreign reads. */
 export async function agentIdentityRetirementReadiness(
   tx: CommandTransaction,
   artifact: HistoryArtifact,
   barrier: HistoryBarrier,
 ): Promise<HistoryReadiness> {
   const receiving = await readAgentIdentitySDKReceivingBinding(tx, artifact, barrier);
-  return {
-    ready: false,
-    gap: receiving.state === 'pending' ? receiving.gap : AGENT_IDENTITY_SDK_RETIREMENT.gap,
-  };
+  if (receiving.state === 'pending') return { ready: false, gap: receiving.gap };
+  const row = (
+    await tx.query<{ sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null }>(
+      `SELECT m.sdk_retirement_receipt FROM core.agent_identity_work m
+       JOIN core.history_work w ON w.partition_no=0 AND w.work_id=m.custody_id
+         AND w.owner='access.agent-identity' AND w.request_digest=m.request_digest
+       WHERE m.custody_id=$1 FOR SHARE OF m,w`,
+      [receiving.binding.custodyId],
+    )
+  ).rows[0];
+  const receipt = row?.sdk_retirement_receipt;
+  return receipt &&
+    receipt.sourceGeneration === receiving.binding.receiver.generation &&
+    same(receipt.binding, receiving.binding)
+    ? { ready: true }
+    : { ready: false, gap: AGENT_IDENTITY_SDK_RETIREMENT.gap };
 }
 
 /** Released SDK receiving observation for inventory presentation. It cannot be used in the
