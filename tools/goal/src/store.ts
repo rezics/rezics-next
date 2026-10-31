@@ -1212,7 +1212,8 @@ export class WorkerStore implements AttemptFence {
           previous?.outcome ?? 'superseded',
         );
         if (previous) {
-          record.taskKind = previous.taskKind;
+          if (previous.taskKind === undefined) delete record.taskKind;
+          else record.taskKind = previous.taskKind;
           record.taskClass = previous.taskClass;
           record.diffLines = previous.diffLines;
           record.changedFiles = previous.changedFiles;
