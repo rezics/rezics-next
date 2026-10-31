@@ -313,15 +313,6 @@ export async function readAccountIdentitySource(
   if (command.basis !== null || command.partition !== partitionOf(route))
     throw new TypeError('Accounts source verification requires its native platform home');
   const time = authoritativeTimeValue(command.time);
-  if (undoOnly) {
-    const technical = await readAccountIdentityTechnicalSource(tx, receipt);
-    if (technical) {
-      if (intent && normalized(intent) !== normalized(technical.input.intent))
-        throw accountIdentityUnavailable(`mismatched accepted technical source ${keyOf(receipt)}`);
-      // Technical custody never receives the new-admission capability in nativeSources.
-      return technical;
-    }
-  }
   const account = await tx.query<{ kind: 'actor' | 'organization'; state: string; authn_fenced: boolean }>(
     `SELECT kind,state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE`,
     [route, receipt.account],
@@ -334,6 +325,15 @@ export async function readAccountIdentitySource(
   )
     throw accountIdentityUnavailable(`account fenced or absent ${receipt.account}`);
   const row = (await tx.query(read.sql, [route, receipt.account, receipt.kind, receipt.receipt])).rows[0];
+  if (!row && undoOnly) {
+    const technical = await readAccountIdentityTechnicalSource(tx, receipt);
+    if (technical) {
+      if (intent && normalized(intent) !== normalized(technical.input.intent))
+        throw accountIdentityUnavailable(`mismatched accepted technical source ${keyOf(receipt)}`);
+      // Technical custody never receives the new-admission capability in nativeSources.
+      return technical;
+    }
+  }
   if (!row)
     throw accountIdentityUnavailable(
       `missing original ${keyOf(receipt)}; owner must recover native decision/pending or reversal custody`,
@@ -612,3 +612,6 @@ export async function verifyAccountIdentityTechnicalSource(
 ): Promise<boolean> {
   return verifyTechnicalSource(tx, reference, receiving);
 }
+
+export { readAccountIdentityReversalSettlement, verifyAccountIdentityReversalSettlement,
+  type AccountIdentityReversalSettlement } from './agent-verification-identity-reversal.ts';

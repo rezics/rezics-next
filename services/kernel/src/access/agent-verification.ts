@@ -1,3 +1,4 @@
+import { prepareAccountIdentityReversalSettlement, recordAccountIdentityReversalSettlement } from './agent-verification-identity-reversal.ts';
 import {
   recordAccountIdentitySource,
   probeAccountIdentityPublication,
@@ -1245,16 +1246,13 @@ export async function finishAgentVerificationReversal(
   input: AgentVerificationReversal,
   clock: () => Date,
 ): Promise<void> {
-  await probeAccountIdentityPublication(pool, {
-    kind: 'account-agent.unverify',
-    account: input.accountId,
-    receipt: input.receiptId,
-  });
+  const settlement = await prepareAccountIdentityReversalSettlement(pool, input);
   await runCommand(
     pool,
     {
       partition: partitionOf(routeOf(input.accountId)!),
       clock,
+      deadline: settlement.deadline,
       receipt: {
         actorAccountId: verificationRequester(input),
         kind: 'access.agent-verification.reversed',
@@ -1273,6 +1271,7 @@ export async function finishAgentVerificationReversal(
         }),
       );
       if (!cleared) throw new AgentVerificationConflictError();
+      await recordAccountIdentityReversalSettlement(tx, settlement);
       return {
         value: { accountId: input.accountId },
         events: [{ type: 'com.rezics.access.agent-verification.reversed.v1', subject: input.accountId, data: input }],

@@ -3937,3 +3937,72 @@ source/receiver/binding keys and actual retained locator keys, O(k log N), witho
 original History scope. Ordinary admission retains the original active source checks and cannot
 obtain a new source capability from the receiver. Original personal minimization and consumer
 closure remain independently owned.
+
+### Native Account reversal settlement
+
+`agent-verification-identity.ts` exports the original Accounts ports:
+
+```ts
+readAccountIdentityReversalSettlement(
+  pool: Pool, reference: IdentitySourceConsumerReference, context: IdentitySourceConsumerContext,
+): Promise<AccountIdentityReversalSettlement | null>;
+verifyAccountIdentityReversalSettlement(
+  tx: CommandTransaction, reference: IdentitySourceConsumerReference,
+  proof: AccountIdentityReversalSettlement,
+): Promise<boolean>;
+```
+
+`AccountIdentityReversalSettlement` is opaque. The default
+`finishAgentVerificationReversal` stages `prepareAccountIdentityReversalSettlement`, then calls
+`recordAccountIdentityReversalSettlement` in its original account-home reversed command. The Account clear,
+immutable relation, native terminal receipt and reversed event commit together. The unchanged workflow finish step
+uses this default writer. Its receipt retains the executor's original input digest and replay guard; a retry cannot
+replace the settlement or issue another event. No callback supplied by a caller can complete the writer.
+
+The writer resolves the original verification through `readAccountIdentityUndo` in undo-only form, including after
+T. It independently resolves the reversal's own accepted binding through
+`readAcceptedAccountIdentityBinding`; the unmerge's `undoJob` must equal the verification's accepted job and must
+differ from the reversal's own accepted job. Both exact jobs must be genuinely published at their native homes,
+with native control currentness and all three fixed scoped receipts reconciled by `identityEpochStore`.
+Each job/home probe releases before the Account write acquires its home. Nothing admits or mints a missing hint.
+
+The original final writer accepts both closed technical inputs into the existing
+`agent_identity_technical_source` receiver and its subject-only inventory. This is real Account undo/replay custody,
+with the existing deferred native receiving constraint and undo-only read path, rather than a fabricated terminal
+flag. The original source's personal attribution remains available until its separately authorized minimization;
+undo-only source reads prefer that original while it exists and use accepted technical custody after it clears.
+The settlement retains only original source components/digests, receipt identities, exact accepted binding
+transaction/generation/scope/source basis and job, undo generation, both receiving components and the final command
+component/key. It copies no reason, statement, requester, decider, barrier or response payload.
+
+Generation meanings are deliberately separate. `binding.generation` is the original accepted replay generation;
+`undoGeneration` is the original binding's current `consumer_undo_generation`, with its real native admission commit.
+`restoreGeneration` is `core.history_family_domain.generation`, used by the actual Account technical receivers.
+The settlement's `owner_epoch` and both original source epochs remain distinct from that domain generation. Native
+claim and undo commits, receiver incarnation and the current source owner must still agree. A new generation is
+never substituted for historical provenance. Missing legacy undo generations, missing original inventories, lost
+receivers, moved/restored owners or unavailable accepted claims refuse settlement.
+
+Read/verify bind the exact original reference, including job, source digest/component and barrier account/route,
+version/time and erased role. The existing genuine Source-retained reference at this same home supplies that
+association even after mutable Account fields or original personal attribution clear. It is association, not root
+proof. Source must retain its original reference before asking for this component. The validator re-locks both
+actual accepted bindings, native undo commits and technical receivers in the current live platform command. It
+checks the persisted original terminal command rather than inferring completion from cleared fields, historical
+event data, publication, an empty list or an in-process brand. There is no foreign checkout under this home.
+
+These are fixed indexed points: one settlement selected by either unique original receipt, one retained reference,
+and exactly two receiver/accepted-binding/native-generation sets. Read reserves 64 rows/points, 20 statements and
+64 KiB; verify reserves 64 rows/points, 15 statements and 64 KiB from the original live Source maintenance frame.
+No partition/account/history/holder enumeration or per-item network call occurs. Unfunded/expired work returns
+null/false; existing worker budgets are unchanged. Released writer staging keeps the existing five-second deadline
+and exactly two jobs, each with three native receipt probes. SQL bounds each retained binding snapshot to 8 KiB.
+
+This component transfers Account-native replay/undo input obligations. It asserts no Library discharge, Semantic
+terminal cut, generated History/SDK copy deletion, all-copy erasure or root completion. Semantic owns combining it
+with independent obligations and extending its original `lockIdentitySourceConsumerCut`/verify protocol. Those
+producers/hooks remain unchanged. The retained settlement and both technical receivers remain personal Account
+subject custody: native discovery appends a stable phase and blocks their purge as `verification-source-custody`.
+The new relation therefore cannot silently disappear from root accounting. The focused default-writer regression
+covers genuine verify/reverse, lifecycle T, exact replay, changed input/reference, owner restore and receiver loss.
+Original acceptance, native and growth execution remain deferred; workspace typing does not prove native closure.

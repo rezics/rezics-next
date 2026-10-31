@@ -78,6 +78,7 @@ export const ADDITIONAL_NATIVE_ERASURE_GROUPS = [
   ['agent_identity_technical_source', 'account_id'],
   ['agent_identity_technical_role', 'account_id'],
   ['agent_identity_technical_role', 'role_account_id'],
+  ['agent_identity_reversal_settlement', 'account_id'],
 ] as const;
 
 export type NativeStoreBlocker =
@@ -148,6 +149,13 @@ export async function nativeStoreBlocker(
     // intent alone would suppress Search's tombstone/revision invalidation.
     const row = await tx.query(`SELECT 1 FROM access.${store} WHERE route=$1 AND account_id=$2`, [...key]);
     if (row.rowCount) return 'account-discovery-consumer';
+  }
+  if (store === 'agent_identity_reversal_settlement') {
+    // A settlement transfers native inputs; it does not authorize deleting its
+    // retained Account subject or replace independent source/copy/root custody.
+    const row = await tx.query(`SELECT 1 FROM access.agent_identity_reversal_settlement
+      WHERE route=$1 AND account_id=$2 AND reversal_receipt_id=$3`, [...key]);
+    return row.rowCount ? 'verification-source-custody' : null;
   }
   if (store === 'agent_identity_technical_source' || store === 'agent_identity_technical_role') {
     // Saved pages can still name role rows physically removed by the privacy migration.
