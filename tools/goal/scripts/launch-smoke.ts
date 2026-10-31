@@ -676,7 +676,9 @@ async function runFakeSmoke(
       // Control-plane candidates do not carry the check runner. Exercise the version on dev, as the real smoke does.
       const sourceRoot = mainCheckout(root);
       // The fake-agent path uses package defaults and must not depend on operator-local account notes or pool data.
-      const sourceSettings = loadSettings({ cwd: root, localFile: join(directory, 'local.json') });
+      const localFile = join(directory, 'local.json');
+      writeFileSync(localFile, `${JSON.stringify({ version: 1, pools: [] })}\n`);
+      const sourceSettings = loadSettings({ cwd: root, localFile });
       git(directory, 'init', '--quiet');
       clone = join(directory, 'repository');
       const cloned = spawnSync('git', ['clone', '--shared', '--no-checkout', sourceRoot, clone], {
