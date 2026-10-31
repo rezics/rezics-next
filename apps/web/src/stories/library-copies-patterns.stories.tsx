@@ -96,11 +96,9 @@ export const CreateRefused: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: m.library_copy_add() }));
     const dialog = within(document.body);
     await dialog.findByRole('dialog');
-    await userEvent.type(
-      dialog.getByLabelText<HTMLInputElement>(/Edition|版本/),
-      '0192f3a0-6c1e-7b2a-9d4e-000000000021',
-    );
-    await userEvent.click(dialog.getByRole('button', { name: m.library_copy_add_submit() }));
+    await userEvent.type(dialog.getByLabelText<HTMLInputElement>(/Edition|版本/), 'Prince');
+    await userEvent.click(await dialog.findByRole('option', { name: /The Little Prince/ }));
+    await userEvent.click(await dialog.findByRole('button', { name: m.library_copy_add_submit() }));
     await expect(dialog.findByRole('alert')).resolves.toBeVisible();
   },
 };

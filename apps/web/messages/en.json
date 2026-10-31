@@ -3701,5 +3701,15 @@
   "board_directory_review_named": "Write a review of {subject} in {title}",
   "board_directory_discuss_named": "Start a discussion about {subject} in {title}",
   "catalogue_technical_details": "Technical details",
-  "catalogue_statement_id": "Statement ID"
+  "catalogue_statement_id": "Statement ID",
+  "library_copy_edition_hint": "Search title or alias word prefixes, up to 64 characters. Authors and ISBNs match only when included in that indexed text. Choose the matching edition.",
+  "library_copy_lookup_loading": "Finding editions…",
+  "library_copy_lookup_limit": "Use up to 64 characters to find an edition.",
+  "library_copy_lookup_unavailable": "Edition search is temporarily unavailable. Try again.",
+  "library_copy_lookup_forbidden": "Edition search was refused for this viewer.",
+  "library_copy_lookup_closed": "This capability is not open for this account.",
+  "library_copy_lookup_empty": "No matching editions. Try another title or alias.",
+  "library_copy_profile_loading": "Loading this edition’s copy choices…",
+  "library_copy_profile_forbidden": "This edition is not available to this viewer. Choose another result.",
+  "library_copy_profile_unavailable": "This edition’s copy choices are temporarily unavailable. Try again."
 }

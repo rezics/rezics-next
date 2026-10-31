@@ -3349,5 +3349,15 @@
   "board_directory_review_named": "Rezension zu {subject} in {title} schreiben",
   "board_directory_discuss_named": "Diskussion zu {subject} in {title} beginnen",
   "catalogue_technical_details": "Technische Details",
-  "catalogue_statement_id": "Aussagen-ID"
+  "catalogue_statement_id": "Aussagen-ID",
+  "library_copy_edition_hint": "Suche nach Wortanfängen in Titeln oder alternativen Namen, mit bis zu 64 Zeichen. Autoren und ISBNs werden nur gefunden, wenn sie in diesem indexierten Text enthalten sind. Wähle die passende Ausgabe.",
+  "library_copy_lookup_loading": "Ausgaben werden gesucht…",
+  "library_copy_lookup_limit": "Verwende bis zu 64 Zeichen, um eine Ausgabe zu finden.",
+  "library_copy_lookup_unavailable": "Die Ausgabensuche ist vorübergehend nicht verfügbar. Versuche es erneut.",
+  "library_copy_lookup_forbidden": "Die Ausgabensuche wurde für diesen Nutzer abgelehnt.",
+  "library_copy_lookup_closed": "Diese Funktion ist für dieses Konto noch nicht freigeschaltet.",
+  "library_copy_lookup_empty": "Keine passenden Ausgaben. Versuche einen anderen Titel oder alternativen Namen.",
+  "library_copy_profile_loading": "Exemplaroptionen dieser Ausgabe werden geladen…",
+  "library_copy_profile_forbidden": "Diese Ausgabe ist für diesen Nutzer nicht verfügbar. Wähle ein anderes Ergebnis.",
+  "library_copy_profile_unavailable": "Die Exemplaroptionen dieser Ausgabe sind vorübergehend nicht verfügbar. Versuche es erneut."
 }

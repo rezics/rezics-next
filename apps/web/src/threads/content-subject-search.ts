@@ -5,6 +5,12 @@ import { getLocale } from '../paraglide/runtime.js';
 import { hitYear } from '../search/results';
 import type { SuggestionResult } from '../search/suggestions';
 
+export class ContentSubjectSearchError extends Error {
+  constructor(readonly reason: 'unavailable' | 'forbidden' | 'closed') {
+    super('Suggestions unavailable');
+  }
+}
+
 /** Discussions and reviews use the same bounded, authenticated suggestion route. */
 export async function searchContentSubjects(text: string, signal: AbortSignal): Promise<EntityPickerSubject[]> {
   signal.throwIfAborted();
@@ -13,7 +19,16 @@ export async function searchContentSubjects(text: string, signal: AbortSignal): 
     `/api/search/suggestions?q=${encodeURIComponent(text)}&locale=${encodeURIComponent(locale)}`,
     { signal },
   );
-  if (!response.ok) throw new Error('Suggestions unavailable');
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { code?: unknown } | null;
+    throw new ContentSubjectSearchError(
+      response.status === 403 && body?.code === 'platform_closed'
+        ? 'closed'
+        : response.status === 401 || response.status === 403
+          ? 'forbidden'
+          : 'unavailable',
+    );
+  }
   const result = (await response.json()) as SuggestionResult;
   signal.throwIfAborted();
   return result.subjects.map((subject) => {

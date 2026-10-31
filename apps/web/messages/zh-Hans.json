@@ -3350,5 +3350,15 @@
   "board_directory_review_named": "在{title}撰写《{subject}》的评论",
   "board_directory_discuss_named": "在{title}发起关于《{subject}》的讨论",
   "catalogue_technical_details": "技术详情",
-  "catalogue_statement_id": "陈述 ID"
+  "catalogue_statement_id": "陈述 ID",
+  "library_copy_edition_hint": "输入书名或别名的词语开头，最多 64 个字符。作者和 ISBN 仅在收录于这些索引文字时才能匹配。请选择对应版本。",
+  "library_copy_lookup_loading": "正在查找版本…",
+  "library_copy_lookup_limit": "请输入最多 64 个字符来查找版本。",
+  "library_copy_lookup_unavailable": "版本搜索暂时不可用，请重试。",
+  "library_copy_lookup_forbidden": "当前用户无权搜索版本。",
+  "library_copy_lookup_closed": "此账号尚未开放此功能。",
+  "library_copy_lookup_empty": "没有匹配的版本，请尝试其他书名或别名。",
+  "library_copy_profile_loading": "正在加载此版本的藏本选项…",
+  "library_copy_profile_forbidden": "当前用户无法访问此版本，请选择其他结果。",
+  "library_copy_profile_unavailable": "此版本的藏本选项暂时不可用，请重试。"
 }

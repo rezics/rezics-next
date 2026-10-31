@@ -1,8 +1,13 @@
 import type { Release } from '../subject/definitions';
 import { libraryChoices, libraryCopyKindLabel, libraryCopyStatusLabel } from './profiles';
 import { m } from '../paraglide/messages.js';
+import type { LibrarySubject } from './reads';
 
 export type CopyProfile = { kinds: { id: string; label: string; statuses: { id: string; label: string }[] }[] };
+
+export type CopySubjectResult =
+  | { state: 'ready'; subject: LibrarySubject; profile: CopyProfile }
+  | { state: 'unsupported' | 'forbidden' | 'unavailable' | 'closed' };
 
 /** Serialize only the choices and localized labels needed by this subject, never the definitions release. */
 export function resolveCopyProfile(release: Release, type: string, locale: string): CopyProfile {

@@ -3349,5 +3349,15 @@
   "board_directory_review_named": "Rédiger un avis sur {subject} dans {title}",
   "board_directory_discuss_named": "Lancer une discussion sur {subject} dans {title}",
   "catalogue_technical_details": "Détails techniques",
-  "catalogue_statement_id": "Identifiant de l’assertion"
+  "catalogue_statement_id": "Identifiant de l’assertion",
+  "library_copy_edition_hint": "Recherchez des débuts de mots du titre ou des autres noms, jusqu’à 64 caractères. Les auteurs et ISBN ne correspondent que s’ils figurent dans ce texte indexé. Choisissez l’édition correspondante.",
+  "library_copy_lookup_loading": "Recherche d’éditions…",
+  "library_copy_lookup_limit": "Utilisez jusqu’à 64 caractères pour trouver une édition.",
+  "library_copy_lookup_unavailable": "La recherche d’éditions est temporairement indisponible. Réessayez.",
+  "library_copy_lookup_forbidden": "La recherche d’éditions a été refusée pour cet utilisateur.",
+  "library_copy_lookup_closed": "Cette fonctionnalité n’est pas encore ouverte à ce compte.",
+  "library_copy_lookup_empty": "Aucune édition correspondante. Essayez un autre titre ou nom.",
+  "library_copy_profile_loading": "Chargement des options d’exemplaire de cette édition…",
+  "library_copy_profile_forbidden": "Cette édition n’est pas accessible à cet utilisateur. Choisissez un autre résultat.",
+  "library_copy_profile_unavailable": "Les options d’exemplaire de cette édition sont temporairement indisponibles. Réessayez."
 }

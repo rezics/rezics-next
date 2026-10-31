@@ -3349,5 +3349,15 @@
   "board_directory_review_named": "在{title}撰寫《{subject}》的評論",
   "board_directory_discuss_named": "在{title}發起關於《{subject}》的討論",
   "catalogue_technical_details": "技術詳情",
-  "catalogue_statement_id": "陳述 ID"
+  "catalogue_statement_id": "陳述 ID",
+  "library_copy_edition_hint": "輸入書名或別名的詞語開頭，最多 64 個字元。作者和 ISBN 僅在收錄於這些索引文字時才能匹配。請選擇對應版本。",
+  "library_copy_lookup_loading": "正在尋找版本…",
+  "library_copy_lookup_limit": "請輸入最多 64 個字元來尋找版本。",
+  "library_copy_lookup_unavailable": "版本搜尋暫時無法使用，請再試一次。",
+  "library_copy_lookup_forbidden": "目前使用者無權搜尋版本。",
+  "library_copy_lookup_closed": "此帳號尚未開放這項功能。",
+  "library_copy_lookup_empty": "沒有符合的版本，請嘗試其他書名或別名。",
+  "library_copy_profile_loading": "正在載入此版本的藏本選項…",
+  "library_copy_profile_forbidden": "目前使用者無法存取此版本，請選擇其他結果。",
+  "library_copy_profile_unavailable": "此版本的藏本選項暫時無法使用，請再試一次。"
 }

@@ -3349,5 +3349,15 @@
   "board_directory_review_named": "Escribir una reseña de {subject} en {title}",
   "board_directory_discuss_named": "Iniciar un debate sobre {subject} en {title}",
   "catalogue_technical_details": "Detalles técnicos",
-  "catalogue_statement_id": "ID de la afirmación"
+  "catalogue_statement_id": "ID de la afirmación",
+  "library_copy_edition_hint": "Busca por el comienzo de las palabras del título o sus alias, con un máximo de 64 caracteres. Los autores y los ISBN solo coinciden si aparecen en ese texto indexado. Elige la edición correspondiente.",
+  "library_copy_lookup_loading": "Buscando ediciones…",
+  "library_copy_lookup_limit": "Usa hasta 64 caracteres para encontrar una edición.",
+  "library_copy_lookup_unavailable": "La búsqueda de ediciones no está disponible temporalmente. Inténtalo de nuevo.",
+  "library_copy_lookup_forbidden": "Se ha denegado la búsqueda de ediciones a este usuario.",
+  "library_copy_lookup_closed": "Esta función aún no está habilitada para esta cuenta.",
+  "library_copy_lookup_empty": "No hay ediciones coincidentes. Prueba otro título o alias.",
+  "library_copy_profile_loading": "Cargando las opciones de ejemplar de esta edición…",
+  "library_copy_profile_forbidden": "Esta edición no está disponible para este usuario. Elige otro resultado.",
+  "library_copy_profile_unavailable": "Las opciones de ejemplar de esta edición no están disponibles temporalmente. Inténtalo de nuevo."
 }

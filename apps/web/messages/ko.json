@@ -3349,5 +3349,15 @@
   "board_directory_review_named": "{title}에서 {subject} 리뷰 작성",
   "board_directory_discuss_named": "{title}에서 {subject}에 관한 토론 시작",
   "catalogue_technical_details": "기술 세부 정보",
-  "catalogue_statement_id": "명제 ID"
+  "catalogue_statement_id": "명제 ID",
+  "library_copy_edition_hint": "제목이나 별칭의 단어 시작 부분으로 검색하세요(최대 64자). 저자와 ISBN은 해당 색인 텍스트에 포함된 경우에만 검색됩니다. 일치하는 판본을 선택하세요.",
+  "library_copy_lookup_loading": "판본 검색 중…",
+  "library_copy_lookup_limit": "판본 검색어는 최대 64자까지 입력하세요.",
+  "library_copy_lookup_unavailable": "판본 검색을 일시적으로 사용할 수 없습니다. 다시 시도하세요.",
+  "library_copy_lookup_forbidden": "현재 사용자에게 판본 검색이 허용되지 않습니다.",
+  "library_copy_lookup_closed": "이 계정에는 아직 이 기능이 개방되지 않았습니다.",
+  "library_copy_lookup_empty": "일치하는 판본이 없습니다. 다른 제목이나 별칭을 입력하세요.",
+  "library_copy_profile_loading": "이 판본의 소장본 옵션을 불러오는 중…",
+  "library_copy_profile_forbidden": "현재 사용자는 이 판본에 접근할 수 없습니다. 다른 결과를 선택하세요.",
+  "library_copy_profile_unavailable": "이 판본의 소장본 옵션을 일시적으로 사용할 수 없습니다. 다시 시도하세요."
 }

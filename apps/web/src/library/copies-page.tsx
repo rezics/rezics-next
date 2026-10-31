@@ -1,4 +1,5 @@
 import type { CoverRatio } from '@rezics/ui/cover';
+import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Calendar } from '@rezics/ui/shadcn/calendar';
@@ -25,7 +26,8 @@ import { subjectHref } from '../subject/subject-href';
 import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';
 
-import type { CopyProfile } from './copies-profiles';
+import type { CopyProfile, CopySubjectResult } from './copies-profiles';
+import { CopyEditionPicker } from './copy-edition-picker';
 import { CopiesFallback } from './copies-fallback';
 import { UndoNotice } from './copies-undo';
 import type { CopyRemoved } from './copies-read';
@@ -183,14 +185,22 @@ export function CopyForm({
 }) {
   const mobile = useIsMobile();
   const lookup = useRef(0);
-  const [choices, setChoices] = useState(profile);
+  const [edition, setEdition] = useState<EntityPickerSubject | null>(null);
+  const [editionProfile, setEditionProfile] = useState<CopySubjectResult | { state: 'idle' | 'loading' }>({
+    state: 'idle',
+  });
+  const binding = useRef<Extract<CopySubjectResult, { state: 'ready' }> | null>(null);
+  const choices = subjectId
+    ? profile
+    : editionProfile.state === 'ready' && editionProfile.subject.id === edition?.id
+      ? editionProfile.profile
+      : undefined;
   const [kind, setKind] = useState(copy?.kind ?? initialKind ?? profile?.kinds[0]?.id ?? '');
   const selected = choices?.kinds.find((choice) => choice.id === kind);
   const readable = detailState !== 'forbidden';
-  const editable = copy ? readable && detailState !== 'loading' : Boolean(selected);
+  const editable = copy ? readable && detailState !== 'loading' : Boolean(selected?.statuses.length);
   const statusChoices = copy?.statusEditing?.state === 'supported' ? (copy.statusEditing.statuses ?? []) : [];
   const statusEditable = Boolean(copy && editable && statusChoices.length);
-  const [edition, setEdition] = useState(subjectId ?? '');
   const [draft, setDraft] = useState(() => ({
     ...draftOf(copy),
     status: copy?.status ?? selected?.statuses[0]?.id ?? '',
@@ -205,9 +215,48 @@ export function CopyForm({
   const change = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
+  useEffect(
+    () => () => {
+      lookup.current += 1;
+    },
+    [],
+  );
+
+  async function chooseEdition(subject: EntityPickerSubject | null) {
+    const current = ++lookup.current;
+    binding.current = null;
+    setEdition(subject);
+    setEditionProfile({ state: subject ? 'loading' : 'idle' });
+    setKind('');
+    change('status', '');
+    setFailure(null);
+    if (!subject) return;
+    try {
+      const result = await readCopySubject({ data: subject.id });
+      if (current !== lookup.current) return;
+      // A point read for a different subject cannot certify this selected edition.
+      if (result.state === 'ready' && result.subject.id !== subject.id) {
+        setEditionProfile({ state: 'unavailable' });
+        return;
+      }
+      setEditionProfile(result);
+      if (result.state === 'ready') {
+        binding.current = result;
+        const first = result.profile.kinds.find((kind) => kind.statuses.length);
+        setKind(first?.id ?? '');
+        change('status', first?.statuses[0]?.id ?? '');
+      }
+    } catch {
+      if (current === lookup.current) setEditionProfile({ state: 'unavailable' });
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || !editable) return;
+    const editionBinding = binding.current;
+    if (!copy && !subjectId && (!edition || editionBinding?.subject.id !== edition.id)) return;
+    if (!copy && !selected?.statuses.some((status) => status.id === draft.status)) return;
     setPending(true);
     setFailure(null);
     try {
@@ -261,7 +310,7 @@ export function CopyForm({
       } else {
         const result = await createCopy({
           data: {
-            subjectId: subjectId ?? edition,
+            subjectId: subjectId ?? editionBinding!.subject.id,
             idempotencyKey: addKey,
             ...(sendKind ? { kind } : {}),
             status: draft.status,
@@ -275,14 +324,25 @@ export function CopyForm({
               ? m.library_copy_conflict()
               : result.reason === 'unsupported'
                 ? m.library_copy_unsupported()
-                : m.library_copy_failure(),
+                : result.reason === 'closed'
+                  ? m.library_copy_lookup_closed()
+                  : result.reason === 'forbidden'
+                    ? m.library_copy_lookup_forbidden()
+                    : m.library_copy_failure(),
           );
           return;
         }
         onCreated({
           ...result.copy,
           kind: result.copy.kind ?? null,
-          subject: null,
+          subject:
+            editionBinding && edition
+              ? {
+                  ...editionBinding.subject,
+                  cover: edition.cover ?? editionBinding.subject.cover,
+                  typeLabel: edition.typeLabel,
+                }
+              : null,
           meaning: 'unavailable',
           statusEditing: { state: 'unavailable' },
           idempotencyKey: crypto.randomUUID(),
@@ -342,29 +402,34 @@ export function CopyForm({
     >
       <input type="hidden" name="intent" value={copy ? 'update' : 'create'} />
       <input type="hidden" name="idempotencyKey" value={copy?.idempotencyKey ?? addKey} />
-      <input type="hidden" name="subjectId" value={subjectId ?? edition} />
+      <input
+        type="hidden"
+        name="subjectId"
+        value={subjectId ?? (editionProfile.state === 'ready' ? (edition?.id ?? '') : '')}
+      />
       <input type="hidden" name="sendKind" value={String(sendKind)} />
       {!copy && !subjectId ? (
-        <TextField
-          label={m.library_copy_edition()}
-          value={subjectId ?? edition}
-          onChange={(value) => {
-            setEdition(value);
-            setChoices(undefined);
-            const current = ++lookup.current;
-            if (/^[0-9a-f-]{36}$/i.test(value))
-              void readCopySubject({ data: value })
-                .then((next) => {
-                  if (current !== lookup.current) return;
-                  setChoices(next);
-                  setKind(next.kinds[0]?.id ?? '');
-                  change('status', next.kinds[0]?.statuses[0]?.id ?? '');
-                })
-                .catch(() => {
-                  if (current === lookup.current) setFailure(m.library_copy_failure());
-                });
-          }}
-        />
+        <CopyEditionPicker value={edition} disabled={pending} onChange={(subject) => void chooseEdition(subject)} />
+      ) : null}
+      {!copy && !subjectId && editionProfile.state !== 'idle' && editionProfile.state !== 'ready' ? (
+        <div className="space-y-2">
+          <p role="status">
+            {editionProfile.state === 'loading'
+              ? m.library_copy_profile_loading()
+              : editionProfile.state === 'unsupported'
+                ? m.library_copy_unsupported()
+                : editionProfile.state === 'forbidden'
+                  ? m.library_copy_profile_forbidden()
+                  : editionProfile.state === 'closed'
+                    ? m.library_copy_lookup_closed()
+                    : m.library_copy_profile_unavailable()}
+          </p>
+          {edition && editionProfile.state === 'unavailable' ? (
+            <button type="button" className={quiet} disabled={pending} onClick={() => void chooseEdition(edition)}>
+              {m.subject_view_retry()}
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {!copy && selected ? (
         choices!.kinds.length > 1 ? (
@@ -773,7 +838,7 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
               ...current,
               {
                 ...copy,
-                subject: current.find((item) => item.subject?.id === page.subjectId)?.subject ?? null,
+                subject: copy.subject ?? current.find((item) => item.subject?.id === page.subjectId)?.subject ?? null,
                 idempotencyKey: crypto.randomUUID(),
               },
             ])

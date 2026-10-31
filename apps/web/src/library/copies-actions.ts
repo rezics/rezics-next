@@ -2,7 +2,8 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { nameSubjectTypes, readRelease } from '../subject/definitions';
-import { resolveCopyProfile } from './copies-profiles';
+import { resolveCopyProfile, type CopySubjectResult } from './copies-profiles';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import { readSessionIdentity } from '../session/state';
 import { getLocale } from '../paraglide/runtime.js';
 import { prepareSession, viewerCredential } from '../session/request';
@@ -116,13 +117,36 @@ async function readCopySubjectSummary(id: string): Promise<LibrarySubject | null
   });
 }
 
-async function resolveSubject(id: string) {
-  const subject = await readCopySubjectSummary(id);
-  if (!subject) return { kinds: [] };
-  return resolveCopyProfile(await readRelease(), subject.type, getLocale());
+async function resolveSubject(id: string): Promise<CopySubjectResult> {
+  if (!copiesSubjectId(id)) return { state: 'unavailable' };
+  try {
+    const request = getRequest();
+    const stale = await prepareSession(request, env as Partial<SessionEnv>);
+    const authorization = viewerCredential(request);
+    if (stale || !authorization) return { state: 'forbidden' };
+    const result = await kernelClient().subjects({ id }).get({ headers: { authorization } });
+    if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
+    if ([401, 403, 404].includes(result.status)) return { state: 'forbidden' };
+    if (result.error || result.data?.subject?.id !== id) return { state: 'unavailable' };
+    const raw = result.data.subject;
+    const locale = getLocale();
+    const subject = presentSubject({
+      id: raw.id,
+      type: raw.type,
+      label: raw.labels[locale] ?? raw.labels.en ?? null,
+      cover: null,
+    });
+    if (!subject) return { state: 'unavailable' };
+    const profile = resolveCopyProfile(await readRelease(), raw.type, locale);
+    return profile.kinds.some((kind) => kind.statuses.length)
+      ? { state: 'ready', subject, profile }
+      : { state: 'unsupported' };
+  } catch (error) {
+    return { state: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
+  }
 }
 
-/** Resolve a newly entered edition on the server, using its authoritative type rather than a browser hint. */
+/** Resolve the selected search result using its current authorised subject and authoritative type. */
 export const readCopySubject = createServerFn({ method: 'GET' })
   .validator((input: unknown) => (typeof input === 'string' ? input : ''))
   .handler(async ({ data }) => {
