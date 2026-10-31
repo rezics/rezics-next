@@ -929,7 +929,10 @@ test('registered READY0 recovery uses normal first start once across controllers
     const second = new WorkerStore(db);
     const tasks = new WorkerTasks(h.settings, second, (pool) => reading(pool), async (store, task, next) => {
       launches++;
-      expect(task.proofRun?.status).toBe('bound');
+      expect(task.proofRun).toMatchObject({
+        status: 'released', binding: { taskId: task.id, attempt: next.attempt },
+        observation: { status: 'terminal', passed: true },
+      });
       mkdirSync(dirname(next.logPath), { recursive: true });
       writeFileSync(next.logPath, JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ status: 'success', summary: 'Original fixture terminal evidence', blocker: null, checks: [], approaches: [] }) } }) + '\n');
       store.updateTask(next, (current) => { current.state = 'running'; });
