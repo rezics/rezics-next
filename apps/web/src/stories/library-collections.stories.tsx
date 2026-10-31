@@ -158,9 +158,7 @@ export const LongCollectionTitles: Story = {
   play: async (context) => {
     await collectionsReady(context);
     const canvas = within(context.canvasElement);
-    const title = window.matchMedia('(min-width: 1024px)').matches
-      ? m.library_more()
-      : m.library_nav_all_collections();
+    const title = window.matchMedia('(min-width: 1024px)').matches ? m.library_more() : m.library_nav_all_collections();
     await userEvent.click(canvas.getByRole('button', { name: `${title} ${m.library_nav_selector()}` }));
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     const menu = await within(document.body).findByRole(sheet ? 'dialog' : 'menu');
@@ -440,9 +438,7 @@ export const PhoneSelectorOpen: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    const title = window.matchMedia('(min-width: 1024px)').matches
-      ? m.library_more()
-      : m.library_nav_tracked_entries();
+    const title = window.matchMedia('(min-width: 1024px)').matches ? m.library_more() : m.library_nav_tracked_entries();
     await userEvent.click(await canvas.findByRole('button', { name: `${title} ${m.library_nav_selector()}` }));
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     if (sheet) {
