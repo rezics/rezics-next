@@ -36,6 +36,12 @@ function sourceRepair(repair: PublicSourceRepair | RetainedSourceRepair): Retain
     receipt: sourceReceipt(repair.receipt),
   };
 }
+function repairBody(repair: RetainedSourceRepair) {
+  // Source's original projection digest excludes execution accounting. Replaying that same
+  // retained page can cost different work; the owner's returned verification cost is charged below.
+  const { cost: _cost, ...projection } = repair.projection;
+  return { ...repair, projection };
+}
 
 /** Owner calls only: the caller must have released every local/native checkout first.
  * `charge` admits each call before I/O and charges all returned owner work before proceeding.
@@ -100,7 +106,7 @@ export async function verifyPublicFilterRepairSourcePage(
     );
     charge(verified.cost);
     if (verified.status !== 'verified') throw new PublicFilterRepairSourceError(verified.reason);
-    if (!isDeepStrictEqual(sourceRepair(verified.repair), repairs[item]))
+    if (!isDeepStrictEqual(repairBody(sourceRepair(verified.repair)), repairBody(repairs[item]!)))
       throw new PublicFilterRepairSourceError('binding_mismatch');
   }
   return {

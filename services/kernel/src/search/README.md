@@ -1582,8 +1582,10 @@ Unsupported ports and legacy intents without their original locator remain typed
 The reader stages a bounded local snapshot, commits and releases its checkout, then calls the actual Source
 `readRepairStep` and `readRepairReceipt` ports. Step verification compares the exact native successor,
 predecessor, completion/frontier and ordered original locators (at most 256). Item verification compares the
-actual owner-loaded repair body, including its original locator digest. The final owner step additionally
-proves its original complete window/chain and creation/change closure; an empty final step needs no item receipt.
+actual owner-loaded repair body, including its original locator digest. Semantic projection data must match;
+replay accounting may change, as in Source's original projection digest. The actual owner verification cost is
+charged and the retained original intent is preserved. The final owner step additionally proves its original
+complete window/chain and creation/change closure; an empty final step needs no item receipt.
 Search does not infer this from counts, a current equivalent page, callback completion or a serialized brand.
 It then opens a fresh local transaction and compares the entire staged custody/execution/work, retained
 intent/effect, physical allocation, owner epoch, writer and enrollment/fence generation basis before its actual

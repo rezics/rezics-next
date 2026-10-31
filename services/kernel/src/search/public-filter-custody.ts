@@ -510,7 +510,9 @@ export async function readPublicFilterRepairSettlement(
           query: (statement: string, values: unknown[] = []) => {
             admit();
             const request: import('pg').QueryConfig & { query_timeout: number } = {
-              text: statement, values, query_timeout: Math.max(1, context.deadline - Date.now()),
+              text: statement,
+              values,
+              query_timeout: Math.max(1, context.deadline - Date.now()),
             };
             return client.query(request);
           },
@@ -599,6 +601,9 @@ export async function readPublicFilterRepairSettlement(
         intent: string;
         page: RetainedRepairPage;
       }[] = [];
+      const copies = new Map<string, string>();
+      const latest = new Map<string, SearchRepairWriterReceipt>();
+      const effects: { page: number; item: number; receipt: string }[] = [];
       const append = async (ordinal: number, intent: string) => {
         const page = decode<RetainedRepairPage>(intent);
         if (
@@ -616,31 +621,7 @@ export async function readPublicFilterRepairSettlement(
         )
           throw new Failure('binding_mismatch');
         pages.push({ ordinal, intent, page });
-      };
-      let after = -1;
-      for (;;) {
-        admit();
-        const row = await repairPages.run(db, { ...keys, after });
-        if (!row) break;
-        if (row.ordinal <= after || row.ordinal >= state.pages) throw new Failure('binding_mismatch');
-        await append(row.ordinal, row.intent);
-        after = row.ordinal;
-      }
-      if (after !== state.pages - 1) {
-        const last = await repairPage.run(db, {
-          ...keys,
-          ordinal: state.pages - 1,
-        });
-        if (!last) throw new Failure('owner_unavailable');
-        await append(state.pages - 1, last.intent);
-      }
-      const last = pages.at(-1)!;
-      if (!last.page.complete || last.page.frontier !== null) throw new Failure('owner_unavailable');
-      const copies = new Map<string, string>();
-      const latest = new Map<string, SearchRepairWriterReceipt>();
-      const effects: { page: number; item: number; receipt: string }[] = [];
-      for (const entry of pages)
-        for (const [item, repair] of entry.page.repairs.entries()) {
+        for (const [item, repair] of page.repairs.entries()) {
           meter.candidates++;
           meter.inputKeys++;
           meter.accessPoints++;
@@ -662,16 +643,16 @@ export async function readPublicFilterRepairSettlement(
           }
           const effect = await repairEffect.run(db, {
             ...keys,
-            page: entry.ordinal,
+            page: ordinal,
             item,
           });
           if (!effect) throw new Failure('owner_unavailable');
-          effects.push({ page: entry.ordinal, item, receipt: effect.receipt });
+          effects.push({ page: ordinal, item, receipt: effect.receipt });
           const receipt = decode<SearchRepairWriterReceipt>(effect.receipt);
           const locator = encode({
             observation: q.snapshot.observation,
             execution: input.execution,
-            page: entry.ordinal,
+            page: ordinal,
             item,
           });
           if (
@@ -694,6 +675,26 @@ export async function readPublicFilterRepairSettlement(
           latest.set(receipt.subject, receipt);
           copies.delete(receipt.subject);
         }
+      };
+      let after = -1;
+      for (;;) {
+        admit();
+        const row = await repairPages.run(db, { ...keys, after });
+        if (!row) break;
+        if (row.ordinal <= after || row.ordinal >= state.pages) throw new Failure('binding_mismatch');
+        await append(row.ordinal, row.intent);
+        after = row.ordinal;
+      }
+      if (after !== state.pages - 1) {
+        const last = await repairPage.run(db, {
+          ...keys,
+          ordinal: state.pages - 1,
+        });
+        if (!last) throw new Failure('owner_unavailable');
+        await append(state.pages - 1, last.intent);
+      }
+      const last = pages.at(-1)!;
+      if (!last.page.complete || last.page.frontier !== null) throw new Failure('owner_unavailable');
       if (copies.size) throw new Failure('owner_unavailable');
       const physical = await readSearchWriterPhysicalTarget(search, q.consumer.physicalTarget);
       if (physical.incarnation !== q.consumer.incarnation) throw new Failure('binding_mismatch');
@@ -852,7 +853,10 @@ export async function readPublicFilterRepairSettlement(
 }
 
 /** No Source authority, ACK, permission or population completion is minted by this storage boundary. */
-export function createPublicFilterCustody(pool: Pool, sourceBinding?: PublicFilterRepairSourceBinding): PublicFilterCustody {
+export function createPublicFilterCustody(
+  pool: Pool,
+  sourceBinding?: PublicFilterRepairSourceBinding,
+): PublicFilterCustody {
   if (sourceBinding) repairSources.set(pool, sourceBinding);
   const pending = new Set<Promise<unknown>>();
   let closed = false;

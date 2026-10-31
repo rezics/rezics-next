@@ -181,6 +181,48 @@ test('ordered original item locators and actual verified repair bodies are requi
   ).rejects.toThrow('owner_unavailable');
 });
 
+test('original repair body survives different replay accounting while actual verification work is charged', async () => {
+  const original = repair('first');
+  const expected = page([original]);
+  const replayCost = { ...cost, inputKeys: 3, candidates: 4 };
+  const verified = {
+    ...port(expected),
+    async readRepairReceipt() {
+      return {
+        status: 'verified' as const,
+        repair: {
+          ...original,
+          projection: { ...original.projection, cost: replayCost },
+        } as unknown as PublicSourceRepair,
+        cost: replayCost,
+      };
+    },
+  };
+  const charged: PublicFilterCost[] = [];
+  expect(
+    await verifyPublicFilterRepairSourcePage(verified, request, expected, context(), (next) => {
+      if (next) charged.push(next);
+    }),
+  ).toEqual(expected);
+  expect(charged).toEqual([cost, replayCost]);
+  const changed = {
+    ...verified,
+    async readRepairReceipt() {
+      const result = await verified.readRepairReceipt();
+      return {
+        ...result,
+        repair: {
+          ...result.repair,
+          projection: { ...result.repair.projection, frontier: null },
+        } as unknown as PublicSourceRepair,
+      };
+    },
+  };
+  await expect(verifyPublicFilterRepairSourcePage(changed, request, expected, context(), () => {})).rejects.toThrow(
+    'binding_mismatch',
+  );
+});
+
 test('owner uncertainty, a replaced cut, wrong predecessor and unfinished frontier remain unavailable', async () => {
   const expected = page([repair('first')]);
   const uncertain = {
