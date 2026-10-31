@@ -248,11 +248,7 @@ async function readSnapshotAsync(
 }
 
 /** Read bounded pages of active task rows and only the scalar fields from each current attempt. */
-export function readWidthSnapshot(
-  db: Database,
-  at?: Date | number,
-  options?: SyncWidthSnapshotOptions,
-): WidthSnapshot;
+export function readWidthSnapshot(db: Database, at?: Date | number, options?: SyncWidthSnapshotOptions): WidthSnapshot;
 export function readWidthSnapshot(
   db: Database,
   at: Date | number,
@@ -323,12 +319,7 @@ export async function sweepWidthGovernor(
   for (let index = 0; index < snapshot.goals.length; index++) {
     if (index > 0 && index % 8 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     const goal = snapshot.goals[index]!;
-    if (
-      !goal.managerId ||
-      goal.managerConflict ||
-      goal.running >= WIDTH_WORKER_THRESHOLD ||
-      !hasUndispatchedWork(goal)
-    )
+    if (!goal.managerId || goal.managerConflict || goal.running >= WIDTH_WORKER_THRESHOLD || !hasUndispatchedWork(goal))
       continue;
 
     const event: ManagerEvent = {

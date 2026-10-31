@@ -3,11 +3,7 @@ import type { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { formatLifecycleMetrics } from './report.ts';
 import { openDb } from './db.ts';
-import {
-  WIDTH_BUCKET_MS,
-  sweepWidthGovernor,
-  type WidthSnapshotOptions,
-} from './width-governor.ts';
+import { WIDTH_BUCKET_MS, sweepWidthGovernor, type WidthSnapshotOptions } from './width-governor.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { emitHourlyLifecycleMetrics, lifecycleMetrics, readHourlyLifecycleMetrics } from './lifecycle-metrics.ts';
 import { processIdentity, type ProcessIdentity } from './process.ts';
@@ -202,10 +198,19 @@ test('hourly lifecycle and flow report expose live system and Codex counts with 
 
   const at = Date.UTC(2026, 9, 31, 14, 0);
   const metrics = lifecycleMetrics(f.db, at);
-  expect(metrics.width.system).toMatchObject({ running: 1, codexRunning: 1, unknownRunning: 1, unknownCodexRunning: 1 });
+  expect(metrics.width.system).toMatchObject({
+    running: 1,
+    codexRunning: 1,
+    unknownRunning: 1,
+    unknownCodexRunning: 1,
+  });
   const lines = formatLifecycleMetrics(metrics);
-  expect(lines).toContain('Actual system-wide running workers: 1 confirmed live; 1 current running attempts have unknown process identity.');
-  expect(lines).toContain('Actual Codex running workers: 1 confirmed live; 1 have unknown process identity; 0 have unknown CLI evidence.');
+  expect(lines).toContain(
+    'Actual system-wide running workers: 1 confirmed live; 1 current running attempts have unknown process identity.',
+  );
+  expect(lines).toContain(
+    'Actual Codex running workers: 1 confirmed live; 1 have unknown process identity; 0 have unknown CLI evidence.',
+  );
 
   expect(emitHourlyLifecycleMetrics(f.db, metrics, at)).toBe(true);
   const saved = readHourlyLifecycleMetrics(f.db, at);
