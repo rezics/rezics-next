@@ -113,7 +113,7 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
           <Button
             variant="outline"
             size="lg"
-            className="w-full sm:w-auto"
+            className="min-h-11 w-full sm:w-auto"
             nativeButton={false}
             render={
               <a
@@ -130,14 +130,19 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
               : m.offer_open_order()}
           </Button>
         ) : phase === 'terms-changed' ? (
-          <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => window.location.reload()}>
+          <Button
+            variant="outline"
+            size="lg"
+            className="min-h-11 w-full sm:w-auto"
+            onClick={() => window.location.reload()}
+          >
             {m.offer_review_terms()}
           </Button>
         ) : phase === 'retry' ? (
           <Button
             variant="outline"
             size="lg"
-            className="w-full disabled:opacity-100 sm:w-auto"
+            className="min-h-11 w-full disabled:opacity-100 sm:w-auto"
             disabled={!admitted || !termsKnown || session === 'unknown'}
             onClick={() => void start()}
           >
@@ -147,7 +152,7 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
           <Button
             variant={buyDisabled ? 'outline' : 'default'}
             size="lg"
-            className="w-full disabled:opacity-100 sm:w-auto"
+            className="min-h-11 w-full disabled:opacity-100 sm:w-auto"
             disabled={buyDisabled}
             onClick={() => void start()}
           >
@@ -156,7 +161,7 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
         )}
       </section>
       <details className="min-w-0 space-y-3 text-sm" onToggle={(event) => setFullTitlesOpen(event.currentTarget.open)}>
-        <summary className="w-fit cursor-pointer rounded-sm py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
+        <summary className="w-fit cursor-pointer rounded-sm py-3 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
           {m.offer_full_titles()}
         </summary>
         {fullTitlesOpen && (
