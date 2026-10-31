@@ -3144,5 +3144,16 @@
   "people_profile_initial_help": "只添加本次实际输入的事实。初始事实在创建时即被选用；后续修正是等待审核的独立提案。空值无效，不会清空字段。",
   "people_profile_add_fact": "添加{field}",
   "people_profile_remove_fact": "移除初始事实",
-  "people_profile_unsupported": "以下已发布字段需要使用其专用编辑器，此处省略："
+  "people_profile_unsupported": "以下已发布字段需要使用其专用编辑器，此处省略：",
+  "screen_title": "电影、电视与单集编辑器",
+  "screen_edit": "编辑电影、电视或单集",
+  "screen_intro": "请选择实际的电影、系列、季或单集。独立出版物应使用单独的版本或发行编辑器。署名仅属于其描述的对象。",
+  "screen_native_help": "使用提供的日期精度和准确的时长单位。单集序号描述作品，与个人观看进度无关。仅提供已发布的字段。",
+  "screen_credits": "创作者与演职人员",
+  "screen_parts": "组成部分与相关作品",
+  "screen_classification": "分类",
+  "screen_credits_parts": "修正创作者、演职人员与组成部分",
+  "screen_initial_facts": "可选的初始事实",
+  "screen_authored_after": "创建后，请通过原创文本编辑器添加自己的长篇简介，并注明语言和许可。",
+  "screen_classification_pending": "此处暂未连接分类修正功能。当前分类仍然可见。"
 }

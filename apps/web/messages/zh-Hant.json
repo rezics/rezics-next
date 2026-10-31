@@ -3143,5 +3143,16 @@
   "people_profile_initial_help": "只新增本次實際輸入的事實。初始事實在建立時即被選用；後續修正是等待審核的獨立提案。空值無效，不會清空欄位。",
   "people_profile_add_fact": "新增{field}",
   "people_profile_remove_fact": "移除初始事實",
-  "people_profile_unsupported": "以下已發布欄位需要使用其專用編輯器，此處省略："
+  "people_profile_unsupported": "以下已發布欄位需要使用其專用編輯器，此處省略：",
+  "screen_title": "電影、電視與單集編輯器",
+  "screen_edit": "編輯電影、電視或單集",
+  "screen_intro": "請選擇實際的電影、系列、季或單集。獨立出版品應使用單獨的版本或發行編輯器。署名僅屬於其描述的對象。",
+  "screen_native_help": "使用提供的日期精度和準確的片長單位。單集序號描述作品，與個人觀看進度無關。僅提供已發布的欄位。",
+  "screen_credits": "創作者與演職人員",
+  "screen_parts": "組成部分與相關作品",
+  "screen_classification": "分類",
+  "screen_credits_parts": "修正創作者、演職人員與組成部分",
+  "screen_initial_facts": "可選的初始事實",
+  "screen_authored_after": "建立後，請透過原創文字編輯器加入自己的長篇簡介，並註明語言和授權。",
+  "screen_classification_pending": "此處暫未連接分類修正功能。目前分類仍然可見。"
 }

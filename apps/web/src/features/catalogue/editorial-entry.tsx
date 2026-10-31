@@ -12,6 +12,7 @@ import { MangaProfileEntry } from './manga-profile-entry';
 import { PeopleProfileEntry } from './people-profile-entry';
 import { RecipeEditorEntry } from './recipe-editor-entry';
 import { CharacterProfileEntry } from './character-profile-entry';
+import { ScreenProfileEntry } from './screen-profile-entry';
 import { AddonProfileEntry } from './addon-profile-entry';
 import { StoryArcProfileEntry, storyArcEntry } from './story-arc-profile-entry';
 import { LiteraryProfileEntry } from './literary-profile-entry';
@@ -60,6 +61,7 @@ export function collectEditorialEntries(children: ReactNode): { entries: Catalog
       match(node, MangaProfileEntry, catalogueEntries.manga) ??
       match(node, RecipeEditorEntry, catalogueEntries.recipe) ??
       match(node, CharacterProfileEntry, catalogueEntries.character) ??
+      match(node, ScreenProfileEntry, catalogueEntries.screen) ??
       match(node, AddonProfileEntry, catalogueEntries.addon) ??
       match(node, StoryArcProfileEntry, storyArcEntry) ??
       match(node, LiteraryProfileEntry, catalogueEntries.literary) ??

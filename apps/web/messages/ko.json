@@ -3143,5 +3143,16 @@
   "people_profile_initial_help": "지금 입력하는 정보만 추가하세요. 초기 정보는 생성 시 선택되며 이후 수정은 검토를 기다리는 별도 제안입니다. 빈 값은 유효하지 않으며 필드를 지우지 않습니다.",
   "people_profile_add_fact": "{field} 추가",
   "people_profile_remove_fact": "초기 정보 제거",
-  "people_profile_unsupported": "다음 출시된 필드는 전용 편집기가 필요하므로 여기서는 생략됩니다:"
+  "people_profile_unsupported": "다음 출시된 필드는 전용 편집기가 필요하므로 여기서는 생략됩니다:",
+  "screen_title": "영화·텔레비전·에피소드 편집기",
+  "screen_edit": "영화·텔레비전·에피소드 편집",
+  "screen_intro": "실제 영화, 시리즈, 시즌 또는 에피소드를 선택하세요. 독립된 출판물은 별도의 판본·출시 편집기를 사용합니다. 크레딧은 해당 대상을 설명합니다.",
+  "screen_native_help": "제공된 날짜 정밀도와 정확한 재생 시간 단위를 사용하세요. 에피소드 순서는 작품 정보이며 개인 시청 진도와 별개입니다. 출시된 필드만 제공됩니다.",
+  "screen_credits": "제작자와 출연진",
+  "screen_parts": "구성 요소와 관련 작품",
+  "screen_classification": "분류",
+  "screen_credits_parts": "제작자·출연진·구성 요소 수정",
+  "screen_initial_facts": "선택적 초기 정보",
+  "screen_authored_after": "생성 후 원문 편집기에서 직접 쓴 긴 설명을 언어 및 라이선스와 함께 추가하세요.",
+  "screen_classification_pending": "분류 수정은 아직 연결되지 않았습니다. 현재 분류는 계속 표시됩니다."
 }

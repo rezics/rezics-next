@@ -3143,5 +3143,16 @@
   "people_profile_initial_help": "Añade solo los datos que estás introduciendo. Los datos iniciales se seleccionan al crear; las correcciones posteriores son propuestas separadas pendientes de revisión. Los valores vacíos no son válidos y nunca borran un campo.",
   "people_profile_add_fact": "Añadir {field}",
   "people_profile_remove_fact": "Quitar dato inicial",
-  "people_profile_unsupported": "Estos campos publicados requieren su editor específico y se omiten aquí:"
+  "people_profile_unsupported": "Estos campos publicados requieren su editor específico y se omiten aquí:",
+  "screen_title": "Editor de cine, televisión y episodios",
+  "screen_edit": "Editar película, serie o episodio",
+  "screen_intro": "Elige la película, serie, temporada o episodio real. Una publicación independiente corresponde al editor separado de ediciones o lanzamientos. Los créditos pertenecen al objeto que describen.",
+  "screen_native_help": "Usa la precisión de fecha ofrecida y la unidad de duración exacta. La posición del episodio describe la obra, separada del progreso personal. Solo se ofrecen campos publicados.",
+  "screen_credits": "Creadores y reparto",
+  "screen_parts": "Partes y obras relacionadas",
+  "screen_classification": "Clasificación",
+  "screen_credits_parts": "Corregir creadores, reparto y partes",
+  "screen_initial_facts": "Datos iniciales opcionales",
+  "screen_authored_after": "Después de crear, añade tu propia descripción extensa mediante el editor de texto original, con su idioma y licencia.",
+  "screen_classification_pending": "Las correcciones de clasificación aún no están conectadas aquí. Las clasificaciones actuales siguen visibles."
 }

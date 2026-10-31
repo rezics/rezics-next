@@ -48,6 +48,7 @@ export function RelationEditor({
   initial,
   onSelected,
   composition,
+  embedded = false,
 }: {
   id: string;
   locale: string;
@@ -55,6 +56,7 @@ export function RelationEditor({
   search: EntityPickerSearch;
   initial?: RelationRead;
   onSelected?: () => void | Promise<void>;
+  embedded?: boolean;
   /** A composition correction keeps every non-order qualifier and native slot key intact. */
   composition?: {
     statement: RelationDraft;
@@ -283,7 +285,9 @@ export function RelationEditor({
           <h2 className="font-sans text-2xl font-semibold">{m.relation_title({}, options)}</h2>
         ) : (
           <>
+            {!embedded && (
             <h1 className="text-2xl font-semibold">{m.relation_title({}, options)}</h1>
+            )}
           </>
         )}
         <p className="text-sm text-muted-foreground">{m.relation_intro({}, options)}</p>

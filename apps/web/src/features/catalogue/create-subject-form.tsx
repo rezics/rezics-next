@@ -15,6 +15,7 @@ import type { InitialSubject } from './create-subject';
 import type { Violation } from '@rezics/definitions/validate';
 import { RecipeEditorEntry } from './recipe-editor-entry';
 import { CharacterProfileEntry } from './character-profile-entry';
+import { ScreenProfileEntry } from './screen-profile-entry';
 import { MangaProfileEntry } from './manga-profile-entry';
 import { PeopleProfileEntry } from './people-profile-entry';
 import { AlbumProfileEntry } from './album-profile-entry';
@@ -244,6 +245,7 @@ export function CreateSubjectForm({
           {!profile && <GameProfileEntry locale={locale} />}
           {!profile && <RecipeEditorEntry locale={locale} />}
           {!profile && <CharacterProfileEntry locale={locale} />}
+          {!profile && <ScreenProfileEntry locale={locale} />}
           {!profile && <MangaProfileEntry locale={locale} />}
           {!profile && <PeopleProfileEntry locale={locale} />}
           {!profile && <AlbumProfileEntry locale={locale} />}

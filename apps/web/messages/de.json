@@ -3143,5 +3143,16 @@
   "people_profile_initial_help": "Ergänze nur Angaben, die du jetzt eingibst. Erste Angaben werden bei der Erstellung ausgewählt; spätere Korrekturen sind getrennte Vorschläge zur Prüfung. Leere Werte sind ungültig und löschen kein Feld.",
   "people_profile_add_fact": "{field} hinzufügen",
   "people_profile_remove_fact": "Erste Angabe entfernen",
-  "people_profile_unsupported": "Diese veröffentlichten Felder benötigen ihren eigenen Editor und werden hier ausgelassen:"
+  "people_profile_unsupported": "Diese veröffentlichten Felder benötigen ihren eigenen Editor und werden hier ausgelassen:",
+  "screen_title": "Editor für Film, Fernsehen und Episoden",
+  "screen_edit": "Film, Fernsehen oder Episode bearbeiten",
+  "screen_intro": "Wähle den tatsächlichen Film, die Serie, Staffel oder Episode. Eine eigenständige Veröffentlichung gehört in den separaten Ausgaben- oder Veröffentlichungseditor. Mitwirkende bleiben dem beschriebenen Objekt zugeordnet.",
+  "screen_native_help": "Verwende die angebotene Datumsgenauigkeit und die genaue Laufzeiteinheit. Die Episodenposition beschreibt das Werk und ist vom persönlichen Sehfortschritt getrennt. Nur veröffentlichte Felder werden angeboten.",
+  "screen_credits": "Urheber und Besetzung",
+  "screen_parts": "Teile und verwandte Werke",
+  "screen_classification": "Klassifikation",
+  "screen_credits_parts": "Urheber, Besetzung und Teile korrigieren",
+  "screen_initial_facts": "Optionale anfängliche Angaben",
+  "screen_authored_after": "Ergänze nach dem Erstellen eine selbst verfasste Langbeschreibung im Originaltexteditor mit Sprache und Lizenz.",
+  "screen_classification_pending": "Klassifikationskorrekturen sind hier noch nicht angebunden. Die aktuellen Klassifikationen bleiben sichtbar."
 }

@@ -3495,5 +3495,16 @@
   "people_profile_initial_help": "Add only facts you are entering now. Initial facts are selected at creation; later corrections are separate proposals awaiting review. Empty values are invalid, never a request to clear a field.",
   "people_profile_add_fact": "Add {field}",
   "people_profile_remove_fact": "Remove initial fact",
-  "people_profile_unsupported": "These released fields need their existing dedicated editor and are omitted here:"
+  "people_profile_unsupported": "These released fields need their existing dedicated editor and are omitted here:",
+  "screen_title": "Film, television and episode editor",
+  "screen_edit": "Edit film, television or episode",
+  "screen_intro": "Choose the actual film, series, season or episode. An independently identified publication belongs in the separate edition or release editor. Credits stay with the object they describe.",
+  "screen_native_help": "Use the offered date precision and exact duration unit. Episode position describes the work, separate from personal viewing progress. Only released fields are offered.",
+  "screen_credits": "Creators and cast",
+  "screen_parts": "Parts and related works",
+  "screen_classification": "Classification",
+  "screen_credits_parts": "Correct creators, cast and parts",
+  "screen_initial_facts": "Optional initial facts",
+  "screen_authored_after": "After creation, add your own long description through the original text editor, with its language and licence.",
+  "screen_classification_pending": "Classification corrections are not connected here yet. Current classifications remain visible."
 }

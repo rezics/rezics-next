@@ -86,6 +86,15 @@ export const catalogueEntries = {
     label: id ? m.album_edit({}, options(locale)) : m.album_create({}, options(locale)),
     href: id ? `${subject({ id, label: label ?? '', locale })}/album` : `/${locale}/catalogue/album`,
   }),
+  screen: ({
+    id,
+    label,
+    locale,
+  }: Locale & { id?: string | undefined; label?: string | undefined }): CatalogueEntry => ({
+    group: id ? 'edit' : 'create',
+    label: id ? m.screen_edit({}, options(locale)) : m.screen_title({}, options(locale)),
+    href: id ? `${subject({ id, label: label ?? '', locale })}/screen` : `/${locale}/catalogue/screen`,
+  }),
   publication: ({ work, locale }: Locale & { work: string }): CatalogueEntry => ({
     group: 'create',
     label: m.publication_add({}, options(locale)),

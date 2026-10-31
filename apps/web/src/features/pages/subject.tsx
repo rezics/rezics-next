@@ -8,6 +8,8 @@ import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { AuthoredFieldEntry } from '../catalogue/authored-field-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
+import { ScreenProfileEntry } from '../catalogue/screen-profile-entry';
+import { isScreenType } from '../catalogue/screen-profile';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
@@ -460,6 +462,9 @@ export function SubjectPage({
             )}
           {read.subject.type === 'schema:Recipe' && (
             <RecipeEditorEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+          )}
+          {isScreenType(read.subject.type) && (
+            <ScreenProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           )}
           {(read.subject.type === 'schema:ComicSeries' || read.subject.type === 'schema:PublicationVolume') && (
             <MangaProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />

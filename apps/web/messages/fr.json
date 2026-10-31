@@ -3143,5 +3143,16 @@
   "people_profile_initial_help": "Ajoutez uniquement les données saisies maintenant. Les données initiales sont sélectionnées à la création ; les corrections ultérieures sont des propositions distinctes à examiner. Une valeur vide est invalide et n’efface jamais un champ.",
   "people_profile_add_fact": "Ajouter {field}",
   "people_profile_remove_fact": "Retirer la donnée initiale",
-  "people_profile_unsupported": "Ces champs publiés nécessitent leur éditeur dédié et sont omis ici :"
+  "people_profile_unsupported": "Ces champs publiés nécessitent leur éditeur dédié et sont omis ici :",
+  "screen_title": "Éditeur de films, séries et épisodes",
+  "screen_edit": "Modifier un film, une série ou un épisode",
+  "screen_intro": "Choisissez le film, la série, la saison ou l’épisode réel. Une publication indépendante relève de l’éditeur distinct d’éditions ou de publications. Les crédits restent associés à l’objet décrit.",
+  "screen_native_help": "Utilisez la précision de date proposée et l’unité de durée exacte. La position d’un épisode décrit l’œuvre, séparément de votre progression personnelle. Seuls les champs publiés sont proposés.",
+  "screen_credits": "Créateurs et distribution",
+  "screen_parts": "Parties et œuvres liées",
+  "screen_classification": "Classification",
+  "screen_credits_parts": "Corriger les créateurs, la distribution et les parties",
+  "screen_initial_facts": "Informations initiales facultatives",
+  "screen_authored_after": "Après la création, ajoutez votre propre description longue dans l’éditeur de texte original, avec sa langue et sa licence.",
+  "screen_classification_pending": "Les corrections de classification ne sont pas encore connectées ici. Les classifications actuelles restent visibles."
 }

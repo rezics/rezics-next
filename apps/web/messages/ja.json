@@ -3143,5 +3143,16 @@
   "people_profile_initial_help": "今入力する情報だけを追加します。初期情報は作成時に選択され、後の修正は審査待ちの別の提案になります。空の値は無効で、項目の削除にはなりません。",
   "people_profile_add_fact": "{field}を追加",
   "people_profile_remove_fact": "初期情報を削除",
-  "people_profile_unsupported": "次の公開済み項目は専用のエディターが必要なため、ここには表示しません："
+  "people_profile_unsupported": "次の公開済み項目は専用のエディターが必要なため、ここには表示しません：",
+  "screen_title": "映画・テレビ・エピソードの編集",
+  "screen_edit": "映画・テレビ・エピソードを編集",
+  "screen_intro": "実際の映画、シリーズ、シーズン、エピソードを選んでください。独立した出版物には別の版・リリース編集画面を使います。クレジットは記載対象に属します。",
+  "screen_native_help": "表示される日付の精度と正確な時間単位を使います。エピソード番号は作品の情報であり、個人の視聴進捗とは別です。公開済みの項目のみを表示します。",
+  "screen_credits": "制作者とキャスト",
+  "screen_parts": "構成要素と関連作品",
+  "screen_classification": "分類",
+  "screen_credits_parts": "制作者・キャスト・構成要素を修正",
+  "screen_initial_facts": "任意の初期情報",
+  "screen_authored_after": "作成後、オリジナル文章の編集画面で、自分で書いた詳しい説明に言語とライセンスを指定して追加できます。",
+  "screen_classification_pending": "分類の修正はまだ接続されていません。現在の分類は引き続き表示されます。"
 }

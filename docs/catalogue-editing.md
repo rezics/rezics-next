@@ -561,3 +561,42 @@ explicit fictional examples, using the recorded emitted definitions and genuinel
 They are not native integration or visual evidence. Locale, phone390/desktop1280 viewport and light/dark theme
 use globals. The shared terms writer is bound through the existing editor. Native integration and visual
 acceptance remain separate; Web owns normal captures.
+
+## Browser flow: film, television and episode profiles
+
+`/{locale}/catalogue/screen` is the released film/series/season/episode creation journey, linked from ordinary
+catalogue creation. Existing work headers and compact view frames offer the profile in their Contribute menu at
+`/{locale}/subjects/{id}/{slug}/screen` for corrections. The private, noindex routes use the existing shell,
+session BFF and current canonical subject reader.
+The entry follows the existing contribution menu's Realm restrictions.
+
+The active emitted release decides the four available Types and their effective properties, labels, targets,
+qualifiers and units. The editor groups dates, quantities, creators/cast, parts, classifications and text. Metadata
+uses the interface locale's normal fallback with its actual language; subject term languages remain independent.
+Duration uses the released seconds unit where offered, date precision is explicit, and episode position is text,
+including specials and fractional ordinals. No season-number property or parent-season relation is invented.
+An independently identified publication belongs in the existing AnimeRelease/publication editor. Language,
+format, files and viewing progress never manufacture an edition or transfer a work's credits to it.
+
+Creation uses the common profile and multilingual initial-terms form. Only explicitly added rows enter the native
+`POST /v1/subjects` body; blank added rows are invalid until changed or explicitly removed. Subject targets use
+the existing picker, with released target admission. Optional qualifiers and citations retain their native shape.
+Initial creation facts are selected in Global. Confirmation retains the exact returned subject ID, and only an
+ordinary read of that ID supplies its reader address. Failed readback offers a read retry without another creation.
+Uncertain delivery freezes the full terms/facts command and key; definite refusals retain the draft, stale metadata
+refreshes without discarding it, and key conflicts require explicit review before a new confirmation.
+The native API validates the submitted command. An uncertain retry reaches that same native idempotency path
+without replacing its payload or key after a metadata change.
+
+Corrections compose the common multi-field editor and qualified relation editor. Unchanged fields and unedited
+languages, qualifiers and references survive; each changed scalar field has its own result and retry key. A
+submitted proposal is still awaiting review and selection, and review follows the exact returned candidate ID.
+Creators, cast roles and part relations keep their emitted slot semantics. Existing original-text/licence and
+multilingual-terms editors remain distinct companions; a `schema:name` candidate cannot replace the term map.
+The terms entry uses the shared native writer and reports its actual availability, refusal and conflict outcomes.
+Ordinary forms send no ingestion Source metadata and confer no prose, cover or other reuse rights.
+
+Original long descriptions are contributed through the existing authored-document editor after creation.
+Classification facts may be entered at creation when emitted; their current values are shown on correction,
+where the missing common classification correction control is explicit. No substitute writer or fabricated
+successful classification mutation is supplied.

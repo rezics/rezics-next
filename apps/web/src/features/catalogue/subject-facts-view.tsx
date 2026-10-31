@@ -269,6 +269,7 @@ export function SubjectFacts({
   profile,
   profileIntro,
   profileRelations,
+  embedded = false,
 }: {
   initial: EditorRead;
   locale: string;
@@ -278,6 +279,7 @@ export function SubjectFacts({
   profile?: FactsProfile | undefined;
   profileIntro?: ReactNode;
   profileRelations?: ReactNode;
+  embedded?: boolean;
 }) {
   const o = { locale: locale as never };
   const [read, setRead] = useState(initial);
@@ -341,6 +343,7 @@ export function SubjectFacts({
   const groupLabels = { text: m.facts_text({}, o), time: m.facts_dates({}, o), quantity: m.facts_quantities({}, o) };
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6" aria-busy={busy}>
+      {!embedded && (
       <header className="space-y-3">
         {profile ? (
           <h1 className="font-sans text-2xl font-semibold">{profile.title}</h1>
@@ -379,6 +382,7 @@ export function SubjectFacts({
           </>
         )}
       </header>
+      )}
       {!read.ok && <EditorFailure reason={read.reason} locale={locale} />}
       {current && (
         <>
