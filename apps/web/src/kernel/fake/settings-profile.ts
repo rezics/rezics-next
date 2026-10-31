@@ -2,6 +2,7 @@ import type { FakeRoute } from '../fake-modules.ts';
 import type { ProfileLink, ProfileValues } from '../../settings/profile-data';
 import type { EditableProfile } from '../../settings/editable-profile-source';
 import { rebaseProfile, type ProfileEditorIO } from '../../settings/profile-write';
+import { storyViewerId } from './identities';
 
 export type ProfileScenario =
   | 'normal'
@@ -58,9 +59,53 @@ export function createProfileStoryIO(scenario: ProfileScenario): ProfileEditorIO
   };
 }
 
-function storyVariant(): string {
-  const context = (globalThis as typeof globalThis & { __rezicsStoryContext?: { url?: string } }).__rezicsStoryContext;
-  return new URL(context?.url ?? '/settings', 'http://rezics.local').searchParams.get('profile') ?? '';
+const profileVariants = new Set([
+  '',
+  'self',
+  'normal',
+  'empty',
+  'organization',
+  'extended',
+  'organization-extended',
+  'pending',
+  'lost',
+  'refused',
+  'unavailable',
+  'handleless',
+  'readback',
+]);
+
+function settingsProfileVariant(): string | undefined {
+  const context = (globalThis as typeof globalThis & {
+    __rezicsStoryContext?: { visitor?: string; url?: string };
+  }).__rezicsStoryContext;
+  if (context?.visitor !== 'Signed In' || !context.url) return;
+
+  let page: URL;
+  try {
+    page = new URL(context.url, 'http://rezics.local');
+  } catch {
+    return;
+  }
+  const pathname = page.pathname.replace(/^\/[a-z]{2}(?:-[a-z0-9]{2,8})?(?=\/)/i, '');
+  if ((pathname !== '/settings' && pathname !== '/settings/') || page.searchParams.has('managedAccount')) return;
+
+  const selected = page.searchParams.getAll('profile');
+  if (selected.length > 1 || (selected.length === 1 && !selected[0])) return;
+  const variant = selected[0] ?? '';
+  if (!profileVariants.has(variant)) return;
+  return variant;
+}
+
+function selectedProfileId(request: Request, match?: RegExpExecArray | null): string | undefined {
+  if (settingsProfileVariant() === undefined) return;
+  const url = new URL(request.url);
+  if (url.search) return;
+  try {
+    return decodeURIComponent(match?.[1] ?? '') === storyViewerId ? storyViewerId : undefined;
+  } catch {
+    return;
+  }
 }
 
 const profile = (id: string, kind: 'actor' | 'organization', variant = '') => ({
@@ -115,17 +160,20 @@ function recordFor(variant: string, id: string) {
 }
 const read: NonNullable<FakeRoute['story']> = ({ request }) => {
   const url = new URL(request.url);
-  if (url.searchParams.has('agent')) return;
-  const variant = storyVariant();
+  const variant = settingsProfileVariant();
+  if (variant === undefined) return;
+  const ids = url.searchParams.getAll('ids');
+  if (url.searchParams.size !== 1 || ids.length !== 1 || ids[0] !== storyViewerId) return;
   if (variant === 'unavailable') return { status: 503, code: 'dependency_unavailable' };
-  const id = url.searchParams.get('ids') ?? (variant.includes('organization') ? 'org-story-viewer' : 'story-viewer');
-  return { status: 200, accounts: [recordFor(variant, id)], next: null };
+  return { status: 200, accounts: [recordFor(variant, storyViewerId)], next: null };
 };
 
-const readEditable: NonNullable<FakeRoute['story']> = ({ match }) => {
-  const variant = storyVariant();
+const readEditable: NonNullable<FakeRoute['story']> = ({ request, match }) => {
+  const id = selectedProfileId(request, match);
+  if (!id) return;
+  const variant = settingsProfileVariant()!;
   if (variant === 'unavailable') return { status: 503, code: 'dependency_unavailable' };
-  const current = recordFor(variant, decodeURIComponent(match?.[1] ?? ''));
+  const current = recordFor(variant, id);
   const profile: EditableProfile = {
     id: current.id,
     kind: current.kind,
@@ -162,8 +210,9 @@ export const routes: FakeRoute[] = [
     method: 'PATCH',
     path: /^\/v1\/accounts\/([^/]+)$/,
     story: async ({ request, match }) => {
-      const id = decodeURIComponent(match?.[1] ?? '');
-      const variant = storyVariant();
+      const id = selectedProfileId(request, match);
+      if (!id) return;
+      const variant = settingsProfileVariant()!;
       if (variant === 'refused') return { status: 403, code: 'forbidden' };
       const key = `${variant}:${request.headers.get('idempotency-key')}`;
       const body: unknown = await request.json();
@@ -193,6 +242,9 @@ export const routes: FakeRoute[] = [
       }
       return { status: 200, accountId: id };
     },
-    fixture: () => ({ status: 200, accountId: 'reader' }),
+    fixture: ({ request, match }) => {
+      const id = selectedProfileId(request, match);
+      return id ? { status: 200, accountId: id } : undefined;
+    },
   },
 ];
