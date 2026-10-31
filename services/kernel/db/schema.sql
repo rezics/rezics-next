@@ -94,10 +94,9 @@ END; $$;
 -- Name: agent_identity_inventory_copy_guard(); Type: FUNCTION; Schema: core; Owner: -
 --
 
--- Recovery enrolls its own physical artifacts as DATA. It never reopens or seals
--- the original writer's finite inventory or fabricates its SDK handoff.
 CREATE FUNCTION core.agent_identity_inventory_copy_guard() RETURNS trigger
-LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql
+    AS $$
 DECLARE i core.agent_identity_inventory; s access.agent_identity_intent;
  a access.agent_identity_recovery; expected bytea;
 BEGIN
@@ -1005,13 +1004,13 @@ CREATE TABLE core.agent_identity_work (
     creation_captured boolean DEFAULT false NOT NULL,
     request_digest bytea,
     sdk_retirement_receipt jsonb,
-    CONSTRAINT agent_identity_work_sdk_retirement_receipt_check CHECK (((sdk_retirement_receipt IS NULL) OR ((octet_length((sdk_retirement_receipt)::text) <= 16384) AND (jsonb_typeof(sdk_retirement_receipt) = 'object'::text) AND (jsonb_typeof((sdk_retirement_receipt -> 'fence'::text)) = 'object'::text) AND ((sdk_retirement_receipt -> 'fence'::text) ?& ARRAY['workflowID'::text, 'generation'::text, 'closureID'::text, 'closedAt'::text])))),
     CONSTRAINT agent_identity_work_accounts_check CHECK (((jsonb_array_length(accounts) >= 1) AND (jsonb_array_length(accounts) <= 64))),
     CONSTRAINT agent_identity_work_approval_check CHECK ((octet_length((approval)::text) <= 4096)),
     CONSTRAINT agent_identity_work_check CHECK (((approval IS NOT NULL) OR (source IS NOT NULL))),
     CONSTRAINT agent_identity_work_receiver_epoch_check CHECK ((receiver_epoch > 0)),
     CONSTRAINT agent_identity_work_receiver_generation_check CHECK ((receiver_generation > 0)),
     CONSTRAINT agent_identity_work_request_digest_check CHECK ((octet_length(request_digest) = 32)),
+    CONSTRAINT agent_identity_work_sdk_retirement_receipt_check CHECK (((sdk_retirement_receipt IS NULL) OR ((octet_length((sdk_retirement_receipt)::text) <= 16384) AND (jsonb_typeof(sdk_retirement_receipt) = 'object'::text) AND (jsonb_typeof((sdk_retirement_receipt -> 'fence'::text)) = 'object'::text) AND ((sdk_retirement_receipt -> 'fence'::text) ?& ARRAY['workflowID'::text, 'generation'::text, 'closureID'::text, 'closedAt'::text])))),
     CONSTRAINT agent_identity_work_source_check CHECK ((octet_length((source)::text) <= 4096)),
     CONSTRAINT agent_identity_work_source_key_check CHECK ((octet_length(source_key) <= 256)),
     CONSTRAINT agent_identity_work_workflow_id_check CHECK ((octet_length(workflow_id) <= 256)),
