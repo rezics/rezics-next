@@ -159,10 +159,6 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     const originalProposal = structuredClone(authored.calls.find((call) => call.method === 'POST'));
     expect(host.textContent).toContain(m.authored_submitted());
     expect(host.textContent).not.toContain(m.candidate_selected());
-    // An open private comparison must not turn a public-text reload into another review read.
-    await act(async () => button(m.correction_review()).click());
-    const reviewsBeforeReload = review.mock.calls.length;
-    expect(reviewsBeforeReload).toBeGreaterThan(0);
     authored.documents.delete(originalDocument.id);
     await act(async () => button(m.authored_reload_current_text()).click());
     expect(readAuthored.mock.calls.at(-1)).toEqual([authoredProperty, proposal.session]);
@@ -171,15 +167,23 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     expect(selected.textContent).toContain(m.authored_body_unavailable());
     expect(selected.textContent).not.toContain('An aviator meets a young traveller in the desert.');
     expect(selected.textContent).not.toContain('A quiet story about friendship.');
+    // An open private comparison must not turn a public-text reload into another review read.
+    await act(async () => button(m.correction_review()).click());
+    const reviewsBeforeReload = review.mock.calls.length;
+    expect(reviewsBeforeReload).toBeGreaterThan(0);
+    const comparison = await review.mock.results.at(-1)!.value;
+    if (!comparison.comparison.ok) throw new Error('Expected the independently authorized comparison');
     loseAuthoredRead = true;
     await act(async () => button(m.authored_reload_current_text()).click());
+    const failedReading = readAuthored.mock.calls.at(-1);
+    expect(failedReading).toEqual([authoredProperty, comparison.comparison.session]);
     expect(host.textContent).toContain(m.authored_submitted());
     expect(host.textContent).toContain(m.catalogue_result_read_unavailable());
     expect(host.querySelector('form')).toBeNull();
     authored.documents.set(originalDocument.id, originalDocument);
     const beforeTextRecovery = authored.calls.length;
     await act(async () => button(m.catalogue_retry_loading_result()).click());
-    expect(readAuthored.mock.calls.at(-1)).toEqual([authoredProperty, proposal.session]);
+    expect(readAuthored.mock.calls.at(-1)).toEqual(failedReading);
     expect(authored.calls.slice(beforeTextRecovery).every((call) => call.method === 'GET')).toBe(true);
     expect(authored.calls.slice(beforeTextRecovery).filter((call) => call.path.startsWith('/v1/documents/'))).toEqual([
       expect.objectContaining({ path: `/v1/documents/${originalDocument.id}`, authorization: null }),
