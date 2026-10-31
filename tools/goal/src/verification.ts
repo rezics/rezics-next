@@ -47,7 +47,7 @@ export const unavailableProofProducer = {
   }),
 };
 
-/** Native producer integration required in every captured proof source. */
+/** Required producer ancestry for optional native custody readers, independent of ordinary proof execution. */
 export const PROOF_PRODUCER_COMMIT = '4669e2280c9511a2157d683c09a25eb96f7d5c09';
 export function nativeProofBinding(binding: ProofBinding): ControllerProofBindingV1 {
   const { reservationToken, ...facts } = binding;
@@ -132,6 +132,8 @@ export function productionProofProducer(store: WorkerStore, registry: string, en
             throw new Error('Native proof publication requires its exact active SQLite reservation');
         };
         admitted();
+        const unavailable = proofExecutionUnavailable(binding.argv);
+        if (unavailable) return { status: 'unavailable', cause: unavailable };
         if (
           spawnSync('git', ['merge-base', '--is-ancestor', PROOF_PRODUCER_COMMIT, binding.sourceCommit], {
             cwd: binding.cwd,
@@ -211,10 +213,13 @@ export function parseProofMetadata(value: unknown): ProofMetadata {
 
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { isBuiltin } from 'node:module';
+import { hostname } from 'node:os';
+import { sameProcess, type ProcessIdentity } from './process.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { Brief, Task } from './types.ts';
 import type { AuthenticatedManager } from './priority-authority.ts';
 import type { WorkerStore } from './store.ts';
@@ -232,6 +237,8 @@ export type ProofReservation = {
   binding: ProofBinding;
   status: 'reserved' | 'bound' | 'unknown' | 'released';
   cause?: string;
+  /** Logical admission only; does not assert native termination or physical lease release. */
+  logicalRelease?: { reason: string; at: string };
   /** All producer observations, including physical reruns, are retained without normalization. */
   observation?: ProofObservation;
   native?: { outcome: 'started' | 'replayed'; resultPath: string; registry: string };
@@ -243,7 +250,7 @@ export type ProofObservation = {
   record: unknown;
   physical: unknown[];
 };
-export function proofFingerprint(brief: Brief): string {
+export function proofFingerprint(brief: Pick<Brief, 'goal' | 'manager' | 'kind' | 'proof' | 'acceptance'>): string {
   return createHash('sha256')
     .update(JSON.stringify([brief.goal, brief.manager, brief.kind, brief.proof, brief.acceptance]))
     .digest('hex');
@@ -251,43 +258,80 @@ export function proofFingerprint(brief: Brief): string {
 function same(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
-/** Explicit Bun test or service check files, preserving the complete raw env/cwd prefix. */
-function fileCommand(argv: string[]): { prefix: string[]; files: string[] } | undefined {
-  const first = argv.findIndex((word) => /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(word));
-  if (first < 0) return;
-  const prefix = argv.slice(0, first);
+/** Keep env and wrapper argv as provenance; never normalize an invocation for the native producer. */
+function commandOffset(argv: string[]): number {
   let index = 0;
-  if (prefix[index] === 'env') {
+  if (argv[index] === 'env') {
     index++;
-    while (index < prefix.length) {
-      if (prefix[index] === '-u' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(prefix[index + 1] ?? '')) index += 2;
-      else if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(prefix[index] ?? '')) index++;
+    while (index < argv.length) {
+      if (argv[index] === '-u' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(argv[index + 1] ?? '')) index += 2;
+      else if (/^[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9_./:-]*$/.test(argv[index] ?? '')) index++;
       else break;
     }
   }
-  const command = prefix.slice(index);
-  const bunTest =
-    command[0] === 'bun' &&
-    (command[1] === 'test' ||
-      (command[1] === '--cwd' && command[3] === 'test') ||
-      (command[1]?.startsWith('--cwd=') && command[2] === 'test'));
-  if (
-    !bunTest &&
-    !same(command, ['bun', 'run', '--cwd', 'services/kernel', 'check']) &&
-    !same(command, ['bun', 'run', '--cwd', 'services/auth', 'check'])
-  )
-    return;
-  const files = argv.slice(first);
-  if (!files.every((word) => /^[A-Za-z0-9_./-]+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(word))) return;
-  return { prefix: argv.slice(0, first), files };
+  return index;
 }
+function wholeWorkspaceCommand(argv: string[]): boolean {
+  const command = argv.slice(commandOffset(argv));
+  return ['services/kernel', 'services/auth'].some((cwd) => same(command, ['bun', 'run', '--cwd', cwd, 'check']));
+}
+const explicitFile = /^[A-Za-z0-9_./-]+\.[cm]?[jt]sx?$/;
+/** Explicit service helpers and tests form one ordered file list, starting at the FIRST input. */
+function fileCommand(argv: string[]): { prefix: string[]; files: string[] } | undefined {
+  const offset = commandOffset(argv);
+  let index = offset;
+  // This exact retained prefix can be registered, but the delivered native port cannot execute it safely.
+  if (same(argv.slice(index, index + 6), ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test']))
+    index += 6;
+  else if (
+    ['services/kernel', 'services/auth'].some((cwd) =>
+      same(argv.slice(index, index + 5), ['bun', 'run', '--cwd', cwd, 'check']),
+    )
+  )
+    index += 5;
+  else {
+    if (argv[index++] !== 'bun') return;
+    if (argv[index] === '--cwd' && argv[index + 1]) index += 2;
+    else if (argv[index]?.startsWith('--cwd=')) index++;
+    if (argv[index++] !== 'test') return;
+    // Supported Bun test options remain part of the identical raw prefix, including their values.
+    while (argv[index] === '--timeout' && /^\d+$/.test(argv[index + 1] ?? '')) index += 2;
+  }
+  const files = argv.slice(index);
+  if (!files.length || !files.every((word) => explicitFile.test(word))) return;
+  if (!files.some((word) => /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(word))) return;
+  return { prefix: argv.slice(0, index), files };
+}
+/** The 50a producer treats this argv as a child command and would mint a nested, second logical check. */
+export function proofExecutionUnavailable(argv: string[]): string | undefined {
+  if (argv.some((word) => /(?:^|\/)worker-check\.[cm]?[jt]s$/.test(word)))
+    return 'Native producer port required: startControllerWorkerCheck must bind the exact original bun scripts/worker-check.ts --local -- bun test argv to ONE logical invocation without stripping its wrapper or starting a second check';
+}
+export class ProofUnavailableError extends Error {}
 export function originalCommandMatches(command: string[], originals: string[][]): boolean {
+  if (!originals.length) return false;
   if (originals.every((argv) => same(argv, command))) return true;
   const parts = originals.map(fileCommand);
   if (parts.some((part) => !part)) return false;
   const prefix = parts[0]!.prefix;
   if (!parts.every((part) => same(part!.prefix, prefix))) return false;
   return same(command, [...prefix, ...new Set(parts.flatMap((part) => part!.files))]);
+}
+/** Shared authentication for proof registration and logical-only release. */
+export function authenticateProofManager(
+  store: WorkerStore,
+  manager: string,
+  actor: AuthenticatedManager | null | undefined,
+  operations?: string,
+): asserts actor is AuthenticatedManager {
+  if (!actor || ![manager, operations].includes(actor.id))
+    throw new Error('proof registration requires the authenticated owning or operations manager');
+  const session = store.db.query('SELECT state FROM manager_sessions WHERE id=?').get(actor.id) as {
+    state: string;
+  } | null;
+  const state: unknown = session ? JSON.parse(session.state) : null;
+  if (!isObject(state) || state.status !== 'running' || state.threadId !== actor.sessionId)
+    throw new Error('proof registration requires a live authenticated manager session');
 }
 export function authorizeProof(
   store: WorkerStore,
@@ -299,14 +343,7 @@ export function authorizeProof(
 ): ProofAuthorization {
   if (brief.kind !== 'verification' || !brief.proof || brief.criticalPath)
     throw new Error('invalid verification registration');
-  if (!actor || ![brief.manager, operations].includes(actor.id))
-    throw new Error('proof registration requires the authenticated owning or operations manager');
-  const session = store.db.query('SELECT state FROM manager_sessions WHERE id=?').get(actor.id) as {
-    state: string;
-  } | null;
-  const state: unknown = session ? JSON.parse(session.state) : null;
-  if (!isObject(state) || state.status !== 'running' || state.threadId !== actor.sessionId)
-    throw new Error('proof registration requires a live authenticated manager session');
+  authenticateProofManager(store, brief.manager, actor, operations);
   const proof = parseProofMetadata(brief.proof);
   if (!originalCommandHasInputs(brief.acceptance.command))
     throw new Error('proof cannot register a broad root or gate campaign');
@@ -391,6 +428,70 @@ export function proofProtocolAuthorized(brief: Partial<Brief>, run?: ProofReserv
       brief.proof.sourceCommit === run.binding.sourceCommit &&
       same(brief.acceptance?.command, run.binding.argv),
     )
+  );
+}
+/** A saved authorization, never a kind label alone, grants ordinary original-command execution. */
+export function registeredProof(brief: Partial<Brief>, authorization?: ProofAuthorization): boolean {
+  return Boolean(
+    brief.kind === 'verification' &&
+    brief.proof &&
+    brief.goal &&
+    brief.manager &&
+    brief.acceptance &&
+    authorization?.fingerprint ===
+      proofFingerprint({
+        goal: brief.goal,
+        manager: brief.manager,
+        kind: brief.kind,
+        proof: brief.proof,
+        acceptance: brief.acceptance,
+      }),
+  );
+}
+/** Preserve the original wrapped invocation; compare its recorded child without executing another wrapper. */
+export function ordinaryProofCommand(argv: string[]): { invocation: string[]; recordedArgv: string[] } {
+  if (!originalCommandHasInputs(argv))
+    throw new Error('proof cannot execute a broad root, gate or nested wrapper campaign');
+  const offset = commandOffset(argv);
+  const wrapped = same(argv.slice(offset, offset + 4), ['bun', 'scripts/worker-check.ts', '--local', '--']);
+  return {
+    invocation: wrapped ? [...argv] : ['bun', 'scripts/worker-check.ts', '--', ...argv],
+    recordedArgv: wrapped ? argv.slice(offset + 4) : [...argv],
+  };
+}
+/** Ordinary wrapper facts authorize a result; native token/custody/cleanup are optional evidence only. */
+export function observeOrdinaryProof(task: Task, checkId: string, record: unknown): ProofObservation {
+  const result = (status: ProofObservation['status'], passed: boolean, cause: string): ProofObservation => ({
+    status,
+    passed,
+    cause,
+    record,
+    physical: [],
+  });
+  if (!registeredProof(task.brief, task.proofAuthorization))
+    return result('unknown', false, 'Authenticated original proof registration unavailable');
+  if (
+    !nativeCheckId.test(checkId) ||
+    !isObject(record) ||
+    record.id !== checkId ||
+    record.cwd !== task.worktree ||
+    !same(record.argv, ordinaryProofCommand(task.brief.acceptance.command).recordedArgv) ||
+    !isObject(record.ownership) ||
+    record.ownership.taskId !== task.id ||
+    record.ownership.attempt !== task.currentAttempt
+  )
+    return result(
+      'unknown',
+      false,
+      'Ordinary proof result does not match this current owner, cwd and exact original argv',
+    );
+  if (record.status === 'running') return result('running', false, `Original check ${checkId} is running`);
+  if (record.status !== 'finished' || typeof record.exitCode !== 'number' || !Number.isInteger(record.exitCode))
+    return result('unknown', false, 'Original wrapper terminal exit status unavailable');
+  return result(
+    'terminal',
+    record.exitCode === 0,
+    `Original check ${checkId}: exit ${record.exitCode}; ${String(record.failureSummary ?? record.infrastructureFailureFinal ?? '')}; log ${String(record.log ?? 'unavailable')}`,
   );
 }
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -601,26 +702,315 @@ export async function readReservationObservation(
     return unknown(error);
   }
 }
-export async function readProofObservation(task: Task): Promise<ProofObservation> {
-  if (task.proofRun?.status === 'released' && task.proofRun.observation) return task.proofRun.observation;
-  if (!task.proofRun || task.proofRun.status !== 'bound')
-    return {
-      status: 'unknown',
-      passed: false,
-      cause: 'proof producer binding unavailable',
-      record: null,
-      physical: [],
-    };
-  return readReservationObservation(task.proofRun);
+export async function readProofObservation(task: Task, checkIds?: string[]): Promise<ProofObservation> {
+  const unknown = (cause: string, record: unknown = null): ProofObservation => ({
+    status: 'unknown',
+    passed: false,
+    cause,
+    record,
+    physical: [],
+  });
+  const directory = join(task.worktree, '.temp/goal/checks/results');
+  try {
+    if (checkIds?.length && (checkIds.length !== 1 || !nativeCheckId.test(checkIds[0]!)))
+      return unknown('Proof waiting requires one bare wrapper UUID');
+    const ids = readdirSync(directory)
+      .filter((name) => name.endsWith('.json') && nativeCheckId.test(name.slice(0, -5)))
+      .map((name) => name.slice(0, -5));
+    const owned: { id: string; record: unknown }[] = [];
+    for (const id of ids) {
+      let record: unknown;
+      try {
+        record = JSON.parse(readFileSync(join(directory, `${id}.json`), 'utf8'));
+      } catch (error) {
+        if (checkIds?.includes(id)) return unknown(`Original wrapper result unreadable: ${String(error)}`);
+        continue; // An unrelated historical result is not this current invocation's evidence.
+      }
+      if (
+        (isObject(record) &&
+          isObject(record.ownership) &&
+          record.ownership.taskId === task.id &&
+          record.ownership.attempt === task.currentAttempt) ||
+        checkIds?.includes(id)
+      )
+        owned.push({ id, record });
+    }
+    if (checkIds?.length && !owned.some(({ id }) => id === checkIds[0]))
+      return unknown(`Original wrapper result missing for ${checkIds[0]}`);
+    if (owned.length !== 1) return unknown('Expected exactly one ordinary original invocation for this attempt', owned);
+    return observeOrdinaryProof(task, owned[0]!.id, owned[0]!.record);
+  } catch (error) {
+    return unknown(`Original wrapper result unavailable: ${String(error)}`);
+  }
 }
 
 export type HistoricalProofCheck = { taskId: string; attempt: number; checkId: string; cwd: string };
+export const nativeCheckId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Only the logical cap classification changes. This observation never releases physical resources or proves a pass. */
+export type HistoricalProofAdmission = {
+  classification: 'live' | 'historical-unknown';
+  cause: string;
+  record: unknown;
+  physical: unknown[];
+  registrations: unknown[];
+  processes: { identity: ProcessIdentity; host: string; live: boolean | null }[];
+};
+export interface HistoricalProofReader extends Pick<ProofReader, 'record' | 'history'> {
+  registrations(check: HistoricalProofCheck): unknown[];
+  /** Uses native v1 ownership/runner/result-path validation, without retrofitting controllerProof. */
+  valid(check: HistoricalProofCheck, registration: unknown): boolean;
+}
+function runnerIdentity(value: unknown): ProcessIdentity | undefined {
+  if (
+    !isObject(value) ||
+    !Number.isSafeInteger(value.pid) ||
+    Number(value.pid) < 1 ||
+    typeof value.start !== 'string' ||
+    !/^\d+$/.test(value.start) ||
+    typeof value.boot !== 'string' ||
+    !nativeCheckId.test(value.boot) ||
+    !Number.isSafeInteger(value.group) ||
+    Number(value.group) < 1
+  )
+    return;
+  return { pid: Number(value.pid), start: value.start, boot: value.boot, group: Number(value.group) };
+}
+/** Pure receiving classification; missing results/identities remain unknown, never terminal or physically cleaned. */
+export function classifyHistoricalProof(
+  check: HistoricalProofCheck,
+  reader: HistoricalProofReader,
+): HistoricalProofAdmission {
+  const evidence: HistoricalProofAdmission = {
+    classification: 'historical-unknown',
+    cause: 'Historical process identity/custody unavailable; physical resources unresolved',
+    record: null,
+    physical: [],
+    registrations: [],
+    processes: [],
+  };
+  const errors: string[] = [];
+  const owned = (value: unknown) =>
+    isObject(value) &&
+    isObject(value.ownership) &&
+    value.ownership.taskId === check.taskId &&
+    value.ownership.attempt === check.attempt;
+  const inspect = (value: unknown) => {
+    if (!isObject(value) || !owned(value)) return;
+    const identity = runnerIdentity(value.runnerIdentity);
+    if (!identity || typeof value.runnerHost !== 'string') return;
+    const live = value.runnerHost === hostname() ? sameProcess(identity) : null;
+    evidence.processes.push({ identity, host: value.runnerHost, live });
+    if (live) evidence.classification = 'live';
+  };
+  try {
+    evidence.record = reader.record(check.checkId, check.cwd);
+  } catch (error) {
+    errors.push(String(error));
+  }
+  try {
+    evidence.registrations = reader.registrations(check);
+  } catch (error) {
+    errors.push(String(error));
+  }
+  const ids = new Set<string>();
+  const record = evidence.record;
+  if (
+    isObject(record) &&
+    record.custodyVersion === 1 &&
+    record.id === check.checkId &&
+    record.cwd === check.cwd &&
+    owned(record)
+  ) {
+    inspect(record);
+    for (const id of [record.physicalRunId, record.waitForPhysicalRunId])
+      if (typeof id === 'string' && nativeCheckId.test(id)) ids.add(id);
+  }
+  for (const registration of evidence.registrations) {
+    try {
+      if (!reader.valid(check, registration)) continue;
+      inspect(registration);
+      if (isObject(registration) && typeof registration.physicalRunId === 'string') ids.add(registration.physicalRunId);
+    } catch (error) {
+      errors.push(String(error));
+    }
+  }
+  for (const id of ids) {
+    try {
+      const run = reader.history(check.checkId, id, check.cwd);
+      evidence.physical.push(run ?? null);
+      if (
+        isObject(run) &&
+        run.version === 1 &&
+        run.id === check.checkId &&
+        run.cwd === check.cwd &&
+        run.physicalRunId === id
+      )
+        inspect(run);
+    } catch (error) {
+      errors.push(String(error));
+    }
+  }
+  evidence.cause =
+    evidence.classification === 'live'
+      ? `Live historical check ${check.checkId} (${check.taskId}/${check.attempt}) occupies one logical proof slot`
+      : evidence.processes.some((entry) => entry.live === false)
+        ? 'Retained historical runner identity is gone; result/physical cleanup remains unknown'
+        : 'Historical process identity/custody unavailable; physical resources unresolved';
+  if (errors.length) evidence.cause += `; ${errors.join('; ')}`;
+  return evidence;
+}
+export type HistoricalProofReaderSource = {
+  root: string;
+  integrationRoot: string;
+  integrationBranch: string;
+};
+const importedHistoricalSources = new Map<string, string>();
+/** Validate code against the controller's Git objects before importing any part of the native module closure. */
+export function validateHistoricalProofReaderSource(source: HistoricalProofReaderSource): string {
+  const { root, integrationRoot, integrationBranch } = source;
+  if (!isAbsolute(root) || realpathSync(root) !== root || git(root, ['rev-parse', '--show-toplevel']) !== root)
+    throw new Error('Historical reader root must be a canonical Git checkout root');
+  const commit = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
+  for (const [ancestor, descendant] of [
+    [PROOF_PRODUCER_COMMIT, commit],
+    [commit, `refs/heads/${integrationBranch}`],
+  ]) {
+    if (
+      spawnSync('git', ['merge-base', '--is-ancestor', ancestor!, descendant!], {
+        cwd: integrationRoot,
+        stdio: 'ignore',
+      }).status !== 0
+    )
+      throw new Error(
+        'Historical reader source must contain the delivered producer and be a captured integration ancestor',
+      );
+  }
+  if (git(root, ['status', '--porcelain', '--untracked-files=no']))
+    throw new Error('Historical reader source must be Git-clean');
+  if (importedHistoricalSources.has(root) && importedHistoricalSources.get(root) !== commit)
+    throw new Error('Imported historical reader source changed; configure an immutable captured checkout');
+  const pending = ['scripts/worker-check.ts', 'scripts/check-custody.ts'];
+  const visited = new Set<string>();
+  const scanner = new Bun.Transpiler({ loader: 'ts' });
+  while (pending.length) {
+    const path = pending.pop()!;
+    if (visited.has(path)) continue;
+    visited.add(path);
+    const absolute = resolve(root, path);
+    if (
+      !path.startsWith('scripts/') ||
+      !path.endsWith('.ts') ||
+      realpathSync(absolute) !== absolute ||
+      !lstatSync(absolute).isFile()
+    )
+      throw new Error(`Historical reader module is not a canonical native source file: ${path}`);
+    const entry = git(integrationRoot, ['ls-tree', commit, '--', path]);
+    if (!/^100644 blob [0-9a-f]{40}\t/.test(entry))
+      throw new Error(`Historical reader module is not a captured regular file: ${path}`);
+    const expected = spawnSync('git', ['show', `${commit}:${path}`], {
+      cwd: integrationRoot,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    const contents = readFileSync(absolute);
+    if (expected.status !== 0 || !contents.equals(expected.stdout))
+      throw new Error(`Historical reader module differs from captured integration source: ${path}`);
+    for (const dependency of scanner.scanImports(contents.toString('utf8'))) {
+      if (isBuiltin(dependency.path)) continue;
+      if (!dependency.path.startsWith('./') && !dependency.path.startsWith('../'))
+        throw new Error(`Historical reader module has an unsupported package import: ${dependency.path}`);
+      pending.push(relative(root, resolve(dirname(absolute), dependency.path)));
+    }
+  }
+  return commit;
+}
+/** Import validated current producer code; historical cwd is passed only as data to its read APIs. */
+export async function loadHistoricalProofReader(
+  registry: string,
+  source: HistoricalProofReaderSource,
+): Promise<HistoricalProofReader> {
+  const commit = validateHistoricalProofReaderSource(source);
+  // Even a failed import can populate Bun's module cache. Never reuse that root for another captured revision.
+  importedHistoricalSources.set(source.root, commit);
+  const wrapper = join(source.root, 'scripts/worker-check.ts');
+  const reader = await loadProofReader(wrapper);
+  const custody: unknown = await import(pathToFileURL(join(wrapper, '../check-custody.ts')).href);
+  if (!isObject(custody) || typeof custody.validRegistration !== 'function')
+    throw new Error('Native historical v1 registration validator unavailable');
+  if (validateHistoricalProofReaderSource(source) !== commit)
+    throw new Error('Historical reader source changed during import');
+  const validRegistration = custody.validRegistration;
+  return {
+    ...reader,
+    registrations: (check) => {
+      try {
+        return readdirSync(registry)
+          .filter((name) => {
+            const physical = name.slice(check.checkId.length + 1, -5);
+            return name.startsWith(`${check.checkId}.`) && name.endsWith('.json') && nativeCheckId.test(physical);
+          })
+          .map((name): unknown => {
+            try {
+              return JSON.parse(readFileSync(join(registry, name), 'utf8'));
+            } catch (error) {
+              return { unavailable: String(error), path: join(registry, name) };
+            }
+          });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        throw error;
+      }
+    },
+    valid: (check, registration) => {
+      if (
+        !isObject(registration) ||
+        registration.checkId !== check.checkId ||
+        registration.resultPath !== join(check.cwd, '.temp/goal/checks/results', `${check.checkId}.json`) ||
+        !isObject(registration.ownership) ||
+        registration.ownership.taskId !== check.taskId ||
+        registration.ownership.attempt !== check.attempt ||
+        typeof registration.physicalRunId !== 'string' ||
+        !nativeCheckId.test(registration.physicalRunId)
+      )
+        return false;
+      return (
+        validRegistration(registration, {
+          version: 1,
+          checkId: check.checkId,
+          resultPath: registration.resultPath,
+          ownership: { taskId: check.taskId, attempt: check.attempt },
+          physicalRunId: registration.physicalRunId,
+          runnerHost: registration.runnerHost,
+          runnerIdentity: registration.runnerIdentity,
+        }) === true
+      );
+    },
+  };
+}
+/** Run before admission and during recovery; all original records and physical lease accounting stay untouched. */
+export async function refreshHistoricalProofAdmission(
+  store: WorkerStore,
+  registry: string,
+  source: HistoricalProofReaderSource,
+  goal?: string,
+): Promise<void> {
+  const checks = store.historicalProofChecks(goal);
+  if (!checks.length) return;
+  let reader: HistoricalProofReader;
+  try {
+    reader = await loadHistoricalProofReader(registry, source);
+  } catch (error) {
+    const cause = `Historical admission requires the trusted current native reader: ${String(error)}`;
+    store.historicalProofReaderUnavailable(checks[0]!, cause);
+    throw new ProofUnavailableError(cause);
+  }
+  for (const check of checks) store.classifyHistoricalProof(check, classifyHistoricalProof(check, reader));
+}
 /** Old unbound UUIDs can release quarantine through custody, but can never acquire source/token provenance. */
 export async function historicalProofTerminal(check: HistoricalProofCheck): Promise<ProofObservation> {
   const physical: unknown[] = [];
   let record: unknown;
   try {
-    const reader = await loadProofReader(join(check.cwd, 'scripts/worker-check.ts'));
+    const reader = await loadProofReader(join(import.meta.dir, '../../../scripts/worker-check.ts'));
     record = reader.record(check.checkId, check.cwd);
     if (
       !isObject(record) ||
@@ -674,13 +1064,12 @@ export async function historicalProofTerminal(check: HistoricalProofCheck): Prom
 
 /** Passing evidence belongs only to this exact source and integration ref, never a later source. */
 export function proofSourceUnchanged(task: Task, integrationBranch: string): boolean {
-  if (!task.brief.proof || !task.proofRun || task.proofAuthorization?.fingerprint !== proofFingerprint(task.brief))
-    return false;
+  if (!registeredProof(task.brief, task.proofAuthorization)) return false;
   try {
     return (
-      git(task.worktree, ['rev-parse', 'HEAD']) === task.proofRun.binding.sourceCommit &&
-      git(task.worktree, ['rev-parse', 'HEAD^{tree}']) === task.proofRun.binding.sourceTree &&
-      git(task.worktree, ['rev-parse', `refs/heads/${integrationBranch}`]) === task.proofRun.binding.sourceCommit &&
+      git(task.worktree, ['rev-parse', 'HEAD']) === task.brief.proof!.sourceCommit &&
+      git(task.worktree, ['rev-parse', 'HEAD^{tree}']) === task.proofAuthorization!.sourceTree &&
+      git(task.worktree, ['rev-parse', `refs/heads/${integrationBranch}`]) === task.brief.proof!.sourceCommit &&
       git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) === ''
     );
   } catch {
@@ -690,14 +1079,12 @@ export function proofSourceUnchanged(task: Task, integrationBranch: string): boo
 
 export class ProofCapacityQueuedError extends Error {
   constructor() {
-    super('Proof queued: three owned checks active or prior task custody unresolved');
+    super('Proof queued: three current ordinary checks active');
   }
 }
 
 function originalCommandHasInputs(argv: string[]): boolean {
-  const text = argv.join(' ');
-  return (
-    !/(?:^|[\s/])(?:gate(?:857)?|root-check|remote-check)(?:\.[cm]?[jt]s)?(?:\s|$)/i.test(text) &&
-    /(?:\.(?:test|spec)\.[cm]?[jt]sx?|[\w/-]+\.(?:ts|js|sh))(?:[\s'"]|$)/.test(text)
-  );
+  if (/(?:^|[\s/])(?:gate(?:857)?|root-check|remote-check)(?:\.[cm]?[jt]s)?(?:\s|$)/i.test(argv.join(' ')))
+    return false;
+  return wholeWorkspaceCommand(argv) || fileCommand(argv) !== undefined;
 }

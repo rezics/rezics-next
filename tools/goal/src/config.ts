@@ -248,6 +248,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'managerSocket',
       'tmuxSocket',
       'operationsManager',
+      'checkScriptReaderRoot',
     ],
     'integration',
   );
@@ -350,6 +351,9 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       ...(integration.operationsManager === undefined
         ? {}
         : { operationsManager: text(integration.operationsManager, 'operationsManager') }),
+      ...(integration.checkScriptReaderRoot === undefined
+        ? {}
+        : { checkScriptReaderRoot: path(integration.checkScriptReaderRoot, '') }),
       managerLimits: {
         turns: positive(managerLimits.turns, 'managerLimits.turns'),
         turnsWithoutDecision: positive(managerLimits.turnsWithoutDecision, 'managerLimits.turnsWithoutDecision'),

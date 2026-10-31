@@ -1,11 +1,12 @@
 import {
   ProofCapacityQueuedError,
+  ProofUnavailableError,
+  type ProofAuthorization,
   authorizeProof,
+  authenticateProofManager,
   proofFingerprint,
   preflightProof,
-  newProofBinding,
   productionProofProducer,
-  readProofObservation,
   type ProofProducer,
 } from './verification.ts';
 import { remoteCheckEnvironment } from './merge.ts';
@@ -221,6 +222,19 @@ export type RetryOptions = {
   /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
   expectedAttempt?: number;
 };
+/** Metadata-only first/future proof registration, including stopped/exited runs with historical reservations. */
+export type ProofStartOptions = {
+  expectedAttempt: number;
+  brief?: string;
+  /** Exact obsolete dependency edges explicitly approved for removal by this authenticated submission. */
+  removeAfter?: string[];
+};
+export type ProofStartRegistration = {
+  taskId: string;
+  attempt: number;
+  status: 'created' | 'waiting' | 'pending';
+  reason?: string;
+};
 export class HeldTaskConflictError extends Error {
   constructor(readonly detail: string) {
     super(detail);
@@ -382,7 +396,7 @@ export class WorkerTasks {
           this.store,
           this.settings.mainCheckout,
           brief,
-          actor ?? authenticatedManager(this.store.db),
+          actor === undefined ? authenticatedManager(this.store.db) : actor,
           this.settings.integration.operationsManager,
           this.settings.integrationBranch,
         );
@@ -412,7 +426,7 @@ export class WorkerTasks {
             this.store,
             this.settings.mainCheckout,
             submittedBrief,
-            actor ?? authenticatedManager(this.store.db),
+            actor === undefined ? authenticatedManager(this.store.db) : actor,
             this.settings.integration.operationsManager,
             this.settings.integrationBranch,
           )
@@ -496,30 +510,154 @@ export class WorkerTasks {
     if (!worker) throw new TaskHeldForDependenciesError();
     return worker;
   }
+  /** Authenticated reconciliation; preserves every native identity and raw historical fact. */
+  releaseProof(
+    taskId: string,
+    expectedAttempt: number,
+    actor?: AuthenticatedManager | null,
+  ): {
+    taskId: string;
+    attempt: number;
+    status: 'released';
+    checks: string[];
+  } {
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    try {
+      const task = this.store.task(taskId);
+      if (!Number.isSafeInteger(expectedAttempt) || expectedAttempt < 1 || task.currentAttempt !== expectedAttempt)
+        throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, task.currentAttempt);
+      authenticateProofManager(
+        this.store,
+        task.brief.manager,
+        actor === undefined ? authenticatedManager(this.store.db) : actor,
+        this.settings.integration.operationsManager,
+      );
+      const checks = this.store.releaseExitedProofReservations({ taskId, attempt: expectedAttempt }, true);
+      return { taskId, attempt: expectedAttempt, status: 'released', checks };
+    } finally {
+      lease.release();
+    }
+  }
+  /** Authenticate a SAME-ID first/future proof start, retaining prior incarnations; never launches anything. */
+  queueProofStart(
+    taskId: string,
+    options: ProofStartOptions,
+    actor?: AuthenticatedManager | null,
+  ): ProofStartRegistration {
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    let briefPath: string | undefined;
+    try {
+      const task = this.store.task(taskId);
+      const ref = { taskId, attempt: options.expectedAttempt };
+      if (
+        !Number.isSafeInteger(options.expectedAttempt) ||
+        options.expectedAttempt < 0 ||
+        task.currentAttempt !== options.expectedAttempt
+      )
+        throw new StaleAttemptError(ref, task.currentAttempt);
+      const submitted = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
+      const nextBrief = submitted?.brief ?? task.brief;
+      if (nextBrief.kind !== 'verification')
+        throw new Error('first-start receiving requires a typed verification brief');
+      this.store.assertProofRegistration(ref, nextBrief);
+      this.store.assertProofFirstStart(ref, nextBrief);
+      const removed = task.brief.after.filter((id) => !nextBrief.after.includes(id));
+      const approved = options.removeAfter ?? [];
+      if (
+        new Set(approved).size !== approved.length ||
+        removed.length !== approved.length ||
+        approved.some((id) => !removed.includes(id))
+      )
+        throw new Error('removed after lanes must exactly match explicit removeAfter approval');
+      const authorization = authorizeProof(
+        this.store,
+        this.settings.mainCheckout,
+        nextBrief,
+        actor === undefined ? authenticatedManager(this.store.db) : actor,
+        this.settings.integration.operationsManager,
+        this.settings.integrationBranch,
+      );
+      const missing = preflightProof(this.settings.mainCheckout, nextBrief);
+      if (missing.length)
+        throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
+      if (submitted) {
+        briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-registered-${crypto.randomUUID()}.md`);
+        mkdirSync(dirname(briefPath), { recursive: true });
+        writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
+      }
+      this.store.updateHeldRetryTask(ref, (current) => {
+        this.store.assertProofRegistration(ref, nextBrief);
+        this.store.assertProofFirstStart(ref, nextBrief);
+        const previousCritical = criticalPriority(current.brief, current.taskClass);
+        current.brief = nextBrief;
+        if (briefPath) current.briefPath = briefPath;
+        current.taskClass = classifyTask(nextBrief);
+        current.proofAuthorization = authorization;
+        if (proofFingerprint(task.brief) !== proofFingerprint(nextBrief))
+          current.pendingBriefChange = {
+            previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
+            newBriefHash: briefHash(nextBrief.markdown),
+          };
+        this.applyRetryPriority(current, previousCritical, actor, authorization);
+        current.state = this.dependenciesMet(current) ? 'ready' : 'held';
+        this.store.saveRetryIntent(ref, {});
+      });
+      briefPath = undefined; // The committed registration owns this immutable file.
+      if (!this.dependenciesMet({ brief: nextBrief }))
+        return { taskId, attempt: ref.attempt, status: 'waiting', reason: 'Dependencies pending' };
+      if (!this.store.proofCapacityAvailable(nextBrief.goal, taskId))
+        return {
+          taskId,
+          attempt: ref.attempt,
+          status: 'waiting',
+          reason: this.store.proofCapacityReason(nextBrief.goal, taskId),
+        };
+      return { taskId, attempt: ref.attempt, status: 'created' };
+    } catch (error) {
+      if (briefPath) rmSync(briefPath, { force: true });
+      throw error;
+    } finally {
+      lease.release();
+    }
+  }
   /** Persist an explicit retry for the host to start on its next recovery sweep. */
   queueRetry(
     taskId: string,
     options: RetryOptions = {},
     actor: AuthenticatedManager | null | undefined = undefined,
   ): void {
+    const expectedAttempt = options.expectedAttempt ?? this.store.task(taskId).currentAttempt;
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    try {
+      this.queueRetryLeased(taskId, { ...options, expectedAttempt }, actor);
+    } finally {
+      lease.release();
+    }
+  }
+  private queueRetryLeased(taskId: string, options: RetryOptions, actor?: AuthenticatedManager | null): void {
     const task = this.store.task(taskId);
-    if (!task.currentAttempt) throw new Error('cannot queue a retry before the first attempt');
+    if (task.currentAttempt !== options.expectedAttempt)
+      throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt! }, task.currentAttempt);
+    if (!task.currentAttempt) throw new Error('cannot queue a retry before the first attempt; use queueProofStart');
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;
+    if (task.brief.kind === 'verification' && nextBrief.kind !== 'verification')
+      throw new Error('registered proof contracts cannot become product retries');
+    let authorization: ProofAuthorization | undefined;
     if (nextBrief.kind === 'verification') {
-      const authorization = authorizeProof(
+      this.store.assertProofRegistration({ taskId, attempt: task.currentAttempt }, nextBrief);
+      authorization = authorizeProof(
         this.store,
         this.settings.mainCheckout,
         nextBrief,
-        actor ?? authenticatedManager(this.store.db),
+        actor === undefined ? authenticatedManager(this.store.db) : actor,
         this.settings.integration.operationsManager,
         this.settings.integrationBranch,
       );
-      authorization.integrationBranch = this.settings.integrationBranch;
-      this.store.updateTask({ taskId, attempt: task.currentAttempt }, (current) => {
-        current.proofAuthorization = authorization;
-      });
+      const missing = preflightProof(this.settings.mainCheckout, nextBrief);
+      if (missing.length)
+        throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
     }
     this.assertLocalAcceptanceCustody(task, nextBrief);
     const ref = { taskId, attempt: task.currentAttempt };
@@ -528,7 +666,7 @@ export class WorkerTasks {
     if (task.state !== 'held' && this.store.retryIntent(ref)?.status === 'pending')
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
-      const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
+      const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
       if (!reshaped) throw new Error('a held task can only be retried with --brief');
       if (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager)
         throw new Error('a reshaped brief must keep the same goal and manager');
@@ -540,17 +678,15 @@ export class WorkerTasks {
         this.store.updateHeldRetryTask(
           ref,
           (current) => {
+            if (authorization) {
+              this.store.assertProofRegistration(ref, nextBrief);
+              current.proofAuthorization = authorization;
+            }
             const previousCritical = criticalPriority(current.brief, current.taskClass);
             current.brief = reshaped.brief;
             current.briefPath = briefPath;
             current.taskClass = reshaped.taskClass;
-            applyPriorityTransition(
-              this.store.db,
-              current,
-              previousCritical,
-              criticalPriority(current.brief, current.taskClass),
-              actor,
-            );
+            this.applyRetryPriority(current, previousCritical, actor, authorization);
             current.state = 'held';
             current.pendingBriefChange = {
               previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
@@ -558,7 +694,7 @@ export class WorkerTasks {
             };
             // With no remaining `after` edge the host has no dependency-release start path. Retain an explicit
             // retry instead, still held until any live worker settles and the host releases this generation.
-            if (!current.brief.after.length) {
+            if (!current.brief.after.length || authorization) {
               const intent = this.store.retryIntent(ref);
               if (intent) {
                 this.store.updateRetryIntent(ref, (value) => {
@@ -568,6 +704,7 @@ export class WorkerTasks {
               } else {
                 const retryOptions = { ...options };
                 delete retryOptions.brief;
+                delete retryOptions.expectedAttempt;
                 this.store.saveRetryIntent(ref, retryOptions);
               }
             }
@@ -578,10 +715,10 @@ export class WorkerTasks {
         rmSync(briefPath, { force: true });
         throw error;
       }
-      this.writeTaskPriority(this.store.task(taskId));
+      if (nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
       return;
     }
-    const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
+    const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
     if (reshaped && (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager))
       throw new Error('a reshaped brief must keep the same goal and manager');
     if (reshaped && sameBriefText(reshaped.brief.markdown, task.brief.markdown))
@@ -595,10 +732,15 @@ export class WorkerTasks {
     }
     const retryOptions = { ...options };
     delete retryOptions.brief;
+    delete retryOptions.expectedAttempt;
     try {
       this.store.recordExplicitRetry(
         ref,
         (current) => {
+          if (authorization) {
+            this.store.assertProofRegistration(ref, nextBrief);
+            current.proofAuthorization = authorization;
+          }
           if (!['ready', 'running', 'landing', 'stopped'].includes(current.state))
             throw new Error(`cannot retry ${current.state} task`);
           if (reshaped) {
@@ -606,13 +748,7 @@ export class WorkerTasks {
             current.brief = reshaped.brief;
             current.briefPath = briefPath!;
             current.taskClass = reshaped.taskClass;
-            applyPriorityTransition(
-              this.store.db,
-              current,
-              previousCritical,
-              criticalPriority(current.brief, current.taskClass),
-              actor,
-            );
+            this.applyRetryPriority(current, previousCritical, actor, authorization);
             current.pendingBriefChange = {
               previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
               newBriefHash: briefHash(reshaped.brief.markdown),
@@ -627,7 +763,35 @@ export class WorkerTasks {
       if (briefPath) rmSync(briefPath, { force: true });
       throw error;
     }
-    if (reshaped) this.writeTaskPriority(this.store.task(taskId));
+    if (reshaped && nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
+  }
+  /** A real proof permit also authorizes its required ordinary priority, including an operations conversion. */
+  private applyRetryPriority(
+    task: Task,
+    previousCritical: boolean,
+    actor: AuthenticatedManager | null | undefined,
+    authorization?: ProofAuthorization,
+  ): void {
+    if (!authorization) {
+      applyPriorityTransition(
+        this.store.db,
+        task,
+        previousCritical,
+        criticalPriority(task.brief, task.taskClass),
+        actor,
+      );
+      return;
+    }
+    if (criticalPriority(task.brief, task.taskClass)) throw new Error('proof tasks are ordinary priority only');
+    if (!previousCritical) return;
+    task.priorityHistory ??= [];
+    task.priorityHistory.push({
+      value: 'normal',
+      setter: authorization.manager,
+      grantor: null,
+      at: new Date().toISOString(),
+      provenance: { kind: 'manager-session', sessionId: authorization.sessionId },
+    });
   }
   setPriority(
     taskId: string,
@@ -697,7 +861,7 @@ export class WorkerTasks {
   private async startReleasedTask(taskId: string): Promise<RunningWorker> {
     let task = this.store.task(taskId);
     if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
-    if (task.workspace) {
+    if (task.workspace || task.brief.kind === 'verification') {
       const worker = await this.retryTask(taskId, {}, true);
       if (!worker) throw new Error('released task was unexpectedly held again');
       return worker;
@@ -769,7 +933,7 @@ export class WorkerTasks {
         git(this.settings.mainCheckout, ['worktree', 'prune']);
         git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
       }
-      installWorktreeDependencies(task.worktree);
+      if (task.brief.kind !== 'verification') installWorktreeDependencies(task.worktree);
     } finally {
       lease.release();
     }
@@ -799,12 +963,87 @@ export class WorkerTasks {
       return { hold: false, first: startsFirst(this.store.task(taskId)) };
     }
   }
+  /** Prepare an authorized unreserved capture without rewriting retained empty-report branches. */
+  private prepareProofWorktree(task: Task, ref: Attempt): Task {
+    const captured = task.brief.proof!.sourceCommit;
+    const tip = git(task.worktree, ['rev-parse', 'HEAD']);
+    if (git(task.worktree, ['status', '--porcelain', '--untracked-files=all']))
+      throw new Error('Proof source is read-only; worktree differs from captured commit');
+    if (tip !== captured) {
+      this.store.assertProofPreparation(ref);
+      if (
+        git(task.worktree, ['merge-base', task.base, tip]) !== task.base ||
+        git(task.worktree, ['diff', '--name-only', task.base, tip])
+      )
+        throw new Error(
+          'Proof source is read-only; only an unreserved clean retained empty-report branch can prepare a fresh capture',
+        );
+      const worktree = join(this.settings.worktreeRoot, `${task.id}-proof-${captured}`);
+      if (!existsSync(worktree)) git(this.settings.mainCheckout, ['worktree', 'add', '--detach', worktree, captured]);
+      if (
+        git(worktree, ['rev-parse', 'HEAD']) !== captured ||
+        git(worktree, ['status', '--porcelain', '--untracked-files=all'])
+      )
+        throw new Error('Proof captured source preparation differs from its registered commit');
+      this.store.event(ref, 'proof-source-prepared', {
+        retainedWorktree: task.worktree,
+        retainedBranch: task.branch,
+        retainedHead: tip,
+        worktree,
+        sourceCommit: captured,
+      });
+      task = this.store.updateTask(ref, (current) => {
+        current.worktree = worktree;
+        current.base = captured;
+      });
+    }
+    return task;
+  }
+  /** Refuse stale captures and missing original inputs before creating an ordinary proof attempt. */
+  assertProofStart(task: Task): void {
+    if (task.brief.kind !== 'verification') return;
+    if (!task.brief.proof || task.proofAuthorization?.fingerprint !== proofFingerprint(task.brief))
+      throw new ProofUnavailableError('Proof pending/unavailable: authenticated registration required');
+    const head = this.branchHead(this.settings.integrationBranch, false);
+    if (head !== task.brief.proof.sourceCommit)
+      throw new ProofUnavailableError(
+        `Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> for a stopped/exited attempt before its new invocation; no separate logical release is required and every old binding/source remains evidence`,
+      );
+    if (
+      spawnSync('git', ['cat-file', '-e', `${task.brief.proof.sourceCommit}:scripts/worker-check.ts`], {
+        cwd: this.settings.mainCheckout,
+        stdio: 'ignore',
+      }).status !== 0
+    )
+      throw new ProofUnavailableError(
+        'Proof pending/unavailable: captured ordinary scripts/worker-check.ts is missing',
+      );
+    const missing = preflightProof(this.settings.mainCheckout, task.brief);
+    if (missing.length)
+      throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
+  }
+  async refreshProofAdmission(task: Task): Promise<void> {
+    if (task.brief.kind !== 'verification') return;
+    if (
+      task.currentAttempt &&
+      ['stopped', 'exited', 'cancelled', 'superseded'].includes(
+        this.store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state,
+      )
+    )
+      this.store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
+  }
   /** `leased` when the caller already holds the task's lease. */
   private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
     if (!leased) {
       const current = this.store.task(taskId);
       const nextBrief = options.brief === undefined ? current.brief : this.validateBrief(options.brief, taskId).brief;
       this.assertLocalAcceptanceCustody(current, nextBrief);
+      if (current.brief.kind === 'verification' && nextBrief.kind !== 'verification')
+        throw new Error('registered proof contracts cannot become product retries');
+      if (nextBrief.kind === 'verification') {
+        this.assertProofStart({ ...current, brief: nextBrief });
+        await this.refreshProofAdmission({ ...current, brief: nextBrief });
+      }
     }
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
     const plan = leased ? undefined : this.retryPlan(taskId, options);
@@ -835,10 +1074,19 @@ export class WorkerTasks {
           }
         : task.pendingBriefChange;
       const nextBrief = reshaped?.brief ?? task.brief;
-      if (nextBrief.kind === 'verification' && !this.store.proofCapacityAvailable(nextBrief.goal, task.id)) {
-        this.store.saveRetryIntent({ taskId, attempt: task.currentAttempt }, {});
-        this.store.event({ taskId, attempt: task.currentAttempt }, 'proof-capacity-queued', { goal: nextBrief.goal });
-        throw new ProofCapacityQueuedError();
+      if (task.brief.kind === 'verification' && nextBrief.kind !== 'verification')
+        throw new Error('registered proof contracts cannot become product retries');
+      if (nextBrief.kind === 'verification') {
+        this.assertProofStart({ ...task, brief: nextBrief });
+        await this.refreshProofAdmission({ ...task, brief: nextBrief });
+        if (!this.store.proofCapacityAvailable(nextBrief.goal, task.id)) {
+          this.store.saveRetryIntent({ taskId, attempt: task.currentAttempt }, {});
+          this.store.event({ taskId, attempt: task.currentAttempt }, 'proof-capacity-queued', {
+            goal: nextBrief.goal,
+            reason: this.store.proofCapacityReason(nextBrief.goal, task.id),
+          });
+          throw new ProofCapacityQueuedError();
+        }
       }
       this.assertLocalAcceptanceCustody(task, nextBrief);
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
@@ -1020,8 +1268,13 @@ export class WorkerTasks {
       });
       const next =
         task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'stopped'
-          ? this.store.retryStopped(taskId, make, oldConfigDirectory)
-          : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make, oldConfigDirectory);
+          ? this.store.retryStopped(taskId, make, oldConfigDirectory, nextBrief.kind === 'verification')
+          : this.store.nextAttempt(
+              { taskId, attempt: task.currentAttempt },
+              make,
+              oldConfigDirectory,
+              nextBrief.kind === 'verification',
+            );
       this.writeTaskPriority(this.store.task(taskId));
       // Include older groups after a controller crash between superseding and termination.
       for (const previous of this.store
@@ -1065,31 +1318,26 @@ export class WorkerTasks {
           const missing = preflightProof(task.worktree, task.brief);
           if (missing.length)
             throw new Error(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
-          const captured = task.brief.proof!.sourceCommit;
+          task = this.prepareProofWorktree(task, next);
+          setupStep = 'installing worktree dependencies';
+          installWorktreeDependencies(task.worktree);
           if (
-            git(task.worktree, ['rev-parse', 'HEAD']) !== captured &&
-            git(task.worktree, ['rev-parse', 'HEAD']) === task.base &&
-            !git(task.worktree, ['status', '--porcelain'])
-          ) {
-            git(task.worktree, ['reset', '--hard', captured]);
-            task = this.store.updateTask(next, (current) => {
-              current.base = captured;
-            });
-          }
-          if (git(task.worktree, ['rev-parse', 'HEAD']) !== captured || git(task.worktree, ['status', '--porcelain']))
-            throw new Error('Proof source is read-only; worktree differs from captured commit');
-          if (this.branchHead(this.settings.integrationBranch, false) !== captured)
-            throw new Error('Proof pending/unavailable: integration source advanced; register a new captured source');
-          const reserved = this.store.reserveProof(newProofBinding(task, next.attempt));
-          if (!reserved) throw new ProofCapacityQueuedError();
-          const run =
-            reserved.status === 'reserved'
-              ? this.store.bindProof(reserved.binding, await this.proofProducer.bind(reserved.binding))
-              : reserved;
-          if (run.status !== 'bound') throw new Error(`Proof pending/unavailable: ${run.cause ?? run.status}`);
-          task = this.store.task(taskId);
-          this.store.observeProof(run.binding, await readProofObservation(task));
-          task = this.store.task(taskId);
+            existsSync(join(task.worktree, 'package.json')) &&
+            !existsSync(join(task.worktree, 'node_modules/.bin/bun'))
+          )
+            throw new Error(
+              'Proof dependency preparation did not provide node_modules/.bin/bun; no system Bun fallback is allowed',
+            );
+          // Ordinary shared/pinned preparation is outside SQLite, before any worker can invoke its command.
+          if (this.branchHead(this.settings.integrationBranch, false) !== task.brief.proof!.sourceCommit)
+            throw new ProofUnavailableError(
+              'Proof pending/unavailable: integration source advanced; authenticated fresh registration required',
+            );
+          this.store.event(next, 'proof-command-ready', {
+            sourceCommit: task.brief.proof!.sourceCommit,
+            argv: task.brief.acceptance.command,
+            cwd: task.worktree,
+          });
           retryPrepared = true;
           return await this.launcher(
             this.store,

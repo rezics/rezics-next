@@ -1018,10 +1018,28 @@ command into a pass.
 
 ### Original integrated journey proofs
 
+Current receiving operations (authenticated owning manager or configured operations manager):
+
+- `WorkerTasks.queueProofStart(taskId, { expectedAttempt, brief?, removeAfter? }, actor)` or
+  `bun tools/goal/src/cli.ts retry <task> --proof-start --expected-attempt <generation> [--brief <file>] [--remove-after <lane>]`
+  saves the exact registered original and one durable start intent. It returns `created`, `waiting` or `pending`.
+  A stopped/exited current attempt can capture fresh current dev directly, including when old native reservations
+  remain UNKNOWN; no separate logical-release operation or custody disposition is required.
+- `WorkerTasks.releaseProof(taskId, expectedAttempt, actor)` or
+  `bun tools/goal/src/cli.ts retry <task> --release-proof --expected-attempt <generation>`
+  optionally reconciles the current stopped or exited run's logical reservation. It returns `status: released` and the retained check UUIDs;
+  it never starts, stops or signals checks, replaces bindings, fabricates results or releases physical resources.
+
+Ordinary proof policy supersedes mandatory native binding/custody admission: authenticated registered verification
+runs its exact original acceptance once through the existing worker-check protocol. Native binding and custody are
+optional evidence. Product and fix tasks retain minimal verification. Native and physical lease accounting remains
+independent of logical admission. The implementation and local typing still require controller combined-release validation.
+
 `kind: verification` is an ordinary Codex worker on the implementation route. It is a read-only proof record,
 separate from a source task: it needs no declared source paths, source estimate, edit, commit, receipt or landing.
 The authenticated owning manager, or `integration.operationsManager` when configured locally, registers it through
-normal dispatch or continues an existing stopped proof task through `retry --brief`. A verification brief cannot
+normal dispatch, converts an existing stopped task through `retry --brief`, or registers the first start of a
+never-started task through `retry --expected-attempt 0`. A verification brief cannot
 choose critical priority, frozen inputs, product paths, a different target or a local placement override.
 
 For example, write `.temp/goal/original-proof.md` with the following front matter and a read-only journey description.
@@ -1050,47 +1068,118 @@ Observe the original journey on the captured source. Source and tests are read-o
 
 From that authenticated manager session, register with
 `bun tools/goal/src/cli.ts dispatch .temp/goal/original-proof.md`, or continue the same stopped task with
-`bun tools/goal/src/cli.ts retry <existing-proof-task> --brief .temp/goal/original-proof.md`.
+`bun tools/goal/src/cli.ts retry <existing-proof-task> --expected-attempt <current-generation> --brief .temp/goal/original-proof.md`.
 Neither command reopens any integrated source original. All originals must belong to this Goal and owner and be
 integrated or merged ancestors of the captured commit. A group retains every whole identical original argv, or the
 ordered deduplicated union of explicit Bun test files or Kernel/Auth `bun run --cwd <service> check` files
-with identical raw prefixes, including cwd/env arguments. Mixed bare and `env -u` groups stay separate.
+with identical raw prefixes, including cwd/env arguments. Service file lists include every helper before, between and
+after tests, starting at the first input. Exact whole original Auth/Kernel workspace checks require their same-Goal
+integrated original provenance; they need no invented explicit test list. Mixed bare and `env -u` groups stay separate.
 Shortened selections, changed flags and broad root/gate campaigns are refused. Explicit command files must exist in
-the captured Git tree before native execution can be granted. Advancing integration invalidates that capture.
+the captured Git tree before execution can be granted. Advancing integration invalidates that capture.
 
-`verification.ts` exports `ProofProducer.bind(ProofBinding): Promise<ProofBindResult>`,
-`productionProofProducer`, `nativeProofBinding`, and `receiveProofStart`. `ProofBinding` version 1 carries the
-once-generated `reservationToken` and logical `checkId`, `goal`, `taskId`, `attempt`, exact `sourceCommit`/`sourceTree`,
-original `argv` and canonical `cwd`. The adapter maps `reservationToken` to the native `ControllerProofBindingV1.token`
-without changing any other fact. It consumes the delivered async `startControllerWorkerCheck(binding)` API from
-`scripts/worker-check.ts`: matching `started`/`replayed` becomes bound evidence with its exact result path;
-`refused-never-started` alone releases never-started capacity. Unavailable/unknown, malformed fields, changed binding
-or result paths retain uncertain capacity. Captured source must contain the delivered producer integration commit;
-older snapshots remain unavailable and require an owner-authorized fresh capture, never a source swap under a token.
+For a never-started held task, submit the typed brief on the SAME task id:
 
-After SQLite admission, the adapter publishes the native reservation in `<state>/check-registry` using the actual
-`validateControllerProofBinding`, `controllerProofReservationPath`, closed reservation validator and `withCheckFence`.
-The async producer call has an isolated process environment for its exact owner/attempt/registry; the existing native
-wrapper owns all execution. Terminal observation validates the actual `validControllerProofRegistration` for every
-physical incarnation and revokes the reservation under that same fence before SQLite releases capacity. The adapter
-never writes native result, runner or custody records. Full controller release validation remains required before
-runtime activation; local typing and fixture validation do not certify native acceptance.
+```sh
+bun tools/goal/src/cli.ts retry <task> --expected-attempt 0 --brief .temp/goal/original-proof.md --remove-after <obsolete-lane>
+```
 
-The existing WorkerStore SQLite write transaction admits at most three active proof reservations per Goal, shared
-by all controllers. Pending retries wait without a model through the existing retry-intent path. Model exit, waiting,
-crash, missing registration and unknown custody retain capacity. Only an owned terminal custody result, or explicit
-proven-never-started refusal, releases it. The wrapper's infrastructure rerun retains the same logical reservation.
-Historical unbound managed UUIDs are quarantined against proof capacity until their own terminal custody is known;
-their sessions and raw evidence remain intact, with no retroactive source/token/admission labels. Conservative
-quarantine also covers older product checks whose saved detached UUIDs cannot establish proof identity.
-The adapter reads actual `readWorkerCheckRecord` and `readWorkerCheckHistory` exports; physical records and terminal
-custody proofs for every incarnation are retained with the immutable observation. It never writes native records.
+Repeat `--remove-after` for each obsolete dependency removed by the submitted brief, and omit it when none is removed.
+The approved list must match exactly: conversion never implicitly drops an old dependency. Other dependency edges
+remain effective. A typed READY0 contract already accepted with a valid capture needs no resubmission: normal
+`WorkerJob.start(taskId, { expectedAttempt: 0 })` starts it once; the host also recovers dispatches that died before
+that first start.
 
-Only a bound registered task gets the final original-proof protocol, including on same-session wake. Global minimal
-verification stays unchanged for product/fix tasks. The binder already started or replayed the one logical invocation;
-the worker receives its current owned records and returns the bare managed UUID while running. It never receives an
-unbound invocation that could mint a second UUID. Goal resumes the same session with actual records, without model polling or an automatic proof fix/retry. Terminal zero,
-valid owned custody, unchanged captured source and structured worker success with `checks: []` settle as `verified`.
-A verified proof never enters the landing queue and never implies main advancement or whole-Goal completion. Reports
-count `verifiedProofs` separately from landed source tasks. Failures retain exact records and log references and reach
-the owning manager for a separate minimal product fix.
+The public receiving method is `WorkerTasks.queueProofStart(taskId, options, actor)`, where `ProofStartOptions` is
+`{ expectedAttempt: number; brief?: string; removeAfter?: string[] }`. The explicit CLI is
+`retry <task> --proof-start --expected-attempt <current-generation> [--brief <file>] [--remove-after <lane>]`.
+Generation zero also retains the existing `retry --expected-attempt 0` spelling. A retained exited product/claim
+attempt does not itself constitute a proof start. The same API also accepts a stopped/exited verification generation;
+its past reservations and command-ready events are retained evidence, not future-admission prerequisites. It returns `ProofStartRegistration` with
+`{ taskId, attempt: number, status: 'created' | 'waiting' | 'pending', reason?: string }`. `created` means the normal durable
+start intent was saved and is eligible; `waiting` means dependencies or owned proof capacity defer it; `pending` names
+unavailable source or preparation, without a fabricated check UUID. These are registration outcomes, without a worker/check id or a model launch.
+Missing inputs, stale generations, invalid captures, unauthenticated owners and invalid transitions are refused before
+execution. No `queueRetry` at generation zero or duplicate task is needed.
+
+Both boundaries authenticate the live owner or configured operations manager and persist authorization, typed contract
+and intent together through the existing SQLite lifecycle under the task lease. A stopped current generation can
+register without using the ordinary stopped-attempt write fence. Its raw attempts, sessions and reports stay intact;
+its historical attempt classification never becomes a registered proof. Running owners, cancelled/integrated tasks
+and stale generations cannot convert. Source refresh requires a new authenticated registration before the NEW attempt's
+reservation, native intent or proof worker start. An exited historical product/claim generation is eligible: its raw
+attempt, report, session, sequence and classification remain unchanged. For an already typed contract, refresh retains
+the exact journey, sourceTasks and acceptance argv and updates the one existing pending start intent atomically under
+the expected generation. A reserved incarnation's source/token never changes, even after release. A future capture
+on the same task requires only normal authenticated stopped/exited receiving, with no live current worker/driver;
+it preserves that old incarnation. Historical UNKNOWN custody and unreleased reservations do not prevent the new
+registration. A retained legacy product record predating `taskKind` keeps that field absent. The host keeps the same intent through capacity waits and recovery;
+capacity waits never launch a model; optional unavailable custody does not block ordinary execution. A stale capture refusal names the old/current commits and exact authorized
+`--proof-start --expected-attempt` refresh needed; it never runs a doomed stale check.
+
+The retained `bun scripts/worker-check.ts --local -- bun test <files...>` prefix, including an original env
+prefix, runs directly as the one ordinary invocation. Goal preserves the raw wrapper argv and never double-wraps it.
+Homogeneous file unions retain every helper/test member; nested/duplicate wrappers and arbitrary shell/flags remain
+prohibited. No native producer port is required for this original ordinary wrapper path.
+
+New verification starts reuse the ordinary worker preparation and launcher. Shared dependency installation prepares
+the supported pinned Bun and workspace dependencies outside SQLite, before the worker can execute its command.
+Setup failure is reported as an environment/tool error with bounded diagnostics, not as a product assertion.
+A clean retained branch whose commits beyond its recorded base have an empty tree diff can prepare a separate
+detached worktree at the newly authorized capture. The old worktree, branch, report commits and attempt history stay
+intact. Dirty trees, real source changes or an already prepared/reserved CURRENT invocation refuse this preparation; it is
+never a reset, rebase, source swap under a token or manager checkout operation.
+
+The SQLite lifecycle admits at most three current proof runs per Goal, atomically before ordinary preparation.
+Pending preparation occupies one slot across controller crashes. Running and waiting ordinary proofs occupy one
+slot each. `historicalProofChecks()` inspects only each task's CURRENT running/waiting attempt; older generations,
+labelled command strings, stopped/exited attempts and archived historical facts do not occupy new logical slots.
+A current running/waiting check remains counted even when its optional custody is unknown. Capacity waits preserve
+one durable start intent without launching a model. Normal host and physical check admission remain independent.
+
+To register a future capture after a stopped/exited proof, use the authenticated owner or configured operations
+session with the exact current generation; no release command is needed:
+
+```sh
+bun tools/goal/src/cli.ts retry <task> --proof-start --expected-attempt <generation> --brief .temp/goal/original-proof.md
+```
+
+The submitted brief captures current dev and retains the exact original Goal, manager, journey, sourceTasks and
+acceptance. Registration archives the previous accepted contract and its hashes, keeps the SAME task ID and one
+pending start intent, and launches nothing. Normal host start creates the next attempt and one distinct ordinary
+invocation. `retry <task> --expected-attempt <generation> --brief <file>` also supports this authenticated
+stopped/exited registration. Running/waiting current attempts and live current worker/driver identities refuse it.
+No historical ownership scan, logical-release event, optional native status or old reservation consistency is an
+admission/preparation prerequisite. The old optional binding cannot select the new attempt's protocol. Neither path
+authorizes changing an old binding, token, check UUID, source, result or raw history.
+
+The optional public logical release operation above and normal host reconciliation mark the current stopped/exited reservation `released`
+with a `logicalRelease` policy reason and a `proof-logical-released` event. They preserve the original binding, token,
+UUID, source, raw observation (including UNKNOWN) and physical history. Release does not declare a native pass,
+terminal custody, cleanup, remote capacity or lease release. Existing historical archive events are retained as facts,
+including `historical-proof-terminal` events whose status is `historical-unknown` and `passed` is false. They are never
+promoted into native passes. No old check is signalled or restarted by reconciliation.
+
+Optional native evidence remains available through the existing strict `ProofProducer`, `nativeProofBinding`,
+`receiveProofStart`, `observeProof` and reservation readers. Their identity, argv, token, result-path and physical
+custody validation is unchanged for consumers of that evidence. Optional history reading uses the configured
+`integration.checkScriptReaderRoot`: a canonical, Git-clean captured integration ancestor containing the delivered
+producer and its exact native module closure, validated before import. Historical cwd is data only; old/deleted
+worker code is never imported. Missing/invalid readers record a bounded `historical-proof-reader-unavailable`
+diagnostic, retain uncertain native observations and never abort unrelated orphan/wake/held/retry recovery.
+They do not prevent ordinary original-proof admission or success. No private source path is hardcoded.
+
+Authenticated registered verification receives its original-command protocol ahead of minimal mode. It invokes the
+exact ordinary wrapper once and returns the actual bare UUID while active. Goal waits and wakes the same session
+with the actual wrapper result; unknown/missing/nonzero results remain non-green. The wrapper record must name the
+current task, attempt, cwd and exact original command (the recorded child for an already wrapped original), with
+one invocation only. No producer token, physical receipt or terminal cleanup chain is needed to verify an ordinary
+wrapper's successful exit. Terminal zero, unchanged captured source and structured worker success with `checks: []`
+settle as `verified`, without a source commit, landing or main advancement. Optional native evidence stays separate.
+Failures retain exact assertion/setup evidence and log references for a separate owner product fix.
+
+Product/fix tasks retain the exact compiler policy: Kernel/Auth compiler database or check-host placement is
+permitted solely for workspace typing through its existing supported command, leases and terminal result. Workers
+await the existing foreground session without polling, cancellation, duplicates or fabricated check UUIDs.
+Acceptance/native/browser/root/worker-check verification stays deferred. Source success requires the complete own
+implementation and permitted typing with `checks: []`; actual native/combined release remains a controller gate.

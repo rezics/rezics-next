@@ -147,13 +147,67 @@ export async function runWorkerCommand(
         );
       }
     } else if (command === 'retry') {
-      if (!arg || (argv.length !== 1 && !(argv.length === 3 && argv[1] === '--brief' && argv[2])))
-        throw new Error('usage: retry <task> [--brief <file>]');
-      try {
-        tasks.queueRetry(arg, argv.length === 3 ? { brief: argv[2]! } : {}, priorityActor);
-      } catch (error) {
-        if (!(error instanceof BriefContractUnchangedError)) throw error;
-        print(error.message);
+      if (!arg)
+        throw new Error(
+          'usage: retry <task> [--proof-start | --release-proof] [--expected-attempt <n>] [--brief <file>] [--remove-after <task>]',
+        );
+      let brief: string | undefined;
+      let expectedAttempt: number | undefined;
+      const removeAfter: string[] = [];
+      let proofStart = false;
+      let releaseProof = false;
+      for (let index = 1; index < argv.length;) {
+        if (argv[index] === '--release-proof' && !releaseProof) {
+          releaseProof = true;
+          index++;
+          continue;
+        }
+        if (argv[index] === '--proof-start' && !proofStart) {
+          proofStart = true;
+          index++;
+          continue;
+        }
+        const flag = argv[index],
+          value = argv[index + 1];
+        if (!value) throw new Error(`missing value for ${flag}`);
+        if (flag === '--brief' && brief === undefined) brief = value;
+        else if (
+          flag === '--expected-attempt' &&
+          expectedAttempt === undefined &&
+          /^(0|[1-9]\d*)$/.test(value) &&
+          Number.isSafeInteger(Number(value))
+        )
+          expectedAttempt = Number(value);
+        else if (flag === '--remove-after') removeAfter.push(value);
+        else throw new Error(`invalid retry option: ${flag}`);
+        index += 2;
+      }
+      if (releaseProof) {
+        if (expectedAttempt === undefined || proofStart || brief || removeAfter.length)
+          throw new Error('--release-proof requires only --expected-attempt <current-generation>');
+        print(JSON.stringify(tasks.releaseProof(arg, expectedAttempt, priorityActor)));
+      } else if (proofStart || expectedAttempt === 0) {
+        if (expectedAttempt === undefined) throw new Error('--proof-start requires --expected-attempt');
+        print(
+          JSON.stringify(
+            tasks.queueProofStart(arg, { expectedAttempt, ...(brief ? { brief } : {}), removeAfter }, priorityActor),
+          ),
+        );
+      } else {
+        if (removeAfter.length)
+          throw new Error(
+            '--remove-after requires --proof-start with an expected generation (or --expected-attempt 0)',
+          );
+        try {
+          tasks.queueRetry(
+            arg,
+            { ...(brief ? { brief } : {}), ...(expectedAttempt === undefined ? {} : { expectedAttempt }) },
+            priorityActor,
+          );
+        } catch (error) {
+          if (!(error instanceof BriefContractUnchangedError)) throw error;
+          print(error.message);
+        }
       }
     } else if (command === 'priority') {
       if (argv[0] === 'grant') {
