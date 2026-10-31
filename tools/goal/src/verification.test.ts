@@ -51,6 +51,7 @@ import {
   type ProofBinding,
 } from './verification.ts';
 import { settle } from './settle.ts';
+import { makeRecord, readMeasurement } from './records.ts';
 import type { Attempt } from './types.ts';
 
 function attempt(taskId: string, n: number, directory: string): Attempt {
@@ -1577,6 +1578,9 @@ test('authenticated logical reconciliation permits one fresh SAME-ID future capt
     h.store.updateAttempt(h.current, (value) => {
       value.result = 'Paid original report'; value.session = 'paid-session'; value.checks = [h.binding.checkId];
     });
+    h.store.putRecord({ ...makeRecord(h.store.task(h.proof.id), h.store.attempt(h.current),
+      readMeasurement(h.store.attempt(h.current)), 'stopped'), proof: unknown });
+    const rawRecord = h.store.db.query('SELECT body FROM worker_records WHERE task_id=? AND attempt=1').get(h.proof.id);
     const originalEvents = h.store.events(h.proof.id);
     h.store.close(h.current, 'stopped');
     const rawAttempt = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=1').get(h.proof.id);
@@ -1607,7 +1611,8 @@ test('authenticated logical reconciliation permits one fresh SAME-ID future capt
     const changedArgv = submittedProof(h, { proof: fresh.brief.proof!,
       acceptance: { ...fresh.brief.acceptance, command: [...fresh.brief.acceptance.command, '--changed'] } });
     expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: changedArgv.path }, h.actor))
-      .toThrow('exact original acceptance');
+      .toThrow('retain every whole original argv');
+    expect(() => h.store.assertProofRegistration(h.current, changedArgv.brief)).toThrow('exact original acceptance');
     const changedOriginal = submittedProof(h, { proof: { ...fresh.brief.proof!, journey: 'Different journey' } });
     expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: changedOriginal.path }, h.actor))
       .toThrow('exact original metadata');
@@ -1654,6 +1659,7 @@ test('authenticated logical reconciliation permits one fresh SAME-ID future capt
     expect(h.store.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=? AND attempt=1').get(h.proof.id)).toEqual(releasedRow);
     expect(h.store.events(h.proof.id).slice(0, originalEvents.length)).toEqual(originalEvents);
     expect(h.store.attempt(h.current)).toMatchObject({ result: 'Paid original report', session: 'paid-session', checks: [h.binding.checkId] });
+    expect(h.store.db.query('SELECT body FROM worker_records WHERE task_id=? AND attempt=1').get(h.proof.id)).toEqual(rawRecord);
     expect(git(h.root, ['rev-parse', 'HEAD'])).toBe(originalHead);
     expect(h.store.events(h.proof.id).some((event) => ['proof-verified', 'historical-proof-terminal'].includes(event.kind))).toBe(false);
     // The new current wait consumes one logical slot; released UNKNOWN history consumes none.

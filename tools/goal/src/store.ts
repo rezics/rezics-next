@@ -1325,7 +1325,9 @@ export class WorkerStore implements AttemptFence {
         this.saveAttempt(old);
         const record =
           this.record(ref) ?? makeRecord(task, old, readMeasurement(old, { configDirectory }), 'superseded');
-        if (record && record.outcome === 'pending-gate') {
+        const retainedProof = record.taskKind === 'verification' &&
+          this.events(task.id, ref.attempt).some((event) => event.kind === 'proof-logical-reconciled');
+        if (record.outcome === 'pending-gate' && !retainedProof) {
           record.outcome = 'superseded';
         }
         this.saveRecord(record);
@@ -1373,7 +1375,10 @@ export class WorkerStore implements AttemptFence {
           record.earlyStop = previous.earlyStop;
         }
         this.saveAttempt(old);
-        this.saveRecord(record);
+        // A new capture cannot recalculate the old proof's report/evidence using its new contract or logs.
+        if (!previous || previous.taskKind !== 'verification' ||
+            !this.events(task.id, old.attempt).some((event) => event.kind === 'proof-logical-reconciled'))
+          this.saveRecord(record);
       }
     });
   }
