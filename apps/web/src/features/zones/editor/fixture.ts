@@ -140,7 +140,7 @@ export function zoneEditorFixture() {
           resource.mounts = body.mounts;
           resource.zone.labels = body.configuration.labels;
           if (body.configuration.primaryLanguage) resource.zone.primaryLanguage = body.configuration.primaryLanguage;
-          else delete resource.zone.primaryLanguage;
+
           resource.zone.navigation = body.configuration.pages.map((page: { route: string }) => ({ route: page.route }));
         } else resource.zone.visibility = body.visibility;
         advance();

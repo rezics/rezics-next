@@ -45,7 +45,7 @@ export function ZoneNameFields({
           aria-describedby="zone-name-help"
           onChange={(event) => {
             const language = event.target.value as ZoneLanguage;
-            change({ ...labels, [language]: labels[language] ?? '' }, language);
+            change({ ...labels }, language);
           }}
         >
           {UI_LOCALES.map((language) => (

@@ -114,7 +114,7 @@ export function CreateZone({ locale, session, onCreate, onNavigate }: CreateProp
               onChange={(event) => {
                 const id = event.target.value;
                 setStarter(id);
-                setLabels((current) => current ?? (copyStarter(id) ? { [primaryLanguage]: '' } : null));
+                setLabels((current) => current ?? (copyStarter(id) ? {} : null));
                 setResult(null);
               }}
             >

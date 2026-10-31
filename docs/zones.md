@@ -166,7 +166,7 @@ explicit legacy order: `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr`, `es`.
 helper consumes only disclosed labels; missing or withheld names are never recovered from private
 configuration. The owner editor explains the legacy order and stores an explicit primary when the owner
 edits a name or chooses its language. Switching either interface or primary language preserves entered
-names; selecting a missing primary creates a blank required field. Only nonprimary translations can be
+names; selecting a missing primary presents a blank required field without adding an empty translation. Only nonprimary translations can be
 removed. Optional translations are progressively disclosed and must be authored, never synthesized.
 Public output remains a closed partial label map, including the empty map after withholding, with optional
 primary-language metadata subject to the same field withholding. A configured

@@ -74,9 +74,6 @@ export const CreateReadRenameRead: Story = {
     await userEvent.click(view.getByRole('button', { name: 'Switch interface language' }));
     await expect(view.getByLabelText(m.zone_name_primary({}, { locale: 'fr' }))).toHaveValue('私の本棚');
     await userEvent.click(view.getByRole('button', { name: 'Switch interface language' }));
-    // Selecting a new primary preserved the old empty English field. Remove that optional translation.
-    await userEvent.click(view.getByText(m.zone_name_translations()));
-    await userEvent.click(view.getByRole('button', { name: m.zone_name_remove({ language: 'English' }) }));
     await userEvent.click(view.getByRole('button', { name: m.zones_create_submit() }));
     const primary = await view.findByLabelText(m.zone_name_primary());
     await expect(primary).toHaveValue('私の本棚');
