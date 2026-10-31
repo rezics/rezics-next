@@ -136,6 +136,7 @@ export function createDiscoverySearch(config: {
     let examined = 0;
     let exhausted = false;
     let retained = false;
+    let failed = false;
     try {
       for (let round = 0; round < 3; round++) {
         const batch = await config.consumer.queryDiscovery(queried, nativeContext, refill);
@@ -254,8 +255,18 @@ export function createDiscoverySearch(config: {
       );
       retained = page.next !== null;
       return page;
+    } catch (error) {
+      failed = true;
+      throw error;
     } finally {
-      if (!retained) await config.consumer.closeObservation(queried, nativeContext);
+      if (!retained) {
+        try {
+          await config.consumer.closeObservation(queried, nativeContext);
+        } catch (error) {
+          // Cleanup of a lost physical observation must not replace its restart/readiness error.
+          if (!failed) throw error;
+        }
+      }
     }
   };
   return async (...args) => {

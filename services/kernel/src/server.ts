@@ -375,9 +375,15 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
         } finally {
           try {
             await boot.catch(() => {});
-            await discovery?.close();
-            await publicFilters?.close();
-            if (workClient) await (await workClient).close();
+            try {
+              await discovery?.close();
+            } finally {
+              try {
+                await publicFilters?.close();
+              } finally {
+                if (workClient) await (await workClient).close();
+              }
+            }
           } finally {
             await pool.end();
           }

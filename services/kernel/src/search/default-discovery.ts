@@ -54,7 +54,10 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
         query: (queried, nativeContext, refill) => bound().query(queried, nativeContext, refill),
         readStatus: (input, nativeContext) => bound().readStatus(input, nativeContext),
         repairStep: (job, nativeContext) => bound().repairStep(job, nativeContext),
-        closeObservation: (queried, nativeContext) => bound().closeObservation(queried, nativeContext),
+        async closeObservation(queried, nativeContext) {
+          // A rejected retained generation has not opened a factory in this request.
+          if (operations) await operations.closeObservation(queried, nativeContext);
+        },
         close: () => runtime.close(),
       };
       return createDiscoverySearch({

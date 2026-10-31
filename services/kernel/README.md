@@ -56,6 +56,12 @@ readiness from its projection-page and reduction readers. Default wiring preserv
 The focused default-server regression requires a positive native response and is deferred in minimal verification
 mode. Workspace typing does not establish native readiness.
 
+Mixed native repair also remains unfinished: `public-filter-consumer.ts` currently dispatches retained repair
+items through the Subject-only `createSearchWriterGuard`, and custody verifies Subject writer receipts.
+`createDiscoveryProjection` is the existing mixed writer, but its copy settlement is not a native repair receipt.
+The default durable delivery now resolves mixed jobs and their registry; it does not turn that writer's local
+settlement into Source or custody proof. A positive default discovery response is not established by this wiring.
+
 Run `bun run search rebuild` from this workspace to build the next subject generation and switch the alias to it.
 Set `DATABASE_URL`, `OPENSEARCH_URL`, and the deployment's `KERNEL_ROUTE_KEY` (canonical unpadded base64url encoding
 of exactly 32 bytes). Rebuild validates the route key before opening the database pool and supplies it to the source
