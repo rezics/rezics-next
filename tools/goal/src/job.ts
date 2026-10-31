@@ -960,9 +960,10 @@ export class WorkerJob implements GateOutcomeSink {
             managerId: task.brief.manager,
             kind: 'environment',
             taskId: task.id,
-            summary: `environment: finished worktree cleanup for ${task.id} is blocked at ${disposition.path} (owner ${owner}); it will retry after the path's ownership or permissions change.`
-              .replace(/[\r\n]+/g, ' ')
-              .slice(0, 1000),
+            summary:
+              `environment: finished worktree cleanup for ${task.id} is blocked at ${disposition.path} (owner ${owner}); it will retry after the path's ownership or permissions change.`
+                .replace(/[\r\n]+/g, ' ')
+                .slice(0, 1000),
           });
         }).then(() => {}),
       );

@@ -14,7 +14,10 @@ export type LifetimeRuntime = {
 };
 
 class CommandStartError extends Error {
-  constructor(message: string, readonly code?: string) {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
     super(message);
   }
 }
@@ -34,8 +37,7 @@ const runtime: LifetimeRuntime = {
   sleep: (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms)),
   command: (command, args, cwd) => {
     const result = spawnSync(command, args, { cwd, encoding: 'utf8' });
-    if (result.error)
-      throw new CommandStartError(result.error.message, (result.error as NodeJS.ErrnoException).code);
+    if (result.error) throw new CommandStartError(result.error.message, (result.error as NodeJS.ErrnoException).code);
     if (result.status !== 0) throw new Error(result.stderr || `${command} exited ${result.status}`);
   },
 };
@@ -61,7 +63,11 @@ function isPermissionFailure(error: unknown): boolean {
   if (error instanceof CommandStartError) return false;
   const code = (error as NodeJS.ErrnoException | undefined)?.code;
   const detail = String(error);
-  return code === 'EACCES' || code === 'EPERM' || /\b(?:EACCES|EPERM)\b|permission denied|operation not permitted/i.test(detail);
+  return (
+    code === 'EACCES' ||
+    code === 'EPERM' ||
+    /\b(?:EACCES|EPERM)\b|permission denied|operation not permitted/i.test(detail)
+  );
 }
 
 function isNotWorkingTree(error: unknown): boolean {
@@ -86,9 +92,7 @@ function reportedPath(error: unknown, root: string, mainCheckout: string): strin
     if (value) break;
   }
   if (!value) return root;
-  const candidates = isAbsolute(value)
-    ? [resolve(value)]
-    : [resolve(mainCheckout, value), resolve(root, value)];
+  const candidates = isAbsolute(value) ? [resolve(value)] : [resolve(mainCheckout, value), resolve(root, value)];
   return candidates.find((path) => inside(root, path)) ?? root;
 }
 
@@ -179,11 +183,7 @@ function hasUnresolvedCleanup(candidates: readonly Task[], roots: readonly strin
   return unresolved;
 }
 
-function notify(
-  reporter: CleanupReporter | undefined,
-  task: Task,
-  disposition: WorktreeCleanupDisposition,
-): void {
+function notify(reporter: CleanupReporter | undefined, task: Task, disposition: WorktreeCleanupDisposition): void {
   if (reporter) reporter(task, disposition);
 }
 
@@ -203,7 +203,9 @@ function recordPermissionFailure(
     path,
     owner: identity.owner,
     worktreeIdentity: { dev: String(worktreeStat.dev), ino: String(worktreeStat.ino) },
-    detail: String(error).replace(/[\r\n]+/g, ' ').slice(0, 1000),
+    detail: String(error)
+      .replace(/[\r\n]+/g, ' ')
+      .slice(0, 1000),
     recordedAt: new Date().toISOString(),
   };
   if (store.recordWorktreeCleanup(disposition)) notify(reporter, task, disposition);
@@ -250,7 +252,10 @@ export async function removeFinishedWorktree(
         if (!worktreeStat || !worktreeStat.isDirectory() || worktreeStat.isSymbolicLink()) continue;
 
         const oldDisposition = store.worktreeCleanup(current.id);
-        if (oldDisposition && pathGeneration(current.worktree, oldDisposition.path).generation === oldDisposition.generation)
+        if (
+          oldDisposition &&
+          pathGeneration(current.worktree, oldDisposition.path).generation === oldDisposition.generation
+        )
           continue;
 
         while ((io.pressure() ?? 0) > IO_PRESSURE_LIMIT) await io.sleep(1000);

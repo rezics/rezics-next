@@ -47,7 +47,12 @@ function fake(overrides: Partial<LifetimeRuntime> = {}): LifetimeRuntime {
   };
 }
 
-function failingRemoval(taskWorktree: string, blocker: string, count: { value: number }, fail: () => boolean): LifetimeRuntime {
+function failingRemoval(
+  taskWorktree: string,
+  blocker: string,
+  count: { value: number },
+  fail: () => boolean,
+): LifetimeRuntime {
   const real = fake();
   return fake({
     command: (command, args, cwd) => {
@@ -62,9 +67,7 @@ function failingRemoval(taskWorktree: string, blocker: string, count: { value: n
   });
 }
 
-function deliverCleanupNotice(
-  inbox: SqliteManagerInbox,
-): Parameters<typeof removeFinishedWorktree>[3] {
+function deliverCleanupNotice(inbox: SqliteManagerInbox): Parameters<typeof removeFinishedWorktree>[3] {
   return (task, disposition) => {
     const owner = disposition.owner ? `${disposition.owner.uid}:${disposition.owner.gid}` : 'unknown';
     inbox.deliver({
