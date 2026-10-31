@@ -335,7 +335,11 @@ For account readers, `GET /v1/subjects/:id/candidates` optionally adds `consentI
 {
   "consentIdentity": {
     "subject": { "id": "subject UUID", "labels": { "en": "River Ink" } },
-    "target": { "id": "original target UUID", "labels": { "en": "The person behind the name" }, "redirect": "optional survivor UUID" }
+    "target": {
+      "id": "original target UUID",
+      "labels": { "en": "The person behind the name" },
+      "redirect": "optional survivor UUID"
+    }
   }
 }
 ```
