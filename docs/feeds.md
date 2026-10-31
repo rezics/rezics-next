@@ -1,0 +1,135 @@
+# Home and Following feeds
+
+`GET /v1/feedItems` returns one mixed page. `stream` is `home` (default) or `following`,
+`limit` is 1–20 (default 20), and `cursor` is an opaque continuation. `Accept-Language`
+selects native summary languages. The response is `{feedItems,next,asOf,sources}`.
+The exported closed `FeedItemSchema` and `FeedPageSchema` define the client-inferred wire.
+
+Each item has a stable native `id`, `source`, canonical `key`, nullable `occurredAt`,
+currently disclosed native `summary`, and typed `destination`. Destinations contain IDs
+and titles, never external URLs. A post preserves both `threadId` and `postId` for the
+consumer's canonical thread route and post fragment. Continue also carries the original
+native Continue subject, state and session. Thread/post summaries use native current
+read fields; Collection summaries contain its current ID, title and description.
+
+Anonymous home invokes only the existing public DiscoverySearch producer. Following and
+Continue are `not_requested`. Authenticated responses are `private, no-store`; session
+preparation belongs to the consumer. Current actor-home lifecycle and credential floor,
+`follow:list`, and the personal Library gate admit Following. Home additionally requires
+`library_entry:list`, `progress_session:list`, the personal Library gate with the original
+Library action, and the reading-progress gate. Discovery independently admits the Search
+gate. Refusal and closed gates remain RFC 9457 problems. Admission is never converted
+into an empty or unavailable lane.
+
+The existing `KernelDependencies.discovery` supplies DiscoverySearch unchanged, including
+its owner hydration, final disclosure and selected ordering. The feed does not create a
+second Search factory. Discovery's default is native name order, not recent activity or
+a personalized recommendation. Continue calls the existing owner reader with `limit:6`
+and `view:'FULL'`, its native Access, pool, route key, tokens and optional Search service.
+A missing canonical owner Source remains preparing/unavailable. No state/session is
+manufactured. Every requested source independently reports `ready`, `preparing` or
+`unavailable`; only ready empty means known empty. One failed source leaves the others
+usable. Raw dependency errors, reason counts and hidden references are not returned.
+
+## Page positions and cost
+
+The merge is deterministic round-robin in Continue, Following, discovery order, with
+the next turn persisted. Each lane preserves its native order. Following uses descending
+`(occurred_at,activity_id)`. Canonical object deduplication prefers Continue, then Following,
+then discovery for this page. Duplicate and rejected candidates consume their source
+positions. No all-follow, all-kind or partition scan runs in a request; no profile lookup
+is performed by the feed.
+
+One bounded mixed round fetches Continue's six, discovery width
+`max(1,floor((P-6)/2))`, and Following width `max(1,P-6-discoveryWidth)`.
+Following alone reads P; anonymous home gives discovery P. The feed reserves the actual
+native owners' raw-work upper bounds: discovery `6D+3`, Continue 39 and inbox F. At P=20
+the mixed bound is 91, anonymous 123, Following 20; all are below B=160. There is no
+additional refill round. Original owner readers retain their maximum three native
+continuation rounds and stricter native operation budgets. Owner point probes and
+batched semantic summary/reference reads are bounded by these candidates; merge work
+is O(B log B), and native indexed owner probes are O(B log R).
+
+Discovery/inbox pages wider than one fit completely in the response budget. Small pages
+may partially consume Continue's native six: the cursor retains the original owner
+cursor, the last examined native activity key and the page's key fingerprint. The next
+read rehydrates that same native page and resumes after that key. A changed owner page
+requires a stale-cursor restart instead of skipping data or caching private progress.
+Sparse pages are valid. The server never derives a frontier from visible output count.
+
+The composite cursor binds the exact viewer/credential authority inputs, stream, page
+size, languages, format, fixed boundary, next turn and source positions. Bounded parts
+use the existing native encrypted list-cursor envelopes with a common authenticated
+digest and part/count bindings. Total cursor size is capped at 32 KiB and expires after
+15 minutes. Following's initial keyset boundary is fixed by that page sequence.
+Native discovery membership/freshness remains owned by its retained cursor. `asOf` is
+the private page boundary or anonymous discovery's native freshness timestamp.
+
+## Activity, delivery and current authority
+
+The default Content registration adds committed thread/review/reply creation, Realm
+subject adoption, and currently public Collection listing/member/update effects to the
+same shared effects runtime. A catalogue-valid event must match its exact outbox event,
+partition, epoch, position and actual event index. Subject references retain the native
+maximum of 128. Realm content additionally carries its actual Space. Activities contain
+only source/target/object locators and time, never bodies, titles, grants or permission
+flags. Semantic publication locators retain Realm and publication IDs so a withdrawal
+or replacement cannot revive an old event. Collection events never feed public discovery.
+
+`createFeedActivityStore({pool,clock?,tokens})` exports
+`pageTargetActivity(target,{cursor?,limit?},deadline)` returning `{activities,next}`, and
+`applyFollowingActivity({accountId,reasonTarget,activity},deadline)`. Limits are 1–128.
+The additive `tokens` dependency is the actual composition's native ring, not a new
+environment secret. Internal inventory/inbox cursors use native sealing; durable work
+positions have no HTTP-session expiry. Their current retention and source identity are
+still rechecked. The HTTP composite cursor supplies the viewer/session lifetime.
+
+`createFollowActivitySource({pool,clock?,tokens,workClient,activityStore})` exports
+`pageRecipients(target,{cursor?,limit?},deadline)` returning `{recipients:[{accountId}],next}`,
+and `checkCurrentFollowSupport(actor,{targets},deadline)` returning
+`[{target,status:'following'|'not_following'|'unavailable'}]`, with at most three targets.
+Subject, Collection and Space are supported. Recipient keysets advance on examined
+inverse candidates, including stale/ineligible accounts. The indexed positive inverse
+and its current terminal/epoch/readiness are candidate support only. Every positive
+disclosure independently reads current actor-home follows, explicit negatives, lifecycle
+and identity. Redirected support is positive only with a complete bounded native witness;
+unknown or oversized support is unavailable. No truncated authority page grants access.
+
+Each fanout step reads at most 128 inverse candidates, releases the source home, and
+delivers to one viewer home per transaction. Work is O(targets × recipients) overall,
+O(128 log R) per step. Inventory commit and durable fanout enqueue both precede effect
+success. Idempotent source-derived IDs make retries safe. Library registers follow-change
+backfill beside its existing work. Before reading recent inventory it delivers the
+existing native follow-count replacement and confirms candidate coverage, closing the
+race between new-follow backfill and concurrent activity fanout. Backfill examines at
+most 2000 references, in resumable pages of 128, within the same 30-day inventory.
+
+Following is a candidate inbox. Before returning each item, the feed checks genuine
+current follow support, calls the original native current owner read, checks current
+references/container chain, and checks follow support again. Thread/opening post/reply,
+board/Realm/Space, publication head, Collection visibility, and owner body/reference
+authorization remain with their original readers. Removed, erased, hidden or revoked
+objects are omitted according to that current authority. No projection supplies an allow.
+One retained reference supplies one checked reason; multiple reasons deduplicate by
+canonical object and no reason count or hidden target is exposed.
+
+## Retention and recovery
+
+Each viewer retains only the newest 2000 references and only the last 30 days, whichever
+is stricter. Delivery serializes per viewer and trims the overflow immediately; reads
+always apply the age cutoff. The default hourly retention schedule uses the existing
+shared schedule provisioner and bounded indexed deletion of 128 inventory and 128 inbox
+rows per step, with durable partition/segment continuations. Target inventory is also
+age bounded. No request performs cleanup or archive backfill. Destinations lead to the
+owner's full history.
+
+The existing Content account-erasure authored phase drains at most 128 of that account's
+own private inbox rows before advancing. Terminal lifecycle fencing prevents delayed
+deliveries from recreating them. These rows contribute only to Content's existing
+outcome; they never acknowledge foreign or Library erasure. Worker steps retry through
+the existing runtime and resume after failure. Owner/source movement or unavailable
+identity remains unavailable until native recovery; it is never declared empty.
+
+The default-composition regression is `services/kernel/test/content/feed.test.ts`, using
+real server/worker, discovery, canonical owner work, native follow changes and disclosure.
+Module schema dumps are derived by the controller through the normal supported path.

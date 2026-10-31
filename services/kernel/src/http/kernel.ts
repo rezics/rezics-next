@@ -39,6 +39,7 @@ import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import { collectionRoutes } from '../library/collection-routes.ts';
 import { continueRoutes } from '../library/continue-routes.ts';
+import { feedRoutes } from '../content/feed-routes.ts';
 import { personalLabelRoutes } from '../library/label-routes.ts';
 import { pinRoutes } from '../library/pin-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
@@ -450,7 +451,14 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ...(dependencies.search ? { search: dependencies.search } : {}),
     access: () => resolveAccess({ actions: actionCatalogue(continued), realmRoleReader }),
   });
-  const contextual = contextRoutes(continued as unknown as ReturnType<typeof definitionRoutes>, {
+  const feed = feedRoutes(continued as unknown as ReturnType<typeof definitionRoutes>, {
+    tokens, pool: dependencies.pool, routeKey: dependencies.routeKey, clock, workClient,
+    ...(dependencies.search ? { search: dependencies.search } : {}),
+    ...(dependencies.discovery ? { discovery: dependencies.discovery } : {}),
+    access: () => resolveAccess({ actions: actionCatalogue(feed), realmRoleReader }),
+    contentAccess: () => realmAwareContentAccess(resolveAccess({ actions: actionCatalogue(feed), realmRoleReader })),
+  });
+  const contextual = contextRoutes(feed as unknown as ReturnType<typeof definitionRoutes>, {
     tokens,
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -716,6 +724,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof ratingRoutes> &
   ReturnType<typeof collectionRoutes> &
   ReturnType<typeof continueRoutes> &
+  ReturnType<typeof feedRoutes> &
   ReturnType<typeof pinRoutes> &
   ReturnType<typeof personalLabelRoutes> &
   ReturnType<typeof personalLibraryRoutes> &

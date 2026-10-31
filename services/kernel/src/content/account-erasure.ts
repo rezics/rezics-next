@@ -18,6 +18,8 @@ import {
 import { eraseAccountReactionsPage, type ReactionErasureCursor } from './account-erasure-reactions.ts';
 import { eraseAccountModerationPage, purgeAccountStatementsPage } from './account-erasure-moderation.ts';
 import type { MediaStorage } from './media-storage.ts';
+import { eraseFeedInboxPage } from './feed-activity.ts';
+import { deadlineFor } from '../request/deadline.ts';
 
 const workflow = 'content.account-erasure.step';
 const retentionWorkflow = 'content.account-erasure.retention';
@@ -103,6 +105,7 @@ async function assertFinalProof(pool: Pool, storage: MediaStorage, accountId: st
           EXISTS(SELECT 1 FROM content.reaction WHERE route=$1 AND actor_account_id=$2 LIMIT 1) OR
           EXISTS(SELECT 1 FROM content.reaction_liked_version WHERE route=$1 AND actor_account_id=$2) OR
           EXISTS(SELECT 1 FROM content.report_reporter WHERE route=$1 AND reporter_account_id=$2) OR
+          EXISTS(SELECT 1 FROM content.feed_inbox WHERE route=$1 AND account_id=$2) OR
           EXISTS(SELECT 1 FROM content.party_locator WHERE route=$1 AND account_id=$2 AND kind <> 'decision')
           AS found`,
         [home, accountId],
@@ -213,6 +216,12 @@ async function step(pool: Pool, storage: MediaStorage, accountId: string, expect
   let finished = false;
 
   if (currentPhase === 'authored') {
+    const feedRows = await eraseFeedInboxPage(pool, accountId, deadlineFor(5000));
+    if (feedRows > 0) {
+      await persist(pool, accountId, progress, { phase: 'authored', cursor: progress.cursor,
+        contentFound: true, deliveryFound: false, pending: false, statementsKeptUntil });
+      return { phase: 'authored', step: expectedStep + 1 };
+    }
     const page = await eraseAccountAuthoredPage({ pool }, accountId, progress.cursor as AuthoredErasureCursor | null);
     found = page.found;
     if (page.next) nextCursor = page.next;

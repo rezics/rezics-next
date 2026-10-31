@@ -1,0 +1,227 @@
+import type { Pool } from 'pg';
+import type { Access, Actor } from '../request/access.ts';
+import type { KernelClock } from '../clock.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import type { WorkClient } from '../work/client.ts';
+import type { DiscoverySearch } from '../search/discovery-service.ts';
+import type { SearchService } from '../search/service-scope.ts';
+import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';
+import { AuthenticationError } from '../request/access.ts';
+import { ProblemError } from '../http/problem.ts';
+import { classifyUnavailability } from '../access/unavailable.ts';
+import { createContinueReads } from '../library/continue-reads.ts';
+import { createFollowActivitySource } from '../library/follow-activity.ts';
+import { createCollectionReads } from '../library/collection-reads.ts';
+import { readSubjectSummaries } from '../semantic/summaries.ts';
+import { readPublication } from '../community/publication.ts';
+import { ContentNotFoundError, readBoard, readPost, readThread } from './reads.ts';
+import { createFeedActivityStore, feedRoute, type ActivityRef } from './feed-activity.ts';
+import { decodeFeedCursor, encodeFeedCursor, feedBinding, fingerprint, type FeedPosition } from './feed-cursor.ts';
+import type { FeedItem, FeedPage, FeedSourceState } from './feed-contract.ts';
+
+export type FeedDependencies = {
+  pool: Pool; routeKey: Uint8Array; tokens: KeyRing; clock: KernelClock;
+  access: Access; contentAccess: Access; workClient: () => Promise<WorkClient>;
+  discovery?: DiscoverySearch; search?: SearchService;
+};
+const canonical = (item: FeedItem) => `${item.key.owner}:${item.key.id}`;
+const sourceState = (error: unknown): FeedSourceState => {
+  if (classifyUnavailability(error) === 'deadline') throw new ProblemError('deadline_exceeded');
+  if (error instanceof AuthenticationError || error instanceof PlatformClosedError) throw error;
+  if (error instanceof ProblemError) {
+    if (['forbidden', 'platform_closed', 'invalid_request', 'invalid_cursor', 'stale_cursor',
+      'search_restart_required', 'deadline_exceeded', 'authentication_required', 'invalid_credentials'].includes(error.code)) throw error;
+    if (['semantic_not_ready', 'index_not_ready'].includes(error.code)) return 'preparing';
+  }
+  return 'unavailable';
+};
+
+export function createFeedReads(deps: FeedDependencies) {
+  const activities = createFeedActivityStore(deps);
+  let follows: ReturnType<typeof createFollowActivitySource> | undefined;
+  const followSource = async () => follows ??= createFollowActivitySource({ ...deps,
+    workClient: await deps.workClient(), activityStore: activities });
+  const continued = createContinueReads(deps);
+  const collections = createCollectionReads(deps);
+  const content = { ...deps, access: deps.contentAccess };
+
+  async function hydrate(activity: ActivityRef, actor: Actor, deadline: number,
+    summaries: Awaited<ReturnType<typeof readSubjectSummaries>>): Promise<FeedItem | null> {
+    const supported = async () => (await (await followSource()).checkCurrentFollowSupport(actor, { targets: [activity.target] }, deadline))[0]?.status;
+    const initial = await supported();
+    if (initial === 'unavailable') throw new ProblemError('dependency_unavailable');
+    if (initial !== 'following') return null;
+    const object = activity.object;
+    if (activity.target.type === 'subject' && !summaries.get(activity.target.id)) return null;
+    let item: FeedItem | null = null;
+    if (object.owner === 'content') {
+      const thread = (await readThread(content, object.threadId, { actor, deadline })).value;
+      if (!thread || thread.availability !== 'available' || thread.firstPost.availability !== 'available') return null;
+      if (object.kind === 'thread' && activity.target.type === 'subject' && !thread.subjectIds.includes(activity.target.id)) return null;
+      if (activity.target.type === 'space') {
+        const board = (await readBoard(content, thread.boardId, { actor, deadline })).value;
+        if (!board || board.community?.spaceId !== activity.target.id) return null;
+      }
+      let postAt = thread.createdAt;
+      if (object.kind === 'post') {
+        const post = (await readPost(content, object.threadId, object.id, { actor, deadline })).value;
+        if (!post || post.availability !== 'available') return null;
+        if (activity.target.type === 'subject' && !post.subjectIds.includes(activity.target.id)) return null;
+        postAt = post.createdAt;
+      }
+      const summary = { id: thread.id, kind: thread.kind, title: thread.title, createdAt: thread.createdAt };
+      item = object.kind === 'thread'
+        ? { id: activity.id, source: 'following', key: { owner: 'content', kind: 'thread', route: object.route, id: object.id },
+          occurredAt: activity.occurredAt, summary, destination: { kind: 'thread', id: object.id, title: thread.title } }
+        : { id: activity.id, source: 'following', key: { owner: 'content', kind: 'post', route: object.route, id: object.id },
+          occurredAt: activity.occurredAt, summary: { id: object.id, threadId: thread.id, title: thread.title, createdAt: postAt },
+          destination: { kind: 'post', id: object.id, threadId: thread.id, postId: object.id, title: thread.title } };
+    } else if (object.owner === 'semantic') {
+      const publication = await readPublication(deps, object.realmId, object.id, { actor, deadline });
+      if (!publication || publication.publicationId !== object.publicationId) return null;
+      const summary = summaries.get(object.id);
+      if (!summary) return null;
+      item = { id: activity.id, source: 'following', key: { owner: 'semantic', kind: summary.type, route: feedRoute(summary.id), id: summary.id },
+        occurredAt: activity.occurredAt, summary, destination: { kind: 'subject', id: summary.id, title: summary.label?.value ?? null } };
+    } else {
+      const collection = await collections.readCollection(actor, object.id, deadline);
+      if (collection.visibility !== 'public') return null;
+      item = { id: activity.id, source: 'following', key: { owner: 'library', kind: 'collection', route: object.route, id: object.id },
+        occurredAt: activity.occurredAt, summary: { id: collection.id, title: collection.title, description: collection.description },
+        destination: { kind: 'collection', id: collection.id, title: collection.title } };
+    }
+    const final = await supported();
+    if (final === 'unavailable') throw new ProblemError('dependency_unavailable');
+    return final === 'following' ? item : null;
+  }
+
+  return {
+    async list(actor: Actor, query: { stream?: 'home' | 'following'; limit?: number; cursor?: string },
+      deadline: number, languages: readonly string[]): Promise<FeedPage> {
+      const stream = query.stream ?? 'home';
+      const limit = query.limit ?? 20;
+      if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw new ProblemError('invalid_request');
+      const personal = actor.kind === 'account';
+      if (stream === 'following' && !personal) throw new AuthenticationError(401, 'Bearer');
+      // Admission is outside lane-local recovery, including the current account lifecycle read.
+      if (personal) {
+        if (!actor.scopes.includes('follow:list') || (stream === 'home' &&
+          (!actor.scopes.includes('library_entry:list') || !actor.scopes.includes('progress_session:list'))))
+          throw new ProblemError('forbidden');
+        await (await followSource()).checkCurrentFollowSupport(actor, { targets: [] }, deadline);
+        await admitGroup({ ...deps, access: () => deps.access, actor, group: 'personal_library', clientAction: 'follow:list', deadline });
+        if (stream === 'home') {
+          await admitGroup({ ...deps, access: () => deps.access, actor, group: 'personal_library', clientAction: 'library_entry:list', deadline });
+          await admitGroup({ ...deps, access: () => deps.access, actor, group: 'reading_progress', clientAction: 'progress_session:list', deadline });
+        }
+      }
+      if (stream === 'home') await admitGroup({ ...deps, access: () => deps.access, actor,
+        group: 'search', clientAction: 'subject:search', deadline });
+      const now = deps.clock();
+      const binding = feedBinding(actor, stream, limit, languages);
+      const position: FeedPosition = query.cursor
+        ? await decodeFeedCursor(deps.tokens, binding, query.cursor, now)
+        : { boundary: now.toISOString(), turn: 0, discovery: stream === 'home' ? null : false,
+          following: personal ? null : false, continue: personal && stream === 'home' ? null : false, resume: null };
+      const sources: FeedPage['sources'] = { discovery: stream === 'home' ? 'ready' : 'not_requested',
+        following: personal ? 'ready' : 'not_requested', continue: personal && stream === 'home' ? 'ready' : 'not_requested' };
+      type Lane = 'continue' | 'following' | 'discovery';
+      const names: Lane[] = ['continue', 'following', 'discovery'];
+      type Candidate = { item: FeedItem | null; after?: string };
+      const lanes: Record<Lane, Candidate[]> = { continue: [], following: [], discovery: [] };
+      const next = { ...position };
+      let continueFingerprint = '';
+      let discoveryAsOf: string | undefined;
+      const discoveryLimit = !personal ? limit : Math.max(1, Math.floor((limit - 6) / 2));
+      const followingLimit = stream === 'following' ? limit : Math.max(1, limit - 6 - discoveryLimit);
+      // One bounded mixed round. Reserve native raw costs, including rejected keys inside owners:
+      // discovery <=6D+3, Continue <=39, inbox <=F. Mixed max91; anonymous max123.
+      await Promise.all(names.map(async (lane) => {
+        if (position[lane] === false) return;
+        try {
+          if (lane === 'discovery') {
+            if (!deps.discovery) throw new ProblemError('dependency_unavailable');
+            const page = await deps.discovery(personal ? `account:${actor.accountId}` : 'anonymous',
+              { representation: 'discovery-v1', limit: discoveryLimit, languages: [...languages],
+                ...(position.discovery ? { cursor: position.discovery } : {}) }, { access: deps.access, actor, deadline });
+            discoveryAsOf = page.as_of;
+            lanes.discovery = page.hits.map((hit) => ({ item: hit.summary.kind === 'subject'
+              ? { id: `discovery:${hit.key.owner}:${hit.key.id}`, source: 'discovery', key: { ...hit.key, owner: 'semantic' },
+                occurredAt: null, summary: hit.summary.value,
+                destination: { kind: 'subject', id: hit.key.id, title: hit.summary.value.label?.value ?? null } }
+              : { id: `discovery:${hit.key.owner}:${hit.key.id}`, source: 'discovery', key: { ...hit.key, owner: 'accounts', kind: 'account' },
+                occurredAt: null, summary: hit.summary.value,
+                destination: { kind: 'account', id: hit.key.id, title: hit.summary.value.displayName ?? hit.summary.value.handle } } }));
+            next.discovery = page.next ?? false;
+          } else if (lane === 'continue') {
+            const page = await continued.list(actor, { limit: 6, view: 'FULL',
+              ...(position.continue ? { cursor: position.continue } : {}) }, deadline, languages);
+            continueFingerprint = fingerprint(page.subjects.map((row) => [row.subjectId, row.lastActivityAt]));
+            if (position.resume && position.resume.fingerprint !== continueFingerprint) throw new ProblemError('stale_cursor');
+            const offset = position.resume ? page.subjects.findIndex((row) =>
+              fingerprint([row.subjectId, row.lastActivityAt]) === position.resume!.after) + 1 : 0;
+            if (position.resume && !offset) throw new ProblemError('stale_cursor');
+            lanes.continue = page.subjects.slice(offset).map((row) => ({ after: fingerprint([row.subjectId, row.lastActivityAt]),
+              item: row.subject ? { id: `continue:${row.subject.id}`, source: 'continue',
+                key: { owner: 'semantic', kind: row.subject.type, route: feedRoute(row.subject.id), id: row.subject.id },
+                occurredAt: row.lastActivityAt, summary: row.subject, continue: row,
+                destination: { kind: 'subject', id: row.subject.id, title: row.subject.label?.value ?? null } } : null }));
+            next.continue = page.next ?? false;
+            next.resume = null;
+          } else if (actor.kind === 'account') {
+            const page = await activities.pageFollowingActivity(actor.accountId, { limit: followingLimit,
+              boundary: position.boundary,
+              ...(position.following ? { cursor: position.following } : {}) }, deadline);
+            const ids = [...new Set(page.activities.flatMap((activity) => [
+              ...(activity.object.owner === 'semantic' ? [activity.object.id] : []),
+              ...(activity.target.type === 'subject' ? [activity.target.id] : []),
+            ]))];
+            const summaries = await readSubjectSummaries({ ...deps, actor, deadline }, ids, { languages });
+            lanes.following = await Promise.all(page.activities.map(async (activity) => {
+              try { return { item: await hydrate(activity, actor, deadline, summaries) }; }
+              catch (error) {
+                if (error instanceof ContentNotFoundError || (error instanceof ProblemError && error.code === 'not_found')) return { item: null };
+                throw error;
+              }
+            }));
+            next.following = page.next ?? false;
+          }
+        } catch (error) { sources[lane] = sourceState(error); next[lane] = position[lane]; }
+      }));
+      const preferred = new Map<string, Lane>();
+      for (const lane of names) for (const candidate of lanes[lane])
+        if (candidate.item && !preferred.has(canonical(candidate.item))) preferred.set(canonical(candidate.item), lane);
+      const offsets = { continue: 0, following: 0, discovery: 0 };
+      const seen = new Set<string>();
+      const feedItems: FeedItem[] = [];
+      let turn = position.turn;
+      let remaining = names.reduce((sum, lane) => sum + lanes[lane].length, 0);
+      while (remaining && feedItems.length < limit) {
+        const lane = names[turn]!;
+        turn = (turn + 1) % 3;
+        const candidate = lanes[lane][offsets[lane]];
+        if (!candidate) continue;
+        offsets[lane]++;
+        remaining--;
+        const item = candidate.item;
+        if (item && preferred.get(canonical(item)) === lane && !seen.has(canonical(item))) {
+          seen.add(canonical(item)); feedItems.push(item);
+        }
+      }
+      for (const lane of names) {
+        if (offsets[lane] === lanes[lane].length) continue;
+        // Discovery/inbox widths exceed one only when all admitted candidates fit P.
+        // Continue always reads its native six; resume by actual source key, never visible count.
+        next[lane] = position[lane];
+        if (lane === 'continue') next.resume = position.resume;
+        if (lane === 'continue' && offsets.continue > 0) next.resume = {
+          fingerprint: continueFingerprint, after: lanes.continue[offsets.continue - 1]!.after!,
+        };
+      }
+      next.turn = turn;
+      const hasNext = names.some((lane) => next[lane] !== false && sources[lane] !== 'not_requested');
+      return { feedItems, sources, asOf: personal ? position.boundary : discoveryAsOf ?? position.boundary,
+        next: hasNext ? await encodeFeedCursor(deps.tokens, binding, next, now) : null };
+    },
+  };
+}

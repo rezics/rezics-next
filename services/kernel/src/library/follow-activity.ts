@@ -1,17 +1,16 @@
 import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { within } from '../access/authenticate.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';
 import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
-import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { decodeCursor, encodeCursor } from '../content/feed-source-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { FeedActivityStore, FeedActivityTarget } from '../content/feed-activity.ts';
 import { feedPageLimit, feedRoute } from '../content/feed-activity.ts';
-import { readFollow } from './follow-store.ts';
+import { feedSnapshot } from '../content/feed-snapshot.ts';
 import { resolveCountDestination, FollowCountUnavailableError } from './follow-count-target.ts';
 import { requireFollowCountHealth } from './follow-count-health.ts';
 
@@ -38,12 +37,12 @@ export function createFollowActivitySource(deps: {
         throw new ProblemError('invalid_cursor');
       // Readiness is owner-maintained constant metadata, never a recipient/partition census.
       await within(deadline, () => requireFollowCountHealth(deps.pool));
-      const rows = await within(deadline, () => withConnection(deps.pool, async (connection) =>
-        (await deadlineClient(connection, deadline).query<{ account_id: string }>(
+      const rows = await feedSnapshot(deps.pool, destination.route, deadline, async (client) =>
+        (await client.query<{ account_id: string }>(
           `SELECT account_id FROM library.follow_count_support WHERE route=$1 AND target_type=$2 AND target_id=$3
            AND account_id>$4 AND support>0 ORDER BY account_id LIMIT $5`,
           [destination.route, target.type, destination.targetId,
-            cursor?.ok ? cursor.after[0] : '00000000-0000-0000-0000-000000000000', limit])).rows));
+            cursor?.ok ? cursor.after[0] : '00000000-0000-0000-0000-000000000000', limit])).rows);
       const current = await within(deadline, () => resolveCountDestination({ pool: deps.pool }, { targetType: target.type, targetId: target.id }));
       if (destination.targetId !== current.targetId || destination.epoch !== current.epoch) throw new FollowCountUnavailableError();
       return { recipients: rows.map((row) => ({ accountId: row.account_id })), next: rows.length === limit
@@ -54,10 +53,7 @@ export function createFollowActivitySource(deps: {
       if (input.targets.length > 3) throw new RangeError('At most three follow support targets');
       const route = feedRoute(actor.accountId);
       async function ownerRows(ids: readonly string[]) {
-        return withConnection(deps.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          try {
+        return feedSnapshot(deps.pool, route, deadline, async (client) => {
             const owner = await readAccount(client, route, actor.accountId);
             if (!owner || owner.kind !== 'actor' || owner.state !== 'active' || owner.fenced ||
               !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1 || owner.minimumAuthnEpoch > BigInt(actor.authnEpoch))
@@ -65,9 +61,7 @@ export function createFollowActivitySource(deps: {
             const result = (await client.query<{ target_id: string; target_type: string; state: string; reason: string }>(
               'SELECT target_id,target_type,state,reason FROM library.follow WHERE route=$1 AND account_id=$2 AND target_id=ANY($3::uuid[])',
               [route, actor.accountId, ids])).rows;
-            await client.query('COMMIT');
             return result;
-          } catch (error) { await client.query('ROLLBACK'); throw error; }
         });
       }
       const direct = await ownerRows(input.targets.map((target) => target.id));
@@ -95,8 +89,8 @@ export function createFollowActivitySource(deps: {
         }
         // A complete anchored candidate page may witness positive alias support, but a missing/stale
         // projection cannot prove a negative. Overflow remains unavailable, never truncated eligibility.
-        const pairs = await withConnection(deps.pool, async (connection) =>
-          (await deadlineClient(connection, deadline).query<{ original_id: string }>(
+        const pairs = await feedSnapshot(deps.pool, feedRoute(mapping.terminal), deadline, async (client) =>
+          (await client.query<{ original_id: string }>(
             `SELECT original_id FROM library.follow_count_pair WHERE route=$1 AND target_type='subject'
              AND target_id=$2 AND account_id=$3 ORDER BY original_id LIMIT 129`,
             [feedRoute(mapping.terminal), mapping.terminal, actor.accountId])).rows);
@@ -104,8 +98,13 @@ export function createFollowActivitySource(deps: {
         const ids = pairs.map((pair) => pair.original_id);
         const mappings = await within(deadline, () => identityEpochStore.readMappings(deps.pool, ids));
         const originalRows = await ownerRows(ids);
+        const finalMappings = await within(deadline, () => identityEpochStore.readMappings(deps.pool, ids));
+        const finalRows = await ownerRows(ids);
         const positive = mappings.some((value) => value.state === 'mapped' && value.epoch === mapping.epoch &&
-          value.terminal === mapping.terminal && originalRows.some((row) => row.target_id === value.original && row.target_type === 'subject' && row.state === 'following'));
+          value.terminal === mapping.terminal && finalMappings.some((current) => current.state === 'mapped' && current.original === value.original &&
+            current.terminal === value.terminal && current.epoch === value.epoch) &&
+          originalRows.some((row) => row.target_id === value.original && row.target_type === 'subject' && row.state === 'following') &&
+          finalRows.some((row) => row.target_id === value.original && row.target_type === 'subject' && row.state === 'following'));
         const final = await within(deadline, () => identityEpochStore.readMapping(deps.pool, target.id));
         result.push({ target, status: positive && final.state === 'mapped' && final.terminal === mapping.terminal && final.epoch === mapping.epoch
           ? 'following' : 'unavailable' });

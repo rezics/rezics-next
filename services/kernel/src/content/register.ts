@@ -18,6 +18,7 @@ import type { MediaImportFetchConfig } from './media-import.ts';
 import { R2Storage } from './r2-storage.ts';
 import { createContentWork } from './work.ts';
 import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts';
+import { registerFeedWork } from './feed-work.ts';
 
 /** Standalone fixture/caller Access with the shared role catalogue. Default
  * production registration uses WorkContext's fully mounted authorization instead.
@@ -142,5 +143,6 @@ export const registerContent: WorkModule = {
       ...contentEffects(context.pool, context.client),
       ...contentNoticeEffects(context.pool, access),
     ]);
+    await registerFeedWork(context);
   },
 };

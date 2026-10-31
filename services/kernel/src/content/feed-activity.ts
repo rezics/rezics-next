@@ -1,18 +1,17 @@
 import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { decodeCursor, encodeCursor } from './feed-source-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { feedSnapshot } from './feed-snapshot.ts';
 
 export type FeedActivityTarget = Readonly<{ type: 'subject' | 'collection' | 'space'; id: string }>;
 export type FeedActivityObject =
   | Readonly<{ owner: 'content'; kind: 'thread' | 'post'; route: number; id: string; threadId: string }>
-  | Readonly<{ owner: 'semantic'; kind: string; route: number; id: string; realmId: string }>
+  | Readonly<{ owner: 'semantic'; kind: string; route: number; id: string; realmId: string; publicationId: string }>
   | Readonly<{ owner: 'library'; kind: 'collection'; route: number; id: string }>;
 export type ActivityRef = Readonly<{
   id: string;
@@ -41,7 +40,7 @@ export function validateActivity(activity: ActivityRef): void {
     !Number.isInteger(source.epoch) || source.epoch < 1 || source.epoch > 2147483647 ||
     !/^[1-9][0-9]{0,18}$/.test(source.position) || BigInt(source.position) > 9223372036854775807n ||
     !Number.isInteger(source.eventIndex) || source.eventIndex < 0 || source.eventIndex >= 1000 ||
-    partitionOf(object.route) !== source.partition || feedRoute(object.id) !== object.route ||
+    partitionOf(object.owner === 'semantic' ? feedRoute(object.realmId) : object.route) !== source.partition || feedRoute(object.id) !== object.route ||
     !['subject', 'collection', 'space'].includes(target.type) ||
     !Number.isFinite(Date.parse(activity.occurredAt))) throw new TypeError('Invalid feed activity identity');
   feedRoute(target.id);
@@ -54,7 +53,7 @@ export function validateActivity(activity: ActivityRef): void {
 export function createFeedActivityStore(deps: { pool: Pool; clock?: KernelClock; tokens: KeyRing }) {
   const clock = deps.clock ?? systemClock;
   async function page(
-    anchor: FeedActivityTarget | { accountId: string }, query: ActivityPageQuery, deadline: number,
+    anchor: FeedActivityTarget | { accountId: string }, query: ActivityPageQuery & { boundary?: string }, deadline: number,
   ): Promise<ActivityPage> {
     const limit = feedPageLimit(query.limit);
     const inbox = 'accountId' in anchor;
@@ -67,10 +66,9 @@ export function createFeedActivityStore(deps: { pool: Pool; clock?: KernelClock;
     if (cursor && (!cursor.ok || cursor.epoch !== 1 || cursor.after.length !== 3 ||
       cursor.after.some((value) => typeof value !== 'string'))) throw new ProblemError('invalid_cursor');
     const after = cursor?.ok ? cursor.after as string[] : null;
-    const boundary = after?.[2] ?? now.toISOString();
+    const boundary = after?.[2] ?? query.boundary ?? now.toISOString();
     const cutoff = new Date(now.getTime() - FEED_RETENTION_MS).toISOString();
-    const activities = await within(deadline, () => withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
+    const activities = await feedSnapshot(deps.pool, feedRoute(id), deadline, async (client) => {
       const rows = await client.query<{ activity: ActivityRef; at: string; id: string }>(inbox
         ? `SELECT activity, to_char(occurred_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at, activity_id AS id
            FROM content.feed_inbox WHERE route=$1 AND account_id=$2 AND occurred_at>$3 AND occurred_at<=$4
@@ -83,14 +81,14 @@ export function createFeedActivityStore(deps: { pool: Pool; clock?: KernelClock;
         [feedRoute(id), id, cutoff, boundary, after?.[0] ?? null, after?.[1] ?? '', limit,
           ...(!inbox ? [anchor.type] : [])]);
       return rows.rows;
-    }));
+    });
     const last = activities.at(-1);
     return { activities: activities.map((row) => row.activity), next: last && activities.length === limit
       ? encodeCursor(deps.tokens, binding, { epoch: 1, after: [last.at, last.id, boundary] }, now.getTime()) : null };
   }
   return {
     pageTargetActivity: (target: FeedActivityTarget, query: ActivityPageQuery, deadline: number) => page(target, query, deadline),
-    pageFollowingActivity: (accountId: string, query: ActivityPageQuery, deadline: number) => page({ accountId }, query, deadline),
+    pageFollowingActivity: (accountId: string, query: ActivityPageQuery & { boundary?: string }, deadline: number) => page({ accountId }, query, deadline),
     async recordTargetActivity(activity: ActivityRef, deadline: number): Promise<void> {
       validateActivity(activity);
       const route = feedRoute(activity.target.id);
@@ -116,7 +114,7 @@ export function createFeedActivityStore(deps: { pool: Pool; clock?: KernelClock;
         if (account.rows[0]?.state !== 'active' || account.rows[0]?.authn_fenced) return noEffect(null);
         await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`content.feed:${input.accountId}`]);
         const cutoff = new Date(Date.parse(authoritativeTimeValue(attempt.time)) - FEED_RETENTION_MS).toISOString();
-        if (input.activity.occurredAt <= cutoff) return noEffect(null);
+        if (Date.parse(input.activity.occurredAt) <= Date.parse(cutoff)) return noEffect(null);
         const inserted = await tx.query(`INSERT INTO content.feed_inbox(route,account_id,activity_id,occurred_at,activity)
           VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING activity_id`,
           [route, input.accountId, input.activity.id, input.activity.occurredAt, input.activity]);
