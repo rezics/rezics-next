@@ -126,7 +126,7 @@ export function CoverList({
     <>
       {preview && (
         <div data-layout="cover-row" className="sm:hidden">
-          <CoverRow ratio={ratio} label={label}>
+          <CoverRow ratio={ratio} label={label} role="group">
             {cards}
           </CoverRow>
         </div>
