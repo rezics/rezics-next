@@ -1789,15 +1789,69 @@ END; $$;
 -- Name: keep_identity_epoch_accepted_binding(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
-CREATE FUNCTION semantic.keep_identity_epoch_accepted_binding() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
+CREATE FUNCTION semantic.keep_identity_epoch_accepted_binding() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE unchanged boolean; native_terminal boolean;
 BEGIN
- IF OLD.state='accepted' AND NEW IS DISTINCT FROM OLD THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ unchanged := (to_jsonb(NEW)-ARRAY['consumer_undo_generation','consumer_undo_transaction_id',
+  'consumer_terminal_custody','consumer_terminal_sequence']) =
+  (to_jsonb(OLD)-ARRAY['consumer_undo_generation','consumer_undo_transaction_id',
+  'consumer_terminal_custody','consumer_terminal_sequence']);
+ IF OLD.state='accepted' AND NEW IS DISTINCT FROM OLD THEN
+  IF NOT unchanged THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+  IF (NEW.consumer_undo_generation,NEW.consumer_undo_transaction_id) IS DISTINCT FROM
+     (OLD.consumer_undo_generation,OLD.consumer_undo_transaction_id) THEN
+   IF OLD.consumer_terminal_custody IS NOT NULL OR OLD.consumer_undo_generation IS NULL
+    OR NEW.consumer_undo_generation IS DISTINCT FROM OLD.consumer_undo_generation+1
+    OR NEW.consumer_undo_transaction_id IS NOT DISTINCT FROM OLD.consumer_undo_transaction_id
+    OR (NEW.consumer_terminal_custody,NEW.consumer_terminal_sequence) IS DISTINCT FROM
+       (OLD.consumer_terminal_custody,OLD.consumer_terminal_sequence)
+    OR NOT EXISTS(
+      SELECT 1 FROM semantic.identity_epoch_receipt_claim c
+      JOIN semantic.identity_epoch_native_commit n ON n.partition_no=c.partition_no
+       AND n.transaction_id=c.transaction_id AND n.purpose='admission' AND n.xmin=c.xmin
+      JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch
+       AND p.write_state='active' AND p.moved_to IS NULL AND n.position=p.position+1
+      WHERE c.partition_no=OLD.partition_no AND c.transaction_id=NEW.consumer_undo_transaction_id AND NOT c.imported
+       AND c.xmin=pg_current_xact_id()::xid AND c.receipt->>'kind'='account-agent.unverify'
+       AND c.receipt->>'account'=OLD.account_id::text AND c.intent->>'kind'='unmerge'
+       AND c.intent->'undoJob'->>'jobId'=OLD.accepted_job::text
+       AND c.intent->'undoJob'->>'epoch'=OLD.accepted_epoch::text
+       AND OLD.receipt_key::jsonb=jsonb_build_array('account-agent.verify',OLD.account_id::text,
+         c.intent->>'verificationReceipt')
+    ) THEN RAISE EXCEPTION 'identity_consumer_undo_not_native'; END IF;
+  ELSE
+   IF OLD.consumer_terminal_custody IS NOT NULL OR NEW.consumer_terminal_custody IS NULL
+    OR to_regclass('semantic.identity_epoch_source_consumer_terminal') IS NULL THEN
+    RAISE EXCEPTION 'identity_consumer_terminal_not_native';
+   END IF;
+   EXECUTE $q$SELECT EXISTS(
+    SELECT 1 FROM semantic.identity_epoch_source_consumer_terminal t
+    JOIN semantic.identity_epoch_source_consumer_custody r ON r.partition_no=t.partition_no
+     AND r.erasure_key=t.custody_key
+    JOIN semantic.erasure_source_commit n ON n.partition_no=t.partition_no
+     AND n.transaction_id=t.transaction_id AND n.epoch=t.owner_epoch AND n.xmin=t.xmin
+    JOIN semantic.identity_epoch_receipt_claim_commit k ON k.partition_no=r.partition_no
+     AND k.receipt_key=r.receipt_key AND k.generation=r.binding_generation
+     AND k.transaction_id=r.binding_transaction_id
+    JOIN semantic.identity_epoch_native_commit original ON original.partition_no=k.partition_no
+     AND original.transaction_id=k.transaction_id AND original.purpose='admission' AND original.xmin=k.xmin
+    JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch
+     AND p.write_state='active' AND p.moved_to IS NULL AND n.position=p.position+1
+    WHERE t.partition_no=$1 AND t.custody_key=$2 AND t.sequence=$3
+     AND t.state IN ('transferred','discharged') AND t.xmin=pg_current_xact_id()::xid
+     AND r.receipt_key=$4 AND r.binding_generation=$5 AND r.source_digest=$6
+     AND r.job_id=$7 AND r.job_epoch=$8 AND t.replay_generation=$5
+     AND t.undo_generation=$9 AND t.restore_generation=original.epoch
+   )$q$ INTO native_terminal USING OLD.partition_no,NEW.consumer_terminal_custody,
+    NEW.consumer_terminal_sequence,OLD.receipt_key,OLD.generation,OLD.intent_digest,
+    OLD.accepted_job,OLD.accepted_epoch,OLD.consumer_undo_generation;
+   IF NOT native_terminal THEN RAISE EXCEPTION 'identity_consumer_terminal_not_native'; END IF;
+  END IF;
+ END IF;
  IF (OLD.partition_no,OLD.receipt_key,OLD.account_id,OLD.intent_digest) IS DISTINCT FROM
     (NEW.partition_no,NEW.receipt_key,NEW.account_id,NEW.intent_digest) THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
  RETURN NEW;
-END; $$;
+END $$;
 
 
 --
@@ -10356,4 +10410,209 @@ CREATE CONSTRAINT TRIGGER identity_epoch_source_consumer_terminal_erasure_captur
 -- PostgreSQL database dump complete
 --
 
+
+
+-- Forward-only native scoped obligations. Existing registrations acquire no fence
+-- until their actual completion and current owner seal have been revalidated.
+CREATE TABLE semantic.identity_scope_consumer_fence (
+ partition_no integer NOT NULL CHECK(partition_no BETWEEN 0 AND 4095),
+ source_key text NOT NULL CHECK(source_key ~ '^[0-9a-f]{64}$'),
+ scope_id text NOT NULL CHECK(octet_length(scope_id) BETWEEN 1 AND 256),
+ registration uuid NOT NULL,
+ capture_id uuid NOT NULL,
+ job_id uuid NOT NULL,
+ job_epoch bigint NOT NULL CHECK(job_epoch>0),
+ attempt jsonb NOT NULL CHECK(octet_length(attempt::text)<=1024),
+ source_generation text NOT NULL CHECK(octet_length(source_generation) BETWEEN 1 AND 256),
+ completion_version bigint NOT NULL CHECK(completion_version>0),
+ seal_digest text NOT NULL CHECK(seal_digest ~ '^[0-9a-f]{64}$'),
+ native_epoch integer NOT NULL CHECK(native_epoch>0),
+ native_position bigint NOT NULL CHECK(native_position>0),
+ transaction_id uuid NOT NULL,
+ PRIMARY KEY(partition_no,source_key,scope_id,registration,job_id,job_epoch),
+ FOREIGN KEY(partition_no,source_key,scope_id)
+  REFERENCES semantic.identity_scope_summary(partition_no,source_key,scope_id),
+ FOREIGN KEY(partition_no,transaction_id,native_epoch,native_position)
+  REFERENCES semantic.identity_epoch_native_commit(partition_no,transaction_id,epoch,position)
+);
+CREATE TRIGGER identity_scope_consumer_fence_immutable BEFORE UPDATE OR DELETE
+ ON semantic.identity_scope_consumer_fence FOR EACH ROW
+ EXECUTE FUNCTION semantic.prevent_revision_mutation();
+CREATE TRIGGER identity_scope_consumer_fence_no_truncate BEFORE TRUNCATE
+ ON semantic.identity_scope_consumer_fence FOR EACH STATEMENT
+ EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+CREATE FUNCTION semantic.validate_identity_scope_consumer_fence() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NOT EXISTS (
+  SELECT 1 FROM semantic.identity_scope_summary s
+  JOIN semantic.identity_scope_attempt a USING(partition_no,source_key,scope_id,registration)
+  JOIN semantic.identity_scope_completion c USING(partition_no,source_key,scope_id,registration,job_id,job_epoch)
+  JOIN semantic.identity_epoch_native_commit n ON n.partition_no=s.partition_no
+   AND n.transaction_id=NEW.transaction_id AND n.epoch=NEW.native_epoch
+   AND n.position=NEW.native_position AND n.purpose='identity-scope-finish'
+  JOIN semantic.identity_scope_consumer_fence f ON f.partition_no=NEW.partition_no
+   AND f.source_key=NEW.source_key AND f.scope_id=NEW.scope_id AND f.registration=NEW.registration
+   AND f.job_id=NEW.job_id AND f.job_epoch=NEW.job_epoch AND f.xmin=n.xmin
+  JOIN semantic.identity_epoch_native_commit completed ON completed.partition_no=a.partition_no
+   AND completed.transaction_id=a.transaction_id AND completed.purpose='identity-scope-finish'
+   AND completed.xmin=a.xmin AND completed.xmin=c.xmin
+   AND completed.epoch=n.epoch AND completed.position<n.position
+  JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch
+   AND p.position>=n.position AND p.write_state='active' AND p.moved_to IS NULL
+  WHERE s.partition_no=NEW.partition_no AND s.source_key=NEW.source_key AND s.scope_id=NEW.scope_id
+   AND s.registration=NEW.registration AND s.capture_id=NEW.capture_id
+   AND s.source->>'kind'='library' AND s.source->'identity'->>'scope'<>'public_output'
+   AND (s.source->'identity'->>'ownerEpoch')::integer=n.epoch
+   AND s.capture->>'kind'='library' AND s.scan_complete AND s.frontier->>'driver'='done'
+   AND s.active=0 AND s.state IN ('ready','repair') AND a.state='finished' AND c.complete
+   AND a.job_id=NEW.job_id AND a.job_epoch=NEW.job_epoch AND a.attempt=NEW.attempt
+   AND c.capture_id=NEW.capture_id AND c.attempt=NEW.attempt
+   AND c.source_generation=NEW.source_generation AND c.version=NEW.completion_version
+   AND c.seal IS NOT NULL
+ ) THEN RAISE EXCEPTION 'identity_scope_consumer_fence_not_native' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+CREATE CONSTRAINT TRIGGER identity_scope_consumer_fence_native
+ AFTER INSERT ON semantic.identity_scope_consumer_fence DEFERRABLE INITIALLY DEFERRED
+ FOR EACH ROW EXECUTE FUNCTION semantic.validate_identity_scope_consumer_fence();
+
+-- Every writer locks the original summary before testing the retained obligation.
+-- Both OLD and NEW addresses are covered; changing a registration or moving a
+-- child cannot evade the old Source fence. No later writer extends it implicitly.
+CREATE FUNCTION semantic.guard_identity_scope_consumer_writer() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE r record; old_key jsonb; new_key jsonb;
+BEGIN
+ IF TG_OP<>'INSERT' THEN old_key:=to_jsonb(OLD); END IF;
+ IF TG_OP<>'DELETE' THEN new_key:=to_jsonb(NEW); END IF;
+ FOR r IN SELECT DISTINCT (v->>'partition_no')::integer AS partition_no,
+   v->>'source_key' AS source_key,v->>'scope_id' AS scope_id
+  FROM (VALUES(old_key),(new_key)) keys(v) WHERE v IS NOT NULL
+  ORDER BY partition_no,source_key,scope_id LOOP
+  PERFORM 1 FROM semantic.identity_scope_summary s
+   WHERE (s.partition_no,s.source_key,s.scope_id)=(r.partition_no,r.source_key,r.scope_id) FOR UPDATE;
+  IF EXISTS(SELECT 1 FROM semantic.identity_scope_consumer_fence f
+   WHERE (f.partition_no,f.source_key,f.scope_id)=(r.partition_no,r.source_key,r.scope_id)) THEN
+   RAISE EXCEPTION 'identity_scope_consumer_fenced' USING ERRCODE='55000';
+  END IF;
+ END LOOP;
+ IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END $$;
+CREATE TRIGGER identity_scope_consumer_summary_guard BEFORE INSERT OR UPDATE OR DELETE
+ ON semantic.identity_scope_summary FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_scope_consumer_writer();
+CREATE TRIGGER identity_scope_consumer_attempt_guard BEFORE INSERT OR UPDATE OR DELETE
+ ON semantic.identity_scope_attempt FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_scope_consumer_writer();
+CREATE TRIGGER identity_scope_consumer_completion_guard BEFORE INSERT OR UPDATE OR DELETE
+ ON semantic.identity_scope_completion FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_scope_consumer_writer();
+CREATE TRIGGER identity_scope_consumer_forward_guard BEFORE INSERT OR UPDATE OR DELETE
+ ON semantic.identity_scope_forward FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_scope_consumer_writer();
+CREATE TRIGGER identity_scope_consumer_prearm_guard BEFORE INSERT OR UPDATE OR DELETE
+ ON semantic.identity_scope_prearm_receipt FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_scope_consumer_writer();
+
+
+-- Forward native binding provenance only. Historical claims have no undo counter;
+-- neither deployment time nor the current owner can reconstruct their consumers.
+ALTER TABLE semantic.identity_epoch_receipt_binding
+ ADD COLUMN consumer_undo_generation bigint CHECK(consumer_undo_generation>=0),
+ ADD COLUMN consumer_undo_transaction_id uuid,
+ ADD COLUMN consumer_terminal_custody bigint,
+ ADD COLUMN consumer_terminal_sequence bigint CHECK(consumer_terminal_sequence>0),
+ ADD CONSTRAINT identity_binding_consumer_undo_pair CHECK
+  ((consumer_undo_generation IS NULL)=(consumer_undo_transaction_id IS NULL)),
+ ADD CONSTRAINT identity_binding_consumer_terminal_pair CHECK
+  ((consumer_terminal_custody IS NULL)=(consumer_terminal_sequence IS NULL)),
+ ADD CONSTRAINT identity_binding_consumer_undo_commit FOREIGN KEY(partition_no,consumer_undo_transaction_id)
+  REFERENCES semantic.identity_epoch_native_commit(partition_no,transaction_id);
+
+-- Original immutable admission fields retain their original protection. The only
+-- additional mutations name a real same-command reversal claim or Source terminal
+-- row. These counters and pointers are fences, never terminal receipt authority.
+
+
+-- New native claims initialize their own provenance. Acceptance of a historical
+-- claim deliberately leaves NULL; no backfill or migration-time reconstruction.
+CREATE FUNCTION semantic.validate_identity_binding_consumer_birth() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='UPDATE' AND NEW.generation=OLD.generation THEN RETURN NEW; END IF;
+ IF NEW.consumer_undo_generation IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM semantic.identity_epoch_receipt_claim c
+  JOIN semantic.identity_epoch_receipt_claim_commit k USING(partition_no,receipt_key,generation)
+  JOIN semantic.identity_epoch_native_commit n ON n.partition_no=k.partition_no
+   AND n.transaction_id=k.transaction_id AND n.purpose='admission' AND n.xmin=k.xmin AND n.xmin=c.xmin
+  WHERE c.partition_no=NEW.partition_no AND c.receipt_key=NEW.receipt_key AND c.generation=NEW.generation
+   AND c.transaction_id=n.transaction_id AND n.transaction_id=NEW.consumer_undo_transaction_id
+   AND c.xmin=pg_current_xact_id()::xid AND NEW.consumer_undo_generation=0
+ ) THEN RAISE EXCEPTION 'identity_consumer_birth_not_native'; END IF;
+ RETURN NEW;
+END $$;
+CREATE CONSTRAINT TRIGGER identity_binding_consumer_birth AFTER INSERT OR UPDATE ON semantic.identity_epoch_receipt_binding
+ DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_identity_binding_consumer_birth();
+
+CREATE FUNCTION semantic.bind_identity_source_consumer_terminal() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE v_receipt_key text;
+BEGIN
+ IF NEW.state NOT IN ('transferred','discharged') THEN RETURN NEW; END IF;
+ SELECT r.receipt_key INTO v_receipt_key FROM semantic.identity_epoch_source_consumer_custody r
+  WHERE r.partition_no=NEW.partition_no AND r.erasure_key=NEW.custody_key;
+ UPDATE semantic.identity_epoch_receipt_binding b
+  SET consumer_terminal_custody=NEW.custody_key,consumer_terminal_sequence=NEW.sequence
+  WHERE b.partition_no=NEW.partition_no AND b.receipt_key=v_receipt_key
+   AND b.consumer_terminal_custody IS NULL;
+ IF NOT FOUND THEN RAISE EXCEPTION 'identity_consumer_terminal_binding_changed'; END IF;
+ RETURN NEW;
+END $$;
+
+-- The sole Source owner delivers this table. Do not duplicate its schema here.
+-- Normal producer-first migration ordering installs the hook when that delivery
+-- is integrated. Until then the local cut explicitly refuses to finalize.
+DO $$ BEGIN
+ IF to_regclass('semantic.identity_epoch_source_consumer_terminal') IS NOT NULL THEN
+  EXECUTE 'CREATE TRIGGER identity_source_consumer_binding_fence AFTER INSERT
+   ON semantic.identity_epoch_source_consumer_terminal FOR EACH ROW
+   EXECUTE FUNCTION semantic.bind_identity_source_consumer_terminal()';
+ END IF;
+END $$;
+CREATE FUNCTION semantic.identity_source_consumer_terminal_hook_installed() RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE NOT tgisinternal AND tgenabled='O'
+  AND tgrelid=to_regclass('semantic.identity_epoch_source_consumer_terminal')
+  AND tgname='identity_source_consumer_binding_fence'
+  AND tgfoid='semantic.bind_identity_source_consumer_terminal()'::regprocedure);
+$$;
+
+
+-- Exact native command provenance; historical imports remain pending.
+CREATE UNIQUE INDEX identity_receipt_claim_native_command
+ ON semantic.identity_epoch_receipt_claim(partition_no,transaction_id) WHERE NOT imported;
+
+-- A replay verifier resolves the exact Source-owned terminal and its original
+-- barrier/role, not another terminal for the same binding or a copied disposition.
+CREATE FUNCTION semantic.identity_source_consumer_terminal_matches(
+ p_home integer,p_custody bigint,p_sequence bigint,p_reference jsonb,p_generation jsonb,p_tx uuid)
+RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE matched boolean;
+BEGIN
+ IF NOT semantic.identity_source_consumer_terminal_hook_installed() THEN RETURN false; END IF;
+ EXECUTE $q$SELECT EXISTS(
+  SELECT 1 FROM semantic.identity_epoch_source_consumer_terminal t
+  JOIN semantic.identity_epoch_source_consumer_custody r ON r.partition_no=t.partition_no
+   AND r.erasure_key=t.custody_key
+  JOIN semantic.erasure_source_commit n ON n.partition_no=t.partition_no
+   AND n.transaction_id=t.transaction_id AND n.epoch=t.owner_epoch AND n.xmin=t.xmin
+  JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch
+   AND p.write_state='active' AND p.moved_to IS NULL
+   AND (p.position>=n.position OR (n.transaction_id=$6 AND n.position=p.position+1))
+  WHERE t.partition_no=$1 AND t.custody_key=$2 AND t.sequence=$3 AND t.state='transferred'
+   AND r.receipt_key::jsonb=jsonb_build_array($4#>>'{receipt,kind}',$4#>>'{receipt,account}',$4#>>'{receipt,receipt}')
+   AND r.source_digest=$4->>'sourceDigest' AND r.source_epoch::text=$4#>>'{source,epoch}'
+   AND r.source_position::text=$4#>>'{source,position}' AND r.source_transaction_id::text=$4#>>'{source,transactionId}'
+   AND r.job_id::text=$4#>>'{job,jobId}' AND r.job_epoch::text=$4#>>'{job,epoch}'
+   AND r.barrier_account_id::text=$4#>>'{barrier,accountId}'
+   AND r.barrier_account_route::text=$4#>>'{barrier,accountRoute}'
+   AND r.barrier_version::text=$4#>>'{barrier,version}' AND r.barrier_at=($4#>>'{barrier,at}')::timestamptz
+   AND r.erased_role=$4->>'erasedRole' AND r.binding_generation=t.replay_generation
+   AND t.replay_generation::text=$5->>'replayGeneration'
+   AND t.undo_generation::text=$5->>'undoGeneration' AND t.restore_generation::text=$5->>'restoreGeneration'
+ )$q$ INTO matched USING p_home,p_custody,p_sequence,p_reference,p_generation,p_tx;
+ RETURN matched;
+END $$;
 

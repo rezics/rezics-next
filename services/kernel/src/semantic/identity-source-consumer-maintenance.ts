@@ -69,6 +69,24 @@ export function reserveIdentitySourceConsumerNativeWork(
   return true;
 }
 
+/** Planning snapshot of this invocation's existing native balance, never new funding. */
+export function identitySourceConsumerNativeWork(
+  pool: Pool,
+  work: IdentitySourceConsumerMaintenanceWork | undefined,
+  deadline: number,
+): NativeStepWork | null {
+  if (!work || typeof work !== 'object') return null;
+  const frame = frames.get(work);
+  if (!frame || !live(frame, pool, deadline)) return null;
+  return Object.freeze({
+    rows: frame.native.rows - frame.used.rows,
+    points: frame.native.points - frame.used.points,
+    statements: frame.native.statements - frame.used.statements,
+    bytes: frame.native.bytes - frame.used.bytes,
+    engineRequests: frame.native.engineRequests - frame.used.engineRequests,
+  });
+}
+
 /** Return the frame's existing Library ledger after validating pool, invocation and lifetime. */
 export function identitySourceConsumerLibraryWork(
   pool: Pool,

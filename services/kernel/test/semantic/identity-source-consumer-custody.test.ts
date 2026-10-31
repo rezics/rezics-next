@@ -14,12 +14,17 @@ import {
 } from '../../src/semantic/identity-source-consumer-custody.ts';
 import {
   identitySourceConsumerLibraryWork,
+  identitySourceConsumerNativeWork,
   isLiveIdentitySourceConsumerMaintenance,
   reserveIdentitySourceConsumerNativeWork,
   withIdentitySourceConsumerMaintenance,
 } from '../../src/semantic/identity-source-consumer-maintenance.ts';
 import { readIdentitySourceMaintenanceConfig } from '../../src/semantic/identity-source-maintenance-config.ts';
 import { approvedVerification, cutoverFixture } from './support/identity-epoch-cutover.ts';
+import * as bindingConsumer from '../../src/semantic/identity-epoch-binding.ts';
+import { readIdentityScopeConsumerWork, retainIdentityScopeConsumerFence } from '../../src/semantic/identity-scoped-observations.ts';
+import type { IdentityPrearmTicketData } from '../../src/semantic/identity-epoch-prearm-contract.ts';
+import type { LibraryScopeEffectSeal } from '../../src/library/identity-scope-effects.ts';
 
 // Authored native cases only. Run through the existing kernel fixture runner after integration.
 let f: Awaited<ReturnType<typeof cutoverFixture>>;
@@ -57,6 +62,43 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await f?.close();
+});
+
+test('Original native binding and scoped writers serialize terminal Source consumer cuts and retained scope obligations using genuine work admission and owner-native receipts rather than publication or inventory alone', async () => {
+  // Required producer delivery remains observable. A missing native implementation
+  // must fail this case, rather than be hidden behind an injected test adapter.
+  const read = Reflect.get(bindingConsumer, 'readIdentitySourceConsumerWork');
+  const lock = Reflect.get(bindingConsumer, 'lockIdentitySourceConsumerCut');
+  const verify = Reflect.get(bindingConsumer, 'verifyIdentitySourceConsumerCut');
+  expect(read).toBeFunction();
+  expect(lock).toBeFunction();
+  expect(verify).toBeFunction();
+  const before = await originalBytes();
+  expect(
+    await read(f.pool, { ...reference, job: { ...reference.job, epoch: reference.job.epoch + 1n } },
+      { deadline: Date.now() + 5000 }),
+  ).toBeNull();
+  const forged = { replayGeneration: '9223372036854775807', undoGeneration: '9223372036854775807',
+    restoreGeneration: '9223372036854775807' };
+  const rejected = await runCommand(f.pool, { partition: reference.source.partition }, async (tx) => {
+    expect(await lock(tx, reference, forged)).toBeNull();
+    expect(await verify(tx, reference, forged, 'discharged')).toBeFalse();
+    expect(await verify(tx, reference, forged, 'transferred')).toBeFalse();
+    return noEffect(null);
+  });
+  expect(rejected.replayed).toBeFalse();
+  expect(await originalBytes()).toBe(before);
+});
+
+test('unsupported public scope custody cannot manufacture a native consumer fence from a copied Library seal', async () => {
+  const ticket = { scope: { source: { kind: 'public' } } } as unknown as IdentityPrearmTicketData;
+  const seal = Object.freeze({}) as LibraryScopeEffectSeal;
+  const before = await originalBytes();
+  const result = await runCommand(f.pool, { partition: reference.source.partition }, async (tx) =>
+    noEffect(await retainIdentityScopeConsumerFence(tx, ticket, seal)),
+  );
+  expect(result.value).toBeNull();
+  expect(await originalBytes()).toBe(before);
 });
 
 async function originalBytes() {
@@ -255,5 +297,115 @@ test('Source consumer refuses copied foreign expired and ended frames before che
   });
   expect(ended).toBeDefined();
   expect(await readIdentitySourceConsumerCustody(pool, reference, ended!)).toBeNull();
+  expect(checkouts).toBe(0);
+});
+
+test('accepted Account binding lookup preserves native input and job without minting admission source custody', async () => {
+  const accepted = await readAccountIdentityUndo(f.pool, {
+    kind: 'account-agent.verify', account: reference.receipt.account, receipt: reference.receipt.receipt,
+  });
+  const before = await originalBytes();
+  await runCommand(f.pool, { partition: reference.source.partition }, async (tx) => {
+    const binding = await bindingConsumer.readAcceptedAccountIdentityBinding(tx, accepted.source.input);
+    expect(binding).not.toBeNull();
+    const data = bindingConsumer.identityBindingData(binding!);
+    expect(data.state).toBe('accepted');
+    expect(data.digest).toBe(accepted.source.digest);
+    expect(data.job).toEqual(accepted.job);
+    expect(() => bindingConsumer.assertIdentityBindingSource(binding!, accepted.source.input.receipt))
+      .toThrow('Missing released Accounts source custody');
+    expect(bindingConsumer.identityBindingAccountRoles(binding!)).toEqual([]);
+    return noEffect(null);
+  });
+  expect(await originalBytes()).toBe(before);
+});
+
+test('accepted Account binding lookup rejects another home receipt or immutable input before effects', async () => {
+  const accepted = await readAccountIdentityUndo(f.pool, {
+    kind: 'account-agent.verify', account: reference.receipt.account, receipt: reference.receipt.receipt,
+  });
+  const input = accepted.source.input;
+  const before = await originalBytes();
+  await runCommand(f.pool, { partition: (reference.source.partition + 1) % 4096 }, async (tx) => {
+    expect(await bindingConsumer.readAcceptedAccountIdentityBinding(tx, input)).toBeNull();
+    return noEffect(null);
+  });
+  await runCommand(f.pool, { partition: reference.source.partition }, async (tx) => {
+    expect(await bindingConsumer.readAcceptedAccountIdentityBinding(tx, {
+      ...input, receipt: { ...input.receipt, receipt: randomUUID() },
+    })).toBeNull();
+    expect(await bindingConsumer.readAcceptedAccountIdentityBinding(tx, {
+      ...input, intent: { ...input.intent, release: `${input.intent.release}:changed` },
+    })).toBeNull();
+    expect(await bindingConsumer.readAcceptedAccountIdentityBinding(tx, {
+      ...input, receipt: { ...input.receipt, kind: 'account-agent.unverify' },
+    })).toBeNull();
+    return noEffect(null);
+  });
+  expect(await originalBytes()).toBe(before);
+});
+
+test('native consumer generations use retained original provenance and debit the live Source frame before directory planning', async () => {
+  const before = await originalBytes();
+  await withIdentitySourceConsumerMaintenance(
+    { pool: f.pool, env: {} }, { deadline: Date.now() + 5000 },
+    (funded) => readIdentitySourceConsumerCustody(f.pool, reference, funded),
+  );
+  await withIdentitySourceConsumerMaintenance(
+    { pool: f.pool, env: {} }, { deadline: Date.now() + 5000 }, async (funded) => {
+      const initial = identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, funded.deadline)!;
+      const observed = await bindingConsumer.readIdentitySourceConsumerWork(f.pool, reference, funded);
+      expect(observed).not.toBeNull();
+      const balance = identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, funded.deadline)!;
+      expect(initial.rows - balance.rows).toBe(13);
+      expect(initial.points - balance.points).toBe(13);
+      expect(initial.statements - balance.statements).toBe(10);
+      expect(initial.bytes - balance.bytes).toBe(16384);
+      expect(observed!.allowance.rows).toBe(balance.rows - 4);
+      expect(observed!.allowance.statements).toBe(balance.statements - 6);
+      const native = (await f.admin.query(
+        `SELECT b.generation::text AS replay,b.consumer_undo_generation::text AS undo,n.epoch::text AS restore
+         FROM semantic.identity_epoch_receipt_binding b
+         JOIN semantic.identity_epoch_receipt_claim_commit k USING(partition_no,receipt_key,generation)
+         JOIN semantic.identity_epoch_native_commit n ON n.partition_no=k.partition_no AND n.transaction_id=k.transaction_id
+         WHERE b.partition_no=$1 AND b.receipt_key=$2`,
+        [reference.source.partition, JSON.stringify([reference.receipt.kind, reference.receipt.account, reference.receipt.receipt])],
+      )).rows[0];
+      expect(observed!.replayGeneration).toBe(native.replay);
+      expect(observed!.undoGeneration).toBe(native.undo);
+      expect(observed!.restoreGeneration).toBe(native.restore);
+      await runCommand(f.pool, { partition: reference.source.partition }, async (tx) => {
+        // Publication and retained directory inventory cannot discharge the live undo input.
+        expect(await bindingConsumer.lockIdentitySourceConsumerCut(tx, reference, observed!)).toBe('transferred');
+        expect(await bindingConsumer.verifyIdentitySourceConsumerCut(tx, reference, observed!, 'discharged')).toBeFalse();
+        return noEffect(null);
+      });
+    },
+  );
+  expect(await originalBytes()).toBe(before);
+});
+
+test('both original work readers reject absent copied foreign ended or exhausted funding before a Source probe', async () => {
+  let checkouts = 0;
+  const pool = { connect: () => { checkouts++; throw new Error('unfunded checkout'); } } as unknown as Pool;
+  const ticket = { scope: { source: { kind: 'public' } } } as unknown as IdentityPrearmTicketData;
+  const deadline = Date.now() + 5000;
+  expect(await bindingConsumer.readIdentitySourceConsumerWork(pool, reference, { deadline })).toBeNull();
+  expect(await readIdentityScopeConsumerWork(pool, ticket, { deadline })).toBeNull();
+  let ended: import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceContext | undefined;
+  await withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (funded) => {
+    ended = funded;
+    const copied = { ...funded, identityConsumerWork: { ...funded.identityConsumerWork } };
+    for (const invalid of [copied, { ...funded, deadline: Date.now() - 1 }]) {
+      expect(await bindingConsumer.readIdentitySourceConsumerWork(pool, reference, invalid)).toBeNull();
+      expect(await readIdentityScopeConsumerWork(pool, ticket, invalid)).toBeNull();
+    }
+    expect(await bindingConsumer.readIdentitySourceConsumerWork(f.pool, reference, funded)).toBeNull();
+    expect(await readIdentityScopeConsumerWork(f.pool, ticket, funded)).toBeNull();
+    expect(reserveIdentitySourceConsumerNativeWork(pool, funded.identityConsumerWork, readIdentitySourceMaintenanceConfig({}).native)).toBeTrue();
+    expect(await bindingConsumer.readIdentitySourceConsumerWork(pool, reference, funded)).toBeNull();
+  });
+  expect(await bindingConsumer.readIdentitySourceConsumerWork(pool, reference, ended!)).toBeNull();
+  expect(await readIdentityScopeConsumerWork(pool, ticket, ended!)).toBeNull();
   expect(checkouts).toBe(0);
 });

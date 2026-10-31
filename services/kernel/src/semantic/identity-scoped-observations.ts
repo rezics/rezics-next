@@ -16,7 +16,7 @@ import {
   type NativeLibrarySourceCustody,
   type NativeSourceFrontier,
 } from '../library/native-source-custody.ts';
-import { NativeCollectionWork } from '../library/collection-source-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
 import {
   readLibraryScopeEffectsPage,
   verifyLibraryScopeEffectsSeal,
@@ -24,7 +24,7 @@ import {
   type LibraryExpectedEffectAfter,
   type LibraryScopeEffectsKey,
 } from '../library/identity-scope-effects.ts';
-import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type * as S from './identity-scope-types.ts';
@@ -43,6 +43,113 @@ import {
   verifyPublicIdentitySourceCaptureLocator,
 } from './identity-scoped-public-source.ts';
 import { withReadTransaction } from './read.ts';
+import { writeIdentityScopeConsumerNativeCommit } from './identity-epoch-native-commit.ts';
+import consumerCurrent from './identity-scoped-consumer-current.sql';
+import consumerReceipt from './identity-scoped-consumer-receipt.sql';
+import consumerWork from './identity-scoped-consumer-work.sql';
+import consumerConflict from './identity-scoped-consumer-conflict.sql';
+import consumerInsert from './identity-scoped-consumer-insert.sql';
+import consumerNative from './identity-scoped-consumer-native.sql';
+import insertNativeCommit from './identity-epoch-store-insert-native-commit.sql';
+import commandTime from '../command/time.sql';
+import commandNoEffect from '../command/no-effect-fence.sql';
+import partitionRead from '../partition/read.sql';
+import { classifyUnavailability } from '../access/unavailable.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
+import { identitySourceConsumerLibraryWork } from './identity-source-consumer-maintenance.ts';
+import type { IdentitySourceConsumerContext, IdentitySourceScopeConsumerWork } from './identity-source-consumer-custody.ts';
+
+/** Resolve the retained registration/capture using the existing Source frame.
+ * The historical capture allowance is never consulted as a remaining balance.
+ */
+export async function readIdentityScopeConsumerWork(
+  pool: Pool,
+  ticket: IdentityPrearmTicketData,
+  context: IdentitySourceConsumerContext,
+): Promise<IdentitySourceScopeConsumerWork | null> {
+  const budget = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline);
+  if (!budget) return null;
+  ticket = structuredClone(ticket);
+  const source = ticket.scope.source;
+  if (source.kind !== 'library' || source.identity.scope === 'public_output') return null;
+  const values = scopeConsumerValues(ticket);
+  return withRequestDeadline(context.deadline, async () => {
+    try {
+      const current = await instrumentNativeCollectionWork(pool, budget, scopeConsumerFootprint, () =>
+        withReadTransaction(pool, async (tx) =>
+          (await tx.query<{ source_generation: string }>(consumerWork.sql, values)).rows[0]));
+      if (!current || current.source_generation !== source.identity.generation) return null;
+      // This immutable ceiling describes the same ledger. Source's compose transfers
+      // work and settles the real owner's receipt; no second allocation is created.
+      const remaining: WorkDimensions = Object.freeze({
+        candidateKeys: budget.available('candidateKeys'),
+        identityMetadataRows: budget.available('identityMetadataRows'),
+        nativeRows: budget.available('nativeRows'),
+        nativePoints: budget.available('nativePoints'),
+        witnessKeys: budget.available('witnessKeys'),
+        statements: budget.available('statements'),
+        bytes: budget.available('bytes'),
+        emptySeeks: budget.available('emptySeeks'),
+      });
+      return Object.freeze({
+        allowance: Object.freeze({ reservationId: budget.receipt().reservationId, remaining }),
+        footprint: scopeConsumerFootprint,
+      });
+    } catch (error) {
+      // The instrumenter charges dispatched failures and poisons its SAME ledger.
+      if (budget.failure || classifyUnavailability(error)) return null;
+      throw error;
+    }
+  });
+}
+
+function scopeConsumerValues(ticket: IdentityPrearmTicketData): unknown[] {
+  if (ticket.scope.source.kind !== 'library') throw new TypeError('Native Library scope required');
+  return [
+    ...params(ticket.scope), ticket.registration, ticket.captureId,
+    ticket.locator.job.jobId, ticket.locator.job.epoch.toString(), json(ticket.attempt),
+    json(ticket.scope.source), ticket.scope.source.identity.ownerEpoch,
+    ticket.locator.directory.transactionId, ticket.locator.pageId, ticket.locator.ordinal,
+  ];
+}
+
+/** Only exact original owner statements have known accounting. In particular,
+ * Library seal and receiving SQL need their owners' actual footprints; unfamiliar
+ * SQL remains undefined and is refused by NativeCollectionWork before dispatch.
+ * Each native projection below is fixed or schema-bounded (seal <=4096 bytes).
+ */
+function scopeConsumerFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {
+  let rows: number;
+  let outputBytes: number;
+  if (sql === consumerCurrent.sql || sql === consumerWork.sql) {
+    rows = 7; outputBytes = 6144;
+  } else if (sql === consumerReceipt.sql) {
+    rows = 3; outputBytes = 2048;
+  } else if (sql === consumerConflict.sql || sql === consumerNative.sql || sql === partitionRead.sql ||
+    sql === commandNoEffect.sql) {
+    rows = 1; outputBytes = 1024;
+  } else if (sql === commandTime.sql) {
+    rows = 0; outputBytes = 128;
+  } else if (sql === insertNativeCommit.sql) {
+    rows = 2; outputBytes = 128;
+  } else if (sql === consumerInsert.sql) {
+    // One insert, two FK points and seven exact-key rows in the deferred native
+    // fence constraint. None of these charges depends on returned row counts.
+    rows = 1 + 2 + 7; outputBytes = 0;
+  } else if (sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' ||
+    sql === 'BEGIN ISOLATION LEVEL SERIALIZABLE' || sql === 'COMMIT' || sql === 'ROLLBACK' ||
+    sql === "SET LOCAL lock_timeout = '200ms'" || /^SET LOCAL statement_timeout = '[1-9][0-9]{0,15}ms'$/.test(sql)) {
+    rows = 0; outputBytes = 0;
+  } else {
+    return undefined;
+  }
+  return {
+    candidateKeys: 0, identityMetadataRows: 0, nativeRows: rows, nativePoints: rows,
+    witnessKeys: 0, statements: 1,
+    bytes: Buffer.byteLength(sql) + Buffer.byteLength(json(values)) + outputBytes,
+    emptySeeks: 0,
+  };
+}
 
 type Work = { -readonly [K in keyof S.IdentityScopeWork]: S.IdentityScopeWork[K] };
 const work = (): Work => ({ rows: 0, points: 0, statements: 0, bytes: 0 });
@@ -169,7 +276,9 @@ async function head(
       await query(
         tx,
         measured,
-        `SELECT s.* FROM semantic.identity_scope_summary s JOIN core.partition p ON p.partition_no=s.partition_no AND p.write_state='active' AND p.moved_to IS NULL AND p.epoch=$4 WHERE s.partition_no=$1 AND source_key=$2 AND scope_id=$3${lock ? ' FOR UPDATE OF s' : ''}`,
+        `SELECT s.* FROM semantic.identity_scope_summary s JOIN core.partition p ON p.partition_no=s.partition_no AND p.write_state='active' AND p.moved_to IS NULL AND p.epoch=$4 WHERE s.partition_no=$1 AND source_key=$2 AND scope_id=$3
+        AND NOT EXISTS(SELECT 1 FROM semantic.identity_scope_consumer_fence f
+        WHERE (f.partition_no,f.source_key,f.scope_id)=(s.partition_no,s.source_key,s.scope_id))${lock ? ' FOR UPDATE OF s' : ''}`,
         [...params(key), key.source.kind === 'library' ? key.source.identity.ownerEpoch : key.source.identity.epoch],
       )
     ).rows[0] ?? null
@@ -1731,4 +1840,103 @@ export async function receiveScopePreparation(
       transactionId: receipt.transaction_id,
     };
   });
+}
+
+/** Source-local native obligation, called only after the terminal owner has checked
+ * Library's current seal in this same command. Rechecking here prevents an unrelated
+ * seal, a completed prefix, or a released receipt read from becoming a durable fence.
+ * The returned component is usable only within this transaction until commit.
+ */
+export async function retainIdentityScopeConsumerFence(
+  tx: CommandTransaction,
+  ticket: IdentityPrearmTicketData,
+  seal: LibraryScopeEffectSeal,
+): Promise<IdentityNativeReceipt | null> {
+  const command = currentCommand(tx);
+  if (command.basis !== null || Date.now() >= currentCommandResources(tx).deadline) return null;
+  const source = ticket.scope.source;
+  // The public planner and public-output custody are independent owner branches.
+  if (source.kind !== 'library' || source.identity.scope === 'public_output') return null;
+  const address = identityScopeAddress(ticket.scope);
+  if (command.partition !== address.partition) return null;
+  const key: LibraryScopeEffectsKey = {
+    job: ticket.locator.job,
+    sourceIdentity: source.identity,
+    scope: ticket.scope.scopeId,
+  };
+  if (!seal?.key || !same(seal.key, key) || !(await verifyLibraryScopeEffectsSeal(tx, key, seal))) return null;
+  const current = (
+    await tx.query<{ revision: string; version: string; source_generation: string; seal: object }>(
+      consumerCurrent.sql,
+      scopeConsumerValues(ticket),
+    )
+  ).rows[0];
+  if (
+    !current ||
+    current.source_generation !== source.identity.generation ||
+    !same(current.seal, seal)
+  )
+    return null;
+  const sealDigest = digest(seal);
+  const receiptValues = [
+    ...params(ticket.scope),
+    ticket.registration,
+    ticket.locator.job.jobId,
+    ticket.locator.job.epoch.toString(),
+    sealDigest,
+    command.transactionId,
+  ];
+  const prior = (
+    await tx.query<{
+      epoch: number;
+      position: string;
+      transaction_id: string;
+      capture_id: string;
+      attempt: object;
+      source_generation: string;
+      completion_version: string;
+      seal_digest: string;
+    }>(consumerReceipt.sql, receiptValues)
+  ).rows[0];
+  if (prior) {
+    if (
+      prior.capture_id !== ticket.captureId ||
+      !same(prior.attempt, ticket.attempt) ||
+      prior.source_generation !== current.source_generation ||
+      prior.completion_version !== current.version
+    )
+      return null;
+    return Object.freeze({
+      partition: address.partition,
+      epoch: prior.epoch,
+      position: BigInt(prior.position),
+      transactionId: prior.transaction_id,
+    });
+  }
+  // Check the natural key before any write; a different seal cannot replace an
+  // immutable retained obligation. The summary lock also serializes all writers.
+  const conflict = await tx.query(
+    consumerConflict.sql,
+    receiptValues.slice(0, 6),
+  );
+  if (conflict.rows.length) return null;
+  const receipt = await writeIdentityScopeConsumerNativeCommit(tx);
+  await tx.query(
+    consumerInsert.sql,
+    [
+      ...params(ticket.scope),
+      ticket.registration,
+      ticket.captureId,
+      ticket.locator.job.jobId,
+      ticket.locator.job.epoch.toString(),
+      json(ticket.attempt),
+      current.source_generation,
+      current.version,
+      sealDigest,
+      receipt.epoch,
+      receipt.position.toString(),
+      receipt.transactionId,
+    ],
+  );
+  return receipt;
 }

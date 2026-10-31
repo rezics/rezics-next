@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
 import type { IdentityAdmissionAuthority, IdentityAdmissionInput, IdentityJobRef } from './identity-epoch-contract.ts';
+import type { IdentitySourceConsumerReference, IdentitySourceConsumerGeneration, IdentitySourceConsumerDisposition, IdentitySourceConsumerWork, IdentitySourceConsumerContext } from './identity-source-consumer-custody.ts';
 /** A serializable locator is custody data. Only a released verified read mints an in-process proof. */
 export type IdentityReceiptBinding = Readonly<{
     partition: number;
@@ -49,6 +50,14 @@ export declare function readIdentityBinding(tx: CommandTransaction, input: Ident
     jobHome: number;
     job: IdentityJobRef;
 }> | null>;
+/** Accepted original input lookup for the same-home technical receiver. This does
+ * not authorize admission or attach Accounts source custody to the returned binding.
+ */
+export declare function readAcceptedAccountIdentityBinding(tx: CommandTransaction, input: IdentityAdmissionInput & Readonly<{
+    receipt: Extract<IdentityAdmissionInput['receipt'], {
+        kind: 'account-agent.verify' | 'account-agent.unverify';
+    }>;
+}>): Promise<IdentityReceiptBinding | null>;
 export declare function identityBindingJob(pool: Pool, data: IdentityBindingData): Promise<any>;
 /** Current authorization and native T precede even the existing-key lookup. Every checkout is released. */
 export declare function lookupIdentityBinding(pool: Pool, authority: IdentityAdmissionAuthority, input: IdentityAdmissionInput): Promise<Readonly<{
@@ -104,3 +113,14 @@ export declare function readAccountIdentityUndo(pool: Pool, receipt: Extract<Ide
     };
 }>;
 export declare function identityBindingAccountRoles(binding: IdentityReceiptBinding): readonly import("./erasure-producer.ts").SemanticCopyRole[];
+/** Resolve native generations with Source's live maintenance allocation. Each
+ * released snapshot prepays its failed point, control and cleanup work. The
+ * directory receives planning data and charges the same frame when it dispatches.
+ */
+export declare function readIdentitySourceConsumerWork(pool: Pool, reference: IdentitySourceConsumerReference, context: IdentitySourceConsumerContext): Promise<IdentitySourceConsumerWork | null>;
+/** Only the Source owner can append a terminal row. This hook locks its original
+ * binding and checks native generations; immutable undo/replay input still requires
+ * genuine Accounts acceptance. No publication or directory fact proves reversal.
+ */
+export declare function lockIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference, expected: IdentitySourceConsumerGeneration): Promise<IdentitySourceConsumerDisposition | null>;
+export declare function verifyIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference, expected: IdentitySourceConsumerGeneration, disposition: IdentitySourceConsumerDisposition): Promise<boolean>;

@@ -13,12 +13,14 @@ const prefix = 'KERNEL_IDENTITY_SOURCE_MAINTENANCE_';
 // One invocation may read and then verify the native directory. Each child still keeps
 // the pre-existing 100-row ceiling. The extra native row/point allowance is the fixed
 // Source control cut: original source, accepted claim/job, participant receipts, progress,
-// and final source-home rechecks. No engine request is dispatched by this PostgreSQL path.
+// and final source-home rechecks. The binding owner's two released snapshots add thirteen
+// native points, ten statements and 16 KiB. Equal directory child ceilings need eighteen
+// statements each, including read/verify cleanup. No PostgreSQL engine request is dispatched.
 const nativeDefaults = {
-  ROWS: 236,
-  POINTS: 236,
-  STATEMENTS: 70,
-  BYTES: 270336,
+  ROWS: 249,
+  POINTS: 249,
+  STATEMENTS: 81,
+  BYTES: 286720,
   ENGINE_REQUESTS: 0,
 } as const;
 
@@ -51,10 +53,10 @@ function dimension(env: Environment, key: string, fallback: number, maximum: num
 export function readIdentitySourceMaintenanceConfig(env: Environment): IdentitySourceMaintenanceConfig {
   return Object.freeze({
     native: Object.freeze({
-      rows: dimension(env, 'NATIVE_ROWS', nativeDefaults.ROWS, 236),
-      points: dimension(env, 'NATIVE_POINTS', nativeDefaults.POINTS, 236),
-      statements: dimension(env, 'NATIVE_STATEMENTS', nativeDefaults.STATEMENTS, 70),
-      bytes: dimension(env, 'NATIVE_BYTES', nativeDefaults.BYTES, 270336),
+      rows: dimension(env, 'NATIVE_ROWS', nativeDefaults.ROWS, nativeDefaults.ROWS),
+      points: dimension(env, 'NATIVE_POINTS', nativeDefaults.POINTS, nativeDefaults.POINTS),
+      statements: dimension(env, 'NATIVE_STATEMENTS', nativeDefaults.STATEMENTS, nativeDefaults.STATEMENTS),
+      bytes: dimension(env, 'NATIVE_BYTES', nativeDefaults.BYTES, nativeDefaults.BYTES),
       engineRequests: dimension(env, 'NATIVE_ENGINE_REQUESTS', nativeDefaults.ENGINE_REQUESTS, 0),
     }),
     library: Object.freeze({

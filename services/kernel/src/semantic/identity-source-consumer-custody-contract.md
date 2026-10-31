@@ -191,16 +191,16 @@ wrong-Pool and expired frames return pending before Source consumer I/O. Same-co
 verification resolves the current frame from the live command resources and checks
 the same Pool and invocation before reading.
 
-The independent native defaults are rows 236, points 236, statements 70, bytes
-270336 and engine requests 0. The row/point allowance is two existing 100-row child
+The independent native defaults are rows 249, points 249, statements 81, bytes
+286720 and engine requests 0. The row/point allowance is two existing 100-row child
 ceilings (one directory read and one current-cut verification), plus 32 fixed Source
-control touches and four same-command verification touches. Each directory child still
-refuses above 100. The statement allowance is 18 for the directory read (three
-four-statement read snapshots and six bounded selects), 17 for verification (three
-snapshots and five selects), 29 fixed Source control statements including the bounded
-command-executor failure/cleanup path, and six same-command verification statements.
+control touches, thirteen binding-owner read points and four same-command verification touches. Each directory child still
+refuses above 100. The statement allowance reserves 18 for each directory child (the existing equal
+read/verify planning split), 29 fixed Source control statements including the bounded
+command-executor failure/cleanup path, ten for the binding owner's two released
+read snapshots, and six same-command verification statements.
 The byte allowance is 32 KiB for fixed Source controls, 8 KiB for same-command
-verification and two 112 KiB native child reservations. No engine request is dispatched
+verification, 16 KiB for the binding owner's fixed projections, and two 112 KiB native child reservations. No engine request is dispatched
 by this PostgreSQL path, so only that proved-unused axis defaults to zero.
 
 Library dimensions stay in their existing units and are never converted into
@@ -217,10 +217,10 @@ The exact optional overrides and defaults are:
 
 | Environment key                                                     | Default | Derivation                                                                                                                                                     |
 | ------------------------------------------------------------------- | ------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS`                    |     236 | Two 100-row native directory child ceilings, 32 fixed Source control touches and four same-command verification touches.                                       |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_POINTS`                  |     236 | The same bounded point footprint as the native row allowance.                                                                                                  |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS`              |      70 | 18 directory-read statements, 17 cut-verification statements, 29 fixed Source control/failure/cleanup statements and six same-command verification statements. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES`                   |  270336 | 32 KiB Source controls, 8 KiB same-command verification and two 112 KiB native directory children.                                                             |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS`                    |     249 | Two 100-row native directory child ceilings, 32 fixed Source control touches, thirteen binding-owner points and four same-command verification touches.                                       |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_POINTS`                  |     249 | The same bounded point footprint as the native row allowance.                                                                                                  |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS`              |      81 | Two eighteen-statement directory children, 29 fixed Source control/failure/cleanup statements, ten binding-owner snapshot statements and six same-command verification statements. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES`                   |  286720 | 32 KiB Source controls, 8 KiB same-command verification, 16 KiB binding-owner reads and two 112 KiB native directory children.                                                             |
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ENGINE_REQUESTS`         |       0 | This PostgreSQL path dispatches no engine request.                                                                                                             |
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_CANDIDATE_KEYS`         |       1 | One effect selection in the existing one-page bound.                                                                                                           |
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_IDENTITY_METADATA_ROWS` |       0 | This path does not dispatch an identity metadata sweep.                                                                                                        |
