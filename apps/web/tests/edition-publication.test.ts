@@ -667,8 +667,7 @@ test('A temporarily unavailable exact-revision edition entry can explicitly retr
   function Surface() {
     return (entry = EditionCreateEntry({ identity }));
   }
-  const render = () =>
-    renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(Surface)));
+  const render = () => renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(Surface)));
   type Props = { children?: import('react').ReactNode; disabled?: boolean; onClick?: () => void };
   function retry(node: import('react').ReactNode = entry): Props | undefined {
     if (!isValidElement<Props>(node)) return;
@@ -684,7 +683,13 @@ test('A temporarily unavailable exact-revision edition entry can explicitly retr
   try {
     expect(render()).toBe(''); // Initial loading makes no admission claim or automatic retry request.
     const query = client.getQueryCache().getAll()[0]!;
-    expect(query.queryKey).toEqual(['edition-create-entry', identity.postId, identity.revisionId, creator, 'signed-in']);
+    expect(query.queryKey).toEqual([
+      'edition-create-entry',
+      identity.postId,
+      identity.revisionId,
+      creator,
+      'signed-in',
+    ]);
     expect(query.options.retry).toBe(false);
     const initial = query.fetch();
     requests[0]!.resolve({ kind: 'unavailable', status: 503 });
