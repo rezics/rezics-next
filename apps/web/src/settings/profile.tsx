@@ -9,7 +9,7 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { uploadAvatar } from '../threads/upload';
 import { profileChanges } from './profile-data';
-import { ProfileEditor, profileFieldErrors, type ProfileScope } from './profile-write';
+import { ProfileEditor, profileFieldErrors, type ProfileScope, type ProfileEditorState } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
 import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';
 import { ProfileLinks } from './profile-links';
@@ -17,11 +17,17 @@ import type { AvatarResume, AvatarUpload } from './profile-avatar-upload';
 import { ProfileNavigation, useProfileNavigationUpload } from './profile-navigation';
 import { usePreferenceRetry } from './preference-failure-retry';
 
-function profileError(status: number) {
-  if (status === 400 || status === 422) return m.settings_profile_invalid_error();
-  if (status === 401 || status === 403) return m.settings_profile_edit_denied();
-  if (status === 409) return m.settings_profile_review_needed();
-  return m.settings_profile_network_error();
+function profileError(scope: ProfileScope, failure: ProfileEditorState['failure']) {
+  const activity = scope === 'views';
+  if (failure?.code === 'platform_closed' || failure?.status === 410)
+    return activity ? m.settings_public_activity_closed() : m.settings_profile_save_closed();
+  if (failure?.status === 400 || failure?.status === 422)
+    return activity ? m.settings_public_activity_invalid() : m.settings_profile_invalid_error();
+  if (failure?.status === 401 || failure?.status === 403)
+    return activity ? m.settings_public_activity_denied() : m.settings_profile_edit_denied();
+  if (failure?.status === 409)
+    return activity ? m.settings_public_activity_conflict() : m.settings_profile_save_conflict();
+  return activity ? m.settings_public_activity_unavailable() : m.settings_profile_save_unavailable();
 }
 
 export function ProfileFeedback({
@@ -37,12 +43,19 @@ export function ProfileFeedback({
   const waiting = usePreferenceRetry(state.failure);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const denied = state.readAuthority === 'denied';
-  const unavailable = state.phase === 'unavailable' || denied;
+  const unavailable = state.readStatus === 'failed' || state.phase === 'unavailable' || denied;
   const failed = ['uncertain', 'refused', 'review'].includes(state.phase) && state.scope === scope;
+  const uncertainScope = state.attempt?.scope ?? state.scope;
+  const uncertain = uncertainScope === 'views' ? m.settings_public_activity_unknown() : m.settings_profile_save_unknown();
   return (
     <div className="space-y-3">
       {state.phase === 'loading' ? <p role="status">{m.settings_profile_loading()}</p> : null}
-      {busy && state.scope === scope ? <p role="status">{m.settings_saving()}</p> : null}
+      {state.phase === 'saving' && state.scope === scope ? <p role="status">{m.settings_saving()}</p> : null}
+      {state.phase === 'reloading' ? (
+        <p role="status">
+          {state.readStatus === 'confirming' ? m.settings_profile_confirming() : m.settings_profile_checking()}
+        </p>
+      ) : null}
       {state.phase === 'saved' && state.scope === scope ? <p role="status">{m.settings_saved()}</p> : null}
       {unavailable || failed ? (
         <Alert
@@ -51,19 +64,30 @@ export function ProfileFeedback({
           data-response-code={state.failure?.code}
           data-retry-after={state.failure?.retryAfter}
         >
-          <AlertTitle>{m.settings_profile_error_title()}</AlertTitle>
+          <AlertTitle>
+            {unavailable
+              ? m.settings_profile_error_title()
+              : scope === 'views'
+                ? m.settings_public_activity_error_title()
+                : m.settings_profile_save_error_title()}
+          </AlertTitle>
           <AlertDescription>
             <p>
-              {denied
-                ? m.settings_profile_read_denied()
-                : unavailable
-                  ? m.settings_profile_self_unavailable()
+              {unavailable
+                ? state.failure?.code === 'platform_closed' || state.failure?.status === 410
+                  ? m.settings_profile_read_closed()
+                  : denied
+                    ? m.settings_profile_read_denied()
+                    : m.settings_profile_read_failed()
+                : state.failure
+                  ? profileError(scope, state.failure)
                   : state.phase === 'uncertain'
-                    ? m.settings_profile_network_error()
-                    : state.failure
-                      ? state.failure.message || profileError(state.failure.status)
+                    ? uncertain
+                    : scope === 'views'
+                      ? m.settings_public_activity_review_needed()
                       : m.settings_profile_review_needed()}
             </p>
+            {state.attempt && (unavailable || state.failure) ? <p>{uncertain}</p> : null}
             {waiting ? <p>{m.settings_retry_wait()}</p> : null}
             <div className="flex flex-wrap gap-2">
               {state.attempt ? (
@@ -74,7 +98,7 @@ export function ProfileFeedback({
                   disabled={!writable || busy || waiting}
                   onClick={() => void editor.retry()}
                 >
-                  {m.settings_profile_retry_save()}
+                  {uncertainScope === 'views' ? m.settings_public_activity_retry() : m.settings_profile_retry_save()}
                 </Button>
               ) : null}
               <Button
@@ -315,7 +339,7 @@ export function ProfileCard({
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
                 disabled={closed || busy || uploading || !!state.attempt || !changed}
               >
-                {busy ? m.settings_saving() : m.settings_profile_save()}
+                {state.phase === 'saving' && state.scope === 'profile' ? m.settings_saving() : m.settings_profile_save()}
               </Button>
               <Button
                 type="button"

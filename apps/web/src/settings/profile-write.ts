@@ -6,6 +6,7 @@ import {
   type ProfileValues,
 } from './profile-data';
 import { profileReadFailure, type EditableProfileFailure } from './editable-profile-source';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 
 export type ProfileScope = 'profile' | 'views';
 export type ProfileAttempt = Readonly<{
@@ -28,8 +29,17 @@ export type ProfileEditorState = {
   phase: 'loading' | 'idle' | 'saving' | 'reloading' | 'saved' | 'uncertain' | 'refused' | 'review' | 'unavailable';
   scope: ProfileScope;
   readAuthority: 'pending' | 'allowed' | 'denied';
+  /** Presentation only: current reads are shared by both callers, independently of the last command's scope. */
+  readStatus?: 'checking' | 'confirming' | 'failed' | undefined;
   failure?: (EditableProfileFailure & { message: string }) | undefined;
 };
+
+function failureMetadata(error: unknown): EditableProfileFailure | undefined {
+  return (
+    profileReadFailure(error) ??
+    (isPlatformClosedError(error) ? { status: 403, code: 'platform_closed' } : undefined)
+  );
+}
 
 function frozen<T extends object>(value: T): T {
   Object.values(value).forEach((part) => {
@@ -126,6 +136,7 @@ export class ProfileEditor {
       attempt: null,
       phase: 'unavailable',
       readAuthority: 'pending',
+      readStatus: undefined,
       failure: undefined,
     });
     this.listeners.clear();
@@ -147,15 +158,17 @@ export class ProfileEditor {
       draft: known && draft ? rebaseProfile(known, draft, current) : current,
       phase: this.state.phase === 'loading' || this.state.phase === 'unavailable' ? 'idle' : this.state.phase,
       readAuthority: 'allowed',
+      ...(this.state.phase === 'loading' || this.state.phase === 'unavailable' ? { readStatus: undefined } : {}),
     });
   }
   unavailable(error?: unknown) {
     if (!this.current()) return;
     const denied = profileReadDenied(error);
-    const failure = profileReadFailure(error);
+    const failure = failureMetadata(error);
     if (denied) this.readVersion++;
     this.update({
       phase: this.state.attempt ? 'uncertain' : 'unavailable',
+      readStatus: 'failed',
       failure: failure ? { ...failure, message: '' } : undefined,
       ...(denied ? { readAuthority: 'denied' as const } : {}),
     });
@@ -215,13 +228,13 @@ export class ProfileEditor {
   private async sendAttempt(recovering: boolean) {
     const attempt = this.state.attempt;
     if (!attempt) return;
-    this.update({ phase: 'saving', failure: undefined });
+    this.update({ phase: 'saving', readStatus: undefined, failure: undefined });
     let result: ProfileSaveResult;
     try {
       result = await this.io.save(attempt);
     } catch (error) {
       if (!this.current()) return;
-      const failure = profileReadFailure(error);
+      const failure = failureMetadata(error);
       this.update({ phase: 'uncertain', failure: failure ? { ...failure, message: '' } : undefined });
       return;
     }
@@ -241,7 +254,7 @@ export class ProfileEditor {
       return;
     }
     // A new acknowledgement and a replay are both historical. Always read the current native profile.
-    this.update({ phase: 'reloading' });
+    this.update({ phase: 'reloading', readStatus: 'confirming' });
     const version = this.readVersion;
     try {
       const current = await this.io.read();
@@ -255,7 +268,14 @@ export class ProfileEditor {
     const { attempt, known, draft } = this.state;
     if (known && known.accountId !== current.accountId) throw new Error('Profile account changed');
     if (!draft) {
-      this.update({ known: current, draft: current, phase: 'idle', readAuthority: 'allowed', failure: undefined });
+      this.update({
+        known: current,
+        draft: current,
+        phase: 'idle',
+        readAuthority: 'allowed',
+        readStatus: undefined,
+        failure: undefined,
+      });
     } else if (attempt) {
       // Compare only the command's fields: unrelated current changes must not invalidate confirmation.
       const confirmed =
@@ -273,6 +293,7 @@ export class ProfileEditor {
             : 'review',
         failure: undefined,
         readAuthority: 'allowed',
+        readStatus: undefined,
       });
     } else {
       const nextDraft = known ? rebaseProfile(known, draft, current) : current;
@@ -282,6 +303,7 @@ export class ProfileEditor {
         phase: Object.keys(profileChanges(current, nextDraft)).length ? 'review' : 'idle',
         failure: undefined,
         readAuthority: 'allowed',
+        readStatus: undefined,
       });
     }
     if (this.current() && this.state.readAuthority === 'allowed') this.io.confirmed?.(current);
@@ -289,7 +311,7 @@ export class ProfileEditor {
   async reload() {
     if (!this.current() || this.pending || ['saving', 'reloading'].includes(this.state.phase)) return;
     this.pending = true;
-    this.update({ phase: 'reloading', failure: undefined });
+    this.update({ phase: 'reloading', readStatus: 'checking', failure: undefined });
     const version = this.readVersion;
     try {
       const current = await this.io.read();
