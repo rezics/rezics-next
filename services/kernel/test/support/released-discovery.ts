@@ -2,6 +2,21 @@ import { createImportTransport } from '../../../importer/src/import-client.ts';
 import type { ReviewedCandidatePage } from '../../../importer/src/import-client.ts';
 import type { BatchWriteRequest, BatchWriteResult, Source } from '@rezics/definitions/bulk';
 import type { PublicFilterDependency } from '../../src/semantic/public-filter-source-contract.ts';
+import { Importer, type ImporterOptions } from '../../../importer/src/importer.ts';
+import {
+  seedReviewedCatalogue,
+  readReviewedBangumiBinding,
+  createReviewedCatalogueLookup,
+} from '../../../importer/src/reviewed-catalogue.ts';
+import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
+import pinnedBangumi from '../../../../specs/fixtures/imports/bangumi/public-book-meta-tags.json';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+import { sourceTuple } from '../../src/semantic/fences.ts';
+import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
+import { accountAgentsForSubjects } from '../../src/semantic/agents.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { setLabelAssignment } from '../../src/library/label-assignment-store.ts';
@@ -153,6 +168,8 @@ export interface ReleasedDiscoveryFixture {
     realmCreation(persona: DiscoveryAccountName): Promise<void>;
   };
   reviewedCatalogueOperator(persona: 'alice' | 'bob'): Promise<ReturnType<typeof createImportTransport>>;
+  importedHarem(): Promise<ImportedHaremControl>;
+  statementConsent(): Promise<StatementConsentControl>;
   nativeLabelAssignment(
     persona: 'alice' | 'bob',
     labelId: string,
@@ -219,6 +236,9 @@ const expectStatus = (response: HttpResponse, status: number, operation: string)
       `${operation}: expected HTTP ${status}, observed ${response.status}: ${JSON.stringify(response.body)}`,
     );
 };
+function requireBinding(value: unknown, binding: string): asserts value {
+  if (!value) throw new Error(`Released discovery missing native binding: ${binding}`);
+}
 
 /** Owns a native driver; never accepts a transport, truth callback or replacement release. */
 export async function createReleasedDiscoveryFixture(
@@ -408,6 +428,9 @@ export async function createReleasedDiscoveryFixture(
     let diet: DietGroup | undefined;
     let books: BookGroup | undefined;
     let recipes: RecipeGroup | undefined;
+    // Cache the operation, including failure, so concurrent consumers cannot create a second import or holder.
+    let importedHarem: Promise<ImportedHaremControl> | undefined;
+    let statementConsent: Promise<StatementConsentControl> | undefined;
     const fixture: ReleasedDiscoveryFixture = {
       version: releasedDiscoveryVersion,
       clock,
@@ -488,6 +511,290 @@ export async function createReleasedDiscoveryFixture(
             return Response.json(response.body, { status: response.status, headers: response.headers });
           }) as typeof fetch,
         });
+      },
+      async importedHarem() {
+        requireOpen();
+        return (importedHarem ??= (async () => {
+          const port = await fixture.reviewedCatalogueOperator('alice');
+          const directory = await mkdtemp(join(tmpdir(), 'released-discovery-import-'));
+          const path = join(directory, 'state.sqlite');
+          let importer: Importer | undefined;
+          try {
+            // The existing producer resolves already-created native claims on replay; no second vocabulary world.
+            await seedReviewedCatalogue({ path, port });
+            const bulk: ImportedHaremControl['bulk'][number][] = [];
+            const options: ImporterOptions = {
+              path,
+              transport: {
+                batchWrite: (request) => port.batch(request),
+                setSourceRecordMetadata: port.setSourceRecordMetadata,
+                readFence: (tuple) =>
+                  port.fence({
+                    source: tuple.source,
+                    externalId: tuple.external_id,
+                    fieldGroup: tuple.field_group,
+                  }),
+              },
+              // This hook runs after real bulk success and before the importer's local ACK.
+              afterBulkSuccess(request, result) {
+                bulk.push(structuredClone({ request, result }));
+              },
+            };
+            importer = new Importer(options);
+            const binding = await readReviewedBangumiBinding(importer.session.bindings, port);
+            requireBinding(binding, 'current reviewed Bangumi source-harem lookup');
+            options.identifierLookup = createReviewedCatalogueLookup(importer.session.bindings, port);
+            const run = await importer.runRecords(
+              createSourceRegistration('bangumi'),
+              (async function* () {
+                yield { source: 'bangumi' as const, key: '498', revision: null, payload: pinnedBangumi };
+              })(),
+            );
+            requireBinding(run.status === 'committed', `Bangumi import committed (${run.status})`);
+            const observations = bulk.flatMap(({ request, result }) =>
+              request.commands.map((command) => {
+                const matches = result.results.filter((entry) => entry.key === command.key);
+                requireBinding(matches.length === 1, `bulk result for command.key ${command.key}`);
+                return { command, result: matches[0]! };
+              }),
+            );
+            const keywords = observations.filter(
+              ({ command }) =>
+                command.op === 'propose' &&
+                command.statement.property.id === 'schema:keywords' &&
+                command.statement.value.type === 'value' &&
+                command.statement.value.content === binding.sourceConcept,
+            );
+            requireBinding(keywords.length === 1, 'one imported source-harem keyword proposal');
+            const proposal = keywords[0]!;
+            requireBinding(proposal.command.op === 'propose', 'imported keyword command');
+            requireBinding(
+              'value' in proposal.result && 'candidate' in proposal.result.value,
+              `native propose.candidate for ${proposal.command.key}`,
+            );
+            const subject = proposal.command.subject;
+            const candidate = proposal.result.value.candidate;
+            const creations = observations.filter(
+              ({ command, result }) =>
+                command.op === 'create' &&
+                command.subject.type === 'schema:Book' &&
+                isDeepStrictEqual(command.source, proposal.command.source) &&
+                'value' in result &&
+                'id' in result.value &&
+                result.value.id === subject,
+            );
+            requireBinding(creations.length === 1, 'matching imported Book create.id and native Source');
+            const query = {
+              property: 'schema:keywords',
+              target: binding.sourceConcept,
+              context: driver.globalContext,
+              limit: 100,
+            };
+            let page = await port.reviewedCandidates(subject, query);
+            const row = page.candidates.find((entry) => entry.id === candidate);
+            requireBinding(
+              page.next === null && row && 'statement' in row,
+              'exact native imported candidate in the keyword slot',
+            );
+            requireBinding(
+              row.source && 'source' in row.source && isDeepStrictEqual(row.source, proposal.command.source),
+              'candidate Source equals captured keyword command.source',
+            );
+            const verifiedNativeSource = row.source;
+            requireBinding(
+              row.statement.property.id === query.property &&
+                row.statement.value.type === 'value' &&
+                row.statement.value.content === query.target &&
+                row.retracted === null &&
+                row.retraction === null &&
+                row.decision !== 'rejected' &&
+                row.rank !== 'deprecated' &&
+                (!page.adoption || (page.adoption.mode === 'replace' && row.rank !== null)) &&
+                !page.candidates.some((entry) => 'statement' in entry && entry.id !== candidate && entry.rank !== null),
+              'live unconflicted imported keyword candidate',
+            );
+            const accepted = await port.acceptReviewedCandidate(
+              subject,
+              candidate,
+              { context: driver.globalContext, expected_head: row.head },
+              randomUUID(),
+            );
+            requireBinding(
+              accepted.acceptance.candidate === candidate && accepted.acceptance.decision === 'accept',
+              'native keyword acceptance',
+            );
+            page = await port.reviewedCandidates(subject, query);
+            requireBinding(
+              page.next === null &&
+                !page.candidates.some(
+                  (entry) => 'statement' in entry && entry.id !== candidate && entry.rank !== null,
+                ) &&
+                (!page.adoption ||
+                  (page.adoption.mode === 'replace' &&
+                    page.candidates.some(
+                      (entry) => 'statement' in entry && entry.id === candidate && entry.rank !== null,
+                    ))),
+              'bounded unconflicted native keyword adoption head',
+            );
+            const adopted = await port.adoptReviewedCandidates(
+              subject,
+              {
+                context: query.context,
+                property: query.property,
+                target: query.target,
+                mode: 'replace',
+                selection: [{ candidate, rank: 'preferred' }],
+                expected_head: page.adoption?.head ?? null,
+              },
+              randomUUID(),
+            );
+            requireBinding(
+              adopted.adoption.selection.some((entry) => entry.candidate === candidate && entry.rank === 'preferred'),
+              'native keyword adoption selection',
+            );
+            const current = await port.reviewedCandidates(subject, query);
+            const selected = current.candidates.find((entry) => entry.id === candidate);
+            requireBinding(
+              current.next === null &&
+                current.adoption?.mode === 'replace' &&
+                current.adoption.head === adopted.adoption.head &&
+                selected &&
+                'statement' in selected &&
+                selected.decision === 'accepted' &&
+                selected.head === accepted.acceptance.head &&
+                selected.rank === 'preferred' &&
+                selected.retracted === null &&
+                selected.retraction === null &&
+                isDeepStrictEqual(selected.source, verifiedNativeSource),
+              'current native selected keyword and retained Source',
+            );
+            const readback = await port.readReviewedSubject(subject);
+            requireBinding(
+              'subject' in readback &&
+                readback.subject.id === subject &&
+                readback.subject.statements[query.property]?.some(
+                  (entry) =>
+                    entry.id === candidate && entry.value.type === 'value' && entry.value.content === query.target,
+                ),
+              'current imported Book keyword readback',
+            );
+            // Equivalent retained native selection evidence above, using Content's real tuple constructor.
+            // This locator is not Source projection/reduction, dispatch, repair ACK or FOREIGN visibility proof.
+            const dependency: ImportedHaremControl['dependency'] = {
+              kind: 'sourceTuple',
+              tuple: sourceTuple(Buffer.from(driver.fixtures.runtime.routeKey, 'base64url'), verifiedNativeSource),
+            };
+            const { source, external_id, field_group } = verifiedNativeSource;
+            await driver.fixtures.grantAccount(personas.alice, ['source_fence:takedown']);
+            return {
+              subject,
+              candidate,
+              sourceConcept: binding.sourceConcept,
+              source: structuredClone(verifiedNativeSource),
+              bulk,
+              current,
+              dependency,
+              async takedown(reason = 'Released discovery imported keyword control') {
+                requireOpen();
+                return request(
+                  'alice',
+                  'POST',
+                  '/v1/sourceFences:takedown',
+                  {
+                    source,
+                    externalId: external_id,
+                    fieldGroup: field_group,
+                    reason,
+                  },
+                  discoveryKey(),
+                );
+              },
+            };
+          } finally {
+            try {
+              await importer?.close();
+            } finally {
+              await rm(directory, { recursive: true, force: true });
+            }
+          }
+        })());
+      },
+      async statementConsent() {
+        requireOpen();
+        return (statementConsent ??= (async () => {
+          const editor = await driver.fixtures.person('editor');
+          await flushNativeClock();
+          const agent = await ensureAccountAgent(driver.fixtures.pool, {
+            account: editor,
+            kind: 'person',
+            name: 'Released discovery consent owner',
+          });
+          const holder = await createSubject('schema:Organization', 'Native statement consent holder');
+          const proposed = await request(
+            'editor',
+            'POST',
+            `/v1/subjects/${holder.id}/candidates`,
+            {
+              statement: { ...snak('rezics:penNameOf', agent.subject.id), references: [] },
+            },
+            discoveryKey(),
+          );
+          expectStatus(proposed, 201, 'Propose owner-authored unsourced pen name');
+          const candidate = proposed.body.candidate;
+          requireBinding(typeof candidate === 'string', 'native statement consent candidate');
+          const point = await withReadTransaction(driver.fixtures.pool, async (client) => {
+            // Only this exact committed point; routing is returned from storage, not the account's route.
+            const result = await client.query<{
+              route: number;
+              account_id: string;
+              subject_id: string;
+              candidate_id: string;
+              target_id: string;
+            }>(
+              `SELECT route, account_id::text, subject_id::text, candidate_id::text, target_id::text
+               FROM semantic.statement_disclosure WHERE route = $1 AND subject_id = $2 AND candidate_id = $3`,
+              [routeOf(candidate), holder.id, candidate],
+            );
+            requireBinding(result.rows.length === 1, 'exact committed statement_disclosure point');
+            const row = result.rows[0]!;
+            requireBinding(
+              row.route === routeOf(candidate) &&
+                row.route === routeOf(holder.id) &&
+                row.account_id === editor.accountId &&
+                row.subject_id === holder.id &&
+                row.candidate_id === candidate &&
+                row.target_id === agent.subject.id,
+              'stored disclosure route/account/subject/candidate/target linkage',
+            );
+            const links = await accountAgentsForSubjects(client, [row.target_id]);
+            requireBinding(
+              links.get(row.target_id)?.account === row.account_id &&
+                links.get(row.target_id)?.subject === row.target_id,
+              'current native target-account agent relationship',
+            );
+            return row;
+          });
+          return {
+            dependency: {
+              kind: 'consent',
+              route: point.route,
+              account: point.account_id,
+              subject: point.subject_id,
+              candidate: point.candidate_id,
+            },
+            target: point.target_id,
+            subject: point.subject_id,
+            candidate: point.candidate_id,
+            async disclose() {
+              requireOpen();
+              return request('editor', 'POST', `/v1/statements/${point.candidate_id}/disclose`, {}, discoveryKey());
+            },
+            async retract() {
+              requireOpen();
+              return request('editor', 'POST', `/v1/statements/${point.candidate_id}/retract`, {}, discoveryKey());
+            },
+          };
+        })());
       },
       async nativeLabelAssignment(persona, labelId, subjectId, operation = 'set') {
         requireOpen();
@@ -740,8 +1047,10 @@ export async function createReleasedDiscoveryFixture(
           if (!done) throw new Error(`Native link projection did not catch up in partition ${partition}`);
         }
       },
-      close: () => {
+      close: async () => {
         closed = true;
+        // Settle any admitted setup and its ordinary journal cleanup before closing the original driver.
+        await Promise.allSettled([importedHarem, statementConsent]);
         return driver.close();
       },
     };

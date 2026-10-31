@@ -199,6 +199,167 @@ test('discovery clock follows wall time until frozen and rejects invalid or over
   expect(fixture.clock.freeze().getTime()).toBe(at + 1);
 });
 
+test('The one released fixture captures a real imported selected HAREM candidate and exact native tuple and exposes actual statement-disclosure controls in the same world without a fake FOREIGN proof', async () => {
+  const privacy = fixture.privacy;
+  const alice = { ...fixture.personas.alice };
+  const [imported, repeated] = await Promise.all([fixture.importedHarem(), fixture.importedHarem()]);
+  expect(repeated).toBe(imported);
+  expect(imported.subject).not.toBe(book);
+  expect(imported.source.source).not.toBe('rezics_reviewed_vocabulary');
+  const proposals = imported.bulk.flatMap(({ request, result }) =>
+    request.commands.flatMap((command) =>
+      command.op === 'propose' &&
+      command.subject === imported.subject &&
+      command.statement.property.id === 'schema:keywords' &&
+      command.statement.value.type === 'value' &&
+      command.statement.value.content === imported.sourceConcept
+        ? [{ command, result: result.results.find((entry) => entry.key === command.key) }]
+        : [],
+    ),
+  );
+  expect(proposals).toHaveLength(1);
+  expect(proposals[0]!.command.source).toEqual(imported.source);
+  expect(proposals[0]!.result).toMatchObject({ value: { candidate: imported.candidate } });
+  const creations = imported.bulk.flatMap(({ request, result }) =>
+    request.commands.flatMap((command) =>
+      command.op === 'create' &&
+      command.subject.type === 'schema:Book' &&
+      result.results.some(
+        (entry) =>
+          entry.key === command.key && 'value' in entry && 'id' in entry.value && entry.value.id === imported.subject,
+      )
+        ? [command]
+        : [],
+    ),
+  );
+  expect(creations).toHaveLength(1);
+  expect(creations[0]!.source).toEqual(imported.source);
+  expect(imported.current.adoption).toMatchObject({ mode: 'replace' });
+  expect(imported.current.candidates.find((row) => row.id === imported.candidate)).toMatchObject({
+    source: imported.source,
+    decision: 'accepted',
+    rank: 'preferred',
+    retracted: null,
+    retraction: null,
+    statement: { property: { id: 'schema:keywords' }, value: { content: imported.sourceConcept } },
+  });
+  const tuple = imported.dependency.tuple;
+  expect(imported.dependency.kind).toBe('sourceTuple');
+  expect(tuple).toMatchObject({
+    source: imported.source.source,
+    external_id: imported.source.external_id,
+    field_group: imported.source.field_group,
+  });
+  const selected = status(await fixture.request('anonymous', 'GET', `/v1/subjects/${imported.subject}`), 200);
+  expect((selected.subject as { statements: Record<string, unknown[]> }).statements['schema:keywords']).toContainEqual(
+    expect.objectContaining({ id: imported.candidate }),
+  );
+
+  const consent = await fixture.statementConsent();
+  expect(await fixture.statementConsent()).toBe(consent);
+  expect(consent.subject).not.toBe(imported.subject);
+  expect(consent.dependency).toMatchObject({ kind: 'consent', subject: consent.subject, candidate: consent.candidate });
+  expect(
+    (
+      await fixture.inspect(
+        `SELECT route, account_id::text AS account, subject_id::text AS subject,
+            candidate_id::text AS candidate, target_id::text AS target, disclosed
+     FROM semantic.statement_disclosure WHERE route=$1 AND subject_id=$2 AND candidate_id=$3`,
+        [consent.dependency.route, consent.subject, consent.candidate],
+      )
+    ).rows,
+  ).toEqual([
+    {
+      route: consent.dependency.route,
+      account: consent.dependency.account,
+      subject: consent.subject,
+      candidate: consent.candidate,
+      target: consent.target,
+      disclosed: false,
+    },
+  ]);
+  const body = { source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group, reason: 'denied' };
+  problem(await fixture.request('bob', 'POST', '/v1/sourceFences:takedown', body, discoveryKey()), 403, 'forbidden');
+  const takenDown = await imported.takedown('Imported keyword provenance control');
+  const revision = status(takenDown, 200).securityRevision;
+  expect(takenDown.headers.get('rezics-session-token')).toBeTruthy();
+  const fence = async () =>
+    (
+      await fixture.inspect(
+        `SELECT taken_down, security_revision::text, taken_down_at::text, takedown_id::text
+     FROM content.source_fences WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4`,
+        [tuple.route, tuple.source, tuple.external_id, tuple.field_group],
+      )
+    ).rows;
+  const firstFence = await fence();
+  expect(firstFence).toEqual([
+    {
+      taken_down: true,
+      security_revision: revision,
+      taken_down_at: expect.any(String),
+      takedown_id: expect.any(String),
+    },
+  ]);
+  const again = status(await imported.takedown(), 200);
+  expect(BigInt(again.securityRevision as string)).toBeGreaterThan(BigInt(revision as string));
+  expect(await fence()).toEqual([{ ...firstFence[0], security_revision: again.securityRevision }]);
+  const hidden = status(await fixture.request('anonymous', 'GET', `/v1/subjects/${imported.subject}`), 200);
+  expect(
+    (hidden.subject as { statements: Record<string, unknown[]> }).statements['schema:keywords'] ?? [],
+  ).not.toContainEqual(expect.objectContaining({ id: imported.candidate }));
+  expect(fixture.personas.alice).toEqual(alice);
+  expect(fixture.privacy).toBe(privacy);
+  expect(fixture.privacy.state).toBe('prerequisite');
+  // These point controls do not settle the original Query/FOREIGN/cross-surface positive cells.
+}, 180_000);
+
+test('native statement consent uses its stored owner and route, rejects a different authorized author and retracts terminally', async () => {
+  const consent = await fixture.statementConsent();
+  const dependency = { ...consent.dependency };
+  const path = `/v1/subjects/${consent.subject}`;
+  const publicCandidates = async () => {
+    const read = status(await fixture.request('anonymous', 'GET', path), 200);
+    return (read.subject as { statements: Record<string, { id: string }[]> }).statements['rezics:penNameOf'] ?? [];
+  };
+  expect(await publicCandidates()).not.toContainEqual(expect.objectContaining({ id: consent.candidate }));
+  // Alice has a genuine statement:propose grant from the same reviewed operator setup.
+  await fixture.reviewedCatalogueOperator('alice');
+  for (const action of ['disclose', 'retract'])
+    problem(
+      await fixture.request('alice', 'POST', `/v1/statements/${consent.candidate}/${action}`, {}, discoveryKey()),
+      403,
+      'forbidden',
+    );
+  const disclosed = await consent.disclose();
+  expect(status(disclosed, 200)).toEqual({ candidate: consent.candidate, disclosed: true });
+  expect(disclosed.headers.get('rezics-session-token')).toBeTruthy();
+  expect(status(await consent.disclose(), 200)).toEqual({ candidate: consent.candidate, disclosed: true });
+  expect(await publicCandidates()).toContainEqual(expect.objectContaining({ id: consent.candidate }));
+  const retracted = await consent.retract();
+  expect(status(retracted, 200)).toEqual({ candidate: consent.candidate, retracted: true });
+  expect(retracted.headers.get('rezics-session-token')).toBeTruthy();
+  expect(await publicCandidates()).not.toContainEqual(expect.objectContaining({ id: consent.candidate }));
+  problem(await consent.disclose(), 409, 'conflict');
+  expect(status(await consent.retract(), 200)).toEqual({ candidate: consent.candidate, retracted: true });
+  expect(
+    (
+      await fixture.inspect(
+        `SELECT disclosed FROM semantic.statement_disclosure WHERE route=$1 AND subject_id=$2 AND candidate_id=$3`,
+        [dependency.route, dependency.subject, dependency.candidate],
+      )
+    ).rows,
+  ).toEqual([{ disclosed: true }]);
+  expect(
+    (
+      await fixture.inspect(
+        `SELECT candidate_id::text FROM semantic.retraction WHERE route=$1 AND subject_id=$2 AND candidate_id=$3`,
+        [dependency.route, dependency.subject, dependency.candidate],
+      )
+    ).rows,
+  ).toEqual([{ candidate_id: consent.candidate }]);
+  expect(consent.dependency).toEqual(dependency);
+}, 120_000);
+
 test('owned database inspection is native read-only and expires with fixture cleanup', async () => {
   const before = await entryRows();
   await expect(
