@@ -2162,8 +2162,8 @@ fixtures; these stories do not claim visual, browser or native completion.
 ### Sitemap export
 
 - **Touches:** One daily Workflow normally walks each feed once in cursor order, with one full restart if a cursor is
-  rejected. A feed step reads at most 20 pages, targets 2,000 families, and holds at most 3,000 when its last page fills
-  the gap; each shard gets one R2 `head` and a
+  rejected. A feed step reads at most 20 pages, targets 2,000 families, and flushes at most 3,000 families at a time
+  while finishing its final native source page; each shard gets one R2 `head` and a
   `put` only when it is absent. Each feed keeps its file list in `runs/`; publication stages a run record and
   conditionally puts `index.xml` after every feed finishes, then lists `shards/` and `runs/` for retention cleanup.
 - **Bound:** Feed requests are about N / 1,000 plus empty pages, a possible full restart, and retries. Each instance
@@ -2177,7 +2177,8 @@ fixtures; these stories do not claim visual, browser or native completion.
   labels, optional original language and meaningful change time in one anonymous, no-store request of at most 1,000
   source items. It reuses the reader's label fallback and canonical view paths, retains source order/ids and sparse
   continuation, and flushes expanded view families within the existing 3,000-family packing bound. Account overview
-  stays with the existing agents feed; other Account destinations use the current native `canonicalPath` unchanged.
+  and admitted catalogue views use the current native `canonicalPath` unchanged. The native target proves a current
+  canonical overview root and declares no agents-feed ownership exclusion; Web does not suppress that family.
   Account posts/reviews/collections still refuse projection: Semantic's offered template views do not supply the
   current Account `publicViews` admission that the public reader requires. Missing/invalid targets or views also
   fail replacement. No per-row discovery, permission evaluator or fallback subject identity is added. This source

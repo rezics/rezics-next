@@ -339,11 +339,13 @@ or unavailable fails the export and preserves the previous inventory; it never b
 The default Subject adapter binds delivered native targets/views to the canonical reader's label fallback and
 locale/view path helpers, preserving raw ids, source order and native cursors even across empty continuation pages.
 Community destination/standalone adapters are also bound. Missing or invalid required Subject targets/views refuse
-replacement; ready empty pages succeed. Account overview belongs to the existing agents feed, while admitted
-catalogue views use the native current Account path. One precise boundary remains unavailable: Account
+replacement; ready empty pages succeed. Account overview and admitted catalogue views use the native current
+Account path. Native reciprocal verification and the exact current handle claim establish that overview root;
+the DTO declares no agents-feed ownership exclusion. One precise boundary remains unavailable: Account
 posts/reviews/collections require the current `publicViews` choice applied by the public Account reader; Semantic's
-template-derived `views` do not supply that admission. The producer must supply current Account view eligibility
-before those families can export. Web neither guesses it nor hydrates identities or metadata per row. Original
+template-derived `views` do not supply that admission. Semantic and Accounts must supply batched admission,
+filtering and final revalidation before those families can export. Web neither guesses eligibility nor hydrates
+identities or metadata per row. Original
 meaningful times are reused when valid and otherwise omitted. This binding does not certify native, whole-feed,
 visual or promoted-main acceptance.
 These boundaries adopt the research's owner-defined public set and separate export stage, consistent with its

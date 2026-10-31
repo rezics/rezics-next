@@ -46,7 +46,12 @@ test('canonical reader paths reach sitemap and HTML unchanged across sparse lang
   // Already resolved public paths: the exporter must not reselect a fallback label or infer an account handle.
   const subjectPaths = paths(`/subjects/${id}/original-title`);
   subjectPaths.fr = `/subjects/${id}/titre-français`;
-  for (const pagePaths of [subjectPaths, subjectViewPaths(subjectPaths, 'details'), paths('/@CurrentHandle/works')]) {
+  for (const pagePaths of [
+    subjectPaths,
+    subjectViewPaths(subjectPaths, 'details'),
+    paths('/@CurrentHandle'),
+    paths('/@CurrentHandle/works'),
+  ]) {
     const family = sitemapFamilyFromPagePaths(pagePaths);
     expect(sitemapPagePaths(family.paths)).toEqual(pagePaths);
     expect(family.lastmod).toBeUndefined();

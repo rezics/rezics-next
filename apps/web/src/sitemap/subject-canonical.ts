@@ -102,12 +102,8 @@ export function subjectCanonicalPage(page: SubjectSitemapPage): CanonicalSitemap
       items.push({
         id: item.id,
         key: `${sourceKey}:${String(viewOrder.indexOf(view)).padStart(2, '0')}`,
-        // Accounts owns the base identity family in agent-pages. Keep its source position even when it
-        // supplies no additional subject view, without duplicating the overview or inventing a cursor.
-        family:
-          target.family === 'account' && view === 'overview'
-            ? null
-            : sitemapFamilyFromPagePaths(subjectViewPaths(paths, view), lastModified),
+        // The native Account target proves its overview root; it declares no agents-feed ownership veto.
+        family: sitemapFamilyFromPagePaths(subjectViewPaths(paths, view), lastModified),
       });
     }
   }

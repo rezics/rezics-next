@@ -130,9 +130,9 @@ Source anchors: [subject adapter](../../apps/web/src/sitemap/feeds/subjects.ts),
 [subject head](../../apps/web/src/features/pages/subject-head.ts).
 
 **Known gaps and next whole slice.** Selected publication semantics, export code and protocol research are distinct
-from a working production inventory. The delivered Subject source is now bound to the existing exporter, with
-Account overview retained by the agents feed. Current Account activity-view admission remains an owner dependency,
-not an invitation to create a Web permission evaluator. Next prove the original subject publication/feed journey:
+from a working production inventory. The delivered Subject source is now bound to the existing exporter, including
+the native current Account overview root; its DTO declares no agents-feed ownership exclusion. Current Account
+activity-view admission remains a Semantic/Accounts dependency. Next prove the original subject publication/feed journey:
 public meaningful change → current feed → eight-locale family → stored shard →
 atomic index → crawler GET, then hide/remove the last public fact and show immediate noindex/404 as appropriate,
 next-export omission, stable/omitted `lastmod`, and previous-index retention on failure. Reuse real fixture assembly

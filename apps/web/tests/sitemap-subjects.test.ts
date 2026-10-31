@@ -219,19 +219,24 @@ test('the existing default subject sitemap adapter consumes actual owner canonic
     expected(subject).en,
     `${expected(subject).en}/editions`,
     `${expected(subject).en}/details`,
-    null,
+    '/en/@Current_Handle-',
     '/en/@Current_Handle-/works',
     '/en/@Current_Handle-/details',
   ]);
   for (const locale of sitemapLocales) {
     expect(page.items[1]!.family?.paths[locale]).toBe(`${expected(subject)[locale]}/editions`);
+    expect(page.items[3]!.family?.paths[locale]).toBe(`/${locale}/@Current_Handle-`);
     expect(page.items[4]!.family?.paths[locale]).toBe(`/${locale}/@Current_Handle-/works`);
   }
+  expect(page.items[3]!.family?.lastmod).toBe(account.lastModified);
   expect(page.items[4]!.family?.lastmod).toBe(account.lastModified);
   expect(projected({ ...subject, lastModified: '2026-02-30T00:00:00Z' }).family?.lastmod).toBeUndefined();
   const onlyAccountOverview = subjectCanonicalPage({
     subjectPages: [{ ...account, views: ['overview'] }],
     next: 'continue',
   });
-  expect(onlyAccountOverview).toEqual({ items: [{ id: account.id, key: keys[3], family: null }], next: 'continue' });
+  expect(onlyAccountOverview).toEqual({
+    items: [{ id: account.id, key: keys[3], family: page.items[3]!.family }],
+    next: 'continue',
+  });
 });

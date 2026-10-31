@@ -519,6 +519,19 @@ test('default subject projection exports a full native window with multiple view
     for (const unavailable of [
       { status: 503 },
       { status: 200, data: { subjectPages: [{ ...subjectItem, target: undefined }], next: null } },
+      ...['posts', 'reviews', 'collections'].map((view) => ({
+        status: 200,
+        data: {
+          subjectPages: [
+            {
+              ...subjectItem,
+              target: { family: 'account', accountId: subjectItem.id, canonicalPath: '/@CurrentHandle' },
+              views: ['overview', view],
+            },
+          ],
+          next: null,
+        },
+      })),
     ]) {
       feedResponse = () => unavailable;
       await expect(exportSitemaps(options)).rejects.toMatchObject({ status: 503 });
