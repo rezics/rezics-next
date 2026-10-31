@@ -195,7 +195,7 @@ export function ErasureProgressView({
       </section>
       {page.status === 'signed-out' ? (
         <a
-          className="inline-flex min-h-11 max-w-full items-center self-start py-2 font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center self-start px-3 py-2 font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
           href={erasureSignInHref(returnTo)}
         >
           {m.erasure_sign_in()}
