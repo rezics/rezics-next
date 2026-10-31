@@ -2,10 +2,11 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { resourceAuthorization } from '../access/resource-authorization.ts';
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { accessCheck, resourceAuthorization, type CommandAuthorization } from '../request/access.ts';
+import { accessCheck, type AccessClient } from '../request/access.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
 import { withConnection } from '../database/pool.ts';
 import {
@@ -24,6 +25,7 @@ import {
   runCommand,
   type AuthoritativeTime,
   type CommandAttempt,
+  type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
@@ -190,7 +192,7 @@ async function activate(context: Context, input: WorkflowInput): Promise<void> {
   const resource = Object.freeze({ route: locator.route, id: locator.collectionId });
   const anchor = {
     resource,
-    async validate(client: import('../request/access.ts').AccessClient) {
+    async validate(client: AccessClient) {
       const collection = await readCollection(client, locator.route, locator.collectionId);
       return (
         collection?.state === 'active' &&
@@ -369,7 +371,7 @@ async function activate(context: Context, input: WorkflowInput): Promise<void> {
         scopeAllowance(100, `${locator.publicationId}:activation`),
         resources.deadline,
       );
-      await completeCollectionSourceOutput(tx, episode.source.output.ref, { locator, work });
+      await completeCollectionSourceOutput(tx, episode.source.output, { locator, work });
       const version = await readCollectionPublicationEpisodeVersion(tx, locator);
       if (
         version === null ||

@@ -63,7 +63,7 @@ function account(actor: Actor): AccountActor {
 /** HTTP-facing begin and owner-private status operations; native readers remain the source of truth. */
 export function createCollectionPublicationService(dependencies: Dependencies) {
   const { pool, access, clock } = dependencies;
-  const episodes = createCollectionPublicationEpisodes({ pool, access, clock });
+  const episodes = createCollectionPublicationEpisodes({ pool, access, ...(clock ? { clock } : {}) });
 
   async function locate(publicationId: string, deadline: number): Promise<CollectionPublicationLocator | null> {
     const route = routeOf(publicationId);
