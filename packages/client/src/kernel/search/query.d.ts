@@ -4,6 +4,7 @@ import { type OpenSearch, type SearchRequestWork } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 export declare const HIT_TEMPLATE = "subjects-hits-v1";
+export declare const SCOPE_HIT_TEMPLATE = "subjects-scope-hits-v1";
 export declare const SEARCH_TEMPLATE = "subjects-search-v2";
 export declare const SUGGEST_TEMPLATE = "subjects-suggest-v1";
 export declare const FACET_TEMPLATE = "subjects-facets-v1";

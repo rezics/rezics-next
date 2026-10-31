@@ -76,6 +76,23 @@ test('every native reply, including zero hits, needs completion and actual itera
   await expect(query(other)).rejects.toThrow();
 });
 
+test('the owner ordered step can submit its full hundred-key allowance including lookahead', async () => {
+  const keys = Array.from({ length: 100 }, (_, index) =>
+    `018f0000-0000-7000-8000-${(index + 1).toString(16).padStart(12, '0')}`,
+  );
+  let dispatched: unknown;
+  const search = { async request(_method: string, _path: string, request: unknown) {
+    dispatched = request;
+    return { status: 200, body: reply(['', keys[0]]) };
+  } } as unknown as OpenSearch;
+  const result = await queryScopeOrderedKeys(search, queried,
+    { sort: 'name', generation: 1, size: 100 }, keys, { deadline: Date.now() + 1000 }, async () => {});
+  expect(result.hits).toHaveLength(1);
+  expect(dispatched).toMatchObject({ params: {
+    size: 100, filter: { bool: { filter: [{ ids: { values: keys } }] } },
+  } });
+});
+
 test('retained key bytes match native term order, preserve full cursors and distinguish empty from missing', () => {
   expect(scopeOrderedNameKey('界'.repeat(512)).byteLength).toBe(1537);
   expect(scopeOrderedNameKey('')).toEqual(Buffer.from('s'));

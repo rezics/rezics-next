@@ -432,7 +432,7 @@ export async function queryScopeOrderedKeys(
   context: PublicFilterConsumerContext,
   retainPit: (pit: string) => Promise<void>,
 ): Promise<{ hits: SearchResult['hits']; engineIteratorSteps: number }> {
-  if (queried.snapshot.kind !== 'pit' || keys.length < 1 || keys.length > 99 || new Set(keys).size !== keys.length)
+  if (queried.snapshot.kind !== 'pit' || keys.length < 1 || keys.length > 100 || new Set(keys).size !== keys.length)
     throw new RangeError('Ordered preparation needs a bounded native input window');
   for (const key of keys) subjectPartition(key);
   const { prefix, generation } = targetParts(queried.consumer.physicalTarget);
