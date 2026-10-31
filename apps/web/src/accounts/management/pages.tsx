@@ -7,6 +7,7 @@ import { Tombstone } from '@rezics/ui/tombstone';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
+import { managedAccountHref } from '../../settings/managed-accounts-read';
 import { issuerPage, type Cursors, type Detail, type Identity, type Inventory, type Page } from './data';
 
 const linkClass = 'inline-flex min-h-11 items-center text-primary underline underline-offset-4';
@@ -275,9 +276,7 @@ export function AccountManagementPage({
             <a href={`/${getLocale()}/settings`} className={linkClass}>
               {m.managed_edit_profile()}
             </a>
-          ) : (
-            <p className="text-sm text-muted-foreground">{m.managed_profile_unavailable()}</p>
-          )}
+          ) : null}
         </CardContent>
       </Card>
       {value.account.kind === 'organization' ? (
@@ -315,15 +314,16 @@ export function AccountManagementPage({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
-          <p>{m.managed_changes_unavailable()}</p>
+          <a className={linkClass} href={managedAccountHref(`/${getLocale()}/settings`, value.account.id)}>
+            {m.managed_options()}
+          </a>
+          <p>{m.managed_options_guidance()}</p>
           {value.relation ? <p>{m.managed_transfer_unavailable()}</p> : null}
           <p>{m.managed_operation_status()}</p>
           {deletion ? (
             <a className={linkClass} href={deletion}>
               {m.managed_delete_self()}
             </a>
-          ) : value.account.kind === 'organization' ? (
-            <p>{m.managed_delete_organization_unavailable()}</p>
           ) : null}
         </CardContent>
       </Card>

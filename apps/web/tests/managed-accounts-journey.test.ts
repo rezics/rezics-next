@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { failure, issuerPage, loadDetail, loadInventory, readCursors } from '../src/accounts/management/data';
-import { inventoryExample, detailExample, organization } from '../src/accounts/management/story-api';
+import { AccountManagementPage } from '../src/accounts/management/pages';
+import { inventoryExample, detailExample, organization, human, automation } from '../src/accounts/management/story-api';
+import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { m } from '../src/paraglide/messages.js';
 import { isSignedInPath } from '../src/session/guard';
 
 // Focused transport tests. Native and real served journey review runs at integration, not in this fixture.
@@ -67,4 +72,73 @@ test('issuer links retain the two supported page profiles and account routes are
   expect(readCursors({ operatorsCursor: 'next', membersCursor: 'x'.repeat(4097), requested_by: 'foreign' })).toEqual({
     operatorsCursor: 'next',
   });
+});
+
+test('Legacy account and organization management reaches the current selected Settings target without inferring permission or another fetch', async () => {
+  const previousLocale = getLocale();
+  const requests: Request[] = [];
+  const targets = [
+    detailExample(human.id),
+    detailExample(automation.id),
+    detailExample(organization.id),
+    {
+      ...detailExample(organization.id),
+      role: 'member' as const,
+      members: { state: 'denied' as const, items: [], next: null },
+      responsibilities: null,
+    },
+  ];
+  try {
+    for (const value of targets) {
+      const client = createKernelClient('https://kernel.example.test', {
+        fetch: (async (input, init) => {
+          requests.push(new Request(input, init));
+          return Response.json(value);
+        }) as typeof fetch,
+      });
+      const page = await loadDetail(client, 'Bearer current-viewer', value.account.id, {});
+      const requestCount = requests.length;
+      for (const locale of locales) {
+        setLocale(locale, { reload: false });
+        const html = renderToStaticMarkup(
+          createElement(AccountManagementPage, {
+            page: { ...page, issuer: 'https://auth.example.test', organizationsAvailable: null },
+            retry() {},
+          }),
+        );
+        // Exactly one selector, with no permission, operation or caller context attached.
+        expect(html.match(/href="[^"]*\?managedAccount=[^"]*"/g)).toEqual([
+          `href="/${locale}/settings?managedAccount=${encodeURIComponent(value.account.id)}#account"`,
+        ]);
+        expect(html).toContain(m.managed_options());
+        expect(html).toContain(m.managed_options_guidance());
+        expect(html).toContain(m.managed_operation_status());
+        expect(html.includes('https://auth.example.test/account/delete')).toBe(value.self);
+        if (value.members.state === 'denied') expect(html).toContain(m.managed_holders_denied());
+        expect(html).not.toContain('current-viewer');
+        expect(requests).toHaveLength(requestCount);
+      }
+      const request = requests.at(-1)!;
+      expect(request.method).toBe('GET');
+      expect(request.url).toBe(`https://kernel.example.test/v1/accounts/${value.account.id}/management`);
+      expect(request.body).toBeNull();
+    }
+    for (const status of [401, 403, 404, 503]) {
+      const client = createKernelClient('https://kernel.example.test', {
+        // Even a response carrying fixture identity must not yield a target after a denied read.
+        fetch: (async () =>
+          Response.json({ ...detailExample(organization.id), code: 'forbidden' }, { status })) as typeof fetch,
+      });
+      const page = await loadDetail(client, 'Bearer current-viewer', organization.id, {});
+      for (const locale of locales) {
+        setLocale(locale, { reload: false });
+        const html = renderToStaticMarkup(createElement(AccountManagementPage, { page, retry() {} }));
+        expect(html).not.toContain('managedAccount=');
+        expect(html).not.toContain(organization.id);
+        expect(html).not.toContain(m.managed_options());
+      }
+    }
+  } finally {
+    setLocale(previousLocale, { reload: false });
+  }
 });

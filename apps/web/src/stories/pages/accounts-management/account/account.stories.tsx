@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { selectManagementStory, human, automation } from '../../../../accounts/management/story-api';
 import { m } from '../../../../paraglide/messages.js';
+import { getLocale } from '../../../../paraglide/runtime.js';
 import { PageStory } from '../../../page';
 import { ready, reviewParameters } from '../support';
 const meta = { title: 'Pages/Account/Management/Account', parameters: reviewParameters } satisfies Meta;
@@ -19,6 +20,11 @@ export const OwnAccount: Story = {
       'href',
       'https://auth.example.test/account/delete',
     );
+    await expect(within(context.canvasElement).getByRole('link', { name: m.managed_options() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/settings?managedAccount=${encodeURIComponent(human.id)}#account`,
+    );
+    await expect(within(context.canvasElement).getByText(m.managed_options_guidance())).toBeVisible();
   },
 };
 export const CurrentOperator: Story = {
@@ -27,9 +33,20 @@ export const CurrentOperator: Story = {
     await ready(context);
     await expect(within(context.canvasElement).getByText(m.managed_transfer_unavailable())).toBeVisible();
     await expect(within(context.canvasElement).queryByRole('link', { name: m.managed_delete_self() })).toBeNull();
+    await expect(within(context.canvasElement).getByRole('link', { name: m.managed_options() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/settings?managedAccount=${encodeURIComponent(automation.id)}#account`,
+    );
+    await expect(within(context.canvasElement).getByText(m.managed_options_guidance())).toBeVisible();
   },
 };
 export const Handleless: Story = { render: () => render('handleless'), play: ready };
-export const Denied: Story = { render: () => render('denied'), play: ready };
+export const Denied: Story = {
+  render: () => render('denied'),
+  play: async (context) => {
+    await ready(context);
+    await expect(within(context.canvasElement).queryByRole('link', { name: m.managed_options() })).toBeNull();
+  },
+};
 export const Unavailable: Story = { render: () => render('unavailable'), play: ready };
 export const Missing: Story = { render: () => render('missing'), play: ready };
