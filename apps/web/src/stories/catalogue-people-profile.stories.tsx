@@ -150,8 +150,14 @@ export const CorrectCitedFact: Story = {
     await expect(field.getByRole('link', { name: 'https://example.org/original' })).toBeVisible();
     await userEvent.click(field.getByRole('link', { name: m.correction_review() }));
     const review = within(await canvas.findByRole('region', { name: m.candidate_title() }));
-    await userEvent.click(review.getByRole('button', { name: m.candidate_entry() }));
-    await expect(await review.findByRole('button', { name: m.candidate_review() })).toBeVisible();
+    const proposedHeading = await review.findByRole('heading', { name: m.candidate_proposed() });
+    const currentHeading = await review.findByRole('heading', { name: m.candidate_current() });
+    await expect(
+      within(proposedHeading.parentElement!).getByRole('link', { name: 'https://example.org/corrected' }),
+    ).toBeVisible();
+    await expect(
+      within(currentHeading.parentElement!).getByRole('link', { name: 'https://example.org/original' }),
+    ).toBeVisible();
   },
 };
 export const Loading: Story = { args: { scenario: 'loading' } };
