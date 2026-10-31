@@ -185,9 +185,16 @@ class ReadWork {
   }
   reserveParentBytes() {
     if (this.parentBytesReserved || !this.consumerWork) return;
-    if (!reserveIdentitySourceConsumerNativeWork(this.pool, this.consumerWork, {
-      rows: 0, points: 0, statements: 0, bytes: this.allowance.bytes, engineRequests: 0,
-    })) return refuse('source-maintenance-work-allowance');
+    if (
+      !reserveIdentitySourceConsumerNativeWork(this.pool, this.consumerWork, {
+        rows: 0,
+        points: 0,
+        statements: 0,
+        bytes: this.allowance.bytes,
+        engineRequests: 0,
+      })
+    )
+      return refuse('source-maintenance-work-allowance');
     this.parentBytesReserved = true;
   }
   charge(rows: number, points: number, statements: number, bytes: number) {
@@ -344,8 +351,10 @@ export async function readIdentityPrearmCustodyPage(
   // Snapshot caller-owned locators before the first await. Authentication cannot authorize
   // a later mutation of the job, work allowance or scalar continuation.
   request = { ...request, job: { ...request.job }, allowance: { ...request.allowance } };
-  if (context.identityConsumerWork &&
-    !isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline))
+  if (
+    context.identityConsumerWork &&
+    !isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline)
+  )
     return { status: 'unavailable', reason: 'source-maintenance-work-unavailable', work: emptyWork() };
   const work = new ReadWork(pool, request.allowance, context, context.identityConsumerWork);
   if (request.after && (request.after.after.length > 8 || Buffer.byteLength(json(request.after)) > 2048))
@@ -477,8 +486,10 @@ export async function verifyIdentityPrearmCustodyCut(
   job = { ...job };
   const saved = cuts.get(cut);
   if (!saved || !validJob(job) || !sameJob(job, saved.job)) return { status: 'unavailable', work: emptyWork() };
-  if (context.identityConsumerWork &&
-    !isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline))
+  if (
+    context.identityConsumerWork &&
+    !isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline)
+  )
     return { status: 'unavailable', work: emptyWork() };
   const work = new ReadWork(pool, saved.allowance, context, context.identityConsumerWork);
   return withRequestDeadline(work.deadline, async () => {

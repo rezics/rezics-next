@@ -215,21 +215,21 @@ result row counts.
 
 The exact optional overrides and defaults are:
 
-| Environment key | Default | Derivation |
-| --- | ---: | --- |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS` | 236 | Two 100-row native directory child ceilings, 32 fixed Source control touches and four same-command verification touches. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_POINTS` | 236 | The same bounded point footprint as the native row allowance. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS` | 70 | 18 directory-read statements, 17 cut-verification statements, 29 fixed Source control/failure/cleanup statements and six same-command verification statements. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES` | 270336 | 32 KiB Source controls, 8 KiB same-command verification and two 112 KiB native directory children. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ENGINE_REQUESTS` | 0 | This PostgreSQL path dispatches no engine request. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_CANDIDATE_KEYS` | 1 | One effect selection in the existing one-page bound. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_IDENTITY_METADATA_ROWS` | 0 | This path does not dispatch an identity metadata sweep. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_NATIVE_ROWS` | 8192 | Existing Collection Source one-page native row ceiling. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_NATIVE_POINTS` | 128 | Existing Collection Source one-page native point ceiling. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_WITNESS_KEYS` | 1 | One effect selection. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_STATEMENTS` | 128 | Existing Collection Source one-page statement ceiling. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_BYTES` | 1048576 | Existing Collection Source one-page byte ceiling. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_EMPTY_SEEKS` | 2 | The bounded page-end and sealed-empty probes. |
+| Environment key                                                     | Default | Derivation                                                                                                                                                     |
+| ------------------------------------------------------------------- | ------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS`                    |     236 | Two 100-row native directory child ceilings, 32 fixed Source control touches and four same-command verification touches.                                       |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_POINTS`                  |     236 | The same bounded point footprint as the native row allowance.                                                                                                  |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS`              |      70 | 18 directory-read statements, 17 cut-verification statements, 29 fixed Source control/failure/cleanup statements and six same-command verification statements. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES`                   |  270336 | 32 KiB Source controls, 8 KiB same-command verification and two 112 KiB native directory children.                                                             |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ENGINE_REQUESTS`         |       0 | This PostgreSQL path dispatches no engine request.                                                                                                             |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_CANDIDATE_KEYS`         |       1 | One effect selection in the existing one-page bound.                                                                                                           |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_IDENTITY_METADATA_ROWS` |       0 | This path does not dispatch an identity metadata sweep.                                                                                                        |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_NATIVE_ROWS`            |    8192 | Existing Collection Source one-page native row ceiling.                                                                                                        |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_NATIVE_POINTS`          |     128 | Existing Collection Source one-page native point ceiling.                                                                                                      |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_WITNESS_KEYS`           |       1 | One effect selection.                                                                                                                                          |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_STATEMENTS`             |     128 | Existing Collection Source one-page statement ceiling.                                                                                                         |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_BYTES`                  | 1048576 | Existing Collection Source one-page byte ceiling.                                                                                                              |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_EMPTY_SEEKS`            |       2 | The bounded page-end and sealed-empty probes.                                                                                                                  |
 
 Overrides are canonical non-negative safe integers no higher than the named
 existing ceilings; invalid values fail at frame creation. Required work dimensions

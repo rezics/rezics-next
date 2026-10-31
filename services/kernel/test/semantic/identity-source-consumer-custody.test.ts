@@ -115,18 +115,31 @@ test('Source maintenance issues one genuinely configured live accounting frame w
   expect(configured.native).not.toBe(configured.library);
 
   const deadline = Date.now() + 5000;
-  let work: import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork | undefined;
+  let work:
+    | import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork
+    | undefined;
   await withIdentitySourceConsumerMaintenance({ pool: f.pool, env: process.env }, { deadline }, async (funded) => {
     work = funded.identityConsumerWork;
     expect(isLiveIdentitySourceConsumerMaintenance(f.pool, work, funded.deadline)).toBe(true);
     expect(identitySourceConsumerLibraryWork(f.pool, work, funded.deadline)).toBeDefined();
-    expect(reserveIdentitySourceConsumerNativeWork(f.pool, work, {
-      rows: 1, points: 1, statements: 1, bytes: 1, engineRequests: 0,
-    })).toBe(true);
+    expect(
+      reserveIdentitySourceConsumerNativeWork(f.pool, work, {
+        rows: 1,
+        points: 1,
+        statements: 1,
+        bytes: 1,
+        engineRequests: 0,
+      }),
+    ).toBe(true);
   });
   expect(isLiveIdentitySourceConsumerMaintenance(f.pool, work, deadline)).toBe(false);
   let checkouts = 0;
-  const pool = { connect: () => { checkouts++; throw new Error('unexpected Source checkout'); } } as unknown as Pool;
+  const pool = {
+    connect: () => {
+      checkouts++;
+      throw new Error('unexpected Source checkout');
+    },
+  } as unknown as Pool;
   expect(await readIdentitySourceConsumerCustody(pool, reference, { deadline: Date.now() + 5000 })).toBeNull();
   expect(checkouts).toBe(0);
 });
@@ -173,46 +186,72 @@ test('a retained locator or copied brand cannot authorize cleanup for any barrie
 
 test('Source funding remains one allocation across awaits and ends even when its callback fails', async () => {
   const configured = readIdentitySourceMaintenanceConfig({});
-  let work: import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork | undefined;
+  let work:
+    | import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork
+    | undefined;
   const deadline = Date.now() + 5000;
   const failure = new Error('maintenance callback failed');
-  await expect(withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
-    work = funded.identityConsumerWork;
-    const library = identitySourceConsumerLibraryWork(f.pool, work, deadline);
-    expect(library).not.toBeNull();
-    expect(reserveIdentitySourceConsumerNativeWork(f.pool, work, configured.native)).toBe(true);
-    await Promise.resolve();
-    expect(identitySourceConsumerLibraryWork(f.pool, work, deadline)).toBe(library);
-    expect(reserveIdentitySourceConsumerNativeWork(f.pool, work, {
-      rows: 1, points: 0, statements: 0, bytes: 0, engineRequests: 0,
-    })).toBe(false);
-    expect(library?.available('nativeRows')).toBe(configured.library.nativeRows);
-    throw failure;
-  })).rejects.toBe(failure);
+  await expect(
+    withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
+      work = funded.identityConsumerWork;
+      const library = identitySourceConsumerLibraryWork(f.pool, work, deadline);
+      expect(library).not.toBeNull();
+      expect(reserveIdentitySourceConsumerNativeWork(f.pool, work, configured.native)).toBe(true);
+      await Promise.resolve();
+      expect(identitySourceConsumerLibraryWork(f.pool, work, deadline)).toBe(library);
+      expect(
+        reserveIdentitySourceConsumerNativeWork(f.pool, work, {
+          rows: 1,
+          points: 0,
+          statements: 0,
+          bytes: 0,
+          engineRequests: 0,
+        }),
+      ).toBe(false);
+      expect(library?.available('nativeRows')).toBe(configured.library.nativeRows);
+      throw failure;
+    }),
+  ).rejects.toBe(failure);
   if (!work) throw new Error('Source maintenance did not enter its callback');
   expect(isLiveIdentitySourceConsumerMaintenance(f.pool, work, deadline)).toBe(false);
   expect(identitySourceConsumerLibraryWork(f.pool, work, deadline)).toBeNull();
-  expect(await readIdentitySourceConsumerCustody(f.pool, reference, {
-    deadline, identityConsumerWork: work,
-  })).toBeNull();
+  expect(
+    await readIdentitySourceConsumerCustody(f.pool, reference, {
+      deadline,
+      identityConsumerWork: work,
+    }),
+  ).toBeNull();
 });
 
 test('Source consumer refuses copied foreign expired and ended frames before checkout', async () => {
   let checkouts = 0;
-  const pool = { connect: () => { checkouts++; throw new Error('unexpected Source checkout'); } } as unknown as Pool;
+  const pool = {
+    connect: () => {
+      checkouts++;
+      throw new Error('unexpected Source checkout');
+    },
+  } as unknown as Pool;
   const deadline = Date.now() + 5000;
   await withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
     expect(await readIdentitySourceConsumerCustody(pool, reference, funded)).toBeNull();
-    expect(await readIdentitySourceConsumerCustody(pool, reference, {
-      ...funded, identityConsumerWork: { ...funded.identityConsumerWork },
-    })).toBeNull();
+    expect(
+      await readIdentitySourceConsumerCustody(pool, reference, {
+        ...funded,
+        identityConsumerWork: { ...funded.identityConsumerWork },
+      }),
+    ).toBeNull();
   });
-  let ended: import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceContext | undefined;
+  let ended:
+    | import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceContext
+    | undefined;
   await withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (funded) => {
     ended = funded;
-    expect(await readIdentitySourceConsumerCustody(pool, reference, {
-      ...funded, deadline: Date.now() - 1,
-    })).toBeNull();
+    expect(
+      await readIdentitySourceConsumerCustody(pool, reference, {
+        ...funded,
+        deadline: Date.now() - 1,
+      }),
+    ).toBeNull();
   });
   expect(ended).toBeDefined();
   expect(await readIdentitySourceConsumerCustody(pool, reference, ended!)).toBeNull();
