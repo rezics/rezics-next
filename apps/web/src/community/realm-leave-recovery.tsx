@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { m } from '../paraglide/messages.js';
-import type { RealmLeaveRecoveryState } from './realm-leave-recovery';
+import type { RealmLeaveRecoveryState } from './realm-leave-recovery.ts';
+export * from './realm-leave-recovery.ts';
 
 export type RealmLeaveCheck = 'checking' | 'unavailable' | 'unchanged' | null;
 
