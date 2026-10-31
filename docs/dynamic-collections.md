@@ -246,6 +246,73 @@ absent here. Public/unlisted requests, including an editor's public request, can
 curator facts. A successful public saved membership delivery is not claimed. Generated OpenAPI/client/schema
 artifacts and native outcome checks are owned by the controller after integration.
 
+### Selected whole-query publication contract; native bodies pending
+
+[`collection-publication-work-admission.ts`](../services/kernel/src/library/collection-publication-work-admission.ts)
+owns the literal server-only `CollectionPublicationLocator` (`route`, `ownerAccountId`, `collectionId`,
+`publicationId`) and `CollectionPublicationWorkDefinition`. Its exact owner calls are
+`admitCollectionPublicationStep(tx: OperationalTransaction, locator: CollectionPublicationLocator): Promise<boolean>`
+and `readCollectionPublicationWorkDefinition(tx: OperationalTransaction, locator: CollectionPublicationLocator):
+Promise<CollectionPublicationWorkDefinition | null>`. Both are explicitly temporary unavailable adapters until
+the native episode/evidence producer replaces them. Exported declarations and getter data grant no admission,
+completion, Source acknowledgement or ordinary reader disclosure.
+
+Search's selected additive `collection-publication` work role carries the live Core `OperationalTransaction`
+and this locator. It borrows neither curated Members nor Kind preparation. Before any Source or Type-audience
+IO, its adapter must verify the live work-step, exact installed pool, owner/account/partition resources, original
+deadline and actual `commandTime(tx)`, then call native admit and getter on that same client. It compares the
+entire native definition again after foreign staging and before settling progress. Changed, missing, moved or
+unavailable evidence means unavailable. Mechanical work uses the shared Source/compiler/evaluator and existing
+WorkAllowance; it restores no Actor and creates no second evaluator or permission engine.
+
+Input and target use the **same actual Collection ID**, with explicit distinct references: input
+`kind:'private_working_source'` selects its authorized private native population (`scope:'private_builtin'`);
+target `kind:'collection_output'` names its eventual public/unlisted complete output. Equal IDs never select a
+Source kind implicitly. Neither active explicit output nor frozen/public output supplies the working population.
+The native getter carries actual expanded pinned `{filter,sort:'id',release:{digest,value:FilterRelease}}`,
+NativeSourceIdentity, CollectionSourceObservation, IdentityScopeObservation, IdentityNativeReceipt repair proof,
+NativeSourceCustody, releaseDigest and audience, together with the immutable rule, committed creation and actual
+native output references. Private working Source admission for this episode is still missing implementation.
+
+[`collection-publication-episode-contract.ts`](../services/kernel/src/library/collection-publication-episode-contract.ts)
+owns the selected begin input, source/target/rule references, immutable creation payload and phase/result data.
+The Collection row retains the sole private query AST. Episodes retain its immutable digest, rule revision,
+release, Collection incarnation/revision and Source generation references, checking current bytes on each use;
+they store no second query/profile mirror. Everything/state retain their actual deterministic IDs,
+first-write materialization and accepted pinned meaning. Liked stays private; unsupported targets refuse.
+Native bodies allocate actual operation/source/output references, never caller-invented UUIDs or receipts.
+
+Begin belongs to the current owner's ordinary authenticated `collection:update`, CAS, idempotency and full
+expanded private-family authority. Its native transaction commits the immutable operation and exact source/target
+payload with the real creation receipt. `captureDurableInitiator(commandAccessContext(...), actor)` captures the
+original admitted account/delegation; `durableInitiatorCommitment` binds the complete DurableInitiatorRecord in
+that receipt. The domain reader is the actual DurableInitiatorReader, independently checking exact native
+operation/source/receipt provenance and returning only its allowlisted original record. Missing evidence cannot
+be reconstructed from current state or permission-shaped JSON.
+
+`staging` and `awaiting_activation` retain B's actual building CollectionOutputRef without a publication receipt;
+`refused` keeps B separate from selected complete A. `complete` requires the actual CollectionOutputPublication.
+Phase data, count, a first page and the delivered explicit 0..100 selected-set helper in
+`collection-publication.ts` do not prove whole-query exhaustion. B stages in bounded steps over the same native
+Source/compiler, with query/source/identity/current fences before work and at finalization; unchanged A remains
+selected until genuine full exhaustion and successful final activation.
+
+Final activation uses WorkContext.getAuthorization()'s same mounted Access/current readConsent and pool with
+createInitiatorRestorer and the real domain reader. Every runCommand retry/replay restores the initiator **inside
+CommandAuthorization.prepare at that attempt.time**, then delegates ordinary resourceAuthorization or
+accessCommandAuthorization prepare/authorize at the same T before receipt lookup. Current consent, principal,
+scopes, floor/operator/delegation, mounted authority and Collection/episode/query/output/source/lifecycle fences
+are independently rechecked. Only that real authorized collection:update CommandTransaction invokes the native
+output hooks; Core basis, receipt, event and complete B selection commit atomically. Mechanical staging has no
+final command authority. Existing output hooks currently require ordinary command authority even for appends;
+bounded operational staging bodies must supply their own native admitted integration, without bypassing them.
+
+Native episode/provenance/admission, bounded staging and restored final-command bodies remain absent. Source,
+receiving, publication, control, late-writer and creation-evidence retention must join the existing native inventory
+and disposition obligations. These declarations claim no receiving/frozen/root support, NoData, cleanup authority
+or native/runtime pass. Original public dynamic C5, whole-query, replay/revocation and terminal outcomes remain
+the unmet acceptance basis; the controller retains native proof and ordinary runtime recovery work.
+
 ## Query, identity and cursor bounds
 
 Success fills the requested page or proves a genuinely exhausted final page. If direct work cannot establish

@@ -1,4 +1,7 @@
-/** The sole Collection Source ABI and native runtime composition. */
+/** The sole Collection Source ABI and native runtime composition.
+ * Ordinary owner-working calls use the registered server query context, never a caller purpose flag.
+ * A selected public output and its curator's private working capture remain separate authorities.
+ */
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime } from '../command/command.ts';

@@ -1,7 +1,21 @@
 import type { PoolClient } from 'pg';
 import { type OperationalTransaction } from '../command/operational.ts';
 import type { LibraryProfilePin } from './profile.ts';
+import type { CanonicalRawKey } from './canonical-source-store.ts';
 type Client = Pick<PoolClient, 'query'>;
+export type OwnerNativeFactDriver = 'entry' | 'label' | 'session' | 'copy';
+/** Independent native ranges for retained canonical preparation, including state Sources.
+ * These are actual fact keys, never positive Source witnesses. The maintenance caller reserves work before
+ * dispatch and checks its actual owner/source fence and captured scoped observation before publication.
+ * Unlike a state Source's entry range, exhausting ALL four drivers closes independent original support.
+ */
+export declare function readOwnerNativeFactPage(client: Client, accountId: string, driver: OwnerNativeFactDriver, after: CanonicalRawKey | null, limit: number): Promise<{
+    rows: {
+        key: CanonicalRawKey;
+    }[];
+    after: CanonicalRawKey | null;
+    exhausted: boolean;
+}>;
 export type OwnerIndexPhase = 'entry' | 'session' | 'copy' | 'label' | 'ready';
 export type OwnerIndexFrontier = Readonly<{
     phase: OwnerIndexPhase;
