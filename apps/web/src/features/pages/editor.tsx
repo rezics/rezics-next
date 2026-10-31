@@ -18,10 +18,12 @@ function CorrectionSelection({ children }: { children: ReactNode }) {
   const target = useContext(CorrectionContext);
   const dispatch = useEditorPuck((state) => state.dispatch);
   const getSelectorForId = useEditorPuck((state) => state.getSelectorForId);
+  const applied = useRef<CorrectionTarget | null>(null);
   useEffect(() => {
-    if (!target) return;
+    if (!target || applied.current === target) return;
     const itemSelector = target.component ? getSelectorForId(target.component.id) : null;
     if (target.component && !itemSelector) return;
+    applied.current = target;
     dispatch({
       type: 'setUi',
       ui: { itemSelector: itemSelector ?? null, rightSideBarVisible: true, leftSideBarVisible: true, mobilePanelExpanded: true, plugin: { current: 'fields' } },
