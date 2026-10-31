@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '../../..');
-type Entry = { id: string; type: string; title: string; tags: string[]; importPath: string };
+type Entry = { id: string; name: string; type: string; title: string; tags: string[]; importPath: string };
 type Component = {
   id: string;
   path: string;
@@ -188,8 +188,10 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
           'docs-show-story.txt',
         ),
       );
-      expect(story).toContain(selected!.id);
-      expect(component!.stories.find((story) => story.id === selected!.id)?.snippet?.length).toBeGreaterThan(0);
+      expect(story).toContain(selected!.name);
+      const snippet = component!.stories.find((story) => story.id === selected!.id)?.snippet;
+      expect(snippet?.length).toBeGreaterThan(0);
+      expect(story).toContain(snippet!);
       stages.push('local MCP component and story selected');
     } finally {
       if (!terminal && child.pid) process.kill(-child.pid, 'SIGTERM');
