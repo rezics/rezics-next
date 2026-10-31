@@ -3,8 +3,8 @@
 Window: **2026-10-30T00:00:00.000Z ≤ event time < 2026-10-31T00:00:00.000Z**.
 The UTC clock still reads October 31, even though the local calendar reads November 1.
 Evidence is a read-only SQLite backup captured at 2026-10-31T14:07:02Z; no live controller state was changed.
-The [machine evidence](../../../docs/research/daily-step-audit-evidence.json) includes the full report JSON,
-bounded daily flow, event census and historical promotion observations. It is an attachment to this report.
+The machine evidence (full report JSON, bounded daily flow, event census and historical promotion observations) is
+kept in the Goal state directory, not in Git.
 
 The strongest actionable finding is a misleading start queue: **303 of 304 supposedly pending start requests
 already have a later worker-start event for the same attempt inside the day**. Merge the launch receipts before
@@ -112,9 +112,7 @@ and `tools/goal/src/{dev-verifier,promotion,lifecycle-metrics}.ts` at that revis
 Repository source licence: [AGPL-3.0-only](../package.json); full [licence text](../../../LICENSE).
 No external clone, installation, copied implementation or outside comparative research was needed for this telemetry audit.
 
-The specific contract path takes precedence over the generic research-directory instruction. The only additional
-file is `docs/research/daily-step-audit-evidence.json`, needed to include complete JSON while keeping this report
-concise. Raw identifiers are retained only in that requested telemetry attachment. The snapshot predates later
+The specific contract path takes precedence over the generic research-directory instruction. Raw identifiers are retained only in the machine evidence in the state directory. The snapshot predates later
 base updates; historical evidence is not relabeled as fresh telemetry. Unknown costs and causal catch counts
 remain unknown; recommendations await manager adoption into the owning efficiency/control-plane document.
 Existing `tools/goal/src/flow.test.ts` already supplies the named tests and is unchanged. Original acceptance,
