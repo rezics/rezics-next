@@ -420,6 +420,7 @@ export const SeenViewerBecomesUnknown: Story = {
 
 export const SeenDeniedAccessRecovery: Story = {
   name: 'Default Inbox denied mark-seen recovery checks current access without replaying the mutation and preserves the exact unresolved marker for deliberate retry',
+  tags: ['!dev'],
   globals: { viewport: { value: 'phone390', isRotated: false } },
   parameters: {
     docs: {

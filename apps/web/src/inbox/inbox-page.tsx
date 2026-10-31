@@ -257,13 +257,13 @@ export function ViewerInboxPage({
   };
 
   const loadMore = () => {
-    if (pageQuery.isFetching || !page?.next) return;
+    if (pageQuery.isFetching || accessPending.current || !page?.next) return;
     const next = nextInboxPage(received);
     if (next === received) void pageQuery.refetch();
     else setPagination(next);
   };
   const startAtFirstPage = () => {
-    if (pageQuery.isFetching || waiting || !viewer.isCurrent()) return;
+    if (pageQuery.isFetching || accessPending.current || waiting || !viewer.isCurrent()) return;
     const first = restartInboxPage(received);
     if (first === received) return;
     // Discard cached pages and cancel their responses before observing the same native first-page query.
@@ -297,13 +297,17 @@ export function ViewerInboxPage({
           <Button
             variant="outline"
             onClick={() => void pageQuery.refetch({ cancelRefetch: false })}
-            disabled={pageQuery.isFetching || waiting}
+            disabled={pageQuery.isFetching || checkingAccess || waiting}
           >
             {m.inbox_retry()}
           </Button>
         ) : null}
         {cursor !== undefined ? (
-          <Button variant="outline" onClick={startAtFirstPage} disabled={pageQuery.isFetching || waiting}>
+          <Button
+            variant="outline"
+            onClick={startAtFirstPage}
+            disabled={pageQuery.isFetching || checkingAccess || waiting}
+          >
             {m.inbox_start_first_page()}
           </Button>
         ) : null}
@@ -360,10 +364,17 @@ export function ViewerInboxPage({
                   variant="outline"
                   className="h-auto min-h-10 max-w-full whitespace-normal py-2"
                   disabled={
-                    seenWaiting || waiting || markingPending || checkingAccess || !csrfToken || !viewer.isCurrent()
+                    seenWaiting ||
+                    waiting ||
+                    markingPending ||
+                    checkingAccess ||
+                    pageQuery.isFetching ||
+                    !csrfToken ||
+                    !viewer.isCurrent()
                   }
                   onClick={() => {
-                    if (seenWaiting || waiting || accessPending.current || !seenAttempt.current) return;
+                    if (seenWaiting || waiting || accessPending.current || pageQuery.isFetching || !seenAttempt.current)
+                      return;
                     setAccessCheck(undefined);
                     void sendSeenAttempt(seenAttempt.current);
                   }}
@@ -405,7 +416,7 @@ export function ViewerInboxPage({
               <InboxRows
                 page={readable}
                 {...(!failed && readable.next ? { onLoadMore: loadMore } : {})}
-                loading={pageQuery.isFetching}
+                loading={pageQuery.isFetching || checkingAccess}
               />
             )
           ) : null}
