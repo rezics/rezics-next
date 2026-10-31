@@ -411,10 +411,10 @@ native(
       subjectIds: [own.subject.id],
     });
     expect(selected.created.response.status).toBe(201);
-    expect(selected.created.collection).toBe(selected.created.response.body.collection);
+    expect(selected.created.response.body.collection).toBe(selected.created.collection);
     expect(selected.created.collection).toMatchObject({ membershipKind: 'dynamic', visibility: 'private' });
-    expect(selected.collection).toBe(selected.response.body.collection);
-    expect(selected.publication).toBe(selected.response.body.publication);
+    expect(selected.response.body.collection).toBe(selected.collection);
+    expect(selected.response.body.publication).toBe(selected.publication);
     expect(selected.publication).toEqual({
       generation: selected.output.ref.generation,
       state: 'complete',
@@ -422,7 +422,7 @@ native(
     });
     expect(selected.source).toEqual({ kind: 'collection', id: selected.collection.id });
     expect(selected.current.response.status).toBe(200);
-    expect(selected.current.collection).toBe(selected.current.response.body.collection);
+    expect(selected.current.response.body.collection).toBe(selected.current.collection);
     expect(selected.current.collection).toMatchObject({
       id: selected.collection.id,
       visibility: 'public',
