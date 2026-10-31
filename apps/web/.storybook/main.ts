@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { browserRoutes } from './browser-routes.ts';
 
 const app = fileURLToPath(new URL('..', import.meta.url));
 
@@ -60,6 +61,8 @@ const config: StorybookConfig = {
             : [plugin],
       ) ?? [];
     config.plugins = storyPlugins(config.plugins) ?? [];
+    // Run before React transforms; this allocates no Start/Cloudflare runtime or route watcher.
+    config.plugins.unshift(await browserRoutes(app));
     config.server ??= {};
     config.server.allowedHosts = ['127.0.0.1', 'localhost'];
     config.resolve ??= {};

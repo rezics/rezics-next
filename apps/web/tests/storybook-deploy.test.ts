@@ -15,6 +15,7 @@ import { formatBuildOutput } from '../scripts/storybook-build-output.ts';
 import { runDeployment, runStatus } from '../scripts/storybook-deploy.ts';
 import { smokeStorybook } from '../scripts/storybook-smoke.ts';
 import { generateRoutes } from '../.storybook/route-generation.ts';
+import type { Plugin, ResolvedConfig } from 'vite';
 
 const root = resolve(import.meta.dir, '../../../');
 const app = resolve(root, 'apps/web');
@@ -113,6 +114,73 @@ describe('Storybook route preparation', () => {
     } finally {
       rmSync(fixture, { recursive: true, force: true });
     }
+  });
+});
+
+describe('Storybook browser route boundary', () => {
+  async function prepare() {
+    const storybook = (await import('../.storybook/main.ts')).default;
+    const react: Plugin = { name: 'vite:react-babel' };
+    const config = await storybook.viteFinal!({ plugins: [react] }, {} as never);
+    const plugins = (await Promise.all(config.plugins ?? [])).flat(Infinity).filter(Boolean) as Plugin[];
+    const compiler = plugins.find((plugin) => plugin.name === 'tanstack-router:code-splitter:compile-reference-file');
+    expect(compiler).toBeDefined();
+    expect(plugins.indexOf(compiler!)).toBeLessThan(plugins.indexOf(react));
+    expect(plugins.some((plugin) => /cloudflare|tanstack-start/.test(plugin.name))).toBe(false);
+    const configure = compiler!.configResolved!;
+    await (typeof configure === 'function' ? configure : configure.handler)({
+      root: app,
+      command: 'build',
+      plugins,
+    } as ResolvedConfig);
+    const hook = compiler!.transform!;
+    const transform = typeof hook === 'function' ? hook : hook.handler;
+    return async (path: string) => {
+      const source = readFileSync(resolve(app, path), 'utf8');
+      const result = await transform.call({} as never, source, resolve(app, path), { ssr: false });
+      return { source, code: typeof result === 'string' ? result : (result?.code ?? source) };
+    };
+  }
+
+  test('keeps the actual card route while removing its native execution imports from the browser', async () => {
+    const transform = await prepare();
+    const { source, code } = await transform('src/routes/cards/$id.ts');
+    const imports = (text: string) => new Bun.Transpiler({ loader: 'ts' }).scanImports(text).map(({ path }) => path);
+    expect(imports(source)).toContain('../../media/share-card.worker');
+    expect(source).toContain('GET: respond, HEAD: respond');
+    expect(imports(code)).toEqual(['@tanstack/react-router']);
+    expect(code).not.toContain('currentShareCardResponse');
+    expect(code).toContain('/cards/$id');
+    expect(code).toContain('publicCache: false');
+    const tree = readFileSync(resolve(app, 'src/routeTree.gen.ts'), 'utf8');
+    expect(tree).toContain("from './routes/cards/$id'");
+  });
+
+  test('retains actual UI loaders, recorded read imports, heads and components on mixed routes', async () => {
+    const transform = await prepare();
+    const { code } = await transform('src/routes/library/labels.tsx');
+    const imports = new Bun.Transpiler({ loader: 'tsx' }).scanImports(code).map(({ path }) => path);
+    expect(imports).toContain('../../library/labels-read-route');
+    expect(imports).toContain('../../library/labels-page');
+    expect(imports).toContain('../../shell/head');
+    expect(imports).not.toContain('../../library/labels-actions');
+    expect(code).toContain('/library/labels');
+    for (const retained of [
+      'validateSearch',
+      'loaderDeps',
+      'loader:',
+      'readLabelsPage',
+      'head:',
+      'component:',
+      'LabelsPageView',
+    ])
+      expect(code).toContain(retained);
+
+    // The root's real providers, shell, locale and public head stay in the same module.
+    const root = await transform('src/routes/__root.tsx');
+    expect(root.code).toBe(root.source);
+    const handlers = await transform('.storybook/react-start.ts');
+    expect(handlers.code).toBe(handlers.source);
   });
 });
 

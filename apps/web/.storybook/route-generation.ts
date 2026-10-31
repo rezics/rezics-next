@@ -1,7 +1,7 @@
 import { Generator, getConfig } from '@tanstack/router-generator';
 import { fileURLToPath } from 'node:url';
 
-export async function generateRoutes(app: string): Promise<void> {
+export async function generateRoutes(app: string) {
   // Production uses tanstackStart() without options: its router paths and filename/parameter rules are
   // the generator defaults. Keep Start's public Register augmentation for the actual router/start entries.
   const config = getConfig(
@@ -23,5 +23,7 @@ export async function generateRoutes(app: string): Promise<void> {
     app,
   );
   // A single generator pass owns the output. It allocates no server or watcher, and failures must reject.
-  await new Generator({ config, root: app }).run();
+  const generator = new Generator({ config, root: app });
+  await generator.run();
+  return generator.getRoutesByFileMap();
 }
