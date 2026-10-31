@@ -205,6 +205,13 @@ export async function readModerationReportPage(
     const result = await nativeClient.posts({ id: postId }).revisions({ revisionId }).get(headers);
     return result.error ? null : (result.data ?? null);
   });
-  const enriched = await enrichModerationTargets(nativeClient, targets, revisions, page.reports, authorization, viewerId);
+  const enriched = await enrichModerationTargets(
+    nativeClient,
+    targets,
+    revisions,
+    page.reports,
+    authorization,
+    viewerId,
+  );
   return { ...page, ...enriched };
 }

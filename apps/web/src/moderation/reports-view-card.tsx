@@ -202,9 +202,7 @@ export function ReportReviewCard({
             <h3 id={`${id}-current`} className="text-sm font-semibold">
               {m.moderation_current_target_label()}
             </h3>
-            <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">
-              {moderationTargetContent(target)}
-            </div>
+            <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">{moderationTargetContent(target)}</div>
           </section>
         </div>
         <div className="border-t pt-4">

@@ -178,6 +178,13 @@ export const loadModerationAppeals = createServerFn({ method: 'GET' })
         return result.error ? null : ((result.data as ModerationTarget['value'] | undefined) ?? null);
       },
     });
-    const enriched = await enrichModerationTargets(nativeClient, targets, [], [], authorization, sessionSubject(request) ?? '');
+    const enriched = await enrichModerationTargets(
+      nativeClient,
+      targets,
+      [],
+      [],
+      authorization,
+      sessionSubject(request) ?? '',
+    );
     return { ...page, targets: enriched.targets };
   });

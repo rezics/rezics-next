@@ -26,9 +26,11 @@ export function ModerationAppealsView({
   canResolve?: (appeal: Appeal) => boolean;
 }) {
   const session = useSession();
-  const evidence = targets.map(target => moderationEvidence(target.value));
-  if (session.state !== 'unknown' && evidence.some(item => item &&
-    (session.state !== 'signed-in' || session.subject !== item.viewerId)))
+  const evidence = targets.map((target) => moderationEvidence(target.value));
+  if (
+    session.state !== 'unknown' &&
+    evidence.some((item) => item && (session.state !== 'signed-in' || session.subject !== item.viewerId))
+  )
     return <p role="status">{m.moderation_target_unavailable()}</p>;
   const filters = [
     threadId ? `thread=${encodeURIComponent(threadId)}` : '',
