@@ -8,7 +8,12 @@ import { SettingsPageView } from '../settings/settings-page';
 import { m } from '../paraglide/messages.js';
 
 export const Route = createFileRoute('/settings')({
-  beforeLoad: requireSignedIn,
+  beforeLoad: async (context) => {
+    await requireSignedIn(context);
+    // Settings hashes choose a job. Its composition owns deliberate heading focus;
+    // initial links and reloads must not trigger the router's fragment scroll.
+    context.location.state.__hashScrollIntoViewOptions = false;
+  },
   loader: async ({ context }) => ({
     page: await readSettingsPage(),
     requestSession: context.queryClient.getQueryData(sessionQuery.queryKey) ?? null,

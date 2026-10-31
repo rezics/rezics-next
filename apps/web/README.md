@@ -50,10 +50,31 @@ needs the normal loopback-only browser namespace.
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
-The settings page at `/settings` shows the signed-in person's spoiler level and cover suitability and saves each change
-when chosen, with the version it read; a stale version keeps the choice on screen and offers a reload. Its Privacy
-section reads the signed-in person's Collections after hydration, one page at a time, and lets them change visibility.
-It links to security settings on the Auth site and offers sign-out. Its controls stay disabled until the page hydrates.
+The settings page at `/settings` presents one category at a time using the existing hashes: `reading`, `display`,
+`notifications`, `privacy`, `verification`, `profile`, `public-activity` and `account`. Reading is the default, including
+unknown or unavailable hashes; a managed-account query without a hash opens Account. Explicit category hashes,
+reload and Back/Forward retain their destination and unrelated locale/query state. The wrapping phone grid and
+desktop rail mark the current destination. Deliberate changes focus its heading; initial rendering leaves focus and
+scroll alone. Signed-out and failed-session recovery keep browser Display choices available.
+
+Each admitted category mounts on its first visit. Visited panels remain mounted but hidden and inert while another
+category is selected, preserving drafts, upload reservations, unresolved originals and restart guards. Their shared
+navigation provider guards leaving Settings and beforeunload, permits category changes without a discard dialog and
+never blocks native sign-out. Changing the current viewer or CSRF session epoch releases all mounted categories and
+their guards. No unseen category starts its producer; selection adds no native IO or command identity.
+
+Reading saves spoiler level and cover suitability when chosen, with the version it read; a stale version keeps the
+choice on screen and offers a reload. Privacy reads the signed-in person's Collections after selection and hydration,
+one page at a time, and lets them change visibility. Account links to security settings on the Auth site and offers
+sign-out. Controls stay disabled until the page hydrates.
+
+`pages-account-settings--focused-categories` is the default `PageStory` regression for “Settings shows one selected
+category and retains the same viewer's drafts and unresolved commands across category navigation”. It edits the
+actual Profile field, visits Reading, uses Back/Forward and checks retained text, heading focus, one visible/current
+category, zero Profile saves, no repeated Profile read and an identical explicit retry of an unresolved Reading
+original. Existing page-story assertions visit their real categories before checking their controls. These stories
+are authored for integration; native, browser, visual and original acceptance execution remain deferred. Local Web
+workspace typing is the permitted verification and does not establish those outcomes.
 
 `bun run test` runs tests in a private network namespace containing only loopback, so host interface changes do not interrupt browsers.
 Tests needing the host network, such as a container's published port, are named `*.host.test.ts` and run on the host through `bun run test:host`; never put a browser in one.

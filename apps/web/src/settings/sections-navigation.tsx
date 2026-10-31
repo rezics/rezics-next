@@ -1,4 +1,5 @@
 import { m } from '../paraglide/messages.js';
+import type { MouseEvent } from 'react';
 
 export type SettingsSection = {
   id: 'reading' | 'display' | 'notifications' | 'privacy' | 'verification' | 'profile' | 'public-activity' | 'account';
@@ -42,13 +43,17 @@ export function settingsSections({
   ];
 }
 
-/** One native anchor index: a wrapping phone grid becomes the existing desktop section rail. */
+/** A bounded anchor grid uses the existing section hashes for focused destinations. */
 export function SectionsNavigation({
   sections,
   pending = false,
+  selected = 'reading',
+  onSelect,
 }: {
   sections: readonly SettingsSection[];
   pending?: boolean;
+  selected?: SettingsSection['id'];
+  onSelect?: (id: SettingsSection['id'], event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
     <nav aria-label={m.settings_sections_label()} className="min-w-0 lg:sticky lg:top-6 lg:self-start">
@@ -58,7 +63,9 @@ export function SectionsNavigation({
           <li key={section.id} className="min-w-0">
             <a
               href={`#${section.id}`}
-              className="flex min-h-11 min-w-0 flex-col justify-center gap-1 rounded-md border border-border px-3 py-2 break-words text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:min-h-0 lg:rounded-none lg:border-0 lg:px-0 lg:py-1"
+              aria-current={selected === section.id ? 'location' : undefined}
+              onClick={(event) => onSelect?.(section.id, event)}
+              className="flex min-h-11 min-w-0 flex-col justify-center gap-1 rounded-md border border-border px-3 py-2 break-words text-muted-foreground hover:bg-muted hover:text-foreground aria-[current=location]:border-primary aria-[current=location]:bg-muted aria-[current=location]:font-semibold aria-[current=location]:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <span>{section.label}</span>
               {section.status ? <span className="text-xs">{section.status}</span> : null}

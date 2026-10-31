@@ -1,6 +1,6 @@
 import { exposureQuery, sessionQuery, useSession } from '../session/query';
 import { useQuery, useQueryClient, type QueryClient, type QueryState } from '@tanstack/react-query';
-import { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore, useCallback, type ReactNode } from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -22,7 +22,7 @@ import { useOperation } from '../kernel/exposure';
 import { AccountSafetyCard, AccountSafetySection } from './account-safety';
 import { ManagedAccountsSection } from './managed-accounts';
 import type { ManagedAccountsIO } from './managed-accounts-read';
-import { SectionsNavigation, settingsSections } from './sections-navigation';
+import { SectionsNavigation, settingsSections, type SettingsSection } from './sections-navigation';
 import { ManagedAccountDetail } from './managed-account-detail';
 import { managedAccountTarget, managedAccountsBackHref } from './managed-account-detail-read';
 import { readSettingsPage, saveNotifications, savePreferences } from './actions';
@@ -134,6 +134,38 @@ function SettingsFailure({
   );
 }
 
+/** Keep visited editors and command identities alive, while excluding inactive jobs from focus and reading. */
+function RetainedSettingsPanel({
+  id,
+  selected,
+  children,
+}: {
+  id: SettingsSection['id'];
+  selected: boolean;
+  children: ReactNode;
+}) {
+  const [visited, setVisited] = useState(selected);
+  const previous = useRef(selected);
+  const panel = useRef<HTMLDivElement>(null);
+  if (selected && !visited) setVisited(true);
+  useLayoutEffect(() => {
+    if (selected && !previous.current) {
+      const heading = panel.current?.querySelector<HTMLElement>('h2') ?? panel.current;
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.focus();
+      }
+    }
+    previous.current = selected;
+  }, [selected]);
+  if (!selected && !visited) return null;
+  return (
+    <div ref={panel} data-settings-panel={id} hidden={!selected} inert={!selected}>
+      {children}
+    </div>
+  );
+}
+
 function SettingsSections({
   page,
   csrfToken,
@@ -190,106 +222,131 @@ function SettingsSections({
   useEffect(() => {
     if ('preferences' in page) setVersion((current) => Math.max(current, page.preferences.version));
   }, [page]);
+  const sections = settingsSections({
+    display: true,
+    notifications: 'preferences' in page,
+    collections: collectionsAdmitted,
+    verification: showVerification,
+    readingState: 'preferences' in page ? undefined : page.state,
+  });
+  const hash = new URL(location.publicHref, 'https://rezics.local').hash.slice(1);
+  // Query-only managed links are also destinations; an explicit category still permits navigating away.
+  const selected =
+    sections.find((section) => section.id === hash)?.id ??
+    (!hash && managedTarget !== undefined ? 'account' : 'reading');
+  const panels: Record<SettingsSection['id'], ReactNode> = {
+    reading: (
+      <section id="reading" aria-labelledby="settings-reading-heading" className="scroll-mt-6">
+        {'preferences' in page ? (
+          <ReadingNavigation csrfToken={csrfToken}>
+            <ReadingCard
+              initial={page.preferences}
+              version={version}
+              csrfToken={csrfToken}
+              io={io.reading}
+              onVersionChange={io.notifications.confirmed}
+            />
+          </ReadingNavigation>
+        ) : (
+          <SettingsFailure state={page.state} failure={page.failure} onRetry={() => void router.invalidate()} />
+        )}
+      </section>
+    ),
+    display: (
+      <div id="display" className="scroll-mt-6">
+        <DisplayPreferences />
+      </div>
+    ),
+    notifications:
+      'preferences' in page ? (
+        <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
+          {page.notifications ? (
+            <NotificationsCard
+              key={csrfToken}
+              initial={page.notifications}
+              version={version}
+              csrfToken={csrfToken}
+              io={io.notifications}
+              action={location.publicHref.split(/[?#]/, 1)[0]!}
+              initialFailed={notificationError}
+              onVersionChange={io.notifications.confirmed}
+            />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Alert variant="destructive">
+                  <AlertTitle>{m.settings_unavailable_title()}</AlertTitle>
+                  <AlertDescription>
+                    <p>{m.settings_unavailable_text()}</p>
+                    <Button type="button" variant="outline" onClick={() => void router.invalidate()}>
+                      {m.settings_retry()}
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+          )}
+        </section>
+      ) : null,
+    privacy: <CollectionPrivacySection />,
+    verification: (
+      <section id="verification" aria-label={m.settings_verification_heading()} className="scroll-mt-6" tabIndex={-1}>
+        <VerificationSection />
+      </section>
+    ),
+    profile: (
+      <section id="profile" aria-label={m.settings_profile_heading()} className="scroll-mt-6">
+        <ProfileSection />
+      </section>
+    ),
+    'public-activity': (
+      <section id="public-activity" aria-label={m.settings_public_activity_heading()} className="scroll-mt-6">
+        <PublicViewsSection />
+      </section>
+    ),
+    account: (
+      <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
+        {managedTarget !== undefined ? (
+          <ManagedAccountDetail accountId={managedTarget} backHref={managedAccountsBackHref(location.publicHref)} />
+        ) : (
+          <>
+            <AccountSafetySection
+              state="signed-in"
+              accountId={page.accountId}
+              securityHref={page.securityHref}
+              renameAccount={page.renameAccount ?? null}
+              csrfToken={csrfToken}
+              onReload={() => window.location.reload()}
+            />
+            <ManagedAccountsSection io={managedAccountsIO} />
+          </>
+        )}
+      </section>
+    ),
+  };
   return (
     <div className="grid gap-8 lg:grid-cols-[12rem_minmax(0,48rem)] lg:justify-center">
       <SectionsNavigation
-        sections={settingsSections({
-          display: true,
-          notifications: 'preferences' in page,
-          collections: collectionsAdmitted,
-          verification: showVerification,
-          readingState: 'preferences' in page ? undefined : page.state,
-        })}
+        sections={sections}
+        selected={selected}
+        onSelect={(id, event) => {
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+          event.preventDefault();
+          void router.navigate({ hash: id, search: true, resetScroll: false, hashScrollIntoView: false });
+        }}
         pending={sessionState === 'unknown' || (sessionState === 'signed-in' && exposure.isPending)}
       />
-      <div className="min-w-0 space-y-8">
-        <section id="reading" aria-labelledby="settings-reading-heading" className="scroll-mt-6">
-          {'preferences' in page ? (
-            <ReadingNavigation csrfToken={csrfToken}>
-              <ReadingCard
-                initial={page.preferences}
-                version={version}
-                csrfToken={csrfToken}
-                io={io.reading}
-                onVersionChange={io.notifications.confirmed}
-              />
-            </ReadingNavigation>
-          ) : (
-            <SettingsFailure state={page.state} failure={page.failure} onRetry={() => void router.invalidate()} />
-          )}
-        </section>
-        <div id="display" className="scroll-mt-6">
-          <DisplayPreferences />
-        </div>
-        {'preferences' in page ? (
-          <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
-            {page.notifications ? (
-              <NotificationsCard
-                key={csrfToken}
-                initial={page.notifications}
-                version={version}
-                csrfToken={csrfToken}
-                io={io.notifications}
-                action={location.publicHref.split(/[?#]/, 1)[0]!}
-                initialFailed={notificationError}
-                onVersionChange={io.notifications.confirmed}
-              />
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Alert variant="destructive">
-                    <AlertTitle>{m.settings_unavailable_title()}</AlertTitle>
-                    <AlertDescription>
-                      <p>{m.settings_unavailable_text()}</p>
-                      <Button type="button" variant="outline" onClick={() => void router.invalidate()}>
-                        {m.settings_retry()}
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                </CardContent>
-              </Card>
-            )}
-          </section>
-        ) : null}
-        <CollectionPrivacySection />
-        {showVerification ? (
-          <section
-            id="verification"
-            aria-label={m.settings_verification_heading()}
-            className="scroll-mt-6"
-            tabIndex={-1}
-          >
-            <VerificationSection />
-          </section>
-        ) : null}
-        <section id="profile" aria-label={m.settings_profile_heading()} className="scroll-mt-6">
-          <ProfileSection />
-        </section>
-        <section id="public-activity" aria-label={m.settings_public_activity_heading()} className="scroll-mt-6">
-          <PublicViewsSection />
-        </section>
-        <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
-          {managedTarget !== undefined ? (
-            <ManagedAccountDetail accountId={managedTarget} backHref={managedAccountsBackHref(location.publicHref)} />
-          ) : (
-            <>
-              <AccountSafetySection
-                state="signed-in"
-                accountId={page.accountId}
-                securityHref={page.securityHref}
-                renameAccount={page.renameAccount ?? null}
-                csrfToken={csrfToken}
-                onReload={() => window.location.reload()}
-              />
-              <ManagedAccountsSection io={managedAccountsIO} />
-            </>
-          )}
-        </section>
+      <div className="min-w-0">
+        {sections.map(({ id }) => (
+          <RetainedSettingsPanel key={id} id={id} selected={id === selected}>
+            {panels[id]}
+          </RetainedSettingsPanel>
+        ))}
       </div>
     </div>
   );
@@ -426,7 +483,7 @@ export function SettingsPageView({
         <PageHeading>{m.settings_heading()}</PageHeading>
       </header>
       {ready ? (
-        <SettingsNavigationProvider>
+        <SettingsNavigationProvider key={JSON.stringify([session.subject, session.csrfToken])}>
           <SettingsSections
             key={session.subject}
             page={{ ...page, accountId: page.accountId! }}

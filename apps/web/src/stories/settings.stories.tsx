@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { requestForStory } from '../../.storybook/react-start';
 import settingsPreferencesRecording from '../kernel/recorded/settings-preferences.json';
 import { setFakeVerificationState } from '../kernel/fake/verification';
 import { m } from '../paraglide/messages.js';
 import { SignedOutSettings } from '../settings/settings-page';
 import { PageHeading } from '../shell/page-heading';
 import { PageStory, pageReady } from './page';
+import { selectSettingsCategory } from './settings-category-navigation';
 
 const meta = {
   title: 'Pages/Account/Settings',
@@ -54,6 +56,7 @@ async function settingsReady(context: { canvasElement: HTMLElement }, expectVeri
     'aria-checked',
     settingsPreferencesRecording.suitability === 'show' ? 'true' : 'false',
   );
+  await selectSettingsCategory(context.canvasElement, m.settings_notifications_heading());
   const notificationGroup = await view.findByRole('group', { name: m.settings_notifications_heading() });
   const notificationView = within(notificationGroup);
   const notificationSwitches = await notificationView.findAllByRole('switch');
@@ -66,15 +69,19 @@ async function settingsReady(context: { canvasElement: HTMLElement }, expectVeri
     await expect(notificationSwitches[index]).toHaveAccessibleName(notificationName(kind));
   }
   await notificationView.findByText(m.settings_notifications_mandatory());
+  await selectSettingsCategory(context.canvasElement, m.settings_account_heading());
   await view.findByRole('button', { name: m.account_sign_out() });
+  await selectSettingsCategory(context.canvasElement, m.settings_privacy_heading());
   await view.findByRole('heading', { level: 2, name: m.settings_privacy_heading() });
   const collectionRow = (await view.findByRole('link', { name: 'Books to revisit' })).closest('li');
   if (!collectionRow) throw new Error('Collection row missing');
   await view.findByRole('link', { name: /unusually long Collection title/i });
   await within(collectionRow).findByRole('combobox', { name: m.settings_privacy_visibility_label() });
+  await selectSettingsCategory(context.canvasElement, m.settings_profile_heading());
   await view.findByRole('heading', { level: 2, name: m.settings_profile_heading() });
   await view.findByRole('textbox', { name: m.settings_profile_display_name() });
   await view.findByRole('textbox', { name: m.settings_profile_biography() });
+  await selectSettingsCategory(context.canvasElement, m.settings_public_activity_heading());
   await view.findByRole('heading', { level: 2, name: m.settings_public_activity_heading() });
   for (const label of [
     m.settings_public_posts(),
@@ -84,7 +91,11 @@ async function settingsReady(context: { canvasElement: HTMLElement }, expectVeri
   ])
     await view.findByRole('switch', { name: label });
   await expect(view.queryByRole('switch', { name: m.settings_public_speakers() })).toBeNull();
-  if (expectVerification) await view.findByRole('heading', { level: 2, name: m.settings_verification_heading() });
+  if (expectVerification) {
+    await selectSettingsCategory(context.canvasElement, m.settings_verification_heading());
+    await view.findByRole('heading', { level: 2, name: m.settings_verification_heading() });
+  }
+  await selectSettingsCategory(context.canvasElement, m.settings_reading_heading());
 }
 
 function verificationStory(state: 'none' | 'pending' | 'approved' | 'rejected') {
@@ -98,11 +109,111 @@ export const SignedIn: Story = {
   render: () => verificationStory('none'),
 };
 
+const categoryRequests: { method: string; path: string; key: string | null; body: string }[] = [];
+
+/** One regression runs the generated route and its default Settings composition, including an unresolved save. */
+export const FocusedCategories: Story = {
+  name: 'Retained category drafts',
+  tags: ['!dev'],
+  beforeEach: () => {
+    categoryRequests.length = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      if (url.hostname === 'kernel.local') {
+        categoryRequests.push({
+          method: request.method,
+          path: url.pathname,
+          key: request.headers.get('idempotency-key'),
+          body: request.method === 'GET' ? '' : await request.clone().text(),
+        });
+      }
+      return original(input, init);
+    }) as typeof fetch;
+    return () => {
+      globalThis.fetch = original;
+    };
+  },
+  render: () => <PageStory visitor="Signed In" path="/settings?profile=self&reading-state=lost&from=account#unknown" />,
+  play: async (context) => {
+    await context.step(
+      "Settings shows one selected category and retains the same viewer's drafts and unresolved commands across category navigation",
+      async () => {
+        await pageReady(context);
+        const canvas = within(within(context.canvasElement).getByRole('main'));
+        const navigation = within(canvas.getByRole('navigation', { name: m.settings_sections_label() }));
+        const selected = async (id: string, label: string) => {
+          await waitFor(() => {
+            expect(context.canvasElement.querySelectorAll('[data-settings-panel]:not([hidden])')).toHaveLength(1);
+            expect(context.canvasElement.querySelector('[data-settings-panel]:not([hidden])')).toHaveAttribute(
+              'data-settings-panel',
+              id,
+            );
+            expect(navigation.getAllByRole('link').filter((link) => link.hasAttribute('aria-current'))).toHaveLength(1);
+            expect(navigation.getByRole('link', { name: label })).toHaveAttribute('aria-current', 'location');
+          });
+          const url = new URL(requestForStory().url);
+          await expect(url.searchParams.get('from')).toBe('account');
+          await expect(url.searchParams.get('profile')).toBe('self');
+          await expect(url.searchParams.get('reading-state')).toBe('lost');
+        };
+        const writes = () => categoryRequests.filter((request) => request.method !== 'GET');
+        await selected('reading', m.settings_reading_heading());
+        await expect(context.canvasElement.querySelector('[data-settings-panel="profile"]')).toBeNull();
+        await expect(categoryRequests.some(({ path }) => /\/profile$|\/collections|verification/.test(path))).toBe(
+          false,
+        );
+
+        // Keyboard selection focuses the selected heading without a discard decision.
+        navigation.getByRole('link', { name: m.settings_profile_heading() }).focus();
+        await userEvent.keyboard('{Enter}');
+        await selected('profile', m.settings_profile_heading());
+        const name = await canvas.findByRole('textbox', { name: m.settings_profile_display_name() });
+        await expect(canvas.getByRole('heading', { level: 2, name: m.settings_profile_heading() })).toHaveFocus();
+        await userEvent.clear(name);
+        await userEvent.type(name, 'Unfinished profile name');
+        await expect(writes()).toHaveLength(0);
+        const profileReads = categoryRequests.filter(({ path }) => path.endsWith('/profile')).length;
+
+        await selectSettingsCategory(context.canvasElement, m.settings_reading_heading());
+        await selected('reading', m.settings_reading_heading());
+        await expect(name).not.toBeVisible();
+        await userEvent.click(canvas.getByRole('radio', { name: m.settings_spoiler_1_title() }));
+        await canvas.findByText(m.settings_reading_uncertain_title());
+        await expect(writes()).toHaveLength(1);
+        const original = { ...writes()[0]! };
+        await expect(original.key).toBeTruthy();
+
+        window.history.back();
+        await selected('profile', m.settings_profile_heading());
+        await expect(canvas.getByRole('textbox', { name: m.settings_profile_display_name() })).toBe(name);
+        await expect(name).toHaveValue('Unfinished profile name');
+        await expect(writes()).toEqual([original]);
+        await expect(categoryRequests.filter(({ path }) => path.endsWith('/profile'))).toHaveLength(profileReads);
+        await expect(within(document.body).queryByRole('alertdialog')).toBeNull();
+
+        window.history.forward();
+        await selected('reading', m.settings_reading_heading());
+        await canvas.findByText(m.settings_reading_uncertain_title());
+        await expect(writes()).toEqual([original]);
+        // Only this explicit action replays the exact immutable original; navigation sent nothing.
+        await userEvent.click(canvas.getByRole('button', { name: m.settings_reading_retry_original() }));
+        await waitFor(() => expect(writes()).toEqual([original, original]));
+        await selectSettingsCategory(context.canvasElement, m.settings_profile_heading());
+        await expect(name).toHaveValue('Unfinished profile name');
+        await expect(writes().filter(({ path }) => !path.endsWith('/preferences'))).toHaveLength(0);
+      },
+    );
+  },
+};
+
 export const VerificationPending: Story = {
   name: 'Owner, verification pending',
   render: () => verificationStory('pending'),
   play: async (context) => {
     await settingsReady(context);
+    await selectSettingsCategory(context.canvasElement, m.settings_verification_heading());
     await within(within(context.canvasElement).getByRole('main')).findByText(
       m.settings_verification_pending({ subject: 'Haruka Aizawa' }),
     );
@@ -114,6 +225,7 @@ export const VerificationApproved: Story = {
   render: () => verificationStory('approved'),
   play: async (context) => {
     await settingsReady(context);
+    await selectSettingsCategory(context.canvasElement, m.settings_verification_heading());
     await within(within(context.canvasElement).getByRole('main')).findByRole('link', {
       name: m.settings_verification_view_agent(),
     });
@@ -125,6 +237,7 @@ export const VerificationRejected: Story = {
   render: () => verificationStory('rejected'),
   play: async (context) => {
     await settingsReady(context);
+    await selectSettingsCategory(context.canvasElement, m.settings_verification_heading());
     await within(within(context.canvasElement).getByRole('main')).findByText(
       m.settings_verification_rejected({ reason: 'The evidence did not establish account ownership.' }),
     );
@@ -137,6 +250,7 @@ export const VerificationRequestFiveLinks: Story = {
   render: () => verificationStory('none'),
   play: async (context) => {
     await settingsReady(context);
+    await selectSettingsCategory(context.canvasElement, m.settings_verification_heading());
     const view = within(within(context.canvasElement).getByRole('main'));
     for (let index = 0; index < 4; index += 1)
       await view.findByRole('button', { name: m.settings_verification_add_link() }).then((button) => button.click());
@@ -165,6 +279,7 @@ export const StaleVisibility: Story = {
   play: async (context) => {
     await settingsReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
+    await selectSettingsCategory(context.canvasElement, m.settings_privacy_heading());
     const link = view.getByRole('link', { name: /unusually long Collection title/i });
     const row = link.closest('li');
     if (!row) throw new Error('Collection row missing');
@@ -182,6 +297,7 @@ export const SavedVisibility: Story = {
   play: async (context) => {
     await settingsReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
+    await selectSettingsCategory(context.canvasElement, m.settings_privacy_heading());
     const firstRow = view.getByRole('link', { name: 'Books to revisit' }).closest('li');
     if (!firstRow) throw new Error('Collection row missing');
     const select = within(firstRow).getByRole('combobox');
@@ -199,6 +315,7 @@ export const CollectionsClosed: Story = {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
     await view.findByRole('heading', { level: 1, name: m.settings_heading() });
+    await selectSettingsCategory(context.canvasElement, m.settings_display_heading());
     const display = await view.findByRole('region', { name: m.shell_appearance() });
     await expect(display).toBeVisible();
     await expect(
@@ -275,7 +392,10 @@ export const SignedOut: Story = {
 export const PersonProfileWithAvatarAndFiveLinks: Story = {
   name: 'Person, avatar and five links',
   tags: ['!dev'],
-  play: settingsReady,
+  play: async (context) => {
+    await settingsReady(context);
+    await selectSettingsCategory(context.canvasElement, m.settings_profile_heading());
+  },
   render: () => <PageStory visitor="Signed In" path="/settings?profile=extended" />,
 };
 
@@ -284,8 +404,11 @@ export const OrganizationProfile: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
+    await selectSettingsCategory(context.canvasElement, m.settings_profile_heading());
     await view.findByRole('heading', { level: 2, name: m.settings_profile_heading() });
+    await selectSettingsCategory(context.canvasElement, m.settings_public_activity_heading());
     await view.findByRole('switch', { name: m.settings_public_speakers() });
+    await selectSettingsCategory(context.canvasElement, m.settings_profile_heading());
   },
   render: () => <PageStory visitor="Signed In" path="/settings?profile=organization" />,
 };
@@ -296,8 +419,11 @@ export const OrganizationWithAvatarAndFiveLinks: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
+    await selectSettingsCategory(context.canvasElement, m.settings_profile_heading());
     await view.findByRole('heading', { level: 2, name: m.settings_profile_heading() });
+    await selectSettingsCategory(context.canvasElement, m.settings_public_activity_heading());
     await view.findByRole('switch', { name: m.settings_public_speakers() });
+    await selectSettingsCategory(context.canvasElement, m.settings_profile_heading());
     await expect((await view.findAllByRole('textbox')).length).toBeGreaterThanOrEqual(12);
   },
   render: () => <PageStory visitor="Signed In" path="/settings?profile=organization-extended" />,

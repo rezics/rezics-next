@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pageReady } from './page';
+import { selectSettingsCategory } from './settings-category-navigation';
 
 const meta = { title: 'Pages/Settings/Profile', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -18,13 +19,16 @@ export const Self: Story = {
     await userEvent.type(name, 'Avery Updated');
     await userEvent.click(profile.getByRole('button', { name: m.settings_profile_save() }));
     await profile.findByText(m.settings_saved());
+    await selectSettingsCategory(context.canvasElement, m.settings_public_activity_heading());
     const activity = within(
       within(context.canvasElement).getByRole('region', { name: m.settings_public_activity_heading() }),
     );
     await userEvent.click(activity.getByRole('switch', { name: m.settings_public_reviews() }));
     await activity.findByText(m.settings_saved());
+    await selectSettingsCategory(context.canvasElement, m.settings_profile_heading());
     await userEvent.click(profile.getByRole('button', { name: m.settings_profile_reload_current() }));
     await expect(name).toHaveValue('Avery Updated');
+    await selectSettingsCategory(context.canvasElement, m.settings_public_activity_heading());
     await expect(activity.getByRole('switch', { name: m.settings_public_reviews() })).not.toBeChecked();
   },
 };

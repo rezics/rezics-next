@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pageReady } from './page';
+import { selectSettingsCategory } from './settings-category-navigation';
 
 const meta = { title: 'Pages/Settings/Reading and display', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -11,9 +12,10 @@ export const ReadingAndDisplay: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
-    await view.findByRole('heading', { name: m.settings_display_heading() });
     await userEvent.click(await view.findByRole('radio', { name: m.settings_spoiler_1_title() }));
     await view.findByText(m.settings_saved());
+    await selectSettingsCategory(context.canvasElement, m.settings_display_heading());
+    await view.findByRole('heading', { name: m.settings_display_heading() });
     const display = within(await view.findByRole('region', { name: m.shell_appearance() }));
     await expect(display.getByRole('button', { name: (name) => name.startsWith(m.shell_language()) })).toBeEnabled();
     await expect(display.getByRole('button', { name: m.shell_theme() })).toBeEnabled();

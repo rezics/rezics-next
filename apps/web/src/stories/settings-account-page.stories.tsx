@@ -10,6 +10,7 @@ import { sessionQuery } from '../session/query';
 import type { SettingsPage } from '../settings/preferences';
 import { readSettingsPage } from '../settings/actions';
 import { setFakeVerificationState } from '../kernel/fake/verification';
+import { selectSettingsCategory } from './settings-category-navigation';
 
 const meta = {
   title: 'Pages/Account/Settings account journey',
@@ -26,6 +27,8 @@ export const Default: Story = {
     const nav = within(await canvas.findByRole('navigation', { name: m.settings_sections_label() }));
     const link = nav.getByRole('link', { name: m.settings_account_heading() });
     for (const anchor of nav.getAllByRole('link')) {
+      await userEvent.click(anchor);
+      await expect(anchor).toHaveAttribute('aria-current', 'location');
       await expect(context.canvasElement.querySelector(anchor.getAttribute('href')!)).not.toBeNull();
     }
     await userEvent.click(link);
@@ -154,13 +157,16 @@ const preferenceTransition: Story = {
     await expect(canvas.getByRole('region', { name: m.settings_display_heading() })).toBeVisible();
     await userEvent.click(fixture.getByRole('button', { name: 'Prepare current viewer' }));
     const reading = within(await canvas.findByRole('region', { name: m.settings_reading_heading() }));
-    const notifications = within(canvas.getByRole('region', { name: m.settings_notifications_heading() }));
     await userEvent.click(reading.getByRole('switch', { name: m.settings_suitability_title() }));
     await reading.findByText(m.settings_conflict_title());
+    await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
+    const notifications = within(canvas.getByRole('region', { name: m.settings_notifications_heading() }));
     await userEvent.click(notifications.getByRole('switch', { name: m.settings_notification_reply() }));
     await notifications.findByText(m.settings_conflict_title());
     await userEvent.click(fixture.getByRole('button', { name: 'Refresh same viewer' }));
+    await selectSettingsCategory(canvasElement, m.settings_reading_heading());
     await expect(reading.getByRole('switch', { name: m.settings_suitability_title() })).toBeChecked();
+    await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
     await expect(notifications.getByRole('switch', { name: m.settings_notification_reply() })).not.toBeChecked();
     await waitFor(() => {
       for (const input of canvasElement.querySelectorAll<HTMLInputElement>('[name="expectedVersion"]'))
@@ -169,13 +175,16 @@ const preferenceTransition: Story = {
     for (const input of canvasElement.querySelectorAll<HTMLInputElement>('[name="csrf_token"]'))
       await expect(input.value).toBe('story-csrf-token');
     // The same-account refresh retains each editor until its explicit recovery action.
+    await selectSettingsCategory(canvasElement, m.settings_reading_heading());
     await userEvent.click(reading.getByRole('button', { name: m.settings_reload() }));
     await waitFor(() =>
       expect(reading.getByRole('switch', { name: m.settings_suitability_title() })).not.toBeChecked(),
     );
+    await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
     await userEvent.click(notifications.getByRole('button', { name: m.settings_reload() }));
     await userEvent.click(await notifications.findByRole('button', { name: m.settings_notifications_use_current() }));
     await expect(notifications.getByRole('switch', { name: m.settings_notification_reply() })).toBeChecked();
+    await selectSettingsCategory(canvasElement, m.settings_reading_heading());
     await userEvent.click(reading.getByRole('switch', { name: m.settings_suitability_title() }));
     await reading.findByText(m.settings_conflict_title());
     await userEvent.click(fixture.getByRole('button', { name: 'Switch viewer' }));
@@ -185,9 +194,10 @@ const preferenceTransition: Story = {
     await expect(canvasElement.querySelector('[name="csrf_token"]')).toBeNull();
     await userEvent.click(fixture.getByRole('button', { name: 'Prepare next viewer' }));
     const nextReading = within(await canvas.findByRole('region', { name: m.settings_reading_heading() }));
-    const nextNotifications = within(canvas.getByRole('region', { name: m.settings_notifications_heading() }));
     await expect(nextReading.getByRole('switch', { name: m.settings_suitability_title() })).not.toBeChecked();
     await expect(nextReading.getByRole('radio', { name: m.settings_spoiler_0_title() })).toBeChecked();
+    await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
+    const nextNotifications = within(canvas.getByRole('region', { name: m.settings_notifications_heading() }));
     await expect(nextNotifications.getByRole('switch', { name: m.settings_notification_mention() })).not.toBeChecked();
     for (const input of canvasElement.querySelectorAll<HTMLInputElement>('[name="expectedVersion"]'))
       await expect(input.value).toBe('1');
@@ -216,9 +226,11 @@ const draftDecision: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
+    await selectSettingsCategory(context.canvasElement, m.settings_verification_heading());
     const verification = within(await canvas.findByRole('region', { name: m.settings_verification_heading() }));
     const statement = await verification.findByRole('textbox', { name: m.settings_verification_statement() });
     await userEvent.type(statement, 'Evidence to finish before submitting.');
+    await selectSettingsCategory(context.canvasElement, m.settings_privacy_heading());
     const row = (await canvas.findByRole('link', { name: /unusually long Collection title/i })).closest('li')!;
     const visibility = within(row).getByRole('combobox');
     await userEvent.selectOptions(visibility, 'private');
@@ -277,6 +289,7 @@ export const NoticeDraftDecisionPhone: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Prepare current viewer' }));
+    await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
     const notifications = within(await canvas.findByRole('region', { name: m.settings_notifications_heading() }));
     const reply = notifications.getByRole('switch', { name: m.settings_notification_reply() });
     await userEvent.click(reply);
