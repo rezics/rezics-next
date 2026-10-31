@@ -4020,7 +4020,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
         zones: {
             post: {
                 body: {
-                    configuration: import("@rezics/composition").ZoneStarter;
+                    configuration: import("@rezics/composition").ZoneConfiguration;
                     mounts: string[];
                     visibility: "private" | "public" | "unlisted";
                 };
@@ -4044,6 +4044,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans"?: string;
                                 "zh-Hant"?: string;
                             };
+                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                             visibility: "private" | "public" | "unlisted";
                             appearance: {
                                 density?: "comfortable" | "compact";
@@ -4074,6 +4075,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans"?: string;
                                 "zh-Hant"?: string;
                             };
+                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                             visibility: "private" | "public" | "unlisted";
                             appearance: {
                                 density?: "comfortable" | "compact";
@@ -4210,6 +4212,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans"?: string;
                                 "zh-Hant"?: string;
                             };
+                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                             visibility: "private" | "public" | "unlisted";
                             appearance: {
                                 density?: "comfortable" | "compact";
@@ -4346,6 +4349,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     "zh-Hans"?: string;
                                     "zh-Hant"?: string;
                                 };
+                                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                                 visibility: "private" | "public" | "unlisted";
                                 appearance: {
                                     density?: "comfortable" | "compact";
@@ -4480,6 +4484,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         "zh-Hans"?: string;
                                         "zh-Hant"?: string;
                                     };
+                                    primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                                     visibility: "private" | "public" | "unlisted";
                                     appearance: {
                                         density?: "comfortable" | "compact";
@@ -4495,7 +4500,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     deletedAt: string | null;
                                     restoreUntil: string | null;
                                 };
-                                configuration: import("@rezics/composition").ZoneStarter;
+                                configuration: import("@rezics/composition").ZoneConfiguration;
                                 mounts: string[];
                             };
                             400: Response | {
@@ -4658,6 +4663,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         "zh-Hans"?: string;
                                         "zh-Hant"?: string;
                                     };
+                                    primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                                     visibility: "private" | "public" | "unlisted";
                                     appearance: {
                                         density?: "comfortable" | "compact";
@@ -4776,7 +4782,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 configuration: {
                     put: {
                         body: {
-                            configuration: import("@rezics/composition").ZoneStarter;
+                            configuration: import("@rezics/composition").ZoneConfiguration;
                             mounts: string[];
                         };
                         params: {
@@ -4802,6 +4808,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         "zh-Hans"?: string;
                                         "zh-Hant"?: string;
                                     };
+                                    primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                                     visibility: "private" | "public" | "unlisted";
                                     appearance: {
                                         density?: "comfortable" | "compact";
@@ -4945,6 +4952,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         "zh-Hans"?: string;
                                         "zh-Hant"?: string;
                                     };
+                                    primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                                     visibility: "private" | "public" | "unlisted";
                                     appearance: {
                                         density?: "comfortable" | "compact";
@@ -5085,6 +5093,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     "zh-Hans"?: string;
                                     "zh-Hant"?: string;
                                 };
+                                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                                 visibility: "private" | "public" | "unlisted";
                                 appearance: {
                                     density?: "comfortable" | "compact";
@@ -5379,6 +5388,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans"?: string;
                                 "zh-Hant"?: string;
                             };
+                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                             visibility: "private" | "public" | "unlisted";
                             appearance: {
                                 density?: "comfortable" | "compact";
@@ -5409,6 +5419,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans"?: string;
                                 "zh-Hant"?: string;
                             };
+                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                             visibility: "private" | "public" | "unlisted";
                             appearance: {
                                 density?: "comfortable" | "compact";
@@ -5441,6 +5452,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans"?: string;
                                 "zh-Hant"?: string;
                             };
+                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                             visibility: "private" | "public" | "unlisted";
                             appearance: {
                                 density?: "comfortable" | "compact";
@@ -5479,6 +5491,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                                 "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                             }>;
+                            primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
                             visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
                             appearance: import("typebox").TObject<{
                                 density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
@@ -5509,6 +5522,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                                 "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                             }>;
+                            primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
                             visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
                             appearance: import("typebox").TObject<{
                                 density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
@@ -5652,6 +5666,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     "zh-Hans"?: string;
                     "zh-Hant"?: string;
                 };
+                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                 visibility: "private" | "public" | "unlisted";
                 appearance: {
                     density?: "comfortable" | "compact";
@@ -5772,6 +5787,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     "zh-Hans"?: string;
                     "zh-Hant"?: string;
                 };
+                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                 visibility: "private" | "public" | "unlisted";
                 appearance: {
                     density?: "comfortable" | "compact";
@@ -5952,6 +5968,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     "zh-Hans"?: string;
                                     "zh-Hant"?: string;
                                 };
+                                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                                 visibility: "private" | "public" | "unlisted";
                                 appearance: {
                                     density?: "comfortable" | "compact";
@@ -5982,6 +5999,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     "zh-Hans"?: string;
                                     "zh-Hant"?: string;
                                 };
+                                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                                 visibility: "private" | "public" | "unlisted";
                                 appearance: {
                                     density?: "comfortable" | "compact";
@@ -6014,6 +6032,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     "zh-Hans"?: string;
                                     "zh-Hant"?: string;
                                 };
+                                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                                 visibility: "private" | "public" | "unlisted";
                                 appearance: {
                                     density?: "comfortable" | "compact";
@@ -6052,6 +6071,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                                     "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                                 }>;
+                                primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
                                 visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
                                 appearance: import("typebox").TObject<{
                                     density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
@@ -6082,6 +6102,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                                     "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                                 }>;
+                                primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
                                 visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
                                 appearance: import("typebox").TObject<{
                                     density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
@@ -6174,6 +6195,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
             "zh-Hans"?: string;
             "zh-Hant"?: string;
         };
+        primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
         visibility: "private" | "public" | "unlisted";
         appearance: {
             density?: "comfortable" | "compact";
@@ -6352,6 +6374,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans"?: string;
                                 "zh-Hant"?: string;
                             };
+                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                             visibility: "private" | "public" | "unlisted";
                             appearance: {
                                 density?: "comfortable" | "compact";
@@ -6382,6 +6405,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans"?: string;
                                 "zh-Hant"?: string;
                             };
+                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                             visibility: "private" | "public" | "unlisted";
                             appearance: {
                                 density?: "comfortable" | "compact";
@@ -6414,6 +6438,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans"?: string;
                                 "zh-Hant"?: string;
                             };
+                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
                             visibility: "private" | "public" | "unlisted";
                             appearance: {
                                 density?: "comfortable" | "compact";
@@ -6452,6 +6477,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                                 "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                             }>;
+                            primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
                             visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
                             appearance: import("typebox").TObject<{
                                 density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
@@ -6482,6 +6508,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                                 "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
                             }>;
+                            primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
                             visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
                             appearance: import("typebox").TObject<{
                                 density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
