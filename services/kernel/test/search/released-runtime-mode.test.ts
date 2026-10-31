@@ -86,9 +86,9 @@ test('instrumentation keeps the supplied clock function and rejects child replic
 
 function portTransport(port: MessagePort): OutcomeRpcTransport {
   return {
-    send: (packet) => port.postMessage(packet),
+    send: (packet) => port.postMessage(JSON.stringify(packet)),
     subscribe(message, failure) {
-      const receive = (event: MessageEvent) => message(event.data);
+      const receive = (event: MessageEvent) => message(JSON.parse(event.data));
       const failed = () => failure(new Error('Clock message could not be deserialized'));
       port.addEventListener('message', receive);
       port.addEventListener('messageerror', failed);
