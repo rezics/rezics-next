@@ -64,7 +64,7 @@ export async function admitBenefitAcquisition(
   const priorId = active?.orderId ?? unresolved?.id;
   if (priorId !== undefined) {
     // Validate the actual native own order as well as the exact entitlement, never a projected locator.
-    const prior = await orderRead.run(client, { route: input.route, id: priorId });
+    const prior = await orderRead.run(client, { route: input.route, id: priorId, receipt: false });
     if (
       !prior ||
       routeOf(priorId) !== input.route ||
