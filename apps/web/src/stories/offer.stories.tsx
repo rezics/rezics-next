@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
-import { PageStory, exposureStory, pagePaths, offerCjkReady, offerDelistedReady, offerPageReady } from './page';
+import { PageStory, exposureStory, pagePaths, pageReady, offerCjkReady, offerDelistedReady, offerPageReady } from './page';
 import { acquisitionProblems, setMappedCheckoutStory } from '../kernel/fake/checkout';
 import { localizeHref } from '../paraglide/runtime.js';
 
@@ -122,7 +122,7 @@ function recoveryStory(problem: (typeof acquisitionProblems)[keyof typeof acquis
   return {
     beforeEach: currentMappedOffer,
     render: () => <PageStory visitor="Signed In" path={pagePaths.offer} />,
-    async play({ canvasElement }) {
+    async play({ canvasElement, step }) {
       const originalFetch = window.fetch;
       let starts = 0;
       window.fetch = (async (input, init) => {
@@ -135,24 +135,38 @@ function recoveryStory(problem: (typeof acquisitionProblems)[keyof typeof acquis
         return originalFetch(input, init);
       }) as typeof window.fetch;
       try {
-        const view = within(await within(canvasElement).findByRole('main'));
-        await userEvent.click(await view.findByRole('button', { name: m.offer_buy() }));
-        const owned = problem.code === 'benefit_already_owned';
-        await view.findByText(owned ? m.offer_already_owned() : m.offer_acquisition_pending());
-        const link = await view.findByRole('link', {
-          name: owned ? m.offer_open_entitlement() : m.offer_open_order(),
-        });
-        await expect(link).toHaveAttribute(
-          'href',
-          localizeHref(
-            owned ? `/entitlements/${acquisitionProblems.owned.entitlementId}` : `/orders/${problem.orderId}`,
-          ),
+        await step(
+          'Offer recovery waits for genuine session and operation readiness then makes one checkout request and preserves exact own-record recovery and no second purchase',
+          async () => {
+            await pageReady({ canvasElement });
+            const view = within(within(canvasElement).getByRole('main'));
+            const buy = await view.findByRole('button', { name: m.offer_buy() });
+            // Presence precedes session/exposure hydration; the real control owns readiness.
+            await waitFor(async () => {
+              await expect(buy).toBeVisible();
+              await expect(buy).toBeEnabled();
+              await expect(buy).not.toHaveStyle({ pointerEvents: 'none' });
+            });
+            await expect(starts).toBe(0);
+            await userEvent.click(buy);
+            const owned = problem.code === 'benefit_already_owned';
+            await view.findByText(owned ? m.offer_already_owned() : m.offer_acquisition_pending());
+            const link = await view.findByRole('link', {
+              name: owned ? m.offer_open_entitlement() : m.offer_open_order(),
+            });
+            await expect(link).toHaveAttribute(
+              'href',
+              localizeHref(
+                owned ? `/entitlements/${acquisitionProblems.owned.entitlementId}` : `/orders/${problem.orderId}`,
+              ),
+            );
+            await expect(view.queryByRole('button', { name: m.offer_buy() })).toBeNull();
+            await expect(view.queryByRole('button', { name: m.offer_retry() })).toBeNull();
+            await expect(view.queryByRole('button', { name: m.offer_review_terms() })).toBeNull();
+            await expect(view.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
+            await expect(starts).toBe(1);
+          },
         );
-        await expect(view.queryByRole('button', { name: m.offer_buy() })).toBeNull();
-        await expect(view.queryByRole('button', { name: m.offer_retry() })).toBeNull();
-        await expect(view.queryByRole('button', { name: m.offer_review_terms() })).toBeNull();
-        await expect(view.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
-        await expect(starts).toBe(1);
       } finally {
         window.fetch = originalFetch;
       }
