@@ -325,5 +325,15 @@
   "auth_opening_current": "受營運帳戶目前的工作階段",
   "auth_opening_method": "驗證方式",
   "auth_opening_scopes": "工作階段實際具備的權限範圍",
-  "auth_opening_no_scopes": "沒有權限範圍"
+  "auth_opening_no_scopes": "沒有權限範圍",
+  "auth_account_identity_heading": "目前登入的帳號",
+  "auth_account_identity_loading": "正在載入帳號身分資訊…",
+  "auth_account_identity_checking": "正在確認目前登入的帳號。",
+  "auth_account_identity_missing": "此帳號沒有可顯示的登入信箱。",
+  "auth_account_identity_unavailable": "暫時無法取得帳號身分資訊。",
+  "auth_account_identity_security_target": "此頁面的安全設定變更將套用至 {account}。",
+  "auth_account_identity_delete_target": "此操作將永久刪除 {account}。",
+  "auth_account_identity_details": "帳號詳情",
+  "auth_account_identity_account_id": "帳號 ID：{accountId}",
+  "auth_account_identity_retry": "重新載入帳號身分"
 }

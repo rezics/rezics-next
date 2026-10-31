@@ -325,5 +325,15 @@
   "auth_opening_current": "受运营账户的当前会话",
   "auth_opening_method": "认证方式",
   "auth_opening_scopes": "会话实际拥有的权限范围",
-  "auth_opening_no_scopes": "无权限范围"
+  "auth_opening_no_scopes": "无权限范围",
+  "auth_account_identity_heading": "当前登录的账号",
+  "auth_account_identity_loading": "正在加载账号身份信息…",
+  "auth_account_identity_checking": "正在确认当前登录的账号。",
+  "auth_account_identity_missing": "此账号没有可显示的登录邮箱。",
+  "auth_account_identity_unavailable": "暂时无法获取账号身份信息。",
+  "auth_account_identity_security_target": "此页面的安全设置变更将应用于 {account}。",
+  "auth_account_identity_delete_target": "此操作将永久删除 {account}。",
+  "auth_account_identity_details": "账号详情",
+  "auth_account_identity_account_id": "账号 ID：{accountId}",
+  "auth_account_identity_retry": "重新加载账号身份"
 }

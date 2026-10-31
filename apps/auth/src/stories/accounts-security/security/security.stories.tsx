@@ -1,6 +1,7 @@
 import { SecurityPage } from '../../../routes/security';
 import { m } from '../../../paraglide/messages.js';
 import type { SecurityLoadResult } from '../../../security';
+import type { AccountIdentitySource } from '../../../account-identity';
 import type { SecuritySource } from '../../../security-reconciliation';
 import {
   AuthStory,
@@ -35,10 +36,17 @@ const initial: SecurityLoadResult = {
     passkeys: [{ id: 'passkey', name: 'Security key', created_at: '2026-10-29T09:00:00Z', last_used_at: null }],
   },
 };
+// Presentation of the closed native email projection; no verification claim.
+const identitySource: AccountIdentitySource = async () => ({
+  kind: 'ready',
+  accountId: storyAccount,
+  email: '读者.長いメールアドレス.reading-companion@example.test',
+});
+const unavailableIdentity: AccountIdentitySource = async () => ({ kind: 'unavailable' });
 export const Owner = {
   render: () => (
     <AuthStory>
-      <SecurityPage initial={initial} inventorySource={populatedInventory} />
+      <SecurityPage identitySource={identitySource} initial={initial} inventorySource={populatedInventory} />
     </AuthStory>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -51,6 +59,7 @@ export const Empty = {
   render: () => (
     <AuthStory>
       <SecurityPage
+        identitySource={identitySource}
         initial={{ ...initial, sessions: [], passkeys: { kind: 'ready', passkeys: [] } }}
         inventorySource={emptyInventory}
       />
@@ -60,28 +69,28 @@ export const Empty = {
 export const Unavailable = {
   render: () => (
     <AuthStory>
-      <SecurityPage initial={initial} inventorySource={unavailableInventory} />
+      <SecurityPage identitySource={identitySource} initial={initial} inventorySource={unavailableInventory} />
     </AuthStory>
   ),
 };
 export const Preparing = {
   render: () => (
     <AuthStory>
-      <SecurityPage initial={initial} inventorySource={preparingInventory} />
+      <SecurityPage identitySource={identitySource} initial={initial} inventorySource={preparingInventory} />
     </AuthStory>
   ),
 };
 export const SignedOut = {
   render: () => (
     <AuthStory>
-      <SecurityPage initial={{ kind: 'signed-out' }} />
+      <SecurityPage identitySource={identitySource} initial={{ kind: 'signed-out' }} />
     </AuthStory>
   ),
 };
 export const ConsentReduced = {
   render: () => (
     <AuthStory>
-      <SecurityPage initial={initial} inventorySource={populatedInventory} />
+      <SecurityPage identitySource={identitySource} initial={initial} inventorySource={populatedInventory} />
     </AuthStory>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -97,7 +106,7 @@ export const Denied = {
   tags: ['!dev'],
   render: () => (
     <AuthStory>
-      <SecurityPage initial={initial} inventorySource={deniedInventory} />
+      <SecurityPage identitySource={identitySource} initial={initial} inventorySource={deniedInventory} />
     </AuthStory>
   ),
 };
@@ -105,6 +114,7 @@ export const LastCredential = {
   render: () => (
     <AuthStory mode="last-credential">
       <SecurityPage
+        identitySource={identitySource}
         initial={initial}
         inventorySource={emptyInventory}
         securitySource={{ act: async () => ({ kind: 'last-credential' }), read: async () => ({ kind: 'unavailable' }) }}
@@ -147,7 +157,12 @@ function recoveryStory(unavailable: boolean) {
   return {
     render: () => (
       <AuthStory>
-        <SecurityPage initial={initial} inventorySource={emptyInventory} securitySource={source} />
+        <SecurityPage
+          identitySource={identitySource}
+          initial={initial}
+          inventorySource={emptyInventory}
+          securitySource={source}
+        />
       </AuthStory>
     ),
     play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -175,3 +190,15 @@ function recoveryStory(unavailable: boolean) {
 }
 export const LostResponseReadback = recoveryStory(false);
 export const LostResponseUnavailable = recoveryStory(true);
+
+export const IdentityUnavailable = {
+  render: () => (
+    <AuthStory>
+      <SecurityPage initial={initial} inventorySource={populatedInventory} identitySource={unavailableIdentity} />
+    </AuthStory>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await waitFor(() => button(canvasElement, m.auth_account_identity_retry()));
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_security_change_password()));
+  },
+};

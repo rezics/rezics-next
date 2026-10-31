@@ -325,5 +325,15 @@
   "auth_opening_current": "運用対象アカウントの現在のセッション",
   "auth_opening_method": "認証方法",
   "auth_opening_scopes": "セッションの実際の権限範囲",
-  "auth_opening_no_scopes": "権限範囲なし"
+  "auth_opening_no_scopes": "権限範囲なし",
+  "auth_account_identity_heading": "ログイン中のアカウント",
+  "auth_account_identity_loading": "アカウントの識別情報を読み込み中…",
+  "auth_account_identity_checking": "ログイン中のアカウントを確認しています。",
+  "auth_account_identity_missing": "このアカウントには表示できるログイン用メールアドレスがありません。",
+  "auth_account_identity_unavailable": "アカウントの識別情報を取得できません。",
+  "auth_account_identity_security_target": "このページのセキュリティ変更は {account} に適用されます。",
+  "auth_account_identity_delete_target": "この操作で {account} を完全に削除します。",
+  "auth_account_identity_details": "アカウントの詳細",
+  "auth_account_identity_account_id": "アカウントID：{accountId}",
+  "auth_account_identity_retry": "識別情報を再読み込み"
 }

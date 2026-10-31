@@ -20,6 +20,7 @@ import { createSigner } from './signing.ts';
 import { signSessionAccessToken } from './session-proof-capability.ts';
 import { issuerOrigin } from './issuer.ts';
 import { securityInventory, type SecurityInventoryInput } from './security-inventory.ts';
+import { readNativeAccountIdentity } from './account-identity.ts';
 import {
   securityPageInput,
   securityPageQuery,
@@ -593,6 +594,38 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const human = await sessionProof(headers);
     if ((await activeActor(human.account_id)).automated || human.amr.includes('operator')) throw new Denied();
     return human;
+  }
+  async function readAccountIdentity(headers: Headers) {
+    const initial = await humanProof(headers);
+    const currentClient = async () => {
+      const admitted = await database.query(
+        'SELECT client_id FROM auth_client WHERE client_id=$1 AND disabled=false AND NOT erasure_fenced',
+        [initial.client_id],
+      );
+      if (!admitted.rowCount) throw new Denied();
+    };
+    const same = (previous: SessionProof, current: SessionProof) => {
+      if (
+        previous.account_id !== current.account_id ||
+        proofSources.get(previous)!.id !== proofSources.get(current)!.id ||
+        previous.client_id !== current.client_id ||
+        previous.authn_epoch !== current.authn_epoch ||
+        previous.auth_time !== current.auth_time ||
+        JSON.stringify(previous.scope) !== JSON.stringify(current.scope) ||
+        JSON.stringify(previous.amr) !== JSON.stringify(current.amr)
+      )
+        throw new Denied();
+    };
+    // Preserve native client/consent issuance admission around the exact-self I/O.
+    return withIssuance(initial.client_id, async () => {
+      const human = await humanProof(headers);
+      same(initial, human);
+      await currentClient();
+      const identity = await readNativeAccountIdentity(database, human.account_id);
+      await currentClient();
+      same(human, await humanProof(headers));
+      return identity;
+    });
   }
   async function readSecurityInventory<T>(
     input: SecurityInventoryInput,
@@ -1759,9 +1792,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     async handler(request) {
       const url = new URL(request.url);
       const inventoryRead = request.method === 'GET' && (url.pathname === '/clients' || url.pathname === '/consents');
+      const identityRead = url.pathname === '/account-identity';
       const respond = (data: unknown, status = 200) => {
         const response = json(data, status);
-        if (inventoryRead) response.headers.set('cache-control', 'private, no-store');
+        if (inventoryRead || identityRead) response.headers.set('cache-control', 'private, no-store');
         return response;
       };
       const deadline = Date.now() + 3000;
@@ -1769,6 +1803,17 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const protocol = await website.handler(request);
         if (protocol) return protocol;
         if (url.origin !== options.issuer || (url.search && !inventoryRead)) throw new Denied(400);
+        if (identityRead) {
+          if (
+            request.method !== 'POST' ||
+            request.headers.get('origin') !== options.issuer ||
+            request.headers.get('sec-fetch-site') === 'cross-site' ||
+            request.headers.has('authorization')
+          )
+            throw new Denied(403);
+          fields(await bodyOf(request), []);
+          return respond(await readAccountIdentity(request.headers));
+        }
         if (inventoryRead) {
           const input = { ...securityPageQuery(url.searchParams), headers: request.headers };
           return respond(

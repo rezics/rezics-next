@@ -325,5 +325,15 @@
   "auth_opening_current": "Aktuelle Sitzung des betriebenen Kontos",
   "auth_opening_method": "Authentifizierungsmethode",
   "auth_opening_scopes": "Tatsächliche Berechtigungsbereiche der Sitzung",
-  "auth_opening_no_scopes": "Keine Berechtigungsbereiche"
+  "auth_opening_no_scopes": "Keine Berechtigungsbereiche",
+  "auth_account_identity_heading": "Angemeldetes Konto",
+  "auth_account_identity_loading": "Deine Kontoidentität wird geladen…",
+  "auth_account_identity_checking": "Das angemeldete Konto wird geprüft.",
+  "auth_account_identity_missing": "Für dieses Konto ist keine Anmelde-E-Mail vorhanden.",
+  "auth_account_identity_unavailable": "Deine Kontoidentität ist nicht verfügbar.",
+  "auth_account_identity_security_target": "Sicherheitsänderungen auf dieser Seite betreffen {account}.",
+  "auth_account_identity_delete_target": "Diese Aktion löscht {account} dauerhaft.",
+  "auth_account_identity_details": "Kontodetails",
+  "auth_account_identity_account_id": "Konto-ID: {accountId}",
+  "auth_account_identity_retry": "Kontoidentität erneut laden"
 }

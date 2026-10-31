@@ -325,5 +325,15 @@
   "auth_opening_current": "Current operated session",
   "auth_opening_method": "Authentication method",
   "auth_opening_scopes": "Actual session scopes",
-  "auth_opening_no_scopes": "No scopes"
+  "auth_opening_no_scopes": "No scopes",
+  "auth_account_identity_heading": "Signed-in account",
+  "auth_account_identity_loading": "Loading your account identity…",
+  "auth_account_identity_checking": "Checking which account is signed in.",
+  "auth_account_identity_missing": "This account has no login email to display.",
+  "auth_account_identity_unavailable": "Your account identity is unavailable.",
+  "auth_account_identity_security_target": "Security changes on this page affect {account}.",
+  "auth_account_identity_delete_target": "This action permanently deletes {account}.",
+  "auth_account_identity_details": "Account details",
+  "auth_account_identity_account_id": "Account ID: {accountId}",
+  "auth_account_identity_retry": "Retry account identity"
 }

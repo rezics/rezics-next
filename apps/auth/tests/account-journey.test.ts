@@ -407,3 +407,193 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
       }
   }
 }, 300_000);
+
+// Deferred browser coverage of the default composition, without injected page sources.
+test('Default Security and deletion flows show a genuine recognizable current signed-in identity and discard it on account or authority changes without granting new operation authority', async () => {
+  const { spawn } = await import('node:child_process');
+  const { createServer } = await import('node:net');
+  const { chromium } = await import('playwright');
+  const { createFakeAuthState, startFakeAuth } = await import('../scripts/fake-auth');
+  const copy = (await import('../messages/en.json')).default;
+  const state = createFakeAuthState({ sessionAccountId: 'first-native-account' });
+  const fake = startFakeAuth({ state });
+  let identityMode: 'ready' | 'unavailable' | 'mismatch' | 'late' | 'denied' = 'ready';
+  const firstEmail = '读者.' + 'long-native-login.'.repeat(6) + 'reader@example.test';
+  const secondEmail = 'second-native-login@example.test';
+  let releaseIdentity: (() => void) | undefined;
+  let identityStarted: (() => void) | undefined;
+  const identityHost = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    async fetch(request) {
+      const url = new URL(request.url);
+      if (url.pathname !== '/account-identity')
+        return originalFetch(new Request(new URL(url.pathname + url.search, fake.url), request));
+      expect(request.method).toBe('POST');
+      expect(await request.json()).toEqual({});
+      expect(request.headers.get('cookie')).toContain('auth_session=review-session');
+      const accountId = state.sessionAccountId;
+      const mode = identityMode;
+      if (mode === 'late') {
+        const gate = new Promise<void>((resolve) => {
+          releaseIdentity = resolve;
+        });
+        identityStarted?.();
+        await gate;
+      }
+      if (mode === 'unavailable' || mode === 'denied')
+        return Response.json(
+          { error: 'authentication_denied' },
+          {
+            status: mode === 'denied' ? 403 : 503,
+            headers: { 'cache-control': 'private, no-store' },
+          },
+        );
+      return Response.json(
+        {
+          account_id: mode === 'mismatch' ? 'first-native-account' : accountId,
+          email: accountId === 'first-native-account' || mode === 'mismatch' ? firstEmail : secondEmail,
+        },
+        { headers: { 'cache-control': 'private, no-store' } },
+      );
+    },
+  });
+  const port = await new Promise<number>((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number };
+      probe.close((error) => (error ? reject(error) : resolve(port)));
+    });
+  });
+  const origin = `http://127.0.0.1:${port}`;
+  const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+    cwd: new URL('..', import.meta.url),
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+    env: { ...process.env, AUTH_ORIGIN: identityHost.url.origin, PRIVACY_CONTACT_URL: 'mailto:privacy@example.test' },
+  });
+  let output = '';
+  let startError: Error | undefined;
+  child.on('error', (error) => {
+    startError = error;
+  });
+  const keep = (chunk: Buffer) => {
+    output = (output + chunk.toString()).slice(-8000);
+  };
+  child.stdout!.on('data', keep);
+  child.stderr!.on('data', keep);
+  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+  try {
+    const deadline = Date.now() + 150_000;
+    for (;;) {
+      if (startError) throw startError;
+      if (child.exitCode !== null) throw new Error(`Auth dev server exited with ${child.exitCode}:\n${output}`);
+      try {
+        if ((await originalFetch(`${origin}/login`, { signal: AbortSignal.timeout(10_000) })).status === 200) break;
+      } catch {}
+      if (Date.now() > deadline) throw new Error(`Auth dev server did not serve /login:\n${output}`);
+      await Bun.sleep(500);
+    }
+    browser = await chromium.launch();
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'en' });
+    await context.addCookies([{ name: 'auth_session', value: 'review-session', url: origin }]);
+    const page = await context.newPage();
+    page.setDefaultTimeout(10_000);
+    const operations: string[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.startsWith('/account-operations/')) operations.push(request.url());
+    });
+    async function visit(path: string) {
+      expect((await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 }))?.status()).toBe(
+        200,
+      );
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    }
+    async function assertIdentity(email: string, action: 'security' | 'delete') {
+      await page.locator('.auth-account-identity-value').filter({ hasText: email }).waitFor();
+      expect(await page.locator('h1').getAttribute('aria-describedby')).toBe('auth-account-identity-description');
+      expect(await page.locator('#auth-account-identity-description').innerText()).toBe(
+        copy[
+          action === 'security' ? 'auth_account_identity_security_target' : 'auth_account_identity_delete_target'
+        ].replace('{account}', email),
+      );
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      const summary = page.locator('.auth-account-identity summary');
+      expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await summary.click();
+      expect(await page.locator('.auth-account-identity details').innerText()).toContain(state.sessionAccountId);
+    }
+    try {
+      await visit('/security');
+      await assertIdentity(firstEmail, 'security');
+      await page.locator('#security-password-heading').waitFor();
+      await visit('/account/delete');
+      await assertIdentity(firstEmail, 'delete');
+      const confirmation = page.locator('#account-delete-input');
+      expect(await confirmation.inputValue()).toBe('');
+      expect(await page.getByRole('button', { name: copy.auth_account_delete_submit, exact: true }).isDisabled()).toBe(
+        true,
+      );
+      expect(operations).toEqual([]);
+
+      state.sessionAccountId = 'second-native-account';
+      identityMode = 'mismatch';
+      await visit('/account/delete');
+      await page.getByRole('alert').waitFor();
+      expect(await page.locator('.auth-card').innerText()).not.toContain(firstEmail);
+      expect(await confirmation.count()).toBe(0);
+      identityMode = 'ready';
+      await visit('/account/delete');
+      await assertIdentity(secondEmail, 'delete');
+      expect(await page.locator('.auth-card').innerText()).not.toContain(firstEmail);
+
+      identityMode = 'unavailable';
+      await visit('/security');
+      const retry = page.getByRole('button', { name: copy.auth_account_identity_retry, exact: true });
+      await retry.waitFor();
+      await page.locator('#security-sessions-heading').waitFor();
+      expect(await page.locator('.auth-account-identity').innerText()).toContain(state.sessionAccountId);
+      expect(await page.locator('.auth-card').innerText()).not.toContain(secondEmail);
+      expect((await retry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      identityMode = 'ready';
+      await retry.click();
+      await assertIdentity(secondEmail, 'security');
+
+      identityMode = 'late';
+      const started = new Promise<void>((resolve) => {
+        identityStarted = resolve;
+      });
+      await visit('/security');
+      await started;
+      await page.locator('#security-sessions-heading').waitFor();
+      page.once('dialog', (dialog) => void dialog.accept());
+      await page.locator('section[aria-labelledby="security-sessions-heading"] button').first().click();
+      await page.getByRole('link', { name: copy.auth_security_sign_in, exact: true }).waitFor();
+      releaseIdentity!();
+      await page.waitForLoadState('networkidle');
+      expect(await page.locator('.auth-card').innerText()).not.toContain(secondEmail);
+      expect(await page.locator('.auth-account-identity').count()).toBe(0);
+
+      identityMode = 'denied';
+      await visit('/account/delete');
+      await page.getByRole('alert').waitFor();
+      expect(await page.locator('.auth-card').innerText()).not.toContain(secondEmail);
+      expect(await confirmation.count()).toBe(0);
+      expect(operations).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    releaseIdentity?.();
+    await browser?.close();
+    identityHost.stop(true);
+    fake.stop(true);
+    if (child.pid)
+      try {
+        process.kill(-child.pid, 'SIGTERM');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+  }
+}, 300_000);

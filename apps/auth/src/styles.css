@@ -230,6 +230,50 @@ body {
   letter-spacing: -0.02em;
 }
 
+.auth-card:has(.auth-account-identity) h1 {
+  margin-bottom: 1.25rem;
+}
+
+.auth-account-identity {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 2.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.auth-account-identity h2 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.auth-account-identity-value {
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+.auth-account-identity-secondary,
+.auth-account-identity details {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.auth-account-identity summary {
+  min-height: 2.75rem;
+  padding-block: 0.625rem;
+  cursor: pointer;
+}
+
+.auth-account-identity summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+  border-radius: 0.25rem;
+}
+
 .auth-security-page section {
   display: grid;
   gap: 1rem;

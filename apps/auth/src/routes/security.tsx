@@ -10,6 +10,8 @@ import { Trash2 } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
+import { useAccountIdentity, type AccountIdentitySource } from '../account-identity';
+import { AccountIdentitySummary } from '../account-identity-view';
 import { failureMessage } from '../api';
 import { ErrorAlert } from '../alert';
 import { SecurityInventory, type InventorySource } from '../security-inventory-view';
@@ -45,7 +47,13 @@ export function SecurityPage({
   initial,
   inventorySource,
   securitySource,
-}: { initial?: SecurityLoadResult; inventorySource?: InventorySource; securitySource?: SecuritySource } = {}) {
+  identitySource,
+}: {
+  initial?: SecurityLoadResult;
+  inventorySource?: InventorySource;
+  securitySource?: SecuritySource;
+  identitySource?: AccountIdentitySource;
+} = {}) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
   const [sessions, setSessions] = useState<SecuritySession[]>([]);
@@ -81,6 +89,14 @@ export function SecurityPage({
   const submittingPassword = useRef(false);
   const passwordInput = useRef<HTMLInputElement>(null);
   const passwordAlert = useRef<HTMLDivElement>(null);
+  const identity = useAccountIdentity(
+    accountId,
+    authorityGeneration.current,
+    (kind) => {
+      clearPrivateData(kind === 'signed-out' ? 'signed-out' : 'failure');
+    },
+    identitySource,
+  );
 
   useLayoutEffect(() => {
     let active = true;
@@ -280,12 +296,11 @@ export function SecurityPage({
     setPasswordPending(false);
     if (activeAccount.current !== owner) return;
     if (result.ok) {
-      setPassword('');
-      setPasswordNotice(m.auth_security_password_changed());
+      clearPrivateData('signed-out', m.auth_security_password_changed());
       return;
     }
     if (result.reason === 'step-up') {
-      setPassword('');
+      clearPrivateData('signed-out');
       window.location.assign(STEP_UP_URL);
       return;
     }
@@ -309,6 +324,7 @@ export function SecurityPage({
       setPasskeyName('');
       setPasskeyNotice(m.auth_security_passkey_added());
     } else if (result.reason === 'step-up') {
+      clearPrivateData('signed-out');
       window.location.assign(STEP_UP_URL);
     } else if (result.reason === 'failure') {
       setPasskeyError(result.message);
@@ -352,7 +368,12 @@ export function SecurityPage({
   const orderedSessions = [...sessions].sort((left, right) => Number(right.current) - Number(left.current));
 
   return (
-    <AuthPage heading={m.auth_security_heading()}>
+    <AuthPage
+      heading={m.auth_security_heading()}
+      identity={
+        <AccountIdentitySummary accountId={accountId} state={identity.state} action="security" retry={identity.retry} />
+      }
+    >
       <div className="auth-security-page" aria-busy={loadState === 'loading'}>
         {loadState === 'loading' ? (
           <p role="status">{m.auth_inventory_loading()}</p>

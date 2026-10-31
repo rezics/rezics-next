@@ -325,5 +325,15 @@
   "auth_opening_current": "Sesión actual de la cuenta operada",
   "auth_opening_method": "Método de autenticación",
   "auth_opening_scopes": "Ámbitos reales de la sesión",
-  "auth_opening_no_scopes": "Sin ámbitos"
+  "auth_opening_no_scopes": "Sin ámbitos",
+  "auth_account_identity_heading": "Cuenta con sesión iniciada",
+  "auth_account_identity_loading": "Cargando la identidad de tu cuenta…",
+  "auth_account_identity_checking": "Comprobando qué cuenta tiene la sesión iniciada.",
+  "auth_account_identity_missing": "Esta cuenta no tiene un correo de acceso que mostrar.",
+  "auth_account_identity_unavailable": "La identidad de tu cuenta no está disponible.",
+  "auth_account_identity_security_target": "Los cambios de seguridad de esta página afectan a {account}.",
+  "auth_account_identity_delete_target": "Esta acción elimina permanentemente {account}.",
+  "auth_account_identity_details": "Detalles de la cuenta",
+  "auth_account_identity_account_id": "ID de la cuenta: {accountId}",
+  "auth_account_identity_retry": "Reintentar la identidad de la cuenta"
 }

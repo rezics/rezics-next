@@ -325,5 +325,15 @@
   "auth_opening_current": "Session actuelle du compte géré",
   "auth_opening_method": "Méthode d’authentification",
   "auth_opening_scopes": "Portées effectives de la session",
-  "auth_opening_no_scopes": "Aucune portée"
+  "auth_opening_no_scopes": "Aucune portée",
+  "auth_account_identity_heading": "Compte connecté",
+  "auth_account_identity_loading": "Chargement de votre identité…",
+  "auth_account_identity_checking": "Vérification du compte connecté.",
+  "auth_account_identity_missing": "Ce compte ne possède pas d’adresse e-mail de connexion à afficher.",
+  "auth_account_identity_unavailable": "L’identité de votre compte est indisponible.",
+  "auth_account_identity_security_target": "Les modifications de sécurité sur cette page concernent {account}.",
+  "auth_account_identity_delete_target": "Cette action supprime définitivement {account}.",
+  "auth_account_identity_details": "Détails du compte",
+  "auth_account_identity_account_id": "Identifiant du compte : {accountId}",
+  "auth_account_identity_retry": "Réessayer de charger l’identité"
 }

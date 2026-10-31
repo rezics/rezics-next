@@ -24,15 +24,20 @@ export function AuthPage({
   heading,
   children,
   returnToSecurity = false,
+  identity,
 }: {
   heading: string;
   children?: ReactNode;
   returnToSecurity?: boolean;
+  identity?: ReactNode;
 }) {
   return (
     <main className="auth-main">
       <Card role="region" className="auth-card" aria-labelledby="auth-heading">
-        <h1 id="auth-heading">{heading}</h1>
+        <h1 id="auth-heading" aria-describedby={identity ? 'auth-account-identity-description' : undefined}>
+          {heading}
+        </h1>
+        {identity}
         {returnToSecurity ? (
           <nav className="auth-operation-exit" aria-label={m.auth_security_heading()}>
             <a href="/security">{m.auth_account_operation_return()}</a>

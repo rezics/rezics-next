@@ -1529,6 +1529,38 @@ is restricted to the explicit operation list in `test/cost-table.test.ts`.
 Existing cascade-test statement assertions predate
 the consent schedule; the current transaction bound above follows `eraseAccount`.
 
+## Current private account identity
+
+`POST /account-identity` with the closed JSON body `{}` returns exactly
+`{ account_id, email }` for the current native human session. Every response,
+including a refusal, is `private, no-store`. The request must carry the configured
+issuer Origin, cannot be cross-site, and accepts neither a bearer Authorization
+header nor account selectors, queries or extra fields. The ordinary service
+handler supplies this read, so the default host composes it without another port
+or Kernel permission.
+
+The source is the installed Better Auth `user.email`, selected by the native
+session's `userId` through `user`'s primary key. Native password provisioning stores
+the login/recovery email there, while key-only owners can have null email. Native
+`user.name` is synthetic or empty and is never projected. `emailVerified` is
+independent: this display read makes no verification claim and does not expose
+that flag. An absent address stays null; malformed native values fail unavailable.
+There is no installed exact-current-account handle reader in this composition.
+
+The service retains human/session, account floor, client coverage and current
+consent admission, holds the existing native issuance guard, and rechecks the
+same account, source session, client, scope, epoch, authentication time and methods
+after the exact native read. Identity supplies display context only. `/session`
+and all original approval, freshness, target-binding and mutation checks keep
+their existing contracts.
+
+Cost: one indexed exact-self `user` lookup, plus the existing constant native
+session/client/consent checks before and after I/O. No enumeration, join across
+homes, scans of account history, per-row requests or polling. Existing native
+request body bounds and issuance guards apply. `test/account-identity.test.ts`
+covers the closed projection, source semantics, privacy refusals and changes
+while the native read is in flight; its execution is separate from typechecking.
+
 ## Ordinary native host assembly
 
 The Auth application owns this assembly. Neither the membership worker nor the
