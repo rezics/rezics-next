@@ -950,7 +950,7 @@ test('registered READY0 recovery uses ordinary start/wait/wake/result once witho
     expect(binds).toBe(0);
   } finally { db.close(); h.dispose(); }
 });
-test('first-start cap waits and old captures keep one durable intent; only authenticated unreserved generation zero can refresh', async () => {
+test('first-start cap waits and old captures keep one durable intent; authenticated stopped generations can register a future capture', async () => {
   const h = registeredFixture();
   try {
     for (let n = 0; n < 2; n++) {
@@ -988,8 +988,11 @@ test('first-start cap waits and old captures keep one durable intent; only authe
     expect(h.tasks.queueProofStart(task.id, { expectedAttempt: 0, brief: fresh.path }, operations).status).toBe('waiting');
     expect(h.store.task(task.id).brief.proof?.sourceCommit).toBe(sourceCommit);
     expect(h.store.retryIntents().filter((intent) => intent.taskId === task.id)).toHaveLength(1);
+    expect(() => h.tasks.queueRetry(h.proof.id, { expectedAttempt: 1, brief: fresh.path }, h.actor)).toThrow('stale');
     h.store.close(h.current, 'stopped');
-    expect(() => h.tasks.queueRetry(h.proof.id, { expectedAttempt: 1, brief: fresh.path }, h.actor)).toThrow('reserved proof source');
+    h.tasks.queueRetry(h.proof.id, { expectedAttempt: 1, brief: fresh.path }, h.actor);
+    expect(h.store.retryIntent(h.current)?.status).toBe('pending');
+    expect(h.store.task(h.proof.id).brief.proof?.sourceCommit).toBe(sourceCommit);
     expect(h.store.proofReservation(h.proof.id, 1)?.binding).toEqual(h.binding);
   } finally {
     h.dispose();
@@ -1246,8 +1249,9 @@ test('unreserved retained product generations refresh through authenticated publ
     const binding = newProofBinding(h.store.task(task.id), next.attempt);
     h.store.reserveProof(binding);
     h.store.bindProof(binding, { status: 'unknown', cause: 'Bound current proof is uncertain' });
+    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 3, brief: fresh.path }, h.actor)).toThrow('stale');
     h.store.close(next, 'stopped');
-    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 3, brief: fresh.path }, h.actor)).toThrow('reserved proof source');
+    expect(h.tasks.queueProofStart(task.id, { expectedAttempt: 3, brief: fresh.path }, h.actor).status).toBe('created');
     expect(h.store.proofReservation(task.id, 3)?.binding).toEqual(binding);
   } finally { h.dispose(); }
 });
@@ -1567,7 +1571,7 @@ test('interrupted ordinary proof launch never replays a prepared command or perm
   } finally { h.dispose(); }
 });
 
-test('authenticated logical reconciliation permits one fresh SAME-ID future capture while retaining the bound UNKNOWN incarnation byte for byte', async () => {
+test('authenticated stopped UNKNOWN proof retry captures fresh SAME-ID source without reconciliation and retains old binding and report', async () => {
   const h = registeredFixture(true);
   try {
     const oldBrief = structuredClone(h.store.task(h.proof.id).brief);
@@ -1594,20 +1598,13 @@ test('authenticated logical reconciliation permits one fresh SAME-ID future capt
     const sourceCommit = git(integrated, ['rev-parse', 'HEAD']);
     git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
     const fresh = submittedProof(h, { proof: { ...h.proofBrief.proof, sourceCommit } });
-    expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: fresh.path }, h.actor))
-      .toThrow('explicit exited logical reconciliation');
-    expect(() => h.tasks.releaseProof(h.proof.id, 1, null)).toThrow('authenticated');
-    expect(() => h.tasks.releaseProof(h.proof.id, 2, h.actor)).toThrow('stale');
+    expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: fresh.path }, null)).toThrow('authenticated');
+    expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 2, brief: fresh.path }, h.actor)).toThrow('stale');
     const runtime = createRuntime({ tasks: h.tasks, db: h.store.db });
     const output: string[] = [];
-    expect(await runWorkerCommand('retry', [h.proof.id, '--release-proof', '--expected-attempt', '1'], {
-      runtime, env: { CODEX_THREAD_ID: h.actor.sessionId }, print: (value) => output.push(value),
-    })).toBe(0);
-    expect(JSON.parse(output.pop()!).checks).toEqual([h.binding.checkId]);
-    const releasedRow = h.store.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=? AND attempt=1').get(h.proof.id);
-    const releasedRun = h.store.proofReservation(h.proof.id, 1);
-    expect(releasedRun).toMatchObject({ binding: h.binding, status: 'released', observation: unknown,
-      logicalRelease: { reason: expect.stringContaining('native custody remains independent') } });
+    const retainedRow = h.store.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=? AND attempt=1').get(h.proof.id);
+    const retainedRun = h.store.proofReservation(h.proof.id, 1);
+    expect(retainedRun).toMatchObject({ binding: h.binding, status: 'bound', observation: unknown });
     const changedArgv = submittedProof(h, { proof: fresh.brief.proof!,
       acceptance: { ...fresh.brief.acceptance, command: [...fresh.brief.acceptance.command, '--changed'] } });
     expect(() => h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: changedArgv.path }, h.actor))
@@ -1621,14 +1618,16 @@ test('authenticated logical reconciliation permits one fresh SAME-ID future capt
     })).toBe(0);
     expect(JSON.parse(output.pop()!)).toEqual({ taskId: h.proof.id, attempt: 1, status: 'created' });
     const registered = h.store.task(h.proof.id);
-    expect(registered).toMatchObject({ currentAttempt: 1, brief: { proof: fresh.brief.proof }, proofRun: releasedRun });
+    expect(registered).toMatchObject({ currentAttempt: 1, brief: { proof: fresh.brief.proof }, proofRun: retainedRun });
     expect(registered.brief.acceptance).toEqual(oldBrief.acceptance);
     expect(h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=1').get(h.proof.id)).toEqual(rawAttempt);
     expect(h.store.proofReservation(h.proof.id, 2)).toBeUndefined();
+    expect(h.store.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=? AND attempt=1').get(h.proof.id)).toEqual(retainedRow);
+    expect(h.store.events(h.proof.id).some((event) => ['proof-logical-reconciled', 'proof-logical-released'].includes(event.kind))).toBe(false);
     const archived = h.store.events(h.proof.id).filter((event) => event.kind === 'proof-registration-replaced');
     expect(archived).toHaveLength(1);
     expect(JSON.parse(archived[0]!.body)).toMatchObject({ brief: oldBrief, authorization: oldAuthorization,
-      previousFingerprint: proofFingerprint(oldBrief), newFingerprint: proofFingerprint(fresh.brief), proofRun: releasedRun });
+      previousFingerprint: proofFingerprint(oldBrief), newFingerprint: proofFingerprint(fresh.brief), proofRun: retainedRun });
     const oldRecord = h.store.record(h.current);
     h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1 }, h.actor);
     expect(h.store.retryIntents().filter((intent) => intent.taskId === h.proof.id)).toEqual([
@@ -1645,7 +1644,8 @@ test('authenticated logical reconciliation permits one fresh SAME-ID future capt
       expect(git(task.worktree, ['rev-parse', 'HEAD'])).toBe(sourceCommit);
       expect(task.worktree).not.toBe(h.binding.cwd);
       expect(task.brief.acceptance.command).toEqual(h.binding.argv);
-      expect(task.proofRun).toEqual(releasedRun); // Old binding remains evidence, never this invocation's identity.
+      expect(task.proofRun).toMatchObject({ binding: h.binding, observation: unknown, status: 'released' });
+      // Host policy disposition is optional evidence, never this invocation's identity.
       const saved = store.updateAttempt(next, (value) => { value.state = 'waiting'; value.checks = [futureCheck]; });
       store.updateTask(next, (value) => { value.state = 'running'; });
       return { attempt: saved, exited: Promise.resolve({ code: 0, signal: null }) };
@@ -1656,7 +1656,10 @@ test('authenticated logical reconciliation permits one fresh SAME-ID future capt
     expect(h.store.task(h.proof.id).currentAttempt).toBe(2);
     expect(h.store.events(h.proof.id, 2).filter((event) => event.kind === 'proof-command-ready')).toHaveLength(1);
     expect(h.store.proofReservation(h.proof.id, 2)).toBeUndefined();
-    expect(h.store.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=? AND attempt=1').get(h.proof.id)).toEqual(releasedRow);
+    const disposed = h.store.proofReservation(h.proof.id, 1)!;
+    expect(disposed.logicalRelease?.reason).toContain('native custody remains independent');
+    const { logicalRelease, ...oldEvidence } = disposed;
+    expect(oldEvidence).toEqual({ ...retainedRun, status: 'released' });
     expect(h.store.events(h.proof.id).slice(0, originalEvents.length)).toEqual(originalEvents);
     expect(h.store.attempt(h.current)).toMatchObject({ result: 'Paid original report', session: 'paid-session', checks: [h.binding.checkId] });
     expect(h.store.db.query('SELECT body FROM worker_records WHERE task_id=? AND attempt=1').get(h.proof.id)).toEqual(rawRecord);
@@ -1676,7 +1679,7 @@ test('authenticated logical reconciliation permits one fresh SAME-ID future capt
   } finally { h.dispose(); }
 });
 
-test('ordinary command-ready proof continuation needs explicit reconciliation and refuses a still-live terminal driver without aborting host reconciliation', () => {
+test('ordinary exited command-ready proof retries without reconciliation and refuses a still-live terminal driver', () => {
   const h = registeredFixture(true);
   try {
     const submitted = submittedProof(h);
@@ -1685,12 +1688,13 @@ test('ordinary command-ready proof continuation needs explicit reconciliation an
     h.tasks.queueProofStart(task.id, { expectedAttempt: 0 }, h.actor);
     const ref = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory));
     h.store.event(ref, 'proof-command-ready', { sourceCommit: h.binding.sourceCommit, argv: submitted.brief.acceptance.command });
-    h.store.close(ref, 'stopped');
-    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 1 }, h.actor)).toThrow('explicit exited logical reconciliation');
-    expect(h.tasks.releaseProof(task.id, 1, h.actor).checks).toEqual([]);
-    expect(h.store.proofReservation(task.id, 1)).toBeUndefined();
-    expect(h.store.events(task.id, 1).filter((event) => event.kind === 'proof-logical-reconciled')).toHaveLength(1);
+    // A retained exited worker may still have the task's running state until host settlement.
+    h.store.updateAttempt(ref, (value) => { value.state = 'exited'; value.endedAt = new Date().toISOString(); });
+    h.store.updateTask(ref, (value) => { value.state = 'running'; });
     expect(h.tasks.queueProofStart(task.id, { expectedAttempt: 1 }, h.actor).status).toBe('created');
+    expect(h.store.proofReservation(task.id, 1)).toBeUndefined();
+    expect(h.store.events(task.id, 1).filter((event) => event.kind === 'proof-logical-reconciled')).toHaveLength(0);
+    expect(h.store.retryIntents().filter((intent) => intent.taskId === task.id)).toHaveLength(1);
     const live = h.store.createTask(submitted.brief,
       { briefPath: submitted.path, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
     const liveRef = h.store.nextAttempt({ taskId: live.id, attempt: 0 }, (n) => ({
@@ -1701,6 +1705,6 @@ test('ordinary command-ready proof continuation needs explicit reconciliation an
     expect(() => h.tasks.releaseProof(live.id, 1, h.actor)).toThrow('live or uncertain');
     expect(h.store.releaseExitedProofReservations(liveRef)).toEqual([]);
     expect(h.store.events(live.id, 1).some((event) => event.kind === 'proof-logical-reconciled')).toBe(false);
-    expect(() => h.tasks.queueProofStart(live.id, { expectedAttempt: 1 }, h.actor)).toThrow('explicit exited logical reconciliation');
+    expect(() => h.tasks.queueProofStart(live.id, { expectedAttempt: 1 }, h.actor)).toThrow('stale');
   } finally { h.dispose(); }
 });

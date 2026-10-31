@@ -222,7 +222,7 @@ export type RetryOptions = {
   /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
   expectedAttempt?: number;
 };
-/** Metadata-only first/future proof registration, including retained product or logically reconciled proof runs. */
+/** Metadata-only first/future proof registration, including stopped/exited runs with historical reservations. */
 export type ProofStartOptions = {
   expectedAttempt: number;
   brief?: string;
@@ -947,7 +947,7 @@ export class WorkerTasks {
       throw new ProofUnavailableError('Proof pending/unavailable: authenticated registration required');
     const head = this.branchHead(this.settings.integrationBranch, false);
     if (head !== task.brief.proof.sourceCommit)
-      throw new ProofUnavailableError(`Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> before its new reservation; prior proof incarnations require retry ${task.id} --release-proof --expected-attempt ${task.currentAttempt} first, without changing any old binding/source`);
+      throw new ProofUnavailableError(`Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> for a stopped/exited attempt before its new invocation; no separate logical release is required and every old binding/source remains evidence`);
     if (spawnSync('git', ['cat-file', '-e', `${task.brief.proof.sourceCommit}:scripts/worker-check.ts`],
       { cwd: this.settings.mainCheckout, stdio: 'ignore' }).status !== 0)
       throw new ProofUnavailableError('Proof pending/unavailable: captured ordinary scripts/worker-check.ts is missing');

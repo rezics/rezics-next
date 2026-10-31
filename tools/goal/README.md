@@ -987,9 +987,11 @@ Current receiving operations (authenticated owning manager or configured operati
 - `WorkerTasks.queueProofStart(taskId, { expectedAttempt, brief?, removeAfter? }, actor)` or
   `bun tools/goal/src/cli.ts retry <task> --proof-start --expected-attempt <generation> [--brief <file>] [--remove-after <lane>]`
   saves the exact registered original and one durable start intent. It returns `created`, `waiting` or `pending`.
+  A stopped/exited current attempt can capture fresh current dev directly, including when old native reservations
+  remain UNKNOWN; no separate logical-release operation or custody disposition is required.
 - `WorkerTasks.releaseProof(taskId, expectedAttempt, actor)` or
   `bun tools/goal/src/cli.ts retry <task> --release-proof --expected-attempt <generation>`
-  reconciles a stopped or exited run's logical reservations. It returns `status: released` and the retained check UUIDs;
+  optionally reconciles the current stopped or exited run's logical reservation. It returns `status: released` and the retained check UUIDs;
   it never starts, stops or signals checks, replaces bindings, fabricates results or releases physical resources.
 
 Ordinary proof policy supersedes mandatory native binding/custody admission: authenticated registered verification
@@ -1057,8 +1059,8 @@ The public receiving method is `WorkerTasks.queueProofStart(taskId, options, act
 `{ expectedAttempt: number; brief?: string; removeAfter?: string[] }`. The explicit CLI is
 `retry <task> --proof-start --expected-attempt <current-generation> [--brief <file>] [--remove-after <lane>]`.
 Generation zero also retains the existing `retry --expected-attempt 0` spelling. A retained exited product/claim
-attempt does not itself constitute a proof start: the same API accepts that current generation if no registered
-proof worker, reservation or native intent has ever started. It returns `ProofStartRegistration` with
+attempt does not itself constitute a proof start. The same API also accepts a stopped/exited verification generation;
+its past reservations and command-ready events are retained evidence, not future-admission prerequisites. It returns `ProofStartRegistration` with
 `{ taskId, attempt: number, status: 'created' | 'waiting' | 'pending', reason?: string }`. `created` means the normal durable
 start intent was saved and is eligible; `waiting` means dependencies or owned proof capacity defer it; `pending` names
 unavailable source or preparation, without a fabricated check UUID. These are registration outcomes, without a worker/check id or a model launch.
@@ -1069,14 +1071,14 @@ Both boundaries authenticate the live owner or configured operations manager and
 and intent together through the existing SQLite lifecycle under the task lease. A stopped current generation can
 register without using the ordinary stopped-attempt write fence. Its raw attempts, sessions and reports stay intact;
 its historical attempt classification never becomes a registered proof. Running owners, cancelled/integrated tasks
-and stale generations cannot convert. Source refresh requires a new authenticated registration before any proof
+and stale generations cannot convert. Source refresh requires a new authenticated registration before the NEW attempt's
 reservation, native intent or proof worker start. An exited historical product/claim generation is eligible: its raw
 attempt, report, session, sequence and classification remain unchanged. For an already typed contract, refresh retains
 the exact journey, sourceTasks and acceptance argv and updates the one existing pending start intent atomically under
 the expected generation. A reserved incarnation's source/token never changes, even after release. A future capture
-on the same task requires the explicit exited logical reconciliation below; it preserves that old incarnation.
-Missing or uncertain prior proof-start classification refuses refresh without reconciliation. A retained legacy product record predating `taskKind` keeps that
-field absent; it is eligible when there is no proof observation, reservation or binding event. The host keeps the same intent through capacity waits and recovery;
+on the same task requires only normal authenticated stopped/exited receiving, with no live current worker/driver;
+it preserves that old incarnation. Historical UNKNOWN custody and unreleased reservations do not prevent the new
+registration. A retained legacy product record predating `taskKind` keeps that field absent. The host keeps the same intent through capacity waits and recovery;
 capacity waits never launch a model; optional unavailable custody does not block ordinary execution. A stale capture refusal names the old/current commits and exact authorized
 `--proof-start --expected-attempt` refresh needed; it never runs a doomed stale check.
 
@@ -1090,7 +1092,7 @@ the supported pinned Bun and workspace dependencies outside SQLite, before the w
 Setup failure is reported as an environment/tool error with bounded diagnostics, not as a product assertion.
 A clean retained branch whose commits beyond its recorded base have an empty tree diff can prepare a separate
 detached worktree at the newly authorized capture. The old worktree, branch, report commits and attempt history stay
-intact. Dirty trees, real source changes or an unreconciled prior/current proof invocation refuse this preparation; it is
+intact. Dirty trees, real source changes or an already prepared/reserved CURRENT invocation refuse this preparation; it is
 never a reset, rebase, source swap under a token or manager checkout operation.
 
 The SQLite lifecycle admits at most three current proof runs per Goal, atomically before ordinary preparation.
@@ -1101,21 +1103,22 @@ A current running/waiting check remains counted even when its optional custody i
 one durable start intent without launching a model. Normal host and physical check admission remain independent.
 
 To register a future capture after a stopped/exited proof, use the authenticated owner or configured operations
-session, in this order (both commands require the exact current generation):
+session with the exact current generation; no release command is needed:
 
 ```sh
-bun tools/goal/src/cli.ts retry <task> --release-proof --expected-attempt <generation>
 bun tools/goal/src/cli.ts retry <task> --proof-start --expected-attempt <generation> --brief .temp/goal/original-proof.md
 ```
 
 The submitted brief captures current dev and retains the exact original Goal, manager, journey, sourceTasks and
 acceptance. Registration archives the previous accepted contract and its hashes, keeps the SAME task ID and one
 pending start intent, and launches nothing. Normal host start creates the next attempt and one distinct ordinary
-invocation. Every previous proof incarnation must have explicit logical reconciliation and no live worker/driver;
-an active or unreleased incarnation refuses continuation. Reconciliation also records an exited ordinary
-command-ready attempt with no optional native binding. It never authorizes changing an old binding or source.
+invocation. `retry <task> --expected-attempt <generation> --brief <file>` also supports this authenticated
+stopped/exited registration. Running/waiting current attempts and live current worker/driver identities refuse it.
+No historical ownership scan, logical-release event, optional native status or old reservation consistency is an
+admission/preparation prerequisite. The old optional binding cannot select the new attempt's protocol. Neither path
+authorizes changing an old binding, token, check UUID, source, result or raw history.
 
-The public logical release operation above and host reconciliation mark stopped/exited reservations `released`
+The optional public logical release operation above and normal host reconciliation mark the current stopped/exited reservation `released`
 with a `logicalRelease` policy reason and a `proof-logical-released` event. They preserve the original binding, token,
 UUID, source, raw observation (including UNKNOWN) and physical history. Release does not declare a native pass,
 terminal custody, cleanup, remote capacity or lease release. Existing historical archive events are retained as facts,

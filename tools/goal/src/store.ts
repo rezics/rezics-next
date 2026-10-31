@@ -567,21 +567,18 @@ export class WorkerStore implements AttemptFence {
       if (!current || !['stopped', 'exited', 'cancelled', 'superseded'].includes(current.state) ||
           ['running', 'landing'].includes(task.state))
         throw new Error('logical proof release requires a stopped or exited current attempt');
-      const reservations = this.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=?').all(task.id)
-        .map((row) => decode<ProofReservation>(row)!);
-      const starts = this.events(task.id)
+      const reservation = this.proofReservation(task.id, ref.attempt);
+      const starts = this.events(task.id, ref.attempt)
         .filter((event) => ['proof-reserved', 'proof-binding', 'proof-command-ready'].includes(event.kind));
-      if (task.brief.kind !== 'verification' && !reservations.length && !starts.length) return [];
-      const generations = new Set([ref.attempt, ...reservations.map((run) => run.binding.attempt),
-        ...starts.map((event) => event.attempt)]);
-      const owners = [...generations].map((generation) => this.attempt({ taskId: task.id, attempt: generation }));
+      if (task.brief.kind !== 'verification' && !reservation && !starts.length) return [];
+      const owners = [current];
       if (owners.some((owner) => !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) ||
           [owner.process, owner.driver, ...(owner.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)))) {
         if (requireExitedOwners) throw new Error('logical proof release refuses live or uncertain worker/driver ownership');
         return []; // An unrelated host sweep/settler must continue without granting continuation authority.
       }
       const released: string[] = [];
-      for (const run of this.activeProofReservations().filter((run) => run.binding.taskId === task.id)) {
+      for (const run of reservation && reservation.status !== 'released' ? [reservation] : []) {
         const owner = this.attempt(run.binding);
         if (!['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state)) continue;
         run.status = 'released';
@@ -594,8 +591,8 @@ export class WorkerStore implements AttemptFence {
           .run(task.id, run.binding.attempt, 'proof-logical-released', run.logicalRelease.at, JSON.stringify(run));
         released.push(run.binding.checkId);
       }
-      // Ordinary command-ready attempts may have no optional reservation at all. Retain explicit continuation
-      // authority for this generation as well; neither this evidence nor a permit release is physical cleanup.
+      // Retain the policy disposition for this generation, including ordinary runs without optional bindings.
+      // It is evidence only: a stopped/exited retry never requires this event or physical cleanup.
       for (const owner of owners) {
         if (this.events(task.id, owner.attempt).some((event) => event.kind === 'proof-logical-reconciled')) continue;
         this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
@@ -962,37 +959,23 @@ export class WorkerStore implements AttemptFence {
   /** Called inside the lifecycle transaction as well as before writing a submitted brief. */
   assertProofRegistration(ref: AttemptRef, brief: Brief): void {
     const task = this.task(ref.taskId);
-    if (task.currentAttempt !== ref.attempt || !['ready', 'held', 'stopped'].includes(task.state))
-      throw new StaleAttemptError(ref, task.currentAttempt);
-    if (ref.attempt > 0) {
-      const attempt = this.attempt(ref);
-      if (!['stopped', 'exited'].includes(attempt.state)) throw new StaleAttemptError(ref, task.currentAttempt);
-    }
+    this.assertProofFirstStart(ref, brief);
     if (task.brief.goal !== brief.goal || task.brief.manager !== brief.manager)
       throw new Error('a reshaped brief must keep the same goal and manager');
-    const prepared = this.db.query("SELECT 1 FROM worker_events WHERE task_id=? AND kind IN ('proof-reserved','proof-binding','proof-command-ready') LIMIT 1").get(task.id);
-    if (task.proofRun || prepared || this.db.query('SELECT 1 FROM worker_proof_reservations WHERE task_id=?').get(task.id))
-      this.assertProofHistoryReconciled(task, ref.attempt);
-    if (task.brief.proof && task.brief.proof.sourceCommit !== brief.proof?.sourceCommit)
-      this.assertProofFirstStart(ref, brief);
-    this.assertProofContract(task, brief);
   }
-  /** Historical product attempts are not proof starts. Released incarnations retain their immutable identities. */
+  /** A stopped/exited generation may register its next capture; historical reservations are evidence only. */
   assertProofFirstStart(ref: AttemptRef, brief: Brief): void {
     const task = this.task(ref.taskId);
-    if (task.currentAttempt !== ref.attempt || !['ready', 'held', 'stopped'].includes(task.state))
+    if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+    const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
+    const retryable = ['ready', 'held', 'stopped'].includes(task.state) ||
+      (['running', 'landing'].includes(task.state) && attempt?.state === 'exited');
+    if (!retryable)
       throw new StaleAttemptError(ref, task.currentAttempt);
-    this.assertProofHistoryReconciled(task, ref.attempt);
-    if (ref.attempt > 0) {
-      const attempt = this.attempt(ref);
-      const record = this.record(ref);
+    if (attempt) {
       if (!['stopped', 'exited'].includes(attempt.state) ||
           [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)))
         throw new StaleAttemptError(ref, task.currentAttempt);
-      // Legacy retained product records predate taskKind. Absence stays absent; do not relabel them from today's brief.
-      if (task.brief.kind === 'verification' && (!record || record.taskKind === 'verification' || record.proof) &&
-          !this.events(task.id, ref.attempt).some((event) => event.kind === 'proof-logical-reconciled'))
-        throw new Error('first proof start requires retained product classification; proof start custody is uncertain');
     }
     this.assertProofContract(task, brief);
   }
@@ -1001,32 +984,19 @@ export class WorkerStore implements AttemptFence {
       { ...task.brief.proof, sourceCommit: brief.proof?.sourceCommit }, brief.proof,
     )) throw new Error('proof refresh must retain the exact original metadata');
     if (task.brief.kind === 'verification' && !isDeepStrictEqual(task.brief.acceptance, brief.acceptance))
-      throw new Error('proof refresh must retain the exact original acceptance');
-  }
-  /** Only explicit logical reconciliation permits a future incarnation; old native evidence is never rewritten. */
-  private assertProofHistoryReconciled(task: Task, throughAttempt: number): void {
-    const reservations = this.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=?').all(task.id)
-      .map((row) => decode<ProofReservation>(row)!);
-    if (task.proofRun && !reservations.some((run) => isDeepStrictEqual(run, task.proofRun)))
-      throw new Error('a reserved proof source and command may never be replaced: inconsistent retained binding');
-    const starts = this.events(task.id).filter((event) =>
-      ['proof-reserved', 'proof-binding', 'proof-command-ready'].includes(event.kind));
-    const generations = new Set([...reservations.map((run) => run.binding.attempt), ...starts.map((event) => event.attempt)]);
-    for (const generation of generations) {
-      const owner = this.attempt({ taskId: task.id, attempt: generation });
-      if (generation > throughAttempt ||
-          reservations.some((run) => run.binding.attempt === generation && run.status !== 'released') ||
-          !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) ||
-          [owner.process, owner.driver, ...(owner.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)) ||
-          !this.events(task.id, generation).some((event) => event.kind === 'proof-logical-reconciled'))
-        throw new Error('a reserved proof source and command may never be replaced: explicit exited logical reconciliation required');
-    }
+      throw new Error('proof command may never be replaced: proof refresh must retain the exact original acceptance');
   }
   /** Called after publishing the new pending attempt, before preparing its immutable source. */
   assertProofPreparation(ref: AttemptRef): void {
     const task = this.task(ref.taskId);
     if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
-    this.assertProofHistoryReconciled(task, ref.attempt - 1);
+    const attempt = this.attempt(ref);
+    if (attempt.state !== 'pending' ||
+        [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)) ||
+        this.proofReservation(task.id, ref.attempt) ||
+        this.events(task.id, ref.attempt).some((event) =>
+          ['proof-reserved', 'proof-binding', 'proof-command-ready'].includes(event.kind)))
+      throw new Error('a current prepared or reserved proof source may never be replaced');
   }
   recordExplicitRetry(ref: AttemptRef, update: (task: Task) => void, options: RetryIntent['options']): void {
     this.db
@@ -1327,8 +1297,7 @@ export class WorkerStore implements AttemptFence {
         this.saveAttempt(old);
         const record =
           this.record(ref) ?? makeRecord(task, old, readMeasurement(old, { configDirectory }), 'superseded');
-        const retainedProof = record.taskKind === 'verification' &&
-          this.events(task.id, ref.attempt).some((event) => event.kind === 'proof-logical-reconciled');
+        const retainedProof = record.taskKind === 'verification';
         if (record.outcome === 'pending-gate' && !retainedProof) {
           record.outcome = 'superseded';
         }
@@ -1378,8 +1347,7 @@ export class WorkerStore implements AttemptFence {
         }
         this.saveAttempt(old);
         // A new capture cannot recalculate the old proof's report/evidence using its new contract or logs.
-        if (!previous || previous.taskKind !== 'verification' ||
-            !this.events(task.id, old.attempt).some((event) => event.kind === 'proof-logical-reconciled'))
+        if (!previous || previous.taskKind !== 'verification')
           this.saveRecord(record);
       }
     });

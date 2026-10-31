@@ -1042,7 +1042,7 @@ export class WorkerJob implements GateOutcomeSink {
           .some((event) => event.kind === 'proof-command-ready')) {
           // The launch may have crossed its process boundary before SQLite recorded a driver. Never replay it.
           await this.endAsEnvironment(attempt,
-            new Error('Original proof launch interrupted after command preparation; execution is unknown, no automatic replay; retain native records and request authenticated reconciliation'),
+            new Error('Original proof launch interrupted after command preparation; execution is unknown, no automatic replay; retain native records and request authenticated fresh retry registration'),
             false, true);
           continue;
         }
