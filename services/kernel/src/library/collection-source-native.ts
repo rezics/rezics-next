@@ -1,4 +1,5 @@
-import { types, type Pool, type PoolClient } from 'pg';
+import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
+import { currentOperationalResources, hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { accessRoot } from '../access/derived-access.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
@@ -28,7 +29,13 @@ import opening from '../access/gates/opening-read.sql';
 
 /** Structural alias of the existing raw owner key; no canonical-order or Access claim. */
 export type CanonicalRangeKey = CanonicalRawKey;
-type Options = { deadline: number; allowance: WorkAllowance };
+type Options = {
+  deadline: number;
+  allowance: WorkAllowance;
+  /** Structural reads only. The Source work branch separately admits the actual native episode. */
+  tx?: OperationalTransaction;
+};
+type QueryClient = Pick<PoolClient, 'query'>;
 type Ref = { route: number; collectionId: string };
 type Header = Ref & {
   curatorAccountId: string | null;
@@ -252,6 +259,17 @@ async function call<T extends object>(
   operation: (work: NativeCollectionWork) => Promise<T>,
 ) {
   const work = new NativeCollectionWork(options.allowance, options.deadline);
+  if (options.tx) {
+    if (!hasLiveOperationalTransaction(options.tx)) throw new ProblemError('semantic_not_ready');
+    const resources = currentOperationalResources(options.tx);
+    if (resources.pool !== pool || resources.mode !== 'work-step') throw new ProblemError('semantic_not_ready');
+    try {
+      return { ...(await operation(work)), work: work.receipt() };
+    } catch (error) {
+      if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
+      throw error;
+    }
+  }
   return instrumentNativeCollectionWork(
     pool,
     work,
@@ -262,7 +280,38 @@ async function call<T extends object>(
     }),
   );
 }
-async function readOnly<T>(pool: Pool, deadline: number, operation: (client: PoolClient) => Promise<T>): Promise<T> {
+async function readOnly<T>(
+  pool: Pool,
+  options: Options,
+  work: NativeCollectionWork,
+  operation: (client: QueryClient) => Promise<T>,
+): Promise<T> {
+  const { deadline, tx } = options;
+  if (tx) {
+    // Core owns this transaction and its locks. No checkout, BEGIN, COMMIT or foreign read here.
+    const client: QueryClient = {
+      query: (async (config: string | QueryConfig, parameters: unknown[] = []) => {
+        const sql = typeof config === 'string' ? config : config.text;
+        const values = (typeof config === 'string' ? parameters : config.values) ?? [];
+        if (!hasLiveOperationalTransaction(tx)) throw new ProblemError('semantic_not_ready');
+        const reservation = work.reserve(footprint(sql, values, work));
+        reservation.dispatch();
+        let result: QueryResult | undefined;
+        try {
+          result = await tx.query({ text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) });
+          return result;
+        } finally {
+          const bound = footprint(sql, values, work)!;
+          reservation.settle({
+            emptySeeks: bound.emptySeeks && result?.rows.length === 0 ? 1 : 0,
+            candidateKeys: result ? Math.min(bound.candidateKeys, result.rows.length) : bound.candidateKeys,
+            witnessKeys: result ? Math.min(bound.witnessKeys, result.rows.length) : bound.witnessKeys,
+          });
+        }
+      }) as QueryClient['query'],
+    };
+    return operation(client);
+  }
   return withConnection(pool, async (client) => {
     const begin = {
       text: 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
@@ -288,7 +337,7 @@ function validate(ref: Ref) {
   if (routeOf(ref.collectionId) !== ref.route) throw new TypeError('Invalid native Collection reference');
 }
 async function observe(
-  client: PoolClient,
+  client: QueryClient,
   ref: Ref,
   work: NativeCollectionWork,
 ): Promise<NativeCollectionMetadata | null> {
@@ -347,13 +396,13 @@ async function observe(
 }
 export function readNativeCollectionMetadata(pool: Pool, ref: Ref, options: Options) {
   return call(pool, options, async (work) => ({
-    metadata: await readOnly(pool, options.deadline, (client) => observe(client, ref, work)),
+    metadata: await readOnly(pool, options, work, (client) => observe(client, ref, work)),
   }));
 }
 /** Raw source discovery stays separate from Source.prepare and never executes the built-in query recursively. */
 export function readNativeCollectionScopeIdentity(pool: Pool, input: Ref & Options) {
   return call(pool, input, async (work) => ({
-    identity: await readOnly(pool, input.deadline, async (client) => {
+    identity: await readOnly(pool, input, work, async (client) => {
       const metadata = await observe(client, input, work);
       if (!metadata || metadata.state !== 'active') return null;
       return (
@@ -373,6 +422,7 @@ export function authorizeNativeCollectionMetadata(
   metadata: NativeCollectionMetadata,
   context: Options & { access: Access; actor: Actor; at: AuthoritativeTime },
 ) {
+  if (context.tx) throw new ProblemError('semantic_not_ready');
   authoritativeTimeValue(context.at);
   return call(pool, context, async (work) => {
     const access = accessRoot(context.access);
@@ -415,7 +465,7 @@ export function authorizeNativeCollectionMetadata(
       { route: metadata.route, id: metadata.collectionId, eligibility },
       { pool, deadline: context.deadline },
     );
-    return readOnly(pool, context.deadline, async (client) => {
+    return readOnly(pool, context, work, async (client) => {
       const allowed = await check(client, context.at);
       if (failure) throw failure;
       current ??= await observe(client, metadata, work);
@@ -453,7 +503,7 @@ export function authorizeNativeCollectionMetadata(
     });
   });
 }
-async function currentSource(client: PoolClient, metadata: NativeCollectionMetadata, work: NativeCollectionWork) {
+async function currentSource(client: QueryClient, metadata: NativeCollectionMetadata, work: NativeCollectionWork) {
   const current = await observe(client, metadata, work);
   if (!current || current.state !== 'active') throw new ProblemError('not_found');
   if (
@@ -493,7 +543,7 @@ export function readNativeCollectionRawOrdinalPage(
   if (input.after && (routeOf(input.after.memberId) === null || !/^[\x21-\x7e]{1,48}$/.test(input.after.ordinalKey)))
     throw new ProblemError('invalid_cursor');
   return call(pool, input, async (work) =>
-    readOnly(pool, input.deadline, async (client) => {
+    readOnly(pool, input, work, async (client) => {
       const current = await currentSource(client, metadata, work);
       if (current.authority !== 'curated') throw new ProblemError('dependency_unavailable');
       const raw = (
@@ -537,7 +587,7 @@ export function readNativeCollectionRawPage(
     throw new TypeError('Invalid native source driver');
   keyInput(input.after, input.driver);
   return call(pool, input, async (work) =>
-    readOnly(pool, input.deadline, async (client) => {
+    readOnly(pool, input, work, async (client) => {
       const current = await currentSource(client, metadata, work);
       if (
         (current.authority === 'curated' && input.driver !== 'member') ||
@@ -610,7 +660,7 @@ export async function probeNativeCollectionOriginal(
   let progress = input.after ?? null;
   try {
     return await call(pool, input, async (work) =>
-      readOnly(pool, input.deadline, async (client) => {
+      readOnly(pool, input, work, async (client) => {
         const current = await currentSource(client, metadata, work);
         const done = (result: NativeCollectionProbe['result'], key: CanonicalRangeKey | null = null): ProbeEvidence => {
           if (result === 'present') {

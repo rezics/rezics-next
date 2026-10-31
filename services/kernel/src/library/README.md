@@ -2136,3 +2136,14 @@ rows, statements, blocks and bytes remain independent inclusive bounds; no nativ
 `collection-list-facts.test.ts` supplies native API/persona, configuration, concealment, tuple/identity/source-race and
 raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed native page and its actual helpers at
 64/512/4096 unrelated fact/history populations, including failed and private/source-change work.
+
+The existing `CollectionSource` work-context branch admits the native Members or Kind episode on the same live
+Core work-step client before Source I/O and rereads native admission and current Source/canonical keys before
+returning. Its local metadata, complete-generation seeks, structural membership probes and raw stored/ordinal
+pages share the caller's Source reservation. Mechanical handles bind the exact native episode and cannot enter
+the ordinary reader branch. Structural evidence grants no Subject readability: the ordinary reader still checks
+current original and terminal Subjects, Source, scoped identity and the full private owner formula. Work performs
+no foreign lookup while holding the home transaction. Public and frozen output remain unavailable in this branch
+because private native capture cannot establish public capture authority. Members remains curated-only; Kind uses
+its distinct native locator and audience/custody admission. The current Members and Kind admission implementations
+still report unavailable; this Source integration supplies neither a replacement producer nor proof of readiness.
