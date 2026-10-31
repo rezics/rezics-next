@@ -48,6 +48,8 @@ export type SmokeOptions = {
   env?: NodeJS.ProcessEnv;
   reportPath?: string;
   expectedDevScriptTree?: string;
+  parity?: 'deferred' | 'execute';
+  scriptsRoot?: string;
 };
 
 type SmokeReport = {
@@ -643,7 +645,9 @@ export async function runLaunchSmoke(agent?: string, options: SmokeOptions = {})
   const root = resolve(options.root ?? resolve(import.meta.dir, '../../..'));
   const report = options.report ?? reportLine;
   if (agent) return runFakeSmoke(agent, root, report, options.env ?? {});
-  return runRealSmoke(root, report, options.reportPath, options.expectedDevScriptTree);
+  if (options.parity === 'execute' && !options.scriptsRoot)
+    throw new Error('Explicit parity execution requires --scripts-root <delivered-dev-checkout>');
+  return runRealSmoke(root, report, options.reportPath, options.expectedDevScriptTree, options);
 }
 
 async function runFakeSmoke(
@@ -896,6 +900,7 @@ async function runRealSmoke(
   report: Reporter,
   requestedReportPath?: string,
   expectedDevScriptTree?: string,
+  options: SmokeOptions = {},
 ): Promise<void> {
   let currentStep = 'candidate';
   const startedAt = Date.now();
@@ -1027,6 +1032,17 @@ async function runRealSmoke(
     const completed = readReport(reportPath);
     if (completed.status !== 'passed')
       throw new Error('inner lifecycle suite exited without complete passing evidence');
+    const { gateParityScenario } = await import('../src/lifecycle-scenarios.ts');
+    const parity = await gateParityScenario({
+      root,
+      ...(options.scriptsRoot ? { scriptsRoot: options.scriptsRoot } : {}),
+      execute: options.parity === 'execute',
+      report,
+    });
+    upsertScenario(completed, parity);
+    persistReport(root, reportPath, completed);
+    if (options.parity === 'execute' && parity.status !== 'passed')
+      throw new Error(`lifecycle regressions: failed: ${parity.detail}`);
     const scenarioEvidence = completed.scenarios.map(({ id, status }) => `${id}:${status}`).join(',');
     const regressionEvidence = completed.suiteRegressions.map(({ id, status }) => `${id}:${status}`).join(',');
     if (!scenarioEvidence || !regressionEvidence)
@@ -1736,6 +1752,16 @@ export function parseSmokeArguments(args: string[]): SmokeOptions {
       if (!tree) throw new Error('--expected-dev-script-tree requires a commit');
       if (options.expectedDevScriptTree) throw new Error('--expected-dev-script-tree can be supplied only once');
       options.expectedDevScriptTree = tree;
+    } else if (value === '--scripts-root') {
+      const root = args[++index];
+      if (!root || root.startsWith('--')) throw new Error('--scripts-root requires a checkout');
+      if (options.scriptsRoot) throw new Error('--scripts-root can be supplied only once');
+      options.scriptsRoot = resolve(root);
+    } else if (value === '--parity') {
+      const mode = args[++index];
+      if (mode !== 'deferred' && mode !== 'execute') throw new Error('--parity requires deferred or execute');
+      if (options.parity) throw new Error('--parity can be supplied only once');
+      options.parity = mode;
     } else throw new Error(`unknown launch-smoke argument: ${value}`);
   }
   return options;

@@ -1,3 +1,4 @@
+import { driveGateParity } from '../scripts/gate-parity.ts';
 import { integrationHarness } from './test-support.ts';
 import { git } from './merge.ts';
 import { runBoundedProcess, type BoundedProcessResult } from './lifecycle-fixture.ts';
@@ -265,6 +266,36 @@ export type ScenarioEvidence = {
   evidence?: unknown;
   detail?: string;
 };
+
+/** Parity is a separate postintegration obligation; minimal smoke still runs the real provider path. */
+export async function gateParityScenario(options: {
+  root: string;
+  scriptsRoot?: string;
+  execute?: boolean;
+  report?: (line: string) => void;
+}): Promise<ScenarioEvidence> {
+  if (!options.execute)
+    return {
+      id: 'worker-root-workspace-gate-parity',
+      status: 'unverified',
+      detail:
+        'Deferred in minimal mode; actual Auth placement, synced Git and concurrent runtime parity require explicit postintegration execution.',
+    };
+  if (!options.scriptsRoot)
+    throw new Error('Explicit parity execution requires --scripts-root <delivered-dev-checkout>');
+  const result = await driveGateParity({
+    inputRoot: options.root,
+    scriptsRoot: options.scriptsRoot,
+    execute: true,
+    report: (plan) => (options.report ?? console.log)(JSON.stringify({ phase: 'parity-plan', ...plan })),
+  });
+  return {
+    id: 'worker-root-workspace-gate-parity',
+    status: result.status === 'failed' ? 'failed' : 'unverified',
+    detail: `Parity ${result.status}; delivered producer evidence cannot replace unavailable end-to-end boundaries.`,
+    evidence: result,
+  };
+}
 
 export function assertLifecycleComplete(report: {
   scenarios: readonly { id: string; status: string }[];
