@@ -2825,7 +2825,7 @@
   "creator_editions_withdrawn": "Zurückgezogen",
   "edition_publication_accept_review": "Aktuelle Angaben übernehmen",
   "edition_publication_choose_subject": "Einen ursprünglichen Eintrag auswählen",
-  "edition_publication_confirm": "Veröffentliche den unveränderlichen Stand von Revision {revision} unter der Lizenz {licence} für den ursprünglichen Eintrag {subject}. Spätere Änderungen am Beitrag ändern diese Ausgabe nicht.",
+  "edition_publication_confirm": "Diese feste Revision ({revision}) unter {licence} für „{subject}“ veröffentlichen. Spätere Änderungen am Beitrag ändern diese Ausgabe nicht.",
   "edition_publication_conflict": "Die aktuelle Version muss geprüft werden. Lies die aktuelle Quelle und Ausgabe und bestätige sie ausdrücklich, bevor du fortfährst.",
   "edition_publication_create": "Festen Entwurf erstellen",
   "edition_publication_create_offer": "Angebot erstellen",
@@ -3881,5 +3881,13 @@
   "library_collection_boundary_refresh_failed": "Das Verschieben ist bestätigt, aber die aktuelle Seite konnte nicht geladen werden. Vor weiteren Änderungen laden; das Verschieben wird dabei nicht wiederholt.",
   "library_collection_boundary_refresh": "Aktuelle Seite laden",
   "library_collection_boundary_retry": "Denselben Vorgang wiederholen",
-  "library_collection_boundary_fenced": "Seite oder Anmeldung haben sich geändert. Der gespeicherte Vorgang ist pausiert. Zur ursprünglichen Seite und zum ursprünglichen Konto zurückkehren, um ihn zu klären."
+  "library_collection_boundary_fenced": "Seite oder Anmeldung haben sich geändert. Der gespeicherte Vorgang ist pausiert. Zur ursprünglichen Seite und zum ursprünglichen Konto zurückkehren, um ihn zu klären.",
+  "edition_identity_withheld": "Identität des Themas nicht freigegeben",
+  "edition_identity_missing": "Titel des Themas fehlt",
+  "edition_identity_unavailable": "Identität des Themas nicht verfügbar",
+  "edition_identity_date_missing": "Revisionsdatum nicht verfügbar",
+  "edition_identity_revision_date": "Feste Revision · {date}",
+  "edition_identity_recovery": "Lade die aktuellen Informationen erneut, um den Titel zu sehen. Die Veröffentlichung bleibt gesperrt, bis das ursprüngliche Ziel erkennbar ist.",
+  "edition_identity_details": "Technische Referenzen (zum Kopieren markieren)",
+  "edition_identity_recorded": "Der Vorgang war erfolgreich. Die Bestätigung bleibt gespeichert, aber die aktuelle Ausgabe konnte nicht gelesen werden. Lade die aktuellen Informationen erneut; ein neuer Vorgang ist nicht nötig."
 }

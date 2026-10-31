@@ -1,3 +1,11 @@
+import {
+  EditionIdentitySummary,
+  EditionTechnicalDetails,
+  editionSubjectName,
+  editionRevisionDate,
+} from './edition-identity';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { DocumentBody } from '../document-body';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -150,9 +158,14 @@ export function EditionPublication({
     failure?.concealSource ||
     failure?.kind === 'refused' ||
     failure?.kind === 'unavailable' ||
-    failure?.kind === 'missing';
+    failure?.kind === 'missing' ||
+    (state.uncertain && !!failure?.receipt);
   const edition = concealed ? null : (state.review?.edition ?? state.edition);
   const previewSource = concealed ? null : source;
+  const target =
+    edition?.identity?.subject ??
+    previewSource?.recognition?.subjects.find((subject) => subject.id === state.targetSubjectId);
+  const recognized = target?.kind === 'available';
   // Media is part of the exact delivered source, never a separately retained image query.
   const images = useMemo(
     () =>
@@ -222,21 +235,24 @@ export function EditionPublication({
           aria-label={m.edition_publication_status_heading()}
         >
           <p role="alert">
-            {failure.kind === 'uncertain'
-              ? m.edition_publication_uncertain()
-              : failure.kind === 'conflict'
-                ? m.edition_publication_conflict()
-                : failure.kind === 'refused'
-                  ? m.edition_publication_refused()
-                  : failure.kind === 'missing'
-                    ? m.edition_publication_missing()
-                    : m.edition_publication_unavailable()}
+            {failure.receipt
+              ? m.edition_identity_recorded()
+              : failure.kind === 'uncertain'
+                ? m.edition_publication_uncertain()
+                : failure.kind === 'conflict'
+                  ? m.edition_publication_conflict()
+                  : failure.kind === 'refused'
+                    ? m.edition_publication_refused()
+                    : failure.kind === 'missing'
+                      ? m.edition_publication_missing()
+                      : m.edition_publication_unavailable()}
           </p>
           <div className="flex flex-wrap gap-3">
             {state.uncertain &&
             state.intent &&
             failure.kind === 'uncertain' &&
             !failure.concealSource &&
+            !failure.receipt &&
             (source || state.resumeEditionId !== null) ? (
               <Button disabled={state.busy} onClick={() => void controller.retry()}>
                 {m.edition_publication_retry()}
@@ -254,24 +270,14 @@ export function EditionPublication({
         <section className="space-y-4 border-b border-border pb-5" aria-label={m.edition_publication_resume_heading()}>
           <h2 className="text-lg font-semibold">{m.edition_publication_resume_heading()}</h2>
           <p className="max-w-prose text-sm text-muted-foreground">{m.edition_publication_resume_help()}</p>
-          <dl className="grid gap-4 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="font-medium">{m.exact_revision_id()}</dt>
-              <dd>{edition.revisionId}</dd>
-            </div>
-            <div>
-              <dt className="font-medium">{m.edition_publication_subject()}</dt>
-              <dd>{edition.targetSubjectId}</dd>
-            </div>
-            <div>
-              <dt className="font-medium">{m.edition_publication_licence()}</dt>
-              <dd>{edition.licence}</dd>
-            </div>
-            <div>
-              <dt className="font-medium">SHA-256</dt>
-              <dd className="font-mono text-xs">{edition.sha256}</dd>
-            </div>
-          </dl>
+          <EditionIdentitySummary edition={edition} />
+          <EditionTechnicalDetails edition={edition} />
+          <p className="text-sm">
+            {m.edition_publication_licence()}: {edition.licence}
+          </p>
+          <Button variant="outline" disabled={state.busy} onClick={() => void controller.refresh()}>
+            {m.edition_publication_refresh()}
+          </Button>
         </section>
       ) : null}
       {edition?.state === 'withdrawn' ? (
@@ -320,24 +326,47 @@ export function EditionPublication({
             )}
           />
           <div className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5">
-            <label className="block text-sm font-medium" htmlFor={subjectId}>
-              {m.edition_publication_subject()}
-            </label>
-            <p className="text-sm text-muted-foreground">{m.edition_publication_subject_help()}</p>
-            <select
-              id={subjectId}
-              className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={state.targetSubjectId}
-              disabled={state.busy || !!state.intent || !!edition}
-              onChange={(event) => controller.chooseSubject(event.target.value)}
-            >
-              <option value="">{m.edition_publication_choose_subject()}</option>
-              {previewSource.subjectIds.map((id) => (
-                <option key={id} value={id}>
-                  {id}
-                </option>
-              ))}
-            </select>
+            <Field>
+              <FieldLabel htmlFor={subjectId}>{m.edition_publication_subject()}</FieldLabel>
+              <p className="text-sm text-muted-foreground">{m.edition_publication_subject_help()}</p>
+              <NativeSelect
+                id={subjectId}
+                className="w-full [&_select]:min-h-11"
+                value={state.targetSubjectId}
+                disabled={state.busy || !!state.intent || !!edition}
+                onChange={(event) => controller.chooseSubject(event.target.value)}
+              >
+                <NativeSelectOption value="">{m.edition_publication_choose_subject()}</NativeSelectOption>
+                {previewSource.subjectIds.map((id, index) => {
+                  const subject = previewSource.recognition?.subjects.find((subject) => subject.id === id);
+                  return (
+                    <NativeSelectOption
+                      key={id}
+                      value={id}
+                      disabled={subject?.kind !== 'available'}
+                      lang={subject?.label?.language}
+                    >
+                      {editionSubjectName(subject)}
+                      {subject?.kind !== 'available' ? ` (${index + 1})` : ''}
+                    </NativeSelectOption>
+                  );
+                })}
+              </NativeSelect>
+            </Field>
+            <p className="text-sm text-muted-foreground">
+              {m.edition_identity_revision_date({
+                date: editionRevisionDate(previewSource.recognition?.revisionCreatedAt),
+              })}
+            </p>
+            {previewSource.recognition?.subjects.some((subject) => subject.kind !== 'available') ||
+            !previewSource.recognition ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.edition_identity_recovery()}
+              </p>
+            ) : null}
+            <Button variant="outline" disabled={state.busy} onClick={() => void controller.refresh()}>
+              {m.edition_publication_refresh()}
+            </Button>
           </div>
         </section>
       ) : null}
@@ -351,16 +380,21 @@ export function EditionPublication({
           {state.review.edition ? (
             <p className="text-sm">
               {m.edition_publication_edition_version({ revision: state.review.edition.editionRevision })} ·{' '}
-              {state.review.edition.state}
+              {state.review.edition.state === 'draft'
+                ? m.creator_editions_draft()
+                : state.review.edition.state === 'published'
+                  ? m.creator_editions_published()
+                  : m.creator_editions_withdrawn()}
             </p>
           ) : null}
+          {state.review.edition && <EditionIdentitySummary edition={state.review.edition} />}
           <Button disabled={state.busy} onClick={() => controller.acceptReview()}>
             {m.edition_publication_accept_review()}
           </Button>
         </section>
       ) : null}
       {source && !failure && !edition && state.resumeEditionId === null ? (
-        <Button disabled={state.busy || !state.targetSubjectId} onClick={() => void controller.create()}>
+        <Button disabled={state.busy || !state.targetSubjectId || !recognized} onClick={() => void controller.create()}>
           {m.edition_publication_create()}
         </Button>
       ) : null}
@@ -371,7 +405,8 @@ export function EditionPublication({
         >
           <h2 className="text-lg font-semibold">{m.edition_publication_draft_heading()}</h2>
           <p className="text-sm">{m.edition_publication_draft_help()}</p>
-          <p className="font-mono text-xs">{edition.editionId}</p>
+          <EditionIdentitySummary edition={edition} />
+          <EditionTechnicalDetails edition={edition} />
           <p className="text-sm">{m.edition_publication_edition_version({ revision: edition.editionRevision })}</p>
           <label htmlFor={confirmId} className="flex min-h-11 items-start gap-3 text-sm">
             <input
@@ -379,18 +414,21 @@ export function EditionPublication({
               type="checkbox"
               className="mt-1 size-4 shrink-0"
               checked={confirmed}
-              disabled={state.busy || !!failure}
+              disabled={state.busy || !!failure || !recognized}
               onChange={(event) => setConfirmed(event.target.checked)}
             />
             <span>
               {m.edition_publication_confirm({
-                revision: edition.revisionId,
+                revision: editionRevisionDate(edition.identity?.revisionCreatedAt),
                 licence: edition.licence,
-                subject: state.targetSubjectId,
+                subject: editionSubjectName(target),
               })}
             </span>
           </label>
-          <Button disabled={!confirmed || state.busy || !!failure} onClick={() => void controller.publish()}>
+          <Button
+            disabled={!confirmed || state.busy || !!failure || !recognized}
+            onClick={() => void controller.publish()}
+          >
             {m.edition_publication_publish()}
           </Button>
         </section>
@@ -403,7 +441,8 @@ export function EditionPublication({
         >
           <h2 className="text-lg font-semibold">{m.edition_publication_published_heading()}</h2>
           <p className="text-sm">{m.edition_publication_published_help()}</p>
-          <p className="font-mono text-sm">{edition.editionId}</p>
+          <EditionIdentitySummary edition={edition} />
+          <EditionTechnicalDetails edition={edition} />
           <div className="flex flex-wrap items-center gap-3">
             <a
               className={buttonVariants({ className: 'min-h-11' })}

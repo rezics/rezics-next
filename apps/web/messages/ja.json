@@ -2825,7 +2825,7 @@
   "creator_editions_withdrawn": "取り下げ済み",
   "edition_publication_accept_review": "現在の情報を確認して受け入れる",
   "edition_publication_choose_subject": "元の項目を1つ選択",
-  "edition_publication_confirm": "リビジョン{revision}の固定スナップショットを、ライセンス{licence}のもと、元の項目{subject}について公開します。後から投稿を編集しても内容は変わりません。",
+  "edition_publication_confirm": "「{subject}」を対象に、この固定された改訂版（{revision}）を {licence} で公開します。その後の投稿の編集はこの版に反映されません。",
   "edition_publication_conflict": "現在のバージョンは確認が必要です。現在のソースと版を読み、続行する前に明示的に受け入れてください。",
   "edition_publication_create": "固定下書きを作成",
   "edition_publication_create_offer": "オファーを作成",
@@ -3881,5 +3881,13 @@
   "library_collection_boundary_refresh_failed": "移動は確認済みですが、現在のページを読み込めませんでした。ほかの変更を行う前に読み込んでください。移動が再実行されることはありません。",
   "library_collection_boundary_refresh": "現在のページを読み込む",
   "library_collection_boundary_retry": "同じ移動を再試行",
-  "library_collection_boundary_fenced": "ページまたはログイン状態が変わりました。保存された移動は一時停止中です。元のページとアカウントに戻って結果を確認してください。"
+  "library_collection_boundary_fenced": "ページまたはログイン状態が変わりました。保存された移動は一時停止中です。元のページとアカウントに戻って結果を確認してください。",
+  "edition_identity_withheld": "対象の情報は非公開です",
+  "edition_identity_missing": "対象のタイトルがありません",
+  "edition_identity_unavailable": "対象の情報を取得できません",
+  "edition_identity_date_missing": "改訂日時を取得できません",
+  "edition_identity_revision_date": "固定された改訂版 · {date}",
+  "edition_identity_recovery": "現在の情報を再取得してタイトルを確認してください。元の対象を識別できるまで公開できません。",
+  "edition_identity_details": "技術的な参照情報（選択してコピー）",
+  "edition_identity_recorded": "操作は成功し、受領記録は保持されていますが、現在のエディションを読み取れませんでした。現在の情報を再取得してください。操作を再実行する必要はありません。"
 }

@@ -1,6 +1,6 @@
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import * as v from 'valibot';
-import { parseEditionMetadata, type EditionMetadata } from './edition-api';
+import { parseEditionMetadata, parseEditionSourceRecognition, type EditionMetadata } from './edition-api';
 import { editionDocumentDigest } from './edition-model';
 import {
   editionContentId,
@@ -124,6 +124,26 @@ export async function readEditionCreateSource(
       )
     )
       return { kind: 'refused', status: 403 };
+    // A single bounded native composition supplies all original subject choices and the exact revision date.
+    let recognition = null;
+    try {
+      const response = await client.contentEditions.sourceIdentity.get({
+        ...auth,
+        query: identity,
+      });
+      const parsed = response.status === 200 && !response.error ? parseEditionSourceRecognition(response.data) : null;
+      if (
+        parsed &&
+        parsed.postId === identity.postId &&
+        parsed.revisionId === identity.revisionId &&
+        parsed.sha256 === revision.sha256 &&
+        parsed.subjects.length === revision.subjectIds.length &&
+        parsed.subjects.every((subject) => revision.subjectIds.includes(subject.id))
+      )
+        recognition = parsed;
+    } catch {
+      /* Recognition stays explicitly unavailable; source bytes confer no subject disclosure. */
+    }
     const media: EditionPreviewMedia = includeMedia
       ? await previewMedia(client, authorization, revision)
       : { kind: 'unavailable' };
@@ -156,6 +176,7 @@ export async function readEditionCreateSource(
         licence: revision.licence,
         subjectIds: [...revision.subjectIds],
         media,
+        recognition,
       },
     };
   } catch {
@@ -256,6 +277,7 @@ export function createNativeEditionCreateApi(
     resume,
     async command(intent) {
       let sent = false;
+      let receipt: { editionId: string; editionRevision: string } | undefined;
       try {
         let selected: EditionCreateSource | EditionMetadata;
         if (intent.source) {
@@ -301,12 +323,14 @@ export function createNativeEditionCreateApi(
         const command = parseEditionCommand(await response.json());
         if (!command || (intent.kind === 'publish' && command.editionId !== intent.editionId))
           return { kind: 'uncertain', status: 502, reason: 'binding' };
+        receipt = command;
         const current = await metadata(command.editionId);
         if ('kind' in current)
           return {
             ...current,
             kind: 'uncertain',
             editionId: command.editionId,
+            receipt: command,
             concealSource: current.kind === 'refused' || current.kind === 'missing',
           };
         if (
@@ -314,15 +338,20 @@ export function createNativeEditionCreateApi(
             ? !editionMatchesSource(current, selected, intent.targetSubjectId)
             : !editionBindingMatches(current, selected)
         )
-          return { kind: 'uncertain', status: 502, reason: 'binding', editionId: command.editionId };
+          return { kind: 'uncertain', status: 502, reason: 'binding', editionId: command.editionId, receipt: command };
         if (
           current.editionRevision !== command.editionRevision ||
           current.state !== (intent.kind === 'create' ? 'draft' : 'published')
         )
-          return { kind: 'conflict', status: 412, editionId: command.editionId };
+          return { kind: 'uncertain', status: 412, editionId: command.editionId, receipt: command };
         return { kind: 'confirmed', edition: current };
       } catch {
-        return { kind: sent ? 'uncertain' : 'unavailable', status: 503, reason: 'dependency' };
+        return {
+          kind: sent ? 'uncertain' : 'unavailable',
+          status: 503,
+          reason: 'dependency',
+          ...(receipt ? { receipt, editionId: receipt.editionId } : {}),
+        };
       }
     },
     async review(identity, editionId) {

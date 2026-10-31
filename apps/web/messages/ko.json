@@ -2825,7 +2825,7 @@
   "creator_editions_withdrawn": "철회됨",
   "edition_publication_accept_review": "현재 정보 확인",
   "edition_publication_choose_subject": "원래 항목 하나 선택",
-  "edition_publication_confirm": "리비전 {revision}의 고정 스냅샷을 {licence} 라이선스로 원래 항목 {subject}에 게시합니다. 이후 게시물을 수정해도 이 내용은 바뀌지 않습니다.",
+  "edition_publication_confirm": "“{subject}”을(를) 대상으로 이 고정된 수정본({revision})을 {licence} 라이선스로 발행합니다. 이후 게시물을 편집해도 이 에디션은 변경되지 않습니다.",
   "edition_publication_conflict": "현재 버전을 다시 확인해야 합니다. 계속하기 전에 현재 출처와 판본을 읽고 명시적으로 확인하세요.",
   "edition_publication_create": "고정 초안 만들기",
   "edition_publication_create_offer": "판매 제안 만들기",
@@ -3881,5 +3881,13 @@
   "library_collection_boundary_refresh_failed": "이동은 확인되었지만 현재 페이지를 불러오지 못했습니다. 다른 변경을 하기 전에 페이지를 불러오세요. 이동을 다시 실행하지는 않습니다.",
   "library_collection_boundary_refresh": "현재 페이지 불러오기",
   "library_collection_boundary_retry": "같은 이동 다시 시도",
-  "library_collection_boundary_fenced": "페이지 또는 로그인 상태가 바뀌었습니다. 저장된 이동이 일시 중지되었습니다. 원래 페이지와 계정으로 돌아가 결과를 확인하세요."
+  "library_collection_boundary_fenced": "페이지 또는 로그인 상태가 바뀌었습니다. 저장된 이동이 일시 중지되었습니다. 원래 페이지와 계정으로 돌아가 결과를 확인하세요.",
+  "edition_identity_withheld": "대상 정보가 비공개입니다",
+  "edition_identity_missing": "대상 제목이 없습니다",
+  "edition_identity_unavailable": "대상 정보를 불러올 수 없습니다",
+  "edition_identity_date_missing": "수정 날짜를 불러올 수 없습니다",
+  "edition_identity_revision_date": "고정된 수정본 · {date}",
+  "edition_identity_recovery": "현재 정보를 다시 불러와 제목을 확인하세요. 원래 대상을 식별할 수 있을 때까지 발행할 수 없습니다.",
+  "edition_identity_details": "기술 참조 정보 (선택하여 복사)",
+  "edition_identity_recorded": "명령은 성공했으며 처리 기록이 보관되어 있지만 현재 에디션을 읽지 못했습니다. 현재 정보를 다시 불러오세요. 명령을 다시 실행할 필요는 없습니다."
 }

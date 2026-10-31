@@ -9,7 +9,7 @@ import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { ContentEditionView } from './edition-model.ts';
-import { readCreatorContentEdition } from './edition-reads.ts';
+import { readCreatorContentEdition, readEditionIdentities } from './edition-reads.ts';
 import { editionRow, editionSnapshot } from './edition-store.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { lockErasureFence } from './erasure-fence.ts';
@@ -82,7 +82,7 @@ export async function readCreatorEditions(
   const readable: string[] = [];
   const read = async (id: string) => {
     try {
-      const result = await readCreatorContentEdition(deps, id, { actor, deadline: context.deadline });
+      const result = await readCreatorContentEdition(deps, id, { actor, deadline: context.deadline }, false);
       return result.value.creatorAccountId === input.accountId ? result.value : null;
     } catch (error) {
       if (error instanceof ContentNotFoundError) return null;
@@ -97,9 +97,10 @@ export async function readCreatorEditions(
     const current = await read(id);
     if (current) editions.push(current);
   }
+  const identities = await readEditionIdentities(deps, editions, { actor, deadline: context.deadline });
   const last = candidates.value.at(-1);
   return {
-    editions,
+    editions: editions.map((edition) => ({ ...edition, identity: identities.get(edition.editionId)! })),
     next:
       last && candidates.value.length === limit
         ? await encodeListCursor(ring, binding, { epoch: candidates.anchor.epoch, after: [last.edition_id] }, now)

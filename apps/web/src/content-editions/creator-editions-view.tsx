@@ -1,3 +1,4 @@
+import { EditionTechnicalDetails, editionSubjectName, editionRevisionDate } from './edition-identity';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { localizeHref } from '../paraglide/runtime.js';
@@ -86,23 +87,25 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
                         {m.creator_editions_version({ version: edition.editionRevision })}
                       </span>
                     </p>
-                    <h2 className="break-words font-mono text-sm font-medium [overflow-wrap:anywhere]">
-                      <span className="mb-1 block font-sans text-xs font-normal text-muted-foreground">
-                        {m.creator_editions_reference()}
-                      </span>
-                      {edition.editionId}
+                    <h2
+                      className="break-words text-lg font-semibold [overflow-wrap:anywhere]"
+                      lang={edition.identity?.subject.label?.language}
+                    >
+                      {editionSubjectName(edition.identity?.subject)}
                     </h2>
-                    <p className="break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                      {m.creator_editions_subject()}: <span className="font-mono">{edition.targetSubjectId}</span>
+                    <p className="text-sm text-muted-foreground">
+                      {m.edition_identity_revision_date({
+                        date: editionRevisionDate(edition.identity?.revisionCreatedAt),
+                      })}
                     </p>
+                    {edition.identity?.subject.kind !== 'available' && (
+                      <p role="status" className="text-sm text-muted-foreground">
+                        {m.edition_identity_recovery()}
+                      </p>
+                    )}
+                    <EditionTechnicalDetails edition={edition} />
                   </div>
                   <dl className="min-w-0 space-y-3 text-sm">
-                    <div>
-                      <dt className="text-xs text-muted-foreground">{m.creator_editions_revision()}</dt>
-                      <dd className="mt-1 break-words font-mono text-xs [overflow-wrap:anywhere]">
-                        {edition.revisionId}
-                      </dd>
-                    </div>
                     <div>
                       <dt className="text-xs text-muted-foreground">{m.creator_editions_licence()}</dt>
                       <dd className="mt-1 break-words [overflow-wrap:anywhere]">{edition.licence}</dd>

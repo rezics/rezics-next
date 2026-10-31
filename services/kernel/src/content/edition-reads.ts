@@ -1,8 +1,14 @@
+import { readEditionSubjectIdentities } from './edition-subject.ts';
+import { withReadTransaction } from '../semantic/read.ts';
+import { partitionReadClients } from '../database/read-snapshot.ts';
+import readRevisionBatch from './read-revision-batch.sql';
+import readContainingThread from './read-containing-post-thread.sql';
+import type { EditionIdentity } from './edition-model.ts';
 import { createHash } from 'node:crypto';
 import { parseDocument, serializeDocument } from '@rezics/document';
 import { accessCheck, type Access } from '../request/access.ts';
 import type { Pool } from 'pg';
-import { ContentNotFoundError, prepareEditionSource } from './reads.ts';
+import { ContentNotFoundError, prepareEditionSource, readPost, type ContentReadDependencies } from './reads.ts';
 import type { ReadContext } from './model.ts';
 import {
   editionBenefit,
@@ -16,7 +22,7 @@ import {
   withEditionReadTime,
 } from './edition-store.ts';
 import { prepareContentEditionSale } from './edition-sale.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import type { ContentEditionView, ContentEditionRevisionView } from './edition-model.ts';
 
 type Dependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
@@ -26,11 +32,17 @@ export async function readContentEdition(deps: Dependencies, id: string, context
 }
 
 /** Creator inventory additionally retains ordinary source authority, even after publication. */
-export async function readCreatorContentEdition(deps: Dependencies, id: string, context: ReadContext) {
-  return readEditionMetadata(deps, id, context, true);
+export async function readCreatorContentEdition(deps: Dependencies, id: string, context: ReadContext, identity = true) {
+  return readEditionMetadata(deps, id, context, true, identity);
 }
 
-async function readEditionMetadata(deps: Dependencies, id: string, context: ReadContext, creator: boolean) {
+async function readEditionMetadata(
+  deps: Dependencies,
+  id: string,
+  context: ReadContext,
+  creator: boolean,
+  identity = true,
+) {
   if (routeOf(id) === null) throw new ContentNotFoundError();
   return withEditionReadTime(deps, context, async (time) => {
     const row = (await editionSnapshot(deps, id, context, (client) => editionRow(client, id))).value;
@@ -72,7 +84,12 @@ async function readEditionMetadata(deps: Dependencies, id: string, context: Read
       });
     await checked();
     if (!(await guard.final())) throw new ContentNotFoundError();
-    return checked();
+    const result = await checked();
+    if (!identity) return result;
+    const identities = await readEditionIdentities(deps, [result.value], context, creator || row.state !== 'published');
+    if (!(await guard.final())) throw new ContentNotFoundError();
+    const final = await checked();
+    return { ...final, value: { ...final.value, identity: identities.get(id)! } };
   });
 }
 
@@ -121,4 +138,116 @@ export async function readContentEditionRevision(deps: Dependencies, id: string,
       return { editionId: row.edition_id, revisionId: row.revision_id, sha256: row.sha256, licence: row.licence, body };
     });
   });
+}
+
+/** Metadata only: one exact revision row-kind read per partition; never bytes,
+ * history or current heads. The caller has already applied native source authority. */
+async function revisionDates(
+  deps: Dependencies,
+  revisions: readonly Readonly<{ revisionId: string; sha256: string; licence: string }>[],
+  context: ReadContext,
+): Promise<Map<string, string>> {
+  if (revisions.length > 100) throw new RangeError('Edition identity accepts at most 100 revisions');
+  return withReadTransaction(
+    deps.pool,
+    async (client) => {
+      const partitions = [...new Set(revisions.map((row) => partitionOf(routeOf(row.revisionId)!)))];
+      await partitionReadClients(client, partitions);
+      const dates = new Map<string, string>();
+      for (const partition of partitions) {
+        const group = revisions.filter((row) => partitionOf(routeOf(row.revisionId)!) === partition);
+        const rows = await readRevisionBatch.run(client, {
+          keys: group.map((row) => ({ route: routeOf(row.revisionId)!, id: row.revisionId })),
+          include_body: false,
+          query: '',
+        });
+        for (const row of rows) {
+          if (row.availability !== 'available' || !row.sha256 || !row.created_at) continue;
+          if (
+            group.some(
+              (pin) =>
+                pin.revisionId === row.id && pin.sha256 === row.sha256!.toString('hex') && pin.licence === row.licence,
+            )
+          )
+            dates.set(row.id, row.created_at.toISOString());
+        }
+      }
+      return dates;
+    },
+    context.deadline,
+  );
+}
+
+export async function readEditionIdentities(
+  deps: Dependencies,
+  editions: readonly ContentEditionView[],
+  context: ReadContext,
+  ordinarySource = true,
+): Promise<Map<string, EditionIdentity>> {
+  if (editions.length > 100) throw new RangeError('Edition identity accepts at most 100 editions');
+  const subjects = await readEditionSubjectIdentities(
+    deps,
+    editions.map((edition) => edition.targetSubjectId),
+    context,
+  );
+  const dates = ordinarySource ? await revisionDates(deps, editions, context) : new Map<string, string>();
+  return new Map(
+    editions.map((edition) => [
+      edition.editionId,
+      {
+        subject: subjects.get(edition.targetSubjectId)!,
+        revisionCreatedAt: dates.get(edition.revisionId) ?? null,
+      },
+    ]),
+  );
+}
+
+/** Ordinary exact document authority owns both candidate associations and date.
+ * Edition ownership supplies no source or subject permission. */
+export async function readEditionSourceIdentity(
+  deps: ContentReadDependencies,
+  input: Readonly<{ postId: string; revisionId: string }>,
+  context: ReadContext,
+) {
+  const route = routeOf(input.postId);
+  if (route === null || routeOf(input.revisionId) !== route) throw new ContentNotFoundError();
+  const thread = (
+    await editionSnapshot(deps, input.postId, context, (client) =>
+      readContainingThread.run(client, { route, id: input.postId }),
+    )
+  ).value;
+  if (!thread) throw new ContentNotFoundError();
+  const exact = await readPost(deps, thread.thread_id, input.postId, context, input.revisionId);
+  const post = exact.value;
+  if (
+    !post ||
+    post.availability !== 'available' ||
+    post.revisionId !== input.revisionId ||
+    context.actor.kind !== 'account' ||
+    post.authorId !== context.actor.accountId ||
+    !['published', 'protected'].includes(post.visibility) ||
+    post.subjectIds.length > 128
+  )
+    throw new ContentNotFoundError();
+  const subjects = await readEditionSubjectIdentities(deps, post.subjectIds, context);
+  const dates = await revisionDates(
+    deps,
+    [{ revisionId: post.revisionId, sha256: post.sha256, licence: post.licence }],
+    context,
+  );
+  const final = (await readPost(deps, thread.thread_id, input.postId, context, input.revisionId)).value;
+  if (
+    !final ||
+    final.availability !== 'available' ||
+    final.revisionId !== post.revisionId ||
+    final.sha256 !== post.sha256
+  )
+    throw new ContentNotFoundError();
+  return {
+    postId: post.id,
+    revisionId: post.revisionId,
+    sha256: post.sha256,
+    revisionCreatedAt: dates.get(post.revisionId) ?? null,
+    subjects: [...subjects.values()],
+  };
 }

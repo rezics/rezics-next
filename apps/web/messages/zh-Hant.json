@@ -2825,7 +2825,7 @@
   "creator_editions_withdrawn": "已撤回",
   "edition_publication_accept_review": "接受目前資訊",
   "edition_publication_choose_subject": "選擇一個原始條目",
-  "edition_publication_confirm": "以 {licence} 授權條款，為原始條目 {subject} 發布修訂版 {revision} 的固定快照。後續編輯貼文不會改變此版次。",
+  "edition_publication_confirm": "為「{subject}」以 {licence} 授權發行此固定修訂版本（{revision}）。之後編輯貼文不會改變此版本。",
   "edition_publication_conflict": "目前版本需要重新審閱。請先閱讀目前來源和版次，並明確接受後再繼續。",
   "edition_publication_create": "建立固定草稿",
   "edition_publication_create_offer": "建立銷售方案",
@@ -3881,5 +3881,13 @@
   "library_collection_boundary_refresh_failed": "移動已確認，但無法載入目前頁面。請先載入頁面再進行其他修改；這不會再次執行移動。",
   "library_collection_boundary_refresh": "載入目前頁面",
   "library_collection_boundary_retry": "重試同一次移動",
-  "library_collection_boundary_fenced": "頁面或登入狀態已變更，已儲存的移動已暫停。請返回原本的頁面和帳號以確認結果。"
+  "library_collection_boundary_fenced": "頁面或登入狀態已變更，已儲存的移動已暫停。請返回原本的頁面和帳號以確認結果。",
+  "edition_identity_withheld": "主題身分未公開",
+  "edition_identity_missing": "主題缺少標題",
+  "edition_identity_unavailable": "無法取得主題身分",
+  "edition_identity_date_missing": "無法取得修訂日期",
+  "edition_identity_revision_date": "固定修訂版本 · {date}",
+  "edition_identity_recovery": "請重新讀取目前資訊以取得標題。確認原始目標的身分前，無法發行。",
+  "edition_identity_details": "技術參照（選取即可複製）",
+  "edition_identity_recorded": "指令已成功，收據已保留，但無法讀取目前的版本。請重新讀取目前資訊，無須再次執行指令。"
 }

@@ -2826,7 +2826,7 @@
   "creator_editions_withdrawn": "已撤回",
   "edition_publication_accept_review": "接受当前信息",
   "edition_publication_choose_subject": "选择一个原始条目",
-  "edition_publication_confirm": "发布修订版本 {revision} 的固定快照，许可协议为 {licence}，对应原始条目 {subject}。之后对帖子的编辑不会改变此版次。",
+  "edition_publication_confirm": "为“{subject}”以 {licence} 许可发布此固定修订版本（{revision}）。之后编辑帖子不会改变此版本。",
   "edition_publication_conflict": "当前版本需要重新审核。请先阅读当前来源和版次，并明确接受后再继续。",
   "edition_publication_create": "创建固定草稿",
   "edition_publication_create_offer": "创建销售方案",
@@ -3882,5 +3882,13 @@
   "library_collection_boundary_refresh_failed": "移动已确认，但无法加载当前页面。请先加载页面再进行其他修改；这不会再次执行移动。",
   "library_collection_boundary_refresh": "加载当前页面",
   "library_collection_boundary_retry": "重试同一次移动",
-  "library_collection_boundary_fenced": "页面或登录状态已更改，已保存的移动已暂停。请返回原来的页面和账号以确认结果。"
+  "library_collection_boundary_fenced": "页面或登录状态已更改，已保存的移动已暂停。请返回原来的页面和账号以确认结果。",
+  "edition_identity_withheld": "主题身份未公开",
+  "edition_identity_missing": "主题缺少标题",
+  "edition_identity_unavailable": "无法获取主题身份",
+  "edition_identity_date_missing": "无法获取修订日期",
+  "edition_identity_revision_date": "固定修订版本 · {date}",
+  "edition_identity_recovery": "请重新读取当前信息以获取标题。确认原始目标的身份前，无法发布。",
+  "edition_identity_details": "技术引用（选中即可复制）",
+  "edition_identity_recorded": "命令已成功，回执已保留，但无法读取当前的版本。请重新读取当前信息，无须再次执行命令。"
 }

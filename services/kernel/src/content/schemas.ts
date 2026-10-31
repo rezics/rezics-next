@@ -687,9 +687,35 @@ export const ContentEditionInputSchema = t.Object(
   },
   closed,
 );
+export const EditionSubjectIdentitySchema = t.Object(
+  {
+    id: ContentIdSchema,
+    kind: t.Union([t.Literal('available'), t.Literal('missing'), t.Literal('withheld')]),
+    label: t.Union([t.Object({ value: t.String(), language: t.String() }, closed), t.Null()]),
+  },
+  closed,
+);
+export const EditionIdentitySchema = t.Object(
+  {
+    subject: EditionSubjectIdentitySchema,
+    revisionCreatedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+  },
+  closed,
+);
+export const EditionSourceIdentitySchema = t.Object(
+  {
+    postId: ContentIdSchema,
+    revisionId: ContentIdSchema,
+    sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+    revisionCreatedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+    subjects: t.Array(EditionSubjectIdentitySchema, { maxItems: 128 }),
+  },
+  closed,
+);
 export const ContentEditionSchema = t.Object(
   {
     editionId: ContentIdSchema,
+    identity: t.Optional(EditionIdentitySchema),
     editionRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
     state: t.Union([t.Literal('draft'), t.Literal('published'), t.Literal('withdrawn')]),
     targetSubjectId: ContentIdSchema,

@@ -2825,7 +2825,7 @@
   "creator_editions_withdrawn": "Retirée",
   "edition_publication_accept_review": "Accepter les informations actuelles",
   "edition_publication_choose_subject": "Choisir une fiche d’origine",
-  "edition_publication_confirm": "Publiez l’instantané fixe de la révision {revision}, sous la licence {licence}, pour la fiche d’origine {subject}. Les modifications ultérieures du billet ne le changeront pas.",
+  "edition_publication_confirm": "Publier cette révision fixe ({revision}) sous {licence} pour « {subject} ». Les modifications ultérieures du message ne changeront pas cette édition.",
   "edition_publication_conflict": "La version actuelle doit être réexaminée. Consultez la source et l’édition actuelles, puis acceptez-les explicitement avant de continuer.",
   "edition_publication_create": "Créer un brouillon fixe",
   "edition_publication_create_offer": "Créer une offre",
@@ -3881,5 +3881,13 @@
   "library_collection_boundary_refresh_failed": "Le déplacement est confirmé, mais la page actuelle n’a pas pu être chargée. Chargez-la avant toute autre modification ; cela ne répète pas le déplacement.",
   "library_collection_boundary_refresh": "Charger la page actuelle",
   "library_collection_boundary_retry": "Réessayer le même déplacement",
-  "library_collection_boundary_fenced": "La page ou la connexion a changé. Le déplacement enregistré est en pause. Revenez à la page et au compte d’origine pour le résoudre."
+  "library_collection_boundary_fenced": "La page ou la connexion a changé. Le déplacement enregistré est en pause. Revenez à la page et au compte d’origine pour le résoudre.",
+  "edition_identity_withheld": "Identité du sujet non divulguée",
+  "edition_identity_missing": "Titre du sujet manquant",
+  "edition_identity_unavailable": "Identité du sujet indisponible",
+  "edition_identity_date_missing": "Date de révision indisponible",
+  "edition_identity_revision_date": "Révision fixe · {date}",
+  "edition_identity_recovery": "Rechargez les informations actuelles pour retrouver le titre. La publication reste indisponible tant que la cible d’origine n’est pas identifiable.",
+  "edition_identity_details": "Références techniques (sélectionner pour copier)",
+  "edition_identity_recorded": "L’opération a réussi. Son reçu est conservé, mais l’édition actuelle n’a pas pu être lue. Rechargez les informations actuelles ; aucune nouvelle opération n’est nécessaire."
 }

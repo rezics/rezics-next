@@ -2845,7 +2845,7 @@
   "edition_publication_draft_heading": "Draft edition",
   "edition_publication_draft_help": "This draft is not published or sellable. Publication requires a separate confirmation and current native authorization.",
   "edition_publication_edition_version": "Edition version {revision}",
-  "edition_publication_confirm": "Publish the fixed snapshot of revision {revision}, under {licence}, for original subject {subject}. Later post edits will not change it.",
+  "edition_publication_confirm": "Publish this fixed revision ({revision}) under {licence} for “{subject}”. Later post edits will not change it.",
   "edition_publication_publish": "Publish fixed edition",
   "edition_publication_published_heading": "Edition published",
   "edition_publication_published_help": "Native publication and the current edition read are confirmed.",
@@ -3884,5 +3884,13 @@
   "library_collection_boundary_refresh_failed": "The move is confirmed, but the current page could not be loaded. Load it before making another change; this does not repeat the move.",
   "library_collection_boundary_refresh": "Load current page",
   "library_collection_boundary_retry": "Retry same move",
-  "library_collection_boundary_fenced": "The page or sign-in changed. The saved move is paused. Return to the original page and account to resolve it."
+  "library_collection_boundary_fenced": "The page or sign-in changed. The saved move is paused. Return to the original page and account to resolve it.",
+  "edition_identity_withheld": "Subject identity withheld",
+  "edition_identity_missing": "Subject title missing",
+  "edition_identity_unavailable": "Subject identity unavailable",
+  "edition_identity_date_missing": "Revision date unavailable",
+  "edition_identity_revision_date": "Fixed revision · {date}",
+  "edition_identity_recovery": "Read current information again to recover the title. Publication stays unavailable until the original target is recognizable.",
+  "edition_identity_details": "Technical references (select to copy)",
+  "edition_identity_recorded": "The command succeeded. Its receipt is retained, but the current edition could not be read. Read current information again; no new command is needed."
 }

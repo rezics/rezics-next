@@ -30,6 +30,14 @@ export const creatorEditionFixture: EditionMetadata = {
   revisionId: '0192f3a0-6c1e-7b2a-9d4e-000000000003',
   sha256: 'a'.repeat(64),
   licence: 'CC-BY-SA-4.0',
+  identity: {
+    subject: {
+      id: '0192f3a0-6c1e-7b2a-9d4e-000000000020',
+      kind: 'available',
+      label: { value: '夜の航路', language: 'ja' },
+    },
+    revisionCreatedAt: '2026-10-31T12:00:00.000Z',
+  },
 };
 export const publishedEditionFixture: EditionMetadata = {
   ...creatorEditionFixture,

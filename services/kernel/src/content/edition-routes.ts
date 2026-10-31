@@ -8,17 +8,18 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError } from '../request/access.ts';
 import type { appealRoutes } from './appeal-routes.ts';
 import { ContentNotFoundError as CommandNotFoundError, RevisionPreconditionError } from './commands.ts';
-import { ContentNotFoundError } from './reads.ts';
+import { ContentNotFoundError, type ContentReadDependencies } from './reads.ts';
 import {
   createContentEdition,
   publishContentEdition,
   unpublishContentEdition,
   type EditionCommandDependencies,
 } from './edition-commands.ts';
-import { readContentEdition, readContentEditionRevision } from './edition-reads.ts';
+import { readContentEdition, readContentEditionRevision, readEditionSourceIdentity } from './edition-reads.ts';
 import { readCreatorEditions, InvalidCreatorEditionCursorError } from './edition-index.ts';
 import {
   ContentEditionInputSchema,
+  EditionSourceIdentitySchema,
   ContentEditionSchema,
   ContentEditionRevisionSchema,
   ContentEditionCommandSchema,
@@ -72,7 +73,10 @@ function expected(request: Request): string {
 }
 
 /** Public catalogue declarations retain authenticated native admission and private delivery. */
-export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: EditionCommandDependencies) {
+export function editionRoutes(
+  app: ReturnType<typeof appealRoutes>,
+  deps: EditionCommandDependencies & Pick<ContentReadDependencies, 'tokens'>,
+) {
   app.wrap((handle) => async (request) => {
     const response = await handle(request);
     if (
@@ -83,6 +87,29 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
     return response;
   });
   return app
+    .get(
+      '/v1/contentEditions/sourceIdentity',
+      {
+        query: t.Object({ postId: t.String(), revisionId: t.String() }, { additionalProperties: false }),
+        response: {
+          200: withHeaders(strictContentSchema(EditionSourceIdentitySchema), { 'cache-control': t.String() }),
+          ...failures,
+        },
+        detail: {
+          operationId: 'content_edition.source_identity',
+          'x-exposure': 'public',
+          'x-action': 'post:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ actor, query, admission, job, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        set.headers['cache-control'] = 'private, no-store';
+        return operation(() =>
+          admission.run('normal', job, () => readEditionSourceIdentity(deps, query, { actor, deadline: job.deadline })),
+        );
+      },
+    )
     .get(
       '/v1/accounts/:accountId/editions',
       {

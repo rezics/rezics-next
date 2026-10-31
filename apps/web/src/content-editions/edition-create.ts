@@ -1,6 +1,6 @@
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
-import type { EditionMetadata } from './edition-api';
+import type { EditionMetadata, EditionSourceRecognition } from './edition-api';
 
 export const editionContentId = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export type EditionSourceIdentity = { postId: string; revisionId: string };
@@ -44,6 +44,7 @@ export type EditionCreateSource = EditionSourceIdentity & {
   licence: string;
   subjectIds: string[];
   media: EditionPreviewMedia;
+  recognition?: EditionSourceRecognition | null;
 };
 export type EditionCreateFailure = {
   kind: 'refused' | 'missing' | 'unavailable' | 'conflict' | 'uncertain';
@@ -51,6 +52,7 @@ export type EditionCreateFailure = {
   reason?: 'native-pending' | 'admission-pending' | 'source' | 'dependency' | 'binding';
   editionId?: string;
   concealSource?: boolean;
+  receipt?: { editionId: string; editionRevision: string };
 };
 export type EditionSourceRead = { kind: 'source'; source: EditionCreateSource } | EditionCreateFailure;
 export type EditionCreateIntent = {
@@ -289,7 +291,8 @@ export class EditionPublicationController {
       this.state.failure?.kind === 'uncertain' &&
       !this.state.failure.concealSource
     )
-      await this.send(this.state.intent);
+      if (this.state.failure.receipt) await this.refresh();
+      else await this.send(this.state.intent);
   }
   private async send(intent: EditionPublicationIntent) {
     const generation = ++this.generation;
@@ -354,11 +357,47 @@ export class EditionPublicationController {
     }
     if (generation !== this.generation) return;
     if (result.kind !== 'review') {
-      this.set({ failure: result, busy: false });
+      this.set({
+        failure: { ...result, ...(this.state.failure?.receipt ? { receipt: this.state.failure.receipt } : {}) },
+        busy: false,
+      });
       return;
     }
     if (this.state.edition && (!result.edition || !editionBindingMatches(this.state.edition, result.edition))) {
-      this.set({ failure: { kind: 'unavailable', status: 502, reason: 'binding' }, busy: false });
+      this.set({
+        failure: {
+          kind: 'unavailable',
+          status: 502,
+          reason: 'binding',
+          ...(this.state.failure?.receipt ? { receipt: this.state.failure.receipt } : {}),
+        },
+        busy: false,
+      });
+      return;
+    }
+    // A parsed command receipt records success. Recover its read without sending another mutation.
+    const receipt = this.state.failure?.receipt;
+    if (
+      receipt &&
+      result.edition &&
+      result.edition.editionId === receipt.editionId &&
+      result.edition.editionRevision === receipt.editionRevision &&
+      result.edition.targetSubjectId === this.state.targetSubjectId &&
+      (this.state.intent?.kind !== 'publish' || result.edition.state === 'published') &&
+      (result.source
+        ? editionMatchesSource(result.edition, result.source, this.state.targetSubjectId)
+        : this.state.edition && editionBindingMatches(result.edition, this.state.edition))
+    ) {
+      this.set({
+        edition: result.edition,
+        source: result.source,
+        knownEditionId: receipt.editionId,
+        intent: null,
+        review: null,
+        failure: null,
+        uncertain: false,
+        busy: false,
+      });
       return;
     }
     // Uncertain commands must settle with their original key, even after an explicit current read.
@@ -370,7 +409,9 @@ export class EditionPublicationController {
         : {}),
       review: result,
       busy: false,
-      failure: uncertain ? { kind: 'uncertain', status: 503 } : { kind: 'conflict', status: 412 },
+      failure: uncertain
+        ? { kind: 'uncertain', status: 503, ...(receipt ? { receipt } : {}) }
+        : { kind: 'conflict', status: 412 },
     });
   }
   acceptReview() {

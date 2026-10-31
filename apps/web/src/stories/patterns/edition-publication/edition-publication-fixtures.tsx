@@ -17,7 +17,7 @@ import { EditionCreateRoute } from '../../../routes/editions/new';
 import { AppShell } from '../../../shell/shell';
 import { deLocalizeUrl, localizeUrl } from '../../../paraglide/runtime.js';
 import { setStoryRequestContext } from '../../../../.storybook/react-start';
-import type { EditionMetadata } from '../../../content-editions/edition-api';
+import type { EditionMetadata, EditionSubjectIdentity } from '../../../content-editions/edition-api';
 import type { ExactRevision } from '../../../threads/exact-revision';
 
 export const postId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
@@ -82,6 +82,14 @@ export async function publicationFixture(state: PublicationExampleState) {
     body,
   };
   let edition: EditionMetadata | null = null;
+  let subjectIdentity: EditionSubjectIdentity = {
+    id: subjectId,
+    kind: 'available',
+    label: { value: '夜の航路', language: 'ja' },
+  };
+  let metadataUnavailable = false;
+  let failNextMetadata = false;
+  const editionIdentity = () => ({ subject: subjectIdentity, revisionCreatedAt: '2026-10-31T12:00:00.000Z' });
   let lost = state === 'uncertain';
   let conflict = state === 'conflict' || state === 'resumed-conflict';
   let lostPublish = state === 'uncertain-publish';
@@ -101,6 +109,19 @@ export async function publicationFixture(state: PublicationExampleState) {
       if (request.headers.get('authorization') !== 'Bearer story-creator')
         return Response.json({ code: 'forbidden' }, { status: 403 });
       if (path === `/v1/posts/${postId}/revisions/${revisionId}`) return Response.json({ post: revision });
+      if (path === '/v1/contentEditions/sourceIdentity')
+        return Response.json({
+          postId,
+          revisionId,
+          sha256,
+          revisionCreatedAt: editionIdentity().revisionCreatedAt,
+          subjects: [subjectIdentity],
+        });
+      if (path === `/v1/accounts/${creatorId}/editions`)
+        return Response.json({
+          editions: edition ? [{ ...edition, identity: editionIdentity() }] : [],
+          next: null,
+        });
       if (path === '/v1/viewerActions') {
         const resource = JSON.parse(call.body!).resources[0];
         return Response.json({
@@ -151,9 +172,16 @@ export async function publicationFixture(state: PublicationExampleState) {
           lostPublish = false;
           throw new Error('Constructed lost publication response');
         }
+        if (failNextMetadata) {
+          metadataUnavailable = true;
+          failNextMetadata = false;
+        }
         return Response.json(publishReceipts.get(key));
       }
-      if (path === `/v1/contentEditions/${editionId}` && edition) return Response.json(edition);
+      if (path === `/v1/contentEditions/${editionId}` && edition)
+        return metadataUnavailable
+          ? Response.json({ code: 'overloaded' }, { status: 503 })
+          : Response.json({ ...edition, identity: editionIdentity() });
       throw new Error(`Unexpected publication fixture request: ${request.method} ${path}`);
     },
     { preconnect() {} },
@@ -174,7 +202,28 @@ export async function publicationFixture(state: PublicationExampleState) {
     await controller.resume(editionId);
     if (state === 'resumed-conflict' || state === 'uncertain-publish') await controller.publish();
   }
-  return { api, controller, calls, resumed };
+  return {
+    api,
+    controller,
+    calls,
+    resumed,
+    fetcher,
+    withholdIdentity() {
+      subjectIdentity = { id: subjectId, kind: 'withheld', label: null };
+    },
+    restoreIdentity() {
+      subjectIdentity = { id: subjectId, kind: 'available', label: { value: '夜の航路', language: 'ja' } };
+    },
+    staleVersion() {
+      if (edition) edition = { ...edition, editionRevision: String(Number(edition.editionRevision) + 1) };
+    },
+    failPublicationRead() {
+      failNextMetadata = true;
+    },
+    restoreRead() {
+      metadataUnavailable = false;
+    },
+  };
 }
 
 function PublicationRouteExample({ fixture }: { fixture: Awaited<ReturnType<typeof publicationFixture>> }) {

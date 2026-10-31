@@ -2825,7 +2825,7 @@
   "creator_editions_withdrawn": "Retirada",
   "edition_publication_accept_review": "Aceptar la información actual",
   "edition_publication_choose_subject": "Elige una ficha original",
-  "edition_publication_confirm": "Publica la instantánea fija de la revisión {revision}, con la licencia {licence}, para la ficha original {subject}. Los cambios posteriores en la publicación no la modificarán.",
+  "edition_publication_confirm": "Publicar esta revisión fija ({revision}) con la licencia {licence} para «{subject}». Los cambios posteriores en la publicación no modificarán esta edición.",
   "edition_publication_conflict": "La versión actual requiere revisión. Lee la fuente y la edición actuales y acéptalas expresamente antes de continuar.",
   "edition_publication_create": "Crear borrador fijo",
   "edition_publication_create_offer": "Crear una oferta",
@@ -3881,5 +3881,13 @@
   "library_collection_boundary_refresh_failed": "El movimiento está confirmado, pero no se pudo cargar la página actual. Cárgala antes de hacer otro cambio; esto no repite el movimiento.",
   "library_collection_boundary_refresh": "Cargar página actual",
   "library_collection_boundary_retry": "Reintentar el mismo movimiento",
-  "library_collection_boundary_fenced": "La página o la sesión cambió. El movimiento guardado está en pausa. Vuelve a la página y la cuenta originales para resolverlo."
+  "library_collection_boundary_fenced": "La página o la sesión cambió. El movimiento guardado está en pausa. Vuelve a la página y la cuenta originales para resolverlo.",
+  "edition_identity_withheld": "Identidad del tema no divulgada",
+  "edition_identity_missing": "Falta el título del tema",
+  "edition_identity_unavailable": "Identidad del tema no disponible",
+  "edition_identity_date_missing": "Fecha de revisión no disponible",
+  "edition_identity_revision_date": "Revisión fija · {date}",
+  "edition_identity_recovery": "Vuelve a cargar la información actual para recuperar el título. La publicación seguirá deshabilitada hasta que se pueda reconocer el destino original.",
+  "edition_identity_details": "Referencias técnicas (selecciona para copiar)",
+  "edition_identity_recorded": "La operación se completó. Se conserva su comprobante, pero no se pudo leer la edición actual. Vuelve a cargar la información actual; no hace falta repetir la operación."
 }

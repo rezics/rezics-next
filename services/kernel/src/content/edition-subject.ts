@@ -1,8 +1,16 @@
+import { accessCheck } from '../request/access.ts';
+import { partitionReadClients } from '../database/read-snapshot.ts';
+import { withReadTransaction } from '../semantic/read.ts';
+import { chooseLabel } from '../semantic/language.ts';
+import readLabels from '../semantic/read-related.sql';
+import type { EditionSubjectIdentity } from './edition-model.ts';
+import type { ReadContext } from './model.ts';
+import { ContentNotFoundError } from './reads.ts';
 import type { Pool } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, AccessContext, AccessCheck } from '../request/access.ts';
 import type { AuthorizationAnchor } from '../access/resource-authorization.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import readSubjectReference from '../semantic/read-subject-reference.sql';
 import { editionSnapshot } from './edition-store.ts';
@@ -34,4 +42,64 @@ export async function prepareEditionSubject(
       })
     ).value;
   return (await final()) ? { final } : null;
+}
+
+/** One bounded set of native label probes, with ordinary subject Access prepared
+ * before checkout and re-evaluated on the same snapshot that reads the labels.
+ * A redirect is withheld rather than substituting another publication target. */
+export async function readEditionSubjectIdentities(
+  deps: Readonly<{ pool: Pool; access: Access }>,
+  ids: readonly string[],
+  context: ReadContext,
+): Promise<Map<string, EditionSubjectIdentity>> {
+  if (ids.length > 128) throw new RangeError('Edition identity accepts at most 128 subjects');
+  const keys = [...new Set(ids)];
+  const checks = new Map<string, AccessCheck>();
+  for (const id of keys) {
+    const route = routeOf(id);
+    if (route === null) throw new ContentNotFoundError();
+    checks.set(
+      id,
+      await accessCheck(
+        deps.access,
+        context.actor,
+        'subject:read',
+        {
+          route,
+          id,
+          eligibility: subjectReadEligibility({ route, id }),
+        },
+        { pool: deps.pool, deadline: context.deadline },
+      ),
+    );
+  }
+  return withReadTransaction(
+    deps.pool,
+    async (client) => {
+      const partitions = [...new Set(keys.map((id) => partitionOf(routeOf(id)!)))];
+      await partitionReadClients(client, partitions);
+      const result = new Map<string, EditionSubjectIdentity>();
+      for (const partition of partitions) {
+        const group = keys.filter((id) => partitionOf(routeOf(id)!) === partition);
+        const labels = await readLabels.run(client, {
+          partition_no: partition,
+          routes: group.map((id) => routeOf(id)!),
+          subject_ids: group,
+        });
+        const found = new Map(labels.map((row) => [row.id, row]));
+        for (const id of group) {
+          if (!(await checks.get(id)!(client)) || found.get(id)?.redirect || found.get(id)?.visibility !== 'visible') {
+            result.set(id, { id, kind: 'withheld', label: null });
+            continue;
+          }
+          const row = found.get(id);
+          const label = row ? chooseLabel(row.labels as Record<string, string>, []) : null;
+          // The original target stays pinned, including when a redirect exists.
+          result.set(id, { id, kind: label ? 'available' : 'missing', label });
+        }
+      }
+      return result;
+    },
+    context.deadline,
+  );
 }

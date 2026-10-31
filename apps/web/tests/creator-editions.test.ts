@@ -199,3 +199,115 @@ test('retry rechecks the same page and drops earlier actionable metadata when cu
   expect(html).not.toContain(published.editionId);
   expect(cursors).toEqual(['same-page', 'same-page']);
 });
+
+test('A creator recognizes a bounded edition list item by authorized document or subject title revision date and state selects its recognizable target and confirms that same exact edition revision before publication while hidden metadata and uncertain original command custody remain protected', async () => {
+  const { publicationFixture, subjectId, editionId, creatorId, revisionId } =
+    await import('../src/stories/patterns/edition-publication/edition-publication-fixtures');
+  const { EditionPublicationController } = await import('../src/content-editions/edition-create');
+  const { EditionPublication } = await import('../src/content-editions/edition-create-view');
+  const { editionRevisionDate } = await import('../src/content-editions/edition-identity');
+  const fixture = await publicationFixture('selection');
+  const source = fixture.controller.snapshot().source!;
+  expect(source.recognition?.revisionId).toBe(revisionId);
+  expect(source.recognition?.subjects[0]?.label?.value).toBe('夜の航路');
+  const selection = renderToStaticMarkup(createElement(EditionPublication, { controller: fixture.controller }));
+  expect(selection).toContain('lang="ja"');
+  expect(selection).toContain(`value="${subjectId}">夜の航路</option>`);
+  expect(selection).not.toContain(`>${subjectId}</option>`);
+  fixture.controller.chooseSubject(subjectId);
+  await fixture.controller.create();
+
+  const listApi = createNativeCreatorEditionsApi('https://kernel.example', fixture.fetcher);
+  const page = await loadCreatorEditions(listApi, creatorId, 'Bearer story-creator', {});
+  expect(page.kind).toBe('ready');
+  if (page.kind !== 'ready') throw new Error('Expected one authorized edition page');
+  expect(page.editions).toHaveLength(1);
+  const selected = page.editions[0]!;
+  const list = renderToStaticMarkup(createElement(CreatorEditionsView, { page }));
+  expect(list).toContain('夜の航路</h2>');
+  expect(list).toContain('editionId=' + editionId);
+  expect(list).toContain(editionRevisionDate(selected.identity?.revisionCreatedAt));
+  expect(list).toContain(m.creator_editions_draft());
+  expect(list).not.toContain(`${editionId}</h2>`);
+
+  const controller = new EditionPublicationController(fixture.api);
+  await controller.resume(selected.editionId);
+  expect(controller.snapshot().edition?.revisionId).toBe(revisionId);
+  expect(controller.snapshot().edition?.sha256).toBe(source.sha256);
+  const review = () => renderToStaticMarkup(createElement(EditionPublication, { controller }));
+  expect(review()).toContain(
+    m.edition_publication_confirm({
+      revision: editionRevisionDate(selected.identity?.revisionCreatedAt),
+      licence: selected.licence,
+      subject: '夜の航路',
+    }),
+  );
+
+  fixture.withholdIdentity();
+  await controller.refresh();
+  controller.acceptReview();
+  expect(review()).toContain(m.edition_identity_withheld());
+  expect(review()).not.toContain('夜の航路');
+  expect(review()).toMatch(/type="checkbox"[^>]*disabled=""/);
+  expect(review()).toContain(m.edition_publication_refresh());
+  fixture.restoreIdentity();
+  await controller.refresh();
+  controller.acceptReview();
+
+  fixture.staleVersion();
+  await controller.publish();
+  expect(controller.snapshot().failure?.kind).toBe('conflict');
+  expect(controller.snapshot().edition?.editionRevision).toBe('1');
+  await controller.refresh();
+  expect(controller.snapshot().review?.edition?.editionRevision).toBe('2');
+  expect(controller.snapshot().edition?.editionRevision).toBe('1');
+  controller.acceptReview();
+  expect(controller.snapshot().edition?.revisionId).toBe(revisionId);
+  expect(controller.snapshot().edition?.editionRevision).toBe('2');
+  expect(review()).toContain('夜の航路');
+  expect(review()).not.toContain('checked=""');
+
+  fixture.failPublicationRead();
+  await controller.publish();
+  const receipt = controller.snapshot().failure?.receipt;
+  const originalIntent = controller.snapshot().intent;
+  expect(receipt).toEqual({ editionId, editionRevision: '3' });
+  expect(originalIntent?.kind).toBe('publish');
+  expect(controller.snapshot().uncertain).toBe(true);
+  expect(review()).toContain(m.edition_identity_recorded());
+  expect(review()).not.toContain(m.edition_publication_retry());
+  const writes = () => fixture.calls.filter((call) => call.method === 'POST' && call.path.endsWith(':publish'));
+  const sent = writes().length;
+  await controller.refresh();
+  expect(controller.snapshot().failure?.receipt).toEqual(receipt);
+  expect(controller.snapshot().intent).toBe(originalIntent);
+  fixture.restoreRead();
+  await controller.refresh();
+  expect(controller.snapshot().edition?.state).toBe('published');
+  expect(controller.snapshot().edition?.revisionId).toBe(revisionId);
+  expect(controller.snapshot().intent).toBeNull();
+  expect(writes()).toHaveLength(sent);
+  expect(review()).toContain('夜の航路');
+
+  // A genuinely lost response still locks the original sealed input, unlike a recorded success.
+  const lost = await publicationFixture('uncertain-publish');
+  const locked = lost.controller.snapshot().intent!;
+  expect(lost.controller.snapshot().uncertain).toBe(true);
+  lost.withholdIdentity();
+  await lost.controller.refresh();
+  lost.controller.acceptReview();
+  expect(lost.controller.snapshot().intent).toBe(locked);
+  expect(lost.controller.snapshot().uncertain).toBe(true);
+  lost.restoreIdentity();
+  await lost.controller.refresh();
+  await lost.controller.retry();
+  const replays = lost.calls.filter((call) => call.path.endsWith(':publish'));
+  expect(replays).toHaveLength(2);
+  expect(replays[0]!.headers.get('idempotency-key')).toBe(replays[1]!.headers.get('idempotency-key'));
+  expect(replays[0]!.headers.get('if-match')).toBe(replays[1]!.headers.get('if-match'));
+  expect(replays[0]!.body).toBe(replays[1]!.body);
+  expect(lost.controller.snapshot().edition?.state).toBe('published');
+  expect(lost.controller.snapshot().edition?.revisionId).toBe(revisionId);
+  // Candidate labels arrive in one native batch, never one subject request per option/card.
+  expect(fixture.calls.filter((call) => call.path === '/v1/contentEditions/sourceIdentity')).toHaveLength(2);
+});
