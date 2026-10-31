@@ -201,7 +201,7 @@ export const PhoneSheet: Story = {
 export const PhoneSheetKeyboardSubmission: Story = {
   args: { onNavigate: fn() },
   render: (args) => (
-    <Example presentation="sheet" fields={[['type', 'schema:Book']]} onNavigate={args.onNavigate} />
+    <Example presentation="sheet" fields={[['type', 'schema:Book']]} onNavigate={(href) => args.onNavigate?.(href)} />
   ),
   play: async (context) => {
     const { canvas, input } = await expand(context);
