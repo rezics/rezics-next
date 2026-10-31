@@ -277,6 +277,34 @@ and promotion queues. Missing lifecycle events stay unknown; reports do not back
 acquisition and release events are distinct, so slot waiting is excluded from worker working time. The stage with the
 most waiting is named as the bottleneck.
 
+The lifecycle JSON and hourly snapshots include conflict telemetry. The current producer records unresolved rebase
+outcomes and conflict retry setup, but does not identify every conflict, the original conflict occurrence time, or
+owner/rerere/replay resolution. Owner-landing capability is therefore `unavailable`; total conflicts, actual
+conflict-to-landed duration, total open conflicts and their age, and resolution-method counters remain unknown.
+An empty recorded window does not establish zero conflicts or zero conflict-created attempts.
+
+`conflicts.recordedOutcomes` counts complete Git contexts from failed `gate-outcome` rebase events in the trailing
+hour. A task/attempt contributes once, using the first persisted rebase outcome; replay cannot add a count or move it
+into a later hour. Legacy outcomes without a complete context remain unclassified. Its observation-to-landed
+percentiles use the persisted outcome time and the first subsequent integration event for that task at the same or
+a later attempt. Its unlanded count and oldest observation age describe only that hour's observed-conflict cohort,
+not all open conflicts. These observation-clock figures do not substitute for the unknown occurrence-clock metrics.
+
+`conflicts.createdAttempts` uses attempts' recorded creation times (`startedAt`). A valid `worker-source-baseline`
+event, written only during conflict retry setup, establishes an observed conflict-created attempt. Retry intents
+can be reconciled to a later current attempt and do not prove its creation cause. Mutable attempt escalation is not a
+creation cause: the attempt that encountered a conflict also receives that escalation. Later attempts without
+creation-cause evidence remain unknown. Neither a same-attempt resume nor duplicate events create another attempt.
+
+Each reader returns at most 1,000 outcome or attempt candidates per trailing-hour window, plus one overflow sentinel;
+an overflow sets `complete: false` and makes the observed counters lower bounds. Readers maintain time-window indexes
+on the optional source tables, select scalar attempt fields, and use task/attempt event lookups rather than decoding
+settled task and attempt bodies. They add no events or producer fields. Truncated timing percentiles describe the
+sample, not the entire hour. The existing hourly emission remains first-write-wins. Historical snapshots without
+conflict fields read back as unavailable, without backfilling today's observations. The existing lifecycle suite remains the postintegration
+proof boundary for same-session/attempt/pass landing with one acceptance, rerere without a worker wake, exact-owner
+wrong-resolution fixes and authenticated manager ownership guards; these counters do not certify those scenarios.
+
 The manager host evaluates absolute flow targets each hour and sends one `environment` event to the configured
 supermanager for each breached threshold: efficiency below 40%, any queue older than 60 minutes, landing p90 above
 30 minutes, or more than 1.5 attempts per integrated task. `flow` in local settings can override `efficiencyBelow`,

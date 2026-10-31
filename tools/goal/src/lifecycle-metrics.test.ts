@@ -361,3 +361,154 @@ test('flow report JSON and text include lifecycle measures', async () => {
     h.dispose();
   }
 });
+
+const conflictContext = { targetHead: 'a'.repeat(40), workerCommit: 'b'.repeat(40), paths: ['source.ts'] };
+const sourceBaseline = { workerCommit: 'b'.repeat(40), controllerHead: 'c'.repeat(40) };
+
+function metricEvent(db: Database, taskId: string, attempt: number, at: string, kind: string, body: unknown): void {
+  db.query('INSERT INTO worker_events(task_id, attempt, kind, at, body) VALUES (?, ?, ?, ?, ?)').run(
+    taskId,
+    attempt,
+    kind,
+    at,
+    JSON.stringify(body),
+  );
+}
+
+test('Hourly report measures conflict count, conflict-to-landed time and attempts caused by conflict truthfully', () => {
+  const { db } = database('conflicts.sqlite');
+  const now = Date.UTC(2026, 9, 30, 12);
+  const at = (minutes: number) => stamp(now, minutes * 60_000);
+  const conflict = { passed: false, stage: 'rebase', rebaseConflict: conflictContext };
+  for (const [index, id] of ['landed', 'open', 'legacy', 'expired', 'future'].entries())
+    insertTask(db, id, index, id === 'landed' ? 'integrated' : 'landing', 3);
+
+  metricEvent(db, 'landed', 1, at(-55), 'gate-outcome', conflict);
+  metricEvent(db, 'landed', 1, at(-54), 'gate-outcome', conflict);
+  metricEvent(db, 'open', 1, at(-10), 'gate-outcome', conflict);
+  metricEvent(db, 'legacy', 1, at(-20), 'gate-outcome', {
+    passed: false,
+    stage: 'rebase',
+    conflictedFiles: ['source.ts'],
+  });
+  metricEvent(db, 'expired', 1, at(-61), 'gate-outcome', conflict);
+  metricEvent(db, 'expired', 1, at(-59), 'gate-outcome', conflict);
+  metricEvent(db, 'future', 1, at(1), 'gate-outcome', conflict);
+  // Integration is a separate fact, including when a later attempt lands. Neither event identifies the resolver.
+  for (const minutes of [-40, -39])
+    recordFlow(db, { taskId: 'landed', attempt: 2, stage: 'integration', action: 'integrated', at: at(minutes) });
+  // A stale earlier attempt or a future integration cannot close an observed conflict.
+  recordFlow(db, { taskId: 'open', attempt: 0, stage: 'integration', action: 'integrated', at: at(-5) });
+  recordFlow(db, { taskId: 'open', attempt: 2, stage: 'integration', action: 'integrated', at: at(2) });
+
+  for (const [attempt, minutes] of [
+    [1, -60],
+    [2, -50],
+    [3, -30],
+  ] as const) {
+    db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)').run(
+      'landed',
+      attempt,
+      JSON.stringify({
+        taskId: 'landed',
+        attempt,
+        state: 'exited',
+        startedAt: at(minutes),
+        escalation: 'rebase-conflict',
+      }),
+    );
+  }
+  metricEvent(db, 'landed', 2, at(-49), 'worker-source-baseline', sourceBaseline);
+  metricEvent(db, 'landed', 2, at(-48), 'worker-source-baseline', sourceBaseline);
+  // Mutable escalation on the original attempt and a reconciled intent do not prove another creation cause.
+  db.query('INSERT INTO worker_retry_intents VALUES (?, ?, ?)').run(
+    'landed',
+    2,
+    JSON.stringify({ status: 'started', nextAttempt: 3, options: { escalation: 'rebase-conflict' } }),
+  );
+  for (const minutes of [-49, -45])
+    recordFlow(db, { taskId: 'landed', attempt: 2, stage: 'worker', action: 'started', at: at(minutes) });
+
+  const metrics = lifecycleMetrics(db, now);
+  expect(metrics.conflicts).toMatchObject({
+    capability: 'unavailable',
+    totalCount: null,
+    conflictToLandedMs: { count: null, p50Ms: null, p90Ms: null },
+    open: { count: null, oldestAgeMs: null },
+    resolutionMethods: { owner: null, rerere: null, replay: null },
+    recordedOutcomes: {
+      available: true,
+      complete: true,
+      observedCount: 2,
+      unclassifiedCount: 1,
+      unknownTimingCount: 0,
+      observationToLandedMs: { count: 1, p50Ms: 15 * 60_000, p90Ms: 15 * 60_000 },
+      unlandedCount: 1,
+      oldestUnlandedObservationAgeMs: 10 * 60_000,
+    },
+    createdAttempts: { available: true, complete: true, observedCount: 1, unknownCauseCount: 1, totalCount: null },
+  });
+  expect(emitHourlyLifecycleMetrics(db, metrics, now)).toBe(true);
+  metricEvent(db, 'landed', 1, at(-1), 'gate-outcome', conflict);
+  expect(lifecycleMetrics(db, now).conflicts).toEqual(metrics.conflicts);
+  expect(emitHourlyLifecycleMetrics(db, lifecycleMetrics(db, now), now)).toBe(false);
+  expect(readHourlyLifecycleMetrics(db, now)?.metrics.conflicts).toEqual(metrics.conflicts);
+});
+
+test('missing conflict sources and historical snapshots remain unavailable instead of acquiring zero counters', () => {
+  const { db } = database('historical-conflicts.sqlite');
+  const now = Date.UTC(2026, 9, 30, 12);
+  const metrics = lifecycleMetrics(db, now);
+  expect(metrics.conflicts.totalCount).toBeNull();
+  // This is the shape stored before conflict telemetry existed, not a backfilled current snapshot.
+  const { conflicts, ...historical } = metrics;
+  expect(emitHourlyLifecycleMetrics(db, metrics, now)).toBe(true);
+  db.query('UPDATE lifecycle_metric_emissions SET body=?').run(JSON.stringify(historical));
+  const old = readHourlyLifecycleMetrics(db, now)!.metrics.conflicts;
+  expect(old.reason).toContain('historical snapshot');
+  expect(old.recordedOutcomes).toMatchObject({ available: false, observedCount: null, unclassifiedCount: null });
+  expect(old.createdAttempts).toMatchObject({ available: false, observedCount: null, totalCount: null });
+  insertTask(db, 'unknown-clock', 1, 'landing');
+  metricEvent(db, 'unknown-clock', 1, '2026-10-30T11:xx:00.000Z', 'gate-outcome', {
+    passed: false,
+    stage: 'rebase',
+    rebaseConflict: conflictContext,
+  });
+  expect(lifecycleMetrics(db, now).conflicts.recordedOutcomes).toMatchObject({
+    observedCount: 1,
+    unknownTimingCount: 1,
+    unlandedCount: 1,
+    oldestUnlandedObservationAgeMs: null,
+  });
+  db.exec('DROP TABLE worker_events');
+  expect(lifecycleMetrics(db, now).conflicts.recordedOutcomes).toMatchObject({ available: false, observedCount: null });
+});
+
+test('an overflowing hourly evidence window reports lower bounds without certifying totals or resolution methods', () => {
+  const { db } = database('busy-conflicts.sqlite');
+  const now = Date.UTC(2026, 9, 30, 12);
+  const at = stamp(now, -30 * 60_000);
+  db.transaction(() => {
+    for (let i = 0; i < 1_001; i++) {
+      const id = `conflict-${i}`;
+      insertTask(db, id, i, 'landing', 2);
+      metricEvent(db, id, 1, at, 'gate-outcome', { passed: false, stage: 'rebase', rebaseConflict: conflictContext });
+      db.query('INSERT INTO worker_attempts VALUES (?, ?, ?)').run(
+        id,
+        2,
+        JSON.stringify({ state: 'exited', startedAt: at }),
+      );
+      metricEvent(db, id, 2, at, 'worker-source-baseline', sourceBaseline);
+    }
+  }).immediate();
+  const conflicts = lifecycleMetrics(db, now).conflicts;
+  expect(conflicts.recordedOutcomes).toMatchObject({ available: true, complete: false, observedCount: 1_000 });
+  expect(conflicts.createdAttempts).toMatchObject({
+    available: true,
+    complete: false,
+    observedCount: 1_000,
+    totalCount: null,
+  });
+  expect(conflicts.totalCount).toBeNull();
+  expect(conflicts.resolutionMethods).toEqual({ owner: null, rerere: null, replay: null });
+});
