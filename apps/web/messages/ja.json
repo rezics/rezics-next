@@ -856,6 +856,8 @@
   "settings_unavailable_title": "設定を取得できません",
   "settings_unavailable_text": "設定サービスから設定を取得できませんでした。もう一度お試しください。",
   "settings_retry": "再試行",
+  "settings_privacy_row_retry_wait": "サーバーから待機するよう求められています。このコレクションの再試行や再読み込みは、しばらく待ってから行ってください。",
+  "settings_privacy_page_retry_wait": "サーバーから待機するよう求められています。このコレクション一覧ページの再試行は、しばらく待ってから行ってください。",
   "settings_retry_wait": "しばらく待ってから再試行してください。",
   "settings_reading_heading": "閲覧",
   "settings_reading_text": "作品を読むときのネタバレとカバー画像の扱いを決めます。",

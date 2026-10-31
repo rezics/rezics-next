@@ -856,6 +856,8 @@
   "settings_unavailable_title": "Paramètres indisponibles",
   "settings_unavailable_text": "Le service des paramètres n’a pas pu récupérer vos préférences. Réessayez.",
   "settings_retry": "Réessayer",
+  "settings_privacy_row_retry_wait": "Le serveur vous demande de patienter avant de réessayer ou de recharger cette collection.",
+  "settings_privacy_page_retry_wait": "Le serveur vous demande de patienter avant de réessayer de charger cette page de collections.",
   "settings_retry_wait": "Patientez avant de réessayer.",
   "settings_reading_heading": "Lecture",
   "settings_reading_text": "La façon dont le site traite les spoilers et les couvertures pendant votre lecture.",

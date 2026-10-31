@@ -7,7 +7,12 @@ import { getLocale } from '../paraglide/runtime.js';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { securityHrefFromIssuer } from './account-safety-links';
-import { collectionPrivacyFailure, readCollectionPrivacyResult } from './collection-privacy-data';
+import {
+  collectionPrivacyFailure,
+  collectionPrivacyFailureMetadata,
+  nativePreferenceFailureDetails as failureDetails,
+  readCollectionPrivacyResult,
+} from './collection-privacy-data';
 import type { AccountRenameNavigation } from './account-rename-actions';
 
 export type SpoilerLevel = 0 | 1 | 2;
@@ -64,7 +69,11 @@ export type OwnedCollection = { id: string; title: string; visibility: Collectio
 export type OwnedCollectionsPage = { collections: OwnedCollection[]; next: string | null };
 export type CollectionVisibilityWrite =
   | { ok: true; collection: OwnedCollection }
-  | { ok: false; reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
+  | {
+      ok: false;
+      reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable';
+      failure?: NativePreferenceFailure;
+    };
 
 type NativeOwnedCollection = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['collections']>['get']>>['data']
@@ -116,13 +125,17 @@ export async function changeCollectionVisibility(
       );
     if (!result.error && result.data?.collection)
       return { ok: true, collection: ownedCollection(result.data.collection) };
-    if (result.status === 409) return { ok: false, reason: 'conflict' };
-    if (result.status === 400 || result.status === 422) return { ok: false, reason: 'invalid' };
-    if (failureDetails(result.error, result.status).code === 'platform_closed') return { ok: false, reason: 'closed' };
-    if (result.status === 401 || result.status === 403) return { ok: false, reason: 'forbidden' };
-    return { ok: false, reason: 'unavailable' };
+    const failure = collectionPrivacyFailureMetadata(result.error, result.status, result.headers);
+    const metadata = failure ? { failure } : {};
+    if (result.status === 409) return { ok: false, reason: 'conflict', ...metadata };
+    if (result.status === 400 || result.status === 422) return { ok: false, reason: 'invalid', ...metadata };
+    if (failureDetails(result.error, result.status).code === 'platform_closed')
+      return { ok: false, reason: 'closed', ...metadata };
+    if (result.status === 401 || result.status === 403) return { ok: false, reason: 'forbidden', ...metadata };
+    return { ok: false, reason: 'unavailable', ...metadata };
   } catch (error) {
-    return { ok: false, reason: collectionPrivacyFailure(error) };
+    const failure = collectionPrivacyFailureMetadata(error);
+    return { ok: false, reason: collectionPrivacyFailure(error), ...(failure ? { failure } : {}) };
   }
 }
 
@@ -159,33 +172,6 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function failureDetails(value: unknown, status?: number, headers?: HeadersInit): NativePreferenceFailure {
-  const root = isRecord(value) ? value : undefined;
-  const problem = root && isRecord(root.value) ? root.value : root && isRecord(root.problem) ? root.problem : root;
-  const nativeStatus =
-    status ??
-    (root && typeof root.status === 'number'
-      ? root.status
-      : problem && typeof problem.status === 'number'
-        ? problem.status
-        : null);
-  const retryAfter =
-    (headers === undefined ? undefined : new Headers(headers).get('retry-after')) ??
-    (value instanceof MediaProblem ? new Headers(value.headers).get('retry-after') : undefined) ??
-    (root && typeof root.retryAfter === 'string' ? root.retryAfter : undefined);
-  return {
-    status: nativeStatus,
-    ...(problem && typeof problem.code === 'string' ? { code: problem.code } : {}),
-    ...(problem && typeof problem.retryable === 'boolean' ? { retryable: problem.retryable } : {}),
-    ...(problem && typeof problem.request_id === 'string'
-      ? { requestId: problem.request_id }
-      : problem && typeof problem.requestId === 'string'
-        ? { requestId: problem.requestId }
-        : {}),
-    ...(retryAfter ? { retryAfter } : {}),
-  };
 }
 
 function failureState(failure: NativePreferenceFailure): 'closed' | 'preparing' | 'unavailable' {

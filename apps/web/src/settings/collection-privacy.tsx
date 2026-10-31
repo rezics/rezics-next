@@ -13,6 +13,7 @@ import type { CollectionVisibility } from '../library/reads';
 import { csrfHeaders } from '../threads/composer';
 import { readOwnedCollection, readOwnedCollectionsPage, saveCollectionVisibility } from './actions';
 import type { OwnedCollection } from './preferences';
+import { usePreferenceRetry } from './preference-failure-retry';
 import type { CollectionPrivacyFailure } from './collection-privacy-data';
 import {
   CollectionPrivacyEditor,
@@ -65,6 +66,7 @@ export function CollectionRow({
   const [editor] = useState(() => new CollectionPrivacyEditor(collection, io));
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   useEffect(() => () => editor.dispose(), [editor]);
+  const waiting = usePreferenceRetry(state.nativeFailure);
   const id = useId();
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const { current, desired, phase } = state;
@@ -77,8 +79,14 @@ export function CollectionRow({
             <AlertDescription className="space-y-3">
               <p>{failureText(state.failure ?? state.readRefusal)}</p>
               <p>{m.settings_privacy_reload_after_refusal()}</p>
+              {waiting ? <p role="status">{m.settings_privacy_row_retry_wait()}</p> : null}
               {busy ? <p role="status">{m.settings_privacy_reading()}</p> : null}
-              <Button type="button" variant="outline" disabled={!canRead || busy} onClick={() => void editor.reload()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!canRead || busy || waiting}
+                onClick={() => void editor.reload()}
+              >
                 {m.settings_privacy_reload_row()}
               </Button>
             </AlertDescription>
@@ -110,7 +118,7 @@ export function CollectionRow({
             id={id}
             value={desired}
             aria-describedby={`${id}-current`}
-            disabled={!csrfToken || !canSave}
+            disabled={!csrfToken || !canSave || (waiting && (phase === 'idle' || phase === 'saved'))}
             onChange={(event) => {
               const value = visibilityOptions.find((option) => option === event.target.value);
               if (value) void editor.edit(value);
@@ -158,12 +166,13 @@ export function CollectionRow({
                         : failureText(state.failure)}
                 </p>
                 {state.failure && phase !== 'refused' ? <p>{failureText(state.failure)}</p> : null}
+                {waiting ? <p role="status">{m.settings_privacy_row_retry_wait()}</p> : null}
                 <div className="flex flex-wrap gap-2">
                   {phase === 'uncertain' ? (
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={!csrfToken || !canSave || busy}
+                      disabled={!csrfToken || !canSave || busy || waiting}
                       onClick={() => void editor.retry()}
                     >
                       {m.settings_privacy_retry_original()}
@@ -172,7 +181,7 @@ export function CollectionRow({
                   {phase === 'review' && desired !== current.visibility ? (
                     <Button
                       type="button"
-                      disabled={!csrfToken || !canSave || busy}
+                      disabled={!csrfToken || !canSave || busy || waiting}
                       onClick={() => void editor.submit()}
                     >
                       {m.settings_privacy_save_choice()}
@@ -181,7 +190,7 @@ export function CollectionRow({
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={!canRead || busy}
+                    disabled={!canRead || busy || waiting}
                     onClick={() => void editor.reload()}
                   >
                     {m.settings_privacy_reload_row()}
@@ -213,6 +222,7 @@ export function CollectionPrivacyView({
 }) {
   const [pager] = useState(() => new CollectionPrivacyPager(read));
   const state = useSyncExternalStore(pager.subscribe, pager.snapshot, pager.snapshot);
+  const waiting = usePreferenceRetry(state.nativeFailure);
   useEffect(() => {
     void pager.load();
     return () => pager.dispose();
@@ -235,7 +245,13 @@ export function CollectionPrivacyView({
               <AlertTitle>{m.settings_failed_title()}</AlertTitle>
               <AlertDescription className="space-y-3">
                 <p>{failureText(state.failure)}</p>
-                <Button type="button" variant="outline" disabled={state.loading} onClick={() => void pager.load()}>
+                {waiting ? <p role="status">{m.settings_privacy_page_retry_wait()}</p> : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={state.loading || waiting}
+                  onClick={() => void pager.load()}
+                >
                   {m.settings_retry()}
                 </Button>
               </AlertDescription>
@@ -250,7 +266,12 @@ export function CollectionPrivacyView({
             ))}
           </ul>
           {state.next !== null && !state.failure ? (
-            <Button type="button" variant="outline" disabled={state.loading} onClick={() => void pager.load()}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={state.loading || waiting}
+              onClick={() => void pager.load()}
+            >
               {state.loading ? m.settings_privacy_loading() : m.settings_privacy_load_more()}
             </Button>
           ) : null}

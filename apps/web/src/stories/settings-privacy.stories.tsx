@@ -4,7 +4,11 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import recording from '../kernel/recorded/library-collection.json';
 import { m } from '../paraglide/messages.js';
 import { CollectionPrivacyView } from '../settings/collection-privacy';
-import type { CollectionPrivacyIO, CollectionPrivacyPageRead } from '../settings/collection-privacy-recovery';
+import type {
+  CollectionPrivacyIO,
+  CollectionPrivacyPageRead,
+  VisibilityAttempt,
+} from '../settings/collection-privacy-recovery';
 import type { OwnedCollection } from '../settings/preferences';
 import { PatternStory } from './page';
 
@@ -262,4 +266,153 @@ export const ReplayCurrentReadRefused: Story = {
   globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => <Example scenario="replay-refused" />,
   play: ({ canvasElement }) => assertRowReadRefusal(canvasElement, true),
+};
+
+/** Constructed failure inputs exercise the actual recovery controls; they are not native proof. */
+function RetryDelayExample({ scenario }: { scenario: 'first-page' | 'independent' | 'readback' }) {
+  const [transport] = useState(() => {
+    const second = { ...initial, id: 'settings-delay-second', title: 'Weekend reading' };
+    const rows = [initial, second];
+    const attempts = new Map<string, VisibilityAttempt>();
+    let pageReads = 0;
+    let rowReads = 0;
+    const io: CollectionPrivacyIO = {
+      save: async (input) => {
+        const original = attempts.get(input.collectionId);
+        if (!original) {
+          attempts.set(input.collectionId, input);
+          return {
+            ok: false,
+            reason: 'unavailable',
+            ...(scenario === 'independent'
+              ? {
+                  failure: {
+                    status: 429,
+                    code: 'rate_limited',
+                    retryable: true,
+                    retryAfter: input.collectionId === initial.id ? '2' : '60',
+                    requestId: input.collectionId,
+                  },
+                }
+              : {}),
+          };
+        }
+        if (input !== original) throw new Error('Recovery must replay the exact original command');
+        const row = rows.find((row) => row.id === input.collectionId)!;
+        return { ok: true, collection: { ...row, visibility: input.visibility, revision: input.revision + 1 } };
+      },
+      read: async (id) => {
+        if (scenario === 'readback' && rowReads++ === 0)
+          return {
+            ok: false,
+            reason: 'unavailable',
+            failure: {
+              status: 503,
+              code: 'dependency_unavailable',
+              retryable: true,
+              retryAfter: '60',
+              requestId: 'current-read',
+            },
+          };
+        const row = rows.find((row) => row.id === id)!;
+        return { ok: true, value: { ...row, revision: row.revision + 2 } };
+      },
+    };
+    const read: CollectionPrivacyPageRead = async () => {
+      pageReads++;
+      if ((scenario === 'first-page' && pageReads === 1) || (scenario === 'independent' && pageReads === 2))
+        return {
+          ok: false,
+          reason: 'unavailable',
+          failure: {
+            status: 503,
+            code: 'dependency_unavailable',
+            retryable: true,
+            retryAfter: '60',
+            requestId: 'owner-page',
+          },
+        };
+      return {
+        ok: true,
+        value: {
+          collections: scenario === 'independent' ? rows : [initial],
+          next: scenario === 'independent' ? 'exact-page-2' : null,
+        },
+      };
+    };
+    return { io, read };
+  });
+  return (
+    <div className="mx-auto max-w-3xl">
+      <CollectionPrivacyView {...transport} />
+    </div>
+  );
+}
+
+export const InitialPageRetryDelay: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <RetryDelayExample scenario="first-page" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByText(m.settings_privacy_page_retry_wait());
+    await expect(view.getByRole('button', { name: m.settings_retry() })).toBeDisabled();
+    await expect(view.queryByText(m.settings_privacy_empty())).toBeNull();
+    await expect(view.queryByRole('combobox')).toBeNull();
+  },
+};
+
+export const IndependentRecoveryDelays: Story = {
+  render: () => <RetryDelayExample scenario="independent" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByRole('link', { name: initial.title });
+    const selects = view.getAllByRole('combobox');
+    await waitFor(() => expect(selects[0]).toBeEnabled());
+    await userEvent.selectOptions(selects[0]!, 'private');
+    await expect(view.getByRole('button', { name: m.settings_privacy_retry_original() })).toBeDisabled();
+    await expect(view.getByRole('button', { name: m.settings_privacy_reload_row() })).toBeDisabled();
+    await expect(selects[1]).toBeEnabled();
+    await expect(view.getByRole('button', { name: m.settings_privacy_load_more() })).toBeEnabled();
+    await userEvent.selectOptions(selects[1]!, 'private');
+    await userEvent.selectOptions(selects[0]!, 'unlisted');
+    await userEvent.click(view.getByRole('button', { name: m.settings_privacy_load_more() }));
+    await view.findByText(m.settings_privacy_page_retry_wait());
+    const retries = view.getAllByRole('button', { name: m.settings_privacy_retry_original() });
+    const reloads = view.getAllByRole('button', { name: m.settings_privacy_reload_row() });
+    await expect(retries[1]).toBeDisabled();
+    await expect(reloads[1]).toBeDisabled();
+    await expect(selects[0]).toBeEnabled();
+    await expect(selects[0]).toHaveValue('unlisted');
+    await waitFor(() => expect(retries[0]).toBeEnabled(), { timeout: 5000 });
+    await expect(reloads[0]).toBeEnabled();
+    await expect(retries[1]).toBeDisabled();
+    await expect(reloads[1]).toBeDisabled();
+    await expect(view.getByRole('button', { name: m.settings_retry() })).toBeDisabled();
+    // Expiry made no replay or page read; both original outcomes still need deliberate recovery.
+    await expect(view.getAllByText(m.settings_privacy_uncertain_title())).toHaveLength(2);
+    await expect(view.queryByText(m.settings_saved())).toBeNull();
+    await userEvent.click(retries[0]!);
+    await view.findByText(m.settings_privacy_review_title());
+    await expect(selects[0]).toHaveValue('unlisted');
+    await expect(
+      view.getAllByText(m.settings_privacy_current({ visibility: m.settings_privacy_public() })),
+    ).toHaveLength(2);
+  },
+};
+
+export const ReplayReadbackRetryDelay: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <RetryDelayExample scenario="readback" />,
+  play: async ({ canvasElement }) => {
+    const view = await choosePrivate(canvasElement);
+    await userEvent.selectOptions(view.getByRole('combobox'), 'unlisted');
+    await userEvent.click(await view.findByRole('button', { name: m.settings_privacy_retry_original() }));
+    await view.findByText(m.settings_privacy_row_retry_wait());
+    await expect(view.getByRole('button', { name: m.settings_privacy_retry_original() })).toBeDisabled();
+    await expect(view.getByRole('button', { name: m.settings_privacy_reload_row() })).toBeDisabled();
+    await expect(view.getByRole('combobox')).toBeEnabled();
+    await expect(view.getByRole('combobox')).toHaveValue('unlisted');
+    await expect(view.queryByText(m.settings_saved())).toBeNull();
+    await view.findByText(m.settings_privacy_current({ visibility: m.settings_privacy_public() }));
+  },
 };

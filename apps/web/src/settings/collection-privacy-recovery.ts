@@ -1,6 +1,12 @@
 import type { CollectionVisibility } from '../library/reads';
-import type { CollectionVisibilityWrite, OwnedCollection, OwnedCollectionsPage } from './preferences';
+import type {
+  CollectionVisibilityWrite,
+  NativePreferenceFailure,
+  OwnedCollection,
+  OwnedCollectionsPage,
+} from './preferences';
 import {
+  collectionPrivacyFailureMetadata,
   isCollectionPrivacyReadRefusal,
   type CollectionPrivacyFailure,
   type CollectionPrivacyRead,
@@ -23,6 +29,7 @@ type EditorState = {
   readRefusal: 'closed' | 'forbidden' | null;
   phase: 'idle' | 'saving' | 'uncertain' | 'conflict' | 'refused' | 'review' | 'reloading' | 'saved';
   failure?: CollectionPrivacyFailure | 'invalid' | undefined;
+  nativeFailure?: NativePreferenceFailure | undefined;
 };
 
 class Observable<State> {
@@ -79,7 +86,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     const attempt = this.state.attempt;
     if (!attempt) return;
     const generation = this.generation;
-    this.update({ phase: 'saving', failure: undefined });
+    this.update({ phase: 'saving', failure: undefined, nativeFailure: undefined });
     try {
       const answer = await this.io.save(attempt);
       if (generation !== this.generation) return;
@@ -87,11 +94,12 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         this.update(
           answer.reason === 'unavailable' || (recovering && answer.reason !== 'conflict')
             ? // A refused replay cannot establish whether the earlier transport-ambiguous command committed.
-              { phase: 'uncertain', failure: answer.reason }
+              { phase: 'uncertain', failure: answer.reason, nativeFailure: answer.failure }
             : {
                 attempt: null,
                 phase: answer.reason === 'conflict' ? 'conflict' : 'refused',
                 failure: answer.reason === 'conflict' ? undefined : answer.reason,
+                nativeFailure: answer.failure,
               },
         );
         return;
@@ -114,13 +122,14 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         return;
       }
       // A replay receipt is historical. Read current native state without replacing a later draft.
-      this.update({ phase: 'reloading' });
+      this.update({ phase: 'reloading', nativeFailure: undefined });
       const read = await this.io.read(attempt.collectionId);
       if (generation !== this.generation) return;
       if (!read.ok) {
         this.update({
           phase: 'uncertain',
           failure: read.reason,
+          nativeFailure: read.failure,
           readRefusal: isCollectionPrivacyReadRefusal(read.reason) ? read.reason : this.state.readRefusal,
         });
         return;
@@ -135,8 +144,13 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         return;
       }
       this.update({ current, attempt: null, phase: 'review', readRefusal: null });
-    } catch {
-      if (generation === this.generation) this.update({ phase: 'uncertain', failure: 'unavailable' });
+    } catch (error) {
+      if (generation === this.generation)
+        this.update({
+          phase: 'uncertain',
+          failure: 'unavailable',
+          nativeFailure: collectionPrivacyFailureMetadata(error),
+        });
     }
   }
   async reload() {
@@ -144,7 +158,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     const generation = this.generation;
     const edits = this.edits;
     const previous = this.state.phase;
-    this.update({ phase: 'reloading' });
+    this.update({ phase: 'reloading', nativeFailure: undefined });
     try {
       const read = await this.io.read(this.state.current.id);
       if (generation !== this.generation) return;
@@ -152,6 +166,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         this.update({
           phase: previous,
           failure: read.reason,
+          nativeFailure: read.failure,
           readRefusal: isCollectionPrivacyReadRefusal(read.reason) ? read.reason : this.state.readRefusal,
         });
         return;
@@ -170,9 +185,15 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         readRefusal: null,
         phase: desired === read.value.visibility ? 'idle' : 'review',
         failure: undefined,
+        nativeFailure: undefined,
       });
-    } catch {
-      if (generation === this.generation) this.update({ phase: previous, failure: 'unavailable' });
+    } catch (error) {
+      if (generation === this.generation)
+        this.update({
+          phase: previous,
+          failure: 'unavailable',
+          nativeFailure: collectionPrivacyFailureMetadata(error),
+        });
     }
   }
 }
@@ -183,6 +204,7 @@ type PageState = {
   loaded: boolean;
   loading: boolean;
   failure: CollectionPrivacyFailure | null;
+  nativeFailure?: NativePreferenceFailure | undefined;
 };
 export type CollectionPrivacyPageRead = (cursor: string | null) => Promise<CollectionPrivacyRead<OwnedCollectionsPage>>;
 
@@ -198,7 +220,7 @@ export class CollectionPrivacyPager extends Observable<PageState> {
     if (this.state.loading || (this.state.loaded && this.state.next === null)) return;
     const generation = this.generation;
     const cursor = this.state.next;
-    this.update({ loading: true, failure: null });
+    this.update({ loading: true, failure: null, nativeFailure: undefined });
     try {
       const read = await this.read(cursor);
       if (generation !== this.generation) return;
@@ -206,16 +228,17 @@ export class CollectionPrivacyPager extends Observable<PageState> {
         this.update(
           isCollectionPrivacyReadRefusal(read.reason)
             ? // An explicit refresh starts at the first native page; denied pages cannot revive cached rows.
-              { failure: read.reason, collections: [], next: null, loaded: false }
-            : { failure: read.reason },
+              { failure: read.reason, nativeFailure: read.failure, collections: [], next: null, loaded: false }
+            : { failure: read.reason, nativeFailure: read.failure },
         );
         return;
       }
       const rows = new Map(this.state.collections.map((row) => [row.id, row]));
       for (const row of read.value.collections) if (!rows.has(row.id)) rows.set(row.id, row);
       this.update({ collections: [...rows.values()], next: read.value.next, loaded: true });
-    } catch {
-      if (generation === this.generation) this.update({ failure: 'unavailable' });
+    } catch (error) {
+      if (generation === this.generation)
+        this.update({ failure: 'unavailable', nativeFailure: collectionPrivacyFailureMetadata(error) });
     } finally {
       if (generation === this.generation) this.update({ loading: false });
     }

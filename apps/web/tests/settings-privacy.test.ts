@@ -8,6 +8,8 @@ import {
   type OwnedCollectionsPage,
   type CollectionVisibilityWrite,
 } from '../src/settings/preferences';
+import { MediaProblem } from '../src/media/kernel';
+import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 import { collectionPrivacyRead, type CollectionPrivacyRead } from '../src/settings/collection-privacy-data';
 import {
   CollectionPrivacyEditor,
@@ -378,4 +380,181 @@ test('actor teardown rejects late pages and row reads, and a successful explicit
     readRefusal: null,
     attempt: null,
   });
+});
+
+test('native Collection privacy failures retain actual retry metadata across page, row and write adapters', async () => {
+  for (const [status, code, retryAfter] of [
+    [429, 'rate_limited', '17'],
+    [503, 'dependency_unavailable', 'Sat, 31 Oct 2026 12:00:00 GMT'],
+  ] as const) {
+    const calls: Request[] = [];
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async (input, init) => {
+        calls.push(new Request(input, init));
+        return Response.json(
+          {
+            type: `https://rezics.com/problems/${code}`,
+            title: code,
+            status,
+            code,
+            retryable: true,
+            request_id: 'native-request',
+          },
+          { status, headers: { 'Retry-After': retryAfter } },
+        );
+      }) as typeof fetch,
+    });
+    const expected = {
+      ok: false,
+      reason: 'unavailable',
+      failure: { status, code, retryable: true, requestId: 'native-request', retryAfter },
+    };
+    expect(await collectionPrivacyRead(() => readOwnedCollections(client, request(), env, 'exact+/cursor=='))).toEqual(
+      expected,
+    );
+    expect(await collectionPrivacyRead(() => reloadOwnedCollection(client, request(), env, 'c1'))).toEqual(expected);
+    expect(
+      await changeCollectionVisibility(client, request('POST'), env, {
+        collectionId: 'c1',
+        revision: 7,
+        visibility: 'private',
+        idempotencyKey: '123e4567-e89b-42d3-a456-426614174000',
+      }),
+    ).toEqual(expected);
+    expect(calls).toHaveLength(3);
+    expect(calls.every((call) => call.headers.get('authorization') === 'Bearer page-token')).toBe(true);
+    expect(new URL(calls[0]!.url).searchParams.get('cursor')).toBe('exact+/cursor==');
+    expect(calls[2]!.headers.get('idempotency-key')).toBe('123e4567-e89b-42d3-a456-426614174000');
+    expect(await calls[2]!.json()).toEqual({ revision: 7, visibility: 'private' });
+  }
+});
+
+test('thrown native problems retain metadata and invalid, past or absent retry headers invent no wait', async () => {
+  const now = Date.parse('2026-10-31T11:00:00Z');
+  for (const retryAfter of [
+    '9',
+    'Sat, 31 Oct 2026 11:00:12 GMT',
+    'invalid',
+    '-1',
+    '0',
+    'Sat, 31 Oct 2026 10:00:00 GMT',
+    undefined,
+  ]) {
+    const problem = {
+      type: 'https://rezics.com/problems/dependency_unavailable',
+      title: 'Unavailable',
+      status: 503,
+      code: 'dependency_unavailable',
+      retryable: true,
+      request_id: 'thrown-request',
+    };
+    const error = new MediaProblem(problem, retryAfter === undefined ? undefined : { 'retry-after': retryAfter });
+    const failure = {
+      status: 503,
+      code: problem.code,
+      retryable: true,
+      requestId: 'thrown-request',
+      ...(retryAfter ? { retryAfter } : {}),
+    };
+    expect(
+      await collectionPrivacyRead(async () => {
+        throw error;
+      }),
+    ).toEqual({ ok: false, reason: 'unavailable', failure });
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async () => {
+        throw error;
+      }) as typeof fetch,
+    });
+    expect(
+      await changeCollectionVisibility(client, request('POST'), env, {
+        collectionId: 'c1',
+        revision: 7,
+        visibility: 'private',
+        idempotencyKey: '123e4567-e89b-42d3-a456-426614174000',
+      }),
+    ).toEqual({ ok: false, reason: 'unavailable', failure });
+    expect(preferenceRetryDeadline(failure.retryAfter, now)).toBe(
+      retryAfter === '9' ? now + 9000 : retryAfter === 'Sat, 31 Oct 2026 11:00:12 GMT' ? now + 12000 : 0,
+    );
+  }
+});
+
+test('Respect native retry delays during Collection privacy recovery without weakening native identity, exact recovery or draft invariants', async () => {
+  const first = collection('first', 'First collection', 'public');
+  const second = collection('second', 'Second collection', 'public');
+  const originalFailure = { status: 429, code: 'rate_limited', retryAfter: '17' };
+  const readbackFailure = { status: 503, code: 'dependency_unavailable', retryAfter: '31' };
+  const pageFailure = { status: 503, code: 'dependency_unavailable', retryAfter: '47' };
+  const commands: VisibilityAttempt[] = [];
+  let reads = 0;
+  const editor = new CollectionPrivacyEditor(first, {
+    save: async (attempt) => {
+      commands.push(attempt);
+      return commands.length === 1
+        ? { ok: false, reason: 'unavailable', failure: originalFailure }
+        : { ok: true, collection: { ...first, visibility: 'private', revision: 8 } };
+    },
+    read: async () =>
+      ++reads === 1
+        ? { ok: false, reason: 'unavailable', failure: readbackFailure }
+        : { ok: true, value: { ...first, visibility: 'unlisted', revision: 10 } },
+  });
+  const other = new CollectionPrivacyEditor(second, {
+    save: async () => ({ ok: true, collection: { ...second, visibility: 'private', revision: 8 } }),
+    read: async () => ({ ok: true, value: second }),
+  });
+  const cursors: (string | null)[] = [];
+  const pager = new CollectionPrivacyPager(async (cursor) => {
+    cursors.push(cursor);
+    if (cursors.length === 1) return { ok: true, value: { collections: [first, second], next: 'exact+/cursor==' } };
+    return cursors.length === 2
+      ? { ok: false, reason: 'unavailable', failure: pageFailure }
+      : { ok: true, value: { collections: [], next: null } };
+  });
+  await pager.load();
+  await editor.edit('private');
+  const attempt = editor.snapshot().attempt!;
+  await editor.edit('unlisted');
+  await pager.load();
+  await other.edit('private');
+  expect(editor.snapshot().nativeFailure).toBe(originalFailure); // Draft edits preserve the hook's deadline anchor.
+  expect(pager.snapshot()).toMatchObject({
+    nativeFailure: pageFailure,
+    next: 'exact+/cursor==',
+    collections: [first, second],
+  });
+  expect(other.snapshot()).toMatchObject({ phase: 'saved', nativeFailure: undefined });
+  expect(commands).toHaveLength(1);
+  expect(reads).toBe(0);
+  const now = Date.parse('2026-10-31T11:00:00Z');
+  expect(preferenceRetryDeadline(editor.snapshot().nativeFailure?.retryAfter, now)).toBe(now + 17_000);
+  expect(preferenceRetryDeadline(pager.snapshot().nativeFailure?.retryAfter, now)).toBe(now + 47_000);
+  // The component's canonical hook enables these deliberate actions only after its own delay expires.
+  await editor.retry();
+  expect(editor.snapshot()).toMatchObject({
+    nativeFailure: readbackFailure,
+    attempt,
+    desired: 'unlisted',
+    current: first,
+  });
+  expect(editor.snapshot().attempt).toBe(attempt);
+  expect(commands[1]).toBe(attempt);
+  expect(pager.snapshot().nativeFailure).toBe(pageFailure);
+  await editor.edit('public');
+  expect(editor.snapshot().nativeFailure).toBe(readbackFailure);
+  expect(commands).toHaveLength(2);
+  await editor.retry();
+  expect(commands[2]).toBe(attempt);
+  expect(editor.snapshot()).toMatchObject({
+    phase: 'review',
+    attempt: null,
+    desired: 'public',
+    current: { visibility: 'unlisted', revision: 10 },
+    nativeFailure: undefined,
+  });
+  expect(reads).toBe(2);
+  await pager.load();
+  expect(cursors).toEqual([null, 'exact+/cursor==', 'exact+/cursor==']);
+  expect(pager.snapshot()).toMatchObject({ loaded: true, next: null, failure: null, nativeFailure: undefined });
 });

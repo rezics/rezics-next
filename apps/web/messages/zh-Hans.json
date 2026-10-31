@@ -857,6 +857,8 @@
   "settings_unavailable_title": "设置暂不可用",
   "settings_unavailable_text": "设置服务暂时无法返回你的偏好，请重试。",
   "settings_retry": "重试",
+  "settings_privacy_row_retry_wait": "服务器要求稍候再重试或重新加载此收藏集。",
+  "settings_privacy_page_retry_wait": "服务器要求稍候再重试加载此收藏集列表页。",
   "settings_retry_wait": "请稍候再试。",
   "settings_reading_heading": "阅读",
   "settings_reading_text": "决定阅读时如何处理剧透和封面。",

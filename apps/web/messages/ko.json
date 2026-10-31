@@ -856,6 +856,8 @@
   "settings_unavailable_title": "설정을 불러올 수 없습니다",
   "settings_unavailable_text": "설정 서비스에서 환경설정을 가져오지 못했습니다. 다시 시도하세요.",
   "settings_retry": "다시 시도",
+  "settings_privacy_row_retry_wait": "서버에서 대기를 요청했습니다. 잠시 후 이 컬렉션을 다시 시도하거나 새로 불러오세요.",
+  "settings_privacy_page_retry_wait": "서버에서 대기를 요청했습니다. 잠시 후 이 컬렉션 목록 페이지를 다시 불러오세요.",
   "settings_retry_wait": "잠시 기다린 후 다시 시도해 주세요.",
   "settings_reading_heading": "읽기",
   "settings_reading_text": "작품을 읽을 때 스포일러와 표지를 어떻게 다룰지 정합니다.",

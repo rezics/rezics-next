@@ -856,6 +856,8 @@
   "settings_unavailable_title": "Einstellungen nicht verfügbar",
   "settings_unavailable_text": "Der Einstellungsdienst konnte deine Einstellungen nicht abrufen. Versuche es erneut.",
   "settings_retry": "Erneut versuchen",
+  "settings_privacy_row_retry_wait": "Der Server bittet dich, vor einem erneuten Versuch oder dem Neuladen dieser Sammlung zu warten.",
+  "settings_privacy_page_retry_wait": "Der Server bittet dich, vor einem erneuten Versuch für diese Sammlungsseite zu warten.",
   "settings_retry_wait": "Warte, bevor du es erneut versuchst.",
   "settings_reading_heading": "Lesen",
   "settings_reading_text": "Wie die Website beim Lesen mit Spoilern und Covern umgeht.",

@@ -856,6 +856,8 @@
   "settings_unavailable_title": "設定暫時無法使用",
   "settings_unavailable_text": "設定服務暫時無法傳回你的偏好，請重試。",
   "settings_retry": "重試",
+  "settings_privacy_row_retry_wait": "伺服器要求稍候再重試或重新載入此收藏集。",
+  "settings_privacy_page_retry_wait": "伺服器要求稍候再重試載入此收藏集清單頁。",
   "settings_retry_wait": "請稍候再試。",
   "settings_reading_heading": "閱讀",
   "settings_reading_text": "決定閱讀時如何處理劇透與封面。",
