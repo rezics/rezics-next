@@ -3,6 +3,7 @@ import { ClientOnly } from '@tanstack/react-router';
 import {
   lazy,
   Suspense,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -48,6 +49,9 @@ import {
   reviewPresentationDraft,
   selectTemplate,
   selectionKey,
+  resolveCorrection,
+  currentCorrection,
+  type CorrectionTarget,
 } from './curate-view-editor-state';
 import type { PageEditorData } from './editor-config';
 import { CurationPublication, type PublicationConfirmation, type PublicationTransport } from './curation-publish';
@@ -109,6 +113,7 @@ export function PresentationViewEditor({
   const [current, setCurrent] = useState(initial);
   const [draft, setDraft] = useState(() => (initial.ok ? presentationDraft(initial) : null));
   const [failure, setFailure] = useState<CurationFailure | null>(null);
+  const [failureProfile, setFailureProfile] = useState(initial.ok ? initial.profile : null);
   const [message, setMessage] = useState('');
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [publication] = useState(() => new CurationPublication(transport));
@@ -125,6 +130,12 @@ export function PresentationViewEditor({
   const [generation, setGeneration] = useState(0);
   const [scope, setScope] = useState<'type' | 'route'>('type');
   const [key, setKey] = useState('');
+  const [correction, setCorrection] = useState<CorrectionTarget | null>(null);
+  const editorRegion = useRef<HTMLElement>(null);
+  const [focusRegion, setFocusRegion] = useState(0);
+  useEffect(() => {
+    if (focusRegion) editorRegion.current?.focus();
+  }, [focusRegion]);
   const dirty = useMemo(() => draft !== null && hasDraftChanges(draft), [draft]);
   const viewNames = presentationViewNames();
   const scopeNames = {
@@ -135,6 +146,32 @@ export function PresentationViewEditor({
   };
   const templateLabel = (template: Template) =>
     template.key === null ? scopeNames.generic : `${scopeNames[template.scope]}: ${template.key}`;
+  const invalidPublication = publicationState.result?.ok === false && publicationState.result.reason === 'invalid';
+  const laterChanges = !!draft && !!publicationState.intent && JSON.stringify(draft.profile) !== JSON.stringify(publicationState.intent.profile);
+  const unresolvedPublication = pendingPublication && !invalidPublication;
+
+  function validationCorrection(source: typeof failureProfile) {
+    return {
+      describe(pointer: string) {
+        const target = source && resolveCorrection(source, pointer, locale);
+        return target
+          ? m.curation_correction_target({ template: templateLabel(target.template), view: viewNames[target.view], component: target.component?.type ?? m.curation_page_settings(), field: target.label })
+          : m.curation_correction_unknown();
+      },
+      correct(pointer: string) {
+        if (!draft || busy) return;
+        const original = source && resolveCorrection(source, pointer, locale);
+        const target = original && currentCorrection(draft.profile, original);
+        setEditorOpen(true);
+        setCorrection(target ? { ...target } : null);
+        setMessage(target
+          ? source && JSON.stringify(source) !== JSON.stringify(draft.profile) ? m.curation_correction_later() : m.curation_correction_help()
+          : m.curation_correction_missing());
+        if (target) setDraft((value) => value && { ...value, selection: { template: target.template, view: target.view } });
+        else setFocusRegion((value) => value + 1);
+      },
+    };
+  }
 
   if ((!current.ok && current.reason === 'forbidden') || failure?.reason === 'forbidden') return <ErrorPage />;
 
@@ -147,6 +184,7 @@ export function PresentationViewEditor({
     inFlight.current = true;
     setLoadingProfile(true);
     setFailure(null);
+    setCorrection(null);
     setMessage('');
     try {
       const next = await transport.read();
@@ -172,7 +210,7 @@ export function PresentationViewEditor({
     const selection = draft.selection;
     setDraft((value) => value && editView(value, selection, data));
     setFailure(null);
-    setMessage('');
+    if (!correction) setMessage('');
   }
 
   function addTemplate(event: FormEvent) {
@@ -195,6 +233,7 @@ export function PresentationViewEditor({
     const errors = validateProfile(platformRegistry, profile);
     if (errors.length) {
       setFailure({ ok: false, reason: 'invalid', errors });
+      setFailureProfile(profile);
       return;
     }
     setDraft({ ...draft, profile, selection: { template, view: 'overview' } });
@@ -208,11 +247,12 @@ export function PresentationViewEditor({
     const saved = { profile: confirmation.intent.profile, ...confirmation.result };
     setCurrent(saved);
     setDraft((value) => value && confirmPresentationDraft(value, confirmation));
+    setCorrection(null);
     setMessage('');
   }
 
   async function publish(edited?: CompositionDocument) {
-    if (!draft || inFlight.current || publication.getSnapshot().busy || publication.getSnapshot().intent) return;
+    if (!draft || inFlight.current || publication.getSnapshot().busy || unresolvedPublication) return;
     // onChange normally already captured this data; onPublish can deliver a final synchronous edit.
     const profile = edited
       ? withView(draft.profile, draft.selection.template, draft.selection.view, edited)
@@ -220,12 +260,15 @@ export function PresentationViewEditor({
     const errors = validateProfile(platformRegistry, profile);
     if (errors.length) {
       setFailure({ ok: false, reason: 'invalid', errors });
+      setFailureProfile(profile);
       return;
     }
     setDraft((value) => value && { ...value, profile });
     setFailure(null);
     setMessage('');
-    const confirmation = await publication.start(profile, draft.saved.head);
+    const confirmation = invalidPublication
+      ? await publication.replaceInvalid(profile, draft.saved.head)
+      : await publication.start(profile, draft.saved.head);
     if (confirmation) published(confirmation);
   }
 
@@ -257,7 +300,9 @@ export function PresentationViewEditor({
         <p className="text-muted-foreground">{m.curation_head({ head: saved.head })}</p>
         <p className="text-sm text-muted-foreground">{m.curation_instructions()}</p>
         <p role="status" className="text-sm">
-          {dirty ? m.curation_unsaved() : m.curation_saved()}
+          {invalidPublication && pendingPublication
+            ? laterChanges ? m.curation_invalid_later() : m.curation_invalid_retained()
+            : dirty ? m.curation_unsaved() : m.curation_saved()}
         </p>
       </header>
       {message && (
@@ -265,13 +310,14 @@ export function PresentationViewEditor({
           {message}
         </p>
       )}
-      {failure && <CurationFailureNotice failure={failure} />}
+      {failure && <CurationFailureNotice failure={failure} correction={validationCorrection(failureProfile)} />}
       {preview}
       <CurationPublicationRecovery
         publication={publication}
         profile={profile}
         head={saved.head}
         onPublished={published}
+        correction={validationCorrection(publicationState.intent?.profile ?? profile)}
         onReviewed={(_reviewed, choice) => {
           // reconcile('keep') returns the draft on the reviewed head. The dirty baseline is the actual read.
           const active = publicationState.active;
@@ -286,7 +332,7 @@ export function PresentationViewEditor({
       <fieldset disabled={busy} className="min-w-0 space-y-6">
         <div className="flex flex-wrap gap-3">
           {!editorOpen && (
-            <Button disabled={pendingPublication} onClick={() => void publish()}>
+            <Button disabled={unresolvedPublication || (invalidPublication && !laterChanges)} onClick={() => void publish()}>
               {m.curation_publish()}
             </Button>
           )}
@@ -313,6 +359,7 @@ export function PresentationViewEditor({
                 onChange={(event) => {
                   const template = templates.find((item) => JSON.stringify(item) === event.target.value);
                   if (template) {
+                    setCorrection(null);
                     setDraft((value) => value && selectTemplate(value, template));
                     setEditorOpen(true);
                   }
@@ -333,6 +380,7 @@ export function PresentationViewEditor({
                 onChange={(event) => {
                   const view = views.find((item) => item === event.target.value);
                   if (view) {
+                    setCorrection(null);
                     setDraft((value) => value && { ...value, selection: { ...value.selection, view } });
                     setEditorOpen(true);
                   }
@@ -349,7 +397,7 @@ export function PresentationViewEditor({
           <p className="text-sm text-muted-foreground">{m.curation_fallback()}</p>
         </section>
         {editorOpen ? (
-          <section className="min-w-0 space-y-3" aria-label={m.curation_editor()}>
+          <section ref={editorRegion} tabIndex={-1} className="min-w-0 space-y-3" aria-label={m.curation_editor()}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="break-words font-semibold">
                 {templateLabel(selection.template)} · {viewNames[selection.view]}
@@ -371,7 +419,13 @@ export function PresentationViewEditor({
                     draft={editors[editorKey]}
                     locale={locale}
                     pointerPrefix={viewPointer(profile, selection.template, selection.view)}
-                    publishDisabled={pendingPublication || busy}
+                    publishDisabled={unresolvedPublication || busy || (invalidPublication && !laterChanges)}
+                    correction={correction}
+                    onInvalid={(errors, document) => {
+                      const invalid = withView(profile, selection.template, selection.view, document);
+                      setFailure({ ok: false, reason: 'invalid', errors: errors.map((error) => ({ ...error, pointer: viewPointer(profile, selection.template, selection.view) + error.pointer })) });
+                      setFailureProfile(invalid);
+                    }}
                     onChange={change}
                     onPublish={(edited) => void publish(edited)}
                   />
@@ -436,6 +490,7 @@ export function PresentationViewEditor({
                 else {
                   setDraft((value) => value && discardPresentationDraft(value));
                   setGeneration((value) => value + 1);
+                  setCorrection(null);
                   setFailure(null);
                   setMessage(m.curation_view_discarded());
                 }

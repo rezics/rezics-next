@@ -1,11 +1,131 @@
-import type { PresentationProfile, View } from '@rezics/composition';
+import { platformRegistry, type CompositionDocument, type CompositionNode, type PresentationProfile, type View } from '@rezics/composition';
 import type { CurationRead } from './curate-actions';
-import { templateViewNames, withView, type Template } from './curate';
-import { toComposition, type PageEditorData } from './editor-config';
+import { profileTemplates, templateViewNames, viewOf, viewPointer, withView, type Template } from './curate';
+import { editorConfig, toComposition, type PageEditorData } from './editor-config';
 import type { PublicationConfirmation } from './curation-publish';
 
 export type CurationSnapshot = Extract<CurationRead, { ok: true }>;
 export type ViewSelection = { template: Template; view: View };
+export type CorrectionTarget = ViewSelection & {
+  component: { id: string; type: string } | null;
+  field: string[];
+  label: string;
+  sourceValue: unknown;
+};
+
+/** Reject malformed escapes and non-canonical array positions rather than guessing a target. */
+function pointerSegments(pointer: string): string[] | null {
+  if (!pointer.startsWith('/') || /~(?:[^01]|$)/u.test(pointer)) return null;
+  return pointer.slice(1).split('/').map((part) => part.replace(/~1/gu, '/').replace(/~0/gu, '~'));
+}
+
+function nodeAt(nodes: CompositionNode[], segment: string | undefined) {
+  return segment !== undefined && /^(0|[1-9][0-9]*)$/u.test(segment) ? nodes[Number(segment)] : undefined;
+}
+
+/** Use the installed editor configuration as the authority for editable fields and their labels. */
+function editableField(type: string | null, path: string[], locale: string, props: Record<string, unknown>) {
+  const config = editorConfig(platformRegistry, { locale });
+  let fields = type === null ? config.root?.fields : config.components[type]?.fields;
+  const names: string[] = [];
+  const labels: string[] = [];
+  let value: unknown = props;
+  for (let index = 0; index < path.length; index++) {
+    const name = path[index]!;
+    if (!fields || !Object.hasOwn(fields, name)) return null;
+    const field = fields[name]!;
+    value = value !== null && typeof value === 'object' && Object.hasOwn(value, name)
+      ? (value as Record<string, unknown>)[name] : undefined;
+    names.push(name);
+    labels.push(field.label ?? name);
+    if (field.type === 'object') {
+      fields = field.objectFields;
+      // Localized scalar text is edited in the English control, as in fromComposition.
+      if (index === path.length - 1 && Object.hasOwn(fields, 'en')) path = [...path, 'en'];
+    } else if (field.type === 'array') {
+      const position = path[++index];
+      if (!position || !/^(0|[1-9][0-9]*)$/u.test(position)) return null;
+      if (!Array.isArray(value) || Number(position) >= value.length) return null;
+      value = value[Number(position)];
+      names.push(position);
+      labels.push(String(Number(position) + 1));
+      fields = field.arrayFields;
+      if (Object.keys(fields).length === 1 && Object.hasOwn(fields, 'value') && index === path.length - 1)
+        path = [...path, 'value'];
+    } else if (field.type !== 'slot') {
+      // JSON-valued controls (filters and object choices) own their entire nested value.
+      if (index !== path.length - 1) {
+        if (field.type !== 'textarea') return null;
+        for (const part of path.slice(index + 1)) {
+          if (value === null || typeof value !== 'object' || !Object.hasOwn(value, part)) return null;
+          value = (value as Record<string, unknown>)[part];
+        }
+      }
+      return { field: names, label: labels.join(' · '), sourceValue: props[names[0]!] };
+    } else return null;
+  }
+  return null;
+}
+
+/** Resolve indices only in the exact profile to which the validation response belongs. */
+export function resolveCorrection(profile: PresentationProfile, pointer: string, locale: string): CorrectionTarget | null {
+  const segments = pointerSegments(pointer);
+  if (!segments) return null;
+  for (const template of profileTemplates(profile)) {
+    for (const view of templateViewNames(profile, template)) {
+      const prefix = pointerSegments(viewPointer(profile, template, view))!;
+      if (!prefix.every((part, index) => segments[index] === part)) continue;
+      const path = segments.slice(prefix.length);
+      const document = viewOf(profile, template, view)!;
+      if (path[0] === 'root' && path[1] === 'props' && path[2] === 'appearance') {
+        const field = editableField(null, path.slice(3), locale, document.root.props.appearance ?? {});
+        return field ? { template, view, component: null, ...field } : null;
+      }
+      if (path.shift() !== 'content') return null;
+      let node = nodeAt(document.content, path.shift());
+      while (node && path[0] === 'props') {
+        path.shift();
+        const definition = platformRegistry.components.find((entry) => entry.type === node!.type);
+        if (!definition) return null;
+        const slot = path[0];
+        if (slot && definition.slots.includes(slot)) {
+          path.shift();
+          const children = node.props[slot];
+          node = Array.isArray(children) ? nodeAt(children as CompositionNode[], path.shift()) : undefined;
+          continue;
+        }
+        const field = editableField(node.type, path, locale, node.props);
+        return field ? { template, view, component: { id: node.props.id, type: node.type }, ...field } : null;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Match stable component identity in the current draft, never reuse a failed snapshot's array position. */
+export function currentCorrection(profile: PresentationProfile, target: CorrectionTarget): CorrectionTarget | null {
+  const document = viewOf(profile, target.template, target.view);
+  if (!document) return null;
+  if (!target.component) return target;
+  const matches: CompositionNode[] = [];
+  function visit(nodes: CompositionDocument['content']) {
+    for (const node of nodes) {
+      if (node.props.id === target.component!.id) matches.push(node);
+      const definition = platformRegistry.components.find((entry) => entry.type === node.type);
+      for (const slot of definition?.slots ?? []) {
+        const children = node.props[slot];
+        if (Array.isArray(children)) visit(children as CompositionNode[]);
+      }
+    }
+  }
+  visit(document.content);
+  if (matches.length !== 1 || matches[0]!.type !== target.component.type) return null;
+  // Array item positions have no stable identity. Map them only if that whole property is unchanged.
+  if (target.field.some((part) => /^(0|[1-9][0-9]*)$/u.test(part)) &&
+    JSON.stringify(matches[0]!.props[target.field[0]!]) !== JSON.stringify(target.sourceValue)) return null;
+  return target;
+}
 export type PresentationDraft = {
   saved: CurationSnapshot;
   profile: PresentationProfile;

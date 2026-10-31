@@ -1,4 +1,4 @@
-import type { PresentationProfile } from '@rezics/composition';
+import { platformRegistry, profileDigest, validateProfile, type PresentationProfile } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useSyncExternalStore } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -9,7 +9,12 @@ import {
   type PublicationRead,
 } from './curation-publish';
 
-export function CurationFailureNotice({ failure }: { failure: Exclude<PublicationRead, { ok: true }> }) {
+export type ValidationCorrection = { describe: (pointer: string) => string; correct: (pointer: string) => void };
+
+export function CurationFailureNotice({ failure, correction }: {
+  failure: Exclude<PublicationRead, { ok: true }>;
+  correction?: ValidationCorrection;
+}) {
   return (
     <div role="alert" className="space-y-2 rounded-lg border border-destructive/40 bg-card p-4">
       <p>
@@ -30,12 +35,15 @@ export function CurationFailureNotice({ failure }: { failure: Exclude<Publicatio
         <p>{m.curation_retry_after({ seconds: failure.retryAfter })}</p>
       ) : null}
       {failure.reason === 'invalid' ? (
-        <ul className="list-disc break-all ps-5">
+        <ul className="space-y-3">
           {failure.errors.map(({ pointer, code }, index) => (
             <li key={index}>
-              <code>
-                {pointer || '/'} — {code}
-              </code>
+              <p>{correction?.describe(pointer) ?? m.curation_correction_unknown()}</p>
+              {correction && <Button onClick={() => correction.correct(pointer)}>{m.curation_correct()}</Button>}
+              <details className="break-all text-sm">
+                <summary>{m.curation_diagnostics()}</summary>
+                <code>{pointer || '/'} — {code}</code>
+              </details>
             </li>
           ))}
         </ul>
@@ -51,12 +59,14 @@ export function CurationPublicationRecovery({
   head,
   onPublished,
   onReviewed,
+  correction,
 }: {
   publication: CurationPublication;
   profile: PresentationProfile;
   head: number;
   onPublished: (confirmation: PublicationConfirmation) => void;
   onReviewed: (active: ActiveCuration, choice: 'keep' | 'discard') => void;
+  correction?: ValidationCorrection;
 }) {
   const { intent, result, active, readFailure, busy } = useSyncExternalStore(
     publication.subscribe,
@@ -65,6 +75,7 @@ export function CurationPublicationRecovery({
   );
   if (!intent && !result) return null;
   const stale = result?.ok === false && result.reason === 'stale';
+  const invalid = result?.ok === false && result.reason === 'invalid';
   function reconcile(choice: 'keep' | 'discard') {
     const reviewed = publication.reconcile(profile, choice);
     if (reviewed) onReviewed(reviewed, choice);
@@ -80,19 +91,19 @@ export function CurationPublicationRecovery({
       aria-busy={busy}
     >
       {result?.ok ? <p role="status">{m.curation_published({ head: result.head })}</p> : null}
-      {result?.ok === false ? <CurationFailureNotice failure={result} /> : null}
+      {result?.ok === false ? <CurationFailureNotice failure={result} correction={correction} /> : null}
       {intent ? (
         <>
-          <p>{m.curation_retained({ head: intent.expectedHead })}</p>
+          <p>{invalid ? m.curation_invalid_intent({ head: intent.expectedHead }) : m.curation_retained({ head: intent.expectedHead })}</p>
           <div className="flex flex-wrap gap-3">
-            <Button
+            {!invalid && <Button
               variant="outline"
               className="min-h-11 whitespace-normal"
               disabled={busy}
               onClick={() => void retry()}
             >
               {m.curation_retry_original()}
-            </Button>
+            </Button>}
             <Button
               variant="outline"
               className="min-h-11 whitespace-normal"
@@ -104,7 +115,8 @@ export function CurationPublicationRecovery({
             {result?.ok === false && result.reason === 'invalid' ? (
               <Button
                 className="min-h-11 whitespace-normal"
-                disabled={busy}
+                variant="outline"
+                disabled={busy || profileDigest(profile) === profileDigest(intent.profile) || validateProfile(platformRegistry, profile).length > 0}
                 onClick={async () => {
                   const confirmation = await publication.replaceInvalid(profile, head);
                   if (confirmation) onPublished(confirmation);

@@ -1,14 +1,60 @@
 import { platformRegistry } from '@rezics/composition';
-import { Puck, type Config } from '@puckeditor/core';
+import { Puck, usePuck, type Config } from '@puckeditor/core';
 import { Button } from '@rezics/ui/shadcn/button';
 import '@puckeditor/core/puck.css';
-import { createElement, useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { createContext, createElement, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import type { CompositionDocument, CompositionRegistry, CompositionViolation } from '@rezics/composition';
 import { layoutComponents, PageRoot } from './layout';
 import { editorConfig, fromComposition, publishErrors, toComposition, type PageEditorData } from './editor-config';
 import { PageLocaleProvider } from './data';
 import { m } from '../../paraglide/messages.js';
 import { presentationEditorDictionary } from './curate-view-editor-messages';
+import type { CorrectionTarget } from './curate-view-editor-state';
+
+const CorrectionContext = createContext<CorrectionTarget | null>(null);
+
+function CorrectionSelection({ children }: { children: ReactNode }) {
+  const target = useContext(CorrectionContext);
+  const { dispatch, getSelectorForId } = usePuck();
+  useEffect(() => {
+    if (!target) return;
+    const itemSelector = target.component ? getSelectorForId(target.component.id) : null;
+    if (target.component && !itemSelector) return;
+    dispatch({
+      type: 'setUi',
+      ui: { itemSelector, rightSideBarVisible: true, leftSideBarVisible: true, mobilePanelExpanded: true, plugin: { current: 'fields' } },
+    });
+  }, [target, dispatch, getSelectorForId]);
+  return children;
+}
+
+function CorrectionFields({ children, isLoading }: { children: ReactNode; isLoading: boolean }) {
+  const target = useContext(CorrectionContext);
+  const { selectedItem } = usePuck();
+  const region = useRef<HTMLDivElement>(null);
+  const focused = useRef<CorrectionTarget | null>(null);
+  useEffect(() => {
+    const element = region.current;
+    if (!element || !target || isLoading || focused.current === target) return;
+    if ((selectedItem?.props.id ?? null) !== (target.component?.id ?? null)) return;
+    function focus() {
+      // Compare owned input names; never interpolate a server pointer into a selector or HTML.
+      const control = Array.from(element!.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select'))
+        .find((input) => input.name === target!.field.join('.') && !input.disabled && !('readOnly' in input && input.readOnly));
+      if (control) {
+        focused.current = target;
+        control.focus();
+        return true;
+      }
+      return false;
+    }
+    if (focus()) return;
+    const observer = new MutationObserver(() => { if (focus()) observer.disconnect(); });
+    observer.observe(element, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [target, selectedItem?.props.id, isLoading]);
+  return <div ref={region}>{children}</div>;
+}
 
 type RenderProps = Record<string, unknown>;
 type SlotRenderer = ComponentType<{ as?: ComponentType<{ children?: ReactNode }>; children?: ReactNode }>;
@@ -108,6 +154,8 @@ export function PageEditor({
   draft,
   pointerPrefix = '',
   publishDisabled = false,
+  correction = null,
+  onInvalid,
 }: {
   document: CompositionDocument;
   locale: string;
@@ -116,6 +164,8 @@ export function PageEditor({
   draft?: PageEditorData | undefined;
   pointerPrefix?: string;
   publishDisabled?: boolean;
+  correction?: CorrectionTarget | null;
+  onInvalid?: (errors: CompositionViolation[], document: CompositionDocument) => void;
 }) {
   const [errors, setErrors] = useState<CompositionViolation[]>([]);
   const config = useMemo(() => editorConfiguration(platformRegistry, locale), [locale]);
@@ -126,6 +176,7 @@ export function PageEditor({
     if (publishDisabled) return;
     const violations = publishErrors(platformRegistry, edited);
     setErrors(violations);
+    if (violations.length) onInvalid?.(violations, toComposition(edited));
     if (violations.length === 0) {
       onChange?.(edited);
       onPublish(toComposition(edited));
@@ -133,6 +184,7 @@ export function PageEditor({
   }
 
   return (
+    <CorrectionContext.Provider value={correction}>
     <Puck
       config={config}
       data={data}
@@ -147,7 +199,12 @@ export function PageEditor({
         setErrors([]);
         onChange?.(edited as PageEditorData);
       }}
-      overrides={{ header: ({ children }) => violationsHeader(children, errors, pointerPrefix) }}
+      overrides={{
+        header: ({ children }) => violationsHeader(children, errors, pointerPrefix),
+        puck: CorrectionSelection,
+        fields: CorrectionFields,
+      }}
     />
+    </CorrectionContext.Provider>
   );
 }

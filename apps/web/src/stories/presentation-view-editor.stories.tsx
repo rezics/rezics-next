@@ -190,7 +190,16 @@ export const NativeValidation: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.curation_publish() }));
-    await expect(await canvas.findByText('/types/0/views/details/content/0/props/text/en — invalid')).toBeVisible();
+    await expect(await canvas.findByText(m.curation_invalid_retained())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.curation_retry_original() })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: m.curation_correct() }));
+    await expect(templateControls(canvasElement).template).toHaveValue(JSON.stringify({ scope: 'type', key: 'schema:Book' }));
+    await expect(templateControls(canvasElement).view).toHaveValue('details');
+    const field = await headingTextField(canvasElement);
+    await expect(field).toHaveFocus();
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Corrected reading notes');
+    await expect(canvas.getByRole('region', { name: m.curation_editor() }).querySelector('textarea[name="text.en"]')).toHaveValue('Corrected reading notes');
   },
 };
 

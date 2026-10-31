@@ -66,7 +66,7 @@ export class CurationPublication {
 
   async retry(): Promise<PublicationConfirmation | null> {
     const { intent, busy } = this.state;
-    if (!intent || busy) return null;
+    if (!intent || busy || (this.state.result?.ok === false && this.state.result.reason === 'invalid')) return null;
     this.update({ busy: true, readFailure: null });
     let result: PublishResult;
     try {
@@ -111,6 +111,9 @@ export class CurationPublication {
   /** Validation refusal is terminal. A revised body requires a deliberate new intent. */
   async replaceInvalid(profile: PresentationProfile, expectedHead: number) {
     if (this.state.busy || this.state.result?.ok !== false || this.state.result.reason !== 'invalid') return null;
+    if (this.state.intent && profileDigest(profile) === profileDigest(this.state.intent.profile)) return null;
+    // Keep the original refusal and its profile until the revised draft is locally valid.
+    if (validateProfile(platformRegistry, profile).length) return null;
     this.update({ intent: null, result: null });
     return this.start(profile, expectedHead);
   }
