@@ -72,8 +72,9 @@ function SelectedFacts({ property, read, locale }: { property: string; read: Fac
     <section className="space-y-3 rounded-lg bg-muted/30 p-4">
       <h4 className="text-sm font-medium">{m.candidate_current({}, o)}</h4>
       {!selected.length && <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>}
-      {selected.map((statement) => (
+      {selected.map((statement, index) => (
         <div key={statement.id} className="space-y-2">
+          <p className="text-sm font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
           <PartValue part={statement} read={read} locale={locale} />
           {statement.qualifiers.map((part, index) => (
             <div key={index} className="text-sm">
@@ -351,16 +352,17 @@ export function SubjectFacts({
             <h1 className="text-2xl font-semibold">{m.facts_title({}, o)}</h1>
           )}
           {subject && (
-            <p>
+            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <span lang={pageText(subject.labels, locale).lang}>
                 <a href={href} className="underline underline-offset-4">
                   {label}
                 </a>
               </span>
-              <span lang={pageText(current?.release.types[subject.type]?.labels, locale).lang}>
-                <span className="ms-2 text-muted-foreground">
-                  {pageText(current?.release.types[subject.type]?.labels, locale).text}
-                </span>
+              <span
+                lang={pageText(current?.release.types[subject.type]?.labels, locale).lang}
+                className="text-muted-foreground"
+              >
+                {pageText(current?.release.types[subject.type]?.labels, locale).text}
               </span>
             </p>
           )}
