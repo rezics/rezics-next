@@ -39,7 +39,15 @@ import {
   type ShelfSort,
 } from './shelf-params';
 import { shelfColumnLabel } from './shelf-columns';
-import { useHydrated, useShelfRows, type ShelfFailure, type ShelfRow } from './shelf-rows';
+import {
+  shelfMutationLease,
+  useHydrated,
+  useShelfRows,
+  type ShelfFailure,
+  type ShelfRow,
+  type ShelfMutationLease,
+} from './shelf-rows';
+import { ShelfLabelAction, ShelfLabelOutcomes } from './shelf-labels';
 import { useSession } from '../session/query';
 import { selectableEntry, type ShelfOutcome } from './shelf-selection';
 import type { LibrarySubject } from './reads';
@@ -133,7 +141,7 @@ function EntryMenu({
   const title = titleOf(entry, controls.locale).text;
   const subjectId = entry.subject?.id;
   const entries: ItemMenuEntry[] = [];
-  if (admitted && entry.stateOptions?.length && !row.unknownIntent) {
+  if (admitted && entry.stateOptions?.length && !row.unknownIntent && !row.unknownLabelIntent) {
     entries.push({
       type: 'submenu',
       label: m.library_menu_status(),
@@ -180,7 +188,7 @@ function EntryMenu({
         onSelect: () => void navigate({ to: '/library/progress', search: { subjectId } }),
       });
   }
-  if (deleteAdmitted && !row.unknownIntent) {
+  if (deleteAdmitted && !row.unknownIntent && !row.unknownLabelIntent) {
     entries.push({ type: 'separator' });
     entries.push({
       type: 'item',
@@ -215,7 +223,8 @@ function Updated({ entry, locale }: { entry: PersonalLibraryEntry; locale: strin
   return <RelativeTime value={entry.lastActivityAt ?? entry.updatedAt} locale={locale} timeZone="UTC" />;
 }
 function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
-  if (!controls.writeAdmitted || !controls.hydrated || !selectableEntry(entry)) return {};
+  if ((!controls.writeAdmitted && !controls.labelWriteAdmitted) || !controls.hydrated || !selectableEntry(entry))
+    return {};
   if (!controls.selected.length) return { onSelect: () => controls.select(entry.subjectId, true) };
   return {
     selectable: true,
@@ -227,7 +236,7 @@ function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
 function SelectionBar({ controls }: { controls: Controls }) {
   const [chosen, setChosen] = useState('');
   const selectedState = controls.commonStates.some((option) => option.id === chosen) ? chosen : '';
-  if (!controls.writeAdmitted) return null;
+  if (!controls.writeAdmitted && !controls.labelWriteAdmitted) return null;
   const eligible = controls.rows.some((row) => selectableEntry(row.entry));
   if (!controls.selected.length)
     return eligible ? (
@@ -250,7 +259,7 @@ function SelectionBar({ controls }: { controls: Controls }) {
       <Button variant="ghost" disabled={controls.pending} onClick={controls.clearSelection}>
         {m.library_selection_clear()}
       </Button>
-      {controls.commonStates.length ? (
+      {controls.writeAdmitted && controls.commonStates.length ? (
         <>
           <label className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
             {m.library_menu_status()}
@@ -276,9 +285,10 @@ function SelectionBar({ controls }: { controls: Controls }) {
             {controls.pending ? m.library_selection_applying() : m.library_selection_apply()}
           </Button>
         </>
-      ) : (
+      ) : controls.writeAdmitted ? (
         <p className="text-sm">{m.library_selection_no_common()}</p>
-      )}
+      ) : null}
+      <ShelfLabelAction controls={controls} />
       {controls.selectionBlocked ? <p className="text-sm">{m.library_selection_unknown()}</p> : null}
     </div>
   );
@@ -543,10 +553,11 @@ export function ShelfEntries(props: ShelfEntriesProps) {
   sourceUrl.searchParams.delete('columns');
   const context = `${session.subject ?? session.state}:${props.locale}:${sourceUrl.href}:${props.state ?? ''}`;
   const [source, setSource] = useState({ entries: props.entries, context, generation: 0 });
+  const [mutationLease] = useState(shelfMutationLease);
   if (source.entries !== props.entries || source.context !== context) {
     setSource({ entries: props.entries, context, generation: source.generation + 1 });
   }
-  return <ShelfEntriesPage key={source.generation} {...props} />;
+  return <ShelfEntriesPage key={source.generation} {...props} mutationLease={mutationLease} />;
 }
 
 function ShelfEntriesPage({
@@ -559,9 +570,10 @@ function ShelfEntriesPage({
   columns,
   cursor,
   state,
-}: ShelfEntriesProps) {
+  mutationLease,
+}: ShelfEntriesProps & { mutationLease: ShelfMutationLease }) {
   const hydrated = useHydrated();
-  const shelfRows = useShelfRows(entries, locale);
+  const shelfRows = useShelfRows(entries, locale, mutationLease);
   const controls: Controls = {
     ...shelfRows,
     locale,
@@ -574,11 +586,18 @@ function ShelfEntriesPage({
   };
   const leaving = shelfRows.rows.find((row) => row.entry.subjectId === shelfRows.removing)?.entry;
   const notices = layout === 'grid' ? [] : shelfRows.rows.filter((row) => row.conflict || row.failure);
-  if (!shelfRows.rows.length && !shelfRows.restoreMessage && !shelfRows.outcomes.length) return null;
+  if (
+    !shelfRows.rows.length &&
+    !shelfRows.restoreMessage &&
+    !shelfRows.outcomes.length &&
+    !shelfRows.labelOutcomes.length
+  )
+    return null;
   return (
     <>
       <SelectionBar controls={controls} />
       <SelectionOutcomes controls={controls} />
+      <ShelfLabelOutcomes controls={controls} />
       {shelfRows.restoreMessage ? (
         <p role="status" className="text-sm">
           {shelfRows.restoreMessage}

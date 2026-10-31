@@ -162,3 +162,24 @@ export const ChosenColumns: Story = {
     await expect(canvas.getByRole('button', { name: m.library_entry_actions({ title }) })).toBeEnabled();
   },
 };
+
+export const SelectedLabelChoice: Story = {
+  name: 'Owner, existing label chosen for selected entries',
+  parameters: {
+    admitted: ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign'],
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
+  play: async (context) => {
+    await libraryEntriesReady(context);
+    const canvas = within(context.canvasElement);
+    const select = await canvas.findByRole('button', { name: m.library_selection_page() });
+    await waitFor(() => expect(select).toBeEnabled());
+    await userEvent.click(select);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_selected_labels_open() }));
+    const dialog = within(await within(document.body).findByRole('dialog', { name: m.library_selected_labels_open() }));
+    await userEvent.type(dialog.getByRole('textbox', { name: m.library_selected_labels_search() }), 'Read');
+    await userEvent.click(await dialog.findByRole('checkbox', { name: 'Reading list' }));
+    await expect(dialog.getByRole('button', { name: m.library_selected_labels_apply() })).toBeEnabled();
+    await expect(dialog.getByText(m.library_selected_labels_description())).toBeVisible();
+  },
+};

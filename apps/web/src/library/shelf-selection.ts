@@ -1,5 +1,6 @@
 import { libraryEntryStateWrite, type LibraryChangeInput, type PersonalLibraryEntry } from './entries-read';
 import type { LibraryStateChoice } from './profiles';
+import type { SubjectLabelMutationInput } from './subject-labels.ts';
 
 export const shelfSelectionLimit = 100;
 export type ShelfStateIntent = LibraryChangeInput & { revision: number };
@@ -8,6 +9,30 @@ export type ShelfOutcome = {
   title: string;
   status: 'changed' | 'unchanged' | 'conflicted' | 'failed' | 'unknown' | 'not-attempted';
 };
+
+/** A label command retains its original input and the entry identity, independently of entry-state keys. */
+export type ShelfLabelIntent = {
+  input: Extract<SubjectLabelMutationInput, { intent: 'assign' }>;
+  labelName: string;
+  entry: Pick<PersonalLibraryEntry, 'subjectId' | 'revision' | 'incarnationId' | 'changeKey' | 'removeKey'>;
+};
+export type ShelfLabelOutcome = {
+  subjectId: string;
+  title: string;
+  status: 'assigned' | 'failed' | 'unknown' | 'not-attempted';
+  reason?: 'capacity' | 'closed' | 'signed-out';
+};
+
+export function matchesShelfLabelIntent(entry: PersonalLibraryEntry, intent: ShelfLabelIntent): boolean {
+  return (
+    entry.subjectId === intent.input.subjectId &&
+    entry.subjectId === intent.entry.subjectId &&
+    entry.revision === intent.entry.revision &&
+    entry.incarnationId === intent.entry.incarnationId &&
+    entry.changeKey === intent.entry.changeKey &&
+    entry.removeKey === intent.entry.removeKey
+  );
+}
 
 export function selectableEntry(entry: PersonalLibraryEntry): boolean {
   return entry.subject !== null && !!entry.stateOptions?.some((option) => libraryEntryStateWrite(option.id));

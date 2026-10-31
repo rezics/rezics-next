@@ -427,3 +427,74 @@ export const ChosenColumns: Story = {
     ).toBeEnabled();
   },
 };
+
+function selectedLabelResponses() {
+  const original = globalThis.fetch;
+  let unknown = true;
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init);
+    if (request.method !== 'POST' || !/^\/v1\/libraryLabels\/[^/]+:assign$/.test(new URL(request.url).pathname))
+      return original(input, init);
+    const body = (await request.json()) as { subjectId: string };
+    if (body.subjectId === selectionId(2) && unknown) {
+      unknown = false;
+      return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+    }
+    return Response.json({ assignment: { id: selectionId(200 + Number(body.subjectId.slice(-1))), revision: 1 } });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+
+async function applySelectedLabel({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement);
+  const select = await canvas.findByRole('button', { name: m.library_selection_page() });
+  await waitFor(() => expect(select).toBeEnabled());
+  await userEvent.click(select);
+  await userEvent.click(canvas.getByRole('button', { name: m.library_selected_labels_open() }));
+  const dialog = within(await within(document.body).findByRole('dialog', { name: m.library_selected_labels_open() }));
+  await userEvent.type(dialog.getByRole('textbox', { name: m.library_selected_labels_search() }), 'Read');
+  await userEvent.click(await dialog.findByRole('checkbox', { name: 'Reading list' }));
+  await expect(dialog.getByText(m.library_selected_labels_confirm({ name: 'Reading list', count: 4 }))).toBeVisible();
+  await userEvent.click(dialog.getByRole('button', { name: m.library_selected_labels_apply() }));
+  await waitFor(() => expect(canvasElement.querySelectorAll('[data-label-outcome="unknown"]')).toHaveLength(1));
+  await expect(canvasElement.querySelectorAll('[data-label-outcome="assigned"]')).toHaveLength(1);
+  await expect(canvasElement.querySelectorAll('[data-label-outcome="not-attempted"]')).toHaveLength(2);
+}
+
+export const SelectedLabelPartialOutcomes: Story = {
+  ...selectionExample(),
+  name: 'Selected entries, label assignment partly unknown',
+  parameters: {
+    admitted: ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign'],
+  },
+  beforeEach: selectedLabelResponses,
+  play: applySelectedLabel,
+};
+
+export const SelectedLabelUnknownRecovered: Story = {
+  ...selectionExample(),
+  name: 'Selected entries, exact label assignment recovered',
+  parameters: {
+    admitted: ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign'],
+  },
+  beforeEach: selectedLabelResponses,
+  play: async (context) => {
+    await applySelectedLabel(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(
+      canvas.getByRole('button', {
+        name: m.library_selected_labels_retry_title({
+          title: 'A concurrent change',
+          name: 'Reading list',
+        }),
+      }),
+    );
+    await waitFor(() =>
+      expect(context.canvasElement.querySelectorAll('[data-label-outcome="unknown"]')).toHaveLength(0),
+    );
+    await expect(context.canvasElement.querySelectorAll('[data-label-outcome="assigned"]')).toHaveLength(2);
+    await expect(context.canvasElement.querySelectorAll('[data-label-outcome="not-attempted"]')).toHaveLength(2);
+  },
+};

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { m } from '../paraglide/messages.js';
 import { useOperation } from '../kernel/exposure';
@@ -12,13 +12,22 @@ import type { PersonalLibraryEntry } from './entries-read';
 import {
   commonShelfStates,
   matchesShelfIntent,
+  matchesShelfLabelIntent,
   selectableEntry,
   shelfSelectionLimit,
   shelfStateIntent,
   type ShelfOutcome,
   type ShelfStateIntent,
+  type ShelfLabelIntent,
+  type ShelfLabelOutcome,
 } from './shelf-selection';
 import { displayLibraryTitle } from './title';
+import { mutateSubjectLabelAction } from './subject-slot-actions';
+import type { LibraryLabelSummary } from './subject-labels.ts';
+
+/** The existing synchronous mutation lease survives a page/actor replacement until its request settles. */
+export type ShelfMutationLease = { current: boolean; listeners: Set<() => void> };
+export const shelfMutationLease = (): ShelfMutationLease => ({ current: false, listeners: new Set() });
 
 export type ShelfFailure = 'closed' | 'denied' | 'unavailable' | 'signed-out' | 'unsupported_library_profile';
 /** One entry as the shelf holds it: what the kernel last said, and what happened to the last write. */
@@ -27,6 +36,7 @@ export type ShelfRow = {
   conflict: boolean;
   failure: ShelfFailure | null;
   unknownIntent?: ShelfStateIntent;
+  unknownLabelIntent?: ShelfLabelIntent;
 };
 
 function withoutIncarnation(entry: PersonalLibraryEntry): PersonalLibraryEntry {
@@ -53,23 +63,39 @@ export function useHydrated(): boolean {
  * its new status; a conflict replaces it with the entry as it now is; a removal drops it. Each write carries the
  * revision, incarnation and idempotency key the entry holds, and takes a fresh key once it has been answered.
  */
-export function useShelfRows(initial: PersonalLibraryEntry[], locale = 'en') {
+export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, busy: ShelfMutationLease) {
   const [rows, setRows] = useState<ShelfRow[]>(() =>
     initial.map((entry) => ({ entry, conflict: false, failure: null })),
   );
   const currentRows = useRef(rows);
-  const busy = useRef(false);
   const mounted = useRef(true);
   const queuedUndo = useRef<(() => void) | null>(null);
-  const [pending, setPending] = useState(false);
+  const pending = useSyncExternalStore(
+    useCallback(
+      (listener: () => void) => {
+        busy.listeners.add(listener);
+        return () => {
+          busy.listeners.delete(listener);
+        };
+      },
+      [busy],
+    ),
+    () => busy.current,
+    () => false,
+  );
   const [selected, setSelected] = useState<string[]>([]);
   const [outcomes, setOutcomes] = useState<ShelfOutcome[]>([]);
+  const [labelOutcomes, setLabelOutcomes] = useState<ShelfLabelOutcome[]>([]);
+  const [assignedLabelName, setAssignedLabelName] = useState('');
   const [removing, setRemoving] = useState<string | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const restoreAdmitted = useOperation('library_entry.restore');
   const writeAdmitted = useOperation('library_entry.put');
   const authority = useRef(writeAdmitted);
   authority.current = writeAdmitted;
+  const labelWriteAdmitted = useOperation('library_label.assign');
+  const labelAuthority = useRef(labelWriteAdmitted);
+  labelAuthority.current = labelWriteAdmitted;
   useLayoutEffect(() => {
     mounted.current = true;
     return () => {
@@ -102,12 +128,12 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale = 'en') {
   const lock = () => {
     if (!mounted.current || busy.current) return false;
     busy.current = true;
-    setPending(true);
+    busy.listeners.forEach((listener) => listener());
     return true;
   };
   const unlock = () => {
     busy.current = false;
-    if (mounted.current) setPending(false);
+    busy.listeners.forEach((listener) => listener());
     const undo = queuedUndo.current;
     queuedUndo.current = null;
     undo?.();
@@ -117,7 +143,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale = 'en') {
   const transition = async (intent: ShelfStateIntent): Promise<{ status: ShelfOutcome['status']; stop?: boolean }> => {
     if (!mounted.current || !authority.current) return { status: 'not-attempted', stop: true };
     const row = currentRows.current.find((item) => item.entry.subjectId === intent.subjectId);
-    if (!row || !matchesShelfIntent(row.entry, intent)) return { status: 'not-attempted' };
+    if (!row || row.unknownLabelIntent || !matchesShelfIntent(row.entry, intent)) return { status: 'not-attempted' };
     try {
       const result = await savePersonalLibraryEntry({ data: intent, headers: csrfHeaders() });
       if (!mounted.current) return { status: 'unknown', stop: true };
@@ -191,7 +217,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale = 'en') {
   };
   const changeState = async (subjectId: string, value: string) => {
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
-    if (!row || row.unknownIntent || row.entry.state === value || !authority.current) return;
+    if (!row || row.unknownIntent || row.unknownLabelIntent || row.entry.state === value || !authority.current) return;
     const intent = shelfStateIntent(row.entry, value);
     if (!intent || !lock()) return;
     try {
@@ -216,7 +242,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale = 'en') {
     if (
       !targets.length ||
       targets.length > shelfSelectionLimit ||
-      targets.some((row) => row.unknownIntent) ||
+      targets.some((row) => row.unknownIntent || row.unknownLabelIntent) ||
       !commonShelfStates(targets.map((row) => row.entry)).some((option) => option.id === value) ||
       !authority.current
     )
@@ -246,10 +272,123 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale = 'en') {
     }
   };
 
+  const recordLabel = (subjectId: string, result: Pick<ShelfLabelOutcome, 'status' | 'reason'>) => {
+    if (!mounted.current) return;
+    setLabelOutcomes((current) =>
+      current.map((outcome) =>
+        outcome.subjectId === subjectId ? { subjectId, title: outcome.title, ...result } : outcome,
+      ),
+    );
+  };
+  const assignLabel = async (intent: ShelfLabelIntent): Promise<Pick<ShelfLabelOutcome, 'status' | 'reason'>> => {
+    const row = currentRows.current.find((item) => item.entry.subjectId === intent.input.subjectId);
+    if (
+      !mounted.current ||
+      !labelAuthority.current ||
+      !row ||
+      row.unknownIntent ||
+      !matchesShelfLabelIntent(row.entry, intent)
+    )
+      return { status: 'not-attempted' };
+    try {
+      const result = await mutateSubjectLabelAction({ data: intent.input, headers: csrfHeaders() });
+      if (!mounted.current) return { status: 'unknown' };
+      if (
+        result.ok &&
+        typeof result.assignment?.id === 'string' &&
+        result.assignment.id.length > 0 &&
+        Number.isSafeInteger(result.assignment.revision) &&
+        result.assignment.revision > 0
+      ) {
+        patch(intent.input.subjectId, (current) => {
+          const next = { ...current };
+          delete next.unknownLabelIntent;
+          return next;
+        });
+        return { status: 'assigned' };
+      }
+      if (
+        !result.ok &&
+        (result.reason === 'capacity' || result.reason === 'closed' || result.reason === 'signed-out')
+      ) {
+        // Refusing a recovery attempt does not prove what happened to the original command.
+        return { status: row.unknownLabelIntent ? 'unknown' : 'failed', reason: result.reason };
+      }
+    } catch {
+      // The ordinary adapter can collapse transport loss or refusal to unavailable. Keep the exact command.
+    }
+    patch(intent.input.subjectId, (current) => ({ ...current, unknownLabelIntent: intent }));
+    return { status: 'unknown' };
+  };
+  const assignSelectedLabel = async (label: LibraryLabelSummary) => {
+    const targets = currentRows.current.filter((row) => selected.includes(row.entry.subjectId));
+    if (
+      !labelAuthority.current ||
+      !targets.length ||
+      targets.length > shelfSelectionLimit ||
+      currentRows.current.some((row) => row.unknownLabelIntent) ||
+      targets.some((row) => row.unknownIntent || !selectableEntry(row.entry))
+    )
+      return;
+    // Fixed loaded targets, row identities, supplied label name and independent command keys before any await.
+    const snapshot = targets.map(({ entry }) => ({
+      intent: {
+        input: {
+          intent: 'assign' as const,
+          subjectId: entry.subjectId,
+          labelId: label.id,
+          idempotencyKey: crypto.randomUUID(),
+        },
+        labelName: label.name,
+        entry: {
+          subjectId: entry.subjectId,
+          revision: entry.revision,
+          changeKey: entry.changeKey,
+          removeKey: entry.removeKey,
+          ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
+        },
+      },
+      title: entry.subject ? displayLibraryTitle(entry.subject.label, locale).text : m.library_subject_unavailable(),
+    }));
+    if (!lock()) return;
+    setAssignedLabelName(label.name);
+    setLabelOutcomes(
+      snapshot.map(({ intent, title }) => ({ subjectId: intent.input.subjectId, title, status: 'not-attempted' })),
+    );
+    try {
+      for (const { intent } of snapshot) {
+        if (!mounted.current || !labelAuthority.current) break;
+        const result = await assignLabel(intent);
+        recordLabel(intent.input.subjectId, result);
+        if (result.status !== 'assigned') break;
+      }
+    } finally {
+      unlock();
+    }
+  };
+  const retryLabel = async (subjectId: string) => {
+    const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
+    const intent = row?.unknownLabelIntent;
+    if (
+      !row ||
+      !intent ||
+      row.unknownIntent ||
+      !matchesShelfLabelIntent(row.entry, intent) ||
+      !labelAuthority.current ||
+      !lock()
+    )
+      return;
+    try {
+      recordLabel(subjectId, await assignLabel(intent));
+    } finally {
+      unlock();
+    }
+  };
+
   const remove = async () => {
     const subjectId = removing;
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
-    if (!subjectId || !row || row.unknownIntent || !lock()) return;
+    if (!subjectId || !row || row.unknownIntent || row.unknownLabelIntent || !lock()) return;
     try {
       const { entry } = row;
       const result = await deletePersonalLibraryEntry({
@@ -350,6 +489,13 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale = 'en') {
     selected: selectedRows.map((row) => row.entry.subjectId),
     commonStates,
     outcomes,
+    labelOutcomes,
+    assignedLabelName,
+    labelWriteAdmitted,
+    assignSelectedLabel,
+    retryLabel,
+    labelSelectionBlocked:
+      selectedRows.some((row) => !!row.unknownIntent) || rows.some((row) => !!row.unknownLabelIntent),
     select,
     selectPage: () => {
       if (!busy.current) setSelected(eligible.slice(0, shelfSelectionLimit).map((row) => row.entry.subjectId));
@@ -360,9 +506,13 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale = 'en') {
     changeSelectedState,
     retryState,
     writeAdmitted,
-    selectionBlocked: selectedRows.some((row) => !!row.unknownIntent),
+    selectionBlocked: selectedRows.some((row) => !!row.unknownIntent || !!row.unknownLabelIntent),
     askRemove: (subjectId: string) => {
-      if (!busy.current) setRemoving(subjectId);
+      if (
+        !busy.current &&
+        !currentRows.current.some((row) => row.entry.subjectId === subjectId && row.unknownLabelIntent)
+      )
+        setRemoving(subjectId);
     },
     cancelRemove: () => setRemoving(null),
     changeState,
