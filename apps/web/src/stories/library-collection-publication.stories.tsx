@@ -4,6 +4,7 @@ import { CollectionPublicationPageView } from '../library/collection-publication
 import { publicationExample, publicationRefusal } from '../kernel/fake/collection-publication';
 import type { PublicationInput } from '../library/collection-publication';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
@@ -56,6 +57,11 @@ export const SelectedEmpty: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await publicationCanvas(canvasElement);
     const publish = canvas.getByRole('button', { name: m.library_publication_publish() });
+    const zero =
+      new Intl.PluralRules(getLocale()).select(0) === 'one'
+        ? m.library_publication_count_one({ count: '0' })
+        : m.library_publication_count({ count: '0' });
+    await expect(canvas.getByText(zero)).toBeVisible();
     await expect(publish).toBeDisabled();
     await userEvent.click(canvas.getByRole('checkbox', { name: m.library_publication_confirm_empty() }));
     await expect(publish).toBeEnabled();
@@ -67,7 +73,17 @@ export const SelectedNonempty: Story = {
   render: () => example('unavailable'),
   play: async ({ canvasElement }) => {
     const canvas = await chooseAndConfirm(canvasElement);
-    await expect(canvas.getByText(m.library_publication_count({ count: '1' }))).toBeVisible();
+    await expect(canvas.getByText(m.library_publication_count_one({ count: '1' }))).toBeVisible();
+    await expect(
+      canvas.getByRole('checkbox', { name: m.library_publication_confirm_one({ count: '1' }) }),
+    ).toBeChecked();
+    await expect(canvas.getByRole('button', { name: m.library_publication_publish() })).toBeEnabled();
+    await userEvent.click(canvas.getAllByRole('checkbox')[1]!);
+    await expect(canvas.getByText(m.library_publication_count({ count: '2' }))).toBeVisible();
+    const confirmation = canvas.getByRole('checkbox', { name: m.library_publication_confirm({ count: '2' }) });
+    await expect(confirmation).not.toBeChecked();
+    await expect(canvas.getByRole('button', { name: m.library_publication_publish() })).toBeDisabled();
+    await userEvent.click(confirmation);
     await expect(canvas.getByRole('button', { name: m.library_publication_publish() })).toBeEnabled();
   },
 };

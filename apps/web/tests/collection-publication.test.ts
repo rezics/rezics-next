@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
+import { dirname } from 'node:path';
 import { createKernelClient } from '@rezics/client';
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import {
   publicationCandidates,
   publicationInput,
@@ -12,6 +14,7 @@ import {
   collectionPublicationQuery,
   type PublicationInput,
   type PublicationPage,
+  type PublicationResult,
 } from '../src/library/collection-publication';
 import { CollectionPublicationPageView } from '../src/library/collection-publication-page';
 import { PublicationLink } from '../src/library/collection-publication-link';
@@ -21,6 +24,7 @@ import type { SessionStore } from '../src/session/store';
 import { publicationExample } from '../src/kernel/fake/collection-publication';
 import { isSignedInPath } from '../src/session/guard';
 import { m } from '../src/paraglide/messages.js';
+import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 
 const key = '0192f3a0-6c1e-7b2a-9d4e-0000000000aa';
 const input: PublicationInput = { collectionId: 'saved-dynamic', revision: 7, subjectIds: [], idempotencyKey: key };
@@ -229,6 +233,129 @@ test('empty intent is explicit and unavailable sources never render a zero selec
     expect(unavailable).not.toContain(m.library_publication_count({ count: '0' }));
     expect(unavailable).not.toContain(m.library_publication_complete({ count: '0' }));
     expect(unavailable).toContain(m.library_publication_previous());
+  }
+});
+
+test('Selected Collection publication communicates zero one and many selected items consistently through confirmation and actual native result', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/collections/publication-example/publish' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(
+    Object.keys(globals).map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]),
+  );
+  for (const [name, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
+  const previousLocale = getLocale();
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const source = publicationExample.source;
+  if (source.state !== 'ready') throw new Error('Expected the existing disclosed selection example');
+  const candidates = publicationCandidates(source.page);
+  let renderPage = () => createElement('div');
+  const router = createRouter({
+    routeTree: createRootRoute({ component: () => renderPage() }),
+    history: createMemoryHistory({ initialEntries: ['/en/collections/publication-example/publish'] }),
+  });
+  await router.load();
+  const click = async (element: { click(): void }) => act(async () => element.click());
+  const statuses = () => Array.from(host.querySelectorAll('[role="status"]'), (element) => element.textContent);
+  try {
+    for (const [locale, singular] of [
+      ['en', '1 item selected'],
+      ['zh-Hant', '已選取 1 個項目'],
+      ['zh-Hans', '已选择 1 个项目'],
+      ['ja', '1項目を選択中'],
+      ['ko', '1개 항목 선택됨'],
+      ['de', '1 Eintrag ausgewählt'],
+      ['fr', '1 élément sélectionné'],
+      ['es', '1 elemento seleccionado'],
+    ] as const) {
+      setLocale(locale, { reload: false });
+      for (const count of [0, 1, 2]) {
+        let sent: PublicationInput | undefined;
+        let finish!: (result: PublicationResult) => void;
+        // Hold the consumer response so a click alone cannot establish completion.
+        const response = new Promise<PublicationResult>((resolve) => {
+          finish = resolve;
+        });
+        renderPage = () =>
+          createElement(CollectionPublicationPageView, {
+            key: `${locale}:${count}`,
+            page: publicationExample,
+            submit: async (request) => {
+              sent = request;
+              return response;
+            },
+          });
+        await act(async () => root.render(createElement(RouterProvider, { router, key: `${locale}:${count}` })));
+        const checkboxes = host.querySelectorAll('input[type="checkbox"]');
+        const confirmation = checkboxes[checkboxes.length - 1]!;
+        const publish = Array.from(host.querySelectorAll('button')).find(
+          (button: any) => button.textContent === m.library_publication_publish(),
+        )!;
+        for (let index = 0; index < count; index++) await click(checkboxes[index]!);
+        const text = new Intl.NumberFormat(locale).format(count);
+        const one = count === 1 || (locale === 'fr' && count === 0);
+        const selected = (one ? m.library_publication_count_one : m.library_publication_count)({ count: text });
+        const completed = (one ? m.library_publication_complete_one : m.library_publication_complete)({ count: text });
+        expect(statuses()).toContain(selected);
+        if (count === 1) expect(selected).toBe(singular);
+        if (locale === 'en') expect(selected).toBe(count === 1 ? '1 item selected' : `${count} items selected`);
+        expect(confirmation.closest('label')!.textContent).toBe(
+          count === 0
+            ? m.library_publication_confirm_empty()
+            : (one ? m.library_publication_confirm_one : m.library_publication_confirm)({ count: text }),
+        );
+        expect(publish.disabled).toBe(true);
+        expect(statuses()).not.toContain(completed);
+        await click(confirmation);
+        expect(publish.disabled).toBe(false);
+        await click(publish);
+        expect(sent!.subjectIds).toEqual(candidates.slice(0, count).map((member) => member.subject!.id));
+        expect(statuses()).not.toContain(completed);
+        await act(async () =>
+          finish(
+            publicationResponse(
+              200,
+              {
+                collection: { id: sent!.collectionId, revision: 8 },
+                publication: { generation: '42', state: 'complete', itemCount: count },
+              },
+              sent!,
+            ),
+          ),
+        );
+        expect(statuses()).toContain(completed);
+        expect(publish.disabled).toBe(true);
+        await click(checkboxes[count]!);
+        expect(confirmation.checked).toBe(false);
+        expect(publish.disabled).toBe(true);
+        // Editing the next selection cannot rewrite the last completed native response's quantity.
+        expect(statuses()).toContain(completed);
+        expect(host.querySelector(`a[href="/${locale}/collections/publication-example"]`)).not.toBeNull();
+      }
+    }
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    setLocale(previousLocale, { reload: false });
+    await window.happyDOM.close();
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else Reflect.deleteProperty(globalThis, name);
+    }
   }
 });
 

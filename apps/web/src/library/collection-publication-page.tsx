@@ -21,6 +21,14 @@ import {
 
 export type PublicationSubmit = (input: PublicationInput) => Promise<PublicationResult>;
 
+type QuantityMessage = (input: { count: string }) => string;
+
+function quantityText(count: number, one: QuantityMessage, other: QuantityMessage) {
+  const locale = getLocale();
+  const message = new Intl.PluralRules(locale).select(count) === 'one' ? one : other;
+  return message({ count: new Intl.NumberFormat(locale).format(count) });
+}
+
 function resultText(reason: Extract<PublicationResult, { ok: false }>['reason']) {
   if (reason === 'stale') return m.library_publication_stale();
   if (reason === 'denied') return m.library_publication_denied();
@@ -53,7 +61,6 @@ export function CollectionPublicationPageView({
   const unknown = result?.ok === false && result.reason === 'unknown';
   const refused = result?.ok === false && !unknown;
   const locked = busy || unknown || refused;
-  const count = new Intl.NumberFormat(getLocale()).format(selected.length);
   const base = `/${getLocale()}/collections/${encodeURIComponent(page.address.id)}`;
 
   async function publish() {
@@ -103,9 +110,11 @@ export function CollectionPublicationPageView({
         <h2 className="text-lg font-semibold">{m.library_publication_output()}</h2>
         {complete ? (
           <p role="status">
-            {m.library_publication_complete({
-              count: new Intl.NumberFormat(getLocale()).format(complete.publication.itemCount),
-            })}
+            {quantityText(
+              complete.publication.itemCount,
+              m.library_publication_complete_one,
+              m.library_publication_complete,
+            )}
           </p>
         ) : null}
         <p className="text-sm text-muted-foreground">{m.library_publication_previous()}</p>
@@ -179,7 +188,7 @@ export function CollectionPublicationPageView({
             )}
             {source.page.next ? <p className="text-sm">{m.library_publication_more_pages()}</p> : null}
             <p className="font-medium" role="status">
-              {m.library_publication_count({ count })}
+              {quantityText(selected.length, m.library_publication_count_one, m.library_publication_count)}
             </p>
             <p className="text-sm text-muted-foreground">{m.library_publication_canonical()}</p>
             <label className="flex min-h-11 items-start gap-3 rounded-xl bg-muted p-4">
@@ -191,7 +200,9 @@ export function CollectionPublicationPageView({
                 onChange={(event) => setConfirmed(event.target.checked)}
               />
               <span>
-                {selected.length ? m.library_publication_confirm({ count }) : m.library_publication_confirm_empty()}
+                {selected.length
+                  ? quantityText(selected.length, m.library_publication_confirm_one, m.library_publication_confirm)
+                  : m.library_publication_confirm_empty()}
               </span>
             </label>
             <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_privacy()}</p>
