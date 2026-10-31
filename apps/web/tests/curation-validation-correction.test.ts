@@ -59,7 +59,7 @@ test('default presentation editor takes a native invalid publication to its actu
   };
   const settle = async (ready: () => boolean) => {
     for (let count = 0; count < 60 && !ready(); count++) await act(async () => { await Bun.sleep(10); });
-    expect(ready()).toBe(true);
+    expect(ready(), [...host.querySelectorAll('button')].map((item) => [item.textContent, item.getAttribute('aria-label'), item.getAttribute('title')]).toString()).toBe(true);
   };
   const click = async (label: string) => { await act(async () => { button(label).click(); }); };
   const select = async (id: string, value: string) => {
