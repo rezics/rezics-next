@@ -1,6 +1,6 @@
 /** SERVER ONLY. Original Library whole-query publication seam, distinct from Members and Kind. */
 import type { FilterDocument, FilterRelease } from '@rezics/filter';
-import type { OperationalTransaction } from '../command/operational.ts';
+import { type OperationalTransaction } from '../command/operational.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CollectionPublicationCreation, CollectionPublicationInputRef, CollectionPublicationPhase, CollectionPublicationRuleRef, CollectionPublicationTargetRef } from './collection-publication-episode-contract.ts';
@@ -46,15 +46,10 @@ export type CollectionPublicationWorkDefinition = Readonly<{
 }> & Extract<CollectionPublicationPhase, {
     phase: 'staging' | 'awaiting_activation';
 }>;
-/** TEMPORARY UNAVAILABLE CONTRACT ADAPTER. The later native episode producer must replace it.
- * On each use, verify the genuine live work-step transaction, exact pool/owner/namespace and T,
- * committed original operation/receipt, phase/rule/source/identity/receiving/custody/output fences.
- * Admission permits bounded own-namespace mechanical staging only; never disclosure or activation.
+/** Getter data alone is never admission or completion. Recheck the SAME native client on each use.
+ * Missing original provenance is unavailable, never ready-empty. Source initialization cannot
+ * start from a bare locator while its owning episode reader is absent.
  */
-export declare function admitCollectionPublicationStep(_tx: OperationalTransaction, _locator: CollectionPublicationLocator): Promise<boolean>;
-/** TEMPORARY UNAVAILABLE CONTRACT ADAPTER. Getter data alone is never admission or completion.
- * Native implementation must use the admitted SAME client; absent/changed evidence returns null
- * or unavailability, never ready-empty. Full-query exhaustion uses the shared Source/compiler and
- * existing WorkAllowance, never a selected 0..100 set, first page, or count as a complete query.
- */
-export declare function readCollectionPublicationWorkDefinition(_tx: OperationalTransaction, _locator: CollectionPublicationLocator): Promise<CollectionPublicationWorkDefinition | null>;
+export declare function readCollectionPublicationWorkDefinition(tx: OperationalTransaction, locator: CollectionPublicationLocator): Promise<CollectionPublicationWorkDefinition | null>;
+/** Mechanical admission only. The result is never viewer permission or final activation authority. */
+export declare function admitCollectionPublicationStep(tx: OperationalTransaction, locator: CollectionPublicationLocator): Promise<boolean>;

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
 import {
   createCollectionPublicationEpisodes,
@@ -81,7 +82,7 @@ test('publication admission binds a real live episode to its complete current pr
       if (definition) {
         expect(definition.locator).toEqual(locator);
         expect(definition.input.kind).toBe('private_working_source');
-        expect(definition.input.identity).toEqual(definition.sourceIdentity);
+        expect(isDeepStrictEqual(definition.input.identity, definition.sourceIdentity)).toBe(true);
         expect(definition.target).toMatchObject({ kind: 'collection_output', collectionId: collection.id });
         expect(definition.definition).toMatchObject({
           filter: { owner: { presence: true } },
