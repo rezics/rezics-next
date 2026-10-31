@@ -1,4 +1,5 @@
 export { createAccountPublicEligibility } from './account-authority.ts';
+export type { AccessCheck, PreparedAccessCheckInvocation, PreparedAccessCheckWork } from '../request/access.ts';
 import type { PermissionAccount } from './account-authority.ts';
 import { accessCheckout, accessTransaction } from './work.ts';
 export {

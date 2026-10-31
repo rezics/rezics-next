@@ -196,7 +196,17 @@ export function validReadDecisionActions(input: PrepareReadDecisionsInput, catal
   }
   return union.size === input.actions.size && [...union].every((action) => input.actions.has(action));
 }
-export type AccessCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>;
+export type PreparedAccessCheckInvocation = Readonly<{
+  client: AccessClient;
+  time: AuthoritativeTime;
+  work: AccessWorkAccounting;
+}>;
+export type PreparedAccessCheckWork = AccessWorkProducer<PreparedAccessCheckInvocation, boolean> & Readonly<{
+  run(input: PreparedAccessCheckInvocation): Promise<boolean>;
+}>;
+export type AccessCheck = ((client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>) & Readonly<{
+  work?: PreparedAccessCheckWork;
+}>;
 export type AccessCommandAuthorization = CommandAuthorization & { readonly check: AccessCheck };
 
 export interface Access {
