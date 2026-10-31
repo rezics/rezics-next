@@ -4,20 +4,23 @@ import {
   operationParties,
   readRequestCreationContext,
   requestPartyScope,
-  type NativeCreationContext,
   type RequestParties,
 } from '../src/workflow-request-parties.ts';
-import type { AccountOperation, AccountWorkflowPorts } from '../src/workflows.ts';
+import type { AccountOperation } from '../src/workflows.ts';
+import type { NativeCreationContext, NativeCreationContextRequest } from '@rezics/auth-contract';
 import { failNativeQueries, nativeFixture } from './support/erasure-native.ts';
 
 const source: NativeCreationContext = {
-  version: 1,
   actorAccountId: 'actor',
   actingHumanId: 'human',
   operatorAccountId: 'source-operator',
   principalAccountId: 'principal',
-  clientId: 'source-client',
+  sourceClientId: 'source-client',
   commandKey: 'original-command',
+  approvalReference: 'approval',
+  operationKey: 'original-key',
+  operationDigest: 'a'.repeat(64),
+  operation: { kind: 'rename', action: 'account:update', targetResourceId: 'subject', targetClientId: null },
 };
 const previous = { subjectAccountId: 'subject', operatorAccountId: 'old-operator', reservationId: 'reservation' };
 const authorization = 'approval';
@@ -84,9 +87,22 @@ describe('closed request projection', () => {
   });
 
   test('a missing producer cannot be replaced by actor-only or JSON provenance', async () => {
-    const access = { actorAccountId: () => 'actor' } as unknown as AccountWorkflowPorts;
-    await expect(readRequestCreationContext(access, { actor: { accountId: 'actor' } })).rejects.toThrow();
-    await expect(readRequestCreationContext(access, undefined)).rejects.toThrow();
+    const access = {
+      actorAccountId: () => 'actor',
+      approvalBinding: () => ({
+        operationKey: source.operationKey,
+        digest: source.operationDigest,
+        commandKeyPrefix: source.commandKey,
+      }),
+    };
+    const input = {
+      kind: 'revoke' as const,
+      accountId: 'actor',
+      authorization,
+      operationKey: source.operationKey,
+    };
+    await expect(readRequestCreationContext(access, { actor: { accountId: 'actor' } }, input)).rejects.toThrow();
+    await expect(readRequestCreationContext(access, undefined, input)).rejects.toThrow();
   });
 
   test('immutable replay scope preserves genuine native roles, and unknown context stays pending', () => {
@@ -127,8 +143,7 @@ describe('closed request projection', () => {
   });
 });
 
-// Uses the actual approved native producer. Until Access composes its projection,
-// this positive scenario intentionally cannot certify a fabricated successful copy.
+// Uses the original native request/result ABI and its actual approval resolver.
 describe('native request producer', () => {
   let f: Awaited<ReturnType<typeof nativeFixture>>;
   beforeAll(async () => {
@@ -136,6 +151,110 @@ describe('native request producer', () => {
   }, 120_000);
   afterAll(async () => {
     await f?.close();
+  }, 120_000);
+
+  test('Bind actual original creation-context ABI to request custody', async () => {
+    const person = await f.person('original-request-context');
+    const account = await f.bindings.workflowPorts.readAccount(person.accountId);
+    const operationKey = randomUUID();
+    const operation = {
+      kind: 'rename' as const,
+      accountId: person.accountId,
+      handle: `abi_${randomUUID().replaceAll('-', '')}`,
+      expectedHandle: account!.handle,
+    };
+    const approval = await f.call('/account-operations/approve', { operationKey, operation }, person.cookie);
+    expect(approval.status).toBe(200);
+    const { reference } = (await approval.json()) as { reference: string };
+    const input = { ...operation, authorization: reference, operationKey };
+    const ports = f.bindings.workflowPorts;
+    const context = await ports.authorizeOperation!(reference, input);
+    const read = ports.readNativeCreationContext!;
+    const requests: NativeCreationContextRequest[] = [];
+    ports.readNativeCreationContext = async (request) => {
+      requests.push(request);
+      return read(request);
+    };
+    try {
+      const source = await readRequestCreationContext(ports, context, input);
+      expect(requests).toEqual([{ approvalReference: reference, operationKey, operation: input }]);
+      expect(source).toMatchObject({
+        actorAccountId: person.accountId,
+        actingHumanId: person.accountId,
+        operatorAccountId: null,
+        principalAccountId: null,
+        sourceClientId: 'erasure-web',
+        approvalReference: reference,
+        operationKey,
+        commandKey: ports.approvalBinding!(context)!.commandKeyPrefix,
+        operationDigest: ports.approvalBinding!(context)!.digest,
+        operation: {
+          kind: 'rename',
+          action: 'account:update',
+          targetResourceId: person.accountId,
+          targetClientId: null,
+        },
+      });
+      expect(Object.isFrozen(source)).toBe(true);
+      expect(Object.isFrozen(source.operation)).toBe(true);
+      // An available result still must bind the exact original reference, key,
+      // digest, command prefix and operation, rather than act as cached allow.
+      for (const changed of [
+        { approvalReference: 'other-approval' },
+        { operationKey: 'other-key' },
+        { operationDigest: '0'.repeat(64) },
+        { commandKey: 'other-command' },
+        { operation: { ...source.operation, kind: 'delete' as const } },
+        { operation: { ...source.operation, targetClientId: 'other-client' } },
+      ]) {
+        await expect(
+          readRequestCreationContext(
+            {
+              ...ports,
+              readNativeCreationContext: async () => ({ kind: 'available', context: { ...source, ...changed } }),
+            },
+            context,
+            input,
+          ),
+        ).rejects.toThrow();
+      }
+      await expect(
+        readRequestCreationContext(
+          {
+            ...ports,
+            readNativeCreationContext: async () => ({ kind: 'unavailable', reason: 'historical-provenance' }),
+          },
+          context,
+          input,
+        ),
+      ).rejects.toThrow();
+      const changedInput = { ...input, handle: `other_${randomUUID().replaceAll('-', '')}` };
+      await expect(readRequestCreationContext(ports, context, changedInput)).rejects.toThrow();
+      await expect(
+        readRequestCreationContext(ports, context, { ...input, authorization: 'other-approval' }),
+      ).rejects.toThrow();
+      await expect(
+        readRequestCreationContext(ports, context, { ...input, operationKey: randomUUID() }),
+      ).rejects.toThrow();
+      const response = await f.call('/account-operations/execute', { operationKey, operation, reference }, person.cookie);
+      expect(response.status).toBe(200);
+      expect(requests.at(-1)).toEqual({ approvalReference: reference, operationKey, operation: input });
+      const workflowId = `accounts:${createHash('sha256')
+        .update(JSON.stringify(`operation:${operationKey}`))
+        .digest('hex')}`;
+      const row = (await f.pool.query('SELECT * FROM auth_workflow_request WHERE workflow_id=$1', [workflowId]))
+        .rows[0];
+      expect(row).toMatchObject({
+        erasure_actor_id: source.actorAccountId,
+        erasure_human_id: source.actingHumanId,
+        erasure_principal_id: source.principalAccountId,
+        erasure_source_client_id: source.sourceClientId,
+        erasure_client_id: null,
+        request_context_version: 1,
+      });
+    } finally {
+      ports.readNativeCreationContext = read;
+    }
   }, 120_000);
 
   test('Native workflow request complete party capture before serialization', async () => {

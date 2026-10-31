@@ -953,23 +953,28 @@ The result supplies current readback only: destination acceptance and source
 approval/execute keep their original immutable descriptor, operation key and
 explicit confirmation requirements.
 
-Native workflow requests capture their complete original parties on the copy writer's
-transaction before request JSON or SDK input serialization. The private
-`workflow-request-parties.ts` adapter consumes only
-`readNativeCreationContext(context)` from the resolved native approval. Its pinned
-version-one literal carries `actorAccountId`, `actingHumanId`, `operatorAccountId`,
-`principalAccountId`, authenticated `clientId` and original `commandKey`; explicit
-nulls mean the source proved that role inapplicable. Actor and human are independent.
-The shared producer port is optional during integration: missing, malformed or
-unsupported context refuses with the existing generic unavailable response, before
-an attributed request or SDK copy commits. An actor-only callback cannot replace it.
-No public operation accepts this context. Plain self operations retain any real verified
-context returned by their existing trusted authorization adapter; a void return
-remains unavailable provenance. Current native `copyActors` supplies the
-existing initiator/delegate roles and actor version unchanged; the request projection
-does not rename those roles to principal. The SDK's installed role vocabulary must
-already contain each projected actor/principal through its genuine native roles,
-or copy creation stays closed. This is a consumer boundary, not producer completion.
+Native workflow requests resolve the complete original creation request before checking
+out the copy writer's SDK transaction. `workflow-request-parties.ts` uses the shared
+`creation-party-context.ts` `readApprovedCreationContext` helper and the exact
+`@rezics/auth-contract` `NativeCreationContextRequest` and `NativeCreationContextResult`
+through the native `readNativeCreationContext({ approvalReference, operationKey, operation })`
+function. The original resolver checks the full operation, digest and key with its unchanged
+current-T formula. Auth compares the available result's original reference, key, digest,
+command prefix, operation kind and target client against that request and its resolved
+approval binding. Historical, opening or absent provenance remains unavailable; neither
+caller JSON nor an actor-only callback supplies it.
+
+Only the frozen literal attribution is staged for the transaction: `actorAccountId`,
+`actingHumanId`, `operatorAccountId`, `principalAccountId`, authenticated `sourceClientId`,
+the original approval/key/digest/command binding and the native operation projection.
+Actor and human are independent; the source client is separate from the operation's
+target client. Explicit nulls mean the source proved that role inapplicable. Current native
+`copyActors` supplies the existing human/initiator/delegate roles and actor version unchanged;
+these must agree with the genuine source. No source read or foreign pool checkout runs while
+the SDK client is held. The preselected organization target and existing digest command
+prefix are resolved before checkout too. The snapshot conveys attribution, never cached
+allow: approval, execution, protected steps and disclosure retain their current authority.
+This is a consumer boundary, not producer, custody, native or participant completion.
 
 The closed business-variant projection records subject, both transfer operators,
 membership target, original target client and stage separately. Organization IDs use

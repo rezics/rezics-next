@@ -1,23 +1,15 @@
 import type {
   AccountWorkflowPorts,
-  NativeCreationContext as ApprovedNativeCreationContext,
+  NativeCreationContext,
+  NativeCreationContextRequest,
 } from '@rezics/auth-contract';
 import type { PoolClient } from 'pg';
 import type { CopyRole } from './erasure-copy.ts';
 import type { AccountOperation } from './workflows.ts';
+import { readApprovedCreationContext } from './creation-party-context.ts';
 
-/** Historical target-projection fixture shape. Runtime attribution is read only
- * through the original producer's shared type and immutable approval request. */
-export type NativeCreationContext = Readonly<{
-  version: 1;
-  actorAccountId: string;
-  actingHumanId: string | null;
-  operatorAccountId: string | null;
-  principalAccountId: string | null;
-  clientId: string;
-  commandKey: string;
-}>;
 export type NativeRequestActors = {
+  human: string | null;
   initiator: string | null;
   delegate: string | null;
   version: number;
@@ -27,44 +19,34 @@ const refused = (): never => {
 };
 const id = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 1024;
-const nullableId = (value: unknown): value is string | null => value === null || id(value);
 
-/** An absent producer is unavailable, never an empty party set. No actor-only
- * callback, current owner or arbitrary payload can substitute for this port. */
+/** Resolve the complete original request on released leases, before the copy
+ * writer checks out its SDK transaction. This projection grants no authority:
+ * ordinary approve/execute and each protected step still resolve at current T. */
 export async function readRequestCreationContext<Context>(
-  access: AccountWorkflowPorts<Context>,
+  access: Pick<AccountWorkflowPorts<Context>, 'readNativeCreationContext' | 'approvalBinding'>,
   context: Context | undefined,
-  input?: AccountOperation,
-): Promise<ApprovedNativeCreationContext> {
+  input: AccountOperation,
+): Promise<NativeCreationContext> {
   if (
     context === undefined ||
-    !access.readNativeCreationContext ||
-    !input?.operationKey ||
+    typeof access.readNativeCreationContext !== 'function' ||
     input.kind === 'transfer-acceptance' ||
     !('authorization' in input) ||
-    !input.authorization
+    typeof input.authorization !== 'string' ||
+    !input.authorization ||
+    input.authorization.length > 4096 ||
+    !id(input.operationKey)
   )
     return refused();
-  const result = await access.readNativeCreationContext({
+  const binding = access.approvalBinding?.(context);
+  if (!binding || binding.operationKey !== input.operationKey) return refused();
+  const request: NativeCreationContextRequest = {
     approvalReference: input.authorization,
     operationKey: input.operationKey,
     operation: input,
-  });
-  if (result.kind !== 'available') return refused();
-  const source = result.context;
-  if (
-    !id(source.actorAccountId) ||
-    !id(source.sourceClientId) ||
-    !id(source.commandKey) ||
-    source.approvalReference !== input.authorization ||
-    source.operationKey !== input.operationKey ||
-    source.operation.kind !== input.kind ||
-    !nullableId(source.actingHumanId) ||
-    !nullableId(source.operatorAccountId) ||
-    !nullableId(source.principalAccountId)
-  )
-    return refused();
-  return source;
+  };
+  return readApprovedCreationContext(access, request, binding);
 }
 
 /** Preserve any real verified context returned by the existing self-operation
@@ -109,7 +91,7 @@ export const REQUEST_PARTY_COLUMNS = `erasure_subject_id,erasure_human_id,erasur
  * switching keeps new operations closed until their source projection is added. */
 export function operationParties(
   input: AccountOperation,
-  source: Pick<ApprovedNativeCreationContext, 'operatorAccountId'>,
+  source: Pick<NativeCreationContext, 'operatorAccountId'>,
 ) {
   const base = {
     subject: null as string | null,
@@ -195,21 +177,25 @@ async function admitParties(connection: PoolClient, row: RequestParties) {
 
 /** Called by the copy writer on its own SDK transaction before it serializes
  * input. A fence, source failure or SDK refusal rolls back this request too. */
-export async function captureWorkflowRequest<Context>(
+export async function captureWorkflowRequest(
   connection: PoolClient,
   options: {
     workflowId: string;
     input: AccountOperation;
-    context: Context | undefined;
-    access: AccountWorkflowPorts<Context>;
+    source: NativeCreationContext;
+    organizationAccountId?: string;
     actors: NativeRequestActors;
     digest(): Buffer;
   },
 ): Promise<CopyRole[]> {
-  const { workflowId, input, context, access, actors } = options;
-  // Read the approved producer even on replay; it remains the current-T authority.
-  const source = await readRequestCreationContext(access, context, input);
-  if (actors.version !== 1) return refused();
+  const { workflowId, input, source, actors } = options;
+  if (
+    actors.version !== 1 ||
+    actors.human !== source.actingHumanId ||
+    actors.initiator !== source.actorAccountId ||
+    actors.delegate !== source.principalAccountId
+  )
+    return refused();
   const original = async () =>
     (
       await connection.query<RequestParties & { digest: Buffer }>(
@@ -227,8 +213,8 @@ export async function captureWorkflowRequest<Context>(
   if (old) return replay(old);
   const target = operationParties(input, source);
   if (input.kind === 'organization') {
-    if (!context || !access.stableCommandKey) return refused();
-    target.subject = access.registrationTarget(access.stableCommandKey(context, 'organization-id'));
+    if (!id(options.organizationAccountId)) return refused();
+    target.subject = options.organizationAccountId;
   }
   if (input.kind === 'automated') {
     const stage = (

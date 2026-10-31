@@ -11,6 +11,7 @@ import type {
 import {
   authorizeUnprotectedRequest,
   captureWorkflowRequest,
+  readRequestCreationContext,
   requestPartyScope,
   REQUEST_PARTY_COLUMNS,
   type RequestParties,
@@ -1446,6 +1447,11 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     if (input.kind === 'transfer-acceptance') denied();
     const context = 'authorization' in input ? await approved(input) : await authorizeUnprotectedRequest(access, input);
     const actors = await nativeActors(context);
+    const source = await readRequestCreationContext(access, context, input);
+    const organizationAccountId =
+      input.kind === 'organization'
+        ? access.registrationTarget(required(access.stableCommandKey)(required(context), 'organization-id'))
+        : undefined;
     const id = workflowId(`operation:${key}`);
     // The stored result is private to the caller whose approval started it. The
     // approval's binding names the actor and the logical operation, and the
@@ -1457,14 +1463,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           captureWorkflowRequest(connection, {
             workflowId: id,
             input,
-            context,
-            access,
+            source,
+            ...(organizationAccountId === undefined ? {} : { organizationAccountId }),
             actors,
-            digest: () =>
-              hash([
-                businessOperation(input),
-                context ? (access.approvalBinding?.(context)?.commandKeyPrefix ?? null) : null,
-              ]),
+            digest: () => hash([businessOperation(input), source.commandKey]),
           }),
         )
       ).getResult(),
@@ -1879,13 +1881,13 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       };
       const context = await approved(operation);
       const actors = await nativeActors(context);
+      const source = await readRequestCreationContext(access, context, operation);
       const id = workflowId(`client-reduction:${key}`);
       await writer().enqueue('accounts.client-reduction', id, { ...operation, cursorVersion: 2 }, (connection) =>
         captureWorkflowRequest(connection, {
           workflowId: id,
           input: operation,
-          context,
-          access,
+          source,
           actors,
           digest: () => hash(operation),
         }),

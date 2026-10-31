@@ -1,6 +1,7 @@
 import type {
   NativeCreationContext,
   NativeCreationContextRequest,
+  NativeCreationContextResult,
   ReadNativeCreationContext,
 } from '@rezics/auth-contract';
 export type { NativeCreationContext } from '@rezics/auth-contract';
@@ -17,19 +18,20 @@ const bounded = (value: unknown, limit = 1024): value is string =>
   typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= limit && !value.includes('\0');
 const nullable = (value: unknown) => value === null || bounded(value);
 
-/** Consume only the real trusted composition port; public operation fields can
- * neither install attribution nor stand in for a missing producer. */
+/** Shared by registration stages and workflow requests. Consume only the real
+ * trusted composition port; public operation fields can neither install
+ * attribution nor stand in for a missing producer. */
 export async function readApprovedCreationContext(
   ports: NativeCreationPort,
   input: NativeCreationContextRequest,
   binding: { operationKey: string; digest: string; commandKeyPrefix: string } | undefined,
 ): Promise<NativeCreationContext> {
-  if (!ports.readNativeCreationContext) creationContextUnavailable('producer-missing');
-  const result = await ports.readNativeCreationContext(input);
+  if (typeof ports.readNativeCreationContext !== 'function') creationContextUnavailable('producer-missing');
+  const result: NativeCreationContextResult = await ports.readNativeCreationContext(input);
   if (result.kind === 'unavailable') creationContextUnavailable(result.reason);
   const c = result.context;
   if (
-    input.operation.kind !== 'automated' ||
+    !c?.operation ||
     !binding ||
     !bounded(c.actorAccountId) ||
     !nullable(c.actingHumanId) ||
@@ -45,10 +47,16 @@ export async function readApprovedCreationContext(
     c.operationKey !== binding.operationKey ||
     c.operationDigest !== binding.digest ||
     c.commandKey !== binding.commandKeyPrefix ||
-    c.operation.kind !== 'automated' ||
-    c.operation.action !== 'account:manage' ||
-    c.operation.targetResourceId !== input.operation.operatorAccountId ||
-    c.operation.targetClientId !== null
+    c.operation.kind !== input.operation.kind ||
+    !bounded(c.operation.action) ||
+    !bounded(c.operation.targetResourceId) ||
+    c.operation.targetClientId !== (input.operation.kind === 'client-reduction' ? input.operation.clientId : null) ||
+    // Keep automation's original exact permission target checks. Other workflow
+    // variants are resolved by the same native full-operation/key/digest reader;
+    // this projection does not evaluate or widen their authorization formula.
+    (input.operation.kind === 'automated' &&
+      (c.operation.action !== 'account:manage' ||
+        c.operation.targetResourceId !== input.operation.operatorAccountId))
   )
     throw Object.assign(new Error('Native creation context binding refused'), { status: 403 as const });
   // Take an exact, closed snapshot. Never persist additional runtime fields or
