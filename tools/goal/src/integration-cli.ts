@@ -30,6 +30,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { SharedInboxQueries, type SharedInboxFilter } from './inbox-shared.ts';
 import { ManagerSessions, recordManagerDecision, type ManagerServices, type ManagerSpec } from './managers.ts';
 import { acquireDirectoryLease } from './lease.ts';
+import { ensureHostRunning, startHostSupervisor, recordHostLiveness } from './host-liveness.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
 
@@ -292,53 +293,15 @@ export function managerHostRestartAllowed(stateDirectory: string, now = Date.now
 }
 
 async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const socket = createConnection(runtime.managerSocket);
-      socket.on('connect', () => {
-        socket.end();
-        resolve();
-      });
-      socket.on('error', reject);
-    });
-    return;
-  } catch {}
-  const argv = [
-    ...(runtime.hostCommand ?? [process.execPath, join(runtime.mainCheckout, 'tools/goal/src/cli.ts')]),
-    '_manager-host',
-  ];
   mkdirSync(runtime.stateDirectory, { recursive: true });
-  const logPath = join(runtime.stateDirectory, 'manager-host.log');
-  const log = openSync(logPath, 'a', 0o600);
-  const child = spawn(argv[0]!, argv.slice(1), { env: process.env, detached: true, stdio: ['ignore', 'pipe', log] });
-  closeSync(log);
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      child.kill();
-      reject(new Error('Manager host startup timed out'));
-    }, 45_000);
-    child.once('error', (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    child.once('exit', (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`Manager host exited (${code}): ${readFileSync(logPath, 'utf8').slice(-4000)}`));
-    });
-    const lines = createInterface({ input: child.stdout! });
-    lines.once('line', (line) => {
-      clearTimeout(timeout);
-      lines.close();
-      if (line !== 'ready') {
-        child.kill();
-        reject(new Error(`Manager host startup: ${line}`));
-        return;
-      }
-      child.stdout!.destroy();
-      child.unref();
-      resolve();
-    });
-  });
+  const config = {
+    stateDirectory: runtime.stateDirectory,
+    managerSocket: runtime.managerSocket,
+    mainCheckout: runtime.mainCheckout,
+    command: runtime.hostCommand ?? [process.execPath, join(runtime.mainCheckout, 'tools/goal/src/cli.ts')],
+  };
+  await ensureHostRunning(config);
+  await startHostSupervisor(config);
 }
 
 export async function serveManagers(runtime: IntegrationRuntime): Promise<void> {
@@ -446,6 +409,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     return runtime.recoverOrphans();
   };
   try {
+    recordHostLiveness(runtime.stateDirectory, true);
     await stopRecordedAppServers(registryPath);
     registrySafe = true;
     const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
@@ -467,6 +431,12 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       server.listen(runtime.managerSocket, resolve);
     });
     chmodSync(runtime.managerSocket, 0o600);
+    await startHostSupervisor({
+      stateDirectory: runtime.stateDirectory,
+      managerSocket: runtime.managerSocket,
+      mainCheckout: runtime.mainCheckout,
+      command: runtime.hostCommand ?? [process.execPath, join(runtime.mainCheckout, 'tools/goal/src/cli.ts')],
+    });
     if (stopRequested) return;
     let reportRecoveryProgress!: () => void;
     const recoveryProgress = new Promise<void>((resolve) => (reportRecoveryProgress = resolve));
@@ -581,6 +551,9 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       stateTimer.unref();
     });
   } finally {
+    // Intentional shutdown must not be interpreted as a crash. Code handoff keeps restart desired.
+    if (stopRequested && !restart && existsSync(runtime.stateDirectory))
+      recordHostLiveness(runtime.stateDirectory, false);
     if (recoveryTimer) clearInterval(recoveryTimer);
     if (codeTimer) clearInterval(codeTimer);
     if (stateTimer) clearInterval(stateTimer);
@@ -590,28 +563,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     if (registrySafe) rmSync(registryPath, { force: true });
     lease.release();
   }
-  if (restart) {
-    const argv = [
-      ...(runtime.hostCommand ?? [process.execPath, join(runtime.mainCheckout, 'tools/goal/src/cli.ts')]),
-      '_manager-host',
-    ];
-    // The new host writes where the first one does: errors it prints must stay readable after the handoff.
-    const log = openSync(join(runtime.stateDirectory, 'manager-host.log'), 'a', 0o600);
-    const child = spawn(argv[0]!, argv.slice(1), {
-      cwd: runtime.mainCheckout,
-      env: process.env,
-      detached: true,
-      stdio: ['ignore', log, log],
-    });
-    closeSync(log);
-    await new Promise<void>((resolve, reject) => {
-      child.once('error', reject);
-      child.once('spawn', () => {
-        child.unref();
-        resolve();
-      });
-    });
-  }
+  if (restart) await ensureHost(runtime);
 }
 
 export async function runIntegration(argv: string[], runtime: IntegrationRuntime): Promise<number> {

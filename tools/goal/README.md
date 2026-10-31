@@ -1016,6 +1016,26 @@ Promotion selects the latest eligible integration head by its expected ref ident
 quarantine, stabilization, ref-race and publication checks; known verifier findings do not turn a failed promotion
 command into a pass.
 
+Daily audit validation and dispatch exceptions are contained in the host. A durable daily claim prevents retries on
+later sweeps or host replacement; `flow_audit_failures` retains the original exception and stack. Its environment
+notice and delivery acknowledgement commit together in the SQLite inbox, with failed notice delivery retried on a
+later sweep. A new UTC day may dispatch again. The template grants only `tools/goal/reports/daily-step-audit-*.md`,
+which passes the existing risk ownership validator without granting product risk areas.
+
+The host also starts an independent supervisor, fenced by `manager-host-supervisor.lease`. It checks only its recorded
+host process identity (PID, start time, boot and process group); it never scans or kills workers. A dead host is
+relaunched through a shared startup lease and the existing host socket lease. Restart backoff starts at 250 ms,
+doubles on repeated failures up to 30 seconds, persists across supervisor replacement, and resets after 60 seconds of
+host survival. Detection polls once a second. Host startup errors remain in `manager-host.log`, supervisor errors in
+`manager-host-supervisor.log`. Graceful shutdown disables restart, state-directory removal ends supervision, and code
+handoff uses the same fenced launch path. Provider recovery and app-server cleanup remain owned by the host.
+Supervisor launch waits for fenced ownership before host readiness; a late launcher leaves removed state absent.
+
+Integration, cancellation and stopping explicitly close pending flow stages without fabricating successful stage
+completion or duration. Reporting also uses stored terminal task state to exclude legacy stale queue entries. An
+integrated task may still await promotion; promotion remains visible until merging, cancellation or its recorded
+completion. Live tasks and phases without observed end times retain their existing uncertainty.
+
 ### Original integrated journey proofs
 
 Current receiving operations (authenticated owning manager or configured operations manager):
