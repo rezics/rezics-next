@@ -501,7 +501,8 @@ export function authorizeNativeCollectionMetadata(
       async verify({ client }) {
         try {
           current = await observe(client as PoolClient, metadata, work);
-          return current?.state === 'active' && current.visibility !== 'private';
+          // A public read floor authorizes the selected output, never the curator's working facts.
+          return !owner && current?.state === 'active' && current.visibility !== 'private';
         } catch (error) {
           failure = error;
           throw error;
