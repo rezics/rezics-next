@@ -1046,6 +1046,7 @@
   "inbox_sign_in": "Inicia sesión para ver tus notificaciones.",
   "inbox_loading": "Cargando notificaciones…",
   "inbox_unavailable": "Las notificaciones no están disponibles temporalmente.",
+  "inbox_session_unavailable": "No pudimos comprobar tu sesión. Inténtalo de nuevo para ver si puedes abrir tus notificaciones.",
   "inbox_preparing": "Estamos preparando tu bandeja de entrada. Inténtalo de nuevo en un momento.",
   "inbox_closed": "La bandeja de entrada está cerrada. Inténtalo más tarde.",
   "inbox_retry": "Intentar de nuevo",

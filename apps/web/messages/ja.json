@@ -1046,6 +1046,7 @@
   "inbox_sign_in": "受信箱を見るにはログインしてください。",
   "inbox_loading": "受信箱を読み込み中…",
   "inbox_unavailable": "受信箱は一時的に利用できません。",
+  "inbox_session_unavailable": "ログイン状態を確認できませんでした。再試行して、受信箱を開けるか確認してください。",
   "inbox_preparing": "受信箱を準備しています。しばらくしてからもう一度お試しください。",
   "inbox_closed": "受信箱は現在利用できません。後でもう一度お試しください。",
   "inbox_retry": "再試行",

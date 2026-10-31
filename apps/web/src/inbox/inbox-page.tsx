@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Flag, Gavel, MessageCircleReply } from 'lucide-react';
 import { inboxPageQuery, markInboxViewerSeen, type InboxPageLoader } from './inbox-query';
 import { useInboxViewer, type InboxViewer } from './inbox-viewer';
+import { InboxEntryState } from './inbox-entry-state';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
@@ -107,7 +108,7 @@ export function InboxRows({
 }
 
 export function InboxPageView({ loadPage }: { loadPage?: InboxPageLoader } = {}) {
-  const { state, csrfToken, viewer } = useInboxViewer();
+  const { state, csrfToken, viewer, sessionRead } = useInboxViewer();
   if (viewer)
     return (
       <ViewerInboxPage
@@ -120,9 +121,7 @@ export function InboxPageView({ loadPage }: { loadPage?: InboxPageLoader } = {})
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
-      <p className="mt-6 text-muted-foreground">
-        {state === 'signed-out' ? m.inbox_sign_in() : state === 'unknown' ? m.inbox_loading() : m.inbox_unavailable()}
-      </p>
+      <InboxEntryState state={state} sessionRead={sessionRead} />
     </div>
   );
 }

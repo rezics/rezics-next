@@ -1046,6 +1046,7 @@
   "inbox_sign_in": "登入以查看收件匣。",
   "inbox_loading": "正在載入收件匣…",
   "inbox_unavailable": "收件匣暫時無法使用。",
+  "inbox_session_unavailable": "目前無法確認您的登入狀態。請重試，確認是否可以開啟收件匣。",
   "inbox_preparing": "正在準備收件匣，請稍後重試。",
   "inbox_closed": "收件匣服務目前已關閉，請稍後再試。",
   "inbox_retry": "重試",

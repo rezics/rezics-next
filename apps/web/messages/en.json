@@ -1092,6 +1092,7 @@
   "inbox_sign_in": "Sign in to see your inbox.",
   "inbox_loading": "Loading your inbox…",
   "inbox_unavailable": "Your inbox is temporarily unavailable.",
+  "inbox_session_unavailable": "We couldn’t check your session. Retry to see whether you can open your inbox.",
   "inbox_preparing": "Your inbox is being prepared. Try again shortly.",
   "inbox_closed": "Your inbox is currently closed. Try again later.",
   "inbox_retry": "Try again",

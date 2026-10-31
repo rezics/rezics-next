@@ -1046,6 +1046,7 @@
   "inbox_sign_in": "Connectez-vous pour consulter vos notifications.",
   "inbox_loading": "Chargement des notifications…",
   "inbox_unavailable": "Les notifications sont temporairement indisponibles.",
+  "inbox_session_unavailable": "Impossible de vérifier votre connexion. Réessayez pour savoir si vous pouvez ouvrir vos notifications.",
   "inbox_preparing": "Préparation de votre boîte de réception. Réessayez dans un instant.",
   "inbox_closed": "Votre boîte de réception est actuellement fermée. Réessayez plus tard.",
   "inbox_retry": "Réessayer",

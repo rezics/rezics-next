@@ -1046,6 +1046,7 @@
   "inbox_sign_in": "Melde dich an, um deinen Posteingang zu sehen.",
   "inbox_loading": "Posteingang wird geladen …",
   "inbox_unavailable": "Der Posteingang ist vorübergehend nicht verfügbar.",
+  "inbox_session_unavailable": "Dein Anmeldestatus konnte nicht geprüft werden. Versuche es erneut, um deinen Posteingang zu öffnen.",
   "inbox_preparing": "Dein Posteingang wird vorbereitet. Versuche es gleich noch einmal.",
   "inbox_closed": "Dein Posteingang ist derzeit geschlossen. Versuche es später erneut.",
   "inbox_retry": "Erneut versuchen",

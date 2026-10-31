@@ -56,13 +56,29 @@ export function currentInboxViewer(client: QueryClient): InboxViewer | null {
 }
 
 const serverViewer = () => null;
+const serverSessionRead = () => undefined;
+export type InboxSessionRead = { status: 'pending' | 'error' | 'success'; fetchStatus: 'fetching' | 'paused' | 'idle' };
+
+/** A failed initial read has no session data, so useSession alone still reports unknown. */
+export function inboxEntryState(state: ReturnType<typeof useSession>['state'], read?: InboxSessionRead) {
+  if (state === 'signed-out') return 'signed-out';
+  if (state === 'unknown' && read?.status !== 'error') return 'loading';
+  return 'unavailable';
+}
 
 export function useInboxViewer() {
   const session = useSession();
-  const store = inboxViewerStore(useQueryClient());
+  const client = useQueryClient();
+  const store = inboxViewerStore(client);
   const current = useSyncExternalStore(store.subscribe, store.snapshot, serverViewer);
+  // Read-only observation: useSession remains the sole owner of the initial browser read.
+  const sessionRead = useSyncExternalStore(
+    store.subscribe,
+    () => client.getQueryState(sessionQuery.queryKey),
+    serverSessionRead,
+  );
   const viewer = current?.subject === subject(session) ? current : null;
-  return { ...session, viewer };
+  return { ...session, viewer, sessionRead };
 }
 
 /** Guard both dispatch and completion; a CSRF token is never an account identity. */
