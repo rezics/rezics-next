@@ -402,7 +402,7 @@ async function bindOwner(
       if (!output) throw new Refused('output_authority');
       outputMembers = output.members;
     }
-  } else if (source.kind === 'dynamic' && (source.visibility !== 'private' || source.builtin === null)) {
+  } else if (source.kind === 'dynamic' && source.visibility !== 'private') {
     throw new Refused('output_authority');
   }
   if (

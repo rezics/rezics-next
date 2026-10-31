@@ -15,6 +15,8 @@ import type { CollectionSourceObservation, WorkAllowance, WorkReceipt } from '..
 import type { NativeSourceIdentity } from '../library/native-source-custody.ts';
 import { admitCollectionMemberQuery } from '../library/owner-filter.ts';
 import { bindOwnerFilterRead } from '../library/owner-filter-plan.ts';
+import { withOwnerFilterNativeRead } from '../library/owner-filter-native-binding.ts';
+import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
 import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
 import { readRelease } from '../semantic/definitions.ts';
@@ -294,13 +296,21 @@ export function createSearchScopeSource({
       !isDeepStrictEqual(admission.filter, value.filter)
     )
       unavailable();
-    const bound = await bindOwnerFilterRead(
+    if (!reader.nativeT) unavailable();
+    const nativeWork = new NativeCollectionWork(work.remaining(), reader.deadline);
+    const bound = await (async () => {
+      try {
+        return await withOwnerFilterNativeRead({ actor: reader.actor, at: reader.nativeT!, work: nativeWork }, () => bindOwnerFilterRead(
       { pool, access: reader.access, routeKey: reader.routeKey, clock },
       reader.actor,
       identity.collectionId,
       admission,
       reader.deadline,
-    );
+        ));
+      } finally {
+        work.native(nativeWork.receipt());
+      }
+    })();
     if (
       bound.status !== 'bound' ||
       bound.binding.input.actor !== reader.actor ||

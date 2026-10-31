@@ -522,7 +522,7 @@ async function currentSource(client: QueryClient, metadata: NativeCollectionMeta
     throw new ProblemError('stale_cursor');
   if (
     current.authority === 'unavailable_output' ||
-    (current.authority === 'private_builtin' && (!current.factFence || !current.builtinKind))
+    (current.authority === 'private_builtin' && !current.factFence)
   )
     throw new ProblemError('dependency_unavailable');
   return current;
@@ -660,7 +660,7 @@ export async function probeNativeCollectionOriginal(
     input.after &&
     (input.after.driver !== 'label' ||
       metadata.authority !== 'private_builtin' ||
-      metadata.builtinKind !== 'everything')
+      metadata.builtinKind === 'state')
   )
     throw new ProblemError('invalid_cursor');
   let progress = input.after ?? null;
@@ -720,7 +720,7 @@ export async function probeNativeCollectionOriginal(
               compressed: boolean;
             }>(entrySQL, [...params, current.stateId])
           ).rows[0];
-          if (row?.present && current.builtinKind === 'everything')
+          if (row?.present && current.builtinKind !== 'state')
             return done('present', {
               driver: 'entry',
               storedSubjectId: input.originalId,

@@ -6,13 +6,15 @@ import { createHash } from 'node:crypto';
 import { deadlineClient } from '../access/authenticate.ts';
 import { readAccount } from '../access/account-data.ts';
 import { admitGroup } from '../access/gates/admission.ts';
+import { commandAccessContext } from '../access/command-admission.ts';
+import { authoritativeTimeValue, type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { ProblemError } from '../http/problem.ts';
 import { parseStrictJson } from '../http/strict-json.ts';
-import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
+import { accessCheck, AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { routeOf } from '../route/route.ts';
-import { activeRelease } from '../semantic/definitions.ts';
+import { activeRelease, freeze } from '../semantic/definitions.ts';
 import type { RelationFacetMatch } from '../search/source.ts';
 import {
   compileCurrentOwnerFilter,
@@ -421,6 +423,18 @@ export type CollectionMemberQuery = {
 };
 
 type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
+const nativeAdmissions = new WeakMap<CollectionMemberAdmission, Readonly<{
+  actor: Actor;
+  pool: Pool;
+  deadline: number;
+}>>();
+
+/** Exact native grammar/family admission, not a permission verdict or a serializable capability.
+ * Consumers must repeat ordinary current authority and Source/identity fences at their actual T.
+ */
+export function readNativeCollectionMemberAdmission(admission: CollectionMemberAdmission) {
+  return nativeAdmissions.get(admission);
+}
 type PrivateRead = { action: string; group: string };
 
 /** Native family list authority, including branches whose truth could otherwise short circuit. */
@@ -435,6 +449,33 @@ function privateReads(filter: FilterDocument): PrivateRead[] {
     if ('presence' in leaf || 'holding' in leaf) add('copy:list', 'personal_library');
   }
   return [...reads.values()];
+}
+
+/** Repeat the admitted expanded families at the actual caller time, including every negative branch. */
+export async function prepareNativeCollectionMemberAuthority(
+  deps: Dependencies,
+  viewer: Actor,
+  admission: CollectionMemberAdmission,
+  at: AuthoritativeTime,
+  deadline: number,
+  attempt?: CommandAttempt,
+) {
+  const saved = nativeAdmissions.get(admission);
+  if (!saved || saved.actor !== viewer || saved.pool !== deps.pool) throw new TypeError('Foreign native owner admission');
+  if (!admission.owner || !admission.filter) return [];
+  if (viewer.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+  const route = routeOf(viewer.accountId);
+  if (route === null || (attempt && attempt.time !== at)) throw new TypeError('Foreign native owner time');
+  const checks = [];
+  for (const { action, group } of privateReads(admission.filter)) {
+    if (!viewer.scopes.includes(action)) throw new ProblemError('forbidden');
+    await admitGroup({ pool: deps.pool, access: () => deps.access, actor: viewer, group,
+      clientAction: action, deadline, clock: () => new Date(authoritativeTimeValue(at)) });
+    const context = { pool: deps.pool, deadline };
+    checks.push(await accessCheck(deps.access, viewer, action, { route, id: viewer.accountId },
+      attempt ? commandAccessContext(context, attempt) : context));
+  }
+  return checks;
 }
 
 function invalidFilter(error: unknown): never {
@@ -505,7 +546,7 @@ export async function admitCollectionMemberQuery(
         clock: deps.clock ?? systemClock,
       });
   }
-  return {
+  const admission: CollectionMemberAdmission = {
     filter,
     sort: 'id',
     plan: filter === undefined ? null : compileCurrentOwnerFilter(filter),
@@ -521,6 +562,9 @@ export async function admitCollectionMemberQuery(
         ? leafProvider(viewer.accountId, filter, deadline)
         : null,
   };
+  freeze(admission);
+  nativeAdmissions.set(admission, { actor: viewer, pool: deps.pool, deadline });
+  return admission;
 }
 
 /**

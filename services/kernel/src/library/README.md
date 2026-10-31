@@ -106,10 +106,20 @@ Current implementation evidence is narrower than the capability:
   independent native support. FULL attaches the existing shared summary/facts batch and revalidates afterwards.
   A sparse admitted read delegates durable reservation and enqueue to `MembersPreparation`; only an actual
   preparing episode can produce the existing 202 body. BASIC and FULL share the same native admission path.
-  `bindOwnerFilterRead` and `readOwnerFilterCandidateClosure` are explicit owned unavailable adapters for the
-  actual caller T/reservation/scoped capture and complete authorized original/fact closure. They perform no I/O,
-  manufacture no identity/source evidence and return no successful empty result. The Semantic scope/public-capture
-  modules use exact published declarations with unavailable producer adapters. Complete native population,
+  `bindOwnerFilterRead` delegates to `bindNativeOwnerFilterRead`: native admission provenance, authenticated actor,
+  current Collection incarnation/generation, actual Source preparation and its committed scoped capture are checked
+  at the real read time or exact registered command attempt. `withOwnerFilterNativeRead` transfers Search's existing
+  time and reservation without changing the binder's arguments. Binding and closure spend that same reservation.
+  `readOwnerFilterCandidateClosure` delegates to `readNativeOwnerFilterClosure`: complete indexed canonical groups,
+  independent native entry/label/session/copy locators, ordinary original and terminal guards, immutable accepted
+  releases and shared Semantic catalogue evidence. Source-local snapshots close before foreign evidence. Final
+  owner-fact, account, Source and scoped identity checks include excluded and nonmatching originals. Missing groups,
+  full bounded windows and changed evidence remain unproved; no successful empty closure is returned.
+  Private saved collections use the existing whole private raw drivers and custody capture rather than rejecting
+  their null built-in kind. This does not supply `requireCollectionRuleExecution`'s missing saved-rule admission body,
+  a private working Source for publication replay after public activation, or complete independent private-support
+  originals for a state-only Source. Those cases remain unavailable. The Semantic scope/public-capture
+  modules retain their own producer qualifications. Complete native population,
   current disclosure, retained preparation/default worker integration and physical bounds still require the
   real producer bodies and combined native verification; source typing does not certify those outcomes.
 - `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
