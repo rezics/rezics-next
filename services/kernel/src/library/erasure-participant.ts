@@ -80,15 +80,28 @@ export function registerLibraryErasure(
     name: 'library.purgeErasureFollowCountsPage',
     ...COMMAND_STEP_RETRIES,
   });
-  const publicationPage = DBOS.registerStep(async (accountId: string) => {
-    const route = requireRoute(accountId);
-    return (await runCommand(pool, { partition: partitionOf(route), deadline: workStepDeadline() }, async (tx) => {
-      const page = await purgeCollectionPublicationEpisodes(tx, { accountId, limit: 100 });
-      if (!page.removed) return noEffect(page);
-      return { value: page, events: [{ type: 'com.rezics.library.account-graph.purged.v1', subject: accountId,
-        data: { accountId, kind: 'collection_publication_operation', removed: page.removed } }] };
-    })).value;
-  }, { name: 'library.purgeErasurePublicationPage', ...COMMAND_STEP_RETRIES });
+  const publicationPage = DBOS.registerStep(
+    async (accountId: string) => {
+      const route = requireRoute(accountId);
+      return (
+        await runCommand(pool, { partition: partitionOf(route), deadline: workStepDeadline() }, async (tx) => {
+          const page = await purgeCollectionPublicationEpisodes(tx, { accountId, limit: 100 });
+          if (!page.removed) return noEffect(page);
+          return {
+            value: page,
+            events: [
+              {
+                type: 'com.rezics.library.account-graph.purged.v1',
+                subject: accountId,
+                data: { accountId, kind: 'collection_publication_operation', removed: page.removed },
+              },
+            ],
+          };
+        })
+      ).value;
+    },
+    { name: 'library.purgeErasurePublicationPage', ...COMMAND_STEP_RETRIES },
+  );
   const graphPage = DBOS.registerStep(
     async (input: Parameters<typeof purgeOwnedGraphPage>[1]) => purgeOwnedGraphPage(pool, input),
     { name: 'library.purgeErasureOwnedPage', ...COMMAND_STEP_RETRIES },
@@ -141,7 +154,11 @@ export function registerLibraryErasure(
         publicationPages++;
       }
       const kinds = ['entry', 'copy', 'follow'] as const;
-      while (cursor.countsComplete && cursor.factKind < kinds.length && counts.pages + publicationPages + facts.pages < 100) {
+      while (
+        cursor.countsComplete &&
+        cursor.factKind < kinds.length &&
+        counts.pages + publicationPages + facts.pages < 100
+      ) {
         const page = await purgePage(accountId, kinds[cursor.factKind]!, cursor.factAfter);
         facts.pages++;
         facts.examined += page.examined;

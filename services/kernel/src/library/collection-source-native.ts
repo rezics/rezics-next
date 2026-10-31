@@ -8,7 +8,13 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { accessRoot } from '../access/derived-access.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';
-import { authoritativeTimeValue, currentCommandResources, hasLiveCommandTransaction, type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  currentCommandResources,
+  hasLiveCommandTransaction,
+  type CommandTransaction,
+  type AuthoritativeTime,
+} from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -313,8 +319,12 @@ async function readOnly<T>(
       query: (async (config: string | QueryConfig, parameters: unknown[] = []) => {
         const sql = typeof config === 'string' ? config : config.text;
         const values = (typeof config === 'string' ? parameters : config.values) ?? [];
-        if (options.commandTx ? !hasLiveCommandTransaction(options.commandTx) :
-          !options.tx || !hasLiveOperationalTransaction(options.tx)) throw new ProblemError('semantic_not_ready');
+        if (
+          options.commandTx
+            ? !hasLiveCommandTransaction(options.commandTx)
+            : !options.tx || !hasLiveOperationalTransaction(options.tx)
+        )
+          throw new ProblemError('semantic_not_ready');
         const reservation = work.reserve(footprint(sql, values, work));
         reservation.dispatch();
         let result: QueryResult | undefined;
@@ -420,8 +430,11 @@ async function observe(
 async function observeWorking(client: QueryClient, ref: Ref, work: NativeCollectionWork) {
   const metadata = await observe(client, ref, work);
   if (!metadata || metadata.membershipKind !== 'dynamic' || metadata.visibility === 'private') return metadata;
-  if (!metadata.curatorAccountId || !(metadata.ruleReady ||
-    (metadata.builtinKind !== null && metadata.releaseDigest !== null))) return null;
+  if (
+    !metadata.curatorAccountId ||
+    !(metadata.ruleReady || (metadata.builtinKind !== null && metadata.releaseDigest !== null))
+  )
+    return null;
   const factFence =
     (await client.query<{ generation: string }>(fenceSQL, [ref.route, metadata.curatorAccountId])).rows[0]
       ?.generation ?? null;
