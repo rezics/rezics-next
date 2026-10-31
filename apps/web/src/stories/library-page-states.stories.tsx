@@ -11,14 +11,7 @@ const meta = {
   title: 'Pages/Library/Personal Library',
   parameters: {
     layout: 'fullscreen',
-    admitted: [
-      'selling',
-      'purchases',
-      'agent_verification',
-      'personal_library',
-      'reading_progress',
-      'collections',
-    ],
+    admitted: ['selling', 'purchases', 'agent_verification', 'personal_library', 'reading_progress', 'collections'],
   },
 } satisfies Meta;
 export default meta;
