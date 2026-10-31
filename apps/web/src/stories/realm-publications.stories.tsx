@@ -8,6 +8,7 @@ import subjectsRecording from '../kernel/recorded/realm-subjects.json';
 import realmRecording from '../kernel/recorded/realm.json';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
+import { subjectHref } from '../subject/subject-href';
 import { PatternStory } from './page';
 
 const meta = {
@@ -170,7 +171,10 @@ export const WithdrawAndRepublish: Story = {
     await view.findByText(m.realm_publication_saved());
     await expect(
       view.getByRole('link', { name: subjects[0]!.labels[getLocale()] ?? subjects[0]!.label ?? '' }),
-    ).toHaveAttribute('href', expect.not.stringContaining('?realm'));
+    ).toHaveAttribute(
+      'href',
+      `${subjectHref({ id: subjects[0]!.id, label: subjects[0]!.labels[getLocale()] ?? subjects[0]!.label ?? '' }, getLocale()).href}?realm=${encodeURIComponent(realmRecording.realm.realmId)}`,
+    );
   },
 };
 export const Conflict: Story = {

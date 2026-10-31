@@ -107,7 +107,9 @@ test(
             const title = subject.labels[locale] ?? subject.labels.en!;
             const link = cards.getByRole('link', { name: title, exact: true });
             await link.waitFor();
-            expect(await link.getAttribute('href')).toBe(`/${locale}/subjects/${subject.id}/${slug(title)}`);
+            expect(await link.getAttribute('href')).toBe(
+              `/${locale}/subjects/${subject.id}/${slug(title)}?realm=${encodeURIComponent(space.space.realmId)}`,
+            );
             expect(await link.evaluate((element) => element.closest('article') !== null)).toBe(true);
           }
         } finally {
