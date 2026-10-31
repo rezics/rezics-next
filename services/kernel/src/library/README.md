@@ -1754,7 +1754,8 @@ Auth provisioning/consent, bearer transport and observation of actual Access cal
 These restored inputs do not establish native completion. The current world lacks an Auth account-operation host
 for operated-account creation and terminal deletion. Whole Library page observations must include raw examined
 work, including owned-graph pages; missing observations fail explicitly. Count-role exhaustion never establishes
-whole-participant completion. The original bootstrap contract file is absent, and newly provisioned accounts are
+whole-participant completion. Shared work-payload observation and minimizer custody remain unresolved. The original
+bootstrap contract file is absent, and newly provisioned accounts are
 already bootstrap-complete under the runtime migration; they cannot stand in for pre-hook legacy coverage.
 The retained first-page inputs require that native legacy population boundary rather than a SQL reset.
 

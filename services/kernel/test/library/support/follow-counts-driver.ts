@@ -43,7 +43,21 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
     const populations = new Map<CountFixture, Map<string, number>>();
     let principalSequence = 0;
     let dependencyLock: PoolClient | undefined;
-    const principal = () => world.native.principal(1024 + (principalSequence++ % 2048));
+    const principal = async () => {
+      for (let attempt = 0; attempt < 2048; attempt++) {
+        const partition = 1024 + (principalSequence++ % 2048);
+        if (
+          fixtures.some(
+            (fixture) =>
+              partitionOf(route(fixture.follower.accountId)) === partition ||
+              partitionOf(route(fixture.target.targetId)) === partition,
+          )
+        )
+          continue;
+        return world.native.principal(partition);
+      }
+      throw new Error('Native Follow growth exhausted distinct fixture partition placements');
+    };
     const steward: Principal = { accountId: world.native.steward.id, credential: world.native.token('steward') };
     const request: FollowCountsDriver['request'] = (credential, path, init) =>
       world.native.bearerRequest(credential, path, init);
@@ -316,7 +330,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
           targetRows.push(
             ...(await inspectRows(
               `library.${relation}`,
-              `SELECT * FROM library.${relation} WHERE account_id=$1 ORDER BY route,target_type,target_id`,
+              `SELECT * FROM library.${relation} WHERE account_id=$1 ORDER BY route,target_type,target_id,to_jsonb(${relation})::text`,
               [as.accountId],
             )),
           );
@@ -326,6 +340,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
           'follow_count_destination',
           'follow_count_owner',
           'follow_count_account_work',
+          'follow_count_account_signal',
         ])
           privatePayloads.push(
             ...(await inspectRows(
@@ -334,8 +349,8 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
               args,
             )),
           );
-        // Native source/receiving locators are included above. Shared immutable
-        // command/event/work copies are observed too, never assumed minimized.
+        // Native source/receiving locators are included above. Shared command and
+        // event copies are observed too, never assumed minimized.
         privatePayloads.push(
           ...(await inspectRows(
             'core.receipt',
@@ -353,7 +368,10 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
         privatePayloads.push(...effects.map((row) => ({ relation: 'core.outbox', row })));
         const terminalFences = (
           await reader.query<{ accountId: string }>(
-            'SELECT account_id AS "accountId" FROM library.follow_count_terminal_follower WHERE account_id=$1 ORDER BY partition_no',
+            `SELECT account_id AS "accountId" FROM library.follow_count_terminal_follower WHERE account_id=$1
+             UNION ALL
+             SELECT account_id AS "accountId" FROM library.follow_count_terminal_source WHERE account_id=$1
+             ORDER BY "accountId"`,
             [as.accountId],
           )
         ).rows;
@@ -447,7 +465,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
             await driver.reconcile(as, fixture.target);
           } else if (axis === 'unrelated_followers') {
             const as = await principal();
-            const target = await collection(as);
+            const target = await collection(await principal());
             await follow(as, target);
             await driver.reconcile(as, target);
           } else {
