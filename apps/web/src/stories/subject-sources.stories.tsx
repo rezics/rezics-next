@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
+import { m } from '../paraglide/messages.js';
 import { pageReady, pagePaths, PageStory } from './page';
 
 const meta = { title: 'Pages/Subject Sources', parameters: { layout: 'fullscreen' } } satisfies Meta;
@@ -16,7 +17,7 @@ export const AllSourceRecordFields: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    const section = await canvas.findByRole('region', { name: 'Sources' });
+    const section = await canvas.findByRole('region', { name: m.subject_sources() });
     const sources = within(section);
     const records: [string, string][] = [
       ['Open Library Catalogue', 'https://openlibrary.org/works/OL45883W'],
@@ -54,7 +55,7 @@ export const NoSourceRecords: Story = {
   render: () => <PageStory visitor="Signed Out" path={sourcePath('empty')} />,
   play: async (context) => {
     await pageReady(context);
-    const region = await within(context.canvasElement).findByRole('region', { name: 'Sources' });
+    const region = await within(context.canvasElement).findByRole('region', { name: m.subject_sources() });
     const section = within(region);
     expect(section.getAllByRole('listitem').length).toBe(1);
     expect(section.getByText('© REZICS fixtures')).toBeTruthy();
