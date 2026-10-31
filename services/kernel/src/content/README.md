@@ -623,11 +623,27 @@ native walker still proves routes, cycles, thread binding and availability. Clos
 bytes settle synchronously from the dispatched invocation; rows retain the full native plan charge, including on
 empty seeks. Initial captured rows and independent outer/final reads belong to their enclosing domain owner.
 
-Cover callbacks remain unavailable before verification IO with the precise dependency
-`Semantic subject:read current subject/Context AccessCheck work producer inside Content cover eligibility.verify`:
-`subjectReadEligibility` and its prepared subject/Context check must declare their own nested work first. No nested
-foreign callback runs under zero or estimated work. Unmetered download and paid-image behavior retain the existing
-queries, native checks and cache policy. A work receipt never supplies permission or whole-source readiness.
+Cover verification composes the existing bounded media point, the exact `semantic/subject-exists.sql` primary-key
+probe (`found: 1`, including an empty seek), and the original prepared actor and anonymous subject Access checks.
+`cover-prepared-access-work.ts` consumes the declared `PreparedAccessCheckWork.bound/run/actual` ABI through a
+Content-local optional boundary until the original request module exports it. Only identical prepared check handles
+share an invocation; an actor grant never supplies the anonymous result used for public transport cacheability.
+The original `subjectReadEligibility` remains the sole Semantic resource verifier.
+
+The pure declaration includes both complete nested producer bounds before callback IO. Their exact invocation
+receipts join the media and existence work in the existing parent envelope; Content neither reserves those children
+again nor subtracts cumulative ledger usage. The Accounts accounting frame owns nested native/owner settlement.
+Failed or unknown execution retains the complete admitted bound. The existence probe costs one key, point and native
+row, with parameter bytes plus the closed constant projection; no subject label, payload or history is selected.
+
+Metered cover verification requires the same genuine live `AuthoritativeTime` and `AccessWorkAccounting` that were
+forwarded to original subject preparation on the released pool. Each original producer must admit that preparation;
+missing producers, undefined bounds, missing time/accounting or unadmitted earlier preparation refuse before callback
+IO. The trusted `DownloadContext` can forward optional `time` and `work` to that released preparation and the final
+media check. Current ordinary callers provide neither, so they do not establish a supported metered Source path.
+Initial/final media and independent tuple-fence snapshots remain at their original released homes and belong to their
+enclosing Source, outside these callback receipts. Unmetered queries, native checks and cache policy retain their
+existing behavior. This consumer does not establish cover, native or whole-source readiness.
 
 ## Realm presentation media
 

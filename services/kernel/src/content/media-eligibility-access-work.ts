@@ -1,3 +1,4 @@
+import type { CoverPreparedAccessWork } from './cover-prepared-access-work.ts';
 import type { ResourceEligibilityOptions, ResourceEligibilityVerifyContext } from '../access/eligibility.ts';
 import { ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, AccessWorkUnavailableError, type AccessWork } from '../access/work.ts';
 
@@ -47,6 +48,8 @@ type ParentReads = Readonly<{
   author: NativeRead;
   media<T>(dispatch: (bounded: boolean) => Promise<T>): Promise<T>;
   ancestor<T>(input: ParentInput, dispatch: () => Promise<T>): Promise<T>;
+  subject<T>(dispatch: (bounded: boolean) => Promise<T>): Promise<T>;
+  prepared(check: import('../request/access.ts').AccessCheck): Promise<boolean>;
 }>;
 
 /** Only these explicit native statements are declared here. read-media-parent
@@ -199,6 +202,7 @@ export function mediaEligibilityCallbacks<E>(
     parent?: ParentPlan;
     media?: MediaPlan;
     dependency?: string;
+    cover?: Readonly<{ route: number; id: string; access: CoverPreparedAccessWork }>;
     verify(context: ResourceEligibilityVerifyContext<E>, reads: ParentReads): Promise<boolean>;
   }>,
 ): Pick<ResourceEligibilityOptions<E>, 'prepare' | 'verify' | 'work'> {
@@ -218,14 +222,23 @@ export function mediaEligibilityCallbacks<E>(
           }),
     });
   const media = mediaPlan && mediaWork(mediaPlan);
+  const cover = options.cover;
+  // semantic/subject-exists.sql selects the constant found=1 by the complete
+  // subject PK. Even a miss dispatches one native point, with no payload read.
+  const subject = cover && {
+    keys: 1, points: 1, witnesses: 0, rows: 1,
+    bytes: bytes({ route: cover.route, subject_id: cover.id }) + bytes({ found: 1 }),
+    emptySeeks: 1,
+  };
   const ancestors =
     mediaPlan?.ancestors?.map((node, index) => {
       const input = { route: mediaPlan.route, id: node.id, kind: index === 0 ? ('container' as const) : node.kind };
       return { input, work: parentWork({ ...input, author: false }) };
     }) ?? [];
-  if (ancestors.length > 34 || (plan && mediaPlan)) throw new TypeError('Invalid media eligibility plan');
+  if (ancestors.length > 34 || (plan && mediaPlan) || (cover && (!mediaPlan || mediaPlan.kind !== 'download'))) throw new TypeError('Invalid media eligibility plan');
   let bound = parent ? sum(parent, author ?? EMPTY_ACCESS_WORK) : media;
   if (bound) for (const node of ancestors) bound = sum(bound, node.work);
+  if (bound && subject) bound = sum(bound, subject);
   const metered = new WeakSet<object>();
   return {
     work: {
@@ -242,10 +255,13 @@ export function mediaEligibilityCallbacks<E>(
       verify: {
         bound(context) {
           verified.delete(context);
+          metered.delete(context);
           if (context.evidence !== options.evidence) return undefined;
           if (!bound) throw new AccessWorkUnavailableError(options.dependency ?? MEDIA_DOWNLOAD_WORK_DEPENDENCY);
+          const nested = cover?.access.bound(context);
+          if (cover && !nested) throw new AccessWorkUnavailableError(COVER_MEDIA_WORK_DEPENDENCY);
           metered.add(context);
-          return bound;
+          return nested ? sum(bound, nested) : bound;
         },
         actual(context, result) {
           const receipt = verified.get(context);
@@ -261,6 +277,9 @@ export function mediaEligibilityCallbacks<E>(
     async verify(context) {
       verified.delete(context);
       const bounded = metered.delete(context);
+      // Direct calls cannot turn an explicitly metered cover into ordinary IO.
+      if (cover && 'work' in context && context.work && !bounded)
+        throw new AccessWorkUnavailableError(COVER_MEDIA_WORK_DEPENDENCY);
       let spent = EMPTY_ACCESS_WORK;
       let ancestorIndex = 0;
       const dispatched = new Set<string>();
@@ -292,6 +311,12 @@ export function mediaEligibilityCallbacks<E>(
       const wireRows = (value: unknown) =>
         value === null || value === undefined ? [] : Array.isArray(value) ? value : [value];
       const result = await options.verify(context, {
+        subject: (dispatch) =>
+          read('subject', subject, cover && { route: cover.route, subject_id: cover.id }, () => dispatch(bounded)),
+        prepared: (check) => {
+          if (!cover) throw new TypeError('Undeclared prepared media eligibility check');
+          return bounded ? cover.access.run(context, check) : check(context.client);
+        },
         parent: (dispatch) => read('parent', parent, parentInput, dispatch, wireRows),
         author: (dispatch) => read('author', author, plan && [plan.route, plan.id], dispatch, wireRows),
         media: (dispatch) =>
@@ -326,6 +351,12 @@ export function mediaEligibilityCallbacks<E>(
           );
         },
       });
+      if (bounded && cover) {
+        if (!dispatched.has('subject')) throw new TypeError('Missing cover subject existence dispatch');
+        const receipt = cover.access.actual(context);
+        if (!receipt) throw new AccessWorkUnavailableError(COVER_MEDIA_WORK_DEPENDENCY);
+        spent = sum(spent, receipt);
+      }
       if (bounded && ((plan && !dispatched.has('parent')) || (mediaPlan && !dispatched.has('media'))))
         throw new TypeError('Missing media eligibility native dispatch');
       if (bounded) verified.set(context, { result, work: spent });

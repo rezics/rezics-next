@@ -1,6 +1,6 @@
 import { createResourcePublicEligibility } from '../access/index.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
+import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '../command/command.ts';
 import { readRealm, realmReadEligibility, type RealmView } from '../community/realm.ts';
 import realmHead from '../community/realm-read.sql';
 import { ProblemError } from '../http/problem.ts';
@@ -19,6 +19,8 @@ import type { DownloadDecision, DownloadVariant, MediaDependencies } from './med
 import read from './read-download-media.sql';
 import readWork from './read-download-media-work.sql';
 import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
+import type { AccessWorkAccounting } from '../access/work.ts';
+import { coverPreparedAccessWork } from './cover-prepared-access-work.ts';
 import { COVER_MEDIA_WORK_DEPENDENCY, mediaEligibilityCallbacks } from './media-eligibility-access-work.ts';
 
 type Row = NonNullable<Awaited<ReturnType<typeof read.run>>>;
@@ -26,6 +28,9 @@ type RealmHeadRow = NonNullable<Awaited<ReturnType<typeof realmHead.run>>>;
 export type DownloadContext = Readonly<{
   deadline: number;
   routeKey?: Uint8Array;
+  /** Trusted caller forwarding only; never reconstructed from an HTTP timestamp. */
+  time?: AuthoritativeTime;
+  work?: AccessWorkAccounting;
 }>;
 const denied: DownloadDecision = Object.freeze({ allowed: false });
 const digest = /^[0-9a-f]{64}$/;
@@ -256,7 +261,11 @@ async function authorizeDownload(
       if (!fence || fence.takenDown) return null;
       const resource = { route: r, id: initial.container_id };
       const subjectResource = { ...resource, eligibility: subjectReadEligibility(resource) };
-      const accessContext = { pool: dependencies.pool, deadline: context.deadline };
+      const accessContext = {
+        pool: dependencies.pool, deadline: context.deadline,
+        ...(context.time === undefined ? {} : { time: context.time }),
+        ...(context.work === undefined ? {} : { work: context.work }),
+      };
       const subject = await accessCheck(dependencies.access, actor, 'subject:read', subjectResource, accessContext);
       const publicSubject = original
         ? null
@@ -269,6 +278,7 @@ async function authorizeDownload(
               subjectResource,
               accessContext,
             );
+      const prepared = coverPreparedAccessWork(subject, publicSubject, accessContext);
       let publiclyVisible = false;
       const mediaResource = { route: r, id: mediaId };
       const media = await accessCheck(
@@ -283,19 +293,33 @@ async function authorizeDownload(
             ...mediaEligibilityCallbacks({
               evidence: initial,
               dependency: COVER_MEDIA_WORK_DEPENDENCY,
-              async verify({ client }) {
-                const current = await point(client, mediaId, slot);
+              media: { kind: 'download', route: r, id: mediaId, ...slot,
+                credit: initial.credit !== null, provenance: initial.provenance !== null },
+              cover: { ...resource, access: prepared },
+              async verify({ client }, reads) {
+                const current = await reads.media((bounded) =>
+                  point(client, mediaId, slot, bounded, initial.credit !== null, initial.provenance !== null),
+                );
                 if (!current || !usable(current) || signature(current) !== signature(initial))
                   throw new GrantDeniedError();
                 // Existence is a hard prerequisite even when an independent grant
                 // could satisfy the subject formula without a public floor.
-                if (!(await subjectExists.run(client, { route: r, subject_id: initial.container_id })))
+                if (!(await reads.subject(async (bounded) => {
+                  const input = { route: r, subject_id: initial.container_id };
+                  if (!bounded) return subjectExists.run(client, input);
+                  // Dispatch only the existing exact native statement: the SQL
+                  // convenience wrapper may perform catalogue freshness reads.
+                  const result = await client.query<{ found: number }>(
+                    subjectExists.sql, subjectExists.params.map((name) => input[name]),
+                  );
+                  return result.rows[0] ?? null;
+                })))
                   throw new GrantDeniedError();
-                if (!(await subject(client))) throw new GrantDeniedError();
+                if (!(await reads.prepared(subject))) throw new GrantDeniedError();
                 // Anonymous viewing and public visibility use the same prepared
                 // check on this snapshot; evaluate that formula only once.
                 publiclyVisible =
-                  publicSubject !== null && (publicSubject === subject || (await publicSubject(client)));
+                  publicSubject !== null && (publicSubject === subject || (await reads.prepared(publicSubject)));
                 return publiclyVisible;
               },
             }),
@@ -307,7 +331,7 @@ async function authorizeDownload(
       if (!currentFence || currentFence.takenDown || signature(currentFence) !== signature(fence)) return null;
       return await snapshot(r, async (client) => {
         const current = await point(client, mediaId, slot);
-        if (!current || !usable(current) || signature(current) !== signature(initial) || !(await media(client)))
+        if (!current || !usable(current) || signature(current) !== signature(initial) || !(await media(client, context.time)))
           return null;
         return authorizedDecision(current, mediaId, variant, publiclyVisible, context.deadline);
       });
