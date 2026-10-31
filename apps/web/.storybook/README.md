@@ -4,6 +4,10 @@ The published review site combines two Storybooks into one entry point. The web 
 page stories. The UI Storybook is built once into `/ui/` and composed into the same sidebar through a relative ref.
 During development, the ref uses the UI dev server at `http://localhost:6007`.
 
+For an isolated worktree dev server, its local `/mcp` connection and component manifest, follow
+[Agent access](../../../docs/development/storybook.md#agent-access). The web preview supplies missing connected-story
+query context while preserving page and per-story providers.
+
 The recursive story globs include nested owner modules. Keep each page or pattern's behavior states together under
 its supplied canonical folder and IDs, including `Patterns/Collection Editor`. Required states remain discoverable
 even when a folder contains more than eight. Review the same IDs with the `phone390` and `desktop1280` viewport

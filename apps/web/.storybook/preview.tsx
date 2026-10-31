@@ -4,6 +4,7 @@ import { configure } from 'storybook/test';
 import { setLocale } from '../src/paraglide/runtime.js';
 import './preview.css';
 import { setFakeAdmitted } from '../src/kernel/fake';
+import { connectedStoryProviders } from '../src/stories/connected-story';
 
 configure({ asyncUtilTimeout: 15_000 });
 
@@ -36,6 +37,7 @@ const preview: Preview = {
     },
   },
   decorators: [
+    ...connectedStoryProviders.decorators,
     (Story, context) => {
       setFakeAdmitted(
         context.parameters.admitted ?? [
