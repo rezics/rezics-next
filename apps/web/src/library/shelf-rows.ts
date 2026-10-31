@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { m } from '../paraglide/messages.js';
 import { useOperation } from '../kernel/exposure';
@@ -70,7 +70,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale = 'en') {
   const writeAdmitted = useOperation('library_entry.put');
   const authority = useRef(writeAdmitted);
   authority.current = writeAdmitted;
-  useEffect(() => {
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;

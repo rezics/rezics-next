@@ -232,7 +232,8 @@ test('the actual selected shelf uses the default authorized per-entry action, re
     await render();
     expect(calls).toHaveLength(0);
     expect(host.querySelector('[aria-label="' + m.library_selection_heading() + '"]')).toBeNull();
-    expect(host.querySelectorAll('[aria-pressed="false"][aria-label^="Work "]')).toHaveLength(5);
+    expect(host.querySelectorAll('[role="checkbox"][aria-label^="Work "]')).toHaveLength(5);
+    expect(host.querySelectorAll('a[data-slot="cover-card-title"]')).toHaveLength(6);
     await act(async () => {
       button(m.library_selection_page()).click();
     });
@@ -299,10 +300,10 @@ test('the actual selected shelf uses the default authorized per-entry action, re
       layout = nextLayout;
       remount++;
       await render();
-      expect(host.querySelector('[role="checkbox"][aria-label="Work 1"]')).not.toBeNull();
       await act(async () => {
         button(m.library_selection_page()).click();
       });
+      expect(host.querySelector('[role="checkbox"][aria-label="Work 1"]')).not.toBeNull();
       expect(host.textContent).toContain(m.library_selection_count({ count: 5 }));
     }
     // Current native authority loss stops unsent targets; successful earlier commands are never rolled back.

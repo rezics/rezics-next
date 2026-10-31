@@ -200,6 +200,7 @@ function Updated({ entry, locale }: { entry: PersonalLibraryEntry; locale: strin
 }
 function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
   if (!controls.writeAdmitted || !controls.hydrated || !selectableEntry(entry)) return {};
+  if (!controls.selected.length) return { onSelect: () => controls.select(entry.subjectId, true) };
   return {
     selectable: true,
     selected: controls.selected.includes(entry.subjectId),
