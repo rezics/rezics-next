@@ -75,7 +75,12 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 function validateRead(input: unknown): Pick<ShelfSearch, 'state' | 'cursor' | 'orderBy' | 'direction'> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
   const { state, cursor, orderBy, direction } = validateShelfSearch(input as Record<string, unknown>);
-  return { state, cursor, orderBy, direction };
+  return {
+    ...(state ? { state } : {}),
+    ...(cursor ? { cursor } : {}),
+    ...(orderBy ? { orderBy } : {}),
+    ...(direction ? { direction } : {}),
+  };
 }
 
 function readIdentity(

@@ -235,7 +235,7 @@ export function PersonalLibraryPage({
         <p>{m.library_sign_in()}</p>
       </div>
     );
-  const sort = page.sort ?? shelfSort({ state: page.state });
+  const sort = page.sort ?? shelfSort(page);
   const filterSort = page.sortExplicit ? sort : undefined;
   const effectiveCursor = page.cursorReset ? undefined : cursor;
   const heading = page.state
@@ -280,15 +280,15 @@ export function PersonalLibraryPage({
               locale={locale}
               display={display}
               sort={sort}
-              filterSort={filterSort}
-              cursor={effectiveCursor}
+              {...(filterSort ? { filterSort } : {})}
+              {...(effectiveCursor ? { cursor: effectiveCursor } : {})}
             />
           </Exposure>
         </div>
         <SortControls
           key={`${sort.orderBy}:${sort.direction}`}
           locale={locale}
-          state={page.state}
+          {...(page.state ? { state: page.state } : {})}
           display={display}
           sort={sort}
         />
@@ -312,8 +312,8 @@ export function PersonalLibraryPage({
           <ShelfEntries
             key={`${page.state ?? 'all'}:${sort.orderBy}:${sort.direction}:${effectiveCursor ?? ''}`}
             sort={sort}
-            filterSort={filterSort}
-            state={page.state}
+            {...(filterSort ? { filterSort } : {})}
+            {...(page.state ? { state: page.state } : {})}
             entries={page.entries}
             locale={locale}
             {...display}

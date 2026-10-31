@@ -20,6 +20,8 @@ export declare class ShelfContractNotImplementedError extends Error {
 export declare const ENTRY_STATES: readonly ['planned', 'in_progress', 'completed', 'paused', 'dropped'];
 export type LegacyEntryState = (typeof ENTRY_STATES)[number];
 export declare function isLegacyEntryState(value: string): value is LegacyEntryState;
+/** Original profile vocabulary grammar; chronological reads preserve the exact state identifier. */
+export declare function isShelfEntryState(value: string): boolean;
 export declare const SHELF_ORDERS: readonly ['lastActivity', 'finishedAt', 'createdAt'];
 export declare const SHELF_DIRECTIONS: readonly ['desc', 'asc'];
 export type ShelfOrder = (typeof SHELF_ORDERS)[number];
@@ -50,6 +52,7 @@ export type ShelfSession = Omit<ProgressSession, 'accountId' | 'transactionId'>;
 /** Existing BASIC entry fields plus the shelf additions. FULL adds `subject` at the transport layer. */
 export type ShelfEntry = {
     subjectId: string;
+    incarnationId?: string | null;
     state: EntryState;
     revision: number;
     createdAt: string;

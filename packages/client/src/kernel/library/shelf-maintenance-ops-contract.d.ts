@@ -101,6 +101,8 @@ export interface ShelfMaintenanceOps {
         readiness: 'ready' | 'backfill';
         generationId: string | null;
         requested: ShelfMaintenanceBinding | null;
+        /** True only for the transaction that installed the original guarded owner intent. */
+        initializedNow?: boolean;
     }>;
     /** Trusted operator surface: real Access account:manage check, commit request/intent before asynchronous drain. */
     requestRebuild(actor: Actor, input: {
@@ -125,7 +127,7 @@ export interface ShelfMaintenanceDependencies {
     readonly pool: Pool;
     readonly access: Access;
     readonly clock?: KernelClock;
-    readonly client?: WorkClient;
+    readonly client?: WorkClient | (() => Promise<WorkClient>);
     /** Released source adapter only; absent identity evidence leaves the exact native frontier pending. */
     readonly sources?: Pick<TypePreparationDependencies, 'observe' | 'observeIdentity'>;
     /** The allocator owner supplies its native derived composition with the existing exact key ABI. */

@@ -341,7 +341,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
         const orderBy = field === 'added' ? 'createdAt' : field === 'finished' ? 'finishedAt' : 'lastActivity';
         void navigate({
           to: '/library',
-          search: { state, orderBy, direction, layout: controls.layout, size: controls.size },
+          search: { ...(state ? { state } : {}), orderBy, direction, layout: controls.layout, size: controls.size },
         });
       }}
     />
@@ -366,7 +366,15 @@ export function ShelfEntries({
 }) {
   const hydrated = useHydrated();
   const shelfRows = useShelfRows(entries);
-  const controls: Controls = { ...shelfRows, locale, hydrated, layout, size, sort, filterSort };
+  const controls: Controls = {
+    ...shelfRows,
+    locale,
+    hydrated,
+    layout,
+    size,
+    ...(sort ? { sort } : {}),
+    ...(filterSort ? { filterSort } : {}),
+  };
   const leaving = shelfRows.rows.find((row) => row.entry.subjectId === shelfRows.removing)?.entry;
   const notices = layout === 'grid' ? [] : shelfRows.rows.filter((row) => row.conflict || row.failure);
   if (!shelfRows.rows.length && !shelfRows.restoreMessage) return null;
@@ -402,7 +410,7 @@ export function ShelfEntries({
       {layout === 'table' ? (
         <>
           <div className="hidden sm:block">
-            <TableView controls={controls} state={state} />
+            <TableView controls={controls} {...(state ? { state } : {})} />
           </div>
           <div className="sm:hidden">
             <ListView controls={controls} />

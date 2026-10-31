@@ -121,6 +121,10 @@ export declare const CONTENT_EVENTS: {
         takenDownAt: Type.TOptional<Type.TString>;
         takedownId: Type.TOptional<Type.TString>;
     }>;
+    readonly 'com.rezics.content.feed.indexed.v1': Type.TObject<{}>;
+    readonly 'com.rezics.content.feed.delivered.v1': Type.TObject<{}>;
+    readonly 'com.rezics.content.feed.erased.v1': Type.TObject<{}>;
+    readonly 'com.rezics.content.feed.expired.v1': Type.TObject<{}>;
     readonly 'com.rezics.content.edition.creator-indexed.v1': Type.TObject<{
         editionId: Type.TString;
         creatorAccountId: Type.TString;

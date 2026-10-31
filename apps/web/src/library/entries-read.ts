@@ -220,7 +220,11 @@ export async function loadPersonalLibrary(
   const authorization = viewerCredential(request);
   if (!authorization) return { signedIn: false };
   const state = libraryEntryStateWrite(input.state);
-  const sort = shelfSort({ state, orderBy: input.orderBy, direction: input.direction });
+  const sort = shelfSort({
+    ...(state ? { state } : {}),
+    ...(input.orderBy ? { orderBy: input.orderBy } : {}),
+    ...(input.direction ? { direction: input.direction } : {}),
+  });
   const sortExplicit = input.orderBy !== undefined || input.direction !== undefined;
   let cursorReset = false;
   let page: Awaited<ReturnType<typeof readEntryPage>>;
