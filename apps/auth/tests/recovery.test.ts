@@ -293,9 +293,9 @@ test(
         expect(await page.getByRole('button', { name: 'Update password', exact: true }).count()).toBe(0);
         expect(recoveryCalls('start')).toHaveLength(0);
         expect(recoveryCalls('complete')).toHaveLength(0);
-        const document = await page.locator('html').evaluate((element) => element.outerHTML);
-        expect(document).not.toContain(token);
-        expect(document).not.toContain(encodeURIComponent(token));
+        const recoveryDocument = await page.locator('html').evaluate((element) => element.outerHTML);
+        expect(recoveryDocument).not.toContain(token);
+        expect(recoveryDocument).not.toContain(encodeURIComponent(token));
         for (const url of urls) {
           expect(url).not.toContain(token);
           expect(url).not.toContain(encodeURIComponent(token));
