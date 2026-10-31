@@ -62,6 +62,6 @@ export const routes: FakeRoute[] = [{
     const locale = request.headers.get('accept-language')?.split(',')[0] ?? 'en';
     const personal = request.headers.has('authorization');
     const state = url.searchParams.get('stream') === 'following' ? 'following' : selected;
-    return { status: 200, ...homeFeedStoryPage(locale, personal, state, url.searchParams.get('cursor') ?? undefined), provenance: 'Illustrative envelope using recorded native owner summaries; not a native feed recording.' };
+    return { status: 200, ...homeFeedStoryPage(locale, personal, state, url.searchParams.get('cursor') ?? undefined) };
   },
 }];

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createHomeFeedWindow, homeFeedViewer } from '../src/features/pages/home-feed-read';
 import { HomeFeed } from '../src/features/pages/home-feed';
-import { homeFeedStoryPage } from '../src/kernel/fake/home-feed-stories';
+import { homeFeedStoryPage, type HomeFeedStory } from '../src/kernel/fake/home-feed-stories';
 import { setLocale } from '../src/paraglide/runtime.js';
 
 let request = new Request('https://rezics.example/en');
@@ -29,6 +29,8 @@ afterAll(() => { globalThis.fetch = liveFetch; mock.restore(); });
 test('The default home route renders a bounded mixed discovery Following and Continue stream with honest source states and private session isolation', async () => {
   setLocale('en', { reload: false });
   const calls: Request[] = [];
+  let selected: HomeFeedStory = 'mixed';
+  let pause: Promise<void> | undefined;
   // Selected HTTP source response for a consumer regression, not proof of native producer acceptance.
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const call = new Request(input, init);
@@ -38,9 +40,9 @@ test('The default home route renders a bounded mixed discovery Following and Con
     const personal = call.headers.has('authorization');
     expect(personal ? sessionReads > 0 : true).toBe(true);
     const url = new URL(call.url);
-    const state = url.searchParams.get('stream') === 'following' ? 'following' : 'mixed';
+    if (pause) await pause;
+    const state = url.searchParams.get('stream') === 'following' ? 'following' : selected;
     const page = homeFeedStoryPage('en', personal, state, url.searchParams.get('cursor') ?? undefined);
-    if (personal && !url.searchParams.has('cursor') && state === 'mixed') page.sources.following = 'unavailable';
     return Response.json(page, { headers: { 'cache-control': personal ? 'private, no-store' : 'public, max-age=60' } });
   }) as typeof fetch;
 
@@ -66,10 +68,17 @@ test('The default home route renders a bounded mixed discovery Following and Con
   const orderedIds = [...html.matchAll(/data-feed-id="([^"]+)"/g)].map((match) => match[1]);
   expect(orderedIds).toEqual(mixed.page.feedItems.map((item) => item.id));
   expect(orderedIds.length).toBeLessThanOrEqual(20);
-  expect(html).toContain('following:unavailable');
+  expect(html).toContain('following:ready');
   expect(html).toContain('data-feed-source="continue"');
   expect(html).toContain('/en/library/progress/01a17ff1-e427-757d-9bbc-52f0787cfc0e');
   expect(html).not.toContain('No recent activity');
+  selected = 'partial';
+  await window.load({ stream: 'home' });
+  const partial = renderToStaticMarkup(<HomeFeed result={window.snapshot().result} locale="en" signedIn />);
+  expect(partial).toContain('following:unavailable');
+  expect(partial).toContain('data-feed-source="continue"');
+  expect(partial).not.toContain('No recent activity');
+  selected = 'mixed';
   const cursor = mixed.page.next!;
   await window.load({ stream: 'home', cursor });
   expect(new URL(calls.at(-1)!.url).searchParams.get('cursor')).toBe(cursor);
@@ -89,9 +98,18 @@ test('The default home route renders a bounded mixed discovery Following and Con
   expect(homeFeedViewer({ state: 'signed-in', subject: 'viewer-b', csrfToken: 'csrf-b' })!.scope).not.toBe(viewer.scope);
   expect(homeFeedViewer({ state: 'signed-in', subject: 'viewer-a', csrfToken: 'rotated' })!.scope).not.toBe(viewer.scope);
   expect(homeFeedViewer({ state: 'signed-out', subject: 'viewer-a', csrfToken: 'csrf-a' })).toBeNull();
+  let resume!: () => void;
+  pause = new Promise<void>((resolve) => { resume = resolve; });
+  const pending = window.load({ stream: 'home' });
   window.clear();
+  resume();
+  await pending;
+  pause = undefined;
   expect(window.snapshot().input).toEqual({ stream: 'home' });
   expect(window.snapshot().result).toEqual(loaded.feed);
+  const countBeforeMismatch = calls.length;
+  expect(await readPrivateHomePage({ data: { locale: 'en', viewer: 'viewer-b', stream: 'home' } })).toMatchObject({ state: 'auth' });
+  expect(calls).toHaveLength(countBeforeMismatch);
   const personalReads = sessionReads;
   request = new Request('https://rezics.example/en');
   const anonymous = await readPublicHomePage({ data: { locale: 'en' } });

@@ -76,9 +76,10 @@ export function HomeFeed({ result, locale, stream = 'home', signedIn = false, bu
       </ol>
       {!page.feedItems.length && Object.values(page.sources).every((state) => state === 'ready' || state === 'not_requested') ?
         <p role="status">{stream === 'following' ? m.home_feed_following_empty({}, options) : m.home_feed_empty({}, options)}</p> : null}
+      {!page.feedItems.length ? <a href={`/${locale}/search`} className="inline-block text-sm text-primary underline underline-offset-4">{m.search_heading({}, options)}</a> : null}
       {Object.values(page.sources).some((state) => state === 'preparing' || state === 'unavailable') && onRetry ?
         <Button variant="outline" disabled={busy} onClick={onRetry}>{m.library_follow_retry({}, options)}</Button> : null}
-      {page.next && onNext ? <Button variant="outline" disabled={busy} onClick={() => onNext(page.next!)}>{m.library_next_page({}, options)}</Button> : null}
+      {onNext ? <Button variant="outline" disabled={busy || !page.next} onClick={() => { if (page.next) onNext(page.next); }}>{m.library_next_page({}, options)}</Button> : null}
       {stream === 'following' && !page.feedItems.length ? <Button variant="outline" disabled={busy} onClick={() => onSelect?.('home')}>{m.home_feed_discovery({}, options)}</Button> : null}
     </> : <div role={result.state === 'loading' ? 'status' : 'alert'} className="space-y-3 rounded-lg border border-border p-5">
       <p>{messages[result.state as keyof typeof messages]({}, options)}</p>

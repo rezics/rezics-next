@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { homeFeedViewer } from '../src/features/pages/home-feed-read';
 import { operationGroups, operationIsAdmitted } from '../src/kernel/exposure';
 
-test('Signed-in Home admits its existing Continue read only through actual native personal-library and reading-progress groups rather than a fictional operation flag while preserving all unknown closed and private read boundaries', async () => {
+test('Signed-in Home delegates Continue to native personal-library and reading-progress admission after actual session readiness while preserving unknown closed and private boundaries', async () => {
   const feed = await Bun.file(new URL('../../../services/kernel/src/content/feed.ts', import.meta.url)).text();
   const native = await Bun.file(
     new URL('../../../services/kernel/src/library/continue-routes.ts', import.meta.url),
