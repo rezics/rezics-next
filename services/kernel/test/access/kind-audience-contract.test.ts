@@ -42,9 +42,9 @@ test('Native Kind audience origin and current evidence have one original-evaluat
   expectTypeOf<ResolveKindAudienceInput['work']>().toEqualTypeOf<CollectionKindPreparationWorkContext>();
   expectTypeOf<VerifyKindAudienceSourceInput['work']>().toEqualTypeOf<CollectionKindPreparationWorkContext>();
   expectTypeOf<KindAudienceWorkDeclaration['source']>().toEqualTypeOf<WorkDimensions>();
-  expectTypeOf<Extract<PrepareKindAudienceResult, { status: 'prepared' }>['coverage']>().toEqualTypeOf<
-    KindAudienceCoverage
-  >();
+  expectTypeOf<
+    Extract<PrepareKindAudienceResult, { status: 'prepared' }>['coverage']
+  >().toEqualTypeOf<KindAudienceCoverage>();
   type Current = Extract<VerifyKindAudienceSourceResult, { status: 'current' }>;
   expectTypeOf<Current['coverage']>().toEqualTypeOf<KindAudienceCoverage>();
   expectTypeOf<Current['time']>().toEqualTypeOf<AuthoritativeTime>();
