@@ -1,8 +1,8 @@
 # A mixed home at the upper bound
 
 Research date: 2026-10-31. This is independent evidence and a proposed design, not an adopted product contract.
-No sibling home investigation was read. The Goal remains paused. No application, reference project, backend audit,
-test, compiler, gate or acceptance campaign was run for this report.
+No sibling home investigation was read. The Goal remains paused. No application or reference project was run;
+no runtime backend measurements, tests, compilers, gates or acceptance campaigns were performed for this report.
 
 ## Recommendation
 
@@ -99,6 +99,32 @@ The test's desired first nodes are Heading/SearchBox; the actual nodes are Headi
 contradiction, not a claimed executed failure. The same test explicitly protects a popular list per vertical;
 passing an updated version of that oracle would still not establish the requested mixed product.
 
+### The shared header on Home
+
+There is real shared search implementation; it is inaccurate to describe scoped search as wholly absent from UI.
+The exact files under `apps/web/src/search/header-search/` are `header-search.tsx`, `shell-search.tsx`,
+`filter-region.tsx`, `authority.ts` and `suggestions.ts`. They provide one shell owner, a scope chip, a
+route-registered filter action and bounded suggestions. An unavailable `searchAction` prevents scoped submission;
+the global suggestion loader explicitly rejects scopes. A chip is therefore a presentation of an admitted route,
+not evidence that every scope has backend search.
+
+The actual `apps/web/src/shell/shell.tsx` header places NavigationToggle and Logo before a `flex-1` search container
+with `md:ms-6` and `md:max-w-[40rem]`, then puts variable controls after `ms-auto`. This does not establish centring
+on the viewport or content axis: the middle depends on asymmetric sibling widths. That is a source-supported cause
+for off-centre layouts, not a measured pixel offset at 1280. It needs a shared centred layout, not a Home override.
+
+In `header-search.tsx`, the composer uses `focus-within:ring-2 focus-within:ring-ring`, changes to `bg-card` when
+expanded and to `md:bg-popover` on desktop, while the form uses `bg-background`. Filters renders only inside the
+expanded branch, in a second row beside Submit, rather than at the input's right end. These are concrete source
+mismatches with the settled interaction. Exact blue hue and visible contrast depend on theme/runtime; they were
+not measured here. Old `styles.css` overrides target `data-slot=input-group`, not this new composer, so they are
+not proof that its ring/surfaces are normalized. Keep an accessible keyboard focus indication while correcting the
+duplicated visual treatment; removing all focus feedback would not satisfy the settled design accessibly.
+
+The phone full-screen form, named dialog and back control are implemented in the same component. Their source
+presence is separate from an executed phone review. Preserve that implementation and the honest scope boundary;
+the shared Search/Web owner should repair alignment, field-end Filters and surface tokens across all consumers.
+
 ### Capability matrix
 
 “Partial” and “closed” below are deliberate. An operation can be mounted yet depend on unavailable preparation,
@@ -118,6 +144,7 @@ or be gated out of the first public scope. An existing source factory is not a r
 | Static Zone site | In first public scope when source-free | `zones/page-runtime.ts`, composition admission and static paths | `zone.read_page` / `POST /v1/zones/:id:readPage`, subject to grants | `apps/web/src/zones/zone-read.ts` calls native client | Static/typed/runtime tests exist; no runtime execution here. |
 | Zone saved scope, mounted Collection union and ordered lists | Designed, but closed behind platform grants in first scope | Substantial membership/union/page-work code exists; native retained preparation still explicitly refuses some paths | Mounted contract distinguishes 200, 202 and 503; exposure depends on grants and sources | Adapter follows bounded continuations, then renders preparing/unavailable | `zones/*` contract/growth tests exist. Their existence is not an open, working books/anime/games site. |
 | Personalized recommendations and cross-kind scores | Deferred; qualified inputs/consent not adopted for Home | No current Home ranking producer found | No Home recommendation endpoint in traced code | No real “because you…” Home behavior | No current end-to-end recommendation evidence; stories cannot supply the missing producer. |
+| Shared Home search | Settled centred single field, scoped route and field-end Filters; phone full-screen | Header is a consumer; owner routes must enforce scope | Global suggestions are native calls; scoped suggestions require a separately supplied native loader | Real `HeaderSearch`; alignment, second-row Filters and ring/surfaces still diverge | Source and supplied reference inspection only; no executed header/phone or complete scope acceptance claim. |
 | Portrait defaults for every kind | Settled instruction | Shared Cover preserves mismatched art; list fallback still has landscape/square type defaults | Presentation annotations can specify geometry | CoverList consumes those annotations/fallbacks, including landscape TV/movie defaults | Cover/list stories/tests exist; they do not establish compliance with the new all-kind default. |
 
 Exact caveats behind the matrix:
@@ -138,6 +165,13 @@ Exact caveats behind the matrix:
   `schema:Movie` and `schema:TVSeries`; a title does not prove animation membership. A deployed vertical needs its
   adopted saved scope/definition, not a broad type alias. Games' alphabetic `schema:VideoGame` list lacks release,
   platform and personal state semantics. Neither starter is proof of a competitive or source-ready home.
+
+The exact current Home story IDs are `pages-discovery-home--signed-in` and `pages-discovery-home--signed-out`
+(`apps/web/src/stories/home.stories.tsx`). The first asserts an unavailable alert and a Continue destination; the
+second asserts absence of the private region. `library-continue-native-binding.stories.tsx` also constructs a
+`NativeContinuePage` object and passes it through the real adapter: useful typed presentation evidence, still
+illustrative data rather than an actual API recording. Neither story title nor generated transport type upgrades
+that object to a served native journey. No live artifact for these IDs was captured by this investigation.
 
 ### Why delivery diverged
 
@@ -191,7 +225,7 @@ It would be inaccurate to describe its whole home as 300 independently fetched R
 | --- | --- | --- |
 | `apps/web/features/work-page/ratings.tsx`, `RatingsRegion` around `contexts.map` | All returned context links are placed in a wrapping row. Twenty contexts already create a large selector; hundreds scale with response cardinality. One selected summary does not bound its context navigation. | Show one selected question/population/scope and use a searched, paged context picker. Never equate different scales. |
 | `apps/web/features/home/tabs.tsx`, hidden gauge and `MoreTopics` | Visible topic tabs are fitted and More is paged, which is better than all tabs. However, `followed.map` still creates hidden measurement nodes for every accumulated topic; More keeps loaded pages. | Fixed pinned subset and bounded picker results, without an invisible inventory-sized measurement tree. |
-| `apps/web/features/home/server.ts`, `readTrending` | At most two results per Realm is a diversity policy, not a total bound by itself. This UI resolves Realm labels against the loaded follows page; a missing page entry becomes null. | Give every returned card its own permitted minimal provenance, with an independent total candidate/result budget. |
+| `apps/web/features/home/server.ts`, `readTrending` | At most two results per Realm is a diversity policy, not a total bound by itself; the separate backend contract does impose total limits. This UI resolves Realm labels against the loaded follows page; a missing page entry becomes null. | Give every returned card its own permitted minimal provenance, with an independent total candidate/result budget. |
 | `apps/web/features/shell/communities-read.ts` | Follow lists are paged; official Zones use limit 6 plus bounded Realm lookups. | Preserve paging; do not reconstruct all 5,000 follows to render the first home page. |
 | `services/main/src/modules/feed/ranking.ts` | Best ranks a bounded pool of 256 by Realm percentile; diversity is 3 per 10; net verified-person votes and 24-hour decay are declared. | Bounded compute is useful, but a one-item Realm cohort gets percentile 1. It is not a globally calibrated quality estimate. |
 | Same ranking file | A thin Following/Best view may admit recommendations when followed count is below 3. | In the new proposal Following stays exact; offer explicit Discover rather than silently changing the selected relationship promise. |
