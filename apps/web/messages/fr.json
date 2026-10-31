@@ -3869,5 +3869,17 @@
   "zone_name_choose": "Choisir une langue",
   "zone_name_remove": "Supprimer la traduction en {language}",
   "zone_name_translation_help": "Rédigez vous-même les traductions. N’ajoutez pas les langues inutilisées ; chaque traduction ajoutée doit contenir un nom.",
-  "zone_name_legacy": "Cette ancienne Zone n’a pas de langue principale enregistrée. Le premier nom disponible est utilisé dans cet ordre : anglais, chinois traditionnel, chinois simplifié, japonais, coréen, allemand, français, espagnol. Modifier un nom ou choisir une langue enregistre la langue principale."
+  "zone_name_legacy": "Cette ancienne Zone n’a pas de langue principale enregistrée. Le premier nom disponible est utilisé dans cet ordre : anglais, chinois traditionnel, chinois simplifié, japonais, coréen, allemand, français, espagnol. Modifier un nom ou choisir une langue enregistre la langue principale.",
+  "library_collection_boundary_start": "Déplacer au début",
+  "library_collection_boundary_end": "Déplacer à la fin",
+  "library_collection_boundary_help": "Ces actions déplacent immédiatement cette occurrence au véritable début ou à la fin de la collection. Enregistrez ou abandonnez le brouillon avant ; les flèches et le glissement nécessitent toujours Enregistrer.",
+  "library_collection_boundary_pending": "Déplacement de {title}…",
+  "library_collection_boundary_unknown": "Le déplacement de {title} n’a pas pu être confirmé. Gardez cette page ouverte et réessayez le même déplacement ; l’occurrence, la destination et la clé sont conservées.",
+  "library_collection_boundary_refused": "Le déplacement a été refusé. Chargez les éléments et les droits actuels avant de choisir un autre déplacement.",
+  "library_collection_boundary_moved_start": "{title} a été déplacé au début de la collection.",
+  "library_collection_boundary_moved_end": "{title} a été déplacé à la fin de la collection.",
+  "library_collection_boundary_refresh_failed": "Le déplacement est confirmé, mais la page actuelle n’a pas pu être chargée. Chargez-la avant toute autre modification ; cela ne répète pas le déplacement.",
+  "library_collection_boundary_refresh": "Charger la page actuelle",
+  "library_collection_boundary_retry": "Réessayer le même déplacement",
+  "library_collection_boundary_fenced": "La page ou la connexion a changé. Le déplacement enregistré est en pause. Revenez à la page et au compte d’origine pour le résoudre."
 }

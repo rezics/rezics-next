@@ -151,6 +151,8 @@ export function CollectionMemberList({
   selectedIds = new Set(),
   onSelectionChange,
   onMove,
+  onBoundaryMove,
+  boundaryBlocked = false,
   onNoteChange,
   onRemove,
   onCopy,
@@ -166,6 +168,8 @@ export function CollectionMemberList({
   selectedIds?: ReadonlySet<string>;
   onSelectionChange?: (memberId: string, selected: boolean) => void;
   onMove?: (memberId: string, after: string | null) => void;
+  onBoundaryMove?: ((memberId: string, placement: 'start' | 'end') => void) | undefined;
+  boundaryBlocked?: boolean;
   onNoteChange?: (memberId: string, note: string) => void;
   onRemove?: (memberId: string) => void;
   onCopy?: (memberId: string) => void | Promise<void>;
@@ -283,13 +287,14 @@ export function CollectionMemberList({
               </p>
             ) : null}
             <ListRowControl className={`col-start-2 flex flex-wrap items-center gap-2 ${editing ? 'col-span-2' : ''}`}>
-              {onCopy && member.subject ? (
+              {member.subject && (onCopy || (editing && onBoundaryMove)) ? (
                 <Menu
                   title={actionLabel(m.library_collection_actions())}
                   trigger={
                     <Button
                       type="button"
                       aria-label={actionLabel(m.library_collection_actions())}
+                      aria-description={editing && onBoundaryMove ? m.library_collection_boundary_help() : undefined}
                       title={actionLabel(m.library_collection_actions())}
                       size="icon-lg"
                       className="size-11 sm:size-9"
@@ -298,7 +303,33 @@ export function CollectionMemberList({
                       <EllipsisIcon aria-hidden="true" />
                     </Button>
                   }
-                  entries={[{ type: 'item', label: m.library_collection_copy(), onSelect: () => onCopy(member.id) }]}
+                  entries={[
+                    ...(onCopy
+                      ? [
+                          {
+                            type: 'item' as const,
+                            label: m.library_collection_copy(),
+                            onSelect: () => onCopy(member.id),
+                          },
+                        ]
+                      : []),
+                    ...(editing && onBoundaryMove
+                      ? [
+                          {
+                            type: 'item' as const,
+                            label: m.library_collection_boundary_start(),
+                            disabled: busy || boundaryBlocked,
+                            onSelect: () => onBoundaryMove(member.id, 'start'),
+                          },
+                          {
+                            type: 'item' as const,
+                            label: m.library_collection_boundary_end(),
+                            disabled: busy || boundaryBlocked,
+                            onSelect: () => onBoundaryMove(member.id, 'end'),
+                          },
+                        ]
+                      : []),
+                  ]}
                 />
               ) : null}
               {editing ? (

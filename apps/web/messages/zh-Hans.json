@@ -3870,5 +3870,17 @@
   "zone_name_choose": "选择语言",
   "zone_name_remove": "移除{language}翻译",
   "zone_name_translation_help": "请自行撰写翻译。不使用的语言无需添加；添加的翻译必须填写名称。",
-  "zone_name_legacy": "这个旧版 Zone 没有保存主要语言。系统按英语、繁体中文、简体中文、日语、韩语、德语、法语、西班牙语的顺序，使用第一个可用名称。编辑名称或选择语言会记录主要语言。"
+  "zone_name_legacy": "这个旧版 Zone 没有保存主要语言。系统按英语、繁体中文、简体中文、日语、韩语、德语、法语、西班牙语的顺序，使用第一个可用名称。编辑名称或选择语言会记录主要语言。",
+  "library_collection_boundary_start": "移至开头",
+  "library_collection_boundary_end": "移至末尾",
+  "library_collection_boundary_help": "这些操作会立即将这一条目移至整个收藏集的实际开头或末尾。请先保存或取消草稿；使用箭头和拖动调整的顺序仍需保存。",
+  "library_collection_boundary_pending": "正在移动{title}…",
+  "library_collection_boundary_unknown": "无法确认{title}的移动结果。请保持此页面打开并重试同一次移动；条目、位置和请求密钥均已保留。",
+  "library_collection_boundary_refused": "移动被拒绝。请先加载当前条目和访问权限，再选择其他移动操作。",
+  "library_collection_boundary_moved_start": "已将{title}移至收藏集开头。",
+  "library_collection_boundary_moved_end": "已将{title}移至收藏集末尾。",
+  "library_collection_boundary_refresh_failed": "移动已确认，但无法加载当前页面。请先加载页面再进行其他修改；这不会再次执行移动。",
+  "library_collection_boundary_refresh": "加载当前页面",
+  "library_collection_boundary_retry": "重试同一次移动",
+  "library_collection_boundary_fenced": "页面或登录状态已更改，已保存的移动已暂停。请返回原来的页面和账号以确认结果。"
 }

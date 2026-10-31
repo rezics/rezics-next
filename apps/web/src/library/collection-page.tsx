@@ -29,6 +29,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { csrfHeaders } from '../threads/composer';
+import { useSession } from '../session/query';
 import { AccountRef } from './account-ref';
 import { coverSrc } from '../media/cover-src';
 import { subjectHref } from '../subject/subject-href';
@@ -231,6 +232,18 @@ function collectionViewAddress(
   return `${path}${suffix ? `?${suffix}` : ''}`;
 }
 
+type BoundaryMove = {
+  intent: Readonly<{
+    context: string;
+    title: string;
+    placement: 'start' | 'end';
+    data: Readonly<{ collectionId: string; memberId: string; after?: null; idempotencyKey: string }>;
+  }>;
+  phase: 'pending' | 'unknown' | 'refused' | 'confirmed' | 'done';
+  reading: boolean;
+  refusal?: string;
+};
+
 export function CollectionPage({
   page,
   queryKey,
@@ -250,9 +263,12 @@ export function CollectionPage({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const session = useSession();
   const updateAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection.update');
   // The editor also needs the loaded private metadata, independently of native action admission.
   const owner = updateAdmitted && page.visibility !== null && (page.memberState ?? 'ready') === 'ready';
+  const boundaryAdmitted =
+    owner && admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection_member.move');
   const addAdmitted =
     page.visibility !== null &&
     admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection_member.create');
@@ -283,7 +299,11 @@ export function CollectionPage({
   const [visibility, setVisibility] = useState<CollectionVisibility>(page.visibility ?? 'public');
   const [conflict, setConflict] = useState(false);
   const [failure, setFailure] = useState('');
-  const [pending, setPending] = useState(false);
+  const [writing, setPending] = useState(false);
+  const [boundary, setBoundary] = useState<BoundaryMove | null>(null);
+  const boundaryRef = useRef<BoundaryMove | null>(null);
+  const mounted = useRef(true);
+  const pending = writing || (boundary !== null && boundary.phase !== 'done');
   const [deletion, setDeletion] = useState<{ collectionId: string; revision: number; idempotencyKey: string } | null>(
     null,
   );
@@ -302,8 +322,29 @@ export function CollectionPage({
     page.memberState,
     page.members.map((member) => `${member.id}:${member.note ?? ''}`).join('\n'),
   ].join('\n');
+  // Capture the actual page and actor, not a row index that another read can reuse.
+  const boundaryContext = JSON.stringify([
+    snapshot,
+    cursor,
+    search,
+    queryKey,
+    page.firstPage,
+    page.viewerActions,
+    session.state,
+    session.subject,
+    session.csrfToken,
+  ]);
+  const currentBoundaryContext = useRef(boundaryContext);
+  currentBoundaryContext.current = boundaryContext;
+  const boundaryFenced = boundary !== null && boundary.phase !== 'done' && boundary.intent.context !== boundaryContext;
 
   useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   useEffect(() => {
     let current = true;
     setDestination(null);
@@ -349,6 +390,102 @@ export function CollectionPage({
     await router.invalidate();
   }
 
+  function recordBoundary(value: BoundaryMove | null) {
+    boundaryRef.current = value;
+    setBoundary(value);
+  }
+
+  function boundaryIsCurrent(value: BoundaryMove) {
+    return (
+      mounted.current &&
+      boundaryRef.current?.intent === value.intent &&
+      currentBoundaryContext.current === value.intent.context
+    );
+  }
+
+  async function refreshBoundary(value: BoundaryMove) {
+    if (!boundaryIsCurrent(value) || value.reading) return;
+    recordBoundary({ ...value, reading: true });
+    try {
+      // One bounded read through the page's established callback. Its native source may restart a stale cursor once.
+      const refreshed = await refreshPage();
+      if (!boundaryIsCurrent(value)) return;
+      if (refreshed.id !== value.intent.data.collectionId || (refreshed.memberState ?? 'ready') !== 'ready')
+        throw new Error('Collection page is not ready');
+      recordBoundary(value.phase === 'refused' ? null : { ...value, phase: 'done', reading: false });
+      setEditing(false);
+      setEditorMembers(null);
+      setSelectedIds(new Set());
+      setConflict(false);
+      queryClient.setQueryData(queryKey, refreshed);
+    } catch {
+      if (boundaryIsCurrent(value)) recordBoundary({ ...value, reading: false });
+    } finally {
+      // A page/actor change fences the result, including an in-flight read, without abandoning its intent.
+      if (mounted.current && boundaryRef.current?.intent === value.intent && boundaryRef.current.reading)
+        recordBoundary({ ...boundaryRef.current, reading: false });
+    }
+  }
+
+  async function dispatchBoundary(value: BoundaryMove) {
+    if (!boundaryIsCurrent(value) || boundaryRef.current !== value || !boundaryAdmitted) return;
+    recordBoundary({ ...value, phase: 'pending' });
+    let result: CollectionWriteResult;
+    try {
+      result = await moveCollectionMember({ data: value.intent.data, headers: csrfHeaders() });
+    } catch {
+      result = { ok: false, reason: 'unavailable' };
+    }
+    if (!mounted.current || boundaryRef.current?.intent !== value.intent) return;
+    if (result.ok) {
+      const confirmed: BoundaryMove = { ...value, phase: 'confirmed', reading: false };
+      recordBoundary(confirmed);
+      if (boundaryIsCurrent(confirmed)) await refreshBoundary(confirmed);
+    } else {
+      recordBoundary({
+        ...value,
+        phase: result.reason === 'unavailable' ? 'unknown' : 'refused',
+        ...(result.reason === 'conflict' ? { refusal: m.library_collection_conflict() } : {}),
+      });
+    }
+  }
+
+  function moveToBoundary(memberId: string, placement: 'start' | 'end') {
+    if (
+      !hydrated ||
+      pending ||
+      conflict ||
+      !editing ||
+      !boundaryAdmitted ||
+      draftChanged ||
+      session.state !== 'signed-in' ||
+      !session.subject ||
+      (boundaryRef.current !== null && boundaryRef.current.phase !== 'done')
+    )
+      return;
+    const index = members.findIndex((member) => member.id === memberId && member.subject !== null);
+    const member = members[index];
+    if (!member?.subject) return;
+    const intent = Object.freeze({
+      context: boundaryContext,
+      placement,
+      title: m.library_member_occurrence({
+        title: pageText(libraryTitleValue(member.subject.label), getLocale()).text,
+        position: index + 1,
+      }),
+      data: Object.freeze({
+        collectionId: page.id,
+        memberId,
+        ...(placement === 'start' ? { after: null } : {}),
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    });
+    const value: BoundaryMove = { intent, phase: 'pending', reading: false };
+    recordBoundary(value);
+    setFailure('');
+    void dispatchBoundary(value);
+  }
+
   async function beginEditing() {
     if (pending) return;
     setPending(true);
@@ -384,6 +521,7 @@ export function CollectionPage({
   }
 
   function cancelEditing() {
+    if (pending) return;
     setBatchRemovalIds(new Set());
     setTransfer(null);
     setDestinationId('');
@@ -593,7 +731,7 @@ export function CollectionPage({
   }
 
   async function removeCollection() {
-    if (!deletion || deleting || !deleteAdmitted) return;
+    if (!deletion || deleting || pending || !deleteAdmitted) return;
     setDeleting(true);
     setDeleteFailure('');
     try {
@@ -633,6 +771,15 @@ export function CollectionPage({
       members,
       page.firstPage,
     ).length > 0;
+  const draftChanged =
+    editing &&
+    (memberDraftChanged ||
+      transfer !== null ||
+      title !== page.title ||
+      description !== (page.description ?? '') ||
+      visibility !== page.visibility ||
+      kind !== storedKind ||
+      coverMediaId !== (page.coverMediaId ?? null));
   return (
     <div className="w-full min-w-0 text-foreground">
       <article className="w-full min-w-0 space-y-4 sm:space-y-5">
@@ -794,6 +941,50 @@ export function CollectionPage({
           </div>
         ) : null}
         {failure ? <p role="alert">{failure}</p> : null}
+        {boundary ? (
+          <div role="status" className="space-y-2 rounded-xl bg-muted/40 p-3" data-collection-boundary>
+            <p>
+              {boundaryFenced
+                ? m.library_collection_boundary_fenced()
+                : boundary.phase === 'pending'
+                  ? m.library_collection_boundary_pending({ title: boundary.intent.title })
+                  : boundary.phase === 'unknown'
+                    ? m.library_collection_boundary_unknown({ title: boundary.intent.title })
+                    : boundary.phase === 'refused'
+                      ? m.library_collection_boundary_refused()
+                      : boundary.intent.placement === 'start'
+                        ? m.library_collection_boundary_moved_start({ title: boundary.intent.title })
+                        : m.library_collection_boundary_moved_end({ title: boundary.intent.title })}
+            </p>
+            {boundary.refusal ? <p>{boundary.refusal}</p> : null}
+            {boundary.phase === 'unknown' ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={boundaryFenced || !boundaryAdmitted}
+                onClick={() => void dispatchBoundary(boundary)}
+              >
+                {m.library_collection_boundary_retry()}
+              </Button>
+            ) : null}
+            {boundary.phase === 'confirmed' || boundary.phase === 'refused' ? (
+              <>
+                {boundary.phase === 'confirmed' && !boundary.reading && !boundaryFenced ? (
+                  <p>{m.library_collection_boundary_refresh_failed()}</p>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={boundaryFenced || boundary.reading}
+                  aria-busy={boundary.reading}
+                  onClick={() => void refreshBoundary(boundary)}
+                >
+                  {m.library_collection_boundary_refresh()}
+                </Button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         {conflict ? (
           <p role="alert">
             {m.library_collection_conflict()}{' '}
@@ -913,6 +1104,12 @@ export function CollectionPage({
         />
         <section aria-label={m.library_collection_members()}>
           <h2 className="sr-only">{m.library_collection_members()}</h2>
+          {editing && boundaryAdmitted ? (
+            <div className="mb-3 space-y-1 text-sm text-muted-foreground" data-collection-boundary-guidance>
+              <p>{m.library_collection_boundary_help()}</p>
+              {draftChanged ? <p role="status">{m.library_collection_move_save_first()}</p> : null}
+            </div>
+          ) : null}
           {editing && owner && (selectedIds.size > 0 || batchRemovalIds.size > 0 || transfer !== null) ? (
             <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3" data-collection-selection>
               <p className="me-auto self-center text-sm text-muted-foreground">
@@ -1052,6 +1249,8 @@ export function CollectionPage({
                 })
               }
               onMove={setMemberOrder}
+              onBoundaryMove={boundaryAdmitted ? moveToBoundary : undefined}
+              boundaryBlocked={draftChanged || conflict || session.state !== 'signed-in' || !session.subject}
               onNoteChange={(memberId, note) =>
                 setMembers((current) =>
                   current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),

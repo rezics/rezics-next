@@ -110,14 +110,20 @@ function validateDelete(input: unknown) {
 
 function validateMove(input: unknown) {
   const value = record(input);
+  if (Object.keys(value).some((key) => !['collectionId', 'memberId', 'after', 'idempotencyKey'].includes(key)))
+    throw new Error('Invalid collection input');
   const after = value.after;
-  if (after !== null && (typeof after !== 'string' || after.length === 0 || after.length > 128)) {
+  if (
+    after !== undefined &&
+    after !== null &&
+    (typeof after !== 'string' || after.length === 0 || after.length > 128)
+  ) {
     throw new Error('Invalid collection input');
   }
   return {
     collectionId: identifier(value, 'collectionId'),
     memberId: identifier(value, 'memberId'),
-    after: after as string | null,
+    ...(after === undefined ? {} : { after: after as string | null }),
     idempotencyKey: text(value, 'idempotencyKey'),
   };
 }

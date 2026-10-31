@@ -816,7 +816,7 @@ export function createCollectionCommands(config: {
     actor: Actor,
     collectionId: string,
     memberId: string,
-    move: { after: string | null },
+    move: { after?: string | null },
     requestKey: string,
   ): Promise<CommandOutcome<CollectionMember>> {
     collectionRoute(memberId);
@@ -828,7 +828,7 @@ export function createCollectionCommands(config: {
       'collection:update',
       'library.collection.member.move',
       requestKey,
-      { collectionId, memberId, after: move.after },
+      { collectionId, memberId, ...(move.after === undefined ? {} : { after: move.after }) },
       async (tx, command) => {
         await activeCollection(tx, route, collectionId);
         const placed = await placeInCollection(tx, route, collectionId, position, memberId, true);

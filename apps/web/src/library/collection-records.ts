@@ -286,19 +286,35 @@ export async function moveCollectionMemberRecord(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { collectionId: string; memberId: string; after: string | null; idempotencyKey: string },
+  input: { collectionId: string; memberId: string; after?: string | null; idempotencyKey: string },
 ): Promise<CollectionWriteResult> {
-  if (!input.collectionId || !input.memberId || !uuid.test(input.idempotencyKey)) {
+  if (
+    !isRecord(input) ||
+    Object.keys(input).some((key) => !['collectionId', 'memberId', 'after', 'idempotencyKey'].includes(key)) ||
+    ![input.collectionId, input.memberId].every((id) => typeof id === 'string' && id.length > 0 && id.length <= 128) ||
+    !uuid.test(input.idempotencyKey)
+  ) {
     return { ok: false, reason: 'invalid' };
   }
-  if (input.after !== null && input.after.length === 0) return { ok: false, reason: 'invalid' };
+  if (
+    input.after !== undefined &&
+    input.after !== null &&
+    (typeof input.after !== 'string' || input.after.length === 0 || input.after.length > 128)
+  )
+    return { ok: false, reason: 'invalid' };
   const session = await writeSession(request, sessionEnv);
   if (!asSession(session)) return session;
   try {
-    const result = await client
-      .collections({ collectionId: input.collectionId })
-      .members({ memberId: input.memberId })
-      .$move.post({ after: input.after }, { headers: kernelHeaders(session.authorization, input.idempotencyKey) });
+    const post = client.collections({ collectionId: input.collectionId }).members({ memberId: input.memberId })
+      .$move.post;
+    // Additive native body until the controller derives the client; preserve its options and response types.
+    const move = post as (
+      body: { after?: string | null },
+      options: Parameters<typeof post>[1],
+    ) => ReturnType<typeof post>;
+    const result = await move(input.after === undefined ? {} : { after: input.after }, {
+      headers: kernelHeaders(session.authorization, input.idempotencyKey),
+    });
     return fromKernel(result, input.memberId);
   } catch (error) {
     return refused(error);

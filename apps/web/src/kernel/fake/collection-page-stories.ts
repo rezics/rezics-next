@@ -29,6 +29,10 @@ export type CollectionStoryMode =
   | 'failed-save'
   | 'conflict-save'
   | 'presentation'
+  | 'boundary-later'
+  | 'boundary-pending'
+  | 'boundary-unknown'
+  | 'boundary-refresh-failed'
   | 'expired-undo';
 
 export const collectionStoryDestinationId = '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7bd0';
@@ -68,6 +72,8 @@ const receipts = new Map<string, KernelRecording>();
 let finishPendingSave: (() => void) | undefined;
 const itemIds = members.map((member) => member.id);
 let editorNavigation = false;
+let boundaryUnknownSent = false;
+let boundaryReadFails = false;
 
 export function setCollectionStoryMode(next: CollectionStoryMode, editor = false): void {
   mode = next;
@@ -76,6 +82,8 @@ export function setCollectionStoryMode(next: CollectionStoryMode, editor = false
   destinationMembers = [];
   editedCollection = clone(baseCollection);
   editedMembers = clone(members);
+  boundaryUnknownSent = false;
+  boundaryReadFails = false;
   if (next === 'empty') {
     editedMembers = [];
     editedCollection.memberCount = 0;
@@ -84,13 +92,17 @@ export function setCollectionStoryMode(next: CollectionStoryMode, editor = false
     editedMembers = editedMembers.slice(0, 1);
     editedCollection.memberCount = 1;
   }
-  if (next === 'notes-duplicates') {
+  if (next === 'notes-duplicates' || next.startsWith('boundary-')) {
     editedMembers.splice(1, 0, {
       ...clone(members[0]!),
       id: '01a17a3b-6e78-73b5-9efd-f4cc070cc9e1',
       note: 'A second occurrence with its own note.',
     });
     editedCollection.memberCount = 5;
+  }
+  if (next.startsWith('boundary-')) {
+    editedMembers.unshift({ ...clone(members[3]!), id: '01a17a3b-6e78-73b5-9efd-f4cc070cc9e2' });
+    editedCollection.memberCount = editedMembers.length;
   }
   if (next === 'private' || next === 'unlisted' || next === 'public') editedCollection.visibility = next;
   if (next === 'presentation') {
@@ -139,6 +151,17 @@ function listResponse(request: Request) {
   const url = new URL(request.url);
   const cursor = url.searchParams.get('cursor');
   const members = editedMembers;
+  if (mode.startsWith('boundary-')) {
+    if (boundaryReadFails) {
+      boundaryReadFails = false;
+      return { status: 503, code: 'unavailable' };
+    }
+    return {
+      status: 200,
+      members: cursor ? members.slice(1, 4) : members.slice(0, 1),
+      next: cursor ? 'page-three' : 'page-two',
+    };
+  }
   if (mode === 'unlisted' && !request.headers.has('authorization')) return { status: 200, members: [], next: null };
   if (mode === 'preparing')
     return {
@@ -368,7 +391,7 @@ async function writeBatchStory(request: Request): Promise<KernelRecording> {
 async function writeStory(request: Request) {
   const observedCollection = editedCollection;
   if (!request.headers.has('authorization')) return { status: 403, code: 'forbidden' };
-  if (mode === 'pending-save')
+  if (mode === 'pending-save' || (mode === 'boundary-pending' && request.method === 'POST'))
     await new Promise<void>((resolve) => {
       finishPendingSave = resolve;
     });
@@ -439,8 +462,13 @@ async function writeStory(request: Request) {
       response = { status: 200, member: clone(member) };
     } else {
       const rest = editedMembers.filter((value) => value.id !== member.id);
-      const index = body.after === null ? 0 : rest.findIndex((value) => value.id === body.after) + 1;
-      if (body.after !== null && index === 0) return { status: 404, code: 'not_found' };
+      const index =
+        body.after === undefined
+          ? rest.length
+          : body.after === null
+            ? 0
+            : rest.findIndex((value) => value.id === body.after) + 1;
+      if (body.after !== undefined && body.after !== null && index === 0) return { status: 404, code: 'not_found' };
       rest.splice(index, 0, member);
       editedMembers = rest;
       editedCollection.revision += 1;
@@ -448,6 +476,13 @@ async function writeStory(request: Request) {
     }
   }
   receipts.set(key, clone(response));
+  if (request.method === 'POST' && /(?::move|\/\$move)$/.test(path)) {
+    if (mode === 'boundary-refresh-failed') boundaryReadFails = true;
+    if (mode === 'boundary-unknown' && !boundaryUnknownSent) {
+      boundaryUnknownSent = true;
+      return { status: 503, code: 'unavailable' };
+    }
+  }
   return response;
 }
 

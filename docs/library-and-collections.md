@@ -93,6 +93,27 @@ merged originals, show conflicts and retain every original fact, stored subject 
 union labels and keep copies/sessions separate. Browsing shows one card per canonical subject; the editor
 preserves every curated occurrence, note and order.
 
+### Native occurrence boundary moves
+
+The single-occurrence `POST /v1/collections/{collectionId}/members/{memberId}:move` accepts `{after?: string | null}`:
+omitting `after` moves to the actual Collection end, `after: null` moves to its actual start, and a string retains
+the existing placement after that member occurrence. Unknown keys, malformed IDs, a null body and numeric/boolean
+`after` remain refusals. The existing command kind and digest inputs for null/string placement, including historic
+receipt replay, stay unchanged. Omission is a distinct end intent throughout transport, receipts and retries.
+The native first/last neighbor seek excludes the moved occurrence, including singleton, already-terminal and
+duplicate-subject cases. Existing authorization, owner/partition fences, no-effect evidence, session recording and
+bounded order placement/repair remain authoritative; there is no global rank, scan or new index.
+
+The curated editor offers explicit immediate Move to start/end actions for a disclosed occurrence only when
+`collection_member.move` is exposed and current edit authority is available. Save or cancel metadata/member drafts
+first. Arrows and dragging retain their staged loaded-page semantics and later-page first-row guard. One captured
+occurrence, placement and immutable idempotency key blocks competing writes until resolved. An uncertain result
+retains that exact request for explicit retry; page, authorization and actor changes fence its use. A definitive
+refusal offers a current-page/access read before another move. A confirmed move refreshes one bounded native page
+through the page callback, with only the source's existing one-time stale-cursor restart. A failed refresh retains
+the acknowledged move and offers read recovery without issuing another mutation or claiming its global location
+has been loaded. Intervening pages are never fetched.
+
 ### Owner state-write order
 
 Latest state means a native per-account write sequence in the owner's partition. Each successful state set, state

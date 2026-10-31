@@ -1066,7 +1066,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       {
         params: memberParams,
         headers,
-        body: strict(t.Object({ after: nullableString }, closed)),
+        body: strict(t.Object({ after: t.Optional(nullableString) }, closed)),
         response: { 200: memberResponse, ...failures },
         detail: detail('collection_member.move', 'collection:update'),
       },

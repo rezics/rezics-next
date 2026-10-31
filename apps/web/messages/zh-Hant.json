@@ -3869,5 +3869,17 @@
   "zone_name_choose": "選擇語言",
   "zone_name_remove": "移除{language}翻譯",
   "zone_name_translation_help": "請自行撰寫翻譯。不使用的語言無須新增；新增的翻譯必須填寫名稱。",
-  "zone_name_legacy": "這個舊版 Zone 沒有儲存主要語言。系統依英文、繁體中文、簡體中文、日文、韓文、德文、法文、西班牙文的順序，使用第一個可用名稱。編輯名稱或選擇語言會記錄主要語言。"
+  "zone_name_legacy": "這個舊版 Zone 沒有儲存主要語言。系統依英文、繁體中文、簡體中文、日文、韓文、德文、法文、西班牙文的順序，使用第一個可用名稱。編輯名稱或選擇語言會記錄主要語言。",
+  "library_collection_boundary_start": "移至開頭",
+  "library_collection_boundary_end": "移至末尾",
+  "library_collection_boundary_help": "這些操作會立即將這一筆項目移至整個收藏集的實際開頭或末尾。請先儲存或取消草稿；使用箭頭和拖曳調整的順序仍需儲存。",
+  "library_collection_boundary_pending": "正在移動{title}…",
+  "library_collection_boundary_unknown": "無法確認{title}的移動結果。請保持此頁面開啟並重試同一次移動；項目、位置和請求金鑰均已保留。",
+  "library_collection_boundary_refused": "移動遭到拒絕。請先載入目前的項目和存取權限，再選擇其他移動操作。",
+  "library_collection_boundary_moved_start": "已將{title}移至收藏集開頭。",
+  "library_collection_boundary_moved_end": "已將{title}移至收藏集末尾。",
+  "library_collection_boundary_refresh_failed": "移動已確認，但無法載入目前頁面。請先載入頁面再進行其他修改；這不會再次執行移動。",
+  "library_collection_boundary_refresh": "載入目前頁面",
+  "library_collection_boundary_retry": "重試同一次移動",
+  "library_collection_boundary_fenced": "頁面或登入狀態已變更，已儲存的移動已暫停。請返回原本的頁面和帳號以確認結果。"
 }

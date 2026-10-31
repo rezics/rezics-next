@@ -3869,5 +3869,17 @@
   "zone_name_choose": "Elegir un idioma",
   "zone_name_remove": "Eliminar la traducción en {language}",
   "zone_name_translation_help": "Escribe las traducciones. No añadas los idiomas que no uses; cada traducción añadida debe contener un nombre.",
-  "zone_name_legacy": "Esta Zona antigua no tiene un idioma principal guardado. Se usa el primer nombre disponible en este orden: inglés, chino tradicional, chino simplificado, japonés, coreano, alemán, francés y español. Editar un nombre o elegir un idioma guarda el idioma principal."
+  "zone_name_legacy": "Esta Zona antigua no tiene un idioma principal guardado. Se usa el primer nombre disponible en este orden: inglés, chino tradicional, chino simplificado, japonés, coreano, alemán, francés y español. Editar un nombre o elegir un idioma guarda el idioma principal.",
+  "library_collection_boundary_start": "Mover al principio",
+  "library_collection_boundary_end": "Mover al final",
+  "library_collection_boundary_help": "Estas acciones mueven esta aparición de inmediato al principio o al final real de la colección. Guarda o descarta el borrador primero; las flechas y el arrastre aún requieren Guardar.",
+  "library_collection_boundary_pending": "Moviendo {title}…",
+  "library_collection_boundary_unknown": "No se pudo confirmar el movimiento de {title}. Mantén esta página abierta y reintenta el mismo movimiento; se conservan la aparición, el destino y la clave.",
+  "library_collection_boundary_refused": "El movimiento se rechazó. Carga los elementos y permisos actuales antes de elegir otro movimiento.",
+  "library_collection_boundary_moved_start": "Se movió {title} al principio de la colección.",
+  "library_collection_boundary_moved_end": "Se movió {title} al final de la colección.",
+  "library_collection_boundary_refresh_failed": "El movimiento está confirmado, pero no se pudo cargar la página actual. Cárgala antes de hacer otro cambio; esto no repite el movimiento.",
+  "library_collection_boundary_refresh": "Cargar página actual",
+  "library_collection_boundary_retry": "Reintentar el mismo movimiento",
+  "library_collection_boundary_fenced": "La página o la sesión cambió. El movimiento guardado está en pausa. Vuelve a la página y la cuenta originales para resolverlo."
 }

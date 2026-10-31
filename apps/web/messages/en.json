@@ -3872,5 +3872,17 @@
   "zone_name_choose": "Choose a language",
   "zone_name_remove": "Remove {language} translation",
   "zone_name_translation_help": "Write translations yourself. Leave unused languages absent; added translations must contain a name.",
-  "zone_name_legacy": "This older Zone has no stored primary language. The first available name in this order is used: English, Traditional Chinese, Simplified Chinese, Japanese, Korean, German, French, Spanish. Editing a name or choosing a language records the primary language."
+  "zone_name_legacy": "This older Zone has no stored primary language. The first available name in this order is used: English, Traditional Chinese, Simplified Chinese, Japanese, Korean, German, French, Spanish. Editing a name or choosing a language records the primary language.",
+  "library_collection_boundary_start": "Move to start",
+  "library_collection_boundary_end": "Move to end",
+  "library_collection_boundary_help": "These actions move this occurrence immediately to the actual Collection start or end. Save or cancel your draft first; arrows and dragging still use Save.",
+  "library_collection_boundary_pending": "Moving {title}…",
+  "library_collection_boundary_unknown": "The move of {title} could not be confirmed. Keep this page open and retry the same move; its occurrence, placement and key are retained.",
+  "library_collection_boundary_refused": "The move was refused. Load current members and access before choosing another move.",
+  "library_collection_boundary_moved_start": "Moved {title} to the Collection start.",
+  "library_collection_boundary_moved_end": "Moved {title} to the Collection end.",
+  "library_collection_boundary_refresh_failed": "The move is confirmed, but the current page could not be loaded. Load it before making another change; this does not repeat the move.",
+  "library_collection_boundary_refresh": "Load current page",
+  "library_collection_boundary_retry": "Retry same move",
+  "library_collection_boundary_fenced": "The page or sign-in changed. The saved move is paused. Return to the original page and account to resolve it."
 }

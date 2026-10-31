@@ -21,7 +21,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The actual owner editor: Edit enters a local draft, keyboard buttons and drag handles reorder only loaded occurrences, Save sends current native commands, and Cancel discards the draft. Writes are independently receipted. Existing imported cover and exact Type choices use the current native metadata command. Selected removal and cross-Collection transfer use the delivered native atomic commands on Save; built-in dynamic rules remain immutable.',
+          'The actual owner editor: Edit enters a local draft, keyboard buttons and drag handles reorder only loaded occurrences, Save sends current native commands, and Cancel discards the draft. Move to start/end are immediate native boundary commands after saving or canceling drafts; an uncertain result retains the same request for retry. Writes are independently receipted. Existing imported cover and exact Type choices use the current native metadata command. Selected removal and cross-Collection transfer use the delivered native atomic commands on Save; built-in dynamic rules remain immutable.',
       },
     },
   },
@@ -30,35 +30,39 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 const id = pagePaths['library-collection'].split('/').at(-1)!;
 
-function EditorRegion() {
-  const query = collectionPageQuery(id, undefined, 'session');
+function EditorRegion({ cursor }: { cursor?: string | undefined }) {
+  const query = collectionPageQuery(id, cursor, 'session');
   const { data } = useSuspenseQuery(query);
   if ('preparing' in data) throw new Error('Expected a curated Collection');
   return (
     <CollectionPage
       page={data}
-      cursor={undefined}
+      cursor={cursor}
       queryKey={query.queryKey}
       readEditorPage={async () => {
-        const editable = await readCollectionPage({ data: { id, credentialMode: 'session', editor: true } });
+        const editable = await readCollectionPage({
+          data: { id, credentialMode: 'session', editor: true, ...(cursor ? { cursor } : {}) },
+        });
         if ('preparing' in editable) throw new Error('Expected a curated Collection');
         return editable;
       }}
       refreshPage={async () => {
-        const refreshed = await readCollectionPage({ data: { id, credentialMode: 'session' } });
+        const refreshed = await readCollectionPage({
+          data: { id, credentialMode: 'session', ...(cursor ? { cursor } : {}) },
+        });
         if ('preparing' in refreshed) throw new Error('Expected a curated Collection');
         return refreshed;
       }}
     />
   );
 }
-function renderEditor(mode: CollectionStoryMode = 'private') {
+function renderEditor(mode: CollectionStoryMode = 'private', cursor?: string) {
   setCollectionStoryMode(mode, true);
   return (
     <PatternStory visitor="Signed In" path={pagePaths['library-collection']}>
       <Suspense fallback={null}>
         <div className="w-full p-4">
-          <EditorRegion />
+          <EditorRegion cursor={cursor} />
         </div>
       </Suspense>
     </PatternStory>
@@ -412,5 +416,92 @@ export const AddItems: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: m.library_collection_add_items() }));
     await expect(canvas.getByRole('combobox', { name: m.library_collection_find_subject() })).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.library_collection_add_selected() })).toBeDisabled();
+  },
+};
+
+async function boundaryMenu(canvasElement: HTMLElement) {
+  const rows = canvasElement.querySelectorAll<HTMLElement>('[data-collection-members] [data-member]');
+  const occurrence = rows[1]!;
+  const trigger = rowAction(occurrence, m.library_collection_actions());
+  await userEvent.click(trigger);
+  return menuForTrigger(trigger, trigger.getAttribute('aria-label')!);
+}
+
+export const LaterPageBoundaries: Story = {
+  render: () => renderEditor('boundary-later', 'page-two'),
+  play: async ({ canvasElement }) => {
+    const canvas = await openEditor(canvasElement, false);
+    await expect(rowAction(firstRow(canvasElement), m.library_member_move_down())).toBeDisabled();
+    const menu = await boundaryMenu(canvasElement);
+    await expect(menu.getByText(m.library_collection_boundary_start(), { exact: true })).toBeVisible();
+    await expect(menu.getByText(m.library_collection_boundary_end(), { exact: true })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    const duplicate = canvasElement.querySelectorAll<HTMLElement>('[data-member]')[1]!;
+    await openNote(duplicate);
+    await userEvent.type(within(duplicate).getByRole('textbox'), ' An unsaved note');
+    await expect(canvas.getByText(m.library_collection_move_save_first())).toBeVisible();
+    const blocked = await boundaryMenu(canvasElement);
+    for (const label of [m.library_collection_boundary_start(), m.library_collection_boundary_end()]) {
+      const action = blocked.getByText(label, { exact: true });
+      await expect(
+        action.closest('[role="menuitem"],button')?.matches('[disabled],[aria-disabled="true"],[data-disabled]'),
+      ).toBe(true);
+    }
+  },
+};
+
+export const BoundaryPending: Story = {
+  render: () => renderEditor('boundary-pending', 'page-two'),
+  play: async ({ canvasElement }) => {
+    const canvas = await openEditor(canvasElement, false);
+    const menu = await boundaryMenu(canvasElement);
+    await userEvent.click(menu.getByText(m.library_collection_boundary_end(), { exact: true }));
+    await waitFor(() => expect(canvasElement.querySelector('[data-collection-boundary]')).toBeVisible());
+    await expect(canvas.getByRole('button', { name: m.library_collection_cancel() })).toBeDisabled();
+    await expect(canvas.getAllByRole('checkbox')[0]).toBeDisabled();
+  },
+  beforeEach: () => () => completePendingCollectionSave(),
+};
+
+async function unknownBoundary(canvasElement: HTMLElement) {
+  const canvas = await openEditor(canvasElement, false);
+  const menu = await boundaryMenu(canvasElement);
+  await userEvent.click(menu.getByText(m.library_collection_boundary_end(), { exact: true }));
+  await canvas.findByRole('button', { name: m.library_collection_boundary_retry() });
+  await expect(canvas.getByRole('button', { name: m.library_collection_cancel() })).toBeDisabled();
+  return canvas;
+}
+
+export const BoundaryUnknown: Story = {
+  render: () => renderEditor('boundary-unknown', 'page-two'),
+  play: async ({ canvasElement }) => {
+    await unknownBoundary(canvasElement);
+  },
+};
+
+export const BoundaryResolved: Story = {
+  render: () => renderEditor('boundary-unknown', 'page-two'),
+  play: async ({ canvasElement }) => {
+    const canvas = await unknownBoundary(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_boundary_retry() }));
+    await waitFor(() => expect(canvas.queryByRole('button', { name: m.library_collection_save() })).toBeNull());
+    await expect(canvasElement.querySelector('[data-collection-boundary]')).toHaveTextContent(
+      m.library_collection_boundary_moved_end({
+        title: m.library_member_occurrence({ title: 'Snow Country', position: 2 }),
+      }),
+    );
+  },
+};
+
+export const BoundaryReadRecovery: Story = {
+  render: () => renderEditor('boundary-refresh-failed', 'page-two'),
+  play: async ({ canvasElement }) => {
+    const canvas = await openEditor(canvasElement, false);
+    const menu = await boundaryMenu(canvasElement);
+    await userEvent.click(menu.getByText(m.library_collection_boundary_start(), { exact: true }));
+    await expect(await canvas.findByText(m.library_collection_boundary_refresh_failed())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.library_collection_boundary_retry() })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_boundary_refresh() }));
+    await waitFor(() => expect(canvas.queryByRole('button', { name: m.library_collection_save() })).toBeNull());
   },
 };

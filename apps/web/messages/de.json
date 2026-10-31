@@ -3869,5 +3869,17 @@
   "zone_name_choose": "Sprache wählen",
   "zone_name_remove": "Übersetzung für {language} entfernen",
   "zone_name_translation_help": "Schreibe Übersetzungen selbst. Nicht verwendete Sprachen bleiben leer; hinzugefügte Übersetzungen müssen einen Namen enthalten.",
-  "zone_name_legacy": "Diese ältere Zone hat keine gespeicherte Hauptsprache. Der erste verfügbare Name wird in dieser Reihenfolge verwendet: Englisch, traditionelles Chinesisch, vereinfachtes Chinesisch, Japanisch, Koreanisch, Deutsch, Französisch, Spanisch. Beim Bearbeiten eines Namens oder Auswählen einer Sprache wird die Hauptsprache gespeichert."
+  "zone_name_legacy": "Diese ältere Zone hat keine gespeicherte Hauptsprache. Der erste verfügbare Name wird in dieser Reihenfolge verwendet: Englisch, traditionelles Chinesisch, vereinfachtes Chinesisch, Japanisch, Koreanisch, Deutsch, Französisch, Spanisch. Beim Bearbeiten eines Namens oder Auswählen einer Sprache wird die Hauptsprache gespeichert.",
+  "library_collection_boundary_start": "An den Anfang verschieben",
+  "library_collection_boundary_end": "Ans Ende verschieben",
+  "library_collection_boundary_help": "Diese Aktionen verschieben diesen Eintrag sofort an den tatsächlichen Anfang oder das Ende der Sammlung. Entwurf zuerst speichern oder verwerfen; Pfeile und Ziehen erfordern weiterhin Speichern.",
+  "library_collection_boundary_pending": "{title} wird verschoben…",
+  "library_collection_boundary_unknown": "Das Verschieben von {title} konnte nicht bestätigt werden. Diese Seite offen lassen und denselben Vorgang erneut versuchen; Eintrag, Ziel und Schlüssel bleiben erhalten.",
+  "library_collection_boundary_refused": "Das Verschieben wurde abgelehnt. Aktuelle Einträge und Zugriffsrechte laden, bevor Sie erneut verschieben.",
+  "library_collection_boundary_moved_start": "{title} wurde an den Anfang der Sammlung verschoben.",
+  "library_collection_boundary_moved_end": "{title} wurde ans Ende der Sammlung verschoben.",
+  "library_collection_boundary_refresh_failed": "Das Verschieben ist bestätigt, aber die aktuelle Seite konnte nicht geladen werden. Vor weiteren Änderungen laden; das Verschieben wird dabei nicht wiederholt.",
+  "library_collection_boundary_refresh": "Aktuelle Seite laden",
+  "library_collection_boundary_retry": "Denselben Vorgang wiederholen",
+  "library_collection_boundary_fenced": "Seite oder Anmeldung haben sich geändert. Der gespeicherte Vorgang ist pausiert. Zur ursprünglichen Seite und zum ursprünglichen Konto zurückkehren, um ihn zu klären."
 }

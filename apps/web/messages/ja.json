@@ -3869,5 +3869,17 @@
   "zone_name_choose": "言語を選択",
   "zone_name_remove": "{language}の翻訳を削除",
   "zone_name_translation_help": "翻訳はご自身で入力してください。使わない言語は追加不要です。追加した翻訳には名前の入力が必要です。",
-  "zone_name_legacy": "この旧形式のゾーンには主言語が保存されていません。英語、繁体字中国語、簡体字中国語、日本語、韓国語、ドイツ語、フランス語、スペイン語の順で、最初にある名前を使用します。名前の編集または言語の選択で主言語が保存されます。"
+  "zone_name_legacy": "この旧形式のゾーンには主言語が保存されていません。英語、繁体字中国語、簡体字中国語、日本語、韓国語、ドイツ語、フランス語、スペイン語の順で、最初にある名前を使用します。名前の編集または言語の選択で主言語が保存されます。",
+  "library_collection_boundary_start": "先頭へ移動",
+  "library_collection_boundary_end": "末尾へ移動",
+  "library_collection_boundary_help": "この操作は、この項目をコレクション全体の先頭または末尾へすぐに移動します。先に下書きを保存または破棄してください。矢印やドラッグでの並べ替えには、引き続き保存が必要です。",
+  "library_collection_boundary_pending": "{title}を移動中…",
+  "library_collection_boundary_unknown": "{title}の移動結果を確認できませんでした。このページを開いたまま、同じ移動を再試行してください。対象の項目、移動先、キーは保持されています。",
+  "library_collection_boundary_refused": "移動が拒否されました。別の移動を選ぶ前に、現在の項目とアクセス権を読み込んでください。",
+  "library_collection_boundary_moved_start": "{title}をコレクションの先頭へ移動しました。",
+  "library_collection_boundary_moved_end": "{title}をコレクションの末尾へ移動しました。",
+  "library_collection_boundary_refresh_failed": "移動は確認済みですが、現在のページを読み込めませんでした。ほかの変更を行う前に読み込んでください。移動が再実行されることはありません。",
+  "library_collection_boundary_refresh": "現在のページを読み込む",
+  "library_collection_boundary_retry": "同じ移動を再試行",
+  "library_collection_boundary_fenced": "ページまたはログイン状態が変わりました。保存された移動は一時停止中です。元のページとアカウントに戻って結果を確認してください。"
 }
