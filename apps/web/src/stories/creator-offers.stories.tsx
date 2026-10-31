@@ -95,7 +95,7 @@ export const LongTitle: Story = {
   render: () => render('long-title'),
   play: async ({ canvasElement }) => {
     const page = creatorOffersStoryPage('long-title');
-    if (page.kind !== 'ready') throw new Error('Expected illustrative offers');
+    if (page.kind !== 'ready') throw new globalThis.Error('Expected illustrative offers');
     const offer = page.offers[0]!;
     const view = within(canvasElement);
     const link = await view.findByRole('link', { name: offer.title });
