@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
@@ -29,6 +30,7 @@ import { accountToken, admittedAccess, authenticateAccount } from '../support/ad
 import { runCommand } from '../../src/command/command.ts';
 import { loadAccountIdentitySource } from '../../src/access/agent-verification-identity.ts';
 import { ORIGINAL_IDENTITY_SOURCE_REQUIRED } from '../../src/access/agent-verification-identity-recovery.ts';
+import { nativeMinimization, nativeStoreBlocker } from '../../src/access/erasure-native-stores.ts';
 
 const sourceUrl = process.env.DATABASE_URL;
 if (!sourceUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -474,6 +476,98 @@ test('person and organization manager requests, withdrawal, pending page, reject
     subject: { id: personCatalogue, label: 'Catalogue Person', type: 'schema:Person' },
     verified: true,
   });
+});
+
+test('A retained terminal organization verification request with an erased requester remains readable by another currently authorized manager and serializes requestedBy as null', async () => {
+  const retainedOrganization = await seedAccount(`retained_org_${randomUUID().slice(0, 8)}`, {
+    kind: 'organization',
+  });
+  const successor = await seedAccount(`successor_${randomUUID().slice(0, 8)}`);
+  await pool.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES ($1, $2, $3, 'account:manage', '(,)', $3),
+            ($1, $2, $4, 'account:manage', '(,)', $4)`,
+    [accountRoute, retainedOrganization.id, manager.id, successor.id],
+  );
+  const created = await request(retainedOrganization, organizationCatalogue, await bearer(manager));
+  expect(created.response.status).toBe(201);
+  const requestId = created.body.verificationRequest.id as string;
+  expect(created.body.verificationRequest.requestedBy).toBe(manager.id);
+  const rejected = await post(`/v1/verification-requests/${requestId}:reject`, await bearer(staff), {
+    reason: 'Representation evidence is insufficient.',
+  });
+  expect(rejected.response.status).toBe(200);
+  expect(rejected.body.verificationRequest.state).toBe('rejected');
+
+  // Exercise the native terminal guard and requester minimizer on a real rejected
+  // request. No approved identity or published undo custody is needed for rejection.
+  const tx = await pool.connect();
+  try {
+    await tx.query('BEGIN');
+    expect(await nativeStoreBlocker(tx, 'agent_verification_request', ['0', requestId], manager.id)).toBeNull();
+    const minimize = nativeMinimization('agent_verification_request', 'requested_by');
+    expect(minimize).toBe('requested_by=NULL');
+    const erased = await tx.query(
+      `UPDATE access.agent_verification_request SET ${minimize}
+       WHERE route=0 AND request_id=$1 AND requested_by=$2 RETURNING requested_by`,
+      [requestId, manager.id],
+    );
+    expect(erased.rows).toEqual([{ requested_by: null }]);
+    await tx.query('COMMIT');
+  } catch (error) {
+    await tx.query('ROLLBACK');
+    throw error;
+  } finally {
+    tx.release();
+  }
+
+  const path = `/v1/accounts/${retainedOrganization.id}/verification`;
+  const successorBearer = await bearer(successor);
+  const actor = await authenticateAccount(
+    access,
+    { pool, deadline: Date.now() + 10_000 },
+    {
+      accountId: successor.id,
+      clientId: 'agent-verification-test',
+      scopes: [...actionCatalogue(kernel).keys(), 'account:manage', 'gate:any'],
+    },
+  );
+  const native = await readLatestAgentVerificationRequest(
+    pool,
+    access,
+    { pool, actor, deadline: Date.now() + 10_000 },
+    retainedOrganization.id,
+  );
+  expect(native).toEqual({ ...rejected.body.verificationRequest, requestedBy: null });
+  const read = await get(path, successorBearer);
+  expect(read.response.status).toBe(200);
+  expect(read.body).toEqual({ verificationRequest: native });
+  expect(Object.hasOwn(read.body.verificationRequest, 'requestedBy')).toBe(true);
+  expect(read.body.verificationRequest.requestedBy).toBeNull();
+
+  const route = kernel.routes.find(
+    (route) => route.hooks.detail?.operationId === 'account.read_verification_request',
+  );
+  const schema = (route!.hooks.response as Record<number, TSchema>)[200]!;
+  expect(Value.Check(schema, read.body)).toBe(true);
+  expect(Value.Check(schema, { verificationRequest: { ...native, requestedBy: manager.id } })).toBe(true);
+  for (const requestedBy of ['not-a-uuid', '', 42, false, {}, [], undefined])
+    expect(Value.Check(schema, { verificationRequest: { ...native, requestedBy } })).toBe(false);
+  const missingRequester = { ...read.body.verificationRequest };
+  delete missingRequester.requestedBy;
+  expect(Value.Check(schema, { verificationRequest: missingRequester })).toBe(false);
+
+  const outsider = await get(path, await bearer(otherAccount));
+  expect(outsider.response.status).toBe(403);
+  expect(outsider.body).toMatchObject({ code: 'forbidden' });
+  await pool.query(
+    `DELETE FROM access.resource_grant
+     WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='account:manage'`,
+    [accountRoute, retainedOrganization.id, successor.id],
+  );
+  const revoked = await get(path, successorBearer);
+  expect(revoked.response.status).toBe(403);
+  expect(revoked.body).toMatchObject({ code: 'forbidden' });
 });
 
 test('automated accounts cannot request verification and a refused semantic merge leaves the account unverified', async () => {

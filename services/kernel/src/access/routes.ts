@@ -163,7 +163,7 @@ const agentVerificationRequest = t.Unsafe<AgentVerificationRequest>(
       id,
       accountId: id,
       accountKind: t.Union([t.Literal('actor'), t.Literal('organization')]),
-      requestedBy: id,
+      requestedBy: t.Union([id, t.Null()]),
       catalogueSubjectId: id,
       statement: t.String({ minLength: 1, maxLength: 2000 }),
       links: t.Array(agentVerificationLink, { maxItems: 5 }),
