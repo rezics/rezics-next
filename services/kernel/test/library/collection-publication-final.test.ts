@@ -72,7 +72,8 @@ afterAll(async () => {
   await f?.close();
 });
 
-const episodes = () => createCollectionPublicationEpisodes({ pool: f.database.pool, access: f.runtime.identity.access });
+const episodes = () =>
+  createCollectionPublicationEpisodes({ pool: f.database.pool, access: f.runtime.identity.access });
 
 async function pendingWithSelectedA() {
   const subject = await f.subject('Private whole-query source');
@@ -132,7 +133,13 @@ async function pendingWithSelectedA() {
       await completeCollectionSourceOutput(tx, a);
       return {
         value: a,
-        events: [{ type: 'com.rezics.library.collection.updated.v1', subject: collection.id, data: { collectionId: collection.id } }],
+        events: [
+          {
+            type: 'com.rezics.library.collection.updated.v1',
+            subject: collection.id,
+            data: { collectionId: collection.id },
+          },
+        ],
       };
     },
   );
@@ -141,7 +148,13 @@ async function pendingWithSelectedA() {
     { collectionId: collection.id, revision: exposure.collection.revision, visibility: 'unlisted' },
     randomUUID(),
   );
-  return { collectionId: collection.id, route, a, revision: exposure.collection.revision, locator: begun.value.locator };
+  return {
+    collectionId: collection.id,
+    route,
+    a,
+    revision: exposure.collection.revision,
+    locator: begun.value.locator,
+  };
 }
 
 function finalActivation(readConsent?: CurrentConsentReader) {
@@ -154,8 +167,7 @@ function finalActivation(readConsent?: CurrentConsentReader) {
       getAuthorization: () => ({
         access: f.runtime.identity.access,
         readConsent:
-          readConsent ??
-          (({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId })),
+          readConsent ?? (({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId })),
       }),
     },
   });
@@ -231,7 +243,9 @@ test('Whole-query activation restores the original real initiator at each comman
 
   // The foreign publication-work admission/getter is still unavailable here. Its missing seal must
   // refuse activation instead of treating a pending phase or the maintained zero counter as completion.
-  await expect(activate.activate(pending.locator, requestKey)).rejects.toMatchObject({ code: 'dependency_unavailable' });
+  await expect(activate.activate(pending.locator, requestKey)).rejects.toMatchObject({
+    code: 'dependency_unavailable',
+  });
   const afterUnsealed = await outputState(pending.collectionId);
   expect(afterUnsealed).toEqual(before);
   expect(await readCollectionPublicationFinalResult(f.database.pool, pending.locator)).toBeNull();
@@ -270,7 +284,12 @@ test('a collected original creation receipt cannot restore final command authori
   await f.database.admin.query(
     `DELETE FROM core.receipt WHERE partition_no=$1 AND principal_kind='account'
      AND principal_id=$2 AND command_kind=$3 AND transaction_id=$4`,
-    [partitionOf(pending.route), actor.accountId, episode.initiator.creation.commandKind, episode.initiator.recordedTransactionId],
+    [
+      partitionOf(pending.route),
+      actor.accountId,
+      episode.initiator.creation.commandKind,
+      episode.initiator.recordedTransactionId,
+    ],
   );
   await expect(finalActivation().activate(pending.locator, randomUUID())).rejects.toMatchObject({
     code: 'dependency_unavailable',

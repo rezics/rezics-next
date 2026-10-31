@@ -37,10 +37,7 @@ import {
 } from './collection-publication-episodes.ts';
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
 import type { WorkDimensions } from './collection-source.ts';
-import {
-  completeCollectionSourceOutput,
-  type CollectionOutputRef,
-} from './collection-source-output.ts';
+import { completeCollectionSourceOutput, type CollectionOutputRef } from './collection-source-output.ts';
 import { readCollectionPublicationStagingSeal } from './collection-publication-staging.ts';
 import outputInventoryQuery from './collection-publication-final-output-inventory.sql';
 import outputCommitQuery from './collection-publication-final-output-commit.sql';
@@ -81,7 +78,11 @@ function metadataFootprint(): WorkDimensions {
   };
 }
 
-async function bounded<T>(work: NativeCollectionWork, footprint: WorkDimensions, operation: () => Promise<T>): Promise<T> {
+async function bounded<T>(
+  work: NativeCollectionWork,
+  footprint: WorkDimensions,
+  operation: () => Promise<T>,
+): Promise<T> {
   const reservation = work.reserve(footprint);
   reservation.dispatch();
   try {
@@ -212,7 +213,11 @@ export function createCollectionPublicationFinalCommand(
   const anchor = Object.freeze({
     resource,
     async validate(client: Parameters<typeof anchorQuery.run>[0]) {
-      const row = await anchorQuery.run(client, { route, collection_id: collectionId, owner_account_id: ownerAccountId });
+      const row = await anchorQuery.run(client, {
+        route,
+        collection_id: collectionId,
+        owner_account_id: ownerAccountId,
+      });
       return row?.valid === true;
     },
   });
@@ -286,15 +291,7 @@ export function createCollectionPublicationFinalActivation(
       });
       const commandIdentity = { principal: command.principal, basis: command.basis };
       const digestBytes = createHash('sha256')
-        .update(
-          canonicalize([
-            commandIdentity,
-            finalCommandKind,
-            locator,
-            creation.source,
-            creation.durableInitiator,
-          ])!,
-        )
+        .update(canonicalize([commandIdentity, finalCommandKind, locator, creation.source, creation.durableInitiator])!)
         .digest();
 
       const outcome = await runCommand<{ locator: CollectionPublicationLocator }>(
@@ -325,17 +322,22 @@ export function createCollectionPublicationFinalActivation(
             !before.version
           )
             throw unavailable();
-          const firstInventory = await bounded(work, {
-            ...zeroScopeWork(),
-            nativeRows: 3,
-            nativePoints: 1,
-            statements: 1,
-            bytes: 4096,
-            emptySeeks: 1,
-          }, async () => outputInventoryQuery.run(tx, {
-            route: locator.route,
-            collection_id: locator.collectionId,
-          }) as Promise<OutputInventoryRow[]>);
+          const firstInventory = await bounded(
+            work,
+            {
+              ...zeroScopeWork(),
+              nativeRows: 3,
+              nativePoints: 1,
+              statements: 1,
+              bytes: 4096,
+              emptySeeks: 1,
+            },
+            async () =>
+              outputInventoryQuery.run(tx, {
+                route: locator.route,
+                collection_id: locator.collectionId,
+              }) as Promise<OutputInventoryRow[]>,
+          );
           validateInventory(firstInventory, creation.source.output, before.episode.selected);
 
           // This is a fresh native query-exhaustion receipt. Phase, row count, or copied JSON cannot substitute.
@@ -373,17 +375,22 @@ export function createCollectionPublicationFinalActivation(
             throw unavailable();
           const activationEpisode = after.episode;
           const activationVersion = after.version;
-          const finalInventory = await bounded(work, {
-            ...zeroScopeWork(),
-            nativeRows: 3,
-            nativePoints: 1,
-            statements: 1,
-            bytes: 4096,
-            emptySeeks: 1,
-          }, async () => outputInventoryQuery.run(tx, {
-            route: locator.route,
-            collection_id: locator.collectionId,
-          }) as Promise<OutputInventoryRow[]>);
+          const finalInventory = await bounded(
+            work,
+            {
+              ...zeroScopeWork(),
+              nativeRows: 3,
+              nativePoints: 1,
+              statements: 1,
+              bytes: 4096,
+              emptySeeks: 1,
+            },
+            async () =>
+              outputInventoryQuery.run(tx, {
+                route: locator.route,
+                collection_id: locator.collectionId,
+              }) as Promise<OutputInventoryRow[]>,
+          );
           validateInventory(finalInventory, creation.source.output, after.episode.selected);
           const current = currentCommand(tx);
           if (current.time !== context.time || current.authorization?.action !== 'collection:update') throw denied();
@@ -433,8 +440,16 @@ export function createCollectionPublicationFinalActivation(
           return {
             value: { locator },
             events: [
-              { type: 'com.rezics.library.collection.updated.v1', subject: locator.collectionId, data: { collectionId: locator.collectionId } },
-              { type: 'com.rezics.library.collection.listing.changed.v1', subject: locator.collectionId, data: { collectionId: locator.collectionId } },
+              {
+                type: 'com.rezics.library.collection.updated.v1',
+                subject: locator.collectionId,
+                data: { collectionId: locator.collectionId },
+              },
+              {
+                type: 'com.rezics.library.collection.listing.changed.v1',
+                subject: locator.collectionId,
+                data: { collectionId: locator.collectionId },
+              },
             ],
           };
         },
