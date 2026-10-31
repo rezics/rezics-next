@@ -11,6 +11,7 @@ import { useSession } from '../../../session/query';
 import { AppShell, ErrorPage } from '../../../shell/shell';
 import { PendingPage } from '../../../shell/pending';
 import { PatternStory } from '../../page';
+import { storyViewerId } from '../../../kernel/fake/identities';
 import owned from '../../../kernel/recorded/thread-owned.json';
 
 export type ErasureStoryState =
@@ -104,10 +105,10 @@ function EntryThread({ state, onAccepted }: { state: ErasureStoryState; onAccept
                       parseAuthorErasureAdmission(
                         {
                           thread: { id: owned.thread.id },
-                          authorErasure: { authorId: owned.thread.authorId, mayErase: state === 'available-entry' },
+                          authorErasure: { authorId: storyViewerId, mayErase: state === 'available-entry' },
                         },
                         threadId,
-                        owned.thread.authorId,
+                        storyViewerId,
                       ),
                   }
                 : { admission: { kind: 'unavailable' as const } }),
