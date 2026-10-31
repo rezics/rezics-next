@@ -425,7 +425,7 @@ export function SubjectTermsPage({
                 disabled={busy || session !== 'signed-in' || (stale && comparison?.state !== 'ready')}
               >
                 {busy
-                  ? m.catalogue_create_saving({}, options)
+                  ? m.correction_saving({}, options)
                   : uncertain
                     ? m.catalogue_create_retry({}, options)
                     : comparison?.state === 'ready'
