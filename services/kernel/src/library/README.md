@@ -189,6 +189,37 @@ Current implementation evidence is narrower than the capability:
   It runs the integrated entry/copy/follow purge pages, records explicit pending evidence and never mistakes those
   pages for a complete graph or no-data proof. Full graph cleanup and shared custody remain incomplete.
 
+### Native whole-query episode storage
+
+`collection-publication-episodes.ts` exports `createCollectionPublicationEpisodes({pool,access,clock?})`.
+Its `begin(actor,{collectionId,revision,visibility},requestKey)` is also the Collection command factory's
+`beginCollectionPublication`. It uses ordinary current owner `collection:update`, every expanded private-family
+read/list check and gate, pinned accepted rule bytes, the native private working Source identity, and the actual
+command's account/fact fences. Admission runs before receipt replay. One command allocates routable operation,
+immutable source and building output references, captures the original admitted initiator, increments the Collection
+revision, and commits their commitment in the exact native creation receipt. The Collection retains the sole query
+AST. Desired visibility stays in the immutable target until activation; pending B does not select public membership
+or replace A. Unknown whole-query cardinality stays NULL, with no complete receipt; explicit selected-output hooks
+refuse such builds.
+
+`readCollectionPublicationInitiator` independently verifies original native source bytes, digest, target, transaction,
+write basis and exact creation receipt PK/commitment. Accounts' native restorer repeats its independent checks.
+`readCollectionPublicationEpisode`, `readCollectionPublicationRule` and `readCollectionPublicationEpisodeVersion`
+return private domain data on the supplied client. Missing/collected evidence has no reconstruction path. Current
+rule use compares incarnation, Collection/rule revision, source generation, accepted release and canonical rule digest.
+`advanceCollectionPublicationEpisodePhase` delegates mechanical admission to the existing live Core work-step port
+and performs version CAS; it cannot complete output. The owning work-admission/getter, bounded query staging, final
+human command and default receiving composition remain independent dependencies. Their unavailable implementations
+are not successful empty results. Logical built-in first-write materialization and its Source bootstrap are not supplied
+by this saved-rule path; Liked and unsupported targets refuse. No public/frozen/full-query completion proof is claimed.
+
+The existing terminal participant invokes `purgeCollectionPublicationEpisodes` in bounded owner-indexed pages,
+removing private source/operation/initiator snapshots even when completed public A is retained. The three families
+join its native probe inventory. Current account fences prevent late creation. Foreign principal/operator custody,
+shared Core history and receiving/SDK minimization remain explicit pending obligations; local exhaustion cannot ACK.
+The focused episode suite adds original native creation, replay/current authority, changed rule and receipt-retention
+assertions. These assertions require the actual native Source producers and have not been executed here.
+
 ### Explicit membership Publication hooks
 
 `collection-source-output.ts` exports `beginCollectionSourceOutput`, `appendCollectionSourceOutput`,

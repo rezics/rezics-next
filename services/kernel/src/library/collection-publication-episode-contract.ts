@@ -134,6 +134,6 @@ export type CollectionPublicationActivationInput = Readonly<{
   episode: CollectionPublicationEpisode;
 }>;
 
-/** Contract only: native creation/reader, bounded staging, final activation, receiving and retention
- * bodies are absent. No type here proves native custody, public/frozen support or terminal cleanup.
+/** Native creation/reader and local owner cleanup are in collection-publication-episodes.ts.
+ * Bounded staging, final activation and receiving remain independent bodies. No type here proves native custody, public/frozen support or terminal cleanup.
  */

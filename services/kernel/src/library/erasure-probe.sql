@@ -8,6 +8,7 @@ WITH input AS NOT MATERIALIZED (
 ),
 probe AS (
   SELECT
+    EXISTS (SELECT 1 FROM library.collection_publication_operation WHERE route=input.route AND owner_account_id=input.account_id) AS collection_publication_operation,
     EXISTS (SELECT 1 FROM library.collection_source_output WHERE route=input.route AND account_id=input.account_id) AS collection_source_output,
     EXISTS (SELECT 1 FROM library.collection_source_output_publication WHERE route=input.route AND account_id=input.account_id) AS collection_source_output_publication,
     EXISTS (SELECT 1 FROM library.native_source_fence WHERE route = input.route AND account_id = input.account_id)
@@ -48,6 +49,9 @@ probe AS (
 SELECT stores.store
 FROM probe
 CROSS JOIN LATERAL (VALUES
+  (collection_publication_operation, 'collection_publication_operation'::text),
+  (collection_publication_operation, 'collection_publication_source'::text),
+  (collection_publication_operation, 'collection_publication_episode'::text),
   (collection_source_output, 'collection_source_output'::text),
   (collection_source_output, 'collection_source_output_head'::text),
   (collection_source_output, 'collection_source_output_member'::text),

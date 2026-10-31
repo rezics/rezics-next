@@ -1,3 +1,4 @@
+import { purgeCollectionPublicationEpisodes } from './collection-publication-episodes.ts';
 import { admitFollowCountErasure, purgeFollowCountsPage } from './erasure-follow-counts.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Value } from 'typebox/value';
@@ -29,6 +30,7 @@ const BLOCKERS = Object.freeze([
   'collection_listing_history: no curator locator after parent removal',
   'shared receipt/outbox/write_basis/work payloads: no exact Library producer custody/minimizer handoff',
   'listing effects: no account-home locator fence or committed late-item disposition',
+  'collection_publication_operation: foreign operator/principal locators, receiving SDK and shared Core history minimizer custody remain pending',
   'logs/caches/exports/replicas/backups: no complete Library custody inventory',
 ]);
 
@@ -78,11 +80,21 @@ export function registerLibraryErasure(
     name: 'library.purgeErasureFollowCountsPage',
     ...COMMAND_STEP_RETRIES,
   });
+  const publicationPage = DBOS.registerStep(async (accountId: string) => {
+    const route = requireRoute(accountId);
+    return (await runCommand(pool, { partition: partitionOf(route), deadline: workStepDeadline() }, async (tx) => {
+      const page = await purgeCollectionPublicationEpisodes(tx, { accountId, limit: 100 });
+      if (!page.removed) return noEffect(page);
+      return { value: page, events: [{ type: 'com.rezics.library.account-graph.purged.v1', subject: accountId,
+        data: { accountId, kind: 'collection_publication_operation', removed: page.removed } }] };
+    })).value;
+  }, { name: 'library.purgeErasurePublicationPage', ...COMMAND_STEP_RETRIES });
   const graphPage = DBOS.registerStep(
     async (input: Parameters<typeof purgeOwnedGraphPage>[1]) => purgeOwnedGraphPage(pool, input),
     { name: 'library.purgeErasureOwnedPage', ...COMMAND_STEP_RETRIES },
   );
   type Continuation = {
+    publicationsComplete?: boolean;
     countsComplete?: boolean;
     segment: number;
     factKind: number;
@@ -123,8 +135,13 @@ export function registerLibraryErasure(
         counts.examined += page.examined;
         cursor.countsComplete = page.complete;
       }
+      let publicationPages = 0;
+      while (!cursor.publicationsComplete && counts.pages + publicationPages < 100) {
+        cursor.publicationsComplete = (await publicationPage(accountId)).exhausted;
+        publicationPages++;
+      }
       const kinds = ['entry', 'copy', 'follow'] as const;
-      while (cursor.countsComplete && cursor.factKind < kinds.length && counts.pages + facts.pages < 100) {
+      while (cursor.countsComplete && cursor.factKind < kinds.length && counts.pages + publicationPages + facts.pages < 100) {
         const page = await purgePage(accountId, kinds[cursor.factKind]!, cursor.factAfter);
         facts.pages++;
         facts.examined += page.examined;
@@ -138,12 +155,12 @@ export function registerLibraryErasure(
         }
       }
       const graph =
-        cursor.countsComplete && cursor.factKind === kinds.length
+        cursor.publicationsComplete && cursor.countsComplete && cursor.factKind === kinds.length
           ? await runOwnedGraphSegment(accountId, cursor.segment, cursor.graph, graphPage)
           : null;
       if (graph) cursor.graph = graph.cursor;
       const continuation =
-        !cursor.countsComplete || cursor.factKind < kinds.length || !graph?.exhausted
+        !cursor.publicationsComplete || !cursor.countsComplete || cursor.factKind < kinds.length || !graph?.exhausted
           ? { ...cursor, segment: cursor.segment + 1 }
           : null;
       if (continuation) await continueErasure(accountId, continuation);

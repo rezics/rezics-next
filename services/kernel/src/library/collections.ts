@@ -1,3 +1,4 @@
+import { createCollectionPublicationEpisodes } from './collection-publication-episodes.ts';
 import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { createShelfCounters } from './shelf-counters.ts';
@@ -285,6 +286,7 @@ export function createCollectionCommands(config: {
 
   return {
     createCollection,
+    beginCollectionPublication: createCollectionPublicationEpisodes(config).begin,
     updateCollection,
     updateCollectionRule,
     deleteCollection,

@@ -21,7 +21,7 @@ type Client = Pick<PoolClient, 'query'>;
 type Build = {
   account_id: string | null;
   source_generation: string;
-  expected_members: string;
+  expected_members: string | null;
   written_members: string;
   member_count: string;
   after_subject_id: string | null;
@@ -111,6 +111,7 @@ export async function beginCollectionSourceOutput(
   const current = await build(tx, input);
   if (
     current.state !== 'building' ||
+    current.expected_members === null ||
     current.account_id !== source.accountId ||
     current.source_generation !== source.sourceGeneration ||
     BigInt(current.expected_members) !== BigInt(input.expectedMembers)
@@ -142,6 +143,7 @@ export async function appendCollectionSourceOutput(
     current = await build(tx, input);
   if (
     current.state !== 'building' ||
+    current.expected_members === null ||
     current.account_id !== source.accountId ||
     current.source_generation !== source.sourceGeneration ||
     current.after_subject_id !== input.after ||
@@ -169,6 +171,7 @@ export async function completeCollectionSourceOutput(
     current = await build(tx, input);
   if (
     current.state !== 'building' ||
+    current.expected_members === null ||
     current.account_id !== source.accountId ||
     current.source_generation !== source.sourceGeneration ||
     current.written_members !== current.expected_members ||
