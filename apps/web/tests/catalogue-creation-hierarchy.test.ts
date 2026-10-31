@@ -123,7 +123,9 @@ test('A contributor starts the actual creation task before alternative editors a
     const form = within(arcName.closest('form')!);
     expect(form.getByText(storyArcType)).toBeDefined();
     expect(form.getByText(arc.release.types[storyArcType]!.labels.en!)).toBeDefined();
-    expect(form.getByText(arc.release.types[storyArcType]!.descriptions.en!)).toBeDefined();
+    expect(arcName.closest('form')!.querySelector('#create-type-help')!.textContent).toBe(
+      arc.release.types[storyArcType]!.descriptions?.en ?? '',
+    );
     expect(
       form.getByRole('link', { name: `${m.guide_type_help()} · ${m.guide_new_tab()}` }).getAttribute('href'),
     ).toContain(`type=${encodeURIComponent(storyArcType)}`);
