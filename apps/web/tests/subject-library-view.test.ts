@@ -93,9 +93,12 @@ async function readerMarkup(session: Session, client = new QueryClient(), path =
     },
   });
   await router.load();
-  return renderToStaticMarkup(
+  const html = renderToStaticMarkup(
     createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
   );
+  if (!html)
+    throw new Error(JSON.stringify(router.state.matches.map(({ status, error }) => ({ status, error }))));
+  return html;
 }
 
 describe('An ordinary non-overview subject view can use the same Library leaf for its current successful reader subject, preserving Realm and view on sign-in/return without a second Library renderer or private cache leak', () => {
