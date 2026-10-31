@@ -37,8 +37,8 @@ test('proof metadata requires explicit originals and a captured commit instead o
     expect(() => parseProofMetadata(input)).toThrow();
 });
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { harness, brief } from './test-support.ts';
 import { git } from './tasks.ts';
 import {
@@ -765,7 +765,7 @@ import { WorkerTasks } from './tasks.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { reading } from './test-support.ts';
 import { proofExecutionUnavailable, ProofUnavailableError } from './verification.ts';
-import { createRuntime } from './config.ts';
+import { createRuntime, loadSettings } from './config.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import type { Brief } from './types.ts';
 
@@ -1294,12 +1294,147 @@ test('unreserved retained product generations refresh through authenticated publ
     expect(h.store.proofReservation(task.id, 2)).toBeUndefined();
     h.tasks.queueProofStart(task.id, { expectedAttempt: 2 }, h.actor);
     expect(h.store.retryIntent(ref)).toEqual(originalIntent);
-    const next = h.store.nextAttempt(ref, (number) => attempt(task.id, number, h.settings.stateDirectory));
+    const next = h.store.retryStopped(task.id, (number) => attempt(task.id, number, h.settings.stateDirectory));
     const binding = newProofBinding(h.store.task(task.id), next.attempt);
     h.store.reserveProof(binding);
     h.store.bindProof(binding, { status: 'unknown', cause: 'Bound current proof is uncertain' });
     h.store.close(next, 'stopped');
     expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 3, brief: fresh.path }, h.actor)).toThrow('reserved proof source');
     expect(h.store.proofReservation(task.id, 3)?.binding).toEqual(binding);
+  } finally { h.dispose(); }
+});
+
+import {
+  loadHistoricalProofReader,
+  refreshHistoricalProofAdmission,
+  validateHistoricalProofReaderSource,
+} from './verification.ts';
+import { SqliteLandingQueue } from './land.ts';
+
+test('historical reader settings resolve only the explicit local source and reject empty values', () => {
+  const h = harness();
+  try {
+    expect(h.settings.integration.checkScriptReaderRoot).toBeUndefined();
+    const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
+    local.integration = { checkScriptReaderRoot: '.temp/captured-native-source' };
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(loadSettings({ cwd: h.root, env: {} }).integration.checkScriptReaderRoot)
+      .toBe(join(h.root, '.temp/captured-native-source'));
+    local.integration.checkScriptReaderRoot = '';
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(() => loadSettings({ cwd: h.root, env: {} })).toThrow('nonempty');
+  } finally { h.dispose(); }
+});
+
+test('historical reader validates the complete captured closure before importing and reads deleted historical modules as data only', async () => {
+  const directory = temporaryDirectory();
+  try {
+    // Only structural read APIs are installed. No native product/remote module or execution capability is imported.
+    git(directory.path, ['clone', '--shared', '--no-checkout', resolve(import.meta.dir, '../../..'), '.']);
+    git(directory.path, ['config', 'user.name', 'Fixture']);
+    git(directory.path, ['config', 'user.email', 'fixture@example.invalid']);
+    mkdirSync(join(directory.path, 'scripts'));
+    writeFileSync(join(directory.path, '.gitignore'), '.temp/\n');
+    const helper = `import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+export function read(cwd, path) { return JSON.parse(readFileSync(join(cwd,'.temp/goal/checks',path),'utf8')); }
+`;
+    writeFileSync(join(directory.path, 'scripts/reader-data.ts'), helper);
+    const marker = join(directory.path, '.temp/imported');
+    mkdirSync(join(directory.path, '.temp'));
+    writeFileSync(join(directory.path, 'scripts/worker-check.ts'), `import {writeFileSync} from 'node:fs';
+import {read} from './reader-data.ts';
+writeFileSync(${JSON.stringify(marker)}, 'readonly reader imported');
+export function readWorkerCheckRecord(id, cwd) { return read(cwd, 'results/'+id+'.json'); }
+export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'history/'+id+'/'+physical+'.json'); }
+`);
+    writeFileSync(join(directory.path, 'scripts/check-custody.ts'),
+      `export function validRegistration() { throw new Error('No registrations in readonly fixture'); }\n`);
+    git(directory.path, ['add', '.']);
+    const tree = git(directory.path, ['write-tree']);
+    const commit = git(directory.path, ['commit-tree', tree, '-p', PROOF_PRODUCER_COMMIT, '-m', 'Readonly reader fixture']);
+    git(directory.path, ['update-ref', 'refs/heads/reader-fixture', commit]);
+    git(directory.path, ['symbolic-ref', 'HEAD', 'refs/heads/reader-fixture']);
+    git(directory.path, ['reset', '--hard', commit]);
+    git(directory.path, ['branch', 'fixture-integration', commit]);
+    const source = { root: directory.path, integrationRoot: directory.path, integrationBranch: 'fixture-integration' };
+    expect(validateHistoricalProofReaderSource(source)).toBe(commit);
+    git(directory.path, ['update-ref', 'refs/heads/fixture-integration', PROOF_PRODUCER_COMMIT]);
+    await expect(loadHistoricalProofReader(join(directory.path, '.temp/registry'), source)).rejects.toThrow('integration ancestor');
+    git(directory.path, ['update-ref', 'refs/heads/fixture-integration', commit]);
+    writeFileSync(join(directory.path, 'scripts/reader-data.ts'), helper + '\nthrow new Error("Changed dependency");\n');
+    git(directory.path, ['update-index', '--assume-unchanged', 'scripts/reader-data.ts']);
+    expect(git(directory.path, ['status', '--porcelain', '--untracked-files=no'])).toBe('');
+    await expect(loadHistoricalProofReader(join(directory.path, '.temp/registry'), source)).rejects.toThrow('differs from captured');
+    expect(existsSync(marker)).toBe(false);
+    git(directory.path, ['update-index', '--no-assume-unchanged', 'scripts/reader-data.ts']);
+    writeFileSync(join(directory.path, 'scripts/reader-data.ts'), helper);
+
+    const oldCwd = join(directory.path, '.temp/deleted-producer');
+    const check = { taskId: 'historical-task', attempt: 28, checkId: crypto.randomUUID(), cwd: oldCwd };
+    const physicalRunId = crypto.randomUUID();
+    mkdirSync(join(oldCwd, '.temp/goal/checks/results'), { recursive: true });
+    mkdirSync(join(oldCwd, '.temp/goal/checks/history', check.checkId), { recursive: true });
+    // There is deliberately no scripts directory in the historical cwd.
+    const record = { custodyVersion: 1, id: check.checkId, cwd: oldCwd, physicalRunId,
+      ownership: { taskId: check.taskId, attempt: check.attempt }, status: 'unknown' };
+    const physical = { version: 1, id: check.checkId, cwd: oldCwd, physicalRunId, ownership: record.ownership, status: 'unknown' };
+    writeFileSync(join(oldCwd, '.temp/goal/checks/results', `${check.checkId}.json`), JSON.stringify(record));
+    writeFileSync(join(oldCwd, '.temp/goal/checks/history', check.checkId, `${physicalRunId}.json`), JSON.stringify(physical));
+    const reader = await loadHistoricalProofReader(join(directory.path, '.temp/registry'), source);
+    expect(readFileSync(marker, 'utf8')).toBe('readonly reader imported');
+    expect(reader.record(check.checkId, oldCwd)).toEqual(record);
+    expect(reader.history(check.checkId, physicalRunId, oldCwd)).toEqual(physical);
+    expect(classifyHistoricalProof(check, reader)).toMatchObject({
+      classification: 'historical-unknown', record, physical: [physical], registrations: [], processes: [],
+    });
+    writeFileSync(join(directory.path, 'scripts/reader-data.ts'), helper + '\n// Next captured revision\n');
+    git(directory.path, ['add', 'scripts/reader-data.ts']);
+    git(directory.path, ['commit', '-m', 'Move previously imported reader root']);
+    git(directory.path, ['update-ref', 'refs/heads/fixture-integration', git(directory.path, ['rev-parse', 'HEAD'])]);
+    await expect(loadHistoricalProofReader(join(directory.path, '.temp/registry'), source)).rejects.toThrow('source changed');
+  } finally { directory.close(); }
+});
+
+test('unavailable historical reader fails proof admission closed once while ordinary orphan and durable retry recovery continue', async () => {
+  const h = registeredFixture();
+  try {
+    h.settings.integration.checkScriptReaderRoot = join(h.root, '.temp/missing-reader');
+    const old = h.store.createTask(brief(),
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+    const oldRef = h.store.nextAttempt({ taskId: old.id, attempt: 0 }, (n) => attempt(old.id, n, h.settings.stateDirectory));
+    h.store.updateAttempt(oldRef, (current) => { current.checks = [crypto.randomUUID()]; current.result = 'Raw historical report'; });
+    h.store.close(oldRef, 'stopped');
+    const raw = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=?').all(old.id);
+    const checks = h.store.historicalProofChecks();
+    const reservations = h.store.activeProofReservations();
+    const source = { root: h.settings.integration.checkScriptReaderRoot, integrationRoot: h.root, integrationBranch: 'dev' };
+    await expect(refreshHistoricalProofAdmission(h.store, join(h.settings.stateDirectory, 'check-registry'), source))
+      .rejects.toBeInstanceOf(ProofUnavailableError);
+    await expect(h.tasks.refreshProofAdmission(h.store.task(h.proof.id))).rejects.toThrow('trusted current native reader');
+
+    const ordinary = h.store.createTask(brief(),
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+    const ref = h.store.nextAttempt({ taskId: ordinary.id, attempt: 0 }, (n) => attempt(ordinary.id, n, h.settings.stateDirectory));
+    h.store.updateTask(ref, (current) => { current.state = 'landing'; });
+    const inbox: ManagerEvent[] = [];
+    const job = new WorkerJob(h.tasks, new SqliteLandingQueue(h.store.db, h.store), { deliver: (event) => inbox.push(event) });
+    let retrySweeps = 0;
+    // Observe durable recovery without launching a worker or native check in this receiving test.
+    job.resumePendingRetries = () => { retrySweeps++; };
+    await job.recoverOrphans();
+    await job.drain();
+    await job.recoverOrphans();
+    await job.drain();
+    expect(retrySweeps).toBe(2);
+    expect(h.store.task(ordinary.id).state).toBe('ready');
+    expect(h.store.retryIntent(ref)?.status).toBe('pending');
+    expect(h.store.events(ordinary.id).filter((event) => event.kind === 'orphaned-landing-recovered')).toHaveLength(1);
+    expect(inbox.filter((event) => event.taskId === ordinary.id)).toHaveLength(1);
+    expect(h.store.events().filter((event) => event.kind === 'historical-proof-reader-unavailable')).toHaveLength(1);
+    expect(h.store.events(old.id).some((event) => ['historical-proof-classified', 'historical-proof-terminal'].includes(event.kind))).toBe(false);
+    expect(h.store.historicalProofSlots()).toEqual(checks);
+    expect(h.store.activeProofReservations()).toEqual(reservations);
+    expect(h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=?').all(old.id)).toEqual(raw);
   } finally { h.dispose(); }
 });
