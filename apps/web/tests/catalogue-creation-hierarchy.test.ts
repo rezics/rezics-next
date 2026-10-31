@@ -23,7 +23,7 @@ test('A contributor starts the actual creation task before alternative editors a
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
-  const { within } = await import(Bun.resolveSync('@testing-library/dom', storybook));
+  const { within, waitFor } = await import(Bun.resolveSync('@testing-library/dom', storybook));
   const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { CreateSubjectForm } = await import('../src/features/catalogue/create-subject-form');
@@ -54,8 +54,11 @@ test('A contributor starts the actual creation task before alternative editors a
         ),
       );
     });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitFor(async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      canvas.getByRole('textbox', { name: m.catalogue_create_label() });
     });
     const name = canvas.getByRole('textbox', { name: m.catalogue_create_label() });
     const language = canvas.getByRole('textbox', { name: m.catalogue_create_language() });
@@ -102,8 +105,11 @@ test('A contributor starts the actual creation task before alternative editors a
         ),
       );
     });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitFor(async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      canvas.getByRole('textbox', { name: m.catalogue_create_label() });
     });
     expect(canvas.getAllByRole('heading', { name: m.story_arc_create() })).toHaveLength(1);
     expect(host.querySelector('h1')!.textContent).toBe(m.story_arc_create());
