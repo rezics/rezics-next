@@ -46,7 +46,14 @@ import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { offerParentAnchor, platformRootAnchor } from './catalogue.ts';
 import { declareCommerceCommandHistory } from './erasure-history.ts';
-import { STRIPE_API_VERSION, type CheckoutRequest, type CheckoutSession, type CheckoutSnapshot, type Offer, type Order } from './model.ts';
+import {
+  STRIPE_API_VERSION,
+  type CheckoutRequest,
+  type CheckoutSession,
+  type CheckoutSnapshot,
+  type Offer,
+  type Order,
+} from './model.ts';
 import { assertCheckoutEvidence, assertTransactionBound, decideCheckout } from './settlement.ts';
 import * as store from './store.ts';
 import { appendCheckoutMoneyObservations } from './money-observation.ts';

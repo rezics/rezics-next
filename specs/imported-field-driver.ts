@@ -136,9 +136,7 @@ export interface ImportedFieldDriver {
     key: string,
     fault?: 'invalid-proposal' | 'before-commit' | 'non-cover-role',
   ): Promise<Reply>;
-  coverReference(
-    key: string,
-  ): Promise<{
+  coverReference(key: string): Promise<{
     mediaId: string;
     role: string;
     credit: string;
