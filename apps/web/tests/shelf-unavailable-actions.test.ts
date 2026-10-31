@@ -200,8 +200,9 @@ test('Unavailable shelf items keep bounded usable management actions', async () 
         exposureQuery.queryKey,
         admitted.filter((operation) => operation !== 'library_label.unassign'),
       );
+      await Bun.sleep(5);
     });
-    expect(tile.querySelector('button, form')).toBeNull();
+    expect(tile.querySelector('button, form') === null).toBe(true);
     expect(host.querySelector('[data-slot="tombstone"]')).not.toBeNull();
   } finally {
     await act(async () => root.unmount());
