@@ -27,7 +27,7 @@ export function readCollectionPrivacyResult<T>(result: {
   data?: T | null;
   error?: unknown;
   status?: number;
-  headers?: HeadersInit;
+  headers?: HeadersInit | undefined;
 }): T {
   try {
     const error = result.error;
