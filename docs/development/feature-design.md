@@ -25,6 +25,12 @@ investigation. Resolve disagreement by checking evidence.
 Maintain a capability matrix with separate columns for specified, backend implemented, interface exposed and tested.
 Classify competitor capabilities as existing configuration, a missing generic capability or an explicit scope boundary.
 
+Design at the upper bound. Push every quantity the design depends on to its realistic limit before choosing it: a
+person in hundreds of Realms and Spaces, 200,000 kinds, thousands of follows, millions of items in one Collection,
+every Context a page could be scored in. A layout with one block, tab or section per Realm, kind or Context fails at
+those numbers; so does ranking that only works for a handful of Contexts. Show what the design renders and costs at
+the limit, not only in the fixture.
+
 Write acceptance in user terms. For Collections, examples include light novels tagged harem, books over one million
 words and combined filters. Name missing properties, indexes and owner ports before claiming support.
 
