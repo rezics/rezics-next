@@ -1,12 +1,16 @@
-import { createServerFn } from '@tanstack/react-start';
-import { notFound } from '@tanstack/react-router';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../kernel/client';
-import type { SessionEnv } from '../session/client';
-import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import type { ResolvedReportTarget as ModerationTarget } from './reports-read';
-import { enrichModerationTargets } from './target-context';
+import { createServerFn } from "@tanstack/react-start";
+import { notFound } from "@tanstack/react-router";
+import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { env } from "cloudflare:workers";
+import { kernelClient } from "../kernel/client";
+import type { SessionEnv } from "../session/client";
+import {
+  prepareSession,
+  sessionSubject,
+  viewerCredential,
+} from "../session/request";
+import type { ResolvedReportTarget as ModerationTarget } from "./reports-read";
+import { enrichModerationTargets } from "./target-context";
 
 export const MODERATION_APPEALS_PAGE_SIZE = 20;
 export type Appeal = {
@@ -17,12 +21,16 @@ export type Appeal = {
   createdAt: string;
   decision: {
     statement: string;
-    target?: { kind: 'post' | 'thread'; id: string };
-    targetKind?: 'post' | 'thread';
+    target?: { kind: "post" | "thread"; id: string };
+    targetKind?: "post" | "thread";
     targetId?: string;
     /** Retained for existing component fixtures; native lists expose only canResolve. */
     deciderId?: string;
-    appeal?: { outcome: 'reversed' | 'upheld'; statement: string; resolvedAt: string } | null;
+    appeal?: {
+      outcome: "reversed" | "upheld";
+      statement: string;
+      resolvedAt: string;
+    } | null;
   };
   canResolve?: boolean;
 };
@@ -32,34 +40,44 @@ export type AppealReadSource = {
   threadAppeals: (id: string, cursor?: string) => Promise<AppealPage>;
 };
 export type AppealTargetReads = {
-  post: (id: string) => Promise<ModerationTarget['value']>;
-  thread: (id: string) => Promise<ModerationTarget['value']>;
+  post: (id: string) => Promise<ModerationTarget["value"]>;
+  thread: (id: string) => Promise<ModerationTarget["value"]>;
 };
 
 function parseAppealPage(value: unknown): AppealPage {
-  if (!value || typeof value !== 'object') throw notFound();
+  if (!value || typeof value !== "object") throw notFound();
   const page = value as Record<string, unknown>;
-  if (!Array.isArray(page.appeals) || (page.next !== null && typeof page.next !== 'string')) throw notFound();
+  if (
+    !Array.isArray(page.appeals) ||
+    (page.next !== null && typeof page.next !== "string")
+  )
+    throw notFound();
   const appeals = page.appeals.map((item): Appeal => {
-    if (!item || typeof item !== 'object') throw notFound();
+    if (!item || typeof item !== "object") throw notFound();
     const appeal = item as Record<string, unknown>;
     const decision =
-      appeal.decision && typeof appeal.decision === 'object' ? (appeal.decision as Record<string, unknown>) : null;
+      appeal.decision && typeof appeal.decision === "object"
+        ? (appeal.decision as Record<string, unknown>)
+        : null;
     if (
-      typeof appeal.id !== 'string' ||
-      typeof appeal.decisionId !== 'string' ||
-      typeof appeal.appellantId !== 'string' ||
-      typeof appeal.statement !== 'string' ||
-      typeof appeal.createdAt !== 'string' ||
-      typeof appeal.canResolve !== 'boolean' ||
+      typeof appeal.id !== "string" ||
+      typeof appeal.decisionId !== "string" ||
+      typeof appeal.appellantId !== "string" ||
+      typeof appeal.statement !== "string" ||
+      typeof appeal.createdAt !== "string" ||
+      typeof appeal.canResolve !== "boolean" ||
       !decision ||
-      typeof decision.statement !== 'string' ||
+      typeof decision.statement !== "string" ||
       !decision.target ||
-      typeof decision.target !== 'object'
+      typeof decision.target !== "object"
     )
       throw notFound();
     const target = decision.target as Record<string, unknown>;
-    if ((target.kind !== 'post' && target.kind !== 'thread') || typeof target.id !== 'string') throw notFound();
+    if (
+      (target.kind !== "post" && target.kind !== "thread") ||
+      typeof target.id !== "string"
+    )
+      throw notFound();
     return {
       id: appeal.id,
       decisionId: appeal.decisionId,
@@ -86,8 +104,11 @@ export async function readModerationAppeals(
     : source.boardAppeals(input.boardId, input.cursor);
 }
 
-export async function resolveAppealTargets(appeals: Appeal[], reads: AppealTargetReads): Promise<ModerationTarget[]> {
-  const unique = new Map<string, NonNullable<Appeal['decision']['target']>>();
+export async function resolveAppealTargets(
+  appeals: Appeal[],
+  reads: AppealTargetReads,
+): Promise<ModerationTarget[]> {
+  const unique = new Map<string, NonNullable<Appeal["decision"]["target"]>>();
   for (const appeal of appeals) {
     const target = appealTarget(appeal);
     if (target) unique.set(`${target.kind}:${target.id}`, target);
@@ -101,7 +122,7 @@ export async function resolveAppealTargets(appeals: Appeal[], reads: AppealTarge
   );
 }
 
-export function appealTarget(appeal: Appeal): Appeal['decision']['target'] {
+export function appealTarget(appeal: Appeal): Appeal["decision"]["target"] {
   return (
     appeal.decision.target ??
     (appeal.decision.targetKind && appeal.decision.targetId
@@ -119,65 +140,100 @@ type Client = {
     appeals: { get: (options: unknown) => Promise<ReadResult> };
     get: (options?: unknown) => Promise<ReadResult>;
   };
-  posts: (params: { id: string }) => { get: (options?: unknown) => Promise<ReadResult> };
+  posts: (params: { id: string }) => {
+    get: (options?: unknown) => Promise<ReadResult>;
+  };
 };
-const auth = (authorization: string) => ({ headers: { authorization }, fetch: { cache: 'no-store' as const } });
+const auth = (authorization: string) => ({
+  headers: { authorization },
+  fetch: { cache: "no-store" as const },
+});
 
-export const loadModerationAppeals = createServerFn({ method: 'GET' })
+export const loadModerationAppeals = createServerFn({ method: "GET" })
   .validator((input: unknown) => {
-    if (!input || typeof input !== 'object') throw notFound();
+    if (!input || typeof input !== "object") throw notFound();
     const value = input as Record<string, unknown>;
-    if (typeof value.boardId !== 'string' || value.boardId.length > 128) throw notFound();
-    if (value.threadId !== undefined && (typeof value.threadId !== 'string' || value.threadId.length > 128))
+    if (typeof value.boardId !== "string" || value.boardId.length > 128)
       throw notFound();
-    if (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 4096))
+    if (
+      value.threadId !== undefined &&
+      (typeof value.threadId !== "string" || value.threadId.length > 128)
+    )
+      throw notFound();
+    if (
+      value.cursor !== undefined &&
+      (typeof value.cursor !== "string" || value.cursor.length > 4096)
+    )
       throw notFound();
     return {
       boardId: value.boardId,
-      ...(typeof value.threadId === 'string' ? { threadId: value.threadId } : {}),
-      ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
+      ...(typeof value.threadId === "string"
+        ? { threadId: value.threadId }
+        : {}),
+      ...(typeof value.cursor === "string" && value.cursor
+        ? { cursor: value.cursor }
+        : {}),
     };
   })
-  .handler(async ({ data }): Promise<AppealPage & { targets: ModerationTarget[] }> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
-    const authorization = viewerCredential(request);
-    if (!authorization) throw notFound();
-    const nativeClient = kernelClient();
-    const client = nativeClient as unknown as Client;
-    const headers = auth(authorization);
-    const page = await readModerationAppeals(
-      {
-        boardAppeals: async (id, cursor) => {
-          const result = await client.boards({ id }).appeals.get({
-            ...headers,
-            query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-          });
-          if (result.error || !result.data) throw notFound();
-          return parseAppealPage(result.data);
+  .handler(
+    async ({ data }): Promise<AppealPage & { targets: ModerationTarget[] }> => {
+      setResponseHeader("cache-control", "private, no-store");
+      const request = getRequest();
+      await prepareSession(request, env as Partial<SessionEnv>);
+      const authorization = viewerCredential(request);
+      if (!authorization) throw notFound();
+      const nativeClient = kernelClient();
+      const client = nativeClient as unknown as Client;
+      const headers = auth(authorization);
+      const page = await readModerationAppeals(
+        {
+          boardAppeals: async (id, cursor) => {
+            const result = await client.boards({ id }).appeals.get({
+              ...headers,
+              query: {
+                limit: MODERATION_APPEALS_PAGE_SIZE,
+                ...(cursor ? { cursor } : {}),
+              },
+            });
+            if (result.error || !result.data) throw notFound();
+            return parseAppealPage(result.data);
+          },
+          threadAppeals: async (id, cursor) => {
+            const result = await client.threads({ id }).appeals.get({
+              ...headers,
+              query: {
+                limit: MODERATION_APPEALS_PAGE_SIZE,
+                ...(cursor ? { cursor } : {}),
+              },
+            });
+            if (result.error || !result.data) throw notFound();
+            return parseAppealPage(result.data);
+          },
         },
-        threadAppeals: async (id, cursor) => {
-          const result = await client.threads({ id }).appeals.get({
-            ...headers,
-            query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-          });
-          if (result.error || !result.data) throw notFound();
-          return parseAppealPage(result.data);
+        data,
+      );
+      const targets = await resolveAppealTargets(page.appeals, {
+        post: async (id) => {
+          const result = await client.posts({ id }).get(headers);
+          return result.error
+            ? null
+            : ((result.data as ModerationTarget["value"] | undefined) ?? null);
         },
-      },
-      data,
-    );
-    const targets = await resolveAppealTargets(page.appeals, {
-      post: async (id) => {
-        const result = await client.posts({ id }).get(headers);
-        return result.error ? null : ((result.data as ModerationTarget['value'] | undefined) ?? null);
-      },
-      thread: async (id) => {
-        const result = await client.threads({ id }).get(headers);
-        return result.error ? null : ((result.data as ModerationTarget['value'] | undefined) ?? null);
-      },
-    });
-    const enriched = await enrichModerationTargets(nativeClient, targets, [], [], authorization, sessionSubject(request) ?? '');
-    return { ...page, targets: enriched.targets };
-  });
+        thread: async (id) => {
+          const result = await client.threads({ id }).get(headers);
+          return result.error
+            ? null
+            : ((result.data as ModerationTarget["value"] | undefined) ?? null);
+        },
+      });
+      const enriched = await enrichModerationTargets(
+        nativeClient,
+        targets,
+        [],
+        [],
+        authorization,
+        sessionSubject(request) ?? "",
+      );
+      return { ...page, targets: enriched.targets };
+    },
+  );

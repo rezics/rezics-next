@@ -1,24 +1,31 @@
-import type { KernelClient } from '@rezics/client';
-import type { DocumentSnapshot } from '@rezics/document';
-import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { notFound } from '@tanstack/react-router';
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../kernel/client';
-import type { SessionEnv } from '../session/client';
-import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import type { KernelClient } from "@rezics/client";
+import type { DocumentSnapshot } from "@rezics/document";
+import { createServerFn } from "@tanstack/react-start";
+import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { notFound } from "@tanstack/react-router";
+import { env } from "cloudflare:workers";
+import { kernelClient } from "../kernel/client";
+import type { SessionEnv } from "../session/client";
+import {
+  prepareSession,
+  sessionSubject,
+  viewerCredential,
+} from "../session/request";
 
-import { enrichModerationTargets, type ModerationEvidence } from './target-context';
+import {
+  enrichModerationTargets,
+  type ModerationEvidence,
+} from "./target-context";
 
 export const MODERATION_REPORTS_PAGE_SIZE = 20;
 export type Report = {
   id: string;
-  target: { kind: 'board' | 'thread' | 'post'; id: string };
+  target: { kind: "board" | "thread" | "post"; id: string };
   revisionId: string | null;
   reason: string;
   evidence: string | null;
   createdAt: string;
-  outcome: 'actioned' | 'dismissed' | null;
+  outcome: "actioned" | "dismissed" | null;
   resolvedAt: string | null;
 };
 export type ReportPage = { reports: Report[]; next: string | null };
@@ -41,12 +48,21 @@ export type ReportTargetValue =
   | ModerationEvidence
   | readonly ReportTargetValue[]
   | { readonly [key: string]: ReportTargetValue | undefined };
-export type ResolvedReportTarget = { key: string; kind: Report['target']['kind']; value: ReportTargetValue | null };
+export type ResolvedReportTarget = {
+  key: string;
+  kind: Report["target"]["kind"];
+  value: ReportTargetValue | null;
+};
 
 /** Keeps report records private and resolves repeated target identities with one existing read each. */
 export async function readModerationReports(
   source: ReportReadSource,
-  input: { boardId: string; threadId?: string; postId?: string; cursor?: string },
+  input: {
+    boardId: string;
+    threadId?: string;
+    postId?: string;
+    cursor?: string;
+  },
 ): Promise<ReportPage> {
   const page = input.postId
     ? await source.postReports(input.postId, input.cursor)
@@ -55,16 +71,27 @@ export async function readModerationReports(
       : await source.boardReports(input.boardId, input.cursor);
   return {
     next: page.next,
-    reports: page.reports.map(({ id, target, revisionId, reason, evidence, createdAt, outcome, resolvedAt }) => ({
-      id,
-      target,
-      revisionId,
-      reason,
-      evidence,
-      createdAt,
-      outcome,
-      resolvedAt,
-    })),
+    reports: page.reports.map(
+      ({
+        id,
+        target,
+        revisionId,
+        reason,
+        evidence,
+        createdAt,
+        outcome,
+        resolvedAt,
+      }) => ({
+        id,
+        target,
+        revisionId,
+        reason,
+        evidence,
+        createdAt,
+        outcome,
+        resolvedAt,
+      }),
+    ),
   };
 }
 
@@ -72,8 +99,9 @@ export async function resolveReportTargets(
   reports: Report[],
   reads: ReportTargetReads,
 ): Promise<ResolvedReportTarget[]> {
-  const unique = new Map<string, Report['target']>();
-  for (const report of reports) unique.set(`${report.target.kind}:${report.target.id}`, report.target);
+  const unique = new Map<string, Report["target"]>();
+  for (const report of reports)
+    unique.set(`${report.target.kind}:${report.target.id}`, report.target);
   return Promise.all(
     [...unique].map(async ([key, target]) => ({
       key,
@@ -83,17 +111,24 @@ export async function resolveReportTargets(
   );
 }
 
-export type ReportedRevision = { reportId: string; value: ReportTargetValue | null };
+export type ReportedRevision = {
+  reportId: string;
+  value: ReportTargetValue | null;
+};
 
 /** Exact revision reads are deduplicated, never inferred from a revision's route or ID. */
 export async function resolveReportedRevisions(
   reports: Report[],
-  read: (postId: string, revisionId: string) => Promise<ReportTargetValue | null>,
+  read: (
+    postId: string,
+    revisionId: string,
+  ) => Promise<ReportTargetValue | null>,
 ): Promise<ReportedRevision[]> {
   const reads = new Map<string, Promise<ReportTargetValue | null>>();
   return Promise.all(
     reports.map(async (report) => {
-      if (!report.revisionId || report.target.kind !== 'post') return { reportId: report.id, value: null };
+      if (!report.revisionId || report.target.kind !== "post")
+        return { reportId: report.id, value: null };
       const key = `${report.target.id}:${report.revisionId}`;
       let result = reads.get(key);
       if (!result) {
@@ -107,52 +142,93 @@ export async function resolveReportedRevisions(
 
 type Client = {
   boards: (params: { id: string }) => {
-    reports: { get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
+    reports: {
+      get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }>;
+    };
     get: (options?: unknown) => Promise<{ data?: unknown; error?: unknown }>;
   };
   threads: (params: { id: string }) => {
-    reports: { get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
+    reports: {
+      get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }>;
+    };
     get: (options?: unknown) => Promise<{ data?: unknown; error?: unknown }>;
   };
   posts: (params: { id: string }) => {
-    reports: { get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
+    reports: {
+      get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }>;
+    };
     get: (options?: unknown) => Promise<{ data?: unknown; error?: unknown }>;
   };
 };
-const auth = (authorization: string) => ({ headers: { authorization }, fetch: { cache: 'no-store' as const } });
+const auth = (authorization: string) => ({
+  headers: { authorization },
+  fetch: { cache: "no-store" as const },
+});
 
-export const loadModerationReports = createServerFn({ method: 'GET' })
+export const loadModerationReports = createServerFn({ method: "GET" })
   .validator((input: unknown) => {
-    if (!input || typeof input !== 'object') throw notFound();
+    if (!input || typeof input !== "object") throw notFound();
     const value = input as Record<string, unknown>;
-    if (typeof value.boardId !== 'string' || value.boardId.length > 128) throw notFound();
-    if (value.threadId !== undefined && (typeof value.threadId !== 'string' || value.threadId.length > 128))
+    if (typeof value.boardId !== "string" || value.boardId.length > 128)
       throw notFound();
-    if (value.postId !== undefined && (typeof value.postId !== 'string' || value.postId.length > 128)) throw notFound();
-    if (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 4096))
+    if (
+      value.threadId !== undefined &&
+      (typeof value.threadId !== "string" || value.threadId.length > 128)
+    )
+      throw notFound();
+    if (
+      value.postId !== undefined &&
+      (typeof value.postId !== "string" || value.postId.length > 128)
+    )
+      throw notFound();
+    if (
+      value.cursor !== undefined &&
+      (typeof value.cursor !== "string" || value.cursor.length > 4096)
+    )
       throw notFound();
     return {
       boardId: value.boardId,
-      ...(typeof value.threadId === 'string' ? { threadId: value.threadId } : {}),
-      ...(typeof value.postId === 'string' ? { postId: value.postId } : {}),
-      ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
+      ...(typeof value.threadId === "string"
+        ? { threadId: value.threadId }
+        : {}),
+      ...(typeof value.postId === "string" ? { postId: value.postId } : {}),
+      ...(typeof value.cursor === "string" && value.cursor
+        ? { cursor: value.cursor }
+        : {}),
     };
   })
   .handler(
-    async ({ data }): Promise<ReportPage & { targets: ResolvedReportTarget[]; revisions: ReportedRevision[] }> => {
-      setResponseHeader('cache-control', 'private, no-store');
+    async ({
+      data,
+    }): Promise<
+      ReportPage & {
+        targets: ResolvedReportTarget[];
+        revisions: ReportedRevision[];
+      }
+    > => {
+      setResponseHeader("cache-control", "private, no-store");
       const request = getRequest();
       await prepareSession(request, env as Partial<SessionEnv>);
       const authorization = viewerCredential(request);
       if (!authorization) throw notFound();
-      return readModerationReportPage(kernelClient(), data, authorization, sessionSubject(request) ?? '');
+      return readModerationReportPage(
+        kernelClient(),
+        data,
+        authorization,
+        sessionSubject(request) ?? "",
+      );
     },
   );
 
 /** Default native composition, also used by the focused transport-to-render regression. */
 export async function readModerationReportPage(
   nativeClient: KernelClient,
-  data: { boardId: string; threadId?: string; postId?: string; cursor?: string },
+  data: {
+    boardId: string;
+    threadId?: string;
+    postId?: string;
+    cursor?: string;
+  },
   authorization: string,
   viewerId: string,
 ) {
@@ -163,7 +239,10 @@ export async function readModerationReportPage(
       boardReports: async (id, cursor) => {
         const result = await client.boards({ id }).reports.get({
           ...headers,
-          query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+          query: {
+            limit: MODERATION_REPORTS_PAGE_SIZE,
+            ...(cursor ? { cursor } : {}),
+          },
         });
         if (result.error || !result.data) throw notFound();
         return result.data as ReportPage;
@@ -171,7 +250,10 @@ export async function readModerationReportPage(
       threadReports: async (id, cursor) => {
         const result = await client.threads({ id }).reports.get({
           ...headers,
-          query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+          query: {
+            limit: MODERATION_REPORTS_PAGE_SIZE,
+            ...(cursor ? { cursor } : {}),
+          },
         });
         if (result.error || !result.data) throw notFound();
         return result.data as ReportPage;
@@ -179,7 +261,10 @@ export async function readModerationReportPage(
       postReports: async (id, cursor) => {
         const result = await client.posts({ id }).reports.get({
           ...headers,
-          query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+          query: {
+            limit: MODERATION_REPORTS_PAGE_SIZE,
+            ...(cursor ? { cursor } : {}),
+          },
         });
         if (result.error || !result.data) throw notFound();
         return result.data as ReportPage;
@@ -190,21 +275,40 @@ export async function readModerationReportPage(
   const targets = await resolveReportTargets(page.reports, {
     post: async (id) => {
       const result = await client.posts({ id }).get(headers);
-      return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
+      return result.error
+        ? null
+        : ((result.data as ReportTargetValue | null | undefined) ?? null);
     },
     thread: async (id) => {
       const result = await client.threads({ id }).get(headers);
-      return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
+      return result.error
+        ? null
+        : ((result.data as ReportTargetValue | null | undefined) ?? null);
     },
     board: async (id) => {
       const result = await client.boards({ id }).get(headers);
-      return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
+      return result.error
+        ? null
+        : ((result.data as ReportTargetValue | null | undefined) ?? null);
     },
   });
-  const revisions = await resolveReportedRevisions(page.reports, async (postId, revisionId) => {
-    const result = await nativeClient.posts({ id: postId }).revisions({ revisionId }).get(headers);
-    return result.error ? null : (result.data ?? null);
-  });
-  const enriched = await enrichModerationTargets(nativeClient, targets, revisions, page.reports, authorization, viewerId);
+  const revisions = await resolveReportedRevisions(
+    page.reports,
+    async (postId, revisionId) => {
+      const result = await nativeClient
+        .posts({ id: postId })
+        .revisions({ revisionId })
+        .get(headers);
+      return result.error ? null : (result.data ?? null);
+    },
+  );
+  const enriched = await enrichModerationTargets(
+    nativeClient,
+    targets,
+    revisions,
+    page.reports,
+    authorization,
+    viewerId,
+  );
   return { ...page, ...enriched };
 }
