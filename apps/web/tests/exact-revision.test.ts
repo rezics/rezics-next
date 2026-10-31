@@ -307,7 +307,14 @@ test('Exact revision and each explicit native history page use the sole delivere
   const images = Array.from({ length: 35 }, (_, index) => id(100 + index));
   const first = illustrated(images);
   const unbound = { ...illustrated([images[0]!], []), revisionId: id(500) };
-  const withheld = { ...illustrated([id(600)]), availability: 'withheld', body: null, sha256: null, removed: true };
+  const withheld = {
+    ...illustrated([id(600)]),
+    revisionId: id(502),
+    availability: 'withheld',
+    body: null,
+    sha256: null,
+    removed: true,
+  };
   const second = { ...illustrated([images[32]!, images[0]!]), revisionId: id(501) };
   const cursor = 'native-signed/+=';
   let pageIndex = -1;

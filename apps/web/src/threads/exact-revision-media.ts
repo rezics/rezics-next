@@ -1,7 +1,17 @@
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
-import { DOCUMENT_MEDIA_LIMIT, type DocumentImagePresentation, type DocumentMediaRead } from './document-media';
+import {
+  DOCUMENT_MEDIA_LIMIT,
+  loadDocumentMedia,
+  type DocumentImagePresentation,
+  type DocumentMediaRead,
+} from './document-media';
 
-export { loadDocumentMedia as loadRevisionDocumentMedia } from './document-media';
+/** Keep the original result in a concrete Map supported by the server-function serializer. */
+export async function loadRevisionDocumentMedia(...args: Parameters<typeof loadDocumentMedia>) {
+  const media = await loadDocumentMedia(...args);
+  return media.kind === 'ready' ? { ...media, images: new Map(media.images) } : media;
+}
+export type RevisionDocumentMedia = Awaited<ReturnType<typeof loadRevisionDocumentMedia>>;
 
 type RevisionImageSource = Readonly<{
   availability: string;
