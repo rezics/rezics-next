@@ -10,7 +10,8 @@ import { readZonePageRequest } from '../../zones/zone-read';
 const configuredRoute = /^(?!subjects(?:\/|$))[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/;
 
 function routeOf(value: string | undefined): string {
-  if (!value || value.length > 255 || !configuredRoute.test(value)) throw notFound();
+  // TanStack can select this route for the home URL with an empty splat.
+  if (value === undefined || value.length > 255 || (value !== '' && !configuredRoute.test(value))) throw notFound();
   return value;
 }
 
@@ -59,7 +60,7 @@ function ConfiguredZoneRoute() {
                 <RoutePage
                   page={{ ...outcome.page, route, document } as unknown as RoutePageData}
                   locale={locale}
-                  heading={zoneRouteHeading(route, locale)}
+                  heading={route === '' ? zonePageTitle(zone, '', locale) : zoneRouteHeading(route, locale)}
                   messages={subjectPageMessages()}
                   {...(nonce !== undefined ? { nonce } : {})}
                   renderJsonLd={false}
