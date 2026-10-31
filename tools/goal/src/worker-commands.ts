@@ -152,7 +152,9 @@ export async function runWorkerCommand(
       let expectedAttempt: number | undefined;
       const removeAfter: string[] = [];
       let proofStart = false;
+      let releaseProof = false;
       for (let index = 1; index < argv.length;) {
+        if (argv[index] === '--release-proof' && !releaseProof) { releaseProof = true; index++; continue; }
         if (argv[index] === '--proof-start' && !proofStart) { proofStart = true; index++; continue; }
         const flag = argv[index], value = argv[index + 1];
         if (!value) throw new Error(`missing value for ${flag}`);
@@ -163,7 +165,11 @@ export async function runWorkerCommand(
         else throw new Error(`invalid retry option: ${flag}`);
         index += 2;
       }
-      if (proofStart || expectedAttempt === 0) {
+      if (releaseProof) {
+        if (expectedAttempt === undefined || proofStart || brief || removeAfter.length)
+          throw new Error('--release-proof requires only --expected-attempt <current-generation>');
+        print(JSON.stringify(tasks.releaseProof(arg, expectedAttempt, priorityActor)));
+      } else if (proofStart || expectedAttempt === 0) {
         if (expectedAttempt === undefined) throw new Error('--proof-start requires --expected-attempt');
         print(JSON.stringify(tasks.queueProofStart(arg, { expectedAttempt, ...(brief ? { brief } : {}), removeAfter }, priorityActor)));
       } else {

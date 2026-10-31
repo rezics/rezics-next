@@ -237,6 +237,8 @@ export type ProofReservation = {
   binding: ProofBinding;
   status: 'reserved' | 'bound' | 'unknown' | 'released';
   cause?: string;
+  /** Logical admission only; does not assert native termination or physical lease release. */
+  logicalRelease?: { reason: string; at: string };
   /** All producer observations, including physical reruns, are retained without normalization. */
   observation?: ProofObservation;
   native?: { outcome: 'started' | 'replayed'; resultPath: string; registry: string };
@@ -314,6 +316,17 @@ export function originalCommandMatches(command: string[], originals: string[][])
   if (!parts.every((part) => same(part!.prefix, prefix))) return false;
   return same(command, [...prefix, ...new Set(parts.flatMap((part) => part!.files))]);
 }
+/** Shared authentication for proof registration and logical-only release. */
+export function authenticateProofManager(
+  store: WorkerStore, manager: string, actor: AuthenticatedManager | null | undefined, operations?: string,
+): asserts actor is AuthenticatedManager {
+  if (!actor || ![manager, operations].includes(actor.id))
+    throw new Error('proof registration requires the authenticated owning or operations manager');
+  const session = store.db.query('SELECT state FROM manager_sessions WHERE id=?').get(actor.id) as { state: string } | null;
+  const state: unknown = session ? JSON.parse(session.state) : null;
+  if (!isObject(state) || state.status !== 'running' || state.threadId !== actor.sessionId)
+    throw new Error('proof registration requires a live authenticated manager session');
+}
 export function authorizeProof(
   store: WorkerStore,
   root: string,
@@ -324,14 +337,7 @@ export function authorizeProof(
 ): ProofAuthorization {
   if (brief.kind !== 'verification' || !brief.proof || brief.criticalPath)
     throw new Error('invalid verification registration');
-  if (!actor || ![brief.manager, operations].includes(actor.id))
-    throw new Error('proof registration requires the authenticated owning or operations manager');
-  const session = store.db.query('SELECT state FROM manager_sessions WHERE id=?').get(actor.id) as {
-    state: string;
-  } | null;
-  const state: unknown = session ? JSON.parse(session.state) : null;
-  if (!isObject(state) || state.status !== 'running' || state.threadId !== actor.sessionId)
-    throw new Error('proof registration requires a live authenticated manager session');
+  authenticateProofManager(store, brief.manager, actor, operations);
   const proof = parseProofMetadata(brief.proof);
   if (!originalCommandHasInputs(brief.acceptance.command))
     throw new Error('proof cannot register a broad root or gate campaign');

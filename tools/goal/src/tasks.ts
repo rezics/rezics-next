@@ -4,6 +4,7 @@ import {
   proofExecutionUnavailable,
   type ProofAuthorization,
   authorizeProof,
+  authenticateProofManager,
   proofFingerprint,
   preflightProof,
   newProofBinding,
@@ -512,6 +513,21 @@ export class WorkerTasks {
     const worker = await this.retryTask(taskId, options);
     if (!worker) throw new TaskHeldForDependenciesError();
     return worker;
+  }
+  /** Authenticated reconciliation; preserves every native identity and raw historical fact. */
+  releaseProof(taskId: string, expectedAttempt: number, actor?: AuthenticatedManager | null): {
+    taskId: string; attempt: number; status: 'released'; checks: string[];
+  } {
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    try {
+      const task = this.store.task(taskId);
+      if (!Number.isSafeInteger(expectedAttempt) || expectedAttempt < 1 || task.currentAttempt !== expectedAttempt)
+        throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, task.currentAttempt);
+      authenticateProofManager(this.store, task.brief.manager,
+        actor === undefined ? authenticatedManager(this.store.db) : actor, this.settings.integration.operationsManager);
+      const checks = this.store.releaseExitedProofReservations({ taskId, attempt: expectedAttempt });
+      return { taskId, attempt: expectedAttempt, status: 'released', checks };
+    } finally { lease.release(); }
   }
   /** Authenticate a SAME-ID first proof start, retaining exited product attempts; never launches anything. */
   queueProofStart(

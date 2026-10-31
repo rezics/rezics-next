@@ -558,6 +558,32 @@ export class WorkerStore implements AttemptFence {
       })
       .immediate();
   }
+  /** Release logical permits only. Never signal checks, rewrite observations or release physical leases. */
+  releaseExitedProofReservations(ref: AttemptRef): string[] {
+    return this.db.transaction(() => {
+      const task = this.task(ref.taskId);
+      if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+      const current = ref.attempt ? this.attempt(ref) : undefined;
+      if (!current || !['stopped', 'exited', 'cancelled', 'superseded'].includes(current.state) ||
+          ['running', 'landing'].includes(task.state))
+        throw new Error('logical proof release requires a stopped or exited current attempt');
+      const released: string[] = [];
+      for (const run of this.activeProofReservations().filter((run) => run.binding.taskId === task.id)) {
+        const owner = this.attempt(run.binding);
+        if (!['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state)) continue;
+        run.status = 'released';
+        run.logicalRelease = {
+          reason: 'Ordinary proof policy: stopped or exited logical run; native custody remains independent and may be unknown',
+          at: new Date().toISOString(),
+        };
+        this.saveProof(run);
+        this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(task.id, run.binding.attempt, 'proof-logical-released', run.logicalRelease.at, JSON.stringify(run));
+        released.push(run.binding.checkId);
+      }
+      return released;
+    }).immediate();
+  }
   private saveProof(run: ProofReservation): void {
     this.db
       .query('UPDATE worker_proof_reservations SET status=?,body=? WHERE token=?')

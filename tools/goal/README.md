@@ -982,6 +982,21 @@ command into a pass.
 
 ### Original integrated journey proofs
 
+Current receiving operations (authenticated owning manager or configured operations manager):
+
+- `WorkerTasks.queueProofStart(taskId, { expectedAttempt, brief?, removeAfter? }, actor)` or
+  `bun tools/goal/src/cli.ts retry <task> --proof-start --expected-attempt <generation> [--brief <file>] [--remove-after <lane>]`
+  saves the exact registered original and one durable start intent. It returns `created`, `waiting` or `pending`.
+- `WorkerTasks.releaseProof(taskId, expectedAttempt, actor)` or
+  `bun tools/goal/src/cli.ts retry <task> --release-proof --expected-attempt <generation>`
+  reconciles a stopped or exited run's logical reservations. It returns `status: released` and the retained check UUIDs;
+  it never starts, stops or signals checks, replaces bindings, fabricates results or releases physical resources.
+
+Ordinary proof policy supersedes mandatory native binding/custody admission: authenticated registered verification
+runs its exact original acceptance once through the existing worker-check protocol. Native binding and custody are
+optional evidence. Product and fix tasks retain minimal verification. Native and physical lease accounting remains
+independent of logical admission. The implementation and local typing still require controller combined-release validation.
+
 `kind: verification` is an ordinary Codex worker on the implementation route. It is a read-only proof record,
 separate from a source task: it needs no declared source paths, source estimate, edit, commit, receipt or landing.
 The authenticated owning manager, or `integration.operationsManager` when configured locally, registers it through
