@@ -10,21 +10,38 @@ let request = new Request('https://rezics.example/en');
 let sessionReads = 0;
 const headers: Record<string, string> = {};
 const env = {
-  KERNEL_ORIGIN: 'https://kernel.example', PUBLIC_ORIGIN: 'https://rezics.example',
-  AUTH_ISSUER: 'https://auth.example', API_RESOURCE: 'https://kernel.example',
-  WEBSITE_SCOPES: 'openid', WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: '{}',
-  SESSIONS: { idFromName: (id: string) => id, get: () => ({ credentialIfFresh: async () => {
-    sessionReads++;
-    return { status: 'active', accessToken: 'private-token', subject: 'viewer-a', csrfToken: 'csrf-a' };
-  } }) },
+  KERNEL_ORIGIN: 'https://kernel.example',
+  PUBLIC_ORIGIN: 'https://rezics.example',
+  AUTH_ISSUER: 'https://auth.example',
+  API_RESOURCE: 'https://kernel.example',
+  WEBSITE_SCOPES: 'openid',
+  WEBSITE_CLIENT_ID: 'web',
+  WEBSITE_CLIENT_KEY: '{}',
+  SESSIONS: {
+    idFromName: (id: string) => id,
+    get: () => ({
+      credentialIfFresh: async () => {
+        sessionReads++;
+        return { status: 'active', accessToken: 'private-token', subject: 'viewer-a', csrfToken: 'csrf-a' };
+      },
+    }),
+  },
 };
 mock.module('cloudflare:workers', () => ({ env }));
 mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
-mock.module('@tanstack/react-start/server', () => ({ getRequest: () => request, setResponseHeader: (name: string, value: string) => { headers[name] = value; } }));
+mock.module('@tanstack/react-start/server', () => ({
+  getRequest: () => request,
+  setResponseHeader: (name: string, value: string) => {
+    headers[name] = value;
+  },
+}));
 const { homePageQuery, readPrivateHomePage, readPublicHomePage } = await import('../src/features/pages/home-queries');
 const { Home } = await import('../src/routes/index');
 const liveFetch = globalThis.fetch;
-afterAll(() => { globalThis.fetch = liveFetch; mock.restore(); });
+afterAll(() => {
+  globalThis.fetch = liveFetch;
+  mock.restore();
+});
 
 test('The default home route renders a bounded mixed discovery Following and Continue stream with honest source states and private session isolation', async () => {
   setLocale('en', { reload: false });
@@ -48,7 +65,11 @@ test('The default home route renders a bounded mixed discovery Following and Con
 
   const client = new QueryClient();
   const loaded = await client.fetchQuery(homePageQuery('en'));
-  const publicHtml = renderToStaticMarkup(<QueryClientProvider client={client}><Home /></QueryClientProvider>);
+  const publicHtml = renderToStaticMarkup(
+    <QueryClientProvider client={client}>
+      <Home />
+    </QueryClientProvider>,
+  );
   expect(publicHtml).toContain('The Little Prince');
   expect(publicHtml).not.toContain('Letters from B-612');
   expect(publicHtml).not.toContain('data-feed-source="continue"');
@@ -56,9 +77,13 @@ test('The default home route renders a bounded mixed discovery Following and Con
   expect(calls).toHaveLength(1);
   expect(calls[0]!.headers.has('authorization')).toBe(false);
 
-  request = new Request('https://rezics.example/en', { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } });
+  request = new Request('https://rezics.example/en', {
+    headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+  });
   const viewer = homeFeedViewer({ state: 'signed-in', subject: 'viewer-a', csrfToken: 'csrf-a' })!;
-  const window = createHomeFeedWindow(loaded.feed, (input) => readPrivateHomePage({ data: { locale: 'en', viewer: viewer.subject, ...input } }));
+  const window = createHomeFeedWindow(loaded.feed, (input) =>
+    readPrivateHomePage({ data: { locale: 'en', viewer: viewer.subject, ...input } }),
+  );
   await window.load({ stream: 'home' });
   expect(headers['Cache-Control']).toBe('private, no-store');
   const mixed = window.snapshot().result;
@@ -95,11 +120,17 @@ test('The default home route renders a bounded mixed discovery Following and Con
   expect(new URL(calls.at(-1)!.url).searchParams.has('cursor')).toBe(false);
 
   // The route's viewer key changes synchronously; clearing also invalidates an older in-flight response.
-  expect(homeFeedViewer({ state: 'signed-in', subject: 'viewer-b', csrfToken: 'csrf-b' })!.scope).not.toBe(viewer.scope);
-  expect(homeFeedViewer({ state: 'signed-in', subject: 'viewer-a', csrfToken: 'rotated' })!.scope).not.toBe(viewer.scope);
+  expect(homeFeedViewer({ state: 'signed-in', subject: 'viewer-b', csrfToken: 'csrf-b' })!.scope).not.toBe(
+    viewer.scope,
+  );
+  expect(homeFeedViewer({ state: 'signed-in', subject: 'viewer-a', csrfToken: 'rotated' })!.scope).not.toBe(
+    viewer.scope,
+  );
   expect(homeFeedViewer({ state: 'signed-out', subject: 'viewer-a', csrfToken: 'csrf-a' })).toBeNull();
   let resume!: () => void;
-  pause = new Promise<void>((resolve) => { resume = resolve; });
+  pause = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
   const pending = window.load({ stream: 'home' });
   window.clear();
   resume();
@@ -108,7 +139,9 @@ test('The default home route renders a bounded mixed discovery Following and Con
   expect(window.snapshot().input).toEqual({ stream: 'home' });
   expect(window.snapshot().result).toEqual(loaded.feed);
   const countBeforeMismatch = calls.length;
-  expect(await readPrivateHomePage({ data: { locale: 'en', viewer: 'viewer-b', stream: 'home' } })).toMatchObject({ state: 'auth' });
+  expect(await readPrivateHomePage({ data: { locale: 'en', viewer: 'viewer-b', stream: 'home' } })).toMatchObject({
+    state: 'auth',
+  });
   expect(calls).toHaveLength(countBeforeMismatch);
   const personalReads = sessionReads;
   request = new Request('https://rezics.example/en');

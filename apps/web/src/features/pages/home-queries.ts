@@ -14,8 +14,10 @@ function localeInput(locale: unknown): string {
 }
 function feedInput(input: { locale: string; stream: 'home' | 'following'; cursor?: string }) {
   localeInput(input.locale);
-  if (!['home', 'following'].includes(input.stream) ||
-    (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 8192)))
+  if (
+    !['home', 'following'].includes(input.stream) ||
+    (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 8192))
+  )
     throw new Error('Invalid feed request');
   return input;
 }
@@ -30,11 +32,12 @@ const readHomePage = createServerFn({ method: 'GET' })
   });
 
 /** Only this anonymous result enters the reusable page query cache or hydration payload. */
-export const homePageQuery = (locale: string) => queryOptions({
-  ...publicRead,
-  queryKey: ['home-page', locale],
-  queryFn: () => readHomePage({ data: locale }),
-});
+export const homePageQuery = (locale: string) =>
+  queryOptions({
+    ...publicRead,
+    queryKey: ['home-page', locale],
+    queryFn: () => readHomePage({ data: locale }),
+  });
 
 export const readPublicHomePage = createServerFn({ method: 'GET' })
   .validator((input: { locale: string; cursor?: string }) => feedInput({ ...input, stream: 'home' }))
@@ -44,7 +47,8 @@ export const readPublicHomePage = createServerFn({ method: 'GET' })
 export const readPrivateHomePage = createServerFn({ method: 'GET' })
   .validator((input: FeedInput & { locale: string; viewer: string }) => {
     feedInput(input);
-    if (typeof input.viewer !== 'string' || !input.viewer || input.viewer.length > 256) throw new Error('Invalid viewer');
+    if (typeof input.viewer !== 'string' || !input.viewer || input.viewer.length > 256)
+      throw new Error('Invalid viewer');
     return input;
   })
   .handler(async ({ data }): Promise<HomeFeedResult> => {
@@ -54,10 +58,17 @@ export const readPrivateHomePage = createServerFn({ method: 'GET' })
     try {
       await prepareSession(request, env as Partial<SessionEnv>, { refresh: false });
       const authorization = viewerCredential(request);
-      if (!authorization || sessionSubject(request) !== data.viewer) return { state: 'auth', code: 'authentication_required' };
-      return readHomeFeedPage(kernelClient(data.locale), {
-        stream: data.stream, ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
-      }, authorization, request.signal);
+      if (!authorization || sessionSubject(request) !== data.viewer)
+        return { state: 'auth', code: 'authentication_required' };
+      return readHomeFeedPage(
+        kernelClient(data.locale),
+        {
+          stream: data.stream,
+          ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
+        },
+        authorization,
+        request.signal,
+      );
     } catch {
       return { state: 'unavailable', code: 'dependency_unavailable' };
     }

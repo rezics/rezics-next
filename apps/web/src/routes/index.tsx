@@ -17,7 +17,10 @@ export const Route = createFileRoute('/')({
     const locale = getLocale();
     if (!loaderData) return { meta: [{ title: 'REZICS' }] };
     const origin = loaderData.origin;
-    return pageHead({ description: m.home_meta_description(), jsonLd: homeJsonLd({ origin, locale }) }, { origin, locale, path: '/' });
+    return pageHead(
+      { description: m.home_meta_description(), jsonLd: homeJsonLd({ origin, locale }) },
+      { origin, locale, path: '/' },
+    );
   },
   component: Home,
 });
@@ -27,8 +30,20 @@ export function Home() {
   const { data: loaded } = useSuspenseQuery(homePageQuery(locale));
   const viewer = homeFeedViewer(useSession());
   const subject = viewer?.subject;
-  const read = useCallback((input: FeedInput) => subject
-    ? readPrivateHomePage({ data: { locale, viewer: subject, ...input } })
-    : readPublicHomePage({ data: { locale, ...(input.cursor === undefined ? {} : { cursor: input.cursor }) } }), [locale, subject]);
-  return <HomeFeedConsumer key={`${locale}:${viewer?.scope ?? 'public'}`} initial={loaded.feed} locale={locale} signedIn={viewer !== null} read={read} />;
+  const read = useCallback(
+    (input: FeedInput) =>
+      subject
+        ? readPrivateHomePage({ data: { locale, viewer: subject, ...input } })
+        : readPublicHomePage({ data: { locale, ...(input.cursor === undefined ? {} : { cursor: input.cursor }) } }),
+    [locale, subject],
+  );
+  return (
+    <HomeFeedConsumer
+      key={`${locale}:${viewer?.scope ?? 'public'}`}
+      initial={loaded.feed}
+      locale={locale}
+      signedIn={viewer !== null}
+      read={read}
+    />
+  );
 }
