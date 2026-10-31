@@ -652,6 +652,13 @@ dependency. Negative probes transform those copied sources; package identity, pi
 policy remain part of the existing assertions.
 These fixture copies do not replace the train's detached dev checkout or its release-ref validation.
 
+The Bun artifact contract retains `bun@1.4.4-canary.20261027.1` and accepts the supplied exact
+`bun@1.4.4-canary.20261031.1` artifact on Linux x64. The latter's installed package version is
+`1.4.4-canary.20261031.1+34cbc70`; its runtime reports `1.4.4` and must match the recorded revision and executable
+hash. Unknown pins and unprovided platforms remain incompatible. Fixture artifact caches are keyed by integrity so
+different pins cannot reuse each other's archives. Metadata support does not certify executable compatibility or
+native lifecycle parity; those remain controller release obligations.
+
 The train precomputes merge candidates for `main`, `stabilize` when that branch exists, and `dev`, then publishes the
 ref changes in one Git compare-and-swap transaction. If `stabilize` is absent, it prepares `main` directly into `dev`.
 Moving refs are re-snapshotted and checked again, preserving unrelated work on `stabilize` and `dev`; branches are never

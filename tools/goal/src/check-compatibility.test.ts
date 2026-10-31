@@ -258,7 +258,11 @@ import { checkPinnedBunInstallation } from './check-compatibility.ts';
 
 /** Provision authentic immutable npm artifacts, never a shim reporting a desired positive version. */
 function pinnedArtifact(packageName: string, url: string, integrity: string): string {
-  const cache = join(repositoryRoot, '.temp/check-compatibility-artifacts');
+  const cache = join(
+    repositoryRoot,
+    '.temp/check-compatibility-artifacts',
+    createHash('sha256').update(integrity).digest('hex'),
+  );
   const directory = join(cache, packageName);
   const archive = join(cache, `${packageName}.tgz`);
   mkdirSync(directory, { recursive: true });
@@ -329,7 +333,7 @@ test('complete executable contract accepts actual dev scripts and genuine manife
   try {
     const { root, executable, pin, artifact } = completeScriptsRoot(directory);
     expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(devFile('package.json'));
-    expect(pin).toBe('bun@1.4.4-canary.20261027.1');
+    expect(pin).toBe(`bun@${artifact.packageVersion.split('+')[0]}`);
     const cli = spawnSync(
       process.execPath,
       [join(repositoryRoot, 'tools/goal/scripts/check-compatibility.ts'), '--scripts-root', root],
