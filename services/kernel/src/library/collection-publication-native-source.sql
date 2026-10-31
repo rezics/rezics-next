@@ -1,3 +1,4 @@
+WITH input AS (SELECT :route::integer AS route,:owner_epoch::integer AS owner_epoch)
 SELECT scope.identity,scope.frontier,scope.capture_id::text AS "sourceCaptureId",
        scope.committed_revision::text AS "sourceRevision",
        capture.capture_id::text AS "nativeCaptureId",capture.collection_id::text AS "nativeCollectionId",
@@ -23,9 +24,10 @@ SELECT scope.identity,scope.frontier,scope.capture_id::text AS "sourceCaptureId"
        output.source_generation::text AS "outputSourceGeneration",
        output.expected_members::text AS "outputExpectedMembers",output.output_mode AS "outputMode",
        output.state AS "outputState",selected.generation::text AS "selectedGeneration"
-FROM library.canonical_source_scope AS scope
+FROM input AS args
+JOIN library.canonical_source_scope AS scope ON scope.route=args.route
 JOIN library.native_source_capture AS capture
-  ON capture.route=scope.route AND capture.capture_id=(scope.frontier->>'captureId')::uuid
+  ON capture.route=args.route AND capture.capture_id=(scope.frontier->>'captureId')::uuid
 JOIN library.native_source_receipt AS capture_receipt
   ON capture_receipt.route=capture.route AND capture_receipt.capture_id=capture.capture_id
 JOIN core.partition AS partition
@@ -52,12 +54,12 @@ JOIN library.collection_source_output AS output
   AND output.generation=:output_generation
 LEFT JOIN library.collection_source_output_head AS selected
   ON selected.route=scope.route AND selected.collection_id=scope.collection_id
-WHERE scope.route=:route AND scope.collection_id=:collection_id AND scope.source_fence=:source_fence
-  AND capture.route=:route AND capture.complete AND capture.driver='done'
-  AND capture_receipt.owner_epoch=:owner_epoch AND capture_receipt.position>0
+WHERE scope.collection_id=:collection_id AND scope.source_fence=:source_fence
+  AND capture.complete AND capture.driver='done'
+  AND capture_receipt.owner_epoch=args.owner_epoch AND capture_receipt.position>0
   AND capture_receipt.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
   AND capture_receipt.xmin=capture.xmin
-  AND owner_basis.epoch=:owner_epoch AND owner_basis.position>0
+  AND owner_basis.epoch=args.owner_epoch AND owner_basis.position>0
   AND identity_scope.source=jsonb_build_object('kind','library','identity',scope.identity)
   AND identity_scope.state='ready' AND identity_scope.active=0 AND identity_scope.scan_complete
   AND identity_scope.frontier->>'driver'='done'
