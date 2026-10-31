@@ -41,7 +41,7 @@ The Web landing integration check selects this command for changes under `apps/w
 Start an isolated local catalogue from the worktree root with an unused port:
 
 ```sh
-bun run --cwd apps/web storybook --host 127.0.0.1 --port 16497 --exact-port --ci --no-open
+bun run --cwd apps/web storybook --host 127.0.0.1 --port 16497 --exact-port --ci
 ```
 
 Connect an MCP HTTP client to `http://127.0.0.1:16497/mcp`. Initialize the session, list tools and read their
