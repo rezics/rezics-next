@@ -701,6 +701,7 @@
   "offer_terms_revision": "Versión de la oferta {revision}",
   "offer_price": "Precio",
   "offer_receives": "Recibirás",
+  "offer_full_titles": "Leer los títulos completos",
   "offer_retry": "Intentar de nuevo",
   "offer_retry_note": "No se pudo iniciar el pago.",
   "offer_start_closed": "Esta parte de REZICS aún no está abierta.",

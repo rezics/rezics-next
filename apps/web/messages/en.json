@@ -731,6 +731,7 @@
   "offer_terms_revision": "Offer revision {revision}",
   "offer_price": "Price",
   "offer_receives": "You receive",
+  "offer_full_titles": "Read full titles",
   "offer_retry": "Try again",
   "offer_retry_note": "Checkout could not be started.",
   "offer_start_closed": "This part of REZICS is not open yet.",

@@ -82,7 +82,11 @@ export const routes: FakeRoute[] = [
               ...localized,
               revision: 3,
               contentEdition: fixedEditionTerms,
-              moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
+              moneyUnit: {
+                system: 'stripe-api',
+                exponent: offer.currency === 'jpy' ? 0 : 2,
+                factsVersion: 'stripe-money-v1',
+              },
               taxBehavior: 'exclusive',
             }
           : localized,

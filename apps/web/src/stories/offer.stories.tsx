@@ -12,6 +12,7 @@ import {
 } from './page';
 import { acquisitionProblems, setMappedCheckoutStory } from '../kernel/fake/checkout';
 import { localizeHref } from '../paraglide/runtime.js';
+import longOffer from '../kernel/recorded/offer-cjk.json';
 
 function currentMappedOffer() {
   setMappedCheckoutStory(true);
@@ -36,7 +37,18 @@ export const SignedOut: Story = {
 };
 export const LongCjkTitle: Story = {
   name: 'Long CJK Title',
-  play: offerCjkReady,
+  beforeEach: currentMappedOffer,
+  play: async (context) => {
+    await offerCjkReady(context);
+    const view = within(await within(context.canvasElement).findByRole('main'));
+    const summary = view.getByText(m.offer_full_titles());
+    summary.focus();
+    await userEvent.keyboard('{Enter}');
+    const titles = summary.closest('details')!;
+    await expect(await within(titles).findByText(longOffer.offer.title, { exact: false })).toBeVisible();
+    await expect(view.getByRole('button', { name: m.offer_buy() })).toBeEnabled();
+    await userEvent.keyboard('{Enter}');
+  },
   render: () => <PageStory visitor="Signed In" path={pagePaths['offer-cjk']} />,
 };
 export const Delisted: Story = {
@@ -123,6 +135,14 @@ export const MappedFixedEdition: Story = {
     await canvas.findByRole('heading', { name: m.benefit_heading() });
     await canvas.findByText('CC-BY-SA-4.0');
     await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
+    const buy = await canvas.findByRole('button', { name: m.offer_buy() });
+    await waitFor(async () => expect(buy).toBeEnabled());
+    const decision = within(buy.closest('section')!);
+    await expect(decision.getByText(m.offer_price())).toBeVisible();
+    await expect(decision.getByText(m.benefit_acquisition())).toBeVisible();
+    await expect(decision.getByText(m.benefit_fixed_version())).toBeVisible();
+    const terms = canvas.getByRole('heading', { name: m.benefit_heading() });
+    await expect(Boolean(buy.compareDocumentPosition(terms) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   },
 };
 

@@ -702,6 +702,7 @@
   "offer_terms_revision": "优惠条款版本 {revision}",
   "offer_price": "价格",
   "offer_receives": "您将获得",
+  "offer_full_titles": "阅读完整标题",
   "offer_retry": "再试一次",
   "offer_retry_note": "无法开始结账。",
   "offer_start_closed": "REZICS 的这部分尚未开放。",

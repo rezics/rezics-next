@@ -701,6 +701,7 @@
   "offer_terms_revision": "オファーの版 {revision}",
   "offer_price": "価格",
   "offer_receives": "受け取る内容",
+  "offer_full_titles": "タイトル全文を読む",
   "offer_retry": "もう一度試す",
   "offer_retry_note": "購入手続きを開始できませんでした。",
   "offer_start_closed": "REZICSのこの部分は、まだ公開されていません。",
