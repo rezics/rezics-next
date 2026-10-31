@@ -189,3 +189,125 @@ test('a replay refused before receipt lookup cannot discard an earlier unknown-o
     expect(editor.snapshot()).toMatchObject({ phase: 'idle', current: receipt, desired: 'public', attempt: null });
   }
 });
+
+test('an exhausted list refresh replaces old pages, and a failed refresh retries its first page honestly', async () => {
+  const reads: (string | null)[] = [];
+  const fresh = { ...initial, title: 'Current reading', visibility: 'unlisted' as const, revision: 10 };
+  const response = deferred<CollectionPrivacyRead<{ collections: OwnedCollection[]; next: string | null }>>();
+  const pager = new CollectionPrivacyPager(async (cursor) => {
+    reads.push(cursor);
+    if (reads.length === 1)
+      return { ok: true, value: { collections: [initial, { ...initial, id: 'old-page-row' }], next: null } };
+    if (reads.length === 2) throw new Error('Refresh unavailable');
+    return response.promise;
+  });
+  await pager.load();
+  await pager.load();
+  expect(reads).toEqual([null]);
+  await pager.restart();
+  expect(pager.snapshot()).toMatchObject({
+    collections: [initial, { ...initial, id: 'old-page-row' }],
+    loaded: true,
+    failure: 'unavailable',
+    next: null,
+    loading: false,
+  });
+  const guarded = new CollectionPrivacyEditor(initial, {
+    save: async () => ({ ok: false, reason: 'unavailable' }),
+    read: async () => ({ ok: true, value: initial }),
+  });
+  const unregister = pager.registerRow(guarded);
+  await guarded.edit('public');
+  await pager.load();
+  expect(reads).toEqual([null, null]); // Retrying a failed replacement also protects new row decisions.
+  expect(pager.retryReplacesRows()).toBe(true);
+  await guarded.reload();
+  unregister();
+  const retry = pager.load();
+  await pager.restart();
+  await pager.load();
+  expect(reads).toEqual([null, null, null]);
+  expect(pager.snapshot()).toMatchObject({ loading: true, restarting: true });
+  response.resolve({ ok: true, value: { collections: [fresh], next: null } });
+  await retry;
+  expect(pager.snapshot()).toMatchObject({ collections: [fresh], failure: null, loading: false, restarting: false });
+  const editor = new CollectionPrivacyEditor(initial, {
+    save: async () => ({ ok: false, reason: 'unavailable' }),
+    read: async () => ({ ok: true, value: fresh }),
+  });
+  editor.receive(fresh);
+  expect(editor.snapshot()).toMatchObject({ current: fresh, desired: 'unlisted', phase: 'idle' });
+});
+
+test('list restart cannot lose an unknown command or a later choice, and native denial still clears protected rows', async () => {
+  const reads: (string | null)[] = [];
+  const commands: VisibilityAttempt[] = [];
+  let deny = false;
+  const editor = new CollectionPrivacyEditor(initial, {
+    save: async (input) => {
+      commands.push(input);
+      return commands.length === 1 ? { ok: false, reason: 'unavailable' } : { ok: true, collection: receipt };
+    },
+    read: async () => ({ ok: true, value: receipt }),
+  });
+  const pager = new CollectionPrivacyPager(async (cursor) => {
+    reads.push(cursor);
+    return deny
+      ? { ok: false, reason: 'forbidden' }
+      : { ok: true, value: { collections: [initial], next: 'exact-next-page' } };
+  });
+  const unregister = pager.registerRow(editor);
+  await pager.load();
+  const saving = editor.edit('public');
+  await pager.restart();
+  expect(pager.snapshot().restartBlocked).toBe(true);
+  expect(reads).toEqual([null]);
+  await saving;
+  const attempt = editor.snapshot().attempt;
+  await editor.edit('unlisted');
+  // Even choosing the last observed value cannot establish that the unknown command had no effect.
+  await editor.edit('private');
+  await pager.restart();
+  expect(reads).toEqual([null]);
+  expect(pager.snapshot().restartBlocked).toBe(true);
+  editor.receive({ ...receipt, title: 'Replacement must not adopt this draft' });
+  expect(editor.snapshot()).toMatchObject({ current: initial, desired: 'private', phase: 'uncertain' });
+  expect(editor.snapshot().attempt).toBe(attempt);
+  await editor.edit('unlisted');
+  await editor.retry();
+  expect(commands[1]).toBe(attempt);
+  expect(editor.snapshot()).toMatchObject({ current: receipt, desired: 'unlisted', attempt: null, phase: 'review' });
+  await pager.restart();
+  expect(reads).toEqual([null]); // A resolved original command does not discard the later unsaved choice.
+  await editor.reload();
+  expect(pager.snapshot().restartBlocked).toBe(false);
+  await pager.restart();
+  expect(reads).toEqual([null, null]);
+  await editor.edit('private');
+  deny = true;
+  await pager.load();
+  expect(reads).toEqual([null, null, 'exact-next-page']);
+  expect(pager.snapshot()).toMatchObject({ failure: 'forbidden', collections: [], next: null, loaded: false });
+  unregister();
+  expect(pager.snapshot().restartBlocked).toBe(false);
+});
+
+test('a late first-page restart cannot populate a replacement actor or cause another read', async () => {
+  const response = deferred<CollectionPrivacyRead<{ collections: OwnedCollection[]; next: string | null }>>();
+  let reads = 0;
+  const previous = new CollectionPrivacyPager(async () => {
+    reads++;
+    return reads === 1 ? { ok: true, value: { collections: [initial], next: null } } : response.promise;
+  });
+  await previous.load();
+  const restart = previous.restart();
+  previous.dispose();
+  const before = previous.snapshot();
+  const current = new CollectionPrivacyPager(async () => ({ ok: true, value: { collections: [], next: null } }));
+  await current.load();
+  response.resolve({ ok: true, value: { collections: [{ ...receipt, title: 'Late private title' }], next: 'old' } });
+  await restart;
+  expect(previous.snapshot()).toBe(before);
+  expect(reads).toBe(2);
+  expect(current.snapshot()).toMatchObject({ collections: [], loaded: true, next: null });
+});

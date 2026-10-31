@@ -61,6 +61,24 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   ) {
     super({ current, desired: current.visibility, attempt: null, readRefusal: null, phase: 'idle' });
   }
+  needsListRestartProtection = () =>
+    this.state.attempt !== null ||
+    this.state.desired !== this.state.current.visibility ||
+    this.state.phase === 'saving' ||
+    this.state.phase === 'reloading';
+  /** A fresh list may update a clean mounted row, but cannot resolve its command or replace a draft. */
+  receive(current: OwnedCollection) {
+    if (
+      this.needsListRestartProtection() ||
+      this.state.readRefusal ||
+      current === this.state.current ||
+      current.id !== this.state.current.id ||
+      current.revision < this.state.current.revision ||
+      (current.revision === this.state.current.revision && current.visibility !== this.state.current.visibility)
+    )
+      return;
+    this.update({ current, desired: current.visibility, phase: 'idle' });
+  }
   async edit(desired: CollectionVisibility) {
     if (this.state.readRefusal) return;
     this.edits++;
@@ -205,26 +223,59 @@ type PageState = {
   loading: boolean;
   failure: CollectionPrivacyFailure | null;
   nativeFailure?: NativePreferenceFailure | undefined;
+  restarting?: boolean;
+  restartBlocked?: boolean;
 };
 export type CollectionPrivacyPageRead = (cursor: string | null) => Promise<CollectionPrivacyRead<OwnedCollectionsPage>>;
 
 export class CollectionPrivacyPager extends Observable<PageState> {
+  private rows = new Set<() => boolean>();
+  private failedRequest: { cursor: string | null; replace: boolean } | null = null;
   constructor(private read: CollectionPrivacyPageRead) {
     super({ collections: [], next: null, loaded: false, loading: false, failure: null });
   }
   override dispose = () => {
     this.generation++;
-    this.update({ loading: false });
+    this.update({ loading: false, ...(this.state.restarting ? { restarting: false } : {}) });
   };
+  /** Read-only registration: drafts and immutable commands remain inside their mounted row editors. */
+  registerRow = (row: Pick<CollectionPrivacyEditor, 'needsListRestartProtection' | 'subscribe'>) => {
+    this.rows.add(row.needsListRestartProtection);
+    const refresh = () => {
+      const restartBlocked = this.hasUnresolvedRows();
+      if (restartBlocked !== !!this.state.restartBlocked) this.update({ restartBlocked });
+    };
+    const unsubscribe = row.subscribe(refresh);
+    refresh();
+    return () => {
+      unsubscribe();
+      this.rows.delete(row.needsListRestartProtection);
+      refresh();
+    };
+  };
+  private hasUnresolvedRows = () => [...this.rows].some((needsDecision) => needsDecision());
+  retryReplacesRows = () => this.failedRequest?.replace === true;
   async load() {
-    if (this.state.loading || (this.state.loaded && this.state.next === null)) return;
+    if (this.state.loaded && this.state.next === null && !this.failedRequest) return;
+    await this.requestPage(this.failedRequest ?? { cursor: this.state.next, replace: false });
+  }
+  async restart() {
+    await this.requestPage({ cursor: null, replace: true });
+  }
+  private async requestPage(request: { cursor: string | null; replace: boolean }) {
+    if (this.state.loading || (request.replace && this.hasUnresolvedRows())) return;
     const generation = this.generation;
-    const cursor = this.state.next;
-    this.update({ loading: true, failure: null, nativeFailure: undefined });
+    this.update({
+      loading: true,
+      failure: null,
+      nativeFailure: undefined,
+      ...(request.replace ? { restarting: true } : {}),
+    });
     try {
-      const read = await this.read(cursor);
+      const read = await this.read(request.cursor);
       if (generation !== this.generation) return;
       if (!read.ok) {
+        this.failedRequest = isCollectionPrivacyReadRefusal(read.reason) ? null : request;
         this.update(
           isCollectionPrivacyReadRefusal(read.reason)
             ? // An explicit refresh starts at the first native page; denied pages cannot revive cached rows.
@@ -233,14 +284,18 @@ export class CollectionPrivacyPager extends Observable<PageState> {
         );
         return;
       }
-      const rows = new Map(this.state.collections.map((row) => [row.id, row]));
+      this.failedRequest = null;
+      const rows = new Map((request.replace ? [] : this.state.collections).map((row) => [row.id, row]));
       for (const row of read.value.collections) if (!rows.has(row.id)) rows.set(row.id, row);
       this.update({ collections: [...rows.values()], next: read.value.next, loaded: true });
     } catch (error) {
-      if (generation === this.generation)
+      if (generation === this.generation) {
+        this.failedRequest = request;
         this.update({ failure: 'unavailable', nativeFailure: collectionPrivacyFailureMetadata(error) });
+      }
     } finally {
-      if (generation === this.generation) this.update({ loading: false });
+      if (generation === this.generation)
+        this.update({ loading: false, ...(request.replace ? { restarting: false } : {}) });
     }
   }
 }

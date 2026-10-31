@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -30,6 +30,7 @@ const nativeIO: CollectionPrivacyIO = {
   read: (data) => readOwnedCollection({ data }),
 };
 const nativePageRead: CollectionPrivacyPageRead = (data) => readOwnedCollectionsPage({ data });
+const ListRestartContext = createContext<CollectionPrivacyPager | null>(null);
 
 function label(value: CollectionVisibility) {
   return value === 'private'
@@ -66,6 +67,8 @@ export function CollectionRow({
   const canSave = useOperation('collection.update');
   const canRead = useOperation('collection.get');
   const [editor] = useState(() => new CollectionPrivacyEditor(collection, io));
+  const pager = useContext(ListRestartContext);
+  const restarting = !!pager?.snapshot().restarting;
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const isCurrent = useSettingsNavigationCurrent(csrfToken);
   useSettingsNavigationDraft(
@@ -74,6 +77,8 @@ export function CollectionRow({
     () => isCurrent() && collectionPrivacyNeedsNavigationDecision(editor.snapshot()),
     editor,
   );
+  useLayoutEffect(() => pager?.registerRow(editor), [editor, pager]);
+  useLayoutEffect(() => editor.receive(collection), [collection, editor]);
   useEffect(() => () => editor.dispose(), [editor]);
   const waiting = usePreferenceRetry(state.nativeFailure);
   const id = useId();
@@ -93,8 +98,10 @@ export function CollectionRow({
               <Button
                 type="button"
                 variant="outline"
-                disabled={!canRead || busy || waiting}
-                onClick={() => void editor.reload()}
+                disabled={!canRead || busy || waiting || restarting}
+                onClick={() => {
+                  if (!pager?.snapshot().restarting) void editor.reload();
+                }}
               >
                 {m.settings_privacy_reload_row()}
               </Button>
@@ -127,8 +134,9 @@ export function CollectionRow({
             id={id}
             value={desired}
             aria-describedby={`${id}-current`}
-            disabled={!csrfToken || !canSave || (waiting && (phase === 'idle' || phase === 'saved'))}
+            disabled={restarting || !csrfToken || !canSave || (waiting && (phase === 'idle' || phase === 'saved'))}
             onChange={(event) => {
+              if (pager?.snapshot().restarting) return;
               const value = visibilityOptions.find((option) => option === event.target.value);
               if (value) void editor.edit(value);
             }}
@@ -181,8 +189,10 @@ export function CollectionRow({
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={!csrfToken || !canSave || busy || waiting}
-                      onClick={() => void editor.retry()}
+                      disabled={!csrfToken || !canSave || busy || waiting || restarting}
+                      onClick={() => {
+                        if (!pager?.snapshot().restarting) void editor.retry();
+                      }}
                     >
                       {m.settings_privacy_retry_original()}
                     </Button>
@@ -190,8 +200,10 @@ export function CollectionRow({
                   {phase === 'review' && desired !== current.visibility ? (
                     <Button
                       type="button"
-                      disabled={!csrfToken || !canSave || busy || waiting}
-                      onClick={() => void editor.submit()}
+                      disabled={!csrfToken || !canSave || busy || waiting || restarting}
+                      onClick={() => {
+                        if (!pager?.snapshot().restarting) void editor.submit();
+                      }}
                     >
                       {m.settings_privacy_save_choice()}
                     </Button>
@@ -199,8 +211,10 @@ export function CollectionRow({
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={!canRead || busy || waiting}
-                    onClick={() => void editor.reload()}
+                    disabled={!canRead || busy || waiting || restarting}
+                    onClick={() => {
+                      if (!pager?.snapshot().restarting) void editor.reload();
+                    }}
                   >
                     {m.settings_privacy_reload_row()}
                   </Button>
@@ -260,7 +274,7 @@ export function CollectionPrivacyView({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={state.loading || waiting}
+                  disabled={state.loading || waiting || (state.restartBlocked && pager.retryReplacesRows())}
                   onClick={() => void pager.load()}
                 >
                   {m.settings_retry()}
@@ -271,11 +285,31 @@ export function CollectionPrivacyView({
           {state.loaded && !state.failure && state.collections.length === 0 && state.next === null ? (
             <p className="text-sm text-muted-foreground">{m.settings_privacy_empty()}</p>
           ) : null}
-          <ul className="space-y-3">
-            {state.collections.map((collection) => (
-              <CollectionRow key={collection.id} collection={collection} io={io} />
-            ))}
-          </ul>
+          <ListRestartContext.Provider value={pager}>
+            <ul className="space-y-3">
+              {state.collections.map((collection) => (
+                <CollectionRow key={collection.id} collection={collection} io={io} />
+              ))}
+            </ul>
+          </ListRestartContext.Provider>
+          {state.loaded || state.failure ? (
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={state.loading || waiting || state.restartBlocked}
+                aria-describedby={state.restartBlocked ? 'settings-privacy-refresh-blocked' : undefined}
+                onClick={() => void pager.restart()}
+              >
+                {m.settings_privacy_refresh_list()}
+              </Button>
+              {state.restartBlocked ? (
+                <p id="settings-privacy-refresh-blocked" role="status" className="text-sm text-muted-foreground">
+                  {m.settings_privacy_refresh_blocked()}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {state.next !== null && !state.failure ? (
             <Button
               type="button"

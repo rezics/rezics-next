@@ -1126,6 +1126,8 @@
   "settings_privacy_loading": "コレクションを読み込んでいます…",
   "settings_privacy_empty": "コレクションはまだありません。",
   "settings_privacy_load_more": "さらに読み込む",
+  "settings_privacy_refresh_list": "一覧を更新",
+  "settings_privacy_refresh_blocked": "一覧を更新する前に、各行の操作で保留中の公開範囲の変更を解決してください。",
   "settings_privacy_conflict_title": "このコレクションは別の場所で変更されました",
   "settings_privacy_conflict_text": "変更は保存されませんでした。再読み込みして現在の公開範囲を確認してください。",
   "settings_privacy_reload_row": "コレクションを再読み込み",

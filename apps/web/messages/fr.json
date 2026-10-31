@@ -1126,6 +1126,8 @@
   "settings_privacy_loading": "Chargement des collections…",
   "settings_privacy_empty": "Vous n’avez pas encore de collection.",
   "settings_privacy_load_more": "Afficher plus",
+  "settings_privacy_refresh_list": "Actualiser la liste",
+  "settings_privacy_refresh_blocked": "Résolvez les changements de visibilité en attente avec les commandes de chaque ligne avant d’actualiser cette liste.",
   "settings_privacy_conflict_title": "Cette collection a été modifiée ailleurs",
   "settings_privacy_conflict_text": "Votre modification n’a pas été enregistrée. Rechargez cette collection pour voir sa visibilité actuelle.",
   "settings_privacy_reload_row": "Recharger la collection",

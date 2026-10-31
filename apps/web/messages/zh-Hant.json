@@ -1126,6 +1126,8 @@
   "settings_privacy_loading": "正在載入收藏集…",
   "settings_privacy_empty": "你目前沒有收藏集。",
   "settings_privacy_load_more": "載入更多",
+  "settings_privacy_refresh_list": "重新整理清單",
+  "settings_privacy_refresh_blocked": "重新整理清單前，請使用各列的控制項處理尚未解決的可見性變更。",
   "settings_privacy_conflict_title": "此收藏集已在其他地方變更",
   "settings_privacy_conflict_text": "變更未儲存。請重新載入此收藏集以查看目前的可見範圍。",
   "settings_privacy_reload_row": "重新載入收藏集",

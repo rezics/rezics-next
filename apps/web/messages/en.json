@@ -1209,6 +1209,8 @@
   "settings_privacy_loading": "Loading Collections…",
   "settings_privacy_empty": "You do not have any Collections yet.",
   "settings_privacy_load_more": "Load more",
+  "settings_privacy_refresh_list": "Refresh list",
+  "settings_privacy_refresh_blocked": "Resolve pending visibility changes with the row controls before refreshing this list.",
   "settings_privacy_conflict_title": "This Collection changed elsewhere",
   "settings_privacy_conflict_text": "Your change was not saved. Reload this Collection to see its current visibility.",
   "settings_privacy_reload_row": "Reload Collection",

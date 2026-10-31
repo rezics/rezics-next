@@ -1127,6 +1127,8 @@
   "settings_privacy_loading": "正在加载收藏集…",
   "settings_privacy_empty": "你还没有收藏集。",
   "settings_privacy_load_more": "加载更多",
+  "settings_privacy_refresh_list": "刷新列表",
+  "settings_privacy_refresh_blocked": "刷新列表前，请使用各行的控件处理尚未解决的可见性更改。",
   "settings_privacy_conflict_title": "此收藏集已在其他地方更改",
   "settings_privacy_conflict_text": "更改未保存。请重新加载此收藏集以查看当前可见范围。",
   "settings_privacy_reload_row": "重新加载收藏集",

@@ -588,3 +588,61 @@ test('Respect native retry delays during Collection privacy recovery without wea
   expect(cursors).toEqual([null, 'exact+/cursor==', 'exact+/cursor==']);
   expect(pager.snapshot()).toMatchObject({ loaded: true, next: null, failure: null, nativeFailure: undefined });
 });
+
+test('Recover the Collection privacy list from a rejected cursor with original request/privacy/recovery bounds intact', async () => {
+  const calls: Request[] = [];
+  const original = collection('old-page', 'Old private page', 'private');
+  const current = collection('current-page', 'Current native page', 'unlisted', 11);
+  const cursor = 'opaque+/expired==';
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: (async (input, init) => {
+      calls.push(new Request(input, init));
+      if (calls.length === 1) return Response.json({ collections: [original], next: cursor });
+      if (calls.length <= 3) return Response.json({ code: 'invalid_cursor' }, { status: 400 });
+      if (calls.length === 4)
+        return Response.json(
+          { code: 'dependency_unavailable', retryable: true, request_id: 'refresh-failure' },
+          { status: 503, headers: { 'Retry-After': '17' } },
+        );
+      return Response.json({ collections: calls.length === 5 ? [current] : [], next: null });
+    }) as typeof fetch,
+  });
+  const pager = new CollectionPrivacyPager((next) =>
+    collectionPrivacyRead(() => readOwnedCollections(client, request(), env, next)),
+  );
+  await pager.load();
+  await pager.load();
+  expect(pager.snapshot()).toMatchObject({
+    collections: [expect.objectContaining({ id: original.id })],
+    next: cursor,
+    failure: 'unavailable',
+  });
+  expect(calls).toHaveLength(2); // Rejected continuation does not trigger an automatic first-page read.
+  await pager.load();
+  expect(calls).toHaveLength(3); // Retry still sends the exact failed cursor.
+  await pager.restart();
+  expect(pager.snapshot()).toMatchObject({
+    collections: [expect.objectContaining({ id: original.id })],
+    next: cursor,
+    failure: 'unavailable',
+    nativeFailure: { status: 503, retryAfter: '17', requestId: 'refresh-failure' },
+  });
+  expect(calls).toHaveLength(4);
+  await pager.load(); // Deliberate retry of the failed refresh uses null, not the old continuation.
+  expect(pager.snapshot()).toMatchObject({
+    collections: [expect.objectContaining({ id: current.id })],
+    next: null,
+    failure: null,
+  });
+  await pager.restart();
+  expect(pager.snapshot()).toMatchObject({ collections: [], loaded: true, failure: null, next: null });
+  expect(calls.map((call) => new URL(call.url).searchParams.get('cursor'))).toEqual([
+    null, cursor, cursor, null, null, null,
+  ]);
+  for (const call of calls) {
+    expect(call.method).toBe('GET');
+    expect(new URL(call.url).pathname).toBe('/v1/accounts/alice/collections');
+    expect(new URL(call.url).searchParams.get('limit')).toBe('20');
+    expect(call.headers.get('authorization')).toBe('Bearer page-token');
+  }
+});

@@ -1126,6 +1126,8 @@
   "settings_privacy_loading": "Sammlungen werden geladen …",
   "settings_privacy_empty": "Du hast noch keine Sammlungen.",
   "settings_privacy_load_more": "Weitere laden",
+  "settings_privacy_refresh_list": "Liste aktualisieren",
+  "settings_privacy_refresh_blocked": "Kläre ausstehende Sichtbarkeitsänderungen mit den Steuerelementen der jeweiligen Zeile, bevor du diese Liste aktualisierst.",
   "settings_privacy_conflict_title": "Diese Sammlung wurde an anderer Stelle geändert",
   "settings_privacy_conflict_text": "Deine Änderung wurde nicht gespeichert. Lade diese Sammlung neu, um die aktuelle Sichtbarkeit zu sehen.",
   "settings_privacy_reload_row": "Sammlung neu laden",

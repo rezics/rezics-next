@@ -416,3 +416,135 @@ export const ReplayReadbackRetryDelay: Story = {
     await view.findByText(m.settings_privacy_current({ visibility: m.settings_privacy_public() }));
   },
 };
+
+/** Constructed cursor/transport failures use the real list and row recovery controls, not native proof. */
+function ListRestartExample({ scenario }: { scenario: 'cursor' | 'exhausted' | 'failed' | 'unresolved' }) {
+  const [transport] = useState(() => {
+    let pageReads = 0;
+    let current = initial;
+    let original: VisibilityAttempt | null = null;
+    const io: CollectionPrivacyIO = {
+      save: async (input) => {
+        if (scenario === 'unresolved' && !original) {
+          original = input;
+          return { ok: false, reason: 'unavailable' };
+        }
+        if (original && input.idempotencyKey === original.idempotencyKey && input !== original)
+          throw new Error('Recovery must retain the original command');
+        current = { ...current, revision: input.revision + 1, visibility: input.visibility };
+        return { ok: true, collection: current };
+      },
+      read: async () => ({ ok: true, value: current }),
+    };
+    const read: CollectionPrivacyPageRead = async (cursor) => {
+      pageReads++;
+      if (pageReads === 1)
+        return {
+          ok: true,
+          value: {
+            collections: scenario === 'exhausted' ? [initial, { ...initial, id: 'old-second-page-row' }] : [initial],
+            next: scenario === 'cursor' ? 'opaque+/expired==' : null,
+          },
+        };
+      if (scenario === 'cursor' && cursor !== null)
+        return { ok: false, reason: 'unavailable', failure: { status: 400, code: 'invalid_cursor' } };
+      if (scenario === 'failed' && pageReads === 2)
+        return {
+          ok: false,
+          reason: 'unavailable',
+          failure: { status: 503, code: 'dependency_unavailable', retryAfter: '60' },
+        };
+      if (cursor !== null) throw new Error('Explicit list refresh must request the first page');
+      return {
+        ok: true,
+        value: {
+          collections: [{ ...current, title: 'Current reading', visibility: 'unlisted', revision: current.revision + 2 }],
+          next: null,
+        },
+      };
+    };
+    return { io, read };
+  });
+  return (
+    <div className="mx-auto max-w-3xl">
+      <CollectionPrivacyView {...transport} />
+    </div>
+  );
+}
+
+export const RejectedCursorRestart: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <ListRestartExample scenario="cursor" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await userEvent.click(await view.findByRole('button', { name: m.settings_privacy_load_more() }));
+    await view.findByText(m.settings_privacy_unavailable());
+    await userEvent.click(view.getByRole('button', { name: m.settings_retry() }));
+    await view.findByText(m.settings_privacy_unavailable());
+    await view.findByRole('link', { name: initial.title });
+    await userEvent.click(view.getByRole('button', { name: m.settings_privacy_refresh_list() }));
+    await view.findByRole('link', { name: 'Current reading' });
+    await expect(view.queryByRole('link', { name: initial.title })).toBeNull();
+    await expect(view.getAllByRole('combobox')).toHaveLength(1);
+    await expect(view.queryByText(m.settings_privacy_empty())).toBeNull();
+  },
+};
+
+export const ExhaustedListRefresh: Story = {
+  render: () => <ListRestartExample scenario="exhausted" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findAllByRole('combobox');
+    const select = view.getAllByRole('combobox')[0]!;
+    await expect(view.getAllByRole('combobox')).toHaveLength(2);
+    await expect(view.queryByRole('button', { name: m.settings_privacy_load_more() })).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.settings_privacy_refresh_list() }));
+    await view.findByRole('link', { name: 'Current reading' });
+    await expect(view.getAllByRole('combobox')).toHaveLength(1);
+    await expect(view.getByRole('combobox')).toBe(select); // The same row keeps its mounted controller.
+    await expect(select).toHaveValue('unlisted');
+    await view.findByText(m.settings_privacy_current({ visibility: m.settings_privacy_unlisted() }));
+    await expect(view.queryByText(m.settings_saved())).toBeNull();
+  },
+};
+
+export const FailedListRefresh: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <ListRestartExample scenario="failed" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByRole('link', { name: initial.title });
+    await userEvent.click(view.getByRole('button', { name: m.settings_privacy_refresh_list() }));
+    await view.findByText(m.settings_privacy_unavailable());
+    await view.findByRole('link', { name: initial.title });
+    await view.findByText(m.settings_privacy_page_retry_wait());
+    await expect(view.getByRole('button', { name: m.settings_retry() })).toBeDisabled();
+    await expect(view.getByRole('button', { name: m.settings_privacy_refresh_list() })).toBeDisabled();
+    await expect(view.queryByText(m.settings_privacy_empty())).toBeNull();
+    await expect(view.queryByText(m.settings_saved())).toBeNull();
+  },
+};
+
+export const RestartProtectedWhileRowUnresolved: Story = {
+  render: () => <ListRestartExample scenario="unresolved" />,
+  play: async ({ canvasElement }) => {
+    const view = await choosePrivate(canvasElement);
+    const select = view.getByRole('combobox');
+    const refresh = view.getByRole('button', { name: m.settings_privacy_refresh_list() });
+    await view.findByText(m.settings_privacy_uncertain_title());
+    await expect(refresh).toBeDisabled();
+    await view.findByText(m.settings_privacy_refresh_blocked());
+    await userEvent.selectOptions(select, 'unlisted');
+    await userEvent.click(view.getByRole('button', { name: m.settings_privacy_retry_original() }));
+    await view.findByText(m.settings_privacy_review_title());
+    await expect(select).toHaveValue('unlisted');
+    await expect(refresh).toBeDisabled();
+    await userEvent.click(view.getByRole('button', { name: m.settings_privacy_save_choice() }));
+    await waitFor(() => expect(refresh).toBeEnabled());
+    await userEvent.click(refresh);
+    await view.findByRole('link', { name: 'Current reading' });
+    await expect(view.getByRole('combobox')).toBe(select);
+    await expect(select).toHaveValue('unlisted');
+    await expect(view.queryByText(m.settings_privacy_refresh_blocked())).toBeNull();
+  },
+};
