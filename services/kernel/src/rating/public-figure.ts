@@ -144,7 +144,7 @@ export async function capturePublicFigurePriorInputs(
       population_id: key.populationId,
       generation: prior?.generation ?? '0',
       epoch: prior?.epoch ?? null,
-      status: prior === undefined ? 'absent' : prior.startCount === null ? 'inactive' : 'active',
+      status: prior == null ? 'absent' : prior.startCount === null ? 'inactive' : 'active',
       m: prior?.m ?? null,
       c: prior?.C ?? null,
     });

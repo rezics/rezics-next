@@ -568,6 +568,7 @@ export function startFakeStripe(rewriteRead?: (path: string, response: Response)
           has_evidence: false,
           past_due: false,
           submission_count: 0,
+          submission_method: 'not_submitted',
         },
       } satisfies Dispute);
       charge.disputed = true;
