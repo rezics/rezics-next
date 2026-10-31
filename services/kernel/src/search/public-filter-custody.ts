@@ -1,52 +1,45 @@
-import repairTransaction from "./public-filter-custody-repair-transaction.sql";
-import repairFinish from "./public-filter-custody-repair-finish.sql";
-import repairWriter from "./public-filter-custody-repair-writer.sql";
-import repairGate from "./public-filter-custody-repair-gate.sql";
-import repairOwner from "./public-filter-custody-repair-owner.sql";
-import repairTarget from "./public-filter-custody-repair-target.sql";
-import repairRegistration from "./public-filter-custody-repair-registration.sql";
-import repairEffect from "./public-filter-custody-repair-effect.sql";
-import repairPage from "./public-filter-custody-repair-page.sql";
-import repairPages from "./public-filter-custody-repair-pages.sql";
-import repairState from "./public-filter-custody-repair-state.sql";
-import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import type { Pool, PoolClient, QueryResult } from "pg";
-import { isDeepStrictEqual } from "node:util";
-import { readSearchWriterPhysicalTarget } from "./identity-epoch-participant-physical.ts";
+import repairTransaction from './public-filter-custody-repair-transaction.sql';
+import repairFinish from './public-filter-custody-repair-finish.sql';
+import repairWriter from './public-filter-custody-repair-writer.sql';
+import repairGate from './public-filter-custody-repair-gate.sql';
+import repairOwner from './public-filter-custody-repair-owner.sql';
+import repairTarget from './public-filter-custody-repair-target.sql';
+import repairRegistration from './public-filter-custody-repair-registration.sql';
+import repairEffect from './public-filter-custody-repair-effect.sql';
+import repairPage from './public-filter-custody-repair-page.sql';
+import repairPages from './public-filter-custody-repair-pages.sql';
+import repairState from './public-filter-custody-repair-state.sql';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import type { Pool, PoolClient, QueryResult } from 'pg';
+import { isDeepStrictEqual } from 'node:util';
+import { readSearchWriterPhysicalTarget } from './identity-epoch-participant-physical.ts';
 import {
   verifySearchRepairWriterReceipt,
   validateSearchRepairWriterEvidence,
   type SearchRepairWriterReceipt,
-} from "./writer-guard.ts";
-import { subjectPartition } from "./source.ts";
-import { validateRefreshResponse } from "./write-actions.ts";
-import { releaseDigest } from "@rezics/definitions";
-import { admitFilter, walkFilter } from "@rezics/filter";
-import releaseExists from "../semantic/definitions-exists.sql";
-import compositeReference from "../semantic/composite-read.sql";
-import { withConnection } from "../database/pool.ts";
-import { compileDiscoveryConsumerCapture } from "./discovery.ts";
-import { compileFilter } from "./filter.ts";
-import { compileText } from "./text.ts";
-import { validatePublicSuggestionInput } from "./public-suggestion-input.ts";
-import {
-  createOpenSearch,
-  OpenSearchError,
-  type OpenSearch,
-} from "./opensearch.ts";
-import type { PublicSourceRepair } from "../semantic/public-filter-source-binding.ts";
-import type { PublicFilterCost } from "../semantic/public-filter-source-contract.ts";
-import type {
-  PublicFilterConsumer,
-  PublicFilterDependencyKey,
-} from "../semantic/public-filter-source-contract.ts";
+} from './writer-guard.ts';
+import { subjectPartition } from './source.ts';
+import { validateRefreshResponse } from './write-actions.ts';
+import { releaseDigest } from '@rezics/definitions';
+import { admitFilter, walkFilter } from '@rezics/filter';
+import releaseExists from '../semantic/definitions-exists.sql';
+import compositeReference from '../semantic/composite-read.sql';
+import { withConnection } from '../database/pool.ts';
+import { compileDiscoveryConsumerCapture } from './discovery.ts';
+import { compileFilter } from './filter.ts';
+import { compileText } from './text.ts';
+import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
+import { createOpenSearch, OpenSearchError, type OpenSearch } from './opensearch.ts';
+import type { PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
+import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterConsumer, PublicFilterDependencyKey } from '../semantic/public-filter-source-contract.ts';
 import type {
   PublicCanonicalCaptureInput,
   PublicFilterConsumerContext,
   PublicFilterQueriedObservation,
-} from "./public-filter-consumer-contract.ts";
+} from './public-filter-consumer-contract.ts';
 import type {
   PublicFilterRepairSettlementResult,
   NativePublicFilterRepairSettlement,
@@ -66,12 +59,9 @@ import type {
   CustodyReleaseReference,
   CustodyRegistration,
   PublicFilterCustody,
-} from "./public-filter-custody-contract.ts";
+} from './public-filter-custody-contract.ts';
 
-const readSql = readFileSync(
-  new URL("./public-filter-custody-read.sql", import.meta.url),
-  "utf8",
-);
+const readSql = readFileSync(new URL('./public-filter-custody-read.sql', import.meta.url), 'utf8');
 // Process-local hints span factories (and wrapped pools). No hint can establish durable drain.
 const drainWaiters = new Map<string, Set<() => void>>();
 function drainSignal(observation: string) {
@@ -115,44 +105,39 @@ function drainSignal(observation: string) {
 // A tagged canonical tree preserves bigint/undefined without collisions with user JSON objects.
 type Tree = [string, unknown?];
 function tree(value: unknown): Tree {
-  if (value === undefined) return ["undefined"];
-  if (typeof value === "bigint") return ["bigint", value.toString()];
-  if (Array.isArray(value)) return ["array", value.map(tree)];
-  if (value !== null && typeof value === "object")
+  if (value === undefined) return ['undefined'];
+  if (typeof value === 'bigint') return ['bigint', value.toString()];
+  if (Array.isArray(value)) return ['array', value.map(tree)];
+  if (value !== null && typeof value === 'object')
     return [
-      "object",
+      'object',
       Object.keys(value)
         .sort()
         .map((key) => [key, tree((value as Record<string, unknown>)[key])]),
     ];
   requireValue(
     value === null ||
-      typeof value === "string" ||
-      typeof value === "boolean" ||
-      (typeof value === "number" && Number.isFinite(value)),
+      typeof value === 'string' ||
+      typeof value === 'boolean' ||
+      (typeof value === 'number' && Number.isFinite(value)),
   );
-  return ["scalar", value];
+  return ['scalar', value];
 }
 function untree(value: Tree): unknown {
   switch (value[0]) {
-    case "undefined":
+    case 'undefined':
       return undefined;
-    case "bigint":
+    case 'bigint':
       return BigInt(value[1] as string);
-    case "array":
+    case 'array':
       return (value[1] as Tree[]).map(untree);
-    case "object":
-      return Object.fromEntries(
-        (value[1] as [string, Tree][]).map(([key, entry]) => [
-          key,
-          untree(entry),
-        ]),
-      );
-    case "value": // Existing consumer_work encoding.
-    case "scalar":
+    case 'object':
+      return Object.fromEntries((value[1] as [string, Tree][]).map(([key, entry]) => [key, untree(entry)]));
+    case 'value': // Existing consumer_work encoding.
+    case 'scalar':
       return value[1];
     default:
-      throw new TypeError("Invalid custody encoding");
+      throw new TypeError('Invalid custody encoding');
   }
 }
 const encode = (value: unknown) => JSON.stringify(tree(value));
@@ -160,18 +145,12 @@ const decode = <T>(value: string): T => untree(JSON.parse(value) as Tree) as T;
 /** Internal durable native encoding; never constructs a settlement or Source proof. */
 export const encodePublicFilterNativeState = encode;
 export const decodePublicFilterNativeState = decode;
-const digest = (value: unknown) =>
-  createHash("sha256").update(encode(value)).digest("hex");
+const digest = (value: unknown) => createHash('sha256').update(encode(value)).digest('hex');
 function requireValue(value: unknown): asserts value {
-  if (!value) throw new TypeError("Invalid public filter custody input");
+  if (!value) throw new TypeError('Invalid public filter custody input');
 }
 function text(value: unknown): asserts value is string {
-  requireValue(
-    typeof value === "string" &&
-      value.length > 0 &&
-      value.length <= 65536 &&
-      !value.includes("\0"),
-  );
+  requireValue(typeof value === 'string' && value.length > 0 && value.length <= 65536 && !value.includes('\0'));
 }
 function home(value: number) {
   requireValue(Number.isInteger(value) && value >= 0 && value < 4096);
@@ -180,7 +159,7 @@ function home(value: number) {
 function partition(observation: string) {
   text(observation);
   requireValue(/^(0|[1-9][0-9]{0,3}):[0-9a-f-]{36}$/.test(observation));
-  return home(Number(observation.split(":")[0]));
+  return home(Number(observation.split(':')[0]));
 }
 function registration(value: CustodyRegistration) {
   home(value.partition);
@@ -189,7 +168,7 @@ function registration(value: CustodyRegistration) {
 function lifetime(value: number) {
   requireValue(Number.isInteger(value) && value >= 1 && value <= 300_000);
 }
-function rows(value: CustodyExecution["ownRows"]) {
+function rows(value: CustodyExecution['ownRows']) {
   requireValue(Array.isArray(value) && value.length <= 1000);
   for (const row of value) {
     text(row.original);
@@ -198,18 +177,13 @@ function rows(value: CustodyExecution["ownRows"]) {
 }
 function queried(value: PublicFilterQueriedObservation) {
   partition(value.snapshot.observation);
-  for (const key of [
-    "physicalTarget",
-    "incarnation",
-    "consumerGeneration",
-    "projectionGeneration",
-  ] as const)
+  for (const key of ['physicalTarget', 'incarnation', 'consumerGeneration', 'projectionGeneration'] as const)
     text(value.consumer[key]);
-  if (value.snapshot.kind === "pit") text(value.snapshot.pit);
+  if (value.snapshot.kind === 'pit') text(value.snapshot.pit);
   else {
     requireValue(
-      value.snapshot.kind === "prepared" &&
-        typeof value.snapshot.generation === "bigint" &&
+      value.snapshot.kind === 'prepared' &&
+        typeof value.snapshot.generation === 'bigint' &&
         value.snapshot.generation > 0n,
     );
     text(value.snapshot.build);
@@ -234,14 +208,14 @@ function cost(): CustodyCost {
 }
 type Meter = { -readonly [K in keyof CustodyCost]: CustodyCost[K] };
 class Failure extends Error {
-  constructor(readonly reason: CustodyFailure["reason"]) {
+  constructor(readonly reason: CustodyFailure['reason']) {
     super(reason);
   }
 }
 export { Failure as PublicFilterCustodyError };
 function check(context: PublicFilterConsumerContext) {
   requireValue(Number.isFinite(context.deadline));
-  if (context.deadline <= Date.now()) throw new Failure("deadline");
+  if (context.deadline <= Date.now()) throw new Failure('deadline');
 }
 function failure(error: unknown, meter: CustodyCost): CustodyFailure {
   if (error instanceof TypeError) throw error;
@@ -249,52 +223,38 @@ function failure(error: unknown, meter: CustodyCost): CustodyFailure {
     error instanceof Failure
       ? error.reason
       : error instanceof OpenSearchError && error.status === 404
-        ? "observation_lost"
-        : "owner_unavailable";
+        ? 'observation_lost'
+        : 'owner_unavailable';
   return {
-    status:
-      reason === "deadline" || reason === "owner_unavailable"
-        ? "unavailable"
-        : "unready",
+    status: reason === 'deadline' || reason === 'owner_unavailable' ? 'unavailable' : 'unready',
     reason,
     cost: meter,
   };
 }
-async function sql(
-  db: Pool | PoolClient,
-  meter: Meter,
-  query: string,
-  values: unknown[] = [],
-): Promise<QueryResult> {
+async function sql(db: Pool | PoolClient, meter: Meter, query: string, values: unknown[] = []): Promise<QueryResult> {
   meter.statements++;
   meter.inputKeys += values.length;
   meter.bytes += Buffer.byteLength(query) + Buffer.byteLength(encode(values));
   const result = await db.query(query, values);
   meter.rows += result.rowCount ?? 0;
   meter.bytes += Buffer.byteLength(encode(result.rows));
-  if (/\b(INSERT|UPDATE|DELETE)\b/.test(query))
-    meter.resultWrites += result.rowCount ?? 0;
+  if (/\b(INSERT|UPDATE|DELETE)\b/.test(query)) meter.resultWrites += result.rowCount ?? 0;
   return result;
 }
 function isReleaseReference(
-  release: CustodyRetainedDefinition["meaning"]["release"],
+  release: CustodyRetainedDefinition['meaning']['release'],
 ): release is CustodyReleaseReference {
-  return "authority" in release && release.authority === "semantic.readRelease";
+  return 'authority' in release && release.authority === 'semantic.readRelease';
 }
-async function requireReleaseAuthority(
-  pool: Pool,
-  meter: Meter,
-  digest: string,
-) {
+async function requireReleaseAuthority(pool: Pool, meter: Meter, digest: string) {
   // Use the existing immutable owner lookups. Charge their actual SQL and returned metadata too.
   // Neither lookup loads a release body, joins homes, nor consults/caches permission.
   const db = {
-    query: (query: string, values?: unknown[]) =>
-      sql(pool, meter, query, values),
+    query: (query: string, values?: unknown[]) => sql(pool, meter, query, values),
   } as Pool;
   if (await releaseExists.run(db, { route: 0, digest })) return;
   if (await compositeReference.run(db, { digest })) return;
-  throw new Failure("definition_missing");
+  throw new Failure('definition_missing');
 }
 async function retainedDefinition(
   pool: Pool,
@@ -311,7 +271,7 @@ async function retainedDefinition(
         digest: definition.meaning.digest,
         type: definition.meaning.type,
         release: {
-          authority: "semantic.readRelease",
+          authority: 'semantic.readRelease',
           digest: definition.meaning.digest,
         },
       },
@@ -326,22 +286,20 @@ async function engine<T>(
   search: OpenSearch,
   meter: Meter,
   context: PublicFilterConsumerContext,
-  method: Parameters<OpenSearch["request"]>[0],
+  method: Parameters<OpenSearch['request']>[0],
   path: string,
   body?: unknown,
 ) {
   check(context);
   meter.engineRequests++;
   meter.bytes += Buffer.byteLength(path) + Buffer.byteLength(encode(body));
-  if (path.endsWith("/_search")) meter.engineSearches++;
+  if (path.endsWith('/_search')) meter.engineSearches++;
   const response = await search.request<T>(method, path, body, {
     timeoutMs: Math.max(1, context.deadline - Date.now()),
   });
   meter.bytes += Buffer.byteLength(encode(response.body));
-  if (path.endsWith("/_search"))
-    meter.engineIteratorSteps += (
-      response.body as { _shards: { total: number } }
-    )._shards.total;
+  if (path.endsWith('/_search'))
+    meter.engineIteratorSteps += (response.body as { _shards: { total: number } })._shards.total;
   return response.body;
 }
 async function native(
@@ -351,115 +309,74 @@ async function native(
   target: string,
 ): Promise<string> {
   requireValue(/^[a-z0-9][a-z0-9_-]{0,254}$/.test(target));
-  const metadata = await engine<
-    Record<string, { settings: { index: { uuid: string } } }>
-  >(search, meter, context, "GET", `/${target}/_settings`);
-  if (
-    Object.keys(metadata).length !== 1 ||
-    !metadata[target]?.settings.index.uuid
-  )
-    throw new Failure("binding_mismatch");
+  const metadata = await engine<Record<string, { settings: { index: { uuid: string } } }>>(
+    search,
+    meter,
+    context,
+    'GET',
+    `/${target}/_settings`,
+  );
+  if (Object.keys(metadata).length !== 1 || !metadata[target]?.settings.index.uuid)
+    throw new Failure('binding_mismatch');
   return metadata[target]!.settings.index.uuid;
 }
-function validateDefinition(
-  definition: CustodyDefinition<PublicCanonicalCaptureInput>,
-) {
+function validateDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>) {
   home(definition.source.partition);
-  requireValue(
-    Number.isInteger(definition.source.epoch) && definition.source.epoch > 0,
-  );
+  requireValue(Number.isInteger(definition.source.epoch) && definition.source.epoch > 0);
   text(definition.source.id);
   text(definition.source.configuration);
   text(definition.readDefinition);
-  requireValue(
-    definition.meaning.digest === releaseDigest(definition.meaning.release),
-  );
+  requireValue(definition.meaning.digest === releaseDigest(definition.meaning.release));
   const input = definition.capture;
-  requireValue(
-    Object.hasOwn(input, "filterDocument") && Object.hasOwn(input, "text"),
-  );
-  if ("purpose" in input) {
+  requireValue(Object.hasOwn(input, 'filterDocument') && Object.hasOwn(input, 'text'));
+  if ('purpose' in input) {
     validatePublicSuggestionInput(input);
     // Source resolves complete prefix/order/name dependencies; custody does not invent callback keys.
     return;
   }
-  if ("representation" in input) {
-    const compiled = compileDiscoveryConsumerCapture(
-      input,
-      definition.meaning,
-      undefined,
-    );
+  if ('representation' in input) {
+    const compiled = compileDiscoveryConsumerCapture(input, definition.meaning, undefined);
     for (const key of compiled.dependencyKeys)
-      requireValue(
-        definition.dependencyKeys.some(
-          (entry) => encode(entry) === encode(key),
-        ),
-      );
+      requireValue(definition.dependencyKeys.some((entry) => encode(entry) === encode(key)));
     return;
   }
-  requireValue(
-    Number.isInteger(input.size) && input.size >= 1 && input.size <= 200,
-  );
-  requireValue(
-    ["id", "name", "relevance", "collections", "rating"].includes(input.sort),
-  );
+  requireValue(Number.isInteger(input.size) && input.size >= 1 && input.size <= 200);
+  requireValue(['id', 'name', 'relevance', 'collections', 'rating'].includes(input.sort));
   if (input.filterDocument) {
-    for (const node of walkFilter(input.filterDocument))
-      requireValue(!("owner" in node) && !("saved" in node));
+    for (const node of walkFilter(input.filterDocument)) requireValue(!('owner' in node) && !('saved' in node));
     admitFilter(input.filterDocument, definition.meaning.release);
   }
   const filter = input.filterDocument
     ? compileFilter(input.filterDocument, {
-        prefix: "f",
+        prefix: 'f',
         relationOverflow: true,
       })
     : undefined;
-  const compiledText = input.text
-    ? compileText(input.text, { field: "search_text", prefix: "t" })
-    : undefined;
+  const compiledText = input.text ? compileText(input.text, { field: 'search_text', prefix: 't' }) : undefined;
   const properties = [
     ...new Set(
       filter?.leaves.flatMap((leaf) =>
-        leaf.facet === "statement"
-          ? [leaf.property, ...(leaf.qualifiers?.map((q) => q.property) ?? [])]
-          : [],
+        leaf.facet === 'statement' ? [leaf.property, ...(leaf.qualifiers?.map((q) => q.property) ?? [])] : [],
       ),
     ),
   ];
-  const keys: PublicFilterDependencyKey[] = [
-    { kind: "order", order: input.sort },
-  ];
-  if (filter?.leaves.some((leaf) => leaf.facet === "type"))
-    keys.push({ kind: "type" });
-  keys.push(
-    ...properties.map((property) => ({ kind: "property" as const, property })),
-  );
+  const keys: PublicFilterDependencyKey[] = [{ kind: 'order', order: input.sort }];
+  if (filter?.leaves.some((leaf) => leaf.facet === 'type')) keys.push({ kind: 'type' });
+  keys.push(...properties.map((property) => ({ kind: 'property' as const, property })));
   // Source owns additional implicit text/order keys. Every compiler leaf must be retained, including NOT.
-  for (const key of keys)
-    requireValue(
-      definition.dependencyKeys.some((entry) => encode(entry) === encode(key)),
-    );
+  for (const key of keys) requireValue(definition.dependencyKeys.some((entry) => encode(entry) === encode(key)));
   for (const [key, derived] of Object.entries({
     filter: filter?.query,
     query: compiledText?.query,
     boost: compiledText?.leaves
       .filter((leaf) => !leaf.negated)
       .map((leaf) => leaf.value)
-      .join(" "),
+      .join(' '),
     overflowProperties: filter
-      ? [
-          ...new Set(
-            filter.leaves.flatMap((leaf) =>
-              leaf.facet === "statement" ? [leaf.property] : [],
-            ),
-          ),
-        ]
+      ? [...new Set(filter.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : [])))]
       : undefined,
   })) {
-    if (Object.hasOwn(input, key))
-      requireValue(
-        encode(input[key as keyof typeof input]) === encode(derived),
-      );
+    if (Object.hasOwn(input, key)) requireValue(encode(input[key as keyof typeof input]) === encode(derived));
   }
 }
 async function read(
@@ -484,7 +401,7 @@ async function read(
   ]);
   const row = result.rows[0];
   check(context);
-  if (!row) throw new Failure("observation_lost");
+  if (!row) throw new Failure('observation_lost');
   if (row.failure) throw new Failure(row.failure);
   const definition = decode<{
     digest: string;
@@ -492,24 +409,14 @@ async function read(
   }>(row.definition);
   requireValue(definition.digest === digest(definition.data));
   if (isReleaseReference(definition.data.meaning.release)) {
-    requireValue(
-      definition.data.meaning.release.digest === definition.data.meaning.digest,
-    );
-    if (
-      verifiedDefinition !== undefined &&
-      !isDeepStrictEqual(verifiedDefinition, definition.data)
-    )
-      throw new Failure("binding_mismatch");
-    if (verifiedDefinition === undefined)
-      await requireReleaseAuthority(
-        pool,
-        meter,
-        definition.data.meaning.digest,
-      );
+    requireValue(definition.data.meaning.release.digest === definition.data.meaning.digest);
+    if (verifiedDefinition !== undefined && !isDeepStrictEqual(verifiedDefinition, definition.data))
+      throw new Failure('binding_mismatch');
+    if (verifiedDefinition === undefined) await requireReleaseAuthority(pool, meter, definition.data.meaning.digest);
     check(context);
   }
   return {
-    status: "found",
+    status: 'found',
     definition: definition.data,
     queried: decode(row.queried),
     covered: decode(row.covered),
@@ -534,38 +441,24 @@ export async function readPublicFilterConsumerCustody(
 // settlement or retained state is cached here. Recovery must install the real owner binding again.
 const repairSources = new WeakMap<Pool, PublicFilterRepairSourceBinding>();
 const repairAllowance = new AsyncLocalStorage<CustodyCost>();
-export function configurePublicFilterRepairSource(
-  pool: Pool,
-  binding: PublicFilterRepairSourceBinding,
-): void {
+export function configurePublicFilterRepairSource(pool: Pool, binding: PublicFilterRepairSourceBinding): void {
   repairSources.set(pool, binding);
 }
 /** Keep all reader phases within the calling consumer's already-spent allowance. */
-export function withPublicFilterRepairAllowance<T>(
-  spent: CustodyCost,
-  work: () => Promise<T>,
-): Promise<T> {
+export function withPublicFilterRepairAllowance<T>(spent: CustodyCost, work: () => Promise<T>): Promise<T> {
   return repairAllowance.run({ ...spent }, work);
 }
 
 /** Data fields only. A missing legacy locator cannot be upgraded from its in-process brand. */
 function sourceReceipt(value: unknown): NativeSourceRepairLocator {
-  if (!value || typeof value !== "object")
-    throw new Failure("owner_unavailable");
-  const fields = ["bootstrap", "execution", "step", "locatorDigest"] as const;
+  if (!value || typeof value !== 'object') throw new Failure('owner_unavailable');
+  const fields = ['bootstrap', 'execution', 'step', 'locatorDigest'] as const;
   for (const field of fields)
-    if (
-      typeof Reflect.get(value, field) !== "string" ||
-      !Reflect.get(value, field)
-    )
-      throw new Failure("owner_unavailable");
-  return Object.fromEntries(
-    fields.map((field) => [field, Reflect.get(value, field)]),
-  ) as NativeSourceRepairLocator;
+    if (typeof Reflect.get(value, field) !== 'string' || !Reflect.get(value, field))
+      throw new Failure('owner_unavailable');
+  return Object.fromEntries(fields.map((field) => [field, Reflect.get(value, field)])) as NativeSourceRepairLocator;
 }
-function sourceRepair(
-  repair: PublicSourceRepair | RetainedSourceRepair,
-): RetainedSourceRepair {
+function sourceRepair(repair: PublicSourceRepair | RetainedSourceRepair): RetainedSourceRepair {
   return {
     kind: repair.kind,
     locator: repair.locator,
@@ -591,24 +484,19 @@ export async function verifyPublicFilterRepairSourcePage(
   context: PublicFilterConsumerContext,
   charge: (cost?: PublicFilterCost) => void,
 ): Promise<RetainedRepairPage> {
-  if (
-    typeof binding.readRepairStep !== "function" ||
-    typeof binding.readRepairReceipt !== "function"
-  )
-    throw new Failure("owner_unavailable");
+  if (typeof binding.readRepairStep !== 'function' || typeof binding.readRepairReceipt !== 'function')
+    throw new Failure('owner_unavailable');
   const owner = async <T>(work: () => Promise<T>): Promise<T> => {
     try {
       return await work();
     } catch {
-      throw new Failure(
-        Date.now() >= context.deadline ? "deadline" : "owner_unavailable",
-      );
+      throw new Failure(Date.now() >= context.deadline ? 'deadline' : 'owner_unavailable');
     }
   };
   charge();
   const step = await owner(() => binding.readRepairStep!(request, context));
   charge(step.cost);
-  if (step.status !== "verified") throw new Failure(step.reason);
+  if (step.status !== 'verified') throw new Failure(step.reason);
   if (
     !step.step ||
     step.predecessor !== request.predecessor ||
@@ -620,7 +508,7 @@ export async function verifyPublicFilterRepairSourcePage(
     step.receipts.length > 256 ||
     expected.repairs.length > 256
   )
-    throw new Failure("binding_mismatch");
+    throw new Failure('binding_mismatch');
   const repairs = expected.repairs.map(sourceRepair);
   const receipts = step.receipts.map(sourceReceipt);
   if (
@@ -629,25 +517,21 @@ export async function verifyPublicFilterRepairSourcePage(
       repairs.map((repair) => repair.receipt),
     )
   )
-    throw new Failure("binding_mismatch");
+    throw new Failure('binding_mismatch');
   for (const [item, receipt] of receipts.entries()) {
     if (
       receipt.bootstrap !== request.bootstrap ||
       receipt.execution !== request.execution ||
       receipt.step !== step.step
     )
-      throw new Failure("binding_mismatch");
+      throw new Failure('binding_mismatch');
     charge();
     const verified = await owner(() =>
-      binding.readRepairReceipt!(
-        { receipt, queried: request.queried, execution: request.execution },
-        context,
-      ),
+      binding.readRepairReceipt!({ receipt, queried: request.queried, execution: request.execution }, context),
     );
     charge(verified.cost);
-    if (verified.status !== "verified") throw new Failure(verified.reason);
-    if (!isDeepStrictEqual(sourceRepair(verified.repair), repairs[item]))
-      throw new Failure("binding_mismatch");
+    if (verified.status !== 'verified') throw new Failure(verified.reason);
+    if (!isDeepStrictEqual(sourceRepair(verified.repair), repairs[item])) throw new Failure('binding_mismatch');
   }
   return {
     sourceStep: step.step,
@@ -676,29 +560,24 @@ export async function readPublicFilterRepairSettlement(
     text(input.execution);
     const binding = repairSources.get(pool);
     const url = process.env.OPENSEARCH_URL;
-    if (!url || !binding) throw new Failure("owner_unavailable");
+    if (!url || !binding) throw new Failure('owner_unavailable');
     const transport = createOpenSearch(url);
     const admit = () => {
       check(context);
       if (
         spent.inputKeys + meter.inputKeys > 1000 ||
         spent.bytes + meter.bytes > 4 * 1024 * 1024 ||
-        spent.rows + meter.rows >
-          64 + 16 * Math.max(spent.candidates + meter.candidates, 1) ||
-        spent.accessPoints +
-          meter.accessPoints +
-          spent.dependencyPoints +
-          meter.dependencyPoints >
+        spent.rows + meter.rows > 64 + 16 * Math.max(spent.candidates + meter.candidates, 1) ||
+        spent.accessPoints + meter.accessPoints + spent.dependencyPoints + meter.dependencyPoints >
           16 + 8 * Math.max(spent.candidates + meter.candidates, 1)
       )
-        throw new Failure("owner_unavailable");
+        throw new Failure('owner_unavailable');
     };
     const charge = (next?: PublicFilterCost) => {
       if (next)
         for (const key of Object.keys(meter) as (keyof CustodyCost)[]) {
           const value = Reflect.get(next, key) ?? 0;
-          if (!Number.isSafeInteger(value) || value < 0)
-            throw new Failure("owner_unavailable");
+          if (!Number.isSafeInteger(value) || value < 0) throw new Failure('owner_unavailable');
           meter[key] += value;
         }
       admit();
@@ -707,25 +586,22 @@ export async function readPublicFilterRepairSettlement(
       async request(method, path, body, options) {
         admit();
         meter.engineRequests++;
-        meter.bytes +=
-          Buffer.byteLength(path) + Buffer.byteLength(encode(body));
+        meter.bytes += Buffer.byteLength(path) + Buffer.byteLength(encode(body));
         const result = await transport.request(method, path, body, {
           ...options,
           timeoutMs: Math.max(1, context.deadline - Date.now()),
         });
         meter.bytes += Buffer.byteLength(encode(result.body));
-        if (path.endsWith("/_search")) {
+        if (path.endsWith('/_search')) {
           meter.engineSearches++;
-          const shards = (result.body as { _shards?: { total?: number } })
-            ._shards?.total;
-          if (Number.isSafeInteger(shards) && shards! > 0)
-            meter.engineIteratorSteps += shards!;
+          const shards = (result.body as { _shards?: { total?: number } })._shards?.total;
+          if (Number.isSafeInteger(shards) && shards! > 0) meter.engineIteratorSteps += shards!;
         }
         admit();
         return result as never;
       },
       bulk() {
-        throw new TypeError("Settlement reader never dispatches writes");
+        throw new TypeError('Settlement reader never dispatches writes');
       },
     };
     // Resolve wide immutable release authority without holding Search's retained checkout.
@@ -738,9 +614,7 @@ export async function readPublicFilterRepairSettlement(
       observation: q.snapshot.observation,
       execution: input.execution,
     };
-    const local = async <T>(
-      work: (db: Pool, raw: Pool) => Promise<T>,
-    ): Promise<T> =>
+    const local = async <T>(work: (db: Pool, raw: Pool) => Promise<T>): Promise<T> =>
       withConnection(pool, async (client) => {
         const raw = {
           query: (statement: string, values: unknown[] = []) => {
@@ -760,17 +634,16 @@ export async function readPublicFilterRepairSettlement(
             return result;
           },
         } as Pool;
-        await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+        await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
         try {
           const result = await work(db, raw);
-          await db.query("COMMIT");
+          await db.query('COMMIT');
           return result;
         } catch (error) {
           // Cleanup still runs when the original allowance/deadline is exhausted.
           meter.statements++;
-          meter.bytes +=
-            Buffer.byteLength("ROLLBACK") + Buffer.byteLength(encode([]));
-          const rolledBack = await client.query("ROLLBACK");
+          meter.bytes += Buffer.byteLength('ROLLBACK') + Buffer.byteLength(encode([]));
+          const rolledBack = await client.query('ROLLBACK');
           meter.rows += rolledBack.rowCount ?? 0;
           meter.bytes += Buffer.byteLength(encode(rolledBack.rows));
           throw error;
@@ -778,18 +651,9 @@ export async function readPublicFilterRepairSettlement(
       });
     const load = async (db: Pool, raw: Pool) => {
       const stateRow = await repairState.run(db, keys);
-      if (!stateRow?.repair_settlement || !stateRow.consumer_work)
-        throw new Failure("execution_missing");
-      const state = decode<RetainedRepairSettlement>(
-        stateRow.repair_settlement,
-      );
-      const retained = await read(
-        raw,
-        input,
-        context,
-        meter,
-        initial.definition,
-      );
+      if (!stateRow?.repair_settlement || !stateRow.consumer_work) throw new Failure('execution_missing');
+      const state = decode<RetainedRepairSettlement>(stateRow.repair_settlement);
+      const retained = await read(raw, input, context, meter, initial.definition);
       admit();
       if (
         !retained.execution ||
@@ -798,7 +662,7 @@ export async function readPublicFilterRepairSettlement(
         state.pages < 1 ||
         state.frontier !== null
       )
-        throw new Failure("owner_unavailable");
+        throw new Failure('owner_unavailable');
       if (
         state.execution !== retained.execution.id ||
         !isDeepStrictEqual(state.covered, retained.covered) ||
@@ -807,7 +671,7 @@ export async function readPublicFilterRepairSettlement(
         !isDeepStrictEqual(retained.definition, initial.definition) ||
         !isDeepStrictEqual(retained.execution, initial.execution)
       )
-        throw new Failure("binding_mismatch");
+        throw new Failure('binding_mismatch');
       const work = decode<{
         bootstrap: { id: string; covered: unknown };
         execution: string;
@@ -824,15 +688,9 @@ export async function readPublicFilterRepairSettlement(
         !isDeepStrictEqual(work.queried, q) ||
         work.execution !== input.execution
       )
-        throw new Failure("binding_mismatch");
-      if (
-        work.repairPage ||
-        work.records.length ||
-        work.projectionSource ||
-        work.repair ||
-        work.dispatch
-      )
-        throw new Failure("owner_unavailable");
+        throw new Failure('binding_mismatch');
+      if (work.repairPage || work.records.length || work.projectionSource || work.repair || work.dispatch)
+        throw new Failure('owner_unavailable');
       const registration = await repairRegistration.run(db, {
         partition_no: home,
         registration: stateRow.registration,
@@ -846,7 +704,7 @@ export async function readPublicFilterRepairSettlement(
         !isDeepStrictEqual(decode(registration.consumer), q.consumer) ||
         target?.incarnation !== q.consumer.incarnation
       )
-        throw new Failure("binding_mismatch");
+        throw new Failure('binding_mismatch');
       const pages: {
         ordinal: number;
         intent: string;
@@ -857,25 +715,17 @@ export async function readPublicFilterRepairSettlement(
         if (
           !page.sourceStep ||
           page.repairs.length > 256 ||
-          (page.complete
-            ? page.frontier !== null
-            : page.frontier !== page.sourceStep)
+          (page.complete ? page.frontier !== null : page.frontier !== page.sourceStep)
         )
-          throw new Failure("binding_mismatch");
+          throw new Failure('binding_mismatch');
         // The native producer CAS advances through every page. Check adjacent retained links at
         // each selected page; complete Source chain/window proof belongs to the final owner read.
-        const previous =
-          ordinal === 0
-            ? null
-            : await repairPage.run(db, { ...keys, ordinal: ordinal - 1 });
+        const previous = ordinal === 0 ? null : await repairPage.run(db, { ...keys, ordinal: ordinal - 1 });
         if (
           (ordinal > 0 && !previous) ||
-          page.predecessor !==
-            (previous
-              ? decode<RetainedRepairPage>(previous.intent).frontier
-              : null)
+          page.predecessor !== (previous ? decode<RetainedRepairPage>(previous.intent).frontier : null)
         )
-          throw new Failure("binding_mismatch");
+          throw new Failure('binding_mismatch');
         pages.push({ ordinal, intent, page });
       };
       let after = -1;
@@ -883,8 +733,7 @@ export async function readPublicFilterRepairSettlement(
         admit();
         const row = await repairPages.run(db, { ...keys, after });
         if (!row) break;
-        if (row.ordinal <= after || row.ordinal >= state.pages)
-          throw new Failure("binding_mismatch");
+        if (row.ordinal <= after || row.ordinal >= state.pages) throw new Failure('binding_mismatch');
         await append(row.ordinal, row.intent);
         after = row.ordinal;
       }
@@ -893,12 +742,11 @@ export async function readPublicFilterRepairSettlement(
           ...keys,
           ordinal: state.pages - 1,
         });
-        if (!last) throw new Failure("owner_unavailable");
+        if (!last) throw new Failure('owner_unavailable');
         await append(state.pages - 1, last.intent);
       }
       const last = pages.at(-1)!;
-      if (!last.page.complete || last.page.frontier !== null)
-        throw new Failure("owner_unavailable");
+      if (!last.page.complete || last.page.frontier !== null) throw new Failure('owner_unavailable');
       const copies = new Map<string, string>();
       const latest = new Map<string, SearchRepairWriterReceipt>();
       const effects: { page: number; item: number; receipt: string }[] = [];
@@ -910,19 +758,16 @@ export async function readPublicFilterRepairSettlement(
           meter.dependencyPoints++;
           admit();
           if (
-            (repair.projection.status !== "progress" &&
-              repair.projection.status !== "complete") ||
+            (repair.projection.status !== 'progress' && repair.projection.status !== 'complete') ||
             !isDeepStrictEqual(repair.source, repair.projection.source) ||
-            repair.source.partition !==
-              subjectPartition(repair.source.subject) ||
+            repair.source.partition !== subjectPartition(repair.source.subject) ||
             repair.source.subject !== repair.locator.subject
           )
-            throw new Failure("binding_mismatch");
+            throw new Failure('binding_mismatch');
           const sourceKey = encode(repair.source);
           const prior = copies.get(repair.source.subject);
-          if (prior && prior !== sourceKey)
-            throw new Failure("binding_mismatch");
-          if (repair.projection.status === "progress") {
+          if (prior && prior !== sourceKey) throw new Failure('binding_mismatch');
+          if (repair.projection.status === 'progress') {
             copies.set(repair.source.subject, sourceKey);
             continue;
           }
@@ -931,7 +776,7 @@ export async function readPublicFilterRepairSettlement(
             page: entry.ordinal,
             item,
           });
-          if (!effect) throw new Failure("owner_unavailable");
+          if (!effect) throw new Failure('owner_unavailable');
           effects.push({ page: entry.ordinal, item, receipt: effect.receipt });
           const receipt = decode<SearchRepairWriterReceipt>(effect.receipt);
           const locator = encode({
@@ -948,43 +793,26 @@ export async function readPublicFilterRepairSettlement(
             receipt.action.version < repair.source.position ||
             receipt.incarnation !== q.consumer.incarnation
           )
-            throw new Failure("binding_mismatch");
-          validateSearchRepairWriterEvidence(
-            q.consumer.physicalTarget,
-            receipt,
-          );
+            throw new Failure('binding_mismatch');
+          validateSearchRepairWriterEvidence(q.consumer.physicalTarget, receipt);
           const previous = latest.get(receipt.subject);
           if (
             previous &&
             (receipt.action.version < previous.action.version ||
               receipt.enrollment.position <= previous.completion.position)
           )
-            throw new Failure("binding_mismatch");
+            throw new Failure('binding_mismatch');
           latest.set(receipt.subject, receipt);
           copies.delete(receipt.subject);
         }
-      if (copies.size) throw new Failure("owner_unavailable");
-      const physical = await readSearchWriterPhysicalTarget(
-        search,
-        q.consumer.physicalTarget,
-      );
-      if (physical.incarnation !== q.consumer.incarnation)
-        throw new Failure("binding_mismatch");
-      const own = [
-        ...new Set(
-          retained.execution.ownRows.flatMap((row) => [
-            row.original,
-            row.terminal,
-          ]),
-        ),
-      ].sort();
+      if (copies.size) throw new Failure('owner_unavailable');
+      const physical = await readSearchWriterPhysicalTarget(search, q.consumer.physicalTarget);
+      if (physical.incarnation !== q.consumer.incarnation) throw new Failure('binding_mismatch');
+      const own = [...new Set(retained.execution.ownRows.flatMap((row) => [row.original, row.terminal]))].sort();
       const subjects = [...new Set([...own, ...latest.keys()])].sort(
-        (a, b) =>
-          subjectPartition(a) - subjectPartition(b) || a.localeCompare(b),
+        (a, b) => subjectPartition(a) - subjectPartition(b) || a.localeCompare(b),
       );
-      const homes = [...new Set(subjects.map(subjectPartition))].sort(
-        (a, b) => a - b,
-      );
+      const homes = [...new Set(subjects.map(subjectPartition))].sort((a, b) => a - b);
       const gates = [];
       for (const partition_no of homes) {
         const gate = await repairGate.run(db, {
@@ -993,24 +821,21 @@ export async function readPublicFilterRepairSettlement(
         });
         if (
           gate &&
-          (gate.incarnation !== physical.incarnation ||
-            gate.write_alias !== physical.writeAlias ||
-            gate.closed_token)
+          (gate.incarnation !== physical.incarnation || gate.write_alias !== physical.writeAlias || gate.closed_token)
         )
-          throw new Failure("identity_pending");
+          throw new Failure('identity_pending');
         gates.push({ partition_no, gate });
       }
       const owners = [];
-      for (const partition_no of [
-        ...new Set([...homes, home, retained.definition.source.partition]),
-      ].sort((a, b) => a - b)) {
+      for (const partition_no of [...new Set([...homes, home, retained.definition.source.partition])].sort(
+        (a, b) => a - b,
+      )) {
         const owner = await repairOwner.run(db, { partition_no });
         if (
-          owner?.write_state !== "active" ||
-          (partition_no === retained.definition.source.partition &&
-            owner.epoch !== retained.definition.source.epoch)
+          owner?.write_state !== 'active' ||
+          (partition_no === retained.definition.source.partition && owner.epoch !== retained.definition.source.epoch)
         )
-          throw new Failure("owner_unavailable");
+          throw new Failure('owner_unavailable');
         owners.push({
           partition_no,
           epoch: owner.epoch,
@@ -1029,19 +854,17 @@ export async function readPublicFilterRepairSettlement(
           original_id,
         });
         const owner = owners.find((row) => row.partition_no === partition_no)!;
-        const gate = gates.find(
-          (row) => row.partition_no === partition_no,
-        )!.gate;
+        const gate = gates.find((row) => row.partition_no === partition_no)!.gate;
         if (
           (gate && gate.owner_epoch !== owner.epoch) ||
           (writer &&
             (writer.writer_token ||
               writer.closed_job ||
-              writer.dispatch_state !== "settled" ||
+              writer.dispatch_state !== 'settled' ||
               writer.incarnation !== physical.incarnation ||
               writer.owner_epoch !== owner.epoch))
         )
-          throw new Failure("identity_pending");
+          throw new Failure('identity_pending');
         writers.push({ original_id, writer });
       }
       return {
@@ -1084,47 +907,28 @@ export async function readPublicFilterRepairSettlement(
     }
     return await local(async (db, raw) => {
       const final = await load(db, raw);
-      if (!isDeepStrictEqual(final.basis, staged.basis))
-        throw new Failure("binding_mismatch");
+      if (!isDeepStrictEqual(final.basis, staged.basis)) throw new Failure('binding_mismatch');
       for (const receipt of [...final.latest.values()].sort(
-        (a, b) =>
-          a.partition - b.partition || a.subject.localeCompare(b.subject),
+        (a, b) => a.partition - b.partition || a.subject.localeCompare(b.subject),
       ))
-        await verifySearchRepairWriterReceipt(
-          db,
-          search,
-          q.consumer.physicalTarget,
-          receipt,
-        );
-      const refreshed = await search.request(
-        "POST",
-        `/${q.consumer.physicalTarget}/_refresh`,
-      );
+        await verifySearchRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
+      const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
       validateRefreshResponse(refreshed.status, refreshed.body);
       if (
         !isDeepStrictEqual(
-          await readSearchWriterPhysicalTarget(
-            search,
-            q.consumer.physicalTarget,
-          ),
+          await readSearchWriterPhysicalTarget(search, q.consumer.physicalTarget),
           final.basis.physical,
         )
       )
-        throw new Failure("binding_mismatch");
-      const retained = await read(
-        raw,
-        input,
-        context,
-        meter,
-        initial.definition,
-      );
+        throw new Failure('binding_mismatch');
+      const retained = await read(raw, input, context, meter, initial.definition);
       if (
         !isDeepStrictEqual(retained.execution, final.retained.execution) ||
         !isDeepStrictEqual(retained.covered, staged.state.covered)
       )
-        throw new Failure("binding_mismatch");
+        throw new Failure('binding_mismatch');
       const transaction = await repairTransaction.run(db);
-      if (!transaction) throw new Failure("owner_unavailable");
+      if (!transaction) throw new Failure('owner_unavailable');
       const fenced: RetainedRepairSettlement = {
         ...final.state,
         fence: {
@@ -1140,10 +944,10 @@ export async function readPublicFilterRepairSettlement(
         next: encode(fenced),
         previous: final.basis.stateRow.repair_settlement,
       });
-      if (!stored) throw new Failure("binding_mismatch");
+      if (!stored) throw new Failure('binding_mismatch');
       admit();
       return {
-        status: "settled",
+        status: 'settled',
         definition: retained.definition,
         queried: retained.queried,
         execution: retained.execution!,
@@ -1171,7 +975,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
     const promise = (async () => {
       try {
         check(context);
-        if (closed && !allowClosed) throw new Failure("owner_unavailable");
+        if (closed && !allowClosed) throw new Failure('owner_unavailable');
         const value = await work(meter);
         check(context);
         return value;
@@ -1183,18 +987,15 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
     void promise.finally(() => pending.delete(promise)).catch(() => {});
     return promise;
   }
-  async function transaction<T>(
-    meter: Meter,
-    work: (client: PoolClient) => Promise<T>,
-  ): Promise<T> {
+  async function transaction<T>(meter: Meter, work: (client: PoolClient) => Promise<T>): Promise<T> {
     return withConnection(pool, async (client) => {
-      await sql(client, meter, "BEGIN");
+      await sql(client, meter, 'BEGIN');
       try {
         const value = await work(client);
-        await sql(client, meter, "COMMIT");
+        await sql(client, meter, 'COMMIT');
         return value;
       } catch (error) {
-        await sql(client, meter, "ROLLBACK");
+        await sql(client, meter, 'ROLLBACK');
         throw error;
       }
     });
@@ -1208,7 +1009,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active'`,
       [value.partition, value.id],
     );
-    if (!result.rows[0]) throw new Failure("definition_missing");
+    if (!result.rows[0]) throw new Failure('definition_missing');
     return decode<PublicFilterConsumer>(result.rows[0].consumer);
   }
   async function retain(
@@ -1235,12 +1036,12 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
         expiresAt,
         prepared === null ? null : encode(prepared),
         q.consumer.incarnation,
-        q.snapshot.kind === "pit" ? digest(q.snapshot.pit) : null,
-        q.snapshot.kind === "pit" ? q.snapshot.pit : null,
+        q.snapshot.kind === 'pit' ? digest(q.snapshot.pit) : null,
+        q.snapshot.kind === 'pit' ? q.snapshot.pit : null,
       ],
     );
-    if (!inserted.rowCount) throw new Failure("binding_mismatch");
-    return { status: "retained" as const, queried: q, cost: meter };
+    if (!inserted.rowCount) throw new Failure('binding_mismatch');
+    return { status: 'retained' as const, queried: q, cost: meter };
   }
   const api: PublicFilterCustody = {
     register(request, search, context) {
@@ -1250,12 +1051,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       text(input.consumerGeneration);
       text(input.projectionGeneration);
       return run(context, async (meter) => {
-        const incarnation = await native(
-          search,
-          meter,
-          context,
-          input.physicalTarget,
-        );
+        const incarnation = await native(search, meter, context, input.physicalTarget);
         const definition = input.definition;
         const consumer: PublicFilterConsumer = {
           physicalTarget: input.physicalTarget,
@@ -1282,18 +1078,12 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             meter,
             `INSERT INTO search.public_filter_registration VALUES ($1,$2,$3,$4,$5,'active')
             ON CONFLICT (partition_no,id) DO UPDATE SET id=EXCLUDED.id WHERE public_filter_registration.consumer=EXCLUDED.consumer AND public_filter_registration.definition=EXCLUDED.definition AND public_filter_registration.state='active' RETURNING id`,
-            [
-              identity.partition,
-              identity.id,
-              consumer.physicalTarget,
-              encode(consumer),
-              retained,
-            ],
+            [identity.partition, identity.id, consumer.physicalTarget, encode(consumer), retained],
           );
-          if (!result.rowCount) throw new Failure("binding_mismatch");
+          if (!result.rowCount) throw new Failure('binding_mismatch');
         });
         return {
-          status: "registered" as const,
+          status: 'registered' as const,
           registration: identity,
           consumer,
           cost: meter,
@@ -1306,11 +1096,8 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       text(input.covered.observation);
       return run(context, async (meter) => {
         const consumer = await registered(input.registration, meter);
-        if (
-          (await native(search, meter, context, consumer.physicalTarget)) !==
-          consumer.incarnation
-        )
-          throw new Failure("binding_mismatch");
+        if ((await native(search, meter, context, consumer.physicalTarget)) !== consumer.incarnation)
+          throw new Failure('binding_mismatch');
         const openedAt = Date.now();
         const opened = await engine<{
           pit_id: string;
@@ -1319,23 +1106,20 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           search,
           meter,
           context,
-          "POST",
+          'POST',
           `/${consumer.physicalTarget}/_search/point_in_time?keep_alive=${input.keepAliveMs}ms`,
         );
         text(opened.pit_id);
         try {
-          if (opened._shards.failed) throw new Failure("observation_lost");
-          if (
-            (await native(search, meter, context, consumer.physicalTarget)) !==
-            consumer.incarnation
-          )
-            throw new Failure("binding_mismatch");
+          if (opened._shards.failed) throw new Failure('observation_lost');
+          if ((await native(search, meter, context, consumer.physicalTarget)) !== consumer.incarnation)
+            throw new Failure('binding_mismatch');
           return await retain(
             input.registration,
             {
               consumer,
               snapshot: {
-                kind: "pit",
+                kind: 'pit',
                 observation: `${input.registration.partition}:${randomUUID()}`,
                 pit: opened.pit_id,
               },
@@ -1356,11 +1140,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       rows(input.rows);
       text(input.build);
       text(input.covered.observation);
-      requireValue(
-        typeof input.generation === "bigint" &&
-          input.generation > 0n &&
-          input.expiresAt > Date.now(),
-      );
+      requireValue(typeof input.generation === 'bigint' && input.generation > 0n && input.expiresAt > Date.now());
       return run(context, async (meter) => {
         const consumer = await registered(input.registration, meter);
         return transaction(meter, async (client) => {
@@ -1377,13 +1157,13 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
               encode(input.rows),
             ],
           );
-          if (!saved.rowCount) throw new Failure("binding_mismatch");
+          if (!saved.rowCount) throw new Failure('binding_mismatch');
           return retain(
             input.registration,
             {
               consumer,
               snapshot: {
-                kind: "prepared",
+                kind: 'prepared',
                 observation: `${input.registration.partition}:${randomUUID()}`,
                 build: input.build,
                 generation: input.generation,
@@ -1422,9 +1202,9 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             input.consumer.incarnation,
           ],
         );
-        if (!result.rowCount) throw new Failure("observation_lost");
+        if (!result.rowCount) throw new Failure('observation_lost');
         return {
-          status: "acquired" as const,
+          status: 'acquired' as const,
           use: { observation: input.snapshot.observation, token },
           cost: meter,
         };
@@ -1453,8 +1233,8 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             encode(input.execution),
           ],
         );
-        if (!result.rowCount) throw new Failure("execution_missing");
-        return { status: "appended" as const, cost: meter };
+        if (!result.rowCount) throw new Failure('execution_missing');
+        return { status: 'appended' as const, cost: meter };
       });
     },
     release(use, context) {
@@ -1464,18 +1244,17 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           await sql(
             pool,
             meter,
-            "DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token)=($1,$2,$3)",
+            'DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token)=($1,$2,$3)',
             [partition(use.observation), use.observation, use.token],
           );
           const active = await sql(
             pool,
             meter,
-            "SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at>$3 ORDER BY expires_at DESC LIMIT 1",
+            'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at>$3 ORDER BY expires_at DESC LIMIT 1',
             [partition(use.observation), use.observation, Date.now()],
           );
-          if (!active.rowCount)
-            for (const wake of drainWaiters.get(use.observation) ?? []) wake();
-          return { status: "released" as const, cost: meter };
+          if (!active.rowCount) for (const wake of drainWaiters.get(use.observation) ?? []) wake();
+          return { status: 'released' as const, cost: meter };
         },
         true,
       );
@@ -1486,11 +1265,8 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       queried(input.queried);
       return run(context, async (meter) => {
         const q = input.queried;
-        if (
-          q.snapshot.kind !== "pit" ||
-          input.use.observation !== q.snapshot.observation
-        )
-          throw new Failure("binding_mismatch");
+        if (q.snapshot.kind !== 'pit' || input.use.observation !== q.snapshot.observation)
+          throw new Failure('binding_mismatch');
         const successor = { ...q, snapshot: { ...q.snapshot, pit: input.pit } };
         const result = await sql(
           pool,
@@ -1516,8 +1292,8 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             encode(successor),
           ],
         );
-        if (!result.rowCount) throw new Failure("observation_lost");
-        return { status: "retained" as const, queried: successor, cost: meter };
+        if (!result.rowCount) throw new Failure('observation_lost');
+        return { status: 'retained' as const, queried: successor, cost: meter };
       });
     },
     renewPit(q, keepAliveMs, search, context) {
@@ -1525,33 +1301,25 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       queried(input);
       lifetime(keepAliveMs);
       return run(context, async (meter) => {
-        if (input.snapshot.kind !== "pit")
-          throw new Failure("binding_mismatch");
+        if (input.snapshot.kind !== 'pit') throw new Failure('binding_mismatch');
         const acquired = await api.acquire(input, context);
         addCost(meter, acquired.cost);
-        if (acquired.status !== "acquired") throw new Failure(acquired.reason);
+        if (acquired.status !== 'acquired') throw new Failure(acquired.reason);
         try {
           const old = await sql(
             pool,
             meter,
-            "SELECT revision FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2)",
+            'SELECT revision FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2)',
             [partition(input.snapshot.observation), input.snapshot.observation],
           );
-          if (
-            (await native(
-              search,
-              meter,
-              context,
-              input.consumer.physicalTarget,
-            )) !== input.consumer.incarnation
-          )
-            throw new Failure("binding_mismatch");
+          if ((await native(search, meter, context, input.consumer.physicalTarget)) !== input.consumer.incarnation)
+            throw new Failure('binding_mismatch');
           const renewedAt = Date.now();
           const response = await engine<{
             pit_id?: string;
             _shards: { failed: number };
             timed_out: boolean;
-          }>(search, meter, context, "POST", "/_search", {
+          }>(search, meter, context, 'POST', '/_search', {
             size: 0,
             track_total_hits: false,
             query: { match_none: {} },
@@ -1585,14 +1353,11 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             [
               partition(input.snapshot.observation),
               input.snapshot.observation,
-              digest(
-                successor.snapshot.kind === "pit" ? successor.snapshot.pit : "",
-              ),
-              successor.snapshot.kind === "pit" ? successor.snapshot.pit : "",
+              digest(successor.snapshot.kind === 'pit' ? successor.snapshot.pit : ''),
+              successor.snapshot.kind === 'pit' ? successor.snapshot.pit : '',
             ],
           );
-          if (response.timed_out || response._shards.failed)
-            throw new Failure("observation_lost");
+          if (response.timed_out || response._shards.failed) throw new Failure('observation_lost');
           const updated = await sql(
             pool,
             meter,
@@ -1610,9 +1375,9 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
               input.consumer.incarnation,
             ],
           );
-          if (!updated.rowCount) throw new Failure("observation_lost");
+          if (!updated.rowCount) throw new Failure('observation_lost');
           return {
-            status: "retained" as const,
+            status: 'retained' as const,
             queried: successor,
             cost: meter,
           };
@@ -1625,19 +1390,15 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       const input = decode<typeof q>(encode(q));
       queried(input);
       return run(context, async (meter) => {
-        const values = [
-          partition(input.snapshot.observation),
-          input.snapshot.observation,
-        ];
+        const values = [partition(input.snapshot.observation), input.snapshot.observation];
         const barrier = await sql(
           pool,
           meter,
           `UPDATE search.public_filter_observation SET state=CASE WHEN state='closed' THEN 'closed' ELSE 'closing' END WHERE (partition_no,observation)=($1,$2) AND queried=$3 RETURNING state`,
           [...values, encode(input)],
         );
-        if (!barrier.rowCount) throw new Failure("observation_lost");
-        if (barrier.rows[0].state === "closed")
-          return { status: "closed" as const, cost: meter };
+        if (!barrier.rowCount) throw new Failure('observation_lost');
+        if (barrier.rows[0].state === 'closed') return { status: 'closed' as const, cost: meter };
         const signal = drainSignal(input.snapshot.observation);
         try {
           // At most three indexed maximum probes, including stale delivery and cross-process fallback.
@@ -1648,20 +1409,15 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             const refs = await sql(
               pool,
               meter,
-              "SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at>$3 ORDER BY expires_at DESC LIMIT 1",
+              'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at>$3 ORDER BY expires_at DESC LIMIT 1',
               [...values, Date.now()],
             );
             if (!refs.rowCount) break;
-            if (attempt === 2) throw new Failure("deadline");
+            if (attempt === 2) throw new Failure('deadline');
             const now = Date.now();
             const remaining = context.deadline - now;
-            const next =
-              attempt === 0
-                ? now + remaining / 2
-                : context.deadline - Math.min(100, remaining / 4);
-            await signal.wait(
-              Math.min(Number(refs.rows[0].expires_at) + 1, next),
-            );
+            const next = attempt === 0 ? now + remaining / 2 : context.deadline - Math.min(100, remaining / 4);
+            await signal.wait(Math.min(Number(refs.rows[0].expires_at) + 1, next));
           }
         } finally {
           signal.dispose();
@@ -1670,7 +1426,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
         await sql(
           pool,
           meter,
-          "DELETE FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at<=$3",
+          'DELETE FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at<=$3',
           [...values, Date.now()],
         );
         for (;;) {
@@ -1681,8 +1437,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             values,
           );
           if (!owned.rowCount) break;
-          for (const pit of owned.rows)
-            await deletePit(pit.locator, search, context, meter);
+          for (const pit of owned.rows) await deletePit(pit.locator, search, context, meter);
           await sql(
             pool,
             meter,
@@ -1696,7 +1451,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           "UPDATE search.public_filter_observation SET state='closed' WHERE (partition_no,observation)=($1,$2) AND state='closing'",
           values,
         );
-        return { status: "closed" as const, cost: meter };
+        return { status: 'closed' as const, cost: meter };
       });
     },
     retire(value, context) {
@@ -1708,8 +1463,8 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           "UPDATE search.public_filter_registration SET state='retired' WHERE (partition_no,id)=($1,$2) RETURNING id",
           [value.partition, value.id],
         );
-        if (!result.rowCount) throw new Failure("definition_missing");
-        return { status: "retired" as const, cost: meter };
+        if (!result.rowCount) throw new Failure('definition_missing');
+        return { status: 'retired' as const, cost: meter };
       });
     },
     read(request, context) {
@@ -1723,22 +1478,15 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
   return api;
 }
 function addCost(target: Meter, value: CustodyCost) {
-  for (const key of Object.keys(target) as (keyof Meter)[])
-    target[key] += value[key];
+  for (const key of Object.keys(target) as (keyof Meter)[]) target[key] += value[key];
 }
-async function deletePit(
-  pit: string,
-  search: OpenSearch,
-  context: PublicFilterConsumerContext,
-  meter: Meter,
-) {
+async function deletePit(pit: string, search: OpenSearch, context: PublicFilterConsumerContext, meter: Meter) {
   try {
-    await engine(search, meter, context, "DELETE", "/_search/point_in_time", {
+    await engine(search, meter, context, 'DELETE', '/_search/point_in_time', {
       pit_id: [pit],
     });
   } catch (error) {
-    if (!(error instanceof OpenSearchError && error.status === 404))
-      throw error;
+    if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
   }
 }
 
@@ -1770,16 +1518,10 @@ export async function readGenerationPublicationCustody(
        JOIN search.public_filter_target t USING(partition_no,physical_target)
        WHERE ($1::integer IS NULL OR r.partition_no=$1) AND r.physical_target=$2 AND md5(r.consumer)=md5($3) AND r.consumer=$3 AND r.state='active'
        AND t.incarnation=$4 LIMIT 2`,
-      [
-        sourceHome,
-        consumer.physicalTarget,
-        encode(consumer),
-        consumer.incarnation,
-      ],
+      [sourceHome, consumer.physicalTarget, encode(consumer), consumer.incarnation],
     );
     const row = registered.rows[0];
-    if (!row || registered.rows.length !== 1)
-      throw new Failure("definition_missing");
+    if (!row || registered.rows.length !== 1) throw new Failure('definition_missing');
     sourceHome = row.partition_no as number;
     const definition = decode<{
       digest: string;
@@ -1802,8 +1544,7 @@ export async function readGenerationPublicationCustody(
          AND observation=$3 AND state='open'`,
             [sourceHome, row.id, observation],
           );
-    if (!found.rows[0])
-      return { definition: definition.data, queried: null, cost: meter };
+    if (!found.rows[0]) return { definition: definition.data, queried: null, cost: meter };
     const q = decode<PublicFilterQueriedObservation>(found.rows[0].queried);
     requireValue(encode(q.consumer) === encode(consumer));
     const native = await read(pool, { queried: q }, context, meter);

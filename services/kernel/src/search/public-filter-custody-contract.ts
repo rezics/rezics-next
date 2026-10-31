@@ -3,54 +3,48 @@ import type {
   PublicFilterConsumerCaptureInput,
   PublicFilterConsumerContext,
   PublicFilterQueriedObservation,
-} from "./public-filter-consumer-contract.ts";
+} from './public-filter-consumer-contract.ts';
 import type {
   PrivacyReductionStart,
   PublicFilterConsumer,
   PublicFilterCost,
   PublicFilterDependencyKey,
   PublicFilterProjectionMeaning,
-} from "../semantic/public-filter-source-contract.ts";
-import type { OpenSearch } from "./opensearch.ts";
+} from '../semantic/public-filter-source-contract.ts';
+import type { OpenSearch } from './opensearch.ts';
 import type {
   PublicFilterSourceBinding,
   PublicFilterBindingFailure,
   PublicSourceRepair,
-} from "../semantic/public-filter-source-binding.ts";
+} from '../semantic/public-filter-source-binding.ts';
 
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
-export type CustodyDefinition<
-  Capture extends PublicCanonicalCaptureInput =
-    PublicFilterConsumerCaptureInput,
-> = Readonly<{
-  source: Readonly<{
-    id: string;
-    partition: number;
-    epoch: number;
-    configuration: string;
+export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> =
+  Readonly<{
+    source: Readonly<{
+      id: string;
+      partition: number;
+      epoch: number;
+      configuration: string;
+    }>;
+    readDefinition: string;
+    meaning: PublicFilterProjectionMeaning;
+    capture: Capture;
+    dependencyKeys: readonly PublicFilterDependencyKey[];
   }>;
-  readDefinition: string;
-  meaning: PublicFilterProjectionMeaning;
-  capture: Capture;
-  dependencyKeys: readonly PublicFilterDependencyKey[];
-}>;
 /** Exact immutable authority consumed through semantic.readRelease, including registered composites.
  * This locates complete meaning, never current Source permission or a reduced copy of its grammar.
  */
 export type CustodyReleaseReference = Readonly<{
-  authority: "semantic.readRelease";
+  authority: 'semantic.readRelease';
   digest: string;
 }>;
 /** Wide meanings retain their immutable authority instead of copying a four-MiB release into one MiB. */
-export type CustodyRetainedDefinition = Omit<
-  CustodyDefinition<PublicCanonicalCaptureInput>,
-  "meaning"
-> &
+export type CustodyRetainedDefinition = Omit<CustodyDefinition<PublicCanonicalCaptureInput>, 'meaning'> &
   Readonly<{
-    meaning: Omit<PublicFilterProjectionMeaning, "release"> &
+    meaning: Omit<PublicFilterProjectionMeaning, 'release'> &
       Readonly<{
-        release:
-          PublicFilterProjectionMeaning["release"] | CustodyReleaseReference;
+        release: PublicFilterProjectionMeaning['release'] | CustodyReleaseReference;
       }>;
   }>;
 export type CustodyRegistration = Readonly<{ partition: number; id: string }>;
@@ -69,21 +63,21 @@ export type CustodyCost = PublicFilterCost &
     engineRequests: number;
   }>;
 export type CustodyFailure = Readonly<{
-  status: "unready" | "unavailable";
+  status: 'unready' | 'unavailable';
   reason:
-    | "source_missing"
-    | "configuration_changed"
-    | "definition_missing"
-    | "observation_lost"
-    | "execution_missing"
-    | "binding_mismatch"
-    | "owner_unavailable"
-    | "identity_pending"
-    | "deadline";
+    | 'source_missing'
+    | 'configuration_changed'
+    | 'definition_missing'
+    | 'observation_lost'
+    | 'execution_missing'
+    | 'binding_mismatch'
+    | 'owner_unavailable'
+    | 'identity_pending'
+    | 'deadline';
   cost: CustodyCost;
 }>;
 export type CustodyFound = Readonly<{
-  status: "found";
+  status: 'found';
   definition: CustodyRetainedDefinition;
   queried: PublicFilterQueriedObservation;
   covered: PrivacyReductionStart;
@@ -91,7 +85,7 @@ export type CustodyFound = Readonly<{
   cost: CustodyCost;
 }>;
 export type CustodyRetained = Readonly<{
-  status: "retained";
+  status: 'retained';
   queried: PublicFilterQueriedObservation;
   cost: CustodyCost;
 }>;
@@ -108,7 +102,7 @@ export type NativePublicFilterRepairSettlement = Readonly<{
 export type PublicFilterRepairSettlementResult =
   | CustodyFailure
   | Readonly<{
-      status: "settled";
+      status: 'settled';
       definition: CustodyRetainedDefinition;
       queried: PublicFilterQueriedObservation;
       execution: CustodyExecution;
@@ -132,7 +126,7 @@ export type NativeSourceRepairRead = Readonly<{
 }>;
 export type NativeSourceRepairVerification =
   | Readonly<{
-      status: "verified";
+      status: 'verified';
       repair: PublicSourceRepair;
       cost: PublicFilterCost;
     }>
@@ -145,7 +139,7 @@ export type NativeSourceRepairStepRead = Readonly<{
 }>;
 export type NativeSourceRepairStepVerification =
   | Readonly<{
-      status: "verified";
+      status: 'verified';
       step: string;
       predecessor: string | null;
       frontier: string | null;
@@ -165,7 +159,7 @@ export type PublicFilterRepairSourceBinding = PublicFilterSourceBinding &
       context: PublicFilterConsumerContext,
     ): Promise<NativeSourceRepairVerification>;
   }>;
-export type RetainedSourceRepair = Omit<PublicSourceRepair, "receipt"> &
+export type RetainedSourceRepair = Omit<PublicSourceRepair, 'receipt'> &
   Readonly<{ receipt: NativeSourceRepairLocator }>;
 /** Internal native storage shapes. Only data fields of the Source locator are persisted. */
 export type RetainedRepairPage = Readonly<{
@@ -205,7 +199,7 @@ export interface PublicFilterCustody {
     context: PublicFilterConsumerContext,
   ): Promise<
     | Readonly<{
-        status: "registered";
+        status: 'registered';
         registration: CustodyRegistration;
         consumer: PublicFilterConsumer;
         cost: CustodyCost;
@@ -228,7 +222,7 @@ export interface PublicFilterCustody {
       covered: PrivacyReductionStart;
       build: string;
       generation: bigint;
-      rows: CustodyExecution["ownRows"];
+      rows: CustodyExecution['ownRows'];
       expiresAt: number;
     }>,
     context: PublicFilterConsumerContext,
@@ -236,22 +230,15 @@ export interface PublicFilterCustody {
   acquire(
     queried: PublicFilterQueriedObservation,
     context: PublicFilterConsumerContext,
-  ): Promise<
-    | Readonly<{ status: "acquired"; use: CustodyUse; cost: CustodyCost }>
-    | CustodyFailure
-  >;
+  ): Promise<Readonly<{ status: 'acquired'; use: CustodyUse; cost: CustodyCost }> | CustodyFailure>;
   appendExecution(
     request: Readonly<{ use: CustodyUse; execution: CustodyExecution }>,
     context: PublicFilterConsumerContext,
-  ): Promise<
-    Readonly<{ status: "appended"; cost: CustodyCost }> | CustodyFailure
-  >;
+  ): Promise<Readonly<{ status: 'appended'; cost: CustodyCost }> | CustodyFailure>;
   release(
     use: CustodyUse,
     context: PublicFilterConsumerContext,
-  ): Promise<
-    Readonly<{ status: "released"; cost: CustodyCost }> | CustodyFailure
-  >;
+  ): Promise<Readonly<{ status: 'released'; cost: CustodyCost }> | CustodyFailure>;
   /** Retain the actual query response locator under the existing active use, including malformed results. */
   retainPit(
     request: Readonly<{
@@ -271,19 +258,12 @@ export interface PublicFilterCustody {
     queried: PublicFilterQueriedObservation,
     search: OpenSearch,
     context: PublicFilterConsumerContext,
-  ): Promise<
-    Readonly<{ status: "closed"; cost: CustodyCost }> | CustodyFailure
-  >;
+  ): Promise<Readonly<{ status: 'closed'; cost: CustodyCost }> | CustodyFailure>;
   retire(
     registration: CustodyRegistration,
     context: PublicFilterConsumerContext,
-  ): Promise<
-    Readonly<{ status: "retired"; cost: CustodyCost }> | CustodyFailure
-  >;
-  read(
-    request: CustodyRead,
-    context: PublicFilterConsumerContext,
-  ): Promise<CustodyFound | CustodyFailure>;
+  ): Promise<Readonly<{ status: 'retired'; cost: CustodyCost }> | CustodyFailure>;
+  read(request: CustodyRead, context: PublicFilterConsumerContext): Promise<CustodyFound | CustodyFailure>;
   /** Drains local method calls; committed observations survive factory recovery. Supplied resources stay open. */
   close(): Promise<void>;
 }

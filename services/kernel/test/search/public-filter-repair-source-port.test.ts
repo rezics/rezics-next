@@ -1,15 +1,15 @@
-import { expect, test } from "bun:test";
-import { verifyPublicFilterRepairSourcePage } from "../../src/search/public-filter-custody.ts";
+import { expect, test } from 'bun:test';
+import { verifyPublicFilterRepairSourcePage } from '../../src/search/public-filter-custody.ts';
 import type {
   NativeSourceRepairLocator,
   NativeSourceRepairStepRead,
   PublicFilterRepairSourceBinding,
   RetainedRepairPage,
   RetainedSourceRepair,
-} from "../../src/search/public-filter-custody-contract.ts";
-import type { PublicFilterQueriedObservation } from "../../src/search/public-filter-consumer-contract.ts";
-import type { PublicFilterCost } from "../../src/semantic/public-filter-source-contract.ts";
-import type { PublicSourceRepair } from "../../src/semantic/public-filter-source-binding.ts";
+} from '../../src/search/public-filter-custody-contract.ts';
+import type { PublicFilterQueriedObservation } from '../../src/search/public-filter-consumer-contract.ts';
+import type { PublicFilterCost } from '../../src/semantic/public-filter-source-contract.ts';
+import type { PublicSourceRepair } from '../../src/semantic/public-filter-source-binding.ts';
 
 // Isolated port-composition tests. These values never establish native Source/engine proof.
 const cost: PublicFilterCost = {
@@ -25,47 +25,42 @@ const cost: PublicFilterCost = {
 };
 const context = () => ({ deadline: Date.now() + 10_000 });
 const request: NativeSourceRepairStepRead = {
-  bootstrap: "0:original-bootstrap",
-  execution: "original-execution",
-  predecessor: "prior-step",
+  bootstrap: '0:original-bootstrap',
+  execution: 'original-execution',
+  predecessor: 'prior-step',
   queried: {
-    snapshot: { kind: "pit", observation: "0:old-observation", pit: "old-pit" },
+    snapshot: { kind: 'pit', observation: '0:old-observation', pit: 'old-pit' },
     consumer: {},
   } as PublicFilterQueriedObservation,
 };
 const locator = (digest: string): NativeSourceRepairLocator => ({
   bootstrap: request.bootstrap,
   execution: request.execution,
-  step: "native-step",
+  step: 'native-step',
   locatorDigest: digest,
 });
 const repair = (digest: string): RetainedSourceRepair =>
   ({
-    kind: "foreign",
-    locator: { subject: "subject" },
-    source: { subject: "subject", position: 9n },
-    projection: { status: "complete", records: [], frontier: null },
+    kind: 'foreign',
+    locator: { subject: 'subject' },
+    source: { subject: 'subject', position: 9n },
+    projection: { status: 'complete', records: [], frontier: null },
     receipt: locator(digest),
   }) as RetainedSourceRepair;
-const page = (
-  repairs: readonly RetainedSourceRepair[] = [],
-): RetainedRepairPage => ({
-  sourceStep: "native-step",
+const page = (repairs: readonly RetainedSourceRepair[] = []): RetainedRepairPage => ({
+  sourceStep: 'native-step',
   predecessor: request.predecessor,
   complete: true,
   frontier: null,
   repairs,
 });
-function port(
-  expected: RetainedRepairPage,
-  trace: string[] = [],
-): PublicFilterRepairSourceBinding {
+function port(expected: RetainedRepairPage, trace: string[] = []): PublicFilterRepairSourceBinding {
   return {
     async readRepairStep(input) {
-      trace.push("step");
+      trace.push('step');
       expect(input).toEqual(request);
       return {
-        status: "verified",
+        status: 'verified',
         step: expected.sourceStep,
         predecessor: expected.predecessor,
         complete: expected.complete,
@@ -79,7 +74,7 @@ function port(
       expect(input.queried).toEqual(request.queried);
       expect(input.execution).toBe(request.execution);
       return {
-        status: "verified",
+        status: 'verified',
         repair: expected.repairs.find(
           (item) => item.receipt.locatorDigest === input.receipt.locatorDigest,
         )! as PublicSourceRepair,
@@ -89,175 +84,115 @@ function port(
   } as PublicFilterRepairSourceBinding;
 }
 
-test("empty final closure requires the exact owner step and charges its actual work without an item receipt", async () => {
+test('empty final closure requires the exact owner step and charges its actual work without an item receipt', async () => {
   const expected = page();
   const trace: string[] = [];
   const costs: PublicFilterCost[] = [];
   expect(
-    await verifyPublicFilterRepairSourcePage(
-      port(expected, trace),
-      request,
-      expected,
-      context(),
-      (next) => {
-        if (next) costs.push(next);
-      },
-    ),
+    await verifyPublicFilterRepairSourcePage(port(expected, trace), request, expected, context(), (next) => {
+      if (next) costs.push(next);
+    }),
   ).toEqual(expected);
-  expect(trace).toEqual(["step"]);
+  expect(trace).toEqual(['step']);
   expect(costs).toEqual([cost]);
   const unavailable = {
     ...port(expected),
     async readRepairStep() {
       return {
-        status: "unavailable" as const,
-        reason: "owner_unavailable" as const,
+        status: 'unavailable' as const,
+        reason: 'owner_unavailable' as const,
         cost,
       };
     },
   };
+  await expect(verifyPublicFilterRepairSourcePage(unavailable, request, expected, context(), () => {})).rejects.toThrow(
+    'owner_unavailable',
+  );
   await expect(
-    verifyPublicFilterRepairSourcePage(
-      unavailable,
-      request,
-      expected,
-      context(),
-      () => {},
-    ),
-  ).rejects.toThrow("owner_unavailable");
-  await expect(
-    verifyPublicFilterRepairSourcePage(
-      {} as PublicFilterRepairSourceBinding,
-      request,
-      expected,
-      context(),
-      () => {},
-    ),
-  ).rejects.toThrow("owner_unavailable");
+    verifyPublicFilterRepairSourcePage({} as PublicFilterRepairSourceBinding, request, expected, context(), () => {}),
+  ).rejects.toThrow('owner_unavailable');
 });
 
-test("ordered original item locators and actual verified repair bodies are required on replay", async () => {
-  const expected = page([repair("first"), repair("second")]);
+test('ordered original item locators and actual verified repair bodies are required on replay', async () => {
+  const expected = page([repair('first'), repair('second')]);
   const trace: string[] = [];
   const costs: PublicFilterCost[] = [];
   expect(
-    await verifyPublicFilterRepairSourcePage(
-      port(expected, trace),
-      request,
-      expected,
-      context(),
-      (next) => {
-        if (next) costs.push(next);
-      },
-    ),
+    await verifyPublicFilterRepairSourcePage(port(expected, trace), request, expected, context(), (next) => {
+      if (next) costs.push(next);
+    }),
   ).toEqual(expected);
-  expect(trace).toEqual(["step", "first", "second"]);
+  expect(trace).toEqual(['step', 'first', 'second']);
   expect(costs).toEqual([cost, cost, cost]);
   const reordered = { ...expected, repairs: [...expected.repairs].reverse() };
   await expect(
-    verifyPublicFilterRepairSourcePage(
-      port(reordered),
-      request,
-      expected,
-      context(),
-      () => {},
-    ),
-  ).rejects.toThrow("binding_mismatch");
+    verifyPublicFilterRepairSourcePage(port(reordered), request, expected, context(), () => {}),
+  ).rejects.toThrow('binding_mismatch');
   const changed = {
     ...port(expected),
     async readRepairReceipt() {
       return {
-        status: "verified" as const,
-        repair: { ...repair("first"), kind: "local" } as PublicSourceRepair,
+        status: 'verified' as const,
+        repair: { ...repair('first'), kind: 'local' } as PublicSourceRepair,
         cost,
       };
     },
   };
-  await expect(
-    verifyPublicFilterRepairSourcePage(
-      changed,
-      request,
-      expected,
-      context(),
-      () => {},
-    ),
-  ).rejects.toThrow("binding_mismatch");
+  await expect(verifyPublicFilterRepairSourcePage(changed, request, expected, context(), () => {})).rejects.toThrow(
+    'binding_mismatch',
+  );
   const missing = {
     ...expected,
-    repairs: [{ ...repair("first"), receipt: {} as NativeSourceRepairLocator }],
+    repairs: [{ ...repair('first'), receipt: {} as NativeSourceRepairLocator }],
   };
   await expect(
-    verifyPublicFilterRepairSourcePage(
-      port(expected),
-      request,
-      missing,
-      context(),
-      () => {},
-    ),
-  ).rejects.toThrow("owner_unavailable");
+    verifyPublicFilterRepairSourcePage(port(expected), request, missing, context(), () => {}),
+  ).rejects.toThrow('owner_unavailable');
 });
 
-test("owner uncertainty, a replaced cut, wrong predecessor and unfinished frontier remain unavailable", async () => {
-  const expected = page([repair("first")]);
+test('owner uncertainty, a replaced cut, wrong predecessor and unfinished frontier remain unavailable', async () => {
+  const expected = page([repair('first')]);
   const uncertain = {
     ...port(expected),
     async readRepairReceipt() {
       return {
-        status: "unavailable" as const,
-        reason: "owner_unavailable" as const,
+        status: 'unavailable' as const,
+        reason: 'owner_unavailable' as const,
         cost,
       };
     },
   };
-  await expect(
-    verifyPublicFilterRepairSourcePage(
-      uncertain,
-      request,
-      expected,
-      context(),
-      () => {},
-    ),
-  ).rejects.toThrow("owner_unavailable");
+  await expect(verifyPublicFilterRepairSourcePage(uncertain, request, expected, context(), () => {})).rejects.toThrow(
+    'owner_unavailable',
+  );
   for (const changed of [
-    { ...expected, predecessor: "later-predecessor" },
-    { ...expected, frontier: "unfinished" },
+    { ...expected, predecessor: 'later-predecessor' },
+    { ...expected, frontier: 'unfinished' },
     {
       ...expected,
       repairs: [
         {
-          ...repair("first"),
-          receipt: { ...locator("first"), bootstrap: "0:new-bootstrap" },
+          ...repair('first'),
+          receipt: { ...locator('first'), bootstrap: '0:new-bootstrap' },
         },
       ],
     },
   ]) {
     await expect(
-      verifyPublicFilterRepairSourcePage(
-        port(changed),
-        request,
-        expected,
-        context(),
-        () => {},
-      ),
-    ).rejects.toThrow("binding_mismatch");
+      verifyPublicFilterRepairSourcePage(port(changed), request, expected, context(), () => {}),
+    ).rejects.toThrow('binding_mismatch');
   }
 });
 
-test("the original allowance admits each owner call and stops before another item when exhausted", async () => {
-  const expected = page([repair("first"), repair("second")]);
+test('the original allowance admits each owner call and stops before another item when exhausted', async () => {
+  const expected = page([repair('first'), repair('second')]);
   const trace: string[] = [];
   let keys = 998;
   await expect(
-    verifyPublicFilterRepairSourcePage(
-      port(expected, trace),
-      request,
-      expected,
-      context(),
-      (next) => {
-        keys += next?.inputKeys ?? 0;
-        if (keys >= 1000) throw new Error("original allowance exhausted");
-      },
-    ),
-  ).rejects.toThrow("original allowance exhausted");
-  expect(trace).toEqual(["step", "first"]);
+    verifyPublicFilterRepairSourcePage(port(expected, trace), request, expected, context(), (next) => {
+      keys += next?.inputKeys ?? 0;
+      if (keys >= 1000) throw new Error('original allowance exhausted');
+    }),
+  ).rejects.toThrow('original allowance exhausted');
+  expect(trace).toEqual(['step', 'first']);
 });
