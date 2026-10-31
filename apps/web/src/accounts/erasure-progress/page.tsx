@@ -29,21 +29,23 @@ export function AccountErasurePage({ accountId }: { accountId: string }) {
   const reading = sessionRead?.fetchStatus !== undefined && sessionRead.fetchStatus !== 'idle';
   const failed = sessionRead?.status === 'error';
   const returnTo = location.publicHref;
+  const viewerId = session.state === 'signed-in' && routedId(session.subject) ? session.subject : null;
+  const binding = sessionRead?.data;
   const current =
     !reading &&
     !failed &&
     sessionRead?.status === 'success' &&
-    session.state === 'signed-in' &&
     routedId(accountId) &&
-    routedId(session.subject) &&
-    sessionRead.data.subject === session.subject;
+    viewerId !== null &&
+    binding?.state === 'signed-in' &&
+    binding.subject === viewerId;
   const unavailable = failed || session.state === 'unavailable' || (session.state === 'signed-in' && !current);
   return current ? (
     <BoundErasure
-      key={`${accountId}:${session.subject}:${sessionRead.dataUpdateCount}:${sessionRead.errorUpdateCount}`}
+      key={`${accountId}:${viewerId}:${sessionRead.dataUpdateCount}:${sessionRead.errorUpdateCount}`}
       accountId={accountId}
-      viewerId={session.subject}
-      binding={sessionRead.data}
+      viewerId={viewerId}
+      binding={binding}
       returnTo={returnTo}
     />
   ) : (
