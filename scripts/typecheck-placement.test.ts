@@ -210,9 +210,7 @@ test('Kernel compiler placement returns only its genuinely required bounded outp
               expect(receivedEnv).toBe(env);
               expect(run.command).toEqual(['bun', 'scripts/typecheck.ts', ...mode.command]);
               expect(run.keepsFiles).toBe(project.REYLO_CONFIG?.startsWith('/external/') ? true : mode.keepsFiles);
-              expect(run.returns).toEqual(
-                project.REYLO_CONFIG?.startsWith('/external/') ? undefined : mode.returns,
-              );
+              expect(run.returns).toEqual(project.REYLO_CONFIG?.startsWith('/external/') ? undefined : mode.returns);
               return compilerStatus;
             },
             withThrowawayDatabase: async () => {
