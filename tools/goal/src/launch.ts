@@ -1,4 +1,11 @@
-import { proofProtocolAuthorized, proofSourceUnchanged, type ProofReservation } from './verification.ts';
+import {
+  proofProtocolAuthorized,
+  proofSourceUnchanged,
+  registeredProof,
+  ordinaryProofCommand,
+  type ProofAuthorization,
+  type ProofReservation,
+} from './verification.ts';
 import { type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
 import {
   closeSync,
@@ -86,7 +93,7 @@ function namedWorkerCheck(contractText: string): string | undefined {
   }
   return path.startsWith('/') && path.endsWith('/scripts/worker-check.ts') ? path : undefined;
 }
-type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'> & Partial<Pick<Brief, 'kind' | 'proof'>>;
+type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'> & Partial<Brief>;
 /** Current acceptance-check and controller wake instructions, repeated at every prompt boundary. */
 /** Whether `<state>/verification-mode` asks for minimal verification: workers type-check and land, checks run later. */
 export function minimalVerification(stateDirectory: string | undefined): boolean {
@@ -102,6 +109,7 @@ export function workerCheckProtocol(
   briefOrContract: CheckProtocolBrief | string = '',
   stateDirectory?: string,
   proofRun?: ProofReservation,
+  authorization?: ProofAuthorization,
 ): string {
   if (typeof briefOrContract !== 'string' && proofProtocolAuthorized(briefOrContract, proofRun))
     return [
@@ -112,17 +120,32 @@ export function workerCheckProtocol(
       `Current owned check evidence: ${JSON.stringify(proofRun!.observation ?? { status: 'unknown', cause: 'Await controller evidence' })}.`,
       `If the supplied check is running, immediately end this turn with {"status":"waiting","checks":["${proofRun!.binding.checkId}"]}. Goal resumes this same session from actual terminal records.`,
       'Do not use --wait, ps, pgrep, log polling, duplicate invocation or an automatic model retry. The wrapper alone owns its one infrastructure rerun and holds the permit throughout.',
-      'Use supplied terminal results exactly. Missing, unknown, timed out, nonzero or invalid custody stays non-green. Route failed assertions and log evidence to the original Goal owner for a separate minimal product fix.',
+      'Use supplied terminal results exactly. Missing, unknown, timed out or nonzero wrapper results stay non-green. Native custody is optional evidence. Route failed assertions and log evidence to the original Goal owner for a separate minimal product fix.',
       'Finish with structured success and checks:[] only after the owned terminal check passes; no source commit or landing is required.',
     ].join(' ');
+  if (typeof briefOrContract !== 'string' && registeredProof(briefOrContract, authorization)) {
+    const invocation = ordinaryProofCommand(briefOrContract.acceptance.command).invocation.map(shellQuote).join(' ');
+    return [
+      'This authenticated registered original proof has a task-scoped exception to minimal verification.',
+      `Captured source: ${briefOrContract.proof!.sourceCommit}. Product source, tests and contracts are read-only. Do not edit, commit, land, typecheck or create receipts. Only ignored check-owned preparation is permitted.`,
+      `Run exactly one ordinary worker-check invocation from the worktree root: \`${invocation}\`. Preserve every original argv, environment prefix, input and wrapper flag. An original wrapper is already the invocation: never wrap it again.`,
+      'The controller has not started a check for you. Native producer binding, token and physical custody are optional evidence, never execution or success prerequisites. Never invent a UUID.',
+      'If the wrapper returns while its check is active, immediately return {"status":"waiting","checks":["<bare UUID printed by this invocation>"]} with the normal exit fields. Goal waits and wakes this same session with its actual result. Terminal success uses checks:[].',
+      'Do not use --wait, ps, pgrep, polling, duplicate invocations or automatic model retries. On wake use the supplied result; never start the command again. The ordinary wrapper alone owns its supported infrastructure rerun.',
+      'Success requires the actual declared command to finish with exit zero and unchanged captured source. Missing, unknown and nonzero results stay non-green; return the exact failed assertion or setup error and log reference to the original owner.',
+    ].join(' ');
+  }
   if (minimalVerification(stateDirectory))
     return [
-      'Verification is minimal for now: do not run the acceptance command in the brief, and do not run any native, database, browser, host or remote check, worker-check or remote-check.',
+      'Verification is minimal for now: complete your entire own current implementation contract and required permitted workspace typing. Original acceptance/native/browser verification is deferred until after integration; do not run it, a root check, worker-check or remote-check.',
       'Before finishing, run only the type check of the workspaces you changed, locally in the foreground from the worktree root (`bun run --cwd <workspace> typecheck`, or `bun scripts/typecheck.ts` for several), and fix every error it reports.',
-      'The type check of services/kernel or services/auth needs a compiler database: run it in the foreground with remote placement off, as `env -u KERNEL_CHECK_REMOTE bun run --cwd services/kernel typecheck` (or services/auth), which starts a local compiler database itself; wait for it to exit and read its status. It is not a worker-check, has no check id, and must never produce a waiting result; this is the only database use allowed.',
+      'For services/kernel or services/auth TYPECHECK ONLY, the actual compiler database or check host is permitted: use the existing supported compiler command and placement, preserving its real leases, results and exact terminal status. Do not force `env -u KERNEL_CHECK_REMOTE` or local-only placement over that supported configuration. This exception grants no acceptance/native/browser/root/worker-check permission and no other database, host or remote checks.',
+      'While an allowed foreground compiler is actually running, await its EXISTING tool command/session result and read its terminal status. It has no detached check id: never return waiting with an empty checks array or manufacture UUIDs. Do not use ps/pgrep/awk/help/status loops, start duplicate commands, or interrupt a live compiler. Waiting on the actual already-open command/session handle is allowed.',
       'Unit tests you wrote that need no database may be run directly with `bun test <file>` if they take seconds; nothing else.',
-      'Then commit and finish with the normal exit object and `"checks":[]`. The acceptance command runs after integration; a failure there comes back to you as a fix.',
-      'A previous session may contain instructions to start or wait on checks; they are superseded by this one.',
+      'When your entire own current implementation contract and required permitted workspace typing are complete, commit and return normal status success, blocker:null, checks:[], naming the actual code completed and deferred original acceptance/native obligations. This source result is NOT whole-feature/native/Goal completion; deferred acceptance alone is neither blocked nor waiting.',
+      'Typing alone cannot establish your own product completion. Unfinished own implementation or genuine absent authority must report status blocked with the exact blocker; do not invent success.',
+      'Status waiting is legal ONLY for genuinely still-running registered bare UUID check ids owned by this task/attempt. Completed command prose, checks:[], a real product blocker, or deferred acceptance cannot justify waiting. Terminal success has "checks":[].',
+      'This current execution policy supersedes conflicting acceptance, report-only, saved-session and retry-manifest instructions, including instructions to start or poll checks or rerun an earlier failure. Use already-recorded failure evidence; do not start another check to recover it.',
     ].join(' ');
   const contractText = typeof briefOrContract === 'string' ? briefOrContract : briefOrContract.markdown;
   const placement: AcceptancePlacement =
@@ -205,11 +228,17 @@ export function workerPrompt(
     : undefined;
   if (task.brief.kind === 'verification')
     return [
-      `Work only in ${task.worktree}, on branch ${task.branch}. The applicable AGENTS.md is already loaded.`,
+      `Work only in ${task.worktree}, at captured commit ${task.brief.proof?.sourceCommit}. The applicable AGENTS.md is already loaded.`,
       `The main checkout ${mainCheckout} is read-only.`,
       task.brief.markdown,
       'Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.',
-      workerCheckProtocol(task.worktree, task.brief, join(mainCheckout, '.temp', 'goal'), task.proofRun),
+      workerCheckProtocol(
+        task.worktree,
+        task.brief,
+        join(mainCheckout, '.temp', 'goal'),
+        task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined,
+        task.proofAuthorization,
+      ),
     ].join('\n\n');
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. The AGENTS.md that applies is already in your instructions; follow it.`,
@@ -264,7 +293,9 @@ export function attemptEnvironment(
   return {
     GOAL_TASK_ID: task.id,
     GOAL_ATTEMPT: String(attempt.attempt),
-    ...(task.proofRun?.native ? { GOAL_CHECK_REGISTRY: task.proofRun.native.registry } : {}),
+    ...(task.proofRun?.native && task.proofRun.binding.attempt === attempt.attempt
+      ? { GOAL_CHECK_REGISTRY: task.proofRun.native.registry }
+      : {}),
     KERNEL_CHECK_AFFECTED: task.base,
     ...remoteCheckEnvironment(stateDirectory),
     // The worker check wrapper appends its full wait here, in milliseconds per line; the class limit adds it back.
@@ -565,13 +596,10 @@ export async function launch(
   store.assertCurrent(attempt);
   if (
     task.brief.kind === 'verification' &&
-    (!task.proofRun?.native ||
-      !proofProtocolAuthorized(task.brief, task.proofRun) ||
-      task.proofRun!.binding.taskId !== task.id ||
-      task.proofRun!.binding.attempt !== attempt.attempt ||
+    (!registeredProof(task.brief, task.proofAuthorization) ||
       !proofSourceUnchanged(task, task.proofAuthorization?.integrationBranch ?? ''))
   )
-    throw new Error('Proof execution unavailable: no owned producer binding');
+    throw new Error('Proof execution unavailable: authenticated exact read-only source registration required');
   recordFlow(store.db, {
     taskId: attempt.taskId,
     attempt: attempt.attempt,

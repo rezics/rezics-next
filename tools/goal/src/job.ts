@@ -1,8 +1,9 @@
 import {
   ProofCapacityQueuedError,
+  ProofUnavailableError,
   readReservationObservation,
   readProofObservation,
-  historicalProofTerminal,
+  refreshHistoricalProofAdmission,
 } from './verification.ts';
 import { taskCommits } from './workspace.ts';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -210,7 +211,12 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (task.currentAttempt !== ref.attempt) return;
       if (task.state === 'held') return;
-      if (task.brief.kind === 'verification' && !store.proofCapacityAvailable(task.brief.goal, task.id)) return;
+      // Ordinary recovery publishes its retry generation without waiting on proof-only preparation.
+      if (task.brief.kind === 'verification') {
+        this.tasks.assertProofStart(task);
+        await this.tasks.refreshProofAdmission(task);
+        if (!store.proofCapacityAvailable(task.brief.goal, task.id)) return;
+      }
       if (!['landing', 'ready', 'running', 'stopped'].includes(task.state)) {
         store.updateRetryIntent(ref, (value) => {
           value.status = 'started';
@@ -248,7 +254,12 @@ export class WorkerJob implements GateOutcomeSink {
       if (worker) await this.follow(worker);
     } catch (error) {
       // Another process holds the task: the intent stays pending for the next sweep.
-      if (error instanceof LeaseHeldError || error instanceof ProofCapacityQueuedError) return;
+      if (
+        error instanceof LeaseHeldError ||
+        error instanceof ProofCapacityQueuedError ||
+        error instanceof ProofUnavailableError
+      )
+        return;
       if (error instanceof TaskHeldForDependenciesError || error instanceof StaleAttemptError) {
         store.updateRetryIntent(ref, (value) => {
           value.status = 'started';
@@ -262,6 +273,16 @@ export class WorkerJob implements GateOutcomeSink {
     }
   }
   resumePendingRetries(): void {
+    // Dispatch may crash after accepting READY0 but before calling start. The same durable intent owns recovery.
+    for (const task of this.tasks.store.activeTasks()) {
+      if (
+        task.currentAttempt === 0 &&
+        ['ready', 'held'].includes(task.state) &&
+        task.brief.kind === 'verification' &&
+        task.proofAuthorization
+      )
+        this.tasks.store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
+    }
     for (const intent of this.tasks.store.retryIntents().filter((value) => value.status === 'pending'))
       this.track(this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt }));
   }
@@ -319,9 +340,8 @@ export class WorkerJob implements GateOutcomeSink {
   }
   private async checkWakeMessage(attempt: Attempt, task: Task): Promise<string | null> {
     if (task.brief.kind === 'verification') {
-      const observed = await readProofObservation(task);
+      const observed = await readProofObservation(task, attempt.checks);
       if (observed.status === 'running') return null;
-      if (task.proofRun?.status === 'bound') this.tasks.store.observeProof(task.proofRun.binding, observed);
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
     const checks = attempt.checks ?? [];
@@ -437,7 +457,8 @@ export class WorkerJob implements GateOutcomeSink {
               task.worktree,
               task.brief,
               this.tasks.settings.stateDirectory,
-              this.tasks.store.task(task.id).proofRun,
+              task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined,
+              task.proofAuthorization,
             ),
           ]
         : []),
@@ -891,11 +912,32 @@ export class WorkerJob implements GateOutcomeSink {
     const store = this.tasks.store;
     this.reportCancelledDependencies();
     // The same recovery sweep also observes detached custody after a model exit or cancellation.
-    if (adoptRunning)
-      for (const check of store.historicalProofChecks()) {
-        const observation = await historicalProofTerminal(check);
-        if (observation.status === 'terminal') store.observeHistoricalProof(check, observation);
+    if (adoptRunning) {
+      try {
+        await refreshHistoricalProofAdmission(store, join(this.tasks.settings.stateDirectory, 'check-registry'), {
+          root: this.tasks.settings.integration?.checkScriptReaderRoot ?? resolve(import.meta.dir, '../../..'),
+          integrationRoot: this.tasks.settings.mainCheckout,
+          integrationBranch: this.tasks.settings.integrationBranch,
+        });
+      } catch (error) {
+        // Optional native history stays unavailable with one bounded diagnostic; ordinary recovery continues.
+        if (!(error instanceof ProofUnavailableError)) throw error;
       }
+    }
+    if (adoptRunning) {
+      // Settled task history is not recovery work; only active permits need logical reconciliation.
+      for (const run of store.activeProofReservations()) {
+        const task = store.task(run.binding.taskId);
+        if (
+          task.currentAttempt === run.binding.attempt &&
+          !['running', 'landing'].includes(task.state) &&
+          ['stopped', 'exited', 'cancelled', 'superseded'].includes(
+            store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state,
+          )
+        )
+          store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
+      }
+    }
     if (adoptRunning)
       for (const run of store.activeProofReservations()) {
         try {
@@ -906,7 +948,7 @@ export class WorkerJob implements GateOutcomeSink {
           );
           if (observation.status === 'terminal') store.observeProof(run.binding, observation);
         } catch {
-          // Missing reader/records never release uncertain capacity.
+          // Optional evidence cannot assert native terminal status from missing reader/records.
         }
       }
     if (adoptRunning) this.track(removeFinishedWorktree(this.tasks.settings, store).then(() => {}));
@@ -971,6 +1013,7 @@ export class WorkerJob implements GateOutcomeSink {
       : tasks.filter(
           (t) =>
             t.state === 'ready' &&
+            t.brief.kind !== 'verification' &&
             t.brief.after.length &&
             this.tasks.dependenciesMet(t, tasks) &&
             // A ready task with a pending retry intent is a retry, started from the intent.
@@ -1014,6 +1057,21 @@ export class WorkerJob implements GateOutcomeSink {
           if (error instanceof LeaseHeldError) continue;
           throw error;
         }
+        if (
+          task.brief.kind === 'verification' &&
+          store.events(task.id, attempt.attempt).some((event) => event.kind === 'proof-command-ready')
+        ) {
+          // The launch may have crossed its process boundary before SQLite recorded a driver. Never replay it.
+          await this.endAsEnvironment(
+            attempt,
+            new Error(
+              'Original proof launch interrupted after command preparation; execution is unknown, no automatic replay; retain native records and request authenticated fresh retry registration',
+            ),
+            false,
+            true,
+          );
+          continue;
+        }
         if (this.recovering.has(attempt.taskId)) continue;
         this.recovering.add(attempt.taskId);
         this.track(
@@ -1030,7 +1088,13 @@ export class WorkerJob implements GateOutcomeSink {
       const waiting = capacityWaiters(this.tasks.settings.stateDirectory);
       for (const task of store.activeTasks()) {
         await yieldSweep();
-        if (task.state !== 'ready' || task.currentAttempt !== 0 || this.recovering.has(task.id)) continue;
+        if (
+          task.brief.kind === 'verification' ||
+          task.state !== 'ready' ||
+          task.currentAttempt !== 0 ||
+          this.recovering.has(task.id)
+        )
+          continue;
         if (Date.now() - Date.parse(task.createdAt) < graceMs || waiting.has(task.id)) continue;
         try {
           acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', task.id)).release();

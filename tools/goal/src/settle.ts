@@ -1,4 +1,4 @@
-import { readProofObservation, proofSourceUnchanged } from './verification.ts';
+import { readProofObservation, proofSourceUnchanged, nativeCheckId } from './verification.ts';
 import { parseAgentExit } from './agents.ts';
 import type { LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
@@ -58,7 +58,12 @@ export async function settle(
       ...(logStartOffset !== undefined ? { logStartOffset } : {}),
     }).waitingChecks;
     const proofTask = store.task(ref.taskId).brief.kind === 'verification';
-    const proofObservation = proofTask ? await readProofObservation(store.task(ref.taskId)) : undefined;
+    const proofObservation = proofTask
+      ? await readProofObservation(
+          store.task(ref.taskId),
+          pendingChecks?.length ? pendingChecks : currentAttempt.checks,
+        )
+      : undefined;
     if (!proofTask && !pendingChecks?.length) removeAttemptContainers(ref.taskId, ref.attempt);
     store.assertCurrent(ref);
     await terminateProcessGroup(store.attempt(ref).process, tasks.settings.terminationGraceMs);
@@ -128,20 +133,23 @@ export async function settle(
         return;
       }
       const proofExit = proofTask ? parseAgentExit(measurement.result, agentAdapter(current.profile.cli)) : null;
-      const bareWaiting =
+      const waitingId =
         proofExit &&
         typeof proofExit === 'object' &&
         'checks' in proofExit &&
         Array.isArray(proofExit.checks) &&
         proofExit.checks.length === 1 &&
-        proofExit.checks[0] === task.proofRun?.binding.checkId;
+        typeof proofExit.checks[0] === 'string' &&
+        nativeCheckId.test(proofExit.checks[0])
+          ? proofExit.checks[0]
+          : undefined;
       if (
         pendingChecks?.length &&
         (!proofTask ||
-          (bareWaiting &&
+          (waitingId &&
             pendingChecks.length === 1 &&
-            pendingChecks[0] === task.proofRun?.binding.checkId &&
-            proofObservation?.status === 'running'))
+            pendingChecks[0] === waitingId &&
+            (proofObservation?.status === 'running' || proofObservation?.status === 'terminal')))
       ) {
         store.updateAttempt(ref, (attempt) => {
           attempt.state = 'waiting';
@@ -215,7 +223,6 @@ export async function settle(
       if (finalMeasurement.failureKind && !proofTask) return;
       if (proofTask && proofObservation) {
         const run = task.proofRun;
-        if (run?.status === 'bound') store.observeProof(run.binding, proofObservation);
         const exit = parseAgentExit(finalMeasurement.result, agentAdapter(attempt.profile.cli));
         const structured = Boolean(
           exit &&
@@ -245,6 +252,7 @@ export async function settle(
           current.failureKind = verified ? null : 'tool';
           current.result = `${finalMeasurement.result}\n${proofObservation.cause}${unchanged ? '' : '; captured source changed'}`;
         });
+        store.releaseExitedProofReservations(ref);
         store.event(ref, verified ? 'proof-verified' : 'proof-failed', {
           binding: run?.binding,
           observation: proofObservation,
