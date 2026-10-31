@@ -79,7 +79,8 @@ async function profileShellReady(canvasElement: HTMLElement, heading: string = m
 }
 
 const meta = {
-  title: 'Pages/Accounts/Public profile',
+  title: 'Pages/Account/Public profile',
+  id: 'pages-accounts-public-profile',
   parameters: {
     layout: 'fullscreen',
     viewport: {
@@ -93,7 +94,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Human: Story = { render: () => <PageStory visitor="Signed Out" path="/@mira" />, play: pageReady };
+export const Human: Story = {
+  render: () => <PageStory visitor="Signed Out" path="/@mira" />,
+  play: async (context) => {
+    await pageReady(context);
+    await profileShellReady(context.canvasElement, 'Mira Okabe');
+  },
+};
 export const SignedIn: Story = { render: () => <PageStory visitor="Signed In" path="/@mira" />, play: pageReady };
 export const Verified: Story = {
   render: () => <Example mode="verified" />,

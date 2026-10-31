@@ -5,7 +5,11 @@ import { setLibraryLabelStorySizes } from '../kernel/fake/library-label-assignme
 import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
 
-const meta = { title: 'Pages/Subject/Personal Labels', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Pages/Subjects/Personal Labels',
+  id: 'pages-subject-personal-labels',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
