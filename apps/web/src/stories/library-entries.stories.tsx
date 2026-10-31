@@ -151,13 +151,13 @@ export const ChosenColumns: Story = {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     const title = displayLibraryTitle(entries.libraryEntries[0]!.subject.label, getLocale()).text;
-    await expect(await canvas.findByRole('link', { name: title, exact: true })).toBeVisible();
+    await expect(await canvas.findByRole('link', { name: title })).toBeVisible();
     if (window.matchMedia('(min-width: 640px)').matches) {
-      await expect(canvas.getByRole('button', { name: m.library_columns(), exact: true })).toBeEnabled();
+      await expect(canvas.getByRole('button', { name: m.library_columns() })).toBeEnabled();
       await expect(canvas.getByRole('columnheader', { name: m.library_column_status() })).toBeVisible();
       await expect(canvas.queryByRole('columnheader', { name: m.library_sort_activity() })).toBeNull();
     } else {
-      await expect(canvas.queryByRole('button', { name: m.library_columns(), exact: true })).toBeNull();
+      await expect(canvas.queryByRole('button', { name: m.library_columns() })).toBeNull();
     }
     await expect(canvas.getByRole('button', { name: m.library_entry_actions({ title }) })).toBeEnabled();
   },

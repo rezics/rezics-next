@@ -32,7 +32,13 @@ export function ShelfColumnsControl({ value, disabled }: { value?: string; disab
   const id = useId();
   const chosen = (shelfColumns(value) ?? shelfColumnIds.join(',')).split(',');
   const change = (columns: string | undefined) => {
-    void navigate({ to: '/library', search: (previous) => ({ ...previous, columns }) });
+    void navigate({
+      to: '/library',
+      search: (previous) => {
+        const { columns: _columns, ...rest } = previous;
+        return { ...rest, ...(columns ? { columns } : {}) };
+      },
+    });
   };
   return (
     <Menu

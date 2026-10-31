@@ -408,18 +408,18 @@ export const ChosenColumns: Story = {
     const canvas = within(canvasElement);
     if (!window.matchMedia('(min-width: 640px)').matches) {
       await expect(await canvas.findByRole('link', { name: 'A new reading state' })).toBeVisible();
-      await expect(canvas.queryByRole('button', { name: m.library_columns(), exact: true })).toBeNull();
+      await expect(canvas.queryByRole('button', { name: m.library_columns() })).toBeNull();
       return;
     }
     await expect(await canvas.findByRole('columnheader', { name: m.library_column_status() })).toBeVisible();
     await expect(canvas.queryByRole('columnheader', { name: m.library_sort_activity() })).toBeNull();
-    await userEvent.click(await canvas.findByRole('button', { name: m.library_columns(), exact: true }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.library_columns() }));
     const picker = within(await within(document.body).findByRole('dialog', { name: m.library_columns() }));
-    await expect(picker.getByRole('checkbox', { name: m.library_column_title(), exact: true })).toBeDisabled();
-    await userEvent.click(picker.getByRole('checkbox', { name: m.library_column_cover(), exact: true }));
+    await expect(picker.getByRole('checkbox', { name: m.library_column_title() })).toBeDisabled();
+    await userEvent.click(picker.getByRole('checkbox', { name: m.library_column_cover() }));
     await userEvent.keyboard('{Escape}');
-    await userEvent.click(canvas.getByRole('button', { name: m.library_layout_list(), exact: true }));
-    await userEvent.click(canvas.getByRole('button', { name: m.library_layout_table(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_layout_list() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_layout_table() }));
     await expect(await canvas.findByRole('columnheader', { name: m.library_column_cover() })).toBeVisible();
     await expect(canvas.queryByRole('columnheader', { name: m.library_sort_activity() })).toBeNull();
     await expect(

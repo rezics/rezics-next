@@ -505,16 +505,18 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
         const orderBy = field === 'added' ? 'createdAt' : field === 'finished' ? 'finishedAt' : 'lastActivity';
         void navigate({
           to: '/library',
-          search: (previous) => ({
-            ...previous,
-            state,
-            orderBy,
-            direction,
-            cursor: undefined,
-            layout: controls.layout,
-            size: controls.size,
-            columns: controls.columns,
-          }),
+          search: (previous) => {
+            const { state: _state, cursor: _cursor, columns: _columns, ...rest } = previous;
+            return {
+              ...rest,
+              ...(state ? { state } : {}),
+              orderBy,
+              direction,
+              layout: controls.layout,
+              size: controls.size,
+              ...(controls.columns ? { columns: controls.columns } : {}),
+            };
+          },
         });
       }}
     />
