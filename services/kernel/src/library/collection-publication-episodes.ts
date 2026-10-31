@@ -18,6 +18,7 @@ import erasureScope from './erasure-scope.sql';
 import { admitCollectionPublicationStep } from './collection-publication-work-admission.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { encodeRoles } from '../history/contracts.ts';
+import { commandHistoryIdentityAccounts, unionHistoryScope } from '../history/record.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -344,20 +345,12 @@ export function createCollectionPublicationEpisodes(config: { pool: Pool; access
         VALUES($1,$2,$3,$4,$5)`, [route,locator.publicationId,sourceId,input.collectionId,actor.accountId]);
       await stageHistoryWork(tx, { owner: 'library', intent: { queue: 'workflows', workflowName: COLLECTION_PUBLICATION_WORKFLOW,
         workflowId: locator.publicationId, input: { accounts: [actor.accountId], ...locator } },
-        scope: { artifactType: 'durable-work/v1', accounts: publicationAccounts(actor, prepared.capture) } });
+        scope: unionHistoryScope('durable-work/v1',commandHistoryIdentityAccounts(tx),
+          [{accountRoute:route,accountId:actor.accountId,roles:encodeRoles(['owner','actor','durable-initiator'])}]) });
       return { value: { locator, durableInitiator: commitment }, events: [{ type: 'com.rezics.library.collection.updated.v1', subject: input.collectionId, data: { collectionId: input.collectionId } }] };
     });
   } };
 }
-function publicationAccounts(actor: AccountActor, capture: Awaited<ReturnType<typeof captureDurableInitiator>>) {
-  const accounts = new Map<string, number>();
-  const add = (id: string, roles: number) => accounts.set(id, (accounts.get(id) ?? 0) | roles);
-  add(actor.accountId, encodeRoles(['owner','actor','durable-initiator']));
-  if (actor.requestedBy) add(actor.requestedBy.split(':')[3]!, encodeRoles(['principal','acting-human']));
-  if (capture.originalAccount.operatorAccountId) add(capture.originalAccount.operatorAccountId, encodeRoles(['operator']));
-  return [...accounts].map(([accountId, roles]) => ({ accountRoute: routeOf(accountId)!, accountId, roles }));
-}
-
 /** Actual sole Source producer's existing row, selected by its native metadata fence. */
 async function readCurrentInput(client: Client, metadata: NonNullable<Awaited<ReturnType<typeof readNativeCollectionWorkingMetadata>>['metadata']>) {
   return (await client.query<{ identity: CollectionPublicationSource['input']['identity'] }>(
