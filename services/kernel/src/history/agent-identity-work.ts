@@ -24,6 +24,14 @@ import {
 } from './agent-identity-source.ts';
 
 export const AGENT_IDENTITY_WORK_OWNER = 'access.agent-identity';
+export {
+  AGENT_IDENTITY_SDK_RETIREMENT,
+  agentIdentityRetirementReadiness,
+  readAgentIdentityRetirementStage,
+  verifyAgentIdentityRetirementStage,
+  type AgentIdentityRetirementStage,
+  type AgentIdentityRetirementResult,
+} from './agent-identity-retirement.ts';
 export type AgentIdentityApprovalCopy = Readonly<{
   requestId: string;
   accountId: string;
@@ -38,6 +46,23 @@ export type AgentIdentityApprovalCopy = Readonly<{
   receiptDigest: string;
 }>;
 export type AgentIdentityWorkAdmission = 'admitted' | 'retired';
+
+/** The native tombstone outlives source payload and SDK deduplication. Check it before
+ * reconstructing arguments or entering the SDK, including delayed original outbox delivery. */
+async function retiredWorkflow(pool: Pool, workflowId: string): Promise<boolean> {
+  return withConnection(pool, async (tx) => {
+    const row = (
+      await tx.query(
+        `SELECT w.state FROM core.agent_identity_work m
+         JOIN core.history_work w ON w.partition_no=0 AND w.work_id=m.custody_id
+           AND w.owner=$2 AND w.request_digest=m.request_digest
+         WHERE m.workflow_id=$1`,
+        [workflowId, AGENT_IDENTITY_WORK_OWNER],
+      )
+    ).rows[0];
+    return row?.state === 'retired';
+  });
+}
 
 function approvalCopy(decision: OriginalAgentIdentityDecision): AgentIdentityApprovalCopy {
   assertOriginalAgentIdentityDecision(decision);
@@ -168,6 +193,8 @@ export async function enqueueAgentIdentityVerification(
   requestId: string,
   receiptId: string,
 ): Promise<AgentIdentityWorkAdmission> {
+  const workflowId = `accounts.agent-verification:${requestId}:${receiptId}`;
+  if (await retiredWorkflow(pool, workflowId)) return 'retired';
   const decision = await readOriginalAgentIdentityDecision(pool, requestId, receiptId);
   const approval = approvalCopy(decision);
   const receipt: AgentIdentityReceipt = {
@@ -189,7 +216,6 @@ export async function enqueueAgentIdentityVerification(
   const handoff = sourceExists ? await readAgentIdentitySourceHandoff(pool, receipt) : null;
   const custodyId = decision.custody_id ?? handoff?.custodyId ?? randomUUID();
   if (handoff && handoff.custodyId !== custodyId) throw accountIdentityUnavailable('conflicting original SDK custody');
-  const workflowId = `accounts.agent-verification:${requestId}:${receiptId}`;
   const accounts = agentIdentityAccounts(decision.account_id, decision.requested_by, decision.decided_by);
   const request: ScopedWorkRequest = {
     owner: AGENT_IDENTITY_WORK_OWNER,
@@ -245,6 +271,8 @@ export async function enqueueAgentIdentityReversal(
   client: WorkClient,
   decision: AgentVerificationReversal,
 ): Promise<AgentIdentityWorkAdmission> {
+  if (await retiredWorkflow(pool, `accounts.agent-verification-reversal:${decision.accountId}:${decision.receiptId}`))
+    return 'retired';
   const receipt: AgentIdentityReceipt = {
     kind: 'account-agent.unverify',
     account: decision.accountId,
@@ -318,6 +346,7 @@ export async function associateAgentIdentityWorkSource(pool: Pool, receipt: Agen
 /** Replays check this outside the registered step, including cached SDK results. It creates no
  * new workflow/step and never infers custody from the status table or an ID parsed as a locator. */
 export async function verifyAgentIdentityWorkReplay(pool: Pool, workflowId: string): Promise<void> {
+  if (await retiredWorkflow(pool, workflowId)) throw accountIdentityUnavailable('SDK execution permanently retired');
   const mapping = await withConnection(
     pool,
     async (tx) =>
@@ -381,8 +410,10 @@ export async function resolveAgentIdentitySDKWork(
       receiver_epoch: number;
       receiver_generation: string;
       writer_version: number;
+      source_key: string;
+      accounts: AgentIdentityWorkSource['accounts'];
     }>(
-      `SELECT m.workflow_id,m.source,m.creation_captured,m.receiver_epoch,m.receiver_generation::text,m.writer_version,
+      `SELECT m.workflow_id,m.source,m.source_key,m.accounts,m.creation_captured,m.receiver_epoch,m.receiver_generation::text,m.writer_version,
        w.request_digest=m.request_digest AND w.owner=$2 AS bound
      FROM core.agent_identity_work m LEFT JOIN core.history_work w ON w.partition_no=0 AND w.work_id=m.custody_id
      WHERE m.custody_id=$1 FOR SHARE OF m`,
@@ -406,6 +437,10 @@ export async function resolveAgentIdentitySDKWork(
             ? 'identity-sdk-legacy-creation-uncovered'
             : !row.source
               ? 'identity-sdk-source-association-pending'
-              : null,
+              : row.source.workflowId !== row.workflow_id ||
+                  row.source.key !== row.source_key ||
+                  canonicalize(row.source.accounts) !== canonicalize(row.accounts)
+                ? 'identity-sdk-source-native-binding-changed'
+                : null,
   };
 }

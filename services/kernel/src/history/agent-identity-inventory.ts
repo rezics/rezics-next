@@ -13,6 +13,11 @@ import { decodeLocator, encodeLocator } from './locator.ts';
 import { commandHistoryKind, COMMAND_HISTORY_KINDS } from './record.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
 import {
+  readAgentIdentitySDKRetirementGap,
+  verifyAgentIdentityRetirementStage,
+  type AgentIdentityRetirementStage,
+} from './agent-identity-retirement.ts';
+import {
   historyDeadline,
   readHistoryReceivingReceipt,
   type HistoryReceivingContext,
@@ -26,7 +31,7 @@ export const AGENT_IDENTITY_INVENTORY = Object.freeze({
   conversionCoverage: 'native-receipt-outbox/v1',
   maxCopies: 3,
   nativeFutureWriters: 'closed-at-original-commit',
-  sdkFutureWriters: 'pending-real-recording-port',
+  sdkFutureWriters: 'pending-native-fence',
 } as const);
 export type AgentIdentityOriginal = Readonly<{
   key: AgentIdentitySourceKey;
@@ -360,7 +365,12 @@ export async function readAgentIdentityInventory(
         gap: `agent-identity-receiving-pending:${artifact.locator.artifactType}`,
       };
   }
-  return { ...inventory, state: 'pending' as const, native: 'sealed' as const, gap: sdkGap };
+  const gap = await readAgentIdentitySDKRetirementGap(
+    deps.pool,
+    { kind: key.direction, account: key.accountId, receipt: key.receiptId },
+    context,
+  );
+  return { ...inventory, state: 'pending' as const, native: 'sealed' as const, gap };
 }
 
 /** SAME source-home command. All queries address local core rows. The portable snapshot is
@@ -371,6 +381,7 @@ export async function verifyAgentIdentityInventory(
   barrier: HistoryBarrier,
   key: AgentIdentitySourceKey,
   proof: AgentIdentityInventoryProof,
+  sdkStage?: AgentIdentityRetirementStage,
 ): Promise<AgentIdentityInventoryVerification> {
   const pending = (gap: string): AgentIdentityInventoryVerification => ({ state: 'pending', native: 'pending', gap });
   if (currentCommand(tx).partition !== params(key)[0])
@@ -454,6 +465,24 @@ export async function verifyAgentIdentityInventory(
   ).rows[0];
   if (!obligation || String(obligation.generation) !== current.proof.generation)
     return pending('agent-identity-sdk-obligation-stale');
-  // No discovery/absence/status flag can certify the missing actual SDK recording port.
+  if (sdkStage) {
+    const reference = sdkStage.reference;
+    if (
+      reference.receipt.kind !== key.direction ||
+      reference.receipt.account !== key.accountId ||
+      reference.receipt.receipt !== key.receiptId ||
+      reference.sourceDigest !== current.proof.original.digest ||
+      reference.barrier.accountId !== barrier.accountId ||
+      reference.barrier.accountRoute !== barrier.accountRoute ||
+      reference.barrier.version !== barrier.version ||
+      reference.barrier.at !== barrier.at
+    )
+      return pending('agent-identity-sdk-retirement-reference-mismatch');
+    const verified = await verifyAgentIdentityRetirementStage(tx, sdkStage);
+    if (verified.state === 'pending') return { state: 'pending', native: 'verified', gap: verified.gap };
+    // A portable verified result alone cannot close the inventory: no durable native SDK
+    // fence/receiving locator exists in the pinned SDK. All original copies stay required.
+  }
+  // No discovery/absence/status flag can certify the missing actual SDK native fence.
   return { state: 'pending', native: 'verified', gap: sdkGap };
 }

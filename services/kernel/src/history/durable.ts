@@ -5,6 +5,7 @@ import { sealHistoryAccount } from './gates.ts';
 import type { WorkClient } from '../work/client.ts';
 import { decodeLocator } from './locator.ts';
 import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
+import { AGENT_IDENTITY_SDK_RETIREMENT } from './agent-identity-retirement.ts';
 
 /** Historical executions without captured native SDK creation keep this exact unresolved gap.
  * New executions use agent-identity-work's transactional mapping and two-stage source handoff.
@@ -97,8 +98,12 @@ export async function minimizeHistoryWork(
   if (key.artifactType !== 'durable-work/v1') throw new TypeError('Invalid durable locator');
   const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
   const mapping = await withConnection(pool, (tx) => resolveAgentIdentitySDKWork(tx, key.workId));
-  if (mapping?.gap) return mapping.gap;
   const sdkWorkId = mapping?.workflowId ?? key.workId;
+  if (mapping?.gap) return mapping.gap;
+  // This SDK has no permanent per-ID native writer fence. Cancellation invalidates a
+  // current executor token but resume/restart can acquire a new one; deletion removes
+  // SDK deduplication. Never cancel a live consumer or certify absence through that race.
+  if (mapping) return AGENT_IDENTITY_SDK_RETIREMENT.gap;
   const prepared = await withConnection(pool, async (tx): Promise<string | null> => {
     await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
     try {

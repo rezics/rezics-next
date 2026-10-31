@@ -1,5 +1,6 @@
 import {
   AGENT_IDENTITY_WORK_OWNER,
+  agentIdentityRetirementReadiness,
   associateAgentIdentityWorkSource,
   enqueueAgentIdentityReversal,
   enqueueAgentIdentityVerification,
@@ -103,11 +104,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     name: AGENT_IDENTITY_WORK_OWNER,
     artifactType: 'durable-work/v1',
     version: 1,
-    async readiness() {
-      // Semantic's real exhaustive consumer/technical-undo producer remains the sole authority.
-      // It currently returns pending; SDK completion cannot discharge that obligation.
-      return { ready: false, gap: 'identity-source-consumer-custody-pending' };
-    },
+    readiness: agentIdentityRetirementReadiness,
   });
   const step = <Args extends unknown[], Result>(
     body: (...args: Args) => Promise<Result>,
