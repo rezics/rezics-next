@@ -3360,5 +3360,22 @@
   "library_copy_lookup_empty": "没有匹配的版本，请尝试其他书名或别名。",
   "library_copy_profile_loading": "正在加载此版本的藏本选项…",
   "library_copy_profile_forbidden": "当前用户无法访问此版本，请选择其他结果。",
-  "library_copy_profile_unavailable": "此版本的藏本选项暂时不可用，请重试。"
+  "library_copy_profile_unavailable": "此版本的藏本选项暂时不可用，请重试。",
+  "home_feed_discovery": "发现",
+  "home_feed_following": "关注动态",
+  "home_feed_horizon": "关注动态保留最近 30 天或最新 2,000 条引用。完整历史请前往来源页面。",
+  "home_feed_sources": "你的来源",
+  "home_feed_ready": "已就绪",
+  "home_feed_preparing": "准备中",
+  "home_feed_unavailable": "暂时不可用",
+  "home_feed_loading": "正在加载动态…",
+  "home_feed_empty": "暂时没有发现内容。试试搜索或稍后再来。",
+  "home_feed_following_empty": "关注的来源暂无近期动态。可以浏览发现或前往来源页面。",
+  "home_feed_request": "动态请求无效。",
+  "home_feed_auth": "请重新登录以查看个人动态。",
+  "home_feed_denied": "你无法查看此动态。",
+  "home_feed_closed": "此动态暂未开放。",
+  "home_feed_cursor": "页面已过期或游标不再匹配。请重新开始。",
+  "home_feed_deadline": "动态请求超时，请重试。",
+  "home_feed_restart": "重新开始"
 }

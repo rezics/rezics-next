@@ -3359,5 +3359,22 @@
   "library_copy_lookup_empty": "Aucune édition correspondante. Essayez un autre titre ou nom.",
   "library_copy_profile_loading": "Chargement des options d’exemplaire de cette édition…",
   "library_copy_profile_forbidden": "Cette édition n’est pas accessible à cet utilisateur. Choisissez un autre résultat.",
-  "library_copy_profile_unavailable": "Les options d’exemplaire de cette édition sont temporairement indisponibles. Réessayez."
+  "library_copy_profile_unavailable": "Les options d’exemplaire de cette édition sont temporairement indisponibles. Réessayez.",
+  "home_feed_discovery": "Découvrir",
+  "home_feed_following": "Abonnements",
+  "home_feed_horizon": "Les abonnements conservent les 30 derniers jours ou les 2 000 références les plus récentes. L’historique complet reste sur la page de chaque source.",
+  "home_feed_sources": "Vos sources",
+  "home_feed_ready": "Prêt",
+  "home_feed_preparing": "En préparation",
+  "home_feed_unavailable": "Temporairement indisponible",
+  "home_feed_loading": "Chargement du fil…",
+  "home_feed_empty": "Rien à découvrir pour le moment. Essayez la recherche ou revenez plus tard.",
+  "home_feed_following_empty": "Aucune activité récente de vos abonnements. Explorez Découvrir ou visitez vos sources.",
+  "home_feed_request": "Cette demande de fil est invalide.",
+  "home_feed_auth": "Reconnectez-vous pour lire votre fil personnel.",
+  "home_feed_denied": "Vous ne pouvez pas lire ce fil.",
+  "home_feed_closed": "Ce fil est actuellement fermé.",
+  "home_feed_cursor": "Cette page a expiré ou son curseur ne correspond plus. Recommencez.",
+  "home_feed_deadline": "La demande a expiré. Réessayez.",
+  "home_feed_restart": "Recommencer"
 }

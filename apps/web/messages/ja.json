@@ -3359,5 +3359,22 @@
   "library_copy_lookup_empty": "一致する版がありません。別のタイトルや別名を試してください。",
   "library_copy_profile_loading": "この版の所蔵オプションを読み込み中…",
   "library_copy_profile_forbidden": "この閲覧者はこの版を利用できません。別の結果を選んでください。",
-  "library_copy_profile_unavailable": "この版の所蔵オプションは一時的に利用できません。再試行してください。"
+  "library_copy_profile_unavailable": "この版の所蔵オプションは一時的に利用できません。再試行してください。",
+  "home_feed_discovery": "見つける",
+  "home_feed_following": "フォロー中",
+  "home_feed_horizon": "フォロー中の履歴は過去30日間または最新2,000件までです。全履歴は各ソースのページで確認できます。",
+  "home_feed_sources": "フォロー先",
+  "home_feed_ready": "準備完了",
+  "home_feed_preparing": "準備中",
+  "home_feed_unavailable": "一時的に利用できません",
+  "home_feed_loading": "フィードを読み込み中…",
+  "home_feed_empty": "表示できるものがありません。検索するか、後でもう一度お試しください。",
+  "home_feed_following_empty": "フォロー先の最近の更新はありません。見つける、またはソースのページをご覧ください。",
+  "home_feed_request": "フィードのリクエストが無効です。",
+  "home_feed_auth": "個人フィードを読むには再度ログインしてください。",
+  "home_feed_denied": "このフィードを読むことはできません。",
+  "home_feed_closed": "このフィードは現在公開されていません。",
+  "home_feed_cursor": "ページの期限が切れたか、カーソルが一致しません。最初からやり直してください。",
+  "home_feed_deadline": "リクエストがタイムアウトしました。もう一度お試しください。",
+  "home_feed_restart": "最初から"
 }

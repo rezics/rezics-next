@@ -583,7 +583,7 @@ Subject pages and views follow the same boundary: the server ensures locale and 
 
 `tests/public-cache-routes.test.ts` guards which routes use `staticData.publicCache` and verifies their server HTML is reader-independent.
 
-The home route reads its page through the public `homePageQuery`. Its server render reads no session; after hydration, a signed-in visitor starts the personal Continue query, which reserves its section height while it loads. Signed-out visitors see no Continue section or personal read.
+The home route uses the public `homePageQuery` for anonymous mixed discovery. Its server render reads no session. After hydration and actual session readiness, a signed-in visitor reads one private mixed feed. Continue is an item in that stream, with its original owner session and resume destination.
 
 Space and Realm pages start from anonymous reads on the server. A signed-in visitor loads membership and participation in the browser. When the anonymous Space response does not expose a carried Realm, the browser makes one bounded session read of that Space page; protected Realm boards and publications are requested only if the session can read the Realm. A denied or unavailable response never becomes a false empty list. The Realm id route resolves its native Realm and Space, then redirects to the Space's address when one exists.
 
@@ -920,31 +920,35 @@ Each server render and browser session has its own query cache. Public reads sta
 
 ### Home page (`/<locale>`)
 
-- **Touches:** One anonymous `POST /v1/pages:read` for route `/`, including platform search and type lists.
-  The personal Continue row starts its separate browser read after the session is known
-- The page read sends the reader's language list once; the kernel applies it to each planned search read inside the page.
-- **Bound:** ≤1 K (four searches of at most 12 subjects each inside the page read, each hit with its cover summary),
-  0 D/R/A for the server render; O(document + read results) rendering, bounded by composition limits;
-  no result, label or media calls per item
-- **Growth check:** `tests/public-render.test.ts` asserts identical HTML with and without a session cookie and zero
-  session/Auth reads; `tests/request-cost.test.ts` checks the public K bound as s grows
+`home-queries.ts` and `HomeFeedConsumer` use Content's mounted `GET /v1/feedItems` with
+`stream=home|following` and `limit=20`. `home-feed-read.ts` infers the actual generated client response type;
+no server runtime enters the browser. The public loader requests only anonymous discovery, never session,
+Continue or follows. Personal reads prepare the existing session, verify its current subject and use
+`private, no-store`. A viewer/session change remounts the private window before rendering prior rows;
+sign-out immediately returns to the public page. Private rows and cursors never enter the shared query cache
+or hydration payload. No Home per-row reads or vocabulary enumeration occur.
 
-### Home Continue row
+One ordered list preserves the producer's stable item identities, deduplication, source order and original
+signed frontier. Next replaces the current page rather than accumulating DOM or cached pages. Changing
+Home/Following discards the previous cursor. A source can be ready, preparing, unavailable or not requested;
+ready plus empty is the only successful empty state. Partial pages retain their usable rows. Request,
+authentication, denial, closed platform, cursor restart and deadline failures have distinct recovery messages.
+Following explains its last-30-days/newest-2,000-reference horizon and links to the existing followed-source
+and Continue destinations; full histories belong to each object's owner page. Discovery makes no personalized
+recommendation or recency claim. Continue links to the actual session, or the owner's subject progress entry,
+and displays only supplied native progress through the shared formatter.
 
-- **Touches:** for a signed-in visitor, one `GET /v1/libraryContinue?limit=6` and one `POST /v1/pages:read` with at most 6
-  `subject` reads; none for a signed-out visitor.
-- **Bound:** two kernel requests per home view and at most 6 cards, whatever the size of the library or the number of
-  active sessions; no per-subject requests.
-- **Growth check:** `continue-runtime.test.ts`, "the row makes at most two kernel reads per view, none of them per
-  subject, with 0, 6 and 300 subjects in progress", counting fake kernel requests.
-- **Card:** each card is a `CoverCard`: the cover edge to edge, the title, the subject's type as the one secondary
-  line, and one `ProgressRow`. The card is one link to the progress session, named "Continue <title>", and its ⋯ menu
-  holds "Open subject page"; nothing else on it is interactive. The row shows the unit form the kernel's progress
-  allows ("Ep 3/12", "p. 120/310") with a bar for the share where there is a total, a percent as its own bar, the
-  amount alone with no bar where there is no total, and the state label "In progress" where only a reading position is
-  known or the session could not be read. Below `sm` the cards form a `CoverRow`; from `sm` up a `CoverGrid`. The
-  home story's recorded sessions cover each case. The catalogue rows of the home page are `CoverRow`s of `CoverCard`s
-  at every width, with the type under the title.
+- **Touches:** one native feed GET per page after the existing session preparation for personal reads.
+- **Bound:** at most 20 rendered items in one page; one supplied source reason per item; zero per-row requests.
+  Backend candidate, source admission, ordering and cursor budgets remain Content's authority.
+- **Regression:** `tests/home-feed-composition.test.tsx` crosses the default public route query and renderer,
+  then the same window/native consumer for mixed order, partial source state, unchanged continuation,
+  Following and viewer reset. It supplies selected HTTP responses; it does not establish native acceptance.
+- **Stories:** canonical SignedIn/SignedOut plus partial, preparing, unavailable, empty and Following use the
+  actual root route and consumer. Their feed envelopes are explicitly illustrative compositions of recorded
+  owner summaries, not native feed recordings. Locale/theme and 390/1280 viewports remain globals.
+  `PageStory.homeFeedFixture` is the single explicit Home fixture hook; the PageStory provider owner must
+  retain this hook when changing its recording setup. No global provider behavior changes.
 
 ### Global board directory (`/<locale>/boards`)
 

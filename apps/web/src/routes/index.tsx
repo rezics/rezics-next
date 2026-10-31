@@ -1,19 +1,15 @@
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { personalRead } from '../kernel/query';
-import { exposureQuery, useSession } from '../session/query';
-import { createFileRoute, useRouter } from '@tanstack/react-router';
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
+import { useCallback } from 'react';
+import { useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { homePageQuery, readHomeContinue } from '../features/pages/home-queries';
+import { homePageQuery, readPrivateHomePage, readPublicHomePage } from '../features/pages/home-queries';
+import { HomeFeedConsumer } from '../features/pages/home-feed';
+import { homeFeedViewer, type FeedInput } from '../features/pages/home-feed-read';
 import { homeJsonLd } from '../features/pages/jsonld';
-import { RoutePage, routePageJsonLd } from '../features/pages/route';
-import { ContinueSection, useContinuePreparation } from '../library/continue';
-import { homeContinueQuery } from '../library/continue-read';
-import { operationIsAdmitted } from '../kernel/exposure';
 import { pageHead } from '../shell/head';
-import { PageHeading } from '../shell/page-heading';
 
-/** The public page query calls loadRoutePage() once on the server. */
 export const Route = createFileRoute('/')({
   staticData: { publicCache: true },
   loader: ({ context }) => context.queryClient.ensureQueryData(homePageQuery(getLocale())),
@@ -21,66 +17,18 @@ export const Route = createFileRoute('/')({
     const locale = getLocale();
     if (!loaderData) return { meta: [{ title: 'REZICS' }] };
     const origin = loaderData.origin;
-    const pageJsonLd = loaderData.kind === 'page' ? routePageJsonLd(loaderData.page, locale, origin) : undefined;
-    const jsonLd = pageJsonLd ? JSON.parse(pageJsonLd) : homeJsonLd({ origin, locale });
-    return pageHead({ description: m.home_meta_description(), jsonLd }, { origin, locale, path: '/' });
+    return pageHead({ description: m.home_meta_description(), jsonLd: homeJsonLd({ origin, locale }) }, { origin, locale, path: '/' });
   },
   component: Home,
 });
 
-function Home() {
-  const { data: loaded } = useSuspenseQuery(homePageQuery(getLocale()));
-  const { state } = useSession();
-  const { data: viewerGroups, isError: exposureFailed } = useQuery({
-    ...exposureQuery,
-    enabled: personalRead.enabled && state === 'signed-in',
-  });
-  const hasContinueList =
-    operationIsAdmitted('library_continue.list', viewerGroups) &&
-    operationIsAdmitted('progress_session.list', viewerGroups);
-  const exposureReady = viewerGroups !== undefined;
-  const continueEnabled =
-    personalRead.enabled && state === 'signed-in' && exposureReady && !exposureFailed && hasContinueList;
-  const resume = useQuery({
-    ...homeContinueQuery(getLocale(), () => readHomeContinue({ data: getLocale() })),
-    enabled: continueEnabled,
-  });
-  const continueState =
-    resume.isError || exposureFailed || (exposureReady && !hasContinueList)
-      ? { state: 'unavailable' as const }
-      : !exposureReady || resume.isFetching
-        ? { state: 'unknown' as const }
-        : (resume.data ?? { state: 'unknown' as const });
-  useContinuePreparation(continueEnabled ? continueState : undefined, resume.refetch, getLocale());
-  const nonce = useRouter().options.ssr?.nonce;
-  if (loaded.kind === 'missing') return <PageHeading>{m.home_heading()}</PageHeading>;
-  return (
-    <RoutePage
-      page={loaded.page}
-      locale={getLocale()}
-      heading={m.home_heading()}
-      {...(nonce !== undefined ? { nonce } : {})}
-      renderJsonLd={false}
-      {...(state === 'signed-in'
-        ? {
-            personal: (
-              <ContinueSection
-                state={continueState}
-                locale={getLocale()}
-                {...(continueEnabled ? { onRetry: () => void resume.refetch() } : {})}
-                busy={resume.isFetching}
-              />
-            ),
-          }
-        : {})}
-      messages={{
-        unknown: m.subject_value_unknown(),
-        none: m.subject_value_none(),
-        unlabelled: m.subject_value_unlabelled(),
-        sources: m.subject_sources(),
-        aliases: m.subject_aliases(),
-        search: m.search_submit(),
-      }}
-    />
-  );
+export function Home() {
+  const locale = getLocale();
+  const { data: loaded } = useSuspenseQuery(homePageQuery(locale));
+  const viewer = homeFeedViewer(useSession());
+  const subject = viewer?.subject;
+  const read = useCallback((input: FeedInput) => subject
+    ? readPrivateHomePage({ data: { locale, viewer: subject, ...input } })
+    : readPublicHomePage({ data: { locale, ...(input.cursor === undefined ? {} : { cursor: input.cursor }) } }), [locale, subject]);
+  return <HomeFeedConsumer key={`${locale}:${viewer?.scope ?? 'public'}`} initial={loaded.feed} locale={locale} signedIn={viewer !== null} read={read} />;
 }

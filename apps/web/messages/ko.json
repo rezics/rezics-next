@@ -3359,5 +3359,22 @@
   "library_copy_lookup_empty": "일치하는 판본이 없습니다. 다른 제목이나 별칭을 입력하세요.",
   "library_copy_profile_loading": "이 판본의 소장본 옵션을 불러오는 중…",
   "library_copy_profile_forbidden": "현재 사용자는 이 판본에 접근할 수 없습니다. 다른 결과를 선택하세요.",
-  "library_copy_profile_unavailable": "이 판본의 소장본 옵션을 일시적으로 사용할 수 없습니다. 다시 시도하세요."
+  "library_copy_profile_unavailable": "이 판본의 소장본 옵션을 일시적으로 사용할 수 없습니다. 다시 시도하세요.",
+  "home_feed_discovery": "발견",
+  "home_feed_following": "팔로잉",
+  "home_feed_horizon": "팔로잉은 최근 30일 또는 최신 2,000개 참조를 보관합니다. 전체 기록은 각 출처 페이지에서 확인하세요.",
+  "home_feed_sources": "내 출처",
+  "home_feed_ready": "준비됨",
+  "home_feed_preparing": "준비 중",
+  "home_feed_unavailable": "일시적으로 사용할 수 없음",
+  "home_feed_loading": "피드 불러오는 중…",
+  "home_feed_empty": "아직 발견할 내용이 없습니다. 검색하거나 나중에 다시 방문하세요.",
+  "home_feed_following_empty": "팔로우한 출처의 최근 활동이 없습니다. 발견이나 출처 페이지를 둘러보세요.",
+  "home_feed_request": "피드 요청이 올바르지 않습니다.",
+  "home_feed_auth": "개인 피드를 보려면 다시 로그인하세요.",
+  "home_feed_denied": "이 피드를 볼 수 없습니다.",
+  "home_feed_closed": "이 피드는 현재 닫혀 있습니다.",
+  "home_feed_cursor": "페이지가 만료되었거나 커서가 일치하지 않습니다. 다시 시작하세요.",
+  "home_feed_deadline": "피드 요청 시간이 초과되었습니다. 다시 시도하세요.",
+  "home_feed_restart": "다시 시작"
 }

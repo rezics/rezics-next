@@ -1,33 +1,48 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, pagePaths, pageReady } from './page';
 
-const meta = { title: 'Pages/Discovery/Home', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Pages/Discovery/Home', parameters: {
+    layout: 'fullscreen',
+    docs: { description: { component: 'Default Home route and consumer. Illustrative feed envelopes composed from recorded native owner summaries; these stories are not native feed acceptance evidence. Locale, theme and phone/desktop viewport use the catalogue globals.' } },
+  },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const SignedIn: Story = {
-  name: 'Member, Continue unavailable pending native binding',
-  parameters: { admitted: ['personal_library', 'reading_progress', 'collections'] },
+  name: 'Member, mixed ready',
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} />,
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_continue_unavailable());
-    const region = canvas.getByRole('region', { name: m.home_continue_heading() });
-    await expect(within(region).getByRole('link', { name: m.library_more() })).toHaveAttribute(
-      'href',
-      `/${getLocale()}/library/continue`,
-    );
-    await expect(canvas.queryByText(m.library_continue_empty())).toBeNull();
+    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
+    await expect(context.canvasElement.querySelector('[data-feed-source="continue"]')).not.toBeNull();
   },
 };
 export const SignedOut: Story = {
   render: () => <PageStory visitor="Signed Out" path={pagePaths.home} />,
   play: async (context) => {
     await pageReady(context);
-    await expect(within(context.canvasElement).queryByRole('region', { name: m.home_continue_heading() })).toBeNull();
+    await expect(context.canvasElement.querySelector('[data-feed-source="discovery"]')).not.toBeNull();
+    await expect(context.canvasElement.querySelector('[data-feed-source="continue"]')).toBeNull();
+    await expect(within(context.canvasElement).queryByRole('button', { name: m.home_feed_following() })).toBeNull();
+  },
+};
+export const PartialSources: Story = { render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="partial" />, play: pageReady };
+export const Preparing: Story = { render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="preparing" />, play: pageReady };
+export const Unavailable: Story = { render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="unavailable" />, play: pageReady };
+export const Empty: Story = { render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="empty" />, play: pageReady };
+export const Following: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    const { userEvent } = await import('storybook/test');
+    await userEvent.click(await canvas.findByRole('button', { name: m.home_feed_following() }));
+    await expect(await canvas.findByRole('link', { name: 'Books I come back to' })).toBeVisible();
+    await expect(context.canvasElement.querySelector('[data-feed-source="discovery"]')).toBeNull();
   },
 };

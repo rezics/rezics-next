@@ -3359,5 +3359,22 @@
   "library_copy_lookup_empty": "沒有符合的版本，請嘗試其他書名或別名。",
   "library_copy_profile_loading": "正在載入此版本的藏本選項…",
   "library_copy_profile_forbidden": "目前使用者無法存取此版本，請選擇其他結果。",
-  "library_copy_profile_unavailable": "此版本的藏本選項暫時無法使用，請再試一次。"
+  "library_copy_profile_unavailable": "此版本的藏本選項暫時無法使用，請再試一次。",
+  "home_feed_discovery": "探索",
+  "home_feed_following": "追蹤動態",
+  "home_feed_horizon": "追蹤動態保留最近 30 天或最新 2,000 筆參照。完整歷史請前往來源頁面。",
+  "home_feed_sources": "你的來源",
+  "home_feed_ready": "已就緒",
+  "home_feed_preparing": "準備中",
+  "home_feed_unavailable": "暫時無法使用",
+  "home_feed_loading": "正在載入動態…",
+  "home_feed_empty": "暫時沒有探索內容。試試搜尋或稍後再來。",
+  "home_feed_following_empty": "追蹤的來源暫無近期動態。可以瀏覽探索或前往來源頁面。",
+  "home_feed_request": "動態請求無效。",
+  "home_feed_auth": "請重新登入以查看個人動態。",
+  "home_feed_denied": "你無法查看此動態。",
+  "home_feed_closed": "此動態暫未開放。",
+  "home_feed_cursor": "頁面已過期或游標不再相符。請重新開始。",
+  "home_feed_deadline": "動態請求逾時，請重試。",
+  "home_feed_restart": "重新開始"
 }

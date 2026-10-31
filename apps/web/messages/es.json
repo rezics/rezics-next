@@ -3359,5 +3359,22 @@
   "library_copy_lookup_empty": "No hay ediciones coincidentes. Prueba otro título o alias.",
   "library_copy_profile_loading": "Cargando las opciones de ejemplar de esta edición…",
   "library_copy_profile_forbidden": "Esta edición no está disponible para este usuario. Elige otro resultado.",
-  "library_copy_profile_unavailable": "Las opciones de ejemplar de esta edición no están disponibles temporalmente. Inténtalo de nuevo."
+  "library_copy_profile_unavailable": "Las opciones de ejemplar de esta edición no están disponibles temporalmente. Inténtalo de nuevo.",
+  "home_feed_discovery": "Descubrir",
+  "home_feed_following": "Siguiendo",
+  "home_feed_horizon": "Siguiendo conserva los últimos 30 días o las 2.000 referencias más recientes. El historial completo está en la página de cada fuente.",
+  "home_feed_sources": "Tus fuentes",
+  "home_feed_ready": "Listo",
+  "home_feed_preparing": "Preparando",
+  "home_feed_unavailable": "No disponible temporalmente",
+  "home_feed_loading": "Cargando el feed…",
+  "home_feed_empty": "Aún no hay nada que descubrir. Prueba la búsqueda o vuelve más tarde.",
+  "home_feed_following_empty": "No hay actividad reciente de tus fuentes. Explora Descubrir o visita tus fuentes.",
+  "home_feed_request": "Esta solicitud de feed no es válida.",
+  "home_feed_auth": "Inicia sesión de nuevo para leer tu feed personal.",
+  "home_feed_denied": "No puedes leer este feed.",
+  "home_feed_closed": "Este feed está cerrado por ahora.",
+  "home_feed_cursor": "Esta página ha caducado o el cursor ya no coincide. Empieza de nuevo.",
+  "home_feed_deadline": "La solicitud ha tardado demasiado. Inténtalo de nuevo.",
+  "home_feed_restart": "Empezar de nuevo"
 }

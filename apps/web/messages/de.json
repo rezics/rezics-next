@@ -3359,5 +3359,22 @@
   "library_copy_lookup_empty": "Keine passenden Ausgaben. Versuche einen anderen Titel oder alternativen Namen.",
   "library_copy_profile_loading": "Exemplaroptionen dieser Ausgabe werden geladen…",
   "library_copy_profile_forbidden": "Diese Ausgabe ist für diesen Nutzer nicht verfügbar. Wähle ein anderes Ergebnis.",
-  "library_copy_profile_unavailable": "Die Exemplaroptionen dieser Ausgabe sind vorübergehend nicht verfügbar. Versuche es erneut."
+  "library_copy_profile_unavailable": "Die Exemplaroptionen dieser Ausgabe sind vorübergehend nicht verfügbar. Versuche es erneut.",
+  "home_feed_discovery": "Entdecken",
+  "home_feed_following": "Gefolgt",
+  "home_feed_horizon": "Gefolgte Aktivitäten umfassen die letzten 30 Tage oder die neuesten 2.000 Verweise. Den vollständigen Verlauf findest du bei der jeweiligen Quelle.",
+  "home_feed_sources": "Deine Quellen",
+  "home_feed_ready": "Bereit",
+  "home_feed_preparing": "Wird vorbereitet",
+  "home_feed_unavailable": "Vorübergehend nicht verfügbar",
+  "home_feed_loading": "Feed wird geladen…",
+  "home_feed_empty": "Noch nichts zu entdecken. Nutze die Suche oder komm später wieder.",
+  "home_feed_following_empty": "Keine aktuellen Aktivitäten deiner Quellen. Entdecke Inhalte oder besuche die Quellen.",
+  "home_feed_request": "Diese Feed-Anfrage ist ungültig.",
+  "home_feed_auth": "Melde dich erneut an, um deinen persönlichen Feed zu lesen.",
+  "home_feed_denied": "Du kannst diesen Feed nicht lesen.",
+  "home_feed_closed": "Dieser Feed ist derzeit geschlossen.",
+  "home_feed_cursor": "Diese Seite ist abgelaufen oder der Cursor passt nicht mehr. Beginne erneut.",
+  "home_feed_deadline": "Die Feed-Anfrage hat zu lange gedauert. Versuche es erneut.",
+  "home_feed_restart": "Neu beginnen"
 }

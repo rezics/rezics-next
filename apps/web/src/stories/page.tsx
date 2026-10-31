@@ -1,3 +1,4 @@
+import { selectHomeFeedStory, type HomeFeedStory } from '../kernel/fake/home-feed-stories';
 import { setLabelCatalogueStory } from '../kernel/fake/library-labels';
 import { resetLabelAssignmentStory } from '../kernel/fake/library-label-assignments';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
@@ -139,6 +140,7 @@ export function PageStory({
   ratings,
   ratingsFixture,
   labelsFixture,
+  homeFeedFixture,
 }: {
   visitor: 'Signed In' | 'Signed Out';
   path: string;
@@ -146,12 +148,14 @@ export function PageStory({
   ratings?: Ratings;
   ratingsFixture?: RatingsFixtureName;
   labelsFixture?: Parameters<typeof selectLabelStory>[0];
+  homeFeedFixture?: HomeFeedStory;
 }) {
   const entry = localizedEntry(path);
   const [limitation, setLimitation] = useState<string>();
   selectRatingsFixture(ratingsFixture);
   const { router, queryClient } = useMemo(() => {
     setStoryRequestContext({ visitor, url: entry });
+    selectHomeFeedStory(homeFeedFixture);
     resetLabelAssignmentStory();
     if (!labelsFixture) setLabelCatalogueStory(false);
     if (labelsFixture) selectLabelStory(labelsFixture);
@@ -169,7 +173,7 @@ export function PageStory({
     });
     void router.load();
     return { router, queryClient };
-  }, [entry, labelsFixture, visitor, credentialMode]);
+  }, [entry, labelsFixture, visitor, credentialMode, homeFeedFixture]);
   useLayoutEffect(
     () =>
       bindPreviewNavigation({

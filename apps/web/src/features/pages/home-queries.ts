@@ -1,52 +1,64 @@
 import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { loadContinueState } from '../../library/continue-read';
 import type { SessionEnv } from '../../session/client';
+import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { kernelClient } from '../../kernel/client';
 import { publicRead } from '../../kernel/query';
 import { validatePublicOrigin } from '../../shell/origin';
-import { loadRoutePage } from './route';
+import { loadPublicHomeFeed, readHomeFeedPage, type FeedInput, type HomeFeedResult } from './home-feed-read';
+
+function localeInput(locale: unknown): string {
+  if (typeof locale !== 'string' || !locale || locale.length > 35) throw new Error('Invalid locale');
+  return locale;
+}
+function feedInput(input: { locale: string; stream: 'home' | 'following'; cursor?: string }) {
+  localeInput(input.locale);
+  if (!['home', 'following'].includes(input.stream) ||
+    (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 8192)))
+    throw new Error('Invalid feed request');
+  return input;
+}
 
 const readHomePage = createServerFn({ method: 'GET' })
-  .validator((locale: unknown) => {
-    if (typeof locale !== 'string' || locale.length === 0 || locale.length > 35) throw new Error('Invalid locale');
-    return locale;
-  })
+  .validator(localeInput)
   .handler(async ({ data: locale }) => {
     const { env } = await import('cloudflare:workers');
-    const page = await loadRoutePage(kernelClient(locale), '/', locale);
-    if (page.kind === 'page') {
-      const { nameSubjectTypes } = await import('../../subject/definitions');
-      const subjects = Object.values(page.page.reads).flatMap((read) => {
-        const body = read.body;
-        if (!body || typeof body !== 'object' || !('subjects' in body) || !Array.isArray(body.subjects)) return [];
-        return body.subjects.filter(
-          (subject): subject is { type: string; typeLabel?: string } =>
-            !!subject && typeof subject === 'object' && 'type' in subject && typeof subject.type === 'string',
-        );
-      });
-      await nameSubjectTypes(subjects);
-    }
+    const feed = await loadPublicHomeFeed(kernelClient(locale));
     const origin = validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN);
-    return { ...page, origin };
+    return { feed, origin };
   });
 
-export const homePageQuery = (locale: string) =>
-  queryOptions({
-    ...publicRead,
-    queryKey: ['home-page', locale],
-    queryFn: () => readHomePage({ data: locale }),
-  });
+/** Only this anonymous result enters the reusable page query cache or hydration payload. */
+export const homePageQuery = (locale: string) => queryOptions({
+  ...publicRead,
+  queryKey: ['home-page', locale],
+  queryFn: () => readHomePage({ data: locale }),
+});
 
-/** Personal data has its own browser-only query and never enters the reusable public Home response. */
-export const readHomeContinue = createServerFn({ method: 'GET' })
-  .validator((locale: string) => {
-    if (!locale || locale.length > 35) throw new Error('Invalid locale');
-    return locale;
+export const readPublicHomePage = createServerFn({ method: 'GET' })
+  .validator((input: { locale: string; cursor?: string }) => feedInput({ ...input, stream: 'home' }))
+  .handler(({ data }) => loadPublicHomeFeed(kernelClient(data.locale), data.cursor));
+
+/** Private feed data lives in the mounted viewer's component, outside shared query/hydration caches. */
+export const readPrivateHomePage = createServerFn({ method: 'GET' })
+  .validator((input: FeedInput & { locale: string; viewer: string }) => {
+    feedInput(input);
+    if (typeof input.viewer !== 'string' || !input.viewer || input.viewer.length > 256) throw new Error('Invalid viewer');
+    return input;
   })
-  .handler(async ({ data: locale }) => {
-    const { env } = await import('cloudflare:workers');
+  .handler(async ({ data }): Promise<HomeFeedResult> => {
     setResponseHeader('Cache-Control', 'private, no-store');
-    return loadContinueState(kernelClient(locale), getRequest(), env as Partial<SessionEnv>);
+    const { env } = await import('cloudflare:workers');
+    const request = getRequest();
+    try {
+      await prepareSession(request, env as Partial<SessionEnv>, { refresh: false });
+      const authorization = viewerCredential(request);
+      if (!authorization || sessionSubject(request) !== data.viewer) return { state: 'auth', code: 'authentication_required' };
+      return readHomeFeedPage(kernelClient(data.locale), {
+        stream: data.stream, ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
+      }, authorization, request.signal);
+    } catch {
+      return { state: 'unavailable', code: 'dependency_unavailable' };
+    }
   });
