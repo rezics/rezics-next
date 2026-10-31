@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { workerLocalContainerError } from '../../../scripts/stack-run.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:7c70c2455c1f22cf4fbf90b16345aa4e5f4e3efd68d68f7cd6d014f529a69108';
+export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad4780b3788dfdd2acef1ac248ad9d56ced8abb06';
 // src/events/effects.ts launches DBOS on this schema.
 const DBOS_SCHEMA = 'dbos';
 const container = 'rezics-kernel-dev';
