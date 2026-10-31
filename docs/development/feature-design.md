@@ -32,8 +32,8 @@ those numbers; so does ranking that only works for a handful of Contexts. Show w
 the limit, not only in the fixture.
 
 For all content, one of the core designs is that it is easy to extend and iterate: what content declares has a
-specification, storage that holds at the upper bound, and versions, so the specification can be extended and changed
-without breaking what is already stored. A kind's filter conditions and presentation are one example.
+versioned specification, so it can be extended and changed without breaking what already exists. A kind's filter
+conditions and presentation are one example.
 
 Write acceptance in user terms. For Collections, examples include light novels tagged harem, books over one million
 words and combined filters. Name missing properties, indexes and owner ports before claiming support.
