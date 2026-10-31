@@ -2,6 +2,9 @@ import type { KernelClient } from '@rezics/client';
 import {
   createEditableProfileSource,
   EditableProfileReadError,
+  nativeProfileFailure,
+  profileReadFailure,
+  type EditableProfileFailure,
   type EditableProfile,
   type EditableProfileSource,
 } from './editable-profile-source';
@@ -27,26 +30,33 @@ export type ProfilePatch = {
   speakersListed?: boolean;
 };
 /** The PATCH acknowledges a command. Only a subsequent GET confirms the current profile. */
-export type ProfileSaveResult = { ok: true; profile: ProfileValues } | { ok: false; status: number; message: string };
+export type ProfileSaveResult =
+  | { ok: true; profile: ProfileValues }
+  | { ok: false; status: number; message: string; failure?: EditableProfileFailure };
 
 /** Keep native read status intact across the server-function serialization boundary. */
-export type ProfileReadResult = { ok: true; profile: ProfileValues } | { ok: false; status: number };
+export type ProfileReadResult =
+  | { ok: true; profile: ProfileValues }
+  | { ok: false; status: number; failure?: EditableProfileFailure };
 export async function profileReadResult(read: () => Promise<ProfileValues>): Promise<ProfileReadResult> {
   try {
     return { ok: true, profile: await read() };
   } catch (error) {
-    if (error instanceof EditableProfileReadError) return { ok: false, status: error.status };
+    const failure = profileReadFailure(error);
+    if (failure)
+      return { ok: false, status: failure.status, ...(Object.keys(failure).length > 1 ? { failure } : {}) };
     throw error;
   }
 }
 
 export function profileReadValue(result: ProfileReadResult): ProfileValues {
-  if (!result.ok) throw new EditableProfileReadError(result.status);
+  if (!result.ok) throw new EditableProfileReadError(result.status, result.failure);
   return result.profile;
 }
 
 export function profileReadDenied(error: unknown): boolean {
-  return error instanceof EditableProfileReadError && [401, 403, 404].includes(error.status);
+  const failure = profileReadFailure(error);
+  return !!failure && [401, 403, 404].includes(failure.status);
 }
 
 function accountProfile(value: EditableProfile): ProfileValues {
@@ -122,5 +132,11 @@ export async function saveProfileRecord(
     errorBody && typeof errorBody === 'object' && 'detail' in errorBody && typeof errorBody.detail === 'string'
       ? errorBody.detail
       : '';
-  return { ok: false, status: result.status, message };
+  const failure = nativeProfileFailure(result.status, errorBody, result.headers);
+  return {
+    ok: false,
+    status: result.status,
+    message,
+    ...(Object.keys(failure).length > 1 ? { failure } : {}),
+  };
 }

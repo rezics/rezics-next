@@ -5,6 +5,7 @@ import {
   type ProfileSaveResult,
   type ProfileValues,
 } from './profile-data';
+import { profileReadFailure, type EditableProfileFailure } from './editable-profile-source';
 
 export type ProfileScope = 'profile' | 'views';
 export type ProfileAttempt = Readonly<{
@@ -27,7 +28,7 @@ export type ProfileEditorState = {
   phase: 'loading' | 'idle' | 'saving' | 'reloading' | 'saved' | 'uncertain' | 'refused' | 'review' | 'unavailable';
   scope: ProfileScope;
   readAuthority: 'pending' | 'allowed' | 'denied';
-  failure?: { status: number; message: string } | undefined;
+  failure?: (EditableProfileFailure & { message: string }) | undefined;
 };
 
 function frozen<T extends object>(value: T): T {
@@ -151,9 +152,11 @@ export class ProfileEditor {
   unavailable(error?: unknown) {
     if (!this.current()) return;
     const denied = profileReadDenied(error);
+    const failure = profileReadFailure(error);
     if (denied) this.readVersion++;
     this.update({
       phase: this.state.attempt ? 'uncertain' : 'unavailable',
+      failure: failure ? { ...failure, message: '' } : undefined,
       ...(denied ? { readAuthority: 'denied' as const } : {}),
     });
   }
@@ -166,7 +169,7 @@ export class ProfileEditor {
   }
   review() {
     if (!this.current() || this.state.readAuthority !== 'allowed') return;
-    this.update({ phase: this.state.attempt ? 'uncertain' : 'idle', failure: undefined });
+    this.update({ phase: this.state.attempt ? 'uncertain' : 'idle' });
   }
   async submit(scope: ProfileScope) {
     if (!this.current() || this.state.readAuthority !== 'allowed') return;
@@ -216,9 +219,10 @@ export class ProfileEditor {
     let result: ProfileSaveResult;
     try {
       result = await this.io.save(attempt);
-    } catch {
+    } catch (error) {
       if (!this.current()) return;
-      this.update({ phase: 'uncertain' });
+      const failure = profileReadFailure(error);
+      this.update({ phase: 'uncertain', failure: failure ? { ...failure, message: '' } : undefined });
       return;
     }
     if (!this.current()) return;
@@ -227,7 +231,7 @@ export class ProfileEditor {
       this.update({
         phase: uncertain ? 'uncertain' : 'refused',
         attempt: uncertain ? attempt : null,
-        failure: { status: result.status, message: result.message },
+        failure: { ...result.failure, status: result.status, message: result.message },
       });
       return;
     }

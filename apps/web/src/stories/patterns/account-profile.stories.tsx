@@ -18,16 +18,42 @@ import { ProfileCard } from '../../settings/profile';
 import { PublicViewsCard } from '../../settings/public-views';
 import { ProfileEditor, type ProfileAttempt } from '../../settings/profile-write';
 import { ProfileNavigation } from '../../settings/profile-navigation';
+import { EditableProfileReadError, nativeProfileFailure } from '../../settings/editable-profile-source';
 
 type SaveObserver = ((attempt: ProfileAttempt) => void) | undefined;
+type RecoveryScenario = 'delay' | 'date' | 'short' | 'malformed' | 'read';
 
-function ProfileExample({ scenario, onSave }: { scenario: ProfileScenario; onSave?: SaveObserver }) {
+function ProfileExample({ scenario, recovery, onSave }: {
+  scenario: ProfileScenario;
+  recovery?: RecoveryScenario | undefined;
+  onSave?: SaveObserver;
+}) {
   const [editor] = useState(() => {
     const io = createProfileStoryIO(scenario);
+    let failed = false;
+    const failure = () => nativeProfileFailure(503, {
+      type: 'https://rezics.com/problems/dependency_unavailable',
+      title: 'Dependency Unavailable',
+      code: 'dependency_unavailable',
+      retryable: true,
+      request_id: 'profile-story-request',
+    }, { 'retry-after': recovery === 'date' ? new Date(Date.now() + 60_000).toUTCString()
+      : recovery === 'short' ? '1' : recovery === 'malformed' ? 'invalid' : '60' });
     return new ProfileEditor({
       ...io,
-      save: (attempt) => {
+      read: async () => {
+        if (recovery === 'read' && !failed) {
+          failed = true;
+          throw new EditableProfileReadError(503, failure());
+        }
+        return io.read();
+      },
+      save: async (attempt) => {
         onSave?.(attempt);
+        if (recovery && recovery !== 'read' && !failed) {
+          failed = true;
+          return { ok: false, status: 503, message: '', failure: failure() };
+        }
         return io.save(attempt);
       },
     });
@@ -72,20 +98,24 @@ function ProfileHome() {
   );
 }
 
-function Example({ scenario = 'normal', onSave }: { scenario?: ProfileScenario; onSave?: SaveObserver }) {
+function Example({ scenario = 'normal', recovery, onSave }: {
+  scenario?: ProfileScenario;
+  recovery?: RecoveryScenario;
+  onSave?: SaveObserver;
+}) {
   const router = useMemo(() => {
     const root = createRootRoute({ component: Outlet });
     const profile = createRoute({
       getParentRoute: () => root,
       path: '/settings',
-      component: () => <ProfileExample scenario={scenario} onSave={onSave} />,
+      component: () => <ProfileExample scenario={scenario} recovery={recovery} onSave={onSave} />,
     });
     const home = createRoute({ getParentRoute: () => root, path: '/', component: ProfileHome });
     return createRouter({
       routeTree: root.addChildren([profile, home]),
       history: createMemoryHistory({ initialEntries: ['/settings'] }),
     });
-  }, [scenario, onSave]);
+  }, [scenario, recovery, onSave]);
   return <RouterProvider router={router} />;
 }
 
@@ -466,5 +496,93 @@ export const LinkRemovalEdges: Story = {
     await expect(replacement).toHaveFocus();
     await expect(replacement).not.toBe(original);
     await expect(replacement).toHaveValue('');
+  },
+};
+
+export const RetryDelay: Story = {
+  args: { recovery: 'delay', onSave: fn() },
+  globals: { viewport: { value: 'desktop1280' } },
+  play: async ({ canvasElement, args }) => {
+    const view = await editName(canvasElement);
+    await view.findByText(m.settings_retry_wait());
+    await expect(view.getByRole('button', { name: m.settings_profile_retry_save() })).toBeDisabled();
+    for (const reload of view.getAllByRole('button', { name: m.settings_profile_reload_current() }))
+      await expect(reload).toBeDisabled();
+    await expect(view.getByRole('button', { name: m.settings_profile_review_draft() })).toBeEnabled();
+    await userEvent.click(view.getByRole('button', { name: m.settings_profile_review_draft() }));
+    await expect(view.getByRole('button', { name: m.settings_profile_retry_save() })).toBeDisabled();
+    await expect(view.getByRole('textbox', { name: m.settings_profile_display_name() })).toBeEnabled();
+    await expect(args.onSave).toHaveBeenCalledTimes(1);
+  },
+};
+
+export const PublicActivityRetryDate: Story = {
+  args: { recovery: 'date', onSave: fn() },
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement, args }) => {
+    const activity = within(within(canvasElement).getByRole('region', { name: m.settings_public_activity_heading() }));
+    await userEvent.click(await activity.findByRole('switch', { name: m.settings_public_reviews() }));
+    await activity.findByText(m.settings_retry_wait());
+    await expect(activity.getByRole('button', { name: m.settings_profile_retry_save() })).toBeDisabled();
+    await expect(activity.getByRole('button', { name: m.settings_profile_reload_current() })).toBeDisabled();
+    await expect(activity.getByRole('button', { name: m.settings_profile_review_draft() })).toBeEnabled();
+    const view = await profileView(canvasElement);
+    await expect(view.getByRole('button', { name: m.settings_profile_reload_current() })).toBeDisabled();
+    await expect(args.onSave).toHaveBeenCalledWith(expect.objectContaining({ patch: { publicViews: { reviews: false } } }));
+    await expect(args.onSave).toHaveBeenCalledTimes(1);
+  },
+};
+
+export const RetryOriginalAfterDelay: Story = {
+  args: { recovery: 'short', onSave: fn() },
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement, args }) => {
+    const view = await editName(canvasElement);
+    await view.findByText(m.settings_retry_wait());
+    const retry = view.getByRole('button', { name: m.settings_profile_retry_save() });
+    await expect(retry).toBeDisabled();
+    const input = view.getByRole('textbox', { name: m.settings_profile_display_name() });
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Later draft');
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 3000 });
+    await expect(args.onSave).toHaveBeenCalledTimes(1);
+    await userEvent.click(retry);
+    await view.findByText(m.settings_profile_review_needed());
+    await expect(input).toHaveValue('Later draft');
+    const original = expect.objectContaining({
+      after: expect.objectContaining({ displayName: 'Avery Updated' }),
+      patch: { displayName: 'Avery Updated' },
+    });
+    await expect(args.onSave).toHaveBeenNthCalledWith(1, original);
+    await expect(args.onSave).toHaveBeenNthCalledWith(2, original);
+    const observer = args.onSave as ReturnType<typeof fn>;
+    await expect(observer.mock.calls[1]?.[0]).toBe(observer.mock.calls[0]?.[0]);
+  },
+};
+
+export const MalformedRetryAfter: Story = {
+  args: { recovery: 'malformed' },
+  globals: { viewport: { value: 'desktop1280' } },
+  play: async ({ canvasElement }) => {
+    const view = await editName(canvasElement);
+    await view.findByText(m.settings_profile_network_error());
+    await expect(view.queryByText(m.settings_retry_wait())).toBeNull();
+    await expect(view.getByRole('button', { name: m.settings_profile_retry_save() })).toBeEnabled();
+    for (const reload of view.getAllByRole('button', { name: m.settings_profile_reload_current() }))
+      await expect(reload).toBeEnabled();
+  },
+};
+
+export const ReadRetryDelay: Story = {
+  args: { recovery: 'read' },
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => {
+    for (const name of [m.settings_profile_heading(), m.settings_public_activity_heading()]) {
+      const view = within(await within(canvasElement).findByRole('region', { name }));
+      await view.findByText(m.settings_retry_wait());
+      await expect(view.getByRole('button', { name: m.settings_profile_reload_current() })).toBeDisabled();
+      await expect(view.queryByRole('textbox')).toBeNull();
+      await expect(view.queryByRole('switch')).toBeNull();
+    }
   },
 };

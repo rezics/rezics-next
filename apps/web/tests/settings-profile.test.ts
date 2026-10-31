@@ -1,8 +1,14 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
 import type { EditableProfile } from '../src/settings/editable-profile-source';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
+import { EditableProfileReadError } from '../src/settings/editable-profile-source';
+import { ProfileEditor, ProfileEditorSession, type ProfileAttempt } from '../src/settings/profile-write';
+import { MediaProblem } from '../src/media/kernel';
+import { m } from '../src/paraglide/messages.js';
 
 const account = {
   id: 'alice',
@@ -225,4 +231,142 @@ test('an organization exposes speakersListed; API refusals retain their status f
     );
     expect(answer).toMatchObject({ ok: false, status });
   }
+});
+
+const recoveryProfile: ProfileValues = {
+  accountId: '019a0000-0000-7000-8000-000000000001',
+  kind: 'actor',
+  displayName: 'Private name',
+  biography: 'Private biography',
+  avatar: null,
+  links: [],
+  publicViews: { posts: true, reviews: true, collections: true, realms: false },
+};
+const recoveryProblem = {
+  type: 'https://rezics.com/problems/dependency_unavailable',
+  title: 'Dependency Unavailable',
+  status: 503,
+  code: 'dependency_unavailable',
+  retryable: true,
+  request_id: 'native-save-request',
+};
+
+test('profile and activity failure controls honor native delay/date headers while draft review stays local', async () => {
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { ProfileCard } = await import('../src/settings/profile');
+  const { PublicViewsCard } = await import('../src/settings/public-views');
+  for (const scope of ['profile', 'views'] as const) {
+    for (const retryAfter of ['60', new Date(Date.now() + 60_000).toUTCString(), 'malformed', '-2', '0',
+      new Date(Date.now() - 60_000).toUTCString(), undefined]) {
+      const { client, calls } = clientFor((request) => {
+        expect(request.headers.get('authorization')).toBe('Bearer page-token');
+        return Response.json(recoveryProblem, {
+          status: 503,
+          headers: retryAfter ? { 'retry-after': retryAfter } : {},
+        });
+      });
+      const editor = new ProfileEditor({
+        read: async () => recoveryProfile,
+        save: (attempt) => saveProfileRecord(client, 'Bearer page-token', recoveryProfile.accountId,
+          attempt.before, attempt.after, attempt.idempotencyKey),
+      }, recoveryProfile);
+      editor.edit(scope === 'profile' ? { biography: 'Original words' }
+        : { publicViews: { ...recoveryProfile.publicViews, posts: false } });
+      await editor.submit(scope);
+      const failure = editor.snapshot().failure;
+      expect(failure).toEqual({ status: 503, message: '', code: recoveryProblem.code, retryable: true,
+        requestId: recoveryProblem.request_id, ...(retryAfter ? { retryAfter } : {}) });
+      const attempt = editor.snapshot().attempt;
+      editor.edit({ biography: 'Later words' });
+      editor.review();
+      expect(editor.snapshot().failure).toBe(failure);
+      expect(editor.snapshot().attempt).toBe(attempt);
+      const waiting = retryAfter === '60' || retryAfter?.endsWith('GMT') && Date.parse(retryAfter) > Date.now();
+      const html = renderToStaticMarkup(createElement('div', null,
+        createElement(ProfileCard, { editor }), createElement(PublicViewsCard, { editor })));
+      const controls = [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)];
+      for (const label of [m.settings_profile_retry_save(), m.settings_profile_reload_current()]) {
+        const matching = controls.filter((control) => control[2]?.includes(label));
+        expect(matching).toHaveLength(label === m.settings_profile_reload_current() ? 2 : 1);
+        for (const control of matching) expect(control[1]?.includes('disabled')).toBe(!!waiting);
+      }
+      expect(html.includes(m.settings_retry_wait())).toBe(!!waiting);
+      expect(controls.find((control) => control[2]?.includes(m.settings_profile_review_draft()))?.[1])
+        .not.toContain('disabled');
+      expect(editor.snapshot().draft?.biography).toBe('Later words');
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.body).toEqual(scope === 'profile' ? { biography: 'Original words' } : { publicViews: { posts: false } });
+      expect(calls[0]?.key).toBe(attempt?.idempotencyKey ?? 'missing original attempt');
+      editor.retire();
+    }
+  }
+});
+
+test('a thrown native save remains unknown and replays the immutable original while a later read failure replaces its delay', async () => {
+  const sent: ProfileAttempt[] = [];
+  const editor = new ProfileEditor({
+    read: async () => { throw new EditableProfileReadError(403); },
+    save: async (attempt) => {
+      sent.push(attempt);
+      if (sent.length === 1) throw new MediaProblem(recoveryProblem, { 'retry-after': '0' });
+      return { ok: false, status: 403, message: '' };
+    },
+  }, recoveryProfile);
+  editor.edit({ biography: 'Original words' });
+  await editor.submit('profile');
+  const original = editor.snapshot().attempt;
+  expect(editor.snapshot().phase).toBe('uncertain');
+  expect(editor.snapshot().failure?.retryAfter).toBe('0');
+  expect(editor.snapshot().failure?.requestId).toBe(recoveryProblem.request_id);
+  editor.edit({ biography: 'Later words' });
+  await editor.retry();
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).toBe(original);
+  expect(Object.isFrozen(original?.patch)).toBe(true);
+  expect(editor.snapshot().attempt).toBe(original);
+  expect(editor.snapshot().phase).toBe('uncertain');
+  expect(editor.snapshot().draft?.biography).toBe('Later words');
+  expect(editor.snapshot().failure?.retryAfter).toBeUndefined();
+  editor.unavailable(new EditableProfileReadError(503, { status: 503, retryAfter: '90' }));
+  await editor.reload();
+  expect(editor.snapshot().failure).toEqual({ status: 403, message: '' });
+  expect(editor.snapshot().readAuthority).toBe('denied');
+  expect(editor.snapshot().attempt).toBe(original);
+  editor.receive({ ...recoveryProfile, biography: 'Stale cached value' });
+  expect(editor.snapshot().draft?.biography).toBe('Later words');
+  editor.unavailable(new Error('Retry-After: 100'));
+  expect(editor.snapshot().failure).toBeUndefined();
+  editor.retire();
+});
+
+test('viewer disposal removes failure metadata and ignores a late native problem without delaying the new viewer', async () => {
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => { finish = resolve; });
+  const owner = new ProfileEditorSession({ state: 'signed-in', subject: recoveryProfile.accountId, csrfToken: 'old' }, () => ({
+    read: async () => recoveryProfile,
+    save: async () => {
+      await pending;
+      throw new MediaProblem(recoveryProblem, { 'retry-after': '120' });
+    },
+  }));
+  owner.editor.receive(recoveryProfile);
+  owner.editor.unavailable(new EditableProfileReadError(503, { status: 503, retryAfter: '60' }));
+  owner.editor.review();
+  owner.editor.edit({ biography: 'Old viewer draft' });
+  const completing = owner.editor.submit('profile');
+  owner.retire();
+  finish();
+  await completing;
+  expect(owner.editor.snapshot().known).toBeNull();
+  expect(owner.editor.snapshot().draft).toBeNull();
+  expect(owner.editor.snapshot().attempt).toBeNull();
+  expect(owner.editor.snapshot().failure).toBeUndefined();
+  const next = new ProfileEditorSession({ state: 'signed-in', subject: 'another-viewer', csrfToken: 'new' }, () => ({
+    read: async () => { throw new EditableProfileReadError(503); },
+    save: async () => { throw new Error('Must not write'); },
+  }));
+  await next.editor.reload();
+  expect(next.editor.snapshot().failure).toEqual({ status: 503, message: '' });
+  expect(next.editor.snapshot().draft).toBeNull();
+  next.retire();
 });

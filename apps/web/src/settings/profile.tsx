@@ -15,6 +15,7 @@ import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';
 import { ProfileLinks } from './profile-links';
 import type { AvatarUpload } from './profile-avatar-upload';
 import { ProfileNavigation, useProfileNavigationUpload } from './profile-navigation';
+import { usePreferenceRetry } from './preference-failure-retry';
 
 function profileError(status: number) {
   if (status === 400 || status === 422) return m.settings_profile_invalid_error();
@@ -33,6 +34,7 @@ export function ProfileFeedback({
   writable?: boolean;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
+  const waiting = usePreferenceRetry(state.failure);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const denied = state.readAuthority === 'denied';
   const unavailable = state.phase === 'unavailable' || denied;
@@ -43,7 +45,12 @@ export function ProfileFeedback({
       {busy && state.scope === scope ? <p role="status">{m.settings_saving()}</p> : null}
       {state.phase === 'saved' && state.scope === scope ? <p role="status">{m.settings_saved()}</p> : null}
       {unavailable || failed ? (
-        <Alert variant="destructive">
+        <Alert
+          variant="destructive"
+          data-response-status={state.failure?.status}
+          data-response-code={state.failure?.code}
+          data-retry-after={state.failure?.retryAfter}
+        >
           <AlertTitle>{m.settings_profile_error_title()}</AlertTitle>
           <AlertDescription>
             <p>
@@ -57,18 +64,24 @@ export function ProfileFeedback({
                       ? state.failure.message || profileError(state.failure.status)
                       : m.settings_profile_review_needed()}
             </p>
+            {waiting ? <p>{m.settings_retry_wait()}</p> : null}
             <div className="flex flex-wrap gap-2">
               {state.attempt ? (
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={!writable || busy}
+                  disabled={!writable || busy || waiting}
                   onClick={() => void editor.retry()}
                 >
                   {m.settings_profile_retry_save()}
                 </Button>
               ) : null}
-              <Button type="button" variant="outline" disabled={!writable || busy} onClick={() => void editor.reload()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!writable || busy || waiting}
+                onClick={() => void editor.reload()}
+              >
                 {m.settings_profile_reload_current()}
               </Button>
               {state.draft ? (
@@ -108,6 +121,7 @@ export function ProfileCard({
   avatarUpload?: AvatarUpload;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
+  const waiting = usePreferenceRetry(state.failure);
   const profile = writable && state.readAuthority === 'allowed' ? state.draft : null;
   const ids = useId();
   const [validationAttempt, setValidationAttempt] = useState(0);
@@ -287,7 +301,12 @@ export function ProfileCard({
               <Button type="submit" disabled={closed || busy || uploading || !!state.attempt || !changed}>
                 {busy ? m.settings_saving() : m.settings_profile_save()}
               </Button>
-              <Button type="button" variant="outline" disabled={!writable || busy} onClick={() => void editor.reload()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!writable || busy || waiting}
+                onClick={() => void editor.reload()}
+              >
                 {m.settings_profile_reload_current()}
               </Button>
             </div>
