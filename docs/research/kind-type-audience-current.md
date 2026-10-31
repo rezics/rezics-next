@@ -49,6 +49,11 @@ and hold the Source home during foreign IO. The selected Search context alone do
 
 Native provenance that is present:
 
+- `library.collection_kind_observation` is keyed by `(route,collection_id,audience)` and retains generation,
+  source_generation, capture, frontier, version, completion and winner. `collection_kind_subject` retains
+  `(route,collection_id,audience,generation,subject_id,type_id)`; `collection_kind_count` retains per-Type votes.
+  These rows contain neither original/terminal disclosure proofs nor their permission dependencies. A proposed
+  evidence page needs an owner-native retained binding; none of these existing rows is that receipt today.
 - `library.canonical_source_scope` contains identity/frontier/capture/committed revision; the preparation
   SQL joins `library.native_source_capture` and `library.native_source_receipt`, checks receipt/capture xmin
   equality and excludes the current native xid. This proves that specific committed capture, not Type visibility.
@@ -163,6 +168,8 @@ produced against its own native Source/audience; no fallback from a missing priv
    witnesses/rows/bytes/emptySeeks map to them through the original bridge, with statements and metadata charged
    separately. Subject Type byte length, dependencies and provenance fanout require explicit finite bounds.
    Use the original anchor/eligibility point declarations; do not inherit the summary hydration footprint.
+   Unknown footprint refuses before dispatch; a dispatched failure burns its reserved bound and poisons the
+   attempt if its actual receipt is missing. Per-attempt reservation identity never carries authority across retries.
 4. Split oversized groups/dependency sets into retained pages; keep canonical settled floor before unfinished
    groups. Total work may follow the finite input, but no step, final GET or final adoption rescans the population.
    Existing identity basis sweeps retain their separate native allowance; raw100 does not pay them implicitly.
@@ -172,6 +179,12 @@ produced against its own native Source/audience; no fallback from a missing priv
 6. Only complete canonical EOF plus complete current evidence permits a winner or genuine empty. Getter repeats
    current viewer formula/audience and Source-local evidence checks; metadata GET remains fixed-point work.
    Unknown footprint, missing producer, exhausted allowance, expired evidence or verification failure is unavailable.
+
+Current `access/evidence-deadline.ts:ACCESS_EVIDENCE_TTL_MS` is 1000 ms, capped by request deadline;
+native temporal membership/grant boundaries can shorten validity further. Retaining a Kind page must not extend
+that permission lifetime. Historical provenance may survive for repair, but current-use evidence needs native
+reverification at each new T and fresh Actor production when it changes/expires. Prior page work is not a receipt
+for a later attempt, and an opaque evidence reference is never a cached allow.
 
 **Two gaps prevent these steps being an implementable contract today.** First, the existing live work context
 exists only inside the Source transaction body. Work-step has no pre-checkout preparation hook, and current
