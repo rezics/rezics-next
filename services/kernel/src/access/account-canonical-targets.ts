@@ -8,11 +8,14 @@ import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
 
+export type PublicAccountCanonicalView = 'overview' | 'posts' | 'reviews' | 'collections';
+
 export type PublicAccountCanonicalTarget = {
   accountId: string;
   accountKind: 'actor' | 'organization';
   handle: string | null;
   canonicalPath: string | null;
+  views: readonly PublicAccountCanonicalView[];
 };
 
 type Pointer = { subjectId: string; accountId: string; receiptId: string };
@@ -181,6 +184,7 @@ export async function readPublicAccountCanonicalTargets(
       accountKind: summary.accountKind,
       handle,
       canonicalPath: handle ? `/@${encodeURIComponent(handle)}` : null,
+      views: handle ? ['overview'] : [],
     });
   }
   requireAccessDeadline(deps.deadline);
