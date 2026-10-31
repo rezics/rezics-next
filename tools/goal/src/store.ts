@@ -920,7 +920,7 @@ export class WorkerStore implements AttemptFence {
       const attempt = this.attempt(ref);
       const record = this.record(ref);
       if (!['stopped', 'exited'].includes(attempt.state) ||
-          [attempt.process, attempt.driver, ...attempt.auxiliaryProcesses].some((identity) => identity && sameProcess(identity)))
+          [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)))
         throw new StaleAttemptError(ref, task.currentAttempt);
       // Legacy retained product records predate taskKind. Absence stays absent; do not relabel them from today's brief.
       if (task.brief.kind === 'verification' && (!record || record.taskKind === 'verification' || record.proof))

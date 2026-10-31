@@ -167,7 +167,7 @@ export async function runWorkerCommand(
         if (expectedAttempt === undefined) throw new Error('--proof-start requires --expected-attempt');
         print(JSON.stringify(tasks.queueProofStart(arg, { expectedAttempt, ...(brief ? { brief } : {}), removeAfter }, priorityActor)));
       } else {
-        if (removeAfter.length) throw new Error('--remove-after requires --expected-attempt 0');
+        if (removeAfter.length) throw new Error('--remove-after requires --proof-start with an expected generation (or --expected-attempt 0)');
         try {
           tasks.queueRetry(arg, { ...(brief ? { brief } : {}), ...(expectedAttempt === undefined ? {} : { expectedAttempt }) }, priorityActor);
         } catch (error) {
