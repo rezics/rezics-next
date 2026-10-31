@@ -24,30 +24,49 @@ const lastModified = '2026-10-19T00:00:00.000Z';
 const id = '00000000-0000-4000-8000-000000000001';
 
 type FeedName = 'boards' | 'threads' | 'realms' | 'spaces';
+type SourceName = FeedName | 'agents' | 'collections' | 'subjects';
 
 const samplePages: Record<FeedName, { items: Record<string, unknown>[]; next: string }> = {
   boards: { items: [{ id, lastModified }], next: 'boards-next' },
   threads: { items: [{ id, title: 'A discussion?', lastModified }], next: 'threads-next' },
-  realms: { items: [{ id, lastModified }], next: 'realms-next' },
+  realms: { items: [{ id, lastModified, canonicalDestination: { kind: 'realm', realmId: id } }], next: 'realms-next' },
   spaces: { items: [{ id, address: 'sample-space', lastModified }], next: 'spaces-next' },
 };
-const endpointCalls: { feed: FeedName; query: Record<string, unknown> }[] = [];
-let feedResponse: ((feed: FeedName, query: Record<string, unknown>) => { status: number; data?: unknown }) | undefined;
+const subjectItem = {
+  id,
+  target: { family: 'subject' as const, subjectId: id },
+  views: ['overview'],
+  labels: [{ language: 'en', value: 'Sample subject' }],
+  lastModified,
+};
+const nativePages = {
+  ...samplePages,
+  agents: { agentPages: [{ handle: 'CurrentHandle', kind: 'actor', lastModified }], next: 'agents-next' },
+  collections: { items: [{ id, lastModified }], next: 'collections-next' },
+  subjects: { subjectPages: [subjectItem], next: 'subjects-next' },
+};
+const endpointCalls: { feed: SourceName; query: Record<string, unknown> }[] = [];
+let feedResponse:
+  | ((feed: SourceName, query: Record<string, unknown>) => { status: number; data?: unknown })
+  | undefined;
+
+function endpoint(feed: SourceName) {
+  return {
+    async get({ query }: { query: Record<string, unknown> }) {
+      endpointCalls.push({ feed, query });
+      if (feedResponse) return feedResponse(feed, query);
+      return { status: 200, data: nativePages[feed] };
+    },
+  };
+}
 
 mock.module('../src/kernel/client.ts', () => ({
   kernelClient() {
     return {
+      'subject-pages': endpoint('subjects'),
+      'agent-pages': endpoint('agents'),
       sitemap: Object.fromEntries(
-        (Object.keys(samplePages) as FeedName[]).map((feed) => [
-          feed,
-          {
-            async get({ query }: { query: Record<string, unknown> }) {
-              endpointCalls.push({ feed, query });
-              if (feedResponse) return feedResponse(feed, query);
-              return { status: 200, data: samplePages[feed] };
-            },
-          },
-        ]),
+        ([...Object.keys(samplePages), 'collections'] as SourceName[]).map((feed) => [feed, endpoint(feed)]),
       ),
     };
   },
@@ -133,13 +152,24 @@ function exportOptions<Item>(store: MemoryStore, runner: MemorySteps, feed: Site
   } satisfies SitemapExportOptions<Item>;
 }
 
-test('sitemapFeeds loads board, thread, Realm and Space feeds with canonical page families', async () => {
+test('sitemapFeeds loads every registered feed including board, thread, Realm and Space canonical page families', async () => {
   const endpointModule = await import('../src/sitemap/feeds.ts');
   const { threadHref } = await import('../src/threads/thread-href.ts');
   const feeds = endpointModule.sitemapFeeds();
-  expect(feeds.map(({ type }) => type).sort()).toEqual(['boards', 'realms', 'spaces', 'threads']);
+  expect(feeds.map(({ type }) => type).sort()).toEqual([
+    'agents',
+    'boards',
+    'collections',
+    'realms',
+    'spaces',
+    'subjects',
+    'threads',
+  ]);
 
-  const paths: Record<FeedName, string> = {
+  const paths: Record<SourceName, string> = {
+    agents: '/@CurrentHandle',
+    collections: `/collections/${id}`,
+    subjects: `/subjects/${id}/sample-subject`,
     boards: `/boards/${id}`,
     threads: threadHref({ id, title: 'A discussion?' }),
     realms: `/realms/${id}`,
@@ -147,13 +177,29 @@ test('sitemapFeeds loads board, thread, Realm and Space feeds with canonical pag
   };
   endpointCalls.length = 0;
   for (const feed of feeds) {
-    const type = feed.type as FeedName;
+    const type = feed.type as SourceName;
     const page = await feed.read(`${type}-cursor`);
-    expect(page).toEqual(samplePages[type]);
+    if (type === 'subjects') {
+      const { subjectCanonicalPage } = await import('../src/sitemap/subject-canonical.ts');
+      expect(page).toEqual(subjectCanonicalPage(nativePages.subjects));
+    } else if (type === 'agents') {
+      expect(page).toEqual({
+        items: [{ ...nativePages.agents.agentPages[0], id: 'CurrentHandle' }],
+        next: 'agents-next',
+      });
+    } else expect(page).toEqual(nativePages[type]);
     expect(endpointCalls.at(-1)).toEqual({ feed: type, query: { cursor: `${type}-cursor`, limit: 1_000 } });
     const item = page.items[0] as Record<string, unknown>;
-    expect(feed.family(item)).toEqual(family(paths[type], lastModified));
-    expect(feed.family({ ...item, lastModified: undefined })).toEqual(family(paths[type]));
+    const meaningfulTime = ['agents', 'boards', 'subjects', 'threads'].includes(type) ? lastModified : undefined;
+    expect(feed.family(item)).toEqual(family(paths[type], meaningfulTime));
+    if (type === 'subjects') {
+      const { subjectCanonicalPage } = await import('../src/sitemap/subject-canonical.ts');
+      const unknownTime = subjectCanonicalPage({
+        subjectPages: [{ ...subjectItem, lastModified: undefined }],
+        next: null,
+      }).items[0]!;
+      expect(feed.family(unknownTime)).toEqual(family(paths[type]));
+    } else expect(feed.family({ ...item, lastModified: undefined })).toEqual(family(paths[type]));
   }
 });
 
@@ -415,6 +461,74 @@ test('default Community feeds consume actual tagged native canonical destination
   try {
     await verify(realms, realmPage, [`/spaces/${encodeURIComponent(carriedAddress)}`, `/realms/${realmId}`]);
     await verify(spaces, spacePage, [`/spaces/${encodeURIComponent(standaloneAddress)}`]);
+  } finally {
+    feedResponse = undefined;
+  }
+});
+
+test('default subject projection exports a full native window with multiple views inside existing packing bounds and retains the previous index on refusal', async () => {
+  const { createSubjectFeed } = await import('../src/sitemap/feeds/subjects.ts');
+  const feed = createSubjectFeed();
+  const source = {
+    subjectPages: Array.from({ length: 1_000 }, (_, index) => {
+      const id = keyedId(index);
+      return {
+        ...subjectItem,
+        id,
+        target: { family: 'subject' as const, subjectId: id },
+        views: ['overview', 'editions', 'credits', 'details'],
+      };
+    }),
+    next: 'native-full-next',
+  };
+  const packed: SitemapFamily[] = [];
+  const store = new MemoryStore();
+  const options = {
+    ...exportOptions(store, new MemorySteps(), feed),
+    pack: async (_origin: string, families: readonly SitemapFamily[]) => {
+      expect(families.length).toBeLessThanOrEqual(3_000);
+      packed.push(...families);
+      return [];
+    },
+  };
+  feedResponse = (name, query) => {
+    if (name !== 'subjects') throw new Error(`Unexpected hydration read: ${name}`);
+    if (query.cursor === undefined) return { status: 200, data: source };
+    if (query.cursor === source.next) return { status: 200, data: { subjectPages: [], next: 'native-empty-next' } };
+    if (query.cursor === 'native-empty-next') return { status: 200, data: { subjectPages: [], next: null } };
+    throw new Error(`Unexpected native cursor: ${query.cursor}`);
+  };
+  endpointCalls.length = 0;
+  try {
+    await exportSitemapFeed('default-subjects', feed, options);
+    expect(endpointCalls).toEqual([
+      { feed: 'subjects', query: { limit: 1_000 } },
+      { feed: 'subjects', query: { cursor: source.next, limit: 1_000 } },
+      { feed: 'subjects', query: { cursor: 'native-empty-next', limit: 1_000 } },
+    ]);
+    expect(packed).toEqual(
+      source.subjectPages.flatMap(({ id }) =>
+        ['', '/editions', '/credits', '/details'].map((view) =>
+          family(`/subjects/${id}/sample-subject${view}`, lastModified),
+        ),
+      ),
+    );
+    await store.put('index.xml', 'prior index');
+    await store.put('shards/prior.xml.gz', 'prior shard');
+    const previous = new Map(store.objects);
+    for (const unavailable of [
+      { status: 503 },
+      { status: 200, data: { subjectPages: [{ ...subjectItem, target: undefined }], next: null } },
+    ]) {
+      feedResponse = () => unavailable;
+      await expect(exportSitemaps(options)).rejects.toMatchObject({ status: 503 });
+      for (const [key, bytes] of previous) expect(store.objects.get(key)).toEqual(bytes);
+      expect(store.objects.has(`runs/${options.runId}/published.json`)).toBe(false);
+    }
+    for (const next of ['opaque-repeat', 'different-opaque-repeat']) {
+      feedResponse = () => ({ status: 200, data: { subjectPages: [subjectItem], next } });
+      await expect(exportSitemapFeed('repeated-subject', feed, options)).rejects.toThrow(/subjects.*progress/iu);
+    }
   } finally {
     feedResponse = undefined;
   }

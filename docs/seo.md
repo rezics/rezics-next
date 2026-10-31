@@ -212,7 +212,10 @@ withdrawn fact or media response. Retaining immutable historical shards is a sep
 The public `GET /v1/subject-pages` feed accepts an optional opaque `cursor` and integer `limit` from 1 to 1,000
 (default 20). The 1,000 maximum is an exception to the ordinary list maximum of 100 for server-to-server sitemap
 reads. A page contains `subjectPages` entries with `id`, current public display `labels` (`language` and `value`),
-and an optional `lastModified` (UTC ISO 8601 date-time), plus `next` (an opaque cursor or null). Omit
+optional `originalLanguage` and `lastModified` (UTC ISO 8601 date-time), plus `next` (an opaque cursor or null).
+The delivered native producer also supplies `target` (`subject` with `subjectId`, or `account` with `accountId` and
+current `canonicalPath`) and offered `views`. These remain optional in the compatibility wire schema; nonempty Web
+projection requires valid owner targets and views. Labels alone never establish a page or view family. Omit
 `lastModified` when unknown; never return it as `null` or guess the current time. Web omits XML `lastmod` when the
 time is absent. The final cursor is a signed keyset token, never a raw id.
 
@@ -244,8 +247,8 @@ processing or rebuild time.
 Unknown, hidden, removed and unreadable ids remain indistinguishable 404s. A merged-source API response remains
 308, followed by the web's public 301. See the [publication research](research/subject-sitemap-publication.md) for
 evidence and [sitemap scale research](research/sitemaps-at-scale.md) for export constraints. The semantic feed
-implementation is pending: valid requests currently return `semantic_not_ready` (503), and the stub does not
-verify cursors or establish indexability.
+source and default Web canonical projection are delivered; source registration and local typing do not establish
+the original native publication, lifecycle, growth or whole-feed acceptance.
 
 ## Status and change
 
@@ -333,10 +336,16 @@ live HTML disclosure. This policy does not purge public responses already held b
 
 Reuse the current keyset exporter, immutable shards and atomic index publication. A native feed that is preparing
 or unavailable fails the export and preserves the previous inventory; it never becomes a successful empty feed.
-Until the actual subject canonical constructor and Community destination/standalone projections are delivered,
-Web's typed adapters remain unavailable, including for empty native pages. Subject labels alone cannot construct
-eligible view or agent families. Ready families reuse the canonical reader's locale paths, including its actual
-fallback language and current identity; Web does not add per-row identity reads.
+The default Subject adapter binds delivered native targets/views to the canonical reader's label fallback and
+locale/view path helpers, preserving raw ids, source order and native cursors even across empty continuation pages.
+Community destination/standalone adapters are also bound. Missing or invalid required Subject targets/views refuse
+replacement; ready empty pages succeed. Account overview belongs to the existing agents feed, while admitted
+catalogue views use the native current Account path. One precise boundary remains unavailable: Account
+posts/reviews/collections require the current `publicViews` choice applied by the public Account reader; Semantic's
+template-derived `views` do not supply that admission. The producer must supply current Account view eligibility
+before those families can export. Web neither guesses it nor hydrates identities or metadata per row. Original
+meaningful times are reused when valid and otherwise omitted. This binding does not certify native, whole-feed,
+visual or promoted-main acceptance.
 These boundaries adopt the research's owner-defined public set and separate export stage, consistent with its
 [Open Library](https://github.com/internetarchive/openlibrary/blob/37e446827465be2febad416de1bc18753b66997d/scripts/sitemaps/sitemap.py),
 [Discourse](https://github.com/discourse/discourse/blob/589325e2b8466178ee83acac9ec411de555a0093/app/models/sitemap.rb)

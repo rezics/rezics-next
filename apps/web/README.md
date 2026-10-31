@@ -2173,7 +2173,15 @@ fixtures; these stories do not claim visual, browser or native completion.
 - **Growth check:** `tests/sitemap-export.test.ts` runs 3,000, 30,000 and 300,000 synthetic families and checks linear
   feed reads, R2 operations and steps, plus the maximum families held by one step.
 - **Feeds:** Boards, threads, Realms and Spaces use their typed kernel sitemap feeds; stalled pages are detected by
-  item order rather than cursor tokens.
+  item order rather than cursor tokens. The default Subject adapter consumes the delivered native `target`, `views`,
+  labels, optional original language and meaningful change time in one anonymous, no-store request of at most 1,000
+  source items. It reuses the reader's label fallback and canonical view paths, retains source order/ids and sparse
+  continuation, and flushes expanded view families within the existing 3,000-family packing bound. Account overview
+  stays with the existing agents feed; other Account destinations use the current native `canonicalPath` unchanged.
+  Account posts/reviews/collections still refuse projection: Semantic's offered template views do not supply the
+  current Account `publicViews` admission that the public reader requires. Missing/invalid targets or views also
+  fail replacement. No per-row discovery, permission evaluator or fallback subject identity is added. This source
+  binding and focused fixtures do not establish native, whole-feed, visual or promoted-main acceptance.
 
 ## Collection browse and editor
 

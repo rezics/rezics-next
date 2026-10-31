@@ -120,6 +120,7 @@ type PageBatch = {
 const indexKey = 'index.xml';
 const defaultPack = packShards;
 const batchFamilyLimit = 2_000;
+const packFamilyLimit = 3_000;
 const batchRequestLimit = 20;
 const retryLimit = 5;
 const retryBaseMs = 10_000;
@@ -236,11 +237,19 @@ async function readBatch<Item>(
 ): Promise<PageBatch> {
   const families: SitemapFamily[] = [];
   const files = new Map<string, ExportFile>();
+  let familyCount = 0;
+  const flush = async () => {
+    for (const shard of await pack(origin, families)) {
+      const file = await saveShard(store, feed.type, shard);
+      files.set(file.key, file);
+    }
+    families.length = 0;
+  };
   let lastPageKey = lastKey;
   let lastPageIds = [...previousIds];
   let next = cursor;
   let requests = 0;
-  while ((requests === 0 || next !== null) && requests < batchRequestLimit && families.length < batchFamilyLimit) {
+  while ((requests === 0 || next !== null) && requests < batchRequestLimit && familyCount < batchFamilyLimit) {
     let page: { items: Item[]; next: string | null };
     try {
       page = await feed.read(next);
@@ -265,14 +274,17 @@ async function readBatch<Item>(
     }
     for (const item of page.items) {
       const value = feed.family(item);
-      if (value) families.push(value);
+      if (value) {
+        // A bounded native subject window can expand to several admitted views per source id. Finish
+        // that exact window/cursor while retaining the existing packing bound.
+        if (families.length === packFamilyLimit) await flush();
+        families.push(value);
+        familyCount += 1;
+      }
     }
     next = page.next;
   }
-  for (const shard of await pack(origin, families)) {
-    const file = await saveShard(store, feed.type, shard);
-    files.set(file.key, file);
-  }
+  await flush();
   return { next, files: [...files.values()], lastKey: lastPageKey, previousIds: lastPageIds, cursorRejected: false };
 }
 

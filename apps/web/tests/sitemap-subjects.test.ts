@@ -4,13 +4,10 @@ import platform from '@rezics/composition/profiles/platform.json';
 import { subjectHref } from '../src/subject/subject-href.ts';
 import { subjectPageTitle, type SubjectPageData } from '../src/features/pages/subject.tsx';
 import { sitemapLocales } from '../src/sitemap/feeds.ts';
+import { subjectCanonicalPage, type SubjectSitemapPage } from '../src/sitemap/subject-canonical.ts';
+import type { CanonicalSitemapItem } from '../src/sitemap/canonical.ts';
 
-type Entry = {
-  id: string;
-  labels: { language: string; value: string }[];
-  originalLanguage?: string;
-  lastModified?: string;
-};
+type Entry = SubjectSitemapPage['subjectPages'][number];
 const locales = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 const id = '01a1740d-7480-71e4-841f-66c04022d7d0';
 const template = (
@@ -68,14 +65,14 @@ function pageFor(entry: Entry): SubjectPageData {
 }
 
 let pages: { subjectPages: Entry[]; next: string | null; status?: number }[] = [];
-const requests: { cursor: string | null; limit: number }[] = [];
+const requests: { cursor: string | null; limit: number; fetch: RequestInit }[] = [];
 mock.module('../src/kernel/client.ts', () => ({
   kernelClient() {
     return {
       'subject-pages': {
-        async get({ query }: { query: { cursor?: string; limit: number } }) {
+        async get({ query, fetch }: { query: { cursor?: string; limit: number }; fetch: RequestInit }) {
           const cursor = query.cursor ?? null;
-          requests.push({ cursor, limit: query.limit });
+          requests.push({ cursor, limit: query.limit, fetch });
           const page = pages.shift() ?? { subjectPages: [], next: null };
           return { status: page.status ?? 200, data: { subjectPages: page.subjectPages, next: page.next } };
         },
@@ -86,13 +83,19 @@ mock.module('../src/kernel/client.ts', () => ({
 
 const { feed } = await import('../src/sitemap/feeds/subjects.ts');
 
-function entry(labels: Record<string, string>, originalLanguage?: string, lastModified?: string): Entry {
+function entry(labels: Record<string, string>, originalLanguage?: string, lastModified?: string, sourceId = id): Entry {
   return {
-    id,
+    id: sourceId,
+    target: { family: 'subject', subjectId: sourceId },
+    views: ['overview'],
     labels: Object.entries(labels).map(([language, value]) => ({ language, value })),
     ...(originalLanguage === undefined ? {} : { originalLanguage }),
     ...(lastModified === undefined ? {} : { lastModified }),
   };
+}
+
+function projected(item: Entry): CanonicalSitemapItem {
+  return subjectCanonicalPage({ subjectPages: [item], next: null }).items[0]!;
 }
 
 function expected(entry: Entry) {
@@ -114,35 +117,36 @@ test('subject feed emits the page canonical URL for each locale from page labels
     entry({}),
   ];
   for (const item of examples) {
-    const actual = feed.family(item);
+    const actual = feed.family(projected(item));
     expect(actual?.paths).toEqual(expected(item));
   }
 });
 
 test('subject feed follows short and empty pages with a continuation and uses the endpoint limit', async () => {
   const first = entry({ en: 'First' }, 'en', '2026-10-29T00:00:00.000Z');
-  const final = entry({ ja: '最後' }, 'ja');
+  const final = entry({ ja: '最後' }, 'ja', undefined, id.replace(/0$/u, '1'));
   pages = [
     { subjectPages: [first], next: 'after-first' },
     { subjectPages: [], next: 'after-empty' },
     { subjectPages: [final], next: null },
   ];
   requests.length = 0;
-  const collected: Entry[] = [];
+  const collected: CanonicalSitemapItem[] = [];
   let cursor: string | null = null;
   do {
     const page = await feed.read(cursor);
     collected.push(...page.items);
     cursor = page.next;
   } while (cursor !== null);
-  expect(collected).toEqual([first, final]);
+  expect(collected).toEqual([projected(first), projected(final)]);
+  expect(collected.map(({ id }) => id)).toEqual([first.id, final.id]);
   expect(requests).toEqual([
-    { cursor: null, limit: 1000 },
-    { cursor: 'after-first', limit: 1000 },
-    { cursor: 'after-empty', limit: 1000 },
+    { cursor: null, limit: 1000, fetch: { cache: 'no-store' } },
+    { cursor: 'after-first', limit: 1000, fetch: { cache: 'no-store' } },
+    { cursor: 'after-empty', limit: 1000, fetch: { cache: 'no-store' } },
   ]);
-  expect(feed.family(first)?.lastmod).toBe(first.lastModified);
-  expect(feed.family(final)?.lastmod).toBeUndefined();
+  expect(feed.family(collected[0]!)?.lastmod).toBe(first.lastModified);
+  expect(feed.family(collected[1]!)?.lastmod).toBeUndefined();
 });
 
 test('a failed subject feed response rejects the export step without changing existing feed families', async () => {
@@ -151,6 +155,7 @@ test('a failed subject feed response rejects the export step without changing ex
   await expect(feed.read(null)).rejects.toThrow('subjects returned 503');
   const { sitemapFeeds } = await import('../src/sitemap/feeds.ts');
   expect(sitemapFeeds().map(({ type }) => type)).toEqual([
+    'agents',
     'boards',
     'collections',
     'realms',
@@ -165,9 +170,9 @@ test('subject feed hrefs reach XML and reciprocal page links with exactly one lo
   const { pageLinks } = await import('../src/shell/head.ts');
   const { sitemapPagePaths } = await import('../src/sitemap/url.ts');
   const origin = 'https://public.example';
-  // Only fields declared by the current native endpoint: sparse real labels, no guessed original language.
+  // Actual target and admitted views accompany sparse labels; no guessed original language.
   const item = entry({ fr: 'Le livre', 'zh-Hant': '書' });
-  const family = feed.family(item)!;
+  const family = feed.family(projected(item))!;
   const result = familyXml(origin, family.paths);
   expect(result.urls).toEqual(locales.map((locale) => `${origin}${family.paths[locale]}`));
   expect(result.xml.match(/<url>/g)).toHaveLength(8);
@@ -184,4 +189,48 @@ test('subject feed hrefs reach XML and reciprocal page links with exactly one lo
         href: `${origin}${family.paths[alternate]}`,
       });
   }
+});
+
+test('the existing default subject sitemap adapter consumes actual owner canonical target/views and retains current canonical locale/view paths sparse cursor semantics and native failure without per-row hydration or guessed eligibility', async () => {
+  const subject = { ...entry({ fr: 'Le livre', 'zh-Hant': '書' }, 'ja'), views: ['overview', 'editions', 'details'] };
+  const account: Entry = {
+    ...entry({ en: 'Not a handle' }, undefined, '2026-10-29T00:00:00.123Z', id.replace(/0$/u, '1')),
+    target: { family: 'account', accountId: id, canonicalPath: '/@Current_Handle-' },
+    views: ['overview', 'works', 'details'],
+  };
+  pages = [{ subjectPages: [subject, account], next: 'native-next' }];
+  requests.length = 0;
+  const page = await feed.read(null);
+  expect(page.next).toBe('native-next');
+  expect(requests).toEqual([{ cursor: null, limit: 1000, fetch: { cache: 'no-store' } }]);
+  expect(page.items.map(({ id }) => id)).toEqual([
+    subject.id,
+    subject.id,
+    subject.id,
+    account.id,
+    account.id,
+    account.id,
+  ]);
+  const keys = page.items.map((item) => feed.key!(item));
+  expect(new Set(keys).size).toBe(6);
+  expect(keys).toEqual([...keys].sort());
+  expect(page.items.map((item) => feed.family(item)?.paths.en ?? null)).toEqual([
+    expected(subject).en,
+    `${expected(subject).en}/editions`,
+    `${expected(subject).en}/details`,
+    null,
+    '/en/@Current_Handle-/works',
+    '/en/@Current_Handle-/details',
+  ]);
+  for (const locale of sitemapLocales) {
+    expect(page.items[1]!.family?.paths[locale]).toBe(`${expected(subject)[locale]}/editions`);
+    expect(page.items[4]!.family?.paths[locale]).toBe(`/${locale}/@Current_Handle-/works`);
+  }
+  expect(page.items[4]!.family?.lastmod).toBe(account.lastModified);
+  expect(projected({ ...subject, lastModified: '2026-02-30T00:00:00Z' }).family?.lastmod).toBeUndefined();
+  const onlyAccountOverview = subjectCanonicalPage({
+    subjectPages: [{ ...account, views: ['overview'] }],
+    next: 'continue',
+  });
+  expect(onlyAccountOverview).toEqual({ items: [{ id: account.id, key: keys[3], family: null }], next: 'continue' });
 });

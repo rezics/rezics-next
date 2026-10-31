@@ -5,6 +5,7 @@ import { pageLinks, type PagePaths } from '../src/shell/head.ts';
 import { subjectViewPaths } from '../src/subject/subject-href.ts';
 import { sitemapFamilyFromPagePaths, sitemapPagePaths } from '../src/sitemap/url.ts';
 import { familyXml } from '../src/sitemap/xml.ts';
+import { subjectCanonicalPage } from '../src/sitemap/subject-canonical.ts';
 
 type SubjectPage = Kernel['~Routes']['v1']['subject-pages']['get']['response'][200];
 type RealmPage = Kernel['~Routes']['v1']['sitemap']['realms']['get']['response'][200];
@@ -16,11 +17,13 @@ let status = 200;
 let subjects: SubjectPage = { subjectPages: [], next: null };
 let realms: RealmPage = { items: [], next: null };
 let spaces: SpacePage = { items: [], next: null };
+let failure: Error | undefined;
 
 function endpoint<T>(name: string, data: () => T) {
   return {
     async get({ query }: { query: { cursor?: string; limit: number } }) {
       calls.push({ name, query });
+      if (failure) throw failure;
       return { status, data: data() };
     },
   };
@@ -66,10 +69,16 @@ test('canonical reader paths reach sitemap and HTML unchanged across sparse lang
     expect(() => sitemapFamilyFromPagePaths(paths(path))).toThrow('Invalid canonical page path');
 });
 
-test('missing native projections reject even empty pages and native errors keep the bounded request contract', async () => {
+test('delivered defaults retain ready empty continuations and native errors keep the bounded request contract', async () => {
   calls.length = 0;
+  subjects = { subjectPages: [], next: 'subject-empty-next' };
+  realms = { items: [], next: 'realm-empty-next' };
+  spaces = { items: [], next: 'space-empty-next' };
   for (const feed of [createSubjectFeed(), createRealmFeed(), createSpaceFeed()]) {
-    await expect(feed.read('opaque-current-cursor')).rejects.toMatchObject({ status: 503 });
+    expect(await feed.read('opaque-current-cursor')).toEqual({
+      items: [],
+      next: `${feed.type.slice(0, -1)}-empty-next`,
+    });
     expect(calls.at(-1)).toEqual({ name: feed.type, query: { cursor: 'opaque-current-cursor', limit: 1_000 } });
   }
   expect(calls).toHaveLength(3);
@@ -80,10 +89,26 @@ test('missing native projections reject even empty pages and native errors keep 
   } finally {
     status = 200;
   }
+  failure = new Error('native transport unavailable');
+  try {
+    await expect(createSubjectFeed().read(null)).rejects.toBe(failure);
+  } finally {
+    failure = undefined;
+  }
 });
 
 test('ready adapters retain source identity and cursors and map only owner supplied canonical families', async () => {
-  subjects = { subjectPages: [{ id, labels: [{ language: 'ja', value: '原題' }] }], next: 'after-source' };
+  subjects = {
+    subjectPages: [
+      {
+        id,
+        target: { family: 'subject', subjectId: id },
+        views: ['overview'],
+        labels: [{ language: 'ja', value: '原題' }],
+      },
+    ],
+    next: 'after-source',
+  };
   const family = sitemapFamilyFromPagePaths(paths('/@CurrentHandle/works'));
   const subjectFeed = createSubjectFeed((page) => ({
     items: page.subjectPages.map((item) => ({ id: item.id, key: `${item.id.slice(24, 28)}${item.id}`, family })),
@@ -96,11 +121,15 @@ test('ready adapters retain source identity and cursors and map only owner suppl
   subjects = { subjectPages: [], next: 'after-empty' };
   expect(await subjectFeed.read('after-source')).toEqual({ items: [], next: 'after-empty' });
 
-  realms = { items: [{ id, lastModified }], next: 'realm-cursor' };
+  realms = {
+    items: [{ id, lastModified, canonicalDestination: { kind: 'space', spaceId: id, address: 'current-space' } }],
+    next: 'realm-cursor',
+  };
   const carried = createRealmFeed(() => ({ kind: 'space', spaceId: id, address: 'current-space' }));
   expect(await carried.read(null)).toBe(realms);
   expect(carried.family(realms.items[0]!)?.paths.en).toBe('/en/spaces/current-space');
   expect(carried.family(realms.items[0]!)?.lastmod).toBeUndefined();
+  expect(createRealmFeed().family(realms.items[0]!)).toEqual(carried.family(realms.items[0]!));
   const standaloneRealm = createRealmFeed(() => ({ kind: 'realm', realmId: id }));
   expect(standaloneRealm.family(realms.items[0]!)?.paths.en).toBe(`/en/realms/${id}`);
 
@@ -109,4 +138,94 @@ test('ready adapters retain source identity and cursors and map only owner suppl
   expect(await standalone.read(null)).toBe(spaces);
   expect(standalone.family(spaces.items[0]!)?.paths.en).toBe('/en/spaces/standalone-space');
   expect(standalone.family(spaces.items[0]!)?.lastmod).toBeUndefined();
+  expect(createSpaceFeed().family(spaces.items[0]!)).toEqual(standalone.family(spaces.items[0]!));
+});
+
+test('missing or invalid required native targets and views refuse projection instead of guessing a successful family', async () => {
+  const item: SubjectPage['subjectPages'][number] = {
+    id,
+    labels: [{ language: 'en', value: 'Title only is not eligibility' }],
+    target: { family: 'subject', subjectId: id },
+    views: ['overview'],
+  };
+  const invalid = [
+    { ...item, target: undefined },
+    { ...item, target: { family: 'subject', subjectId: id.replace(/0$/u, '1') } },
+    { ...item, target: { family: 'unknown' } },
+    { ...item, views: undefined },
+    { ...item, views: [] },
+    { ...item, views: ['overview', 'overview'] },
+    { ...item, views: ['details', 'overview'] },
+    { ...item, views: ['overview', 'editor'] },
+    ...[
+      '',
+      '/@',
+      '/accounts/id',
+      '//elsewhere/@handle',
+      '/@handle/works',
+      '/@handle?filter=1',
+      '/@handle#fragment',
+      '/en/@handle',
+      '/@%ZZ',
+      '/@%2Fother',
+    ].map((canonicalPath) => ({ ...item, target: { family: 'account', accountId: id, canonicalPath } })),
+  ];
+  calls.length = 0;
+  for (const bad of invalid) {
+    subjects = { subjectPages: [bad], next: 'unchanged-native-next' } as SubjectPage;
+    await expect(createSubjectFeed().read(null)).rejects.toMatchObject({ status: 503 });
+  }
+  expect(calls).toHaveLength(invalid.length);
+  expect(calls.every(({ name, query }) => name === 'subjects' && query.limit === 1_000)).toBe(true);
+  for (const subjectPages of [
+    [item, item],
+    [
+      {
+        ...item,
+        id: id.replace(/0$/u, '1'),
+        target: { family: 'subject' as const, subjectId: id.replace(/0$/u, '1') },
+      },
+      item,
+    ],
+  ])
+    expect(() => subjectCanonicalPage({ subjectPages, next: null })).toThrow('source order');
+});
+
+test('Account activity views require native public-view admission while other delivered families remain available', () => {
+  for (const view of ['posts', 'reviews', 'collections']) {
+    const item: SubjectPage['subjectPages'][number] = {
+      id,
+      labels: [],
+      target: { family: 'account', accountId: id, canonicalPath: '/@CurrentHandle' },
+      views: ['overview', view],
+    };
+    expect(() => subjectCanonicalPage({ subjectPages: [item], next: null })).toThrow(
+      'current Account public-view admission',
+    );
+    const ordinary = { ...item, target: { family: 'subject' as const, subjectId: id } };
+    expect(subjectCanonicalPage({ subjectPages: [ordinary], next: null }).items[1]!.family?.paths.en).toEndWith(
+      `/${view}`,
+    );
+  }
+});
+
+test('projection injection cannot drop reorder or replace native source identities or change a continuation', async () => {
+  const second = id.replace(/0$/u, '1');
+  subjects = {
+    subjectPages: [id, second].map((id) => ({
+      id,
+      labels: [],
+      target: { family: 'subject', subjectId: id },
+      views: ['overview'],
+    })),
+    next: 'native-next',
+  };
+  const item = (id: string) => ({ id, key: id, family: null });
+  for (const items of [[], [item(id)], [item(second), item(id)], [item(id), item('not-native')]])
+    await expect(createSubjectFeed(() => ({ items, next: subjects.next })).read(null)).rejects.toThrow(
+      'native source identity',
+    );
+  await expect(
+    createSubjectFeed(() => ({ items: [item(id), item(second)], next: 'invented' })).read(null),
+  ).rejects.toThrow('native cursor');
 });

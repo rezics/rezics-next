@@ -1,26 +1,18 @@
-import type { Kernel } from '@rezics/client';
 import { kernelClient } from '../../kernel/client.ts';
 import type { SitemapFeed } from '../feeds.ts';
-import { canonicalProjectionUnavailable, type CanonicalSitemapItem, type CanonicalSitemapPage } from '../canonical.ts';
-
-type SubjectPage = Kernel['~Routes']['v1']['subject-pages']['get']['response'][200];
+import type { CanonicalSitemapItem, CanonicalSitemapPage } from '../canonical.ts';
+import { subjectCanonicalPage, type SubjectSitemapPage } from '../subject-canonical.ts';
 
 /**
- * The closed owner constructor supplies complete eligible page families, using the ordinary subject reader and
- * bounded reciprocal/current-target Account facts. This is the existing Web family interface, not proposed native
- * fields. Views and account destinations require their owner's current eligibility decision.
+ * Project the delivered native target/views through the reader's canonical URL helpers. Views and Account
+ * destinations require their owner's current facts, never per-row hydration or labels alone.
  */
-export type SubjectCanonicalProjection = (page: SubjectPage) => CanonicalSitemapPage | Promise<CanonicalSitemapPage>;
+export type SubjectCanonicalProjection = (
+  page: SubjectSitemapPage,
+) => CanonicalSitemapPage | Promise<CanonicalSitemapPage>;
 
-const unavailable: SubjectCanonicalProjection = () =>
-  canonicalProjectionUnavailable(
-    'subjects',
-    'native publication/disclosure and the closed canonical family constructor with current Account targets',
-  );
-
-/** Replace the unavailable adapter only when the actual owner constructor is delivered. No per-row hydration. */
 export function createSubjectFeed(
-  project: SubjectCanonicalProjection = unavailable,
+  project: SubjectCanonicalProjection = subjectCanonicalPage,
 ): SitemapFeed<CanonicalSitemapItem> {
   return {
     type: 'subjects',
@@ -28,13 +20,17 @@ export function createSubjectFeed(
     async read(cursor) {
       const result = await kernelClient()['subject-pages'].get({
         query: { ...(cursor === null ? {} : { cursor }), limit: 1_000 },
+        fetch: { cache: 'no-store' },
       });
       if (result.status !== 200 || !result.data)
         throw Object.assign(new Error(`Sitemap feed subjects returned ${result.status}`), { status: result.status });
       const page = await project(result.data);
       if (page.next !== result.data.next) throw new Error('Subject canonical projection changed the native cursor');
-      const sourceIds = new Set(result.data.subjectPages.map(({ id }) => id));
-      if (page.items.some(({ id }) => !sourceIds.has(id)))
+      const sourceIds = result.data.subjectPages.map(({ id }) => id);
+      const projectedIds = page.items
+        .filter((item, index) => index === 0 || item.id !== page.items[index - 1]!.id)
+        .map(({ id }) => id);
+      if (projectedIds.length !== sourceIds.length || projectedIds.some((id, index) => id !== sourceIds[index]))
         throw new Error('Subject canonical projection changed the native source identity');
       return page;
     },
