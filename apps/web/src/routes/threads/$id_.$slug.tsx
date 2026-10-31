@@ -615,7 +615,7 @@ export function ThreadReadingPost({
             {signedIn && personalReady ? <ReplyButton disabled={replyPending} onReply={onReply} /> : null}
           </div>
           {post.revisionId ? (
-            <PostHistory postId={post.id} {...(viewerId ? { viewerId } : {})} review={review} />
+            <PostHistory postId={post.id} readAuthority={scope} {...(viewerId ? { viewerId } : {})} review={review} />
           ) : null}
         </>
       )}

@@ -45,6 +45,10 @@ export const History: Story = {
   ...Reading.History,
   play: async (context) => Reading.History.play!(context),
 };
+export const HistoryRetry: Story = {
+  ...Reading.HistoryRetry,
+  play: async (context) => Reading.HistoryRetry.play!(context),
+};
 export const Report: Story = {
   ...Reading.Report,
   play: async (context) => Reading.Report.play!(context),

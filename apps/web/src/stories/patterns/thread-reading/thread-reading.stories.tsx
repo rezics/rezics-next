@@ -176,6 +176,20 @@ export const History: Story = {
     await expect(history).toHaveTextContent('LicenseRef-rezics-terms');
   },
 };
+export const HistoryRetry: Story = {
+  args: { visitor: 'Signed Out' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click((await canvas.findAllByRole('button', { name: m.thread_history_show() }))[0]!);
+    const history = within(await canvas.findByRole('region', { name: m.thread_history_heading() }));
+    // This thread has no recorded history endpoint; an explicit retry must remain honestly unavailable.
+    await history.findByText(m.thread_history_unavailable());
+    await userEvent.click(await history.findByRole('button', { name: m.exact_revision_retry() }));
+    await waitFor(() => expect(history.getByRole('button', { name: m.exact_revision_retry() })).toBeEnabled());
+    await expect(history.getByText(m.thread_history_unavailable())).toBeVisible();
+    await expect(history.queryByRole('list', { name: m.thread_history_heading() })).toBeNull();
+  },
+};
 export const Report: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

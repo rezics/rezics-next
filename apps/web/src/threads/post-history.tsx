@@ -1,6 +1,6 @@
 import { DocumentBody } from '../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Byline } from './byline';
@@ -13,21 +13,31 @@ import { RevisionProvenance } from './revision-provenance-view';
 type HistoryPage = Extract<Awaited<ReturnType<typeof readPostHistory>>, { available: true }>;
 type Revision = HistoryPage['revisions'][number];
 
-/** A bounded, cursor-paged view of the immutable revisions returned by the native post history API. */
-export function PostHistory({
-  postId,
-  viewerId,
-  review = false,
-}: {
+type PostHistoryProps = {
   postId: string;
   viewerId?: string;
+  readAuthority?: object;
   review?: boolean;
-}) {
+};
+
+/** A disclosure belongs to one post and the current reader's existing authority. */
+export function PostHistory(props: PostHistoryProps) {
+  const { postId, viewerId, readAuthority } = props;
+  const [scope, setScope] = useState({ postId, viewerId, readAuthority, generation: 0 });
+  if (scope.postId !== postId || scope.viewerId !== viewerId || scope.readAuthority !== readAuthority) {
+    setScope({ postId, viewerId, readAuthority, generation: scope.generation + 1 });
+  }
+  return <HistoryDisclosure key={scope.generation} {...props} />;
+}
+
+/** A bounded, cursor-paged view of the immutable revisions returned by the native post history API. */
+function HistoryDisclosure({ postId, viewerId, review = false }: PostHistoryProps) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [available, setAvailable] = useState(true);
+  const [failedCursor, setFailedCursor] = useState<string>();
   const [revisions, setRevisions] = useState<{ revision: Revision; documentMedia: HistoryPage['documentMedia'] }[]>([]);
   const [authors, setAuthors] = useState<HistoryPage['authors']>({});
   const [mentions, setMentions] = useState<HistoryPage['mentions']>({});
@@ -35,15 +45,27 @@ export function PostHistory({
   const [reviewVotes, setReviewVotes] = useState<HistoryPage['reviewVotes']>({});
   const [next, setNext] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date().toISOString());
+  const request = useRef<{ pending: boolean } | undefined>(undefined);
+
+  useEffect(() => {
+    request.current = { pending: false };
+    return () => {
+      request.current = undefined;
+    };
+  }, []);
 
   async function load(cursor?: string) {
-    if (loading || !available) return;
+    const current = request.current;
+    if (!current || current.pending) return;
+    current.pending = true;
     setLoading(true);
     try {
       const result = await readPostHistory({ data: { postId, ...(cursor ? { cursor } : {}) } });
+      if (request.current !== current) return;
       if (!result.available) {
         setAvailable(false);
         setLoaded(true);
+        setFailedCursor(cursor);
         return;
       }
       const entries = result.revisions.map((revision) => ({ revision, documentMedia: result.documentMedia }));
@@ -57,11 +79,19 @@ export function PostHistory({
       setNext(result.next);
       setNow(result.now);
       setLoaded(true);
+      setAvailable(true);
+      setFailedCursor(undefined);
     } catch {
-      setAvailable(false);
-      setLoaded(true);
+      if (request.current === current) {
+        setAvailable(false);
+        setLoaded(true);
+        setFailedCursor(cursor);
+      }
     } finally {
-      setLoading(false);
+      if (request.current === current) {
+        current.pending = false;
+        setLoading(false);
+      }
     }
   }
 
@@ -90,9 +120,14 @@ export function PostHistory({
             </p>
           ) : null}
           {!available ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {m.thread_history_unavailable()}
-            </p>
+            <div className="space-y-3">
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.thread_history_unavailable()}
+              </p>
+              <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void load(failedCursor)}>
+                {m.exact_revision_retry()}
+              </Button>
+            </div>
           ) : null}
           {available && loaded && revisions.length === 0 ? (
             <p role="status" className="text-sm text-muted-foreground">
