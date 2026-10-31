@@ -16,9 +16,8 @@ import type { useSession } from '../src/session/query';
 // Keep the actual frame, shared Library renderer, query keys and reader responses; only substitute the Worker boundary.
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { loadViewPages, subjectFrame, SubjectFrame, SubjectViewPage } = await import(
-  '../src/features/pages/subject-frame'
-);
+const { loadViewPages, subjectFrame, SubjectFrame, SubjectViewPage } =
+  await import('../src/features/pages/subject-frame');
 const { SubjectLibraryLeaf, subjectLibraryLeafQuery } = await import('../src/features/pages/subject-library-leaf');
 const queries = await import('../src/features/pages/subject-queries');
 const { subjectLibraryQuery } = queries;
@@ -96,8 +95,7 @@ async function readerMarkup(session: Session, client = new QueryClient(), path =
   const html = renderToStaticMarkup(
     createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
   );
-  if (!html)
-    throw new Error(JSON.stringify(router.state.matches.map(({ status, error }) => ({ status, error }))));
+  if (!html) throw new Error(JSON.stringify(router.state.matches.map(({ status, error }) => ({ status, error }))));
   return html;
 }
 
@@ -126,11 +124,7 @@ describe('An ordinary non-overview subject view can use the same Library leaf fo
   test('unrelated router contexts retain the existing canonical fallback for the actual current subject', async () => {
     const client = new QueryClient();
     try {
-      const html = await readerMarkup(
-        signedOut,
-        client,
-        '/en/search?realm=borrowed&return_to=https%3A%2F%2Fevil.test',
-      );
+      const html = await readerMarkup(signedOut, client, '/en/search?realm=borrowed&return_to=https%3A%2F%2Fevil.test');
       expect(html).toContain(`href="/auth/sign-in?return_to=${encodeURIComponent(canonical)}"`);
       expect(html).not.toContain('return_to=https');
     } finally {
@@ -149,7 +143,10 @@ describe('An ordinary non-overview subject view can use the same Library leaf fo
     expect(typeof window).toBe('undefined');
     const client = new QueryClient();
     client.setQueryData(subjectLibraryLeafQuery(frame, 'en', viewer).queryKey, personal);
-    client.setQueryData(subjectLibraryQuery(frame.id, 'en', false, undefined, undefined, frame.type).queryKey, personal);
+    client.setQueryData(
+      subjectLibraryQuery(frame.id, 'en', false, undefined, undefined, frame.type).queryKey,
+      personal,
+    );
     try {
       for (const session of [
         { state: 'unknown', csrfToken: null } as const,
