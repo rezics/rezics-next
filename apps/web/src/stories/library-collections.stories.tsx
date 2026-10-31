@@ -3,6 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { completePendingCollectionCreate, setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, pagePaths, pageReady } from './page';
 import collectionRecording from '../kernel/recorded/library-collection.json';
 
@@ -277,12 +278,47 @@ export const CollectionsNinePins: Story = {
     render('many', pagePaths['library-collections'], { pinCount: 9, builtins: 'everything-liked', collectionCount: 9 }),
   play: async (context) => {
     await collectionsReady(context);
-    const navigation = context.canvasElement.querySelector('[data-library-navigation-desktop]');
+    const manager = context.canvasElement.querySelector<HTMLElement>('[data-library-pin-manager]');
+    if (!manager) throw new globalThis.Error('Missing pin manager');
+    await expect(manager).toBeVisible();
+    const rows = within(manager).getAllByRole('listitem');
+    expect(rows).toHaveLength(9);
+    await expect(within(rows[8]!).getByRole('link', { name: 'Reading list 9', exact: true })).toBeVisible();
+    await expect(within(rows[8]!).getByRole('button', { name: m.library_pin_actions() })).toBeEnabled();
+
+    const navigation = context.canvasElement.querySelector<HTMLElement>('[data-library-navigation-desktop]');
     await expect(navigation).toBeTruthy();
     await expect(navigation?.querySelectorAll('a[data-library-pin]')).toHaveLength(8);
-    await expect(
-      within(navigation as HTMLElement).getAllByRole('link', { name: m.library_nav_all_collections() }),
-    ).toHaveLength(1);
+    if (!navigation) throw new globalThis.Error('Missing Library navigation');
+    if (window.getComputedStyle(navigation).display !== 'none') {
+      const links = within(navigation).getAllByRole('link', { name: m.library_nav_all_collections(), exact: true });
+      await expect(links).toHaveLength(1);
+      await expect(links[0]!).toBeVisible();
+      return;
+    }
+
+    // The phone destination is in the visible Collection selector, opened explicitly by the reader.
+    const phone = context.canvasElement.querySelector<HTMLElement>('[data-library-navigation-phone]');
+    if (!phone) throw new globalThis.Error('Missing phone Library navigation');
+    await expect(phone).toBeVisible();
+    expect(phone.querySelectorAll('a[data-library-pin]')).toHaveLength(3);
+    const selector = within(phone).getByRole('button', { name: m.library_nav_selector(), exact: true });
+    await expect(selector).toBeVisible();
+    await expect(selector).toHaveTextContent(m.library_nav_all_collections());
+    await userEvent.click(selector);
+
+    const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+    const menu = sheet
+      ? await within(document.body).findByRole('dialog', { name: m.library_nav_selector(), exact: true })
+      : await within(document.body).findByRole('menu');
+    const destination = within(menu).getByRole(sheet ? 'link' : 'menuitem', {
+      name: m.library_nav_all_collections(),
+      exact: true,
+    });
+    destination.scrollIntoView({ block: 'nearest' });
+    await expect(destination).toBeVisible();
+    await expect(destination).toHaveAttribute('href', `/${getLocale()}${pagePaths['library-collections']}`);
+    await expect(destination).toHaveAttribute('aria-current', 'page');
   },
 };
 
