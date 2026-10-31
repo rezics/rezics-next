@@ -177,6 +177,22 @@ Correct the layout once at the shell seam; give the header one surface and a rea
 Verify the closed and expanded states in a real PageStory where registration, route state and focus are exercised.
 Do not treat a scope chip as authority for a backend predicate that the route/API does not implement.
 
+The isolated header Patterns provide more than the integrated pages expose. Enlarged
+`shots/patterns-header-search--expanded--1280.png` shows a blue focus ring around a separately filled composer
+above a second filled recent/trending surface. Filters is at the **left of a second row**, with a submit arrow at
+its right; that is not the settled right-end Filters arrangement. The phone expanded Pattern does fill the screen,
+so it would be wrong to say no full-screen implementation exists. Its `--scope-chip--390` state explicitly says
+search is unavailable in Reading list and offers scope removal; this is a visible supported-boundary refusal,
+not working scoped search. `--filters-open--390` opens another bottom sheet over the full-screen search, with
+count-unavailable/loading dependencies. These isolated states do not repair the Collection/Home route integration.
+
+The source makes the appearance and placement intentional: `header-search.tsx` gives the outer expanded form
+`bg-background`, the inner composer `bg-card`/`md:bg-popover`, `focus-within:ring-2`, and a second-row
+`justify-between` containing Filters followed by submit. The blue ring itself supplies useful focus visibility;
+removing all keyboard focus treatment would be the wrong response to visual clutter. Adopt one coherent field
+surface, preserve accessible focus indication, and move Filters according to the settled composition. Credit the
+existing full-screen primitive while finishing its integration and shared filter surface.
+
 **Defect class: broken panel containment; owner seam: UI Menu/custom dialog and Collection filter consumer.**
 The supplied maintainer image `.temp/goal/web/refs/maintainer-20261031/rezics-filter-panel-bug.png` was visually
 inspected. The popover background ends near the trigger's width while fields extend to its right over page content.
