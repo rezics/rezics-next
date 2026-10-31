@@ -167,7 +167,7 @@ test('manual and foreign checks keep the ordinary callable API without native wo
     authenticate: async () => {
       throw new Error('unused');
     },
-    authorize: manual,
+    authorize: (client) => manual(client),
   };
   // The foreign fixture never touches its pool.
   const pool = createPool('postgres://unused:unused@127.0.0.1:1/unused');
