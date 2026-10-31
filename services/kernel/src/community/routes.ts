@@ -119,22 +119,34 @@ const space = t.Object(
   },
   closed,
 );
-const claimReviewResponse = t.Object({
-  claimRequests: t.Array(t.Object({
-    realmId: id,
-    requestId: id,
-    claimantAccountId: id,
-    state: t.Literal('pending'),
-    orphanedAt: instant,
-    claimEligibleAt: instant,
-    requestedAt: instant,
-  }, closed), { maxItems: 20 }),
-  next: t.Union([t.String(), t.Null()]),
-}, closed);
-const claimReviewQuery = t.Object({
-  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
-  cursor: t.Optional(t.String({ maxLength: 4096 })),
-}, closed);
+const claimReviewResponse = t.Object(
+  {
+    claimRequests: t.Array(
+      t.Object(
+        {
+          realmId: id,
+          requestId: id,
+          claimantAccountId: id,
+          state: t.Literal('pending'),
+          orphanedAt: instant,
+          claimEligibleAt: instant,
+          requestedAt: instant,
+        },
+        closed,
+      ),
+      { maxItems: 20 },
+    ),
+    next: t.Union([t.String(), t.Null()]),
+  },
+  closed,
+);
+const claimReviewQuery = t.Object(
+  {
+    limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
+    cursor: t.Optional(t.String({ maxLength: 4096 })),
+  },
+  closed,
+);
 
 const spaceResponse = t.Object({ space }, closed);
 const spaceHomeResponse = t.Object({ space, community: t.Union([CommunityPresentationSchema, t.Null()]) }, closed);
@@ -1294,9 +1306,14 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       },
       async ({ params: { realmId }, query, actor, admission, job }) =>
         admission.run('normal', job, async () => {
-          const result = await listRealmClaimRequests(realmDependencies(), actor, { realmId, ...query }, {
-            deadline: job.deadline,
-          });
+          const result = await listRealmClaimRequests(
+            realmDependencies(),
+            actor,
+            { realmId, ...query },
+            {
+              deadline: job.deadline,
+            },
+          );
           return { claimRequests: [...result.claimRequests], next: result.next };
         }),
     )
