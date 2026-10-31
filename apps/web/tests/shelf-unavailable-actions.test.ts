@@ -19,6 +19,7 @@ test('Unavailable shelf items keep bounded usable management actions', async () 
     Element: window.Element,
     Node: window.Node,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -29,12 +30,13 @@ test('Unavailable shelf items keep bounded usable management actions', async () 
   const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000001102';
   const assignmentId = '0192f3a0-6c1e-7b2a-9d4e-000000001202';
   const viewerId = '0192f3a0-6c1e-7b2a-9d4e-000000000111';
+  const csrfToken = 'a'.repeat(22);
   const admitted = ['personal_library', 'reading_progress', 'library_label.assignment_list', 'library_label.unassign'];
   const credential = async () => ({
     status: 'active',
     subject: viewerId,
     accessToken: 'owner-token',
-    csrfToken: 'csrf',
+    csrfToken,
   });
   const sessionEnv = {
     KERNEL_ORIGIN: 'https://kernel.test',
@@ -110,7 +112,7 @@ test('Unavailable shelf items keep bounded usable management actions', async () 
     );
     expect(page.state).toBe('loaded');
     if (page.state !== 'loaded') throw new Error('Label page did not load');
-    client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: viewerId, csrfToken: 'csrf' });
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: viewerId, csrfToken });
     client.setQueryData(exposureQuery.queryKey, admitted);
     const route = createRootRoute({
       component: () => createElement(LabelShelfPage, { page, locale: 'en', display: { layout: 'grid', size: 'm' } }),
@@ -157,7 +159,7 @@ test('Unavailable shelf items keep bounded usable management actions', async () 
       labelId,
       assignmentId,
       revision: '5',
-      csrf_token: 'csrf',
+      csrf_token: csrfToken,
       idempotencyKey: page.entries[2]!.removeKey,
     });
     let result: ReturnType<typeof submitSubjectLabelForm> | undefined;
