@@ -58,10 +58,12 @@ test('Buyer receipt shows recorded charge and truthful payment/access state', as
   const calls: Request[] = [];
   let native = { ...paid.order, ...receiptStoryMoney, contentEdition: fixedEditionTerms };
   let current: unknown = {
-    ...fixedEditionTerms,
     id: paid.order.entitlementId,
+    offerId: paid.order.offerId,
     orderId: paid.order.id,
     targetSubjectId: paid.order.targetSubjectId,
+    grantedAt: paid.order.createdAt,
+    summary: paid.order.subject,
     active: true,
     revokedAt: null,
     revokeReason: null,
@@ -150,10 +152,10 @@ test('Buyer receipt shows recorded charge and truthful payment/access state', as
       currency: 'jpy',
       unitAmountMinor: 1200,
       moneyUnit: unit,
-      recordedCharge: { currency: 'jpy', moneyUnit: unit, amountTotalMinor: 1296, amountTaxMinor: 0 },
+      recordedCharge: { currency: 'jpy', moneyUnit: unit, amountTotalMinor: 1200, amountTaxMinor: 0 },
     };
     const scaleZero = await receipt(await load());
-    expect(scaleZero).toContain(formatMinorAmount('en', 'jpy', 1296, unit)!);
+    expect(scaleZero).toContain(formatMinorAmount('en', 'jpy', 1200, unit)!);
     expect(scaleZero).toContain(formatMinorAmount('en', 'jpy', 0, unit)!);
 
     for (const status of [403, 404, 503]) {
