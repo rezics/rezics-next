@@ -273,6 +273,9 @@ The public figure is the standard-question **Global mean**, labelled with scale 
 The Bayesian value used for order is not the displayed mean; imported external scores keep their own source, scale, date, licence and attribution.
 Do not average VNDB, IMDb and REZICS numbers into a single unlabeled score.
 The existing figure/source boundaries already support this separation; presentation should make it understandable without two permanent paragraphs about internal processing.
+The currently supported imported provider is specifically `vndb`, not a general aggregation of all surveyed products.
+`source-statistics.ts` validates that provider, and `source-statistic-upsert.sql` keeps one row per subject/source; aliases identify its source-fence tuple, not additional independent rating providers.
+Within that supported write contract, the current list is at most one imported statistic per subject; adding providers would need a new explicit display and read bound.
 
 ### What is actually implemented
 
@@ -280,6 +283,8 @@ The existing figure/source boundaries already support this separation; presentat
 It exposes freshness (`asOf`, `updating`) for aggregate reads; the prior has its own minimum-population rule of fifty.
 These are disclosure/publication rules, not front-end estimates of statistical confidence.
 The public figure endpoint exposes its own ready/insufficient/updating representation; it does not expose the aggregate's complete freshness object.
+The aggregate implementation recognises exactly four question grains (`work`, `release`, `episode`, `character`) and rejects an unknown grain.
+An extensible kind catalogue therefore does not imply arbitrary new rating-grain behaviour; any extension belongs to the question/rating owner rather than a new per-kind web branch.
 
 `services/kernel/src/rating/routes.ts` exposes:
 
@@ -306,7 +311,8 @@ Its optional own-state path is separate; the actual public server loader in `sub
 Consequently, real route code does not supply the three illustrative Realm rows present in `kernel/fake/ratings.ts`.
 Even a future caller passing memberships would hit `memberships.slice(0, 3)`, an arbitrary omission rather than a 300-Realm interaction.
 
-The web `Figure` projection discards aggregate freshness, and a required read failure collapses the whole rating result to `null`.
+The web `Figure` type omits aggregate freshness and the view does not consume it; the assigned wire objects can still retain that field at runtime.
+A required read failure collapses the whole rating result to `null`.
 An imported-statistics failure can therefore remove a usable native public figure.
 `subject-ratings-view.tsx` renders that as the generic failure block, uses `href="?"` for retry, and constructs a Reviews URL without preserving the selected Realm.
 `overview.tsx` explicitly renders a rating failure when a Realm is selected; importantly, it does not silently relabel Global as Realm.
@@ -357,6 +363,7 @@ Do not call a single HTTP route a single cheap database operation.
 | Population page | `aggregate-populations-page.sql` key-seeks positive candidates, `limit + 1` = 21 candidate probes; count projection for at most twenty populations | Hidden candidates can produce sparse visible output. This is not a scan of every vote or a constant-latency guarantee. |
 | Membership propagation | Capped counted memberships plus resumable jobs/checkpoints | Joining/leaving can make aggregate publication lag; a UI refresh is not job completion. |
 | Public figure | Question/publication point reads, separately maintained publication state | Async drain/prior work is not forced into each subject request. Internal batch/drain caps do not bound all background completion time. |
+| Imported statistic | One currently supported `vndb` row per subject/source, with repeated tuple/current-subject checks | No arbitrary provider fan-out is implemented; lifecycle verification is additional work, not just the one row lookup. |
 | Web rating section | Four public calls today; private own-state call after session is known | Failure coupling and unnecessary aggregate work should be reduced only without losing provenance/disclosure meaning. |
 
 ## Purchase: a useful entry, not an entitlement claim
@@ -436,7 +443,7 @@ Historical owner receipts and the existence of growth/native suites remain separ
 | Discover subject populations | Cursor, no all-membership enumeration | Twenty raw positive candidates, readable filtering | `/ratings/populations` | No scalable chooser on current subject | HTTP test covers 21+ candidates/protected filtering; no 300-Realm name/search journey evidenced. |
 | Own vote | Private, zero/save/clear/idempotency | Native vote writes and own read; contribution jobs | Authenticated GET/PUT/DELETE | Hydrated control and recovery states | Control, adapter, native vote suites exist; local story state is not persistence evidence. |
 | Membership contribution | Capped/resumable propagation | First 100 counted memberships; leave promotion | Aggregate/vote operations, not a demonstrated explanatory own-contribution API | Cap/promotion meaning not surfaced | `voter-realms.test.ts` includes 102 joins and promotion; no execution or user explanation established. |
-| Imported scores | Separate provenance/scale/licence/date | Source statistic storage and identity/lifecycle fences | Source-statistics read | Real loader, but failure coupled to native rating; all supplied source rows rendered | Isolation/lifecycle tests exist. Fake VNDB attribution is illustrative, not an acquired data licence. |
+| Imported scores | Separate provenance/scale/licence/date | VNDB-only source statistic storage and identity/lifecycle fences | Source-statistics read | Real loader, but failure coupled to native rating; all supplied source rows rendered | Isolation/lifecycle tests exist. Fake VNDB attribution is illustrative, not an acquired data licence. |
 | Review/discussion preview | Small, actual readable community content | Content list/projected author/access paths | Subject threads and bounded author batch | Real preview/full views; legacy Global compatibility helper also exists | Community/thread tests exist; no universal Realm board-creation or native authoring completion claim. |
 | Subject offers | Current readable terms, sparse/preparing pagination | Native bounded directory and repeated final checks | Generated subject-offers route | Mounted real browser owner region | Native commerce and web transport tests exist; slot test is placement-only, commerce stories use fake transport. |
 | Owned benefit summary | Owner-isolated private state | Individual entitlement journey exists; bounded subject-owned batch not established | No such batch established by the inspected region | Link to entitlements, not owned badge | Do not count a private pending-slot test as ownership verification. |
@@ -490,7 +497,7 @@ The causes describe what the inspected checks/harness permit; they do not attrib
 
 ### 5. Rating information exists but lacks a finished decision surface
 
-- **Class / evidence:** interaction hierarchy/meaning; `subject-ratings-view.tsx` displays revision metadata, a numerical 21-bin grid, persistent implementation explanations, and imported rows; its `Figure` projection drops aggregate freshness.
+- **Class / evidence:** interaction hierarchy/meaning; `subject-ratings-view.tsx` displays revision metadata, a numerical 21-bin grid, persistent implementation explanations, and imported rows; its local `Figure` type and view do not model/use aggregate freshness.
 - **Cause that let it through:** asserting score text twice and that a disclosure opens does not judge statistical comprehension, own action, compactness or stale-state clarity.
 - **Impact:** a ready example is technically populated but hard to scan; users may confuse saved vote, published mean, Bayesian ordering and source score.
 - **Owner seam / correction:** shared rating presentation and rating owner; compact mean/scale/count/population, prominent own action, optional accessible chart/details, and source-specific provenance. Keep raw revision/internal ordering explanation out of the default reading hierarchy.
@@ -537,6 +544,13 @@ The causes describe what the inspected checks/harness permit; they do not attrib
 - **Impact:** users encounter broken search or clipped controls while trying to use the subject, even if its local data component passes.
 - **Owner seam / correction:** shared shell/search/UI owner; exercise the real shell where navigation/search is part of the journey, use an honest narrow harness otherwise, and consume the already-settled search design. This report does not own a second search redesign.
 
+### 12. Readiness documentation outlives the implementation it describes
+
+- **Class / evidence:** authority/evidence drift; the presentation README's opening profile differs from the current composition description, while web rating and commerce prose lags the four-call loader and mounted offer adapter, as detailed above.
+- **Cause that let it through:** delivery descriptions and historical receipts can remain in owner READMEs after adjacent routes/providers change; a document assertion has no automatic relationship to current interface exposure.
+- **Impact:** a manager can plan nonexistent count-only reads, overlook implemented offer wiring, or count a fixture as native proof; subsequent slices inherit contradictory cost and readiness assumptions.
+- **Owner seam / correction:** composition, presentation, web and commerce documentation owners; reconcile each topic into its one owning contract, distinguish historical receipts from current claims, and point examples at the actual current adapter without rewriting frozen evidence.
+
 ## Cross-surface, privacy, and lifecycle checklist for adoption
 
 This section names design obligations and existing seams; it is not a claim that the following scenarios passed.
@@ -548,7 +562,7 @@ This section names design obligations and existing seams; it is not a claim that
 | Realm closes, viewer leaves, permission changes | New aggregate/population reads apply current disclosure; previous selection recovers without revealing protected details | Route checks exist; final-read race/currentness review and client invalidation are not established by the ready story. |
 | Hundredth counted membership leaves | Promotion and reaggregation may change the person's contribution | Resumable cap/promotion implementation exists; user explanation and current contribution visibility are gaps. |
 | Subject merge / alias / owner-home movement | Canonical target, current readability and tuple identity remain coherent; stale cursors restart | Rating source-statistic lifecycle and commerce identity/epoch checks exist; cross-section composed evidence still needed. |
-| Prior epoch or publication job pending | Label unavailable/updating states honestly; do not present a different tuple's score as current | Native publication/prior machinery exists; aggregate freshness is currently dropped by the web projection. |
+| Prior epoch or publication job pending | Label unavailable/updating states honestly; do not present a different tuple's score as current | Native publication/prior machinery exists; aggregate freshness is currently unused by the web view. |
 | Imported source removed / licence changes | Stop inappropriate display and retain accurate source/date/licence meaning | Source lifecycle/isolation paths exist; a fake VNDB row is not a data permission. |
 | Offer changes / delists / subject withdraws | Chooser never authorises purchase by cache alone; review current terms/access; safe restart | Native adapter performs repeated currentness checks and fenced continuation; terms confirmation belongs to commerce. |
 | Refund/revocation | Current owned benefit changes; retained receipt/legal terms remain their own authority | Subject region has no bounded owned-benefit summary. Do not synthesise one from offers or edition identity. |
