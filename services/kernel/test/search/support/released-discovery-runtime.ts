@@ -31,6 +31,10 @@ export type ReleasedNativeObservation = Pick<
   PublicFilterConsumerOperations,
   'capture' | 'query' | 'repairStep' | 'readStatus' | 'closeObservation' | 'close'
 >;
+export type ReleasedNativeBoundRequest = Awaited<ReturnType<DefaultPublicFilterRuntime['bindRequest']>>;
+export type ReleasedNativeRepairJob = Parameters<DefaultPublicFilterRuntime['repair']>[0];
+/** Explicit pool instrumentation requires the actual parent-process SDK and pool identities. */
+export type ReleasedDiscoveryWorkerKind = 'in-process' | 'owned-child';
 export type ReleasedTransportBarrier = Readonly<{
   /** Resolves only when real I/O reaches the selected transport boundary. */
   reached: Promise<void>;
@@ -56,8 +60,19 @@ export interface ReleasedDiscoveryRuntime extends ReleasedNativeConsumers {
   restart(): Promise<WorkerStats>;
 }
 
+/** Internal shared-fixture handoff; Access is supplied once by the installed Kernel. */
+export interface ReleasedDiscoveryComposition {
+  control: ReleasedDiscoveryRuntime;
+  onAccessReady(access: Access): void;
+  service(installed: Parameters<typeof createKernel>[0]): ReturnType<typeof createSearchService>;
+  start(runtime: SemanticOutcomeDriver['fixtures']['runtime'], send: Request): Promise<void>;
+  close(): Promise<void>;
+}
+
 /** One native prefix, supplied HTTP pool and default SDK child in the supplied database world. */
-export function releasedDiscoveryRuntime(_kernelPool?: (url: string) => Pool | Promise<Pool>) {
+export function releasedDiscoveryRuntime(
+  _kernelPool?: (url: string) => Pool | Promise<Pool>,
+): ReleasedDiscoveryComposition {
   const url = process.env.OPENSEARCH_URL;
   if (!url) throw new Error('OPENSEARCH_URL must name the native Search node');
   const cleanupSearch = createOpenSearch(url);
