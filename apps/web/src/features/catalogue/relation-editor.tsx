@@ -745,7 +745,9 @@ export function RelationEditor({
                                 <Button
                                   className="min-h-11"
                                   disabled={frozen || candidate.retracted !== null}
-                                  onClick={() => setConfirmation(candidate.decision === 'accepted' ? 'adopt' : 'accept')}
+                                  onClick={() =>
+                                    setConfirmation(candidate.decision === 'accepted' ? 'adopt' : 'accept')
+                                  }
                                 >
                                   {candidate.decision === 'accepted'
                                     ? m.candidate_adopt({}, options)
