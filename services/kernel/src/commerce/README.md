@@ -79,10 +79,13 @@ field is the existing sanitized fixed-edition terms DTO, nullable for unknown hi
 and tax metadata remain nullable. Discovery is eventual positive evidence, never a count or completeness promise.
 Current native disclosure, exact offer confirmation and creation target authority remain the source authorities.
 
-Web's `checkout/subject-offers.ts` exports `SubjectOffersApi`, the closed reader and the typed unavailable
-`nativeSubjectOffersApi`: this base has no subject-offer module/generated caller. The producer replaces that one
-adapter with its real binding; a missing body never becomes ready/empty. The BFF preserves the actual request
+Web's `checkout/subject-offers.ts` exports `SubjectOffersApi`, the closed reader and
+`nativeSubjectOffersApi`, bound to the generated `KernelClient.subjects({id}).offers.get` caller. Its page, query
+and options types derive from that caller; a missing body never becomes ready/empty. The BFF preserves the actual request
 credential and named native refusal, uses private no-store, and reads one bounded page without per-card lookups.
+Native original/terminal identity confirmation owns directory membership; Web preserves each returned offer's actual
+captured target and validates its terms against that target, without rewriting it to the requested Subject.
+The illustrative `kernel.local` transport explicitly returns 503 until an actual native page can be recorded.
 The served offer review now also carries current credentials and preserves named denials; it retains the existing
 observed revision, consent and uncertain-creation retry path.
 

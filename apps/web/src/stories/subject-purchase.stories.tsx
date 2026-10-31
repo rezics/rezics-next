@@ -14,6 +14,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
 import { FeatureSlotsProvider } from '../shell/feature-slots';
+import { setStoryRequestContext } from '../../.storybook/react-start';
 
 const meta = {
   title: 'Pages/Commerce/Subject purchase',
@@ -54,6 +55,10 @@ function PurchaseStory({
     return queryClient;
   });
   const locale = getLocale();
+  setStoryRequestContext({
+    visitor: signedIn ? 'Signed In' : 'Signed Out',
+    url: `/${locale}/subjects/${subjectOfferFixture.targetSubjectId}`,
+  });
   return (
     <QueryClientProvider client={client}>
       <StoryState.Provider value={state}>
@@ -106,7 +111,24 @@ export const CursorError: Story = { render: () => <PurchaseStory state="cursor-e
 export const LongTitle: Story = { render: () => <PurchaseStory state="long-title" /> };
 export const MappedPriceUnknown: Story = { render: () => <PurchaseStory state="mapped-price-unknown" signedIn /> };
 export const UnknownMapping: Story = { render: () => <PurchaseStory state="unknown-mapping" /> };
-export const ActualAdapterUnavailable: Story = { render: () => <PurchaseStory actualAdapter signedIn /> };
+export const ActualAdapterUnavailable: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story: 'The generated native adapter receives an explicit 503 from the illustrative kernel.local transport.',
+      },
+    },
+  },
+  render: () => <PurchaseStory actualAdapter signedIn />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.subject_purchase_unavailable());
+    await expect(view.queryByText(m.subject_purchase_empty())).toBeNull();
+    await expect(
+      view.queryByRole('link', { name: m.subject_purchase_review_offer({ title: subjectOfferFixture.title }) }),
+    ).toBeNull();
+  },
+};
 export const SignedInLongTitle: Story = {
   render: () => <PurchaseStory state="long-title" signedIn />,
 };

@@ -17,8 +17,10 @@ The adopted [ownership/benefits](commerce-ownership-entitlements-benefits.md) an
 [payment evidence/settlement](commerce-payment-evidence-settlement.md) reports remain design evidence.
 Subject pages now receive Commerce's exact public/private region exports through the shared `AppShell` seam.
 The closed subject-offer BFF consumes the selected cursor/default-10/max-20 page contract and keeps current native
-denial, preparing, unavailable and successful sparse pages distinct. The subject-offer module/generated caller is
-absent in this base: `nativeSubjectOffersApi` remains typed unavailable, including the development transport.
+denial, preparing, unavailable and successful sparse pages distinct. `nativeSubjectOffersApi` now binds the delivered
+generated `KernelClient.subjects({id}).offers.get` caller through the existing locale/session-aware BFF. Its page,
+query and options types derive from that caller. The development transport remains an explicit 503 example because
+no actual current native page is recorded; it is not evidence of a missing producer.
 Constructed presentation examples never supply runtime discovery or ownership facts. Public reads start only after
 hydration/session preparation, bind query keys to the actor/session, cancel old reads and use private no-store.
 Current offer-review credentials and named denials are preserved as well; no anonymous retry substitutes for refusal.
@@ -35,7 +37,8 @@ and the signed-in mount seam. The ordinary Web 390/1280 review remains pending. 
 `apps/web/tests/subject-purchase.test.ts` is focused interface acceptance source, not an executed native campaign.
 The local `bun run --cwd apps/web typecheck` passes with no type errors in 1,155 files after narrowing the shared
 locale at the region boundary. No acceptance, unit, browser, native or remote checks ran for this slice.
-Actual native producer binding, whole-journey, privacy/protected-use and promoted-main proof remain pending.
+Native producer binding is present in source. Whole-journey, privacy/protected-use, visual and promoted-main proof
+remain pending; source typing does not establish those outcomes.
 
 Known-ID `/offers/$id` now presents the actual sanitized `contentEdition` capture: one fixed version, quantity one,
 one-time account binding, native creator identity when its public name is available, and the captured licence.

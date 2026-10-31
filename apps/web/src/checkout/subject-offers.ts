@@ -1,36 +1,26 @@
+import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { kernelClient } from '../kernel/client';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { locales } from '../paraglide/runtime.js';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { cookie, SESSION_COOKIE } from '../session/cookies';
-import { capturedBenefit, type ContentEditionTerms } from './benefit';
-import { recordedMoneyUnit, recordedTaxBehavior, type StripeMoneyUnit } from './money-schema';
+import { capturedBenefit } from './benefit';
+import { recordedMoneyUnit, recordedTaxBehavior } from './money-schema';
 import { UUID } from './price';
 
 export const SUBJECT_OFFERS_PAGE_SIZE = 10;
 export const SUBJECT_OFFERS_MAX_PAGE_SIZE = 20;
+type NativeSubjectOffersRead = ReturnType<KernelClient['subjects']>['offers']['get'];
+export type NativeSubjectOffersOptions = NonNullable<Parameters<NativeSubjectOffersRead>[0]>;
 /** Closed public discovery DTO. No ownership, permission or source-body fields. */
-export type SubjectOffer = {
-  id: string;
-  targetSubjectId: string;
-  title: string;
-  currency: string;
-  unitAmountMinor: number;
-  moneyUnit: StripeMoneyUnit | null;
-  taxBehavior: 'exclusive' | null;
-  revision: number;
-  contentEdition: ContentEditionTerms | null;
-};
-export type SubjectOffersPage = {
-  offers: SubjectOffer[];
-  next: string | null;
-  projectionState: 'ready' | 'preparing';
-};
+export type SubjectOffersPage = NonNullable<Awaited<ReturnType<NativeSubjectOffersRead>>['data']>;
+export type SubjectOffer = SubjectOffersPage['offers'][number];
 export type SubjectOffersData =
   | ({ kind: 'ready' } & SubjectOffersPage)
   | { kind: 'denied'; status: number; code: string | null }
@@ -46,16 +36,30 @@ export interface SubjectOffersApi {
   read(input: {
     subjectId: string;
     locale: string;
-    query: { limit: number; cursor?: string };
+    query: NativeSubjectOffersOptions['query'];
     authorization: string | null;
   }): Promise<{ status: number; data: unknown; code?: string | null }>;
 }
-/** The selected producer is declared, but this base has no module/generated caller for it. */
-export const nativeSubjectOffersApi: SubjectOffersApi = {
-  async read() {
-    return { status: 503, data: null };
-  },
-};
+/** One generated native directory read; the existing client owns locale and platform-gate handling. */
+export function createNativeSubjectOffersApi(client?: Pick<KernelClient, 'subjects'>): SubjectOffersApi {
+  return {
+    async read({ subjectId, locale, query, authorization }) {
+      const options: NativeSubjectOffersOptions = {
+        query,
+        ...(authorization ? { headers: { authorization } } : {}),
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      };
+      const result = await (client ?? kernelClient(locale)).subjects({ id: subjectId }).offers.get(options);
+      const body: unknown = result.error?.value;
+      return {
+        status: result.status,
+        data: result.error ? null : result.data,
+        code: record(body) && typeof body.code === 'string' ? body.code : null,
+      };
+    },
+  };
+}
+export const nativeSubjectOffersApi = createNativeSubjectOffersApi();
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -87,6 +91,7 @@ export function subjectOffersInput(value: unknown): SubjectOffersInput {
 /** Validate the bounded closed wire before any projection can become shopper-facing data. */
 export function parseSubjectOffersPage(value: unknown, subjectId: string): SubjectOffersPage | null {
   if (
+    !UUID.test(subjectId) ||
     !record(value) ||
     !keys(value, ['offers', 'next', 'projectionState']) ||
     !Array.isArray(value.offers) ||
@@ -112,7 +117,8 @@ export function parseSubjectOffersPage(value: unknown, subjectId: string): Subje
       ]) ||
       typeof row.id !== 'string' ||
       !UUID.test(row.id) ||
-      row.targetSubjectId !== subjectId ||
+      typeof row.targetSubjectId !== 'string' ||
+      !UUID.test(row.targetSubjectId) ||
       typeof row.title !== 'string' ||
       row.title.trim().length === 0 ||
       row.title.length > 1024 ||
@@ -126,11 +132,12 @@ export function parseSubjectOffersPage(value: unknown, subjectId: string): Subje
       row.revision < 1
     )
       return null;
-    const benefit = capturedBenefit(row.contentEdition, subjectId);
+    // Native discovery confirms original/terminal identity. Preserve the actual captured target, even after a merge.
+    const benefit = capturedBenefit(row.contentEdition, row.targetSubjectId);
     if (benefit.kind === 'unavailable' || row.contentEdition === undefined) return null;
     offers.push({
       id: row.id,
-      targetSubjectId: subjectId,
+      targetSubjectId: row.targetSubjectId,
       title: row.title,
       currency: row.currency,
       unitAmountMinor: row.unitAmountMinor,

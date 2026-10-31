@@ -53,7 +53,7 @@ export function subjectOffersStoryPage(state: SubjectPurchaseStoryState): Subjec
   };
 }
 
-// The dev transport must preserve the missing producer, never invent ready, empty or ownership facts.
+// Explicit negative transport example: native discovery is delivered, but no current native page is recorded here.
 export const routes: FakeRoute[] = [
   {
     method: 'GET',
