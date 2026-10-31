@@ -118,12 +118,12 @@ export function InboxPageView({ loadPage }: { loadPage?: InboxPageLoader } = {})
       />
     );
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
       <p className="mt-6 text-muted-foreground">
         {state === 'signed-out' ? m.inbox_sign_in() : state === 'unknown' ? m.inbox_loading() : m.inbox_unavailable()}
       </p>
-    </main>
+    </div>
   );
 }
 
@@ -225,7 +225,7 @@ export function ViewerInboxPage({
   ) : null;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
       {seenFailed ? (
         <section role="status" className="mt-4 space-y-2">
@@ -268,6 +268,6 @@ export function ViewerInboxPage({
           {failure}
         </>
       )}
-    </main>
+    </div>
   );
 }
