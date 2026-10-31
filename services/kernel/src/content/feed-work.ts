@@ -151,7 +151,7 @@ export async function registerFeedWork(context: WorkContext): Promise<void> {
     await context.client.enqueue({ workflowName: cleanupWorkflow, workflowID: `${root}:${segment}`,
       workflowIDReusePolicy: 'return-existing', queueName: 'workflows' }, position, root, segment);
   }, { name: 'content.feedRetentionContinue', ...COMMAND_STEP_RETRIES });
-  DBOS.registerWorkflow(async (position: { after: number; current?: number } = { after: -1 }, root = DBOS.workflowID!, segment = 0) => {
+  DBOS.registerWorkflow(async (position: { after: number; current?: number } = { after: -1 }, root: string = DBOS.workflowID!, segment: number = 0) => {
     const next = await clean(position.after, position.current);
     if (next) await nextCleanup(next, root, segment + 1);
   }, { name: cleanupWorkflow });

@@ -31,6 +31,10 @@ const threadIndex = {
 };
 const media = { mediaId, containerId };
 const fixtures = {
+  'com.rezics.content.feed.indexed.v1': {},
+  'com.rezics.content.feed.delivered.v1': {},
+  'com.rezics.content.feed.erased.v1': {},
+  'com.rezics.content.feed.expired.v1': {},
   'com.rezics.content.edition.creator-indexed.v1': { editionId: itemId, creatorAccountId: actorId },
   'com.rezics.content.edition.created.v1': { editionId: itemId, editionRevision: '1' },
   'com.rezics.content.edition.published.v1': { editionId: itemId, editionRevision: '2' },

@@ -259,6 +259,7 @@ const typed = [
   'POST /v1/recentSearches/$clear',
   'GET /v1/libraryEntries',
   'GET /v1/libraryContinue',
+  'GET /v1/feedItems',
   'GET /v1/libraryShelfSummary',
   'GET /v1/libraryShelfTypes',
   'GET /v1/libraryEntries/:subjectId',

@@ -61,16 +61,17 @@ export function createFollowActivitySource(deps: {
     async checkCurrentFollowSupport(actor: Actor, input: { targets: readonly FeedActivityTarget[] }, deadline: number): Promise<readonly FollowActivitySupport[]> {
       if (actor.kind !== 'account' || !actor.scopes.includes('follow:list')) throw new ProblemError('forbidden');
       if (input.targets.length > 3) throw new RangeError('At most three follow support targets');
-      const route = feedRoute(actor.accountId);
+      const accountActor = actor;
+      const route = feedRoute(accountActor.accountId);
       async function ownerRows(ids: readonly string[]) {
         return feedSnapshot(deps.pool, route, deadline, async (client) => {
-            const owner = await readAccount(client, route, actor.accountId);
+            const owner = await readAccount(client, route, accountActor.accountId);
             if (!owner || owner.kind !== 'actor' || owner.state !== 'active' || owner.fenced ||
-              !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1 || owner.minimumAuthnEpoch > BigInt(actor.authnEpoch))
+              !Number.isSafeInteger(accountActor.authnEpoch) || accountActor.authnEpoch < 1 || owner.minimumAuthnEpoch > BigInt(accountActor.authnEpoch))
               throw new ProblemError('forbidden');
             const result = (await client.query<{ target_id: string; target_type: string; state: string; reason: string }>(
               'SELECT target_id,target_type,state,reason FROM library.follow WHERE route=$1 AND account_id=$2 AND target_id=ANY($3::uuid[])',
-              [route, actor.accountId, ids])).rows;
+              [route, accountActor.accountId, ids])).rows;
             return result;
         });
       }
