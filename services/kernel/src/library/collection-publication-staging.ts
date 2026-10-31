@@ -582,7 +582,7 @@ async function currentSource(tx: CommandTransaction, row: Checkpoint, work: Nati
      JOIN editorial.write_basis repair ON repair.partition_no=p.partition_no AND repair.epoch=p.epoch
        AND repair.position=$11 AND repair.transaction_id=$12
      WHERE c.route=$1 AND c.collection_id=$2 AND c.curator_account_id=$3 AND c.state='active'
-       AND c.visibility<>'private' AND c.source_generation=$4 AND c.revision=$5
+       AND c.source_generation=$4 AND c.revision=$5
        AND c.collection_id::text || ':' || extract(epoch FROM c.created_at)::text=$6
        AND p.epoch=$7 AND p.write_state='active' AND p.moved_to IS NULL
        AND h.generation=$8 AND g.state='complete' AND g.source_exhausted

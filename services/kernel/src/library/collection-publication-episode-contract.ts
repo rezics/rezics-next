@@ -1,7 +1,12 @@
 /** Whole-query publication domain data. No declaration here admits work or authorizes a command. */
 import type { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
-import type { DurableInitiatorReader, DurableInitiatorRecord } from '../access/durable-initiator.ts';
-import type { CommandAuthorization, CommandTransaction, PrincipalCommandOptions } from '../command/command.ts';
+import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
+import type {
+  CommandAuthorization,
+  CommandOutcome,
+  CommandTransaction,
+  PrincipalCommandOptions,
+} from '../command/command.ts';
 import type { WorkContext } from '../work/registry.ts';
 import type { BuiltinCollectionKey } from './builtin-identity.ts';
 import type { CollectionRow, CollectionVisibility } from './collection-model.ts';
@@ -10,6 +15,7 @@ import type { SavedCollectionRule } from './collection-rules.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { CollectionOutputPublication, CollectionOutputRef } from './collection-source-output.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
+import type { NativeCollectionWork } from './collection-source-work.ts';
 
 /** Same actual Collection as the target; this reference selects its PRIVATE working population.
  * Native bodies must validate the relationship, owner, incarnation and generation explicitly.
@@ -118,8 +124,7 @@ export type CollectionPublicationEpisode = CollectionPublicationCreation & Colle
  */
 export type CollectionPublicationInitiatorReader = DurableInitiatorReader;
 export type CollectionPublicationWorkerDependencies = Readonly<{
-  workContext: WorkContext;
-  readOperation: DurableInitiatorReader;
+  workContext: Pick<WorkContext, 'pool' | 'clock' | 'getAuthorization'>;
 }>;
 
 /** Body handoff: use workContext.getAuthorization()'s SAME mounted Access/current readConsent
@@ -129,8 +134,8 @@ export type CollectionPublicationWorkerDependencies = Readonly<{
  * Never restore a person for mechanical Source staging or cast an OperationalTransaction.
  */
 export type CollectionPublicationFinalAuthorization = CommandAuthorization & Readonly<{ action: 'collection:update' }>;
-/** Actual runCommand admission options from collection-publication-final.ts. No receipt, native
- * exhaustion proof or activation body is implied; their original producers remain required.
+/** Actual runCommand admission options from collection-publication-final.ts. The final activation
+ * body is separately exported; these options carry neither a receipt nor native exhaustion proof.
  */
 export type CollectionPublicationFinalCommand = Readonly<
   Pick<PrincipalCommandOptions, 'principal' | 'basis' | 'partition' | 'deadline' | 'clock'> & {
@@ -140,8 +145,24 @@ export type CollectionPublicationFinalCommand = Readonly<
 export type CollectionPublicationActivationInput = Readonly<{
   tx: CommandTransaction;
   episode: CollectionPublicationEpisode;
+  version: string;
+  work: NativeCollectionWork;
+}>;
+
+/** Safe result read from the committed native episode after output provenance is present. */
+export type CollectionPublicationFinalResult = Readonly<{
+  locator: CollectionPublicationLocator;
+  phase: 'complete';
+  output: CollectionOutputRef;
+}>;
+export type CollectionPublicationFinalActivation = Readonly<{
+  activate(
+    locator: CollectionPublicationLocator,
+    requestKey: string,
+  ): Promise<CommandOutcome<CollectionPublicationFinalResult>>;
 }>;
 
 /** Native creation/reader and local owner cleanup are in collection-publication-episodes.ts.
- * Bounded staging, final activation and receiving remain independent bodies. No type here proves native custody, public/frozen support or terminal cleanup.
+ * Bounded staging and final activation are independent bodies. No type here proves native custody,
+ * public/frozen support or terminal cleanup.
  */

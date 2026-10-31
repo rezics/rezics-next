@@ -694,8 +694,8 @@ export function createCollectionPublicationEpisodes(config: {
           if (retained.rows.length >= 2) throw unavailable();
           // Unknown whole-query cardinality stays NULL until real exhaustion. No selected-set count or complete receipt.
           await tx.query(
-            `INSERT INTO library.collection_source_output(route,collection_id,generation,source_generation,account_id,expected_members)
-        VALUES($1,$2,$3,$4,$5,NULL)`,
+            `INSERT INTO library.collection_source_output(route,collection_id,generation,source_generation,account_id,expected_members,output_mode)
+        VALUES($1,$2,$3,$4,$5,NULL,'whole_query')`,
             [route, input.collectionId, output.generation, rule.sourceGeneration, actor.accountId],
           );
           await tx.query(

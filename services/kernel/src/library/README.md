@@ -35,15 +35,17 @@ listing stores public Collection pairs and counts; it is not personal membership
 
 Current implementation evidence is narrower than the capability:
 
-- `createCollectionPublicationFinalCommand` in `collection-publication-final.ts` constructs ordinary
-  `runCommand` admission options using the same worker pool, mounted Access and current consent reader.
-  Every attempt restores the original initiator inside authorization preparation, compares the entire native
-  original tuple and delegates ordinary Collection authorization at that attempt's time before receipt lookup.
-  It provides neither activation nor a completion result. The actual Library operation/source/creation-receipt
-  reader and bounded whole-query seal/staging producer are absent in this revision; no fallback reader, guessed
-  seal ABI or count-based completion is supplied. Final native rule/Source/identity/custody/public-input/output
-  comparisons, atomic A-to-B selection and after-commit publication provenance remain required before wiring
-  a final body or exposing complete episode results. Existing explicit selected-set publication is separate.
+- `createCollectionPublicationFinalCommand` and `createCollectionPublicationFinalActivation` in
+  `collection-publication-final.ts` use the actual Library operation/source/creation-receipt reader, the same
+  worker pool and mounted Access/current consent reader, and ordinary `runCommand`. Every attempt restores the
+  original initiator inside authorization preparation, compares its full native tuple and delegates ordinary
+  Collection authorization at that attempt's time before receipt lookup. The body rechecks the actual staging
+  seal, episode, pinned rule, selected output inventory and current owner/source fences before invoking the
+  native output hook. That hook switches target visibility and selects B in the same transaction, then writes
+  output provenance from the actual Core callback. The returned result is reread from the committed episode and
+  contains only its locator and selected output reference. Private working inputs and public/unlisted outputs
+  remain separate. Whole-query staging still refuses while the actual publication work-admission/getter and
+  Search-owned work branch are unavailable; no empty result, copied proof or fallback authority is supplied.
 - `collection-reads.ts` reads stored headers and ordinal curated occurrence pages. Dynamic headers omit curated
   counts/timestamps. Private saved members use the sole owner-filter binding and Source reader; public/unlisted
   members use only the Source's activated explicit COMPLETE output, including current original/terminal disclosure.
@@ -220,6 +222,9 @@ rule use compares incarnation, Collection/rule revision, source generation, acce
 and performs version CAS; it cannot complete output. `collection-publication-service.ts` binds begin and owner-private
 status to those readers, while `collection-publication-work.ts` registers staging and final activation on the existing
 Library workflow. `builtin-materialization.ts` uses the existing parent-creation capability and native
+and performs version CAS; it cannot complete output. The final human command and output-selection body are exported;
+the owning work-admission/getter, bounded query staging and default receiving composition remain independent
+dependencies. Their unavailable implementations are not successful empty results. `builtin-materialization.ts` uses the existing parent-creation capability and native
 grant initializer for the first owner write (logical revision 0 to native revision 1), keeping Everything/state IDs
 stable and accepted meaning pinned in the native header. Its storage title defaults to `Everything` or the accepted
 state identifier until an owner changes it; no query AST is retained there. Liked refuses. The existing canonical
@@ -296,12 +301,13 @@ options: CollectionPublicationStagingOptions)`. The original module also exports
 operational transaction and shared `NativeCollectionWork`; the second freshly reads native committed state on either
 an admitted work transaction or the actual authorized final Collection command. Returned references are not grants.
 
-The episode's ordinary begin command uses `beginWholeQueryCollectionSourceOutput` in the existing native output
-allocator. `expected_members` remains NULL while B builds; zero is reserved for a genuinely known empty selection or
+The episode's ordinary begin command allocates a `whole_query` generation in the existing native output namespace.
+`expected_members` remains NULL while B builds; zero is reserved for a genuinely known empty selection or
 an exhausted whole query at final activation. The original two-retained-generation limit, curator/SDK/epoch writer
 guards and destination disposition requirements remain. B never changes the selected head A. Selected-list append
-hooks refuse whole-query generations. Final activation remains the ordinary `completeCollectionSourceOutput` hook,
-which requires its shared work ledger and exact episode locator and independently rereads the native staging seal.
+hooks refuse whole-query generations. Final activation uses the ordinary `completeCollectionSourceOutput` hook with
+its same shared work ledger and exact episode locator/version/phase/selected-A snapshot. The hook independently
+rereads the native staging seal, rechecks local episode/rule/owner fences, and switches visibility and B atomically.
 
 Each step admits and reads the whole current publication definition on the same Core client before Source/Type work. It
 uses the shared Source, id order, compiler and evaluator, transferring one allowance in every dimension. A private

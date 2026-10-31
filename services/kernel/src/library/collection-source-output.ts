@@ -1,11 +1,23 @@
 /** Explicit membership Publication storage. It never evaluates personal predicates or grants read authority. */
 import type { PoolClient } from 'pg';
+import { isDeepStrictEqual } from 'node:util';
 import { shareAccount } from '../access/account-share.ts';
-import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  currentCommand,
+  registerCommandCallback,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import lock from './collection-source-output-lock.sql';
 import { readCollectionPublicationStagingSeal } from './collection-publication-staging.ts';
+import {
+  readCollectionPublicationEpisode,
+  readCollectionPublicationEpisodeVersion,
+  readCollectionPublicationRule,
+} from './collection-publication-episodes.ts';
+import type { CollectionPublicationEpisode } from './collection-publication-episode-contract.ts';
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
 
@@ -31,6 +43,22 @@ type Build = {
   after_subject_id: string | null;
   state: 'building' | 'complete' | 'cancelled';
 };
+type OutputOwner = Readonly<{
+  accountId: string;
+  state: string;
+  membershipKind: string;
+  visibility: string;
+  revision: number;
+  sourceGeneration: string;
+  incarnation: string;
+}>;
+type StagingActivation = Readonly<{
+  locator: CollectionPublicationLocator;
+  work: NativeCollectionWork;
+  version: string;
+  phase: Extract<CollectionPublicationEpisode['phase'], 'staging' | 'awaiting_activation'>;
+  selected: CollectionPublicationEpisode['selected'];
+}>;
 const conflict = () => new ProblemError('conflict');
 const uuid = (id: string) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id);
 function ref(input: CollectionOutputRef) {
@@ -43,7 +71,7 @@ function ref(input: CollectionOutputRef) {
  * The caller admits explicit membership through its ordinary Source/subject boundary BEFORE calling append.
  * A complete generation contains only subject IDs; predicates, pins, notes and private facts are never copied.
  */
-async function writer(tx: CommandTransaction, input: CollectionOutputRef) {
+async function writer(tx: CommandTransaction, input: CollectionOutputRef, allowPrivate = false): Promise<OutputOwner> {
   ref(input);
   const command = currentCommand(tx);
   if (
@@ -59,14 +87,17 @@ async function writer(tx: CommandTransaction, input: CollectionOutputRef) {
     await tx.query<{
       accountId: string;
       state: string;
+      membershipKind: string;
       visibility: string;
+      revision: number;
       sourceGeneration: string;
+      incarnation: string;
     }>(lock.sql, [input.route, input.collectionId])
   ).rows[0];
-  if (!row || row.state !== 'active') throw new ProblemError('not_found');
+  if (!row || row.state !== 'active' || row.membershipKind !== 'dynamic') throw new ProblemError('not_found');
   // Hold the real curator fence through commit. Late uploads/completion cannot cross terminal T.
   await shareAccount(tx, row.accountId);
-  if (row.visibility === 'private') throw conflict();
+  if (row.visibility === 'private' && !allowPrivate) throw conflict();
   return row;
 }
 
@@ -187,25 +218,108 @@ export async function appendCollectionSourceOutput(
 export async function completeCollectionSourceOutput(
   tx: CommandTransaction,
   input: CollectionOutputRef,
-  staging?: Readonly<{ locator: CollectionPublicationLocator; work: NativeCollectionWork }>,
+  staging?: StagingActivation,
 ): Promise<void> {
-  const source = await writer(tx, input);
-  let current = await build(tx, input);
-  if (current.output_mode === 'whole_query') {
-    if (!staging) throw conflict();
-    // Fresh native rereading on the actual authorized command, never a caller-supplied completion proof.
+  let source: OutputOwner;
+  let current: Build;
+  let sealedMembers: string | null = null;
+  if (staging) {
+    // Re-read the actual native full-query seal before the fresh local owner/rule/header compare.
+    // No caller count, phase, checkpoint JSON or selected A may stand in for this receipt.
     const seal = await readCollectionPublicationStagingSeal(tx, staging.locator, staging.work);
     if (
       !seal ||
+      seal.publicationId !== staging.locator.publicationId ||
       seal.output.route !== input.route ||
       seal.output.collectionId !== input.collectionId ||
       seal.output.generation !== input.generation
     )
       throw conflict();
+    const episode = await readCollectionPublicationEpisode(tx, staging.locator);
+    const rule = await readCollectionPublicationRule(tx, staging.locator);
+    const version = await readCollectionPublicationEpisodeVersion(tx, staging.locator);
+    if (
+      !episode ||
+      !rule ||
+      !version ||
+      episode.phase !== staging.phase ||
+      version !== staging.version ||
+      !isDeepStrictEqual(episode.selected, staging.selected) ||
+      (episode.phase !== 'staging' && episode.phase !== 'awaiting_activation') ||
+      episode.output.state !== 'building' ||
+      episode.source.output.route !== input.route ||
+      episode.source.output.collectionId !== input.collectionId ||
+      episode.source.output.generation !== input.generation ||
+      episode.source.locator.route !== staging.locator.route ||
+      episode.source.locator.collectionId !== staging.locator.collectionId ||
+      episode.source.locator.ownerAccountId !== staging.locator.ownerAccountId ||
+      episode.source.target.route !== input.route ||
+      episode.source.target.collectionId !== input.collectionId ||
+      (episode.source.target.visibility !== 'public' && episode.source.target.visibility !== 'unlisted') ||
+      episode.source.input.kind !== 'private_working_source' ||
+      episode.source.input.identity.scope !== 'private_builtin' ||
+      episode.source.input.identity.route !== input.route ||
+      episode.source.input.identity.collectionId !== input.collectionId ||
+      episode.source.input.identity.accountId !== staging.locator.ownerAccountId ||
+      episode.source.rule.collectionRevision !== rule.collectionRevision ||
+      episode.source.rule.sourceGeneration !== rule.sourceGeneration ||
+      episode.source.rule.incarnation !== rule.incarnation
+    )
+      throw conflict();
+
+    // The exact Collection row is re-locked only after Source seal verification, immediately before
+    // the single visibility/output switch. This leaves private working authority private until then.
+    source = await writer(tx, input, true);
+    if (
+      source.accountId !== staging.locator.ownerAccountId ||
+      source.revision !== episode.source.rule.collectionRevision ||
+      source.sourceGeneration !== episode.source.rule.sourceGeneration ||
+      source.incarnation !== episode.source.rule.incarnation
+    )
+      throw conflict();
+    current = await build(tx, input);
+    if (
+      current.output_mode !== 'whole_query' ||
+      current.state !== 'building' ||
+      current.expected_members !== null ||
+      current.account_id !== source.accountId ||
+      current.source_generation !== source.sourceGeneration ||
+      current.written_members !== seal.members ||
+      current.member_count !== seal.members
+    )
+      throw conflict();
+    const command = currentCommand(tx);
+    const changed = await tx.query(
+      `UPDATE library.collection SET visibility=$5,revision=revision+1,
+         updated_at=$6::timestamptz,transaction_id=$7
+       WHERE route=$1 AND collection_id=$2 AND curator_account_id=$3 AND revision=$4
+         AND source_generation=$8 AND state='active' AND membership_kind='dynamic'
+         AND collection_id::text || ':' || extract(epoch FROM created_at)::text=$9`,
+      [
+        input.route,
+        input.collectionId,
+        source.accountId,
+        source.revision,
+        episode.source.target.visibility,
+        authoritativeTimeValue(command.time),
+        command.transactionId,
+        source.sourceGeneration,
+        source.incarnation,
+      ],
+    );
+    if (changed.rowCount !== 1) throw conflict();
+    sealedMembers = seal.members;
+  } else {
+    source = await writer(tx, input);
+    current = await build(tx, input);
+    if (current.output_mode === 'whole_query') throw conflict();
+  }
+  if (current.output_mode === 'whole_query') {
+    if (!staging || sealedMembers === null) throw conflict();
     await tx.query(
       `UPDATE library.collection_source_output SET expected_members=$4
        WHERE route=$1 AND collection_id=$2 AND generation=$3 AND output_mode='whole_query' AND expected_members IS NULL`,
-      [input.route, input.collectionId, input.generation, seal.members],
+      [input.route, input.collectionId, input.generation, sealedMembers],
     );
     current = await build(tx, input);
   }
