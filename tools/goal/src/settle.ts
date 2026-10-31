@@ -129,19 +129,20 @@ export async function settle(
         return;
       }
       const proofExit = proofTask ? parseAgentExit(measurement.result, agentAdapter(current.profile.cli)) : null;
-      const bareWaiting =
+      const waitingId =
         proofExit &&
         typeof proofExit === 'object' &&
         'checks' in proofExit &&
         Array.isArray(proofExit.checks) &&
         proofExit.checks.length === 1 &&
-        typeof proofExit.checks[0] === 'string' && nativeCheckId.test(proofExit.checks[0]);
+        typeof proofExit.checks[0] === 'string' && nativeCheckId.test(proofExit.checks[0])
+          ? proofExit.checks[0] : undefined;
       if (
         pendingChecks?.length &&
         (!proofTask ||
-          (bareWaiting &&
+          (waitingId &&
             pendingChecks.length === 1 &&
-            pendingChecks[0] === proofExit!.checks![0] &&
+            pendingChecks[0] === waitingId &&
             (proofObservation?.status === 'running' || proofObservation?.status === 'terminal')))
       ) {
         store.updateAttempt(ref, (attempt) => {

@@ -318,7 +318,7 @@ test('ordinary SQLite admission caps current runs at three across controllers, p
       const task = h.store.createTask(h.proofBrief,
         { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
       h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
-        current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization;
+        current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization!;
       });
       return { taskId: task.id, attempt: 0 };
     };
@@ -1148,7 +1148,7 @@ test('one hundred older active-looking and current stopped rows preserve archive
     for (let i = 0; i < 2; i++) {
       const task = store.createTask(h.proofBrief,
         { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
-      store.updateTask({ taskId: task.id, attempt: 0 }, (current) => { current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization; });
+      store.updateTask({ taskId: task.id, attempt: 0 }, (current) => { current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization!; });
       store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory), undefined, true);
     }
     expect(store.proofCapacityAvailable('fixture', 'fourth-proof')).toBe(false);
@@ -1434,7 +1434,9 @@ test('ordinary original result uses actual wrapper exit without optional custody
     { ...record, argv: ['bun', 'test', 'narrowed.test.ts'] }, { ...record, exitCode: undefined },
     { ...record, exitCode: '0' },
   ]) expect(observeOrdinaryProof(task, id, wrong)).toMatchObject({ status: 'unknown', passed: false });
-  expect(observeOrdinaryProof({ ...task, proofAuthorization: undefined }, id, record).passed).toBe(false);
+  const unregistered = { ...task };
+  delete unregistered.proofAuthorization;
+  expect(observeOrdinaryProof(unregistered, id, record).passed).toBe(false);
 });
 
 test('ordinary original records wait then terminate without token/physical receipts and detect duplicate current invocation while ignoring older evidence', async () => {

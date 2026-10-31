@@ -1038,6 +1038,14 @@ export class WorkerJob implements GateOutcomeSink {
           if (error instanceof LeaseHeldError) continue;
           throw error;
         }
+        if (task.brief.kind === 'verification' && store.events(task.id, attempt.attempt)
+          .some((event) => event.kind === 'proof-command-ready')) {
+          // The launch may have crossed its process boundary before SQLite recorded a driver. Never replay it.
+          await this.endAsEnvironment(attempt,
+            new Error('Original proof launch interrupted after command preparation; execution is unknown, no automatic replay; retain native records and request authenticated reconciliation'),
+            false, true);
+          continue;
+        }
         if (this.recovering.has(attempt.taskId)) continue;
         this.recovering.add(attempt.taskId);
         this.track(

@@ -952,6 +952,7 @@ export class WorkerTasks {
     if (missing.length) throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
   }
   async refreshProofAdmission(task: Task): Promise<void> {
+    if (task.brief.kind !== 'verification') return;
     if (task.currentAttempt && ['stopped', 'exited', 'cancelled', 'superseded'].includes(
       this.store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state))
       this.store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
