@@ -456,7 +456,12 @@ function preparedCheckWork(
       if (invoked.has(input)) return input.work.unavailable('Access prepared invocation already dispatched');
       invoked.add(input);
       const { client, time, work } = input;
-      const result = await work.invocation('Access prepared check', bound(input), () => dispatch(input));
+      const result = await work.invocation(
+        'Access prepared check',
+        bound(input),
+        () => dispatch(input),
+        facts.deadline,
+      );
       receipts.set(input, { ...result, client, time, work });
       return result.value;
     },

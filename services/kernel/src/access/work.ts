@@ -65,7 +65,7 @@ export function addAccessWork(...values: readonly AccessWork[]): AccessWork {
   );
 }
 
-type AccountingFrame = { bound: AccessWork; used: AccessWork; open: boolean; active: number };
+type AccountingFrame = { bound: AccessWork; used: AccessWork; open: boolean; active: number; deadline: number };
 
 /** Receipt accumulator only. Admission and remaining budget stay with the sink.
  * Dispatch charges the bound immediately, so timeout/parallel/failed work cannot
@@ -110,6 +110,7 @@ export class AccessWorkAccounting {
     operation: string,
     bound: AccessWork | undefined,
     dispatch: () => Promise<T>,
+    deadline = this.deadline,
   ): Promise<Readonly<{ value: T; usage: AccessWork }>> {
     let usage: AccessWork | undefined;
     const value = await this.run(
@@ -124,6 +125,7 @@ export class AccessWorkAccounting {
       },
       () => usage,
       'owner',
+      deadline,
     );
     if (!usage) return this.unavailable(`${operation}: native receipt`);
     return { value, usage };
@@ -134,12 +136,14 @@ export class AccessWorkAccounting {
     dispatch: () => Promise<T>,
     actual?: (result: T) => AccessWork | undefined,
     kind: 'native' | 'owner' = 'native',
+    notAfter = this.deadline,
   ): Promise<T> {
     if (this.failure) throw this.failure;
-    requireAccessDeadline(this.deadline);
+    const parent = this.frames.getStore();
+    const deadline = Math.min(this.deadline, parent?.deadline ?? this.deadline, notAfter);
+    requireAccessDeadline(deadline);
     if (!footprint) this.unavailable(operation);
     const bound = copy(footprint);
-    const parent = this.frames.getStore();
     if (parent && !parent.open) this.unavailable(`${operation}: closed native frame`);
     // Validate the cumulative arithmetic before asking the parent to hold work.
     const next = copy(
@@ -168,7 +172,7 @@ export class AccessWorkAccounting {
       parent.active++;
     } else this.used = next;
     const frame: AccountingFrame | undefined =
-      kind === 'owner' ? { bound, used: EMPTY_ACCESS_WORK, open: true, active: 0 } : undefined;
+      kind === 'owner' ? { bound, used: EMPTY_ACCESS_WORK, open: true, active: 0, deadline } : undefined;
     const pending = {
       bound,
       finish: (charged: AccessWork) => {
@@ -206,7 +210,7 @@ export class AccessWorkAccounting {
       }
       if (frame && ACCESS_WORK_AXES.some((axis) => charged[axis] < frame.used[axis]))
         throw new TypeError('Access owner receipt omits dispatched child work');
-      requireAccessDeadline(this.deadline);
+      requireAccessDeadline(deadline);
       return result;
     } catch (error) {
       charged = bound;

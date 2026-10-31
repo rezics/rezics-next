@@ -122,7 +122,8 @@ Owner reservations establish an asynchronous accounting frame inside the SAME `A
 native statements and owner envelopes reserve from that finite admitted parent footprint before dispatch. They
 settle into the parent receipt, without a second reservation or charge in the caller's sink. `invocation` returns
 only that frame's child receipts, never a difference of global usage. Concurrent siblings cannot borrow each
-other's reservations. An owner receipt must include every admitted child; unfinished children, an overrun,
+other's reservations. Nested admission also retains the earlier of the parent and native evidence deadlines.
+An owner receipt must include every admitted child; unfinished children, an overrun,
 failure or missing receipt burn the full reservation and poison the attempt. Closed frames forbid late IO.
 Native statement row declarations and all six dimensions retain their original meaning.
 
