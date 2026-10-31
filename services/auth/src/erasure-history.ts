@@ -102,7 +102,7 @@ export async function erasureHistoryPage(database: Pool, id: string, restoreGene
   if (
     !covered ||
     row.native_role_version !== 1 ||
-    !nativePhaseComplete(row) ||
+    (!restoreGeneration && !nativePhaseComplete(row)) ||
     !(await nativeRoleCoverageComplete(database))
   )
     return false;

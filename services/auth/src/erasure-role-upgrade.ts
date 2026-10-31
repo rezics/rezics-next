@@ -158,7 +158,9 @@ export type NativeCursor = {
 /** Closed identity adapter: completed old phases stay completed, and old EOF
  * becomes the first appended phase. Raw keys and the in-flight client subphase
  * are preserved exactly; all other versions and out-of-inventory numbers fail. */
-export function upgradeNativeCursor<T extends NativeCursor>(cursor: T): T {
+export function upgradeNativeCursor<T extends NativeCursor>(
+  cursor: T,
+): Omit<T, 'native_phase_version'> & { native_phase_version: typeof NATIVE_PHASE_VERSION } {
   const end = cursor.native_phase_version === 1 ? NATIVE_V1_END : NATIVE_PHASE_END;
   if (
     ![1, NATIVE_PHASE_VERSION].includes(cursor.native_phase_version) ||
