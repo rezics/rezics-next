@@ -250,7 +250,7 @@ export async function nativeDiscoveryRegistry(
     pool,
     routeKey,
     release,
-    languages: options?.languages,
+    languages: options?.languages ?? [],
     semantic: {
       source: subjects,
       icons: Object.fromEntries(Object.keys(release.types).map((kind) => [kind, 'file-text'])),

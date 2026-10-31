@@ -35,7 +35,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
       if (!current) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
       const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, subjects, {
         release: current.release,
-        languages: request.languages,
+        languages: request.languages ?? [],
       });
       const bound = () => {
         if (!operations) throw new Error('Discovery capture or retained resume must precede consumer work');

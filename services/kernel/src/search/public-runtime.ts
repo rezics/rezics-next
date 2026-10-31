@@ -220,14 +220,13 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         const release = await activeRelease(config.pool);
         if (!release) notReady();
         if (release.digest !== digest) throw new ProblemError('search_restart_required');
-        const result = await config.pool.query<{ generation: number; uuid: string; incarnation: string }>(
-          {
-            text: `SELECT generation::float8 AS generation,index_uuid AS uuid,incarnation::text
-              FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state='active'`,
-            values: [config.prefix],
-            query_timeout: Math.max(1, context.deadline - Date.now()),
-          },
-        );
+        const query: import('pg').QueryConfig & { query_timeout: number } = {
+          text: `SELECT generation::float8 AS generation,index_uuid AS uuid,incarnation::text
+            FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state='active'`,
+          values: [config.prefix],
+          query_timeout: Math.max(1, context.deadline - Date.now()),
+        };
+        const result = await config.pool.query<{ generation: number; uuid: string; incarnation: string }>(query);
         if (result.rows.length !== 1) notReady();
         const allocation = result.rows[0]!;
         if (!allocation.uuid || !Number.isSafeInteger(allocation.generation)) notReady();
