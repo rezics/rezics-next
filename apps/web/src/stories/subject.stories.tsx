@@ -13,7 +13,7 @@ import { libraryStateOptions } from '../library/profiles';
 import type { Release } from '../subject/definitions';
 import { getLocale } from '../paraglide/runtime';
 import { subjectTabs } from '../features/pages/views';
-import { PageStory, exposureStory, pagePaths, pageReady } from './page';
+import { PageStory, PatternStory, exposureStory, pagePaths, pageReady } from './page';
 import { ratingsFixtures } from '../kernel/fake/ratings';
 import { selectEntryUndoOutcome } from '../kernel/fake/library-entry-undo';
 import { IMPORTED_VN_SUBJECT_ID } from '../kernel/fake/ratings';

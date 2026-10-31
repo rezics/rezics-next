@@ -110,12 +110,12 @@ async function selectDetailsHeading(canvasElement: HTMLElement) {
   if (rows.length !== 1) throw new Error('The details Heading is missing from the Puck outline.');
   const row = rows.item(0);
   if (!(row instanceof HTMLElement)) throw new Error('The details Heading outline row did not render.');
-  await userEvent.click(within(row).getByRole('button', { name: 'Heading', exact: true }));
+  await userEvent.click(within(row).getByRole('button', { name: 'Heading' }));
 }
 
 function headingTextField(canvasElement: HTMLElement) {
   const editor = within(canvasElement).getByRole('region', { name: m.curation_editor() });
-  return within(editor).findByRole('textbox', { name: languageFieldLabel('en'), exact: true });
+  return within(editor).findByRole('textbox', { name: languageFieldLabel('en') });
 }
 
 // Real Puck field interaction, including an uncommitted edit before switching away and back.
