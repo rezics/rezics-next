@@ -8,6 +8,7 @@ export type Params = {
 export type Row = {
     role: "owner" | "member";
 };
+export type QueryError = import("reylo").QueryError<"postgres">;
 /**
  * ```sql
  * SELECT m.role
@@ -55,7 +56,7 @@ declare const query: Query<{
     at: string;
 }, {
     role: "owner" | "member";
-}, "maybeOne", "postgres"> & {
+}, "maybeOne", "postgres", QueryError> & {
     /**
      * ```sql
      * SELECT m.role

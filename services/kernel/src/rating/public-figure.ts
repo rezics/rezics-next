@@ -139,11 +139,11 @@ async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulati
   const partition = partitionOf(populationRoute);
   try {
     await runCommand(pool, { partition }, async (tx) => {
-      const totals = (await lockPriorEpochTotals.run(tx, {
+      const [totals] = await lockPriorEpochTotals.run(tx, {
         route: populationRoute,
         question_id: population.questionId,
         population_id: population.populationId,
-      })) as { count: string; sum: string; mean: string | null; cleared: string } | undefined;
+      });
       if (!totals || Number(totals.cleared) === 0) throw new NoPriorEpochCheck();
 
       const previous = (await readPriorEpoch.run(tx, {

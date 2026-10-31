@@ -57,7 +57,17 @@ export const OWNED_PHASES = [
   'collection_kind_observation',
   'collection_kind_retired',
 ] as const;
-const childQueries = {
+const childQueries: {
+  units: typeof units;
+  changes: typeof changes;
+  members: typeof members;
+  canonicalFacts: typeof canonicalFacts;
+  canonicalState: typeof canonicalState;
+  collectionHistory: typeof collectionHistory;
+  sessionDelete: typeof sessionDelete;
+  collectionDelete: typeof collectionDelete;
+  collectionRetain: typeof collectionRetain;
+} = {
   units,
   changes,
   members,

@@ -24,7 +24,14 @@ export const moneyEconomicsHash = (value: string): string => createHash('sha256'
  * The financial participant owns the fence and the pending financial retention decision;
  * these bounded buyer-home queries supply its minimization and probe surface, not an acknowledgement.
  */
-export const moneyObservationOwnership = Object.freeze({
+export const moneyObservationOwnership: Readonly<{
+  participant: 'commerce';
+  store: 'commerce.money_observation';
+  ownerKeys: readonly ['route', 'buyer_account_id'];
+  page: typeof erasurePage;
+  minimize: typeof erasureDelete;
+  retainedFields: readonly [];
+}> = Object.freeze({
   participant: 'commerce',
   store: 'commerce.money_observation',
   ownerKeys: ['route', 'buyer_account_id'] as const,

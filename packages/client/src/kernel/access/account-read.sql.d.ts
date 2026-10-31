@@ -23,6 +23,7 @@ export type Row = {
     rateTier: "ordinary" | "trusted" | "service";
     transactionId: string;
 };
+export type QueryError = import("reylo").QueryError<"postgres">;
 /**
  * ```sql
  * SELECT route, account_id AS "accountId", kind, handle, display_name AS "displayName",
@@ -91,7 +92,7 @@ declare const query: Query<{
     createdAt: number | null;
     rateTier: "ordinary" | "trusted" | "service";
     transactionId: string;
-}, "maybeOne", "postgres"> & {
+}, "maybeOne", "postgres", QueryError> & {
     /**
      * ```sql
      * SELECT route, account_id AS "accountId", kind, handle, display_name AS "displayName",

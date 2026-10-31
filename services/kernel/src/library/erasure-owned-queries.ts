@@ -30,7 +30,38 @@ import purgeTypePreparationHeader from './erasure-owned-type-preparation-header.
 import purgeBulkTarget from './erasure-owned-bulk-target.sql';
 
 /** Fixed producer inventory, in child-before-parent order; heads are last. */
-export const ownedQueries = {
+export const ownedQueries: {
+  readonly collection_kind_retired: typeof purgeCollectionKindRetired;
+  readonly collection_kind_observation: typeof purgeCollectionKindObservation;
+  readonly collection_kind_count: typeof purgeCollectionKindCount;
+  readonly collection_kind_subject: typeof purgeCollectionKindSubject;
+  readonly owner_index_label_repair: typeof purgeOwnerIndexLabelRepair;
+  readonly owner_index_state: typeof purgeOwnerIndexState;
+  readonly owner_member_support: typeof purgeOwnerMemberSupport;
+  readonly owner_member_index: typeof purgeOwnerMemberIndex;
+  readonly owner_index_pin: typeof purgeOwnerIndexPin;
+  readonly owner_index_control: typeof purgeOwnerIndexControl;
+  readonly entry_deleted: typeof purgeEntryDeleted;
+  readonly label_assignment: typeof purgeLabelAssignment;
+  readonly personal_label: typeof purgePersonalLabel;
+  readonly progress_head: typeof purgeProgressHead;
+  readonly published_log: typeof purgePublishedLog;
+  readonly collection_pins: typeof purgeCollectionPins;
+  readonly builtin_state_reference_source: typeof purgeBuiltinStateReferenceSource;
+  readonly builtin_collection_reference: typeof purgeBuiltinCollectionReference;
+  readonly shelf_writer_owner: typeof purgeShelfWriterOwner;
+  readonly shelf_count: typeof purgeShelfCount;
+  readonly shelf_type_node: typeof purgeShelfTypeNode;
+  readonly shelf_type_reservation: typeof purgeShelfTypeReservation;
+  readonly shelf_type_root: typeof purgeShelfTypeRoot;
+  readonly shelf_type_value: typeof purgeShelfTypeValue;
+  readonly owner_write_counter: typeof purgeOwnerWriteCounter;
+  readonly fact_source_head: typeof purgeFactSourceHead;
+  readonly type_preparation_slot: typeof purgeTypePreparationSlot;
+  readonly type_preparation_progress: typeof purgeTypePreparationProgress;
+  readonly type_preparation_header: typeof purgeTypePreparationHeader;
+  readonly bulk_target: typeof purgeBulkTarget;
+} = {
   collection_kind_retired: purgeCollectionKindRetired,
   collection_kind_observation: purgeCollectionKindObservation,
   collection_kind_count: purgeCollectionKindCount,

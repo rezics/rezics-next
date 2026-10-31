@@ -36,6 +36,7 @@ export type Row = {
     variant_width: number | null;
     variant_height: number | null;
 };
+export type QueryError = import("reylo").QueryError<"postgres">;
 /**
  * No variant enumeration: this is one exact object and one exact processed slot.
  *
@@ -144,7 +145,7 @@ declare const query: Query<{
     variant_format: "avif" | "webp" | null;
     variant_width: number | null;
     variant_height: number | null;
-}, "maybeOne", "postgres"> & {
+}, "maybeOne", "postgres", QueryError> & {
     /**
      * No variant enumeration: this is one exact object and one exact processed slot.
      *

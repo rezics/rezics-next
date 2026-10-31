@@ -20,6 +20,7 @@ export type Row = {
     jwtExpiresAt: string;
     transactionId: string;
 };
+export type QueryError = import("reylo").QueryError<"postgres">;
 /**
  * ```sql
  * WITH input AS (SELECT $1::timestamptz AS at)
@@ -85,7 +86,7 @@ declare const query: Query<{
     expiresAt: string;
     jwtExpiresAt: string;
     transactionId: string;
-}, "maybeOne", "postgres"> & {
+}, "maybeOne", "postgres", QueryError> & {
     /**
      * ```sql
      * WITH input AS (SELECT $1::timestamptz AS at)
