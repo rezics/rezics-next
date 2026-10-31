@@ -328,7 +328,7 @@ The property's `disclosure: sourceOrConsent` requires either a reference or the 
 
 Private candidates share the hidden-statement exclusion probes. Public projections, counts, search snapshots and content disclosure omit them. Subject reads, forward and inverse pages and candidate listings give the linked account and accounts with Global `moderation:hide` access a bounded private overlay. Read permissions and subject moderation still apply. Reader identity is request-scoped and never inherited by relays or exports.
 
-`GET /v1/subjects/:id/candidates` optionally adds `consentIdentity` to an admitted, unretracted
+For account readers, `GET /v1/subjects/:id/candidates` optionally adds `consentIdentity` to an admitted, unretracted
 `sourceOrConsent` main-item candidate payload:
 
 ```json
@@ -348,12 +348,12 @@ revalidates current visibility, Access, audience, candidate lifecycle, disclosur
 checkouts have been released. Deleted markers and retracted or withheld candidates never retain identity labels.
 The work is bounded by the existing page limit (1–100) and at most two addressed target identities per candidate;
 redirects also revalidate the original after reading the survivor. Account candidate responses use `private, no-store`;
-anonymous caching stays `no-cache`.
+anonymous payloads and `no-cache` caching stay unchanged.
 
 The consent adapter and screen use only this identity and pinned property labels for the private assertion, with
 `pickText` locale fallback. Missing names are explicitly unavailable, with reload before fresh confirmation;
 this is a display guard, not a new native permission. Retraction retains its native owner admission and exact-key
-uncertain retry. The assertion appears before confirmation and again before its checkbox and buttons. Anonymous
+uncertain retry using the native structured-field idempotency key. The assertion appears before confirmation and again before its checkbox and buttons. Anonymous
 public-result reads cannot fill or replace private identity. Denial/concealment clears prepared private state;
 terminal retraction clears the candidate. The focused default-composition regression is
 `test/semantic/statement-consent-identity.test.ts`; native execution is deferred during minimal verification.

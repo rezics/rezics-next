@@ -1008,7 +1008,7 @@ async function candidatePage(pool: Pool, ring: KeyRing, options: CandidatePageOp
       routeOf(after[2]) === routeOf(options.subject),
     async (client, after) => {
       const identityAdmitted =
-        options.identity &&
+        options.identity?.actor.kind === 'account' &&
         (await readPartition(client, partitionOf(routeOf(options.subject)!)))?.writeState === 'active';
       const slot = options.slot ?? slotId(options.subject, options.property);
       const state = await resolveSlot(client, options.subject, options.property, options.context, slot);

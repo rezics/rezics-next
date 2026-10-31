@@ -64,6 +64,17 @@ export declare function providerReviewSchemas(app: ReturnType<typeof subjectRout
                 })[];
             }[];
         } | null;
+        consentIdentity?: {
+            subject: {
+                id: string;
+                labels: Record<string, string>;
+            } | null;
+            target: {
+                id: string;
+                labels: Record<string, string>;
+                redirect?: string;
+            } | null;
+        };
         statement: {
             id: string;
             rank: "deprecated" | "normal" | "preferred";
@@ -2134,6 +2145,17 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                             })[];
                                         }[];
                                     } | null;
+                                    consentIdentity?: {
+                                        subject: {
+                                            id: string;
+                                            labels: Record<string, string>;
+                                        } | null;
+                                        target: {
+                                            id: string;
+                                            labels: Record<string, string>;
+                                            redirect?: string;
+                                        } | null;
+                                    };
                                     statement: {
                                         id: string;
                                         rank: "deprecated" | "normal" | "preferred";
@@ -3597,6 +3619,17 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         })[];
                                     }[];
                                 } | null;
+                                consentIdentity?: {
+                                    subject: {
+                                        id: string;
+                                        labels: Record<string, string>;
+                                    } | null;
+                                    target: {
+                                        id: string;
+                                        labels: Record<string, string>;
+                                        redirect?: string;
+                                    } | null;
+                                };
                                 statement: {
                                     id: string;
                                     rank: "deprecated" | "normal" | "preferred";

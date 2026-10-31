@@ -2076,6 +2076,17 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                             })[];
                                         }[];
                                     } | null;
+                                    consentIdentity?: {
+                                        subject: {
+                                            id: string;
+                                            labels: Record<string, string>;
+                                        } | null;
+                                        target: {
+                                            id: string;
+                                            labels: Record<string, string>;
+                                            redirect?: string;
+                                        } | null;
+                                    };
                                     statement: {
                                         id: string;
                                         rank: "deprecated" | "normal" | "preferred";
