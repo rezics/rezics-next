@@ -13,12 +13,13 @@ import {
   type ZoneStarter,
 } from '@rezics/composition';
 import bookZone from '../../../../packages/definitions/presentation/book/zone.json';
+import { fromPlainText } from '@rezics/document';
 import { Compile } from 'typebox/compile';
 import { ZonePageResponseSchema } from '../../src/zones/contract.ts';
 import { ZonePageReadProgressSchema } from '../../src/zones/page-continuation.ts';
 import type { FilterDocument } from '@rezics/filter';
 import type { CollectionView, DynamicCollectionView } from '../../../../specs/dynamic-collections-driver.ts';
-import type { HttpResponse } from '../../../../specs/semantic-driver.ts';
+import type { HttpResponse, Subject } from '../../../../specs/semantic-driver.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../../src/command/command.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -935,18 +936,42 @@ async function caughtUp(): Promise<void> {
 test('a genuine explicit retain expiry releases native work without claiming the HTTP 24-hour default elapsed', async () => {
   const native = fixture.search!;
   const bound: ReleasedNativeBoundRequest[] = [];
+  const expiryText = marker('Retainexpiry');
+  const expirySubject = await fixture.createSubject('schema:Book', expiryText);
+  await fixture.catchUp([expirySubject]);
+  await fixture.grant('editor', ['moderation:hide'], GLOBAL_CONTEXT);
+  await native.indexing('paused');
   // Different admitted plans produce distinct native jobs; re-retaining one key must not rewrite its expiry.
   try {
     for (const size of [2, 3]) {
       bound.push(
         await native.bindRequest(
           {
-            plan: { filterDocument: undefined, text: parseText(timingMarker), sort: 'id', size },
+            plan: { filterDocument: undefined, text: parseText(expiryText), sort: 'id', size },
             snapshot: 'pit',
           },
           timingContext(),
         ),
       );
+    }
+    status(
+      await population.request(
+        'editor',
+        'POST',
+        `/v1/subjects/${expirySubject.id}:hide`,
+        { reason: 'Actual pending repair retained through its explicit expiry' },
+        discoveryKey(),
+      ),
+      200,
+    );
+    for (const request of bound) {
+      if (request.capture.status === 'captured') {
+        const pending = await request.operations.readStatus({ queried: request.capture.queried }, timingContext());
+        expect(pending.status).toBe('observed');
+        assert(pending.status === 'observed');
+        expect(pending.pending.length).toBeGreaterThan(0);
+        expect(pending.blocking.length).toBeGreaterThan(0);
+      }
     }
     const [ordinary, short] = bound.map(({ capture }) => {
       if (capture.status !== 'captured' && capture.status !== 'preparing')
@@ -955,7 +980,6 @@ test('a genuine explicit retain expiry releases native work without claiming the
     });
     if (!ordinary || !short) throw new Error('Expected two actual admitted native repair jobs');
     expect(short).not.toEqual(ordinary);
-    await native.indexing('paused');
     try {
       const beforeDefault = Date.now();
       const ordinaryId = await native.preparePublic(ordinary);
@@ -1018,6 +1042,7 @@ test('a genuine explicit retain expiry releases native work without claiming the
       await native.indexing('running');
     }
   } finally {
+    await native.indexing('running');
     for (const request of bound) {
       try {
         if (request.capture.status === 'captured')
@@ -1479,6 +1504,7 @@ for (let jobIndex = 0; jobIndex < 4; jobIndex++) {
       expect(Compile(ZonePageResponseSchema).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
       expect(answer.body.document).toEqual(document);
       expect(answer.body.zone).toMatchObject({ id: zone.id, revision });
+      expect(JSON.stringify(answer.body)).not.toContain('Second occurrence with a distinct note');
       const key = planReads(platformRegistry, document, { subject: null }).nodes['original-outcome'];
       assert(key);
       const result = (answer.body.reads as Record<string, { status: number; body: Record<string, unknown> }>)[key];
@@ -1501,13 +1527,12 @@ for (let jobIndex = 0; jobIndex < 4; jobIndex++) {
       cursors.add(next);
       cursor = next;
     }
-    expect(JSON.stringify(ids)).not.toContain('Second occurrence with a distinct note');
     // The Zone grants no new rights to its source; source owner discovery remains independent.
     status(await population.request('anonymous', 'GET', `/v1/collections/${memberSource.id}`), 200);
   }, 120_000);
 
   test(`configured TypeList freshness consumer: ${title} uses native aggregate continuation and exact released facts`, async () => {
-    const { jobs, subjects } = await catalogueInputForRead();
+    const { jobs, subjects, recipes } = await catalogueInputForRead();
     const job = jobs[jobIndex]!;
     const document = originalListDocument(job.filter, job.type);
     await fixture.grant('steward', ['presentation:publish', 'presentation:activate'], GLOBAL_CONTEXT);
@@ -1569,7 +1594,44 @@ for (let jobIndex = 0; jobIndex < 4; jobIndex++) {
       }
     } while (cursor);
     expect(ids).toEqual(job.ids);
-    for (const subject of subjects.filter(({ id }) => job.ids.includes(id))) status(await fixture.read(subject), 200);
+    for (const subject of subjects.filter(({ id }) => job.ids.includes(id))) {
+      const disclosed = status(await fixture.read(subject), 200).body.subject as Subject;
+      expect(disclosed).toMatchObject({ id: subject.id, type: job.type, release: subject.release });
+      const values = (property: string) => disclosed.statements[property]?.map(({ value }) => value.content);
+      if (job.type === 'schema:Book') {
+        if (jobIndex === 0 || jobIndex === 2)
+          expect(values(fixture.meaning.words)).toEqual([{ amount: '+1200001', unit: '1' }]);
+        if (jobIndex === 1 || jobIndex === 2) {
+          const classification = await fixture.classification();
+          expect(values(fixture.meaning.form)).toContain(classification.lightNovel.id);
+          expect(values('schema:keywords')).toContain(classification.harem.id);
+        }
+      } else {
+        expect(values(fixture.meaning.diet)).toContain((await fixture.diet()).vegetarian.id);
+        const minutes =
+          subject.id === recipes.subjects['R-quick'].id ? 25 : subject.id === recipes.subjects['R-edge'].id ? 30 : 20;
+        expect(values(fixture.meaning.time)).toEqual([{ amount: `+${minutes}`, unit: fixture.meaning.minuteStorage }]);
+        expect(values('schema:recipeIngredient')).toEqual([
+          { language: 'en', text: 'Controlled authored ingredients; no diet inference.' },
+        ]);
+        const instructions = values('schema:recipeInstructions');
+        assert(instructions?.length === 1);
+        const reference = instructions[0];
+        assert(reference && typeof reference === 'object' && !Array.isArray(reference));
+        assert(typeof reference.document === 'string');
+        const document = status(
+          await population.request('anonymous', 'GET', `/v1/documents/${reference.document}`),
+          200,
+        );
+        expect(document.body.document).toMatchObject({
+          subjectId: subject.id,
+          availability: 'available',
+          language: 'en',
+          licence: 'CC-BY-4.0',
+          body: fromPlainText('Simmer the controlled test ingredients, then serve.'),
+        });
+      }
+    }
   }, 120_000);
 }
 
