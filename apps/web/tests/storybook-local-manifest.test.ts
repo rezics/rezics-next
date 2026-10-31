@@ -57,7 +57,11 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
       {
         cwd: root,
         // Web retains its UI ref, pointed at this attempt's UI endpoint (stopped between catalogues).
-        env: { ...process.env, STORYBOOK_UI_URL: `http://127.0.0.1:${uiPort}` },
+        env: {
+          ...process.env,
+          CACHE_DIR: resolve(directory, 'cache'),
+          STORYBOOK_UI_URL: `http://127.0.0.1:${uiPort}`,
+        },
         detached: true,
         stdio: ['ignore', log, log],
       },

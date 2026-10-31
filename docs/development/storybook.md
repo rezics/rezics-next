@@ -41,9 +41,9 @@ The Web landing integration check selects this command for changes under `apps/w
 Start an isolated local catalogue from the worktree root with an unused exact loopback port:
 
 ```sh
-bun run --cwd apps/web storybook --host 127.0.0.1 --port 16497 --exact-port --ci
+CACHE_DIR="$PWD/.temp/storybook-cache/web" bun run --cwd apps/web storybook --host 127.0.0.1 --port 16497 --exact-port --ci
 # Or inspect the shared UI catalogue, using its own unused port:
-bun run --cwd packages/ui storybook --host 127.0.0.1 --port 16498 --exact-port --ci
+CACHE_DIR="$PWD/.temp/storybook-cache/ui" bun run --cwd packages/ui storybook --host 127.0.0.1 --port 16498 --exact-port --ci
 ```
 
 Connect an MCP client using Streamable HTTP to that catalogue's `/mcp` endpoint, for example
