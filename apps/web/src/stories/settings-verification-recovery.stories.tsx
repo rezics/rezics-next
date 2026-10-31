@@ -301,7 +301,9 @@ export const DefaultReadRecovery: StoryObj = {
     await expect(failure).toHaveAttribute('data-response-code', 'dependency_unavailable');
     await expect(failure).toHaveAttribute('data-request-id', 'verification-status');
     await expect(failure).toHaveAttribute('data-retry-after', '2');
-    const details = within(failure as HTMLElement).getByText(m.settings_verification_read_details()).closest('details')!;
+    const details = within(failure as HTMLElement)
+      .getByText(m.settings_verification_read_details())
+      .closest('details')!;
     await expect(details).not.toHaveAttribute('open');
     await userEvent.click(within(failure as HTMLElement).getByText(m.settings_verification_read_details()));
     await expect(within(details).getByText(m.settings_verification_read_error({ status: 503 }))).toBeVisible();
