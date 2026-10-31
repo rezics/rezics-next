@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useRouter } from '@tanstack/react-router';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
@@ -27,6 +28,8 @@ export function Refinement({
   locale,
   sort,
   load,
+  showSummary = true,
+  onNavigate,
 }: {
   data: RefinementData;
   conditions: RefinementConditions;
@@ -34,8 +37,16 @@ export function Refinement({
   locale: string;
   sort?: 'rating';
   load: Load;
+  showSummary?: boolean;
+  onNavigate?: (href: string) => void;
 }) {
   const id = useId();
+  const router = useRouter({ warn: false });
+  const navigate =
+    onNavigate ??
+    ((href: string) => {
+      void router?.navigate({ href });
+    });
   const [shown, setShown] = useState(data.properties.slice(0, 8).map((entry) => entry.property));
   const [pages, setPages] = useState<FacetPage['facets']>(
     data.initial?.status === 'ready' ? data.initial.page.facets : [],
@@ -116,72 +127,92 @@ export function Refinement({
   }
 
   return (
-    <div className="min-w-0 space-y-4" aria-busy={busy}>
-      {(selected.length > 0 || Object.keys(conditions.ranges ?? {}).length > 0 || conditions.condition) && (
-        <>
-          <ul className="flex flex-wrap gap-2" aria-label={m.refinement_selected()}>
-            {selected.map(({ property, value }) => {
-              const text =
-                label(
-                  pages.find((entry) => entry.property === property)?.values.find((entry) => entry.value === value)
-                    ?.labels ?? {},
-                ) || m.refinement_selected_value();
-              const propertyName =
-                property === 'type'
-                  ? m.search_type()
-                  : label(data.properties.find((entry) => entry.property === property)?.labels ?? {});
-              const chip = propertyName ? `${propertyName}: ${text}` : text;
-              const values = conditions.facetValues[property]!.filter((entry) => entry !== value);
-              return (
-                <li key={`${property}:${value}`}>
+    <div
+      className="min-w-0 space-y-4"
+      aria-busy={busy}
+      onClick={(event) => {
+        const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+        if (
+          (!onNavigate && !router) ||
+          !anchor ||
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        event.preventDefault();
+        navigate(anchor.getAttribute('href')!);
+      }}
+    >
+      {showSummary &&
+        (selected.length > 0 || Object.keys(conditions.ranges ?? {}).length > 0 || conditions.condition) && (
+          <>
+            <ul className="flex flex-wrap gap-2" aria-label={m.refinement_selected()}>
+              {selected.map(({ property, value }) => {
+                const text =
+                  label(
+                    pages.find((entry) => entry.property === property)?.values.find((entry) => entry.value === value)
+                      ?.labels ?? {},
+                  ) || m.refinement_selected_value();
+                const propertyName =
+                  property === 'type'
+                    ? m.search_subject_types()
+                    : label(data.properties.find((entry) => entry.property === property)?.labels ?? {});
+                const chip = propertyName ? `${propertyName}: ${text}` : text;
+                const values = conditions.facetValues[property]!.filter((entry) => entry !== value);
+                return (
+                  <li key={`${property}:${value}`}>
+                    <a
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      aria-label={m.refinement_remove({ value: chip })}
+                      href={href({ ...conditions, facetValues: { ...conditions.facetValues, [property]: values } })}
+                    >
+                      <span className="max-w-44 truncate">{chip}</span>
+                      <XIcon aria-hidden="true" className="size-3" />
+                    </a>
+                  </li>
+                );
+              })}
+              {Object.entries(conditions.ranges ?? {}).map(([property, range]) => (
+                <li key={property}>
                   <a
                     className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                    aria-label={m.refinement_remove({ value: chip })}
-                    href={href({ ...conditions, facetValues: { ...conditions.facetValues, [property]: values } })}
+                    aria-label={m.refinement_remove({
+                      value:
+                        label(data.properties.find((entry) => entry.property === property)?.labels ?? {}) ||
+                        m.refinement_range(),
+                    })}
+                    href={href({
+                      ...conditions,
+                      ranges: Object.fromEntries(
+                        Object.entries(conditions.ranges ?? {}).filter(([key]) => key !== property),
+                      ),
+                    })}
                   >
-                    <span className="max-w-44 truncate">{chip}</span>
+                    {label(data.properties.find((entry) => entry.property === property)?.labels ?? {})}:{' '}
+                    {range.gte ?? '…'} – {range.lte ?? '…'} {range.unit}
                     <XIcon aria-hidden="true" className="size-3" />
                   </a>
                 </li>
-              );
-            })}
-            {Object.entries(conditions.ranges ?? {}).map(([property, range]) => (
-              <li key={property}>
-                <a
-                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                  aria-label={m.refinement_remove({
-                    value:
-                      label(data.properties.find((entry) => entry.property === property)?.labels ?? {}) ||
-                      m.refinement_range(),
-                  })}
-                  href={href({
-                    ...conditions,
-                    ranges: Object.fromEntries(
-                      Object.entries(conditions.ranges ?? {}).filter(([key]) => key !== property),
-                    ),
-                  })}
-                >
-                  {label(data.properties.find((entry) => entry.property === property)?.labels ?? {})}:{' '}
-                  {range.gte ?? '…'} – {range.lte ?? '…'} {range.unit}
-                  <XIcon aria-hidden="true" className="size-3" />
-                </a>
-              </li>
-            ))}
-          </ul>
-          <a
-            className={buttonVariants({ variant: 'link', size: 'sm' })}
-            href={href({
-              ...(conditions.type ? { type: conditions.type } : {}),
-              ...(conditions.kinds ? { kinds: conditions.kinds } : {}),
-              ...(conditions.languages ? { languages: conditions.languages } : {}),
-              ...(conditions.filter ? { filter: conditions.filter } : {}),
-              facetValues: {},
-            })}
-          >
-            {m.refinement_clear()}
-          </a>
-        </>
-      )}
+              ))}
+            </ul>
+            <a
+              className={buttonVariants({ variant: 'link', size: 'sm' })}
+              href={href({
+                ...(conditions.type ? { type: conditions.type } : {}),
+                ...(conditions.kinds ? { kinds: conditions.kinds } : {}),
+                ...(conditions.languages ? { languages: conditions.languages } : {}),
+                ...(conditions.filter ? { filter: conditions.filter } : {}),
+                facetValues: {},
+              })}
+            >
+              {m.refinement_clear()}
+            </a>
+          </>
+        )}
       <Field>
         <FieldLabel htmlFor={`${id}-property`}>{m.refinement_property()}</FieldLabel>
         <NativeSelect
@@ -197,7 +228,7 @@ export function Refinement({
           <NativeSelectOption value="">{m.refinement_choose_property()}</NativeSelectOption>
           {data.properties.map((entry) => (
             <NativeSelectOption key={entry.property} value={entry.property}>
-              {entry.mode === 'types' ? m.search_type() : label(entry.labels) || entry.property}
+              {entry.mode === 'types' ? m.search_subject_types() : label(entry.labels) || entry.property}
             </NativeSelectOption>
           ))}
         </NativeSelect>
@@ -244,6 +275,7 @@ export function Refinement({
       {selected
         .filter(
           ({ property, value }) =>
+            disabled ||
             !shown.includes(property) ||
             !pages.find((entry) => entry.property === property)?.values.some((entry) => entry.value === value),
         )
@@ -253,7 +285,7 @@ export function Refinement({
       {shown.map((property) => {
         const definition = data.properties.find((entry) => entry.property === property)!;
         const page = pages.find((entry) => entry.property === property);
-        const title = definition.mode === 'types' ? m.search_type() : label(definition.labels) || property;
+        const title = definition.mode === 'types' ? m.search_subject_types() : label(definition.labels) || property;
         return (
           <FieldSet
             key={property}
@@ -267,8 +299,11 @@ export function Refinement({
             }
           >
             <FieldLegend variant="label">{title}</FieldLegend>
+            {definition.mode === 'types' && (
+              <p className="text-sm text-muted-foreground">{m.search_subject_types_help()}</p>
+            )}
             {definition.mode === 'range' ? (
-              <RangeControl definition={definition} conditions={conditions} href={href} />
+              <RangeControl definition={definition} conditions={conditions} href={href} navigate={navigate} />
             ) : definition.mode === 'unsupported' ? (
               <p className="text-sm text-muted-foreground">{m.refinement_unsupported()}</p>
             ) : (
@@ -283,22 +318,16 @@ export function Refinement({
                       id={`${id}-${property}-${index}`}
                       name={`f.${property}`}
                       value={entry.value}
-                      checked={
-                        conditions.facetValues[property]?.includes(entry.value) ||
-                        (definition.mode === 'types' && conditions.type === entry.value) ||
-                        false
-                      }
+                      checked={conditions.facetValues[property]?.includes(entry.value) || false}
                       onChange={(event) => {
-                        const values = [
-                          ...new Set([
-                            ...(conditions.facetValues[property] ?? []),
-                            ...(definition.mode === 'types' && conditions.type ? [conditions.type] : []),
-                          ]),
-                        ];
-                        const { type: _type, ...withoutType } = conditions;
-                        window.location.assign(
+                        if (!onNavigate && !router) {
+                          event.currentTarget.form?.requestSubmit();
+                          return;
+                        }
+                        const values = conditions.facetValues[property] ?? [];
+                        navigate(
                           href({
-                            ...(definition.mode === 'types' ? withoutType : conditions),
+                            ...conditions,
                             facetValues: {
                               ...conditions.facetValues,
                               [property]: event.currentTarget.checked
@@ -344,10 +373,12 @@ function RangeControl({
   definition,
   conditions,
   href,
+  navigate,
 }: {
   definition: RefinementProperty;
   conditions: RefinementConditions;
   href: (conditions: RefinementConditions) => string;
+  navigate: (href: string) => void;
 }) {
   const id = useId();
   const range = conditions.ranges?.[definition.property];
@@ -420,7 +451,7 @@ function RangeControl({
             setInvalid(true);
             return;
           }
-          window.location.assign(
+          navigate(
             href({
               ...conditions,
               ranges: {

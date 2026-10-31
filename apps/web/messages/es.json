@@ -832,7 +832,7 @@
   "search_no_results": "No se encontraron resultados.",
   "search_no_suggestions": "No se encontraron sugerencias.",
   "search_placeholder": "Buscar…",
-  "search_results": "Fichas coincidentes",
+  "search_results": "Resultados",
   "search_submit": "Buscar",
   "search_suggestions_failed": "No se pudieron cargar las sugerencias.",
   "search_type": "Tipo",
@@ -3297,5 +3297,18 @@
   "realm_bans_target_selected": "Cuenta actual seleccionada para revisión.",
   "realm_bans_target_select": "Seleccionar esta cuenta",
   "realm_bans_ban_confirm": "¿Bloquear esta cuenta por el motivo mostrado? Su identidad actual se comprobará de nuevo antes de enviar.",
-  "realm_bans_confirm_ban": "Confirmar bloqueo"
+  "realm_bans_confirm_ban": "Confirmar bloqueo",
+  "search_result_kind": "Categoría de resultado",
+  "search_result_kinds": "Categorías de resultados",
+  "search_result_kinds_help": "Elige categorías concretas, incluidas las cuentas. Si no eliges ninguna, se incluyen todas. Puede haber más opciones en la página siguiente.",
+  "search_all_kinds": "Todas las categorías de resultados",
+  "search_choose_kinds": "Elegir categorías concretas",
+  "search_kind_choice": "Resultados: {value}",
+  "search_subject_type": "Tipo de ficha",
+  "search_subject_type_help": "Incluye los subtipos. Las cuentas se eligen en las categorías de resultados.",
+  "search_all_subject_types": "Cualquier tipo de ficha",
+  "search_subject_types": "Tipos de ficha adicionales",
+  "search_subject_types_help": "Los resultados deben coincidir con alguno de los tipos elegidos o sus subtipos. Si también se especifica un tipo de ficha, se aplican ambas condiciones.",
+  "search_existing_filter": "Otras condiciones",
+  "search_close_filters": "Cerrar filtros"
 }

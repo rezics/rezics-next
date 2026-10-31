@@ -832,7 +832,7 @@
   "search_no_results": "검색 결과가 없습니다.",
   "search_no_suggestions": "추천 항목이 없습니다.",
   "search_placeholder": "검색…",
-  "search_results": "일치하는 항목",
+  "search_results": "검색 결과",
   "search_submit": "검색",
   "search_suggestions_failed": "추천 검색어를 불러오지 못했습니다.",
   "search_type": "유형",
@@ -3297,5 +3297,18 @@
   "realm_bans_target_selected": "검토할 현재 계정을 선택했습니다.",
   "realm_bans_target_select": "이 계정 선택",
   "realm_bans_ban_confirm": "표시된 사유로 이 계정을 차단할까요? 제출 전에 현재 신원을 다시 확인합니다.",
-  "realm_bans_confirm_ban": "차단 확인"
+  "realm_bans_confirm_ban": "차단 확인",
+  "search_result_kind": "결과 종류",
+  "search_result_kinds": "결과 종류",
+  "search_result_kinds_help": "계정을 포함해 결과 종류를 개별적으로 선택할 수 있습니다. 선택하지 않으면 모든 종류가 포함됩니다. 다음 페이지에 선택 항목이 더 있을 수 있습니다.",
+  "search_all_kinds": "모든 결과 종류",
+  "search_choose_kinds": "결과 종류 지정",
+  "search_kind_choice": "{value} 결과",
+  "search_subject_type": "항목 유형",
+  "search_subject_type_help": "하위 유형도 포함합니다. 계정은 ‘결과 종류’에서 선택하세요.",
+  "search_all_subject_types": "항목 유형 제한 없음",
+  "search_subject_types": "추가 항목 유형",
+  "search_subject_types_help": "선택한 유형 중 하나 또는 그 하위 유형에 해당하는 결과를 표시합니다. 항목 유형도 지정하면 두 조건을 모두 적용합니다.",
+  "search_existing_filter": "기타 조건",
+  "search_close_filters": "필터 닫기"
 }

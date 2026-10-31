@@ -832,7 +832,7 @@
   "search_no_results": "検索結果がありません。",
   "search_no_suggestions": "候補がありません。",
   "search_placeholder": "検索…",
-  "search_results": "一致する項目",
+  "search_results": "検索結果",
   "search_submit": "検索",
   "search_suggestions_failed": "候補を読み込めませんでした。",
   "search_type": "種類",
@@ -3297,5 +3297,18 @@
   "realm_bans_target_selected": "確認対象のアカウントを選択しました。",
   "realm_bans_target_select": "このアカウントを選択",
   "realm_bans_ban_confirm": "表示された理由でこのアカウントを禁止しますか？送信前に現在の身元を再確認します。",
-  "realm_bans_confirm_ban": "禁止を確定"
+  "realm_bans_confirm_ban": "禁止を確定",
+  "search_result_kind": "結果の種類",
+  "search_result_kinds": "結果の種類",
+  "search_result_kinds_help": "アカウントも含め、結果の種類を個別に選べます。何も選ばなければすべての種類が対象です。選択肢が次のページに続く場合があります。",
+  "search_all_kinds": "すべての結果の種類",
+  "search_choose_kinds": "結果の種類を指定する",
+  "search_kind_choice": "{value}の結果",
+  "search_subject_type": "項目の型",
+  "search_subject_type_help": "下位の型も含みます。アカウントは「結果の種類」で選べます。",
+  "search_all_subject_types": "項目の型を指定しない",
+  "search_subject_types": "項目の型の追加条件",
+  "search_subject_types_help": "選んだいずれかの型またはその下位の型に一致する結果を表示します。項目の型も指定した場合は、両方の条件が適用されます。",
+  "search_existing_filter": "その他の条件",
+  "search_close_filters": "絞り込みを閉じる"
 }

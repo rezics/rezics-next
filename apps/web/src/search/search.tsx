@@ -1,15 +1,16 @@
 import { facetProperties, FILTER_LIMITS, parseFilter, type FilterDocument, type FilterRange } from '@rezics/filter';
 import * as v from 'valibot';
-import { Link } from '@tanstack/react-router';
+import { Link, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { SlidersHorizontalIcon } from 'lucide-react';
+import { SlidersHorizontalIcon, XIcon } from 'lucide-react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { cn } from '@rezics/ui/utils';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { kernelClient } from '../kernel/client.ts';
@@ -412,8 +413,10 @@ export function SearchPage({
   const [invalidation, setInvalidation] = useState<{ owner: SearchPageData; state: SearchRecoveryState }>();
   if (data) data = searchPageForRecovery(data, invalidation?.owner === data ? invalidation.state : data.recovery);
   const [hydrated, setHydrated] = useState(false);
-  const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(Boolean(data?.problem?.errors?.length));
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [filterSurface, setFilterSurface] = useState<'desktop' | 'mobile' | undefined>();
+  const router = useRouter({ warn: false });
+  const typeControlId = useId();
+  const filterOpener = useRef<HTMLElement | null>(null);
   const locale = getLocale();
   const type = data?.type;
   const result = data?.result;
@@ -454,28 +457,85 @@ export function SearchPage({
     JSON.stringify([draft.condition, editedState.languages]) !==
     JSON.stringify([committedState.condition, committedState.languages]);
   const number = new Intl.NumberFormat(locale);
-  const activeFilterCount =
-    (type ? 1 : 0) +
-    (data?.queryState?.kinds?.length ?? 0) +
-    Object.values(selectedFacets).reduce((sum, values) => sum + values.length, 0) +
-    Object.keys(data?.ranges ?? {}).length +
-    (draft.condition ? 1 : 0);
+  const label = (labels: Record<string, string> | undefined, fallback: string) =>
+    localizedLabel(labels ?? {}, locale).text || fallback;
+  const constraints: { key: string; text: string; state: SearchLoaderDeps }[] = [];
+  const add = (key: string, text: string, state: SearchLoaderDeps) =>
+    constraints.push({ key, text, state: { ...state, cursor: undefined } });
+  if (type)
+    add('type', `${m.search_subject_type()}: ${label(data?.typeLabels, type)}`, {
+      ...navigationState,
+      type: undefined,
+    });
+  for (const kind of navigationState.kinds ?? [])
+    add(
+      `kind:${kind}`,
+      `${m.search_result_kind()}: ${label(
+        discovery?.status === 'ready'
+          ? discovery.page.kinds.values.find((entry) => entry.id === kind)?.labels
+          : undefined,
+        kind,
+      )}`,
+      { ...navigationState, kinds: navigationState.kinds?.filter((value) => value !== kind) },
+    );
+  for (const [property, values] of Object.entries(selectedFacets))
+    for (const value of values) {
+      const page = data?.refinement?.initial;
+      const valueLabels =
+        page?.status === 'ready'
+          ? page.page.facets.find((entry) => entry.property === property)?.values.find((entry) => entry.value === value)
+              ?.labels
+          : undefined;
+      add(
+        `facet:${property}:${value}`,
+        `${property === 'type' ? m.search_subject_types() : label(data?.selectedFacetLabels[property], property)}: ${label(valueLabels, value)}`,
+        {
+          ...navigationState,
+          facets: { ...selectedFacets, [property]: values.filter((entry) => entry !== value) },
+        },
+      );
+    }
+  for (const [property, range] of Object.entries(data?.ranges ?? {}))
+    add(
+      `range:${property}`,
+      `${label(data?.conditionMetadata?.properties[property]?.labels, property)}: ${range.gte ?? '…'} – ${range.lte ?? '…'}${range.unit ? ` ${range.unit}` : ''}`,
+      {
+        ...navigationState,
+        ranges: Object.fromEntries(Object.entries(data?.ranges ?? {}).filter(([key]) => key !== property)),
+      },
+    );
+  for (const tag of draft.languages ?? [])
+    add(
+      `language:${tag}`,
+      `${m.condition_language()}: ${new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag}`,
+      {
+        ...navigationState,
+        languages: draft.languages?.filter((entry) => entry !== tag),
+      },
+    );
+  if (draft.condition) add('condition', m.condition_heading(), { ...navigationState, condition: undefined });
+  if (navigationState.filter) add('filter', m.search_existing_filter(), { ...navigationState, filter: undefined });
+  const activeFilterCount = constraints.length;
   useEffect(() => setHydrated(true), []);
   const desktopPanel = useRef<HTMLDivElement>(null);
   const openFilters = useCallback(() => {
-    if (window.matchMedia('(min-width: 1024px)').matches) {
-      setDesktopFiltersOpen(true);
-      requestAnimationFrame(() => {
-        const panel = desktopPanel.current;
-        (
-          panel?.querySelector<HTMLElement>('[aria-invalid="true"]') ??
-          panel?.querySelector<HTMLElement>(
-            'a[href], select:not(:disabled), input:not([type="hidden"]), button:not(:disabled)',
-          )
-        )?.focus();
-      });
-    } else setMobileFiltersOpen(true);
+    filterOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const desktop = window.matchMedia('(min-width: 1024px)').matches;
+    setFilterSurface(desktop ? 'desktop' : 'mobile');
+    if (desktop) requestAnimationFrame(() => desktopPanel.current?.focus());
   }, []);
+  const closeFilters = useCallback(() => {
+    setFilterSurface(undefined);
+    requestAnimationFrame(() => filterOpener.current?.focus());
+  }, []);
+  useEffect(() => {
+    if (filterSurface === 'desktop') desktopPanel.current?.focus();
+    if (!filterSurface) return;
+    const media = window.matchMedia('(min-width: 1024px)');
+    const resize = () => setFilterSurface(media.matches ? 'desktop' : 'mobile');
+    media.addEventListener('change', resize);
+    return () => media.removeEventListener('change', resize);
+  }, [filterSurface]);
   useEffect(() => {
     if (initiallyOpen) openFilters();
   }, [initiallyOpen, openFilters]);
@@ -483,9 +543,6 @@ export function SearchPage({
     if (data?.problem?.errors?.length) openFilters();
   }, [data?.problem, openFilters]);
 
-  const typeLabel = type
-    ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
-    : undefined;
   const hasFilterPanel = data !== undefined;
   const filterRegion = useMemo(
     () => ({ activeCount: activeFilterCount, open: openFilters }),
@@ -504,18 +561,80 @@ export function SearchPage({
     onRetry,
     committedState,
   );
+  const navigate = (href: string, removingCondition = false) => {
+    setAttempted(true);
+    if (!removingCondition && localIssues.length) {
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
+      return;
+    }
+    void router?.navigate({ href });
+  };
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     setAttempted(true);
-    if (!localIssues.length) return;
-    event.preventDefault();
-    const form = event.currentTarget;
-    requestAnimationFrame(() => form.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
+    if (localIssues.length || router) event.preventDefault();
+    if (localIssues.length) {
+      const form = event.currentTarget;
+      requestAnimationFrame(() => form.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
+      return;
+    }
+    if (router) {
+      const params = new URLSearchParams();
+      for (const [key, value] of new FormData(event.currentTarget))
+        if (typeof value === 'string' && value !== '') params.append(key, value);
+      navigate(`/${locale}/search?${params}`);
+    }
   };
+  const follow = (event: React.MouseEvent<HTMLElement>) => {
+    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+    if (
+      !router ||
+      !anchor ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    navigate(anchor.getAttribute('href')!, anchor.dataset.removeCondition === 'true');
+  };
+  const filterEntrance = (
+    <div className="space-y-3" onClick={follow}>
+      <Button
+        type="button"
+        variant="outline"
+        aria-controls="search-filters"
+        aria-expanded={!hydrated || filterSurface !== undefined}
+        onClick={openFilters}
+      >
+        <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
+        {m.search_filters()} ({number.format(activeFilterCount)})
+      </Button>
+      {constraints.length > 0 && (
+        <ul aria-label={m.refinement_selected()} className="flex flex-wrap gap-2">
+          {constraints.map(({ key, text, state }) => (
+            <li key={key}>
+              <a
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                data-remove-condition={key === 'condition' ? 'true' : undefined}
+                aria-label={m.refinement_remove({ value: text })}
+                href={discoverySearchHref(locale, state)}
+              >
+                <span className="max-w-64 truncate">{text}</span>
+                <XIcon aria-hidden="true" className="size-3" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 
   const filterContents = (surface: 'desktop' | 'mobile') => (
     <div className="space-y-5 pt-3 lg:pt-0">
       <input type="hidden" name="q" value={query} />
-      {type && <input type="hidden" name="type" value={type} />}
       {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
       {(draft.languages ?? []).map((tag) => (
         <input key={tag} type="hidden" name="language" value={tag} />
@@ -526,14 +645,9 @@ export function SearchPage({
       ))}
       {!data?.refinement &&
         Object.entries(selectedFacets).flatMap(([property, values]) =>
-          values
-            .filter(
-              (value) =>
-                !data?.groups.some(
-                  (group) => group.property === property && group.values.some((entry) => entry.value === value),
-                ),
-            )
-            .map((value) => <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />),
+          values.map((value) => (
+            <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />
+          )),
         )}
       {data?.discovery?.status === 'ready' && data.queryState && (
         <DiscoveryKinds
@@ -559,31 +673,39 @@ export function SearchPage({
           }}
         />
       )}
-      {type && (
-        <section className="space-y-3">
-          <h2 className="font-medium">
-            {m.search_type()}: <span lang={typeLabel?.lang}>{typeLabel?.text || type}</span>
-          </h2>
-          <a
-            className={linkClass}
-            href={searchHref(
-              locale,
-              query,
-              undefined,
-              selectedFacets,
-              undefined,
-              data?.sort === 'rating' ? 'rating' : undefined,
-              data?.queryState,
-            )}
-          >
-            {m.search_clear_type()}
-          </a>
-        </section>
-      )}
+      <Field>
+        <FieldLabel htmlFor={`${typeControlId}-${surface}`}>{m.search_subject_type()}</FieldLabel>
+        <p className="text-sm text-muted-foreground">{m.search_subject_type_help()}</p>
+        <NativeSelect
+          id={`${typeControlId}-${surface}`}
+          name="type"
+          value={type ?? ''}
+          onChange={(event) => {
+            if (hydrated) event.currentTarget.form?.requestSubmit();
+          }}
+        >
+          <NativeSelectOption value="">{m.search_all_subject_types()}</NativeSelectOption>
+          {type && !data?.conditionMetadata?.types[type] && (
+            <NativeSelectOption value={type}>{label(data?.typeLabels, type)}</NativeSelectOption>
+          )}
+          {Object.entries(data?.conditionMetadata?.types ?? {}).map(([id, definition]) => (
+            <NativeSelectOption key={id} value={id}>
+              {label(definition.labels, id)}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
       {data?.refinement && (
         <Refinement
           key={`${surface}-${data.refinement.key}`}
-          data={data.refinement}
+          data={{
+            ...data.refinement,
+            properties: data.refinement.properties.filter(
+              (entry) => entry.mode !== 'types' || selectedFacets.type?.length,
+            ),
+          }}
+          showSummary={false}
+          onNavigate={navigate}
           conditions={{
             ...(type ? { type } : {}),
             facetValues: selectedFacets,
@@ -644,57 +766,63 @@ export function SearchPage({
       {Object.entries(data?.ranges ?? {}).map(([property, range]) => (
         <input key={property} type="hidden" name={`r.${property}`} value={JSON.stringify(range)} />
       ))}
-      <Button type="submit" variant="outline" hidden={hydrated}>
-        {m.search_apply()}
-      </Button>
     </div>
   );
 
+  const desktopOpen = !hydrated || filterSurface === 'desktop';
   const filterControls = (
     <>
-      <form
-        id="desktop-filter-form"
-        method="get"
-        onSubmit={submit}
-        action={`/${locale}/search`}
-        className="hidden lg:block lg:col-start-1 lg:row-start-1"
-      >
-        <Collapsible
-          open={!hydrated || desktopFiltersOpen}
-          onOpenChange={setDesktopFiltersOpen}
-          className={cn((!hydrated || desktopFiltersOpen) && 'rounded-xl border border-border/60 p-4')}
+      {desktopOpen && (
+        <div
+          id="search-filters"
+          ref={desktopPanel}
+          role="region"
+          aria-label={m.search_filters()}
+          tabIndex={-1}
+          className="min-w-0 rounded-xl border border-border/60 p-4"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              closeFilters();
+            }
+          }}
+          onClick={follow}
         >
-          <CollapsibleTrigger className="hidden">{m.search_filters()}</CollapsibleTrigger>
-          <CollapsibleContent>
-            <div ref={desktopPanel}>{filterContents('desktop')}</div>
-          </CollapsibleContent>
-        </Collapsible>
-      </form>
-      <button
-        type="button"
-        className={`${buttonVariants({ variant: 'outline' })} w-fit gap-2 border-border lg:hidden`}
-        style={{ borderColor: 'color-mix(in oklch, var(--border), var(--foreground) 35%)' }}
-        aria-label={`${m.search_filters()} (${number.format(activeFilterCount)})`}
-        onClick={() => setMobileFiltersOpen(true)}
-      >
-        <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
-        {m.search_filters()} ({number.format(activeFilterCount)})
-      </button>
-      <BottomSheet
-        open={mobileFiltersOpen}
-        onOpenChange={setMobileFiltersOpen}
-        title={`${m.search_filters()} (${number.format(activeFilterCount)})`}
-      >
-        <form id="mobile-filter-form" method="get" action={`/${locale}/search`} onSubmit={submit}>
-          {filterContents('mobile')}
-        </form>
-      </BottomSheet>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-medium">{m.search_filters()}</h2>
+            <Button type="button" variant="ghost" hidden={!hydrated} onClick={closeFilters}>
+              {m.search_close_filters()}
+            </Button>
+          </div>
+          <form id="desktop-filter-form" method="get" onSubmit={submit} action={`/${locale}/search`}>
+            {filterContents('desktop')}
+          </form>
+        </div>
+      )}
+      {filterSurface === 'mobile' && (
+        <BottomSheet
+          open
+          onOpenChange={(open) => {
+            if (!open) closeFilters();
+          }}
+          title={`${m.search_filters()} (${number.format(activeFilterCount)})`}
+        >
+          <form id="search-filters" method="get" action={`/${locale}/search`} onSubmit={submit} onClick={follow}>
+            {filterContents('mobile')}
+          </form>
+        </BottomSheet>
+      )}
     </>
   );
 
   if (filtersOnly) {
     if (!hasFilterPanel) return null;
-    return <div className="w-full">{filterControls}</div>;
+    return (
+      <div className="w-full space-y-4">
+        {filterEntrance}
+        {filterControls}
+      </div>
+    );
   }
 
   const browsing = isRealmDiscoverySearch(committedState) && !editing && !result && !discovery && !data?.recovery;
@@ -713,10 +841,13 @@ export function SearchPage({
     <section className="mx-auto max-w-5xl space-y-6">
       <PageHeading>{m.search_heading()}</PageHeading>
       {hasFilterPanel ? (
-        <div className="grid items-start gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
-          {filterControls}
-          <div className="min-w-0 space-y-4 lg:col-start-2 lg:row-start-1">{content}</div>
-        </div>
+        <>
+          {filterEntrance}
+          <div className={cn('grid items-start gap-6', desktopOpen && 'lg:grid-cols-[16rem_minmax(0,1fr)]')}>
+            {filterControls}
+            <div className="min-w-0 space-y-4">{content}</div>
+          </div>
+        </>
       ) : (
         content
       )}

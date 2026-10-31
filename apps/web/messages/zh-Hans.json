@@ -833,7 +833,7 @@
   "search_no_results": "没有找到结果。",
   "search_no_suggestions": "没有找到建议。",
   "search_placeholder": "搜索…",
-  "search_results": "匹配的条目",
+  "search_results": "搜索结果",
   "search_submit": "搜索",
   "search_suggestions_failed": "无法加载建议。",
   "search_type": "类型",
@@ -3298,5 +3298,18 @@
   "realm_bans_target_selected": "已选择当前账号以供确认。",
   "realm_bans_target_select": "选择此账号",
   "realm_bans_ban_confirm": "确定以所示原因封禁此账号？提交前会再次确认当前身份。",
-  "realm_bans_confirm_ban": "确认封禁"
+  "realm_bans_confirm_ban": "确认封禁",
+  "search_result_kind": "结果类别",
+  "search_result_kinds": "结果类别",
+  "search_result_kinds_help": "选择具体的结果类别，其中也包括账号。未选择时包含所有类别，更多选项可能在下一页。",
+  "search_all_kinds": "所有结果类别",
+  "search_choose_kinds": "选择具体的结果类别",
+  "search_kind_choice": "{value}类结果",
+  "search_subject_type": "条目类型",
+  "search_subject_type_help": "包含子类型。账号请在“结果类别”中选择。",
+  "search_all_subject_types": "不限条目类型",
+  "search_subject_types": "附加条目类型",
+  "search_subject_types_help": "结果须符合任一所选类型或其子类型。如果另有限定条目类型，则两项条件都须符合。",
+  "search_existing_filter": "其他条件",
+  "search_close_filters": "关闭筛选"
 }

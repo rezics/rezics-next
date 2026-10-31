@@ -63,40 +63,50 @@ export function DiscoveryKinds({
     }
   }
   return (
-    <section className="space-y-3" aria-label={m.search_types()}>
-      <h2 className="font-medium">{m.search_types()}</h2>
+    <section className="space-y-3" aria-label={m.search_result_kinds()}>
+      <h2 className="font-medium">{m.search_result_kinds()}</h2>
+      <p className="text-sm text-muted-foreground">{m.search_result_kinds_help()}</p>
+      {selected.length === 0 && (
+        <p role="status" className="text-sm">
+          {m.search_all_kinds()}
+        </p>
+      )}
       {selected
         .filter((id) => !values.some((kind) => kind.id === id))
         .map((id) => (
           <input key={id} type="hidden" name="kinds" value={id} />
         ))}
-      <ul className="space-y-2">
-        {values.map((kind) => {
-          const label = localizedLabel(kind.labels, locale);
-          const count = kind.count;
-          const evidence =
-            count && 'value' in count
-              ? `${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'}`
-              : m.discovery_count_unavailable();
-          return (
-            <li key={kind.id}>
-              <Label className="items-start gap-2 text-sm font-normal">
-                <NativeCheckbox
-                  name="kinds"
-                  value={kind.id}
-                  defaultChecked={selected.includes(kind.id)}
-                  className="mt-0.5 size-4 shrink-0 accent-primary"
-                  onChange={(event) => {
-                    if (hydrated) event.currentTarget.form?.requestSubmit();
-                  }}
-                />
-                <span lang={label.lang}>{label.text || kind.id}</span>
-                <span className="text-muted-foreground">{evidence}</span>
-              </Label>
-            </li>
-          );
-        })}
-      </ul>
+      <details open={selected.length > 0}>
+        <summary className="cursor-pointer text-sm font-medium">{m.search_choose_kinds()}</summary>
+        <ul className="space-y-2 pt-3">
+          {values.map((kind) => {
+            const label = localizedLabel(kind.labels, locale);
+            const count = kind.count;
+            const evidence =
+              count && 'value' in count
+                ? `${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'}`
+                : m.discovery_count_unavailable();
+            return (
+              <li key={kind.id}>
+                <Label className="items-start gap-2 text-sm font-normal">
+                  <NativeCheckbox
+                    aria-label={m.search_kind_choice({ value: label.text || kind.id })}
+                    name="kinds"
+                    value={kind.id}
+                    defaultChecked={selected.includes(kind.id)}
+                    className="mt-0.5 size-4 shrink-0 accent-primary"
+                    onChange={(event) => {
+                      if (hydrated) event.currentTarget.form?.requestSubmit();
+                    }}
+                  />
+                  <span lang={label.lang}>{label.text || kind.id}</span>
+                  <span className="text-muted-foreground">{evidence}</span>
+                </Label>
+              </li>
+            );
+          })}
+        </ul>
+      </details>
       {status && (
         <p role={status === 'loading' ? 'status' : 'alert'} className="text-sm text-muted-foreground">
           {recovery ? searchRecoveryMessage(recovery) : discoveryMessage(status)}

@@ -832,7 +832,7 @@
   "search_no_results": "找不到搜尋結果。",
   "search_no_suggestions": "找不到建議項目。",
   "search_placeholder": "搜尋…",
-  "search_results": "符合的條目",
+  "search_results": "搜尋結果",
   "search_submit": "搜尋",
   "search_suggestions_failed": "無法載入建議。",
   "search_type": "類型",
@@ -3297,5 +3297,18 @@
   "realm_bans_target_selected": "已選取目前帳號供確認。",
   "realm_bans_target_select": "選取此帳號",
   "realm_bans_ban_confirm": "確定以所示原因封鎖此帳號？送出前會再次確認目前身分。",
-  "realm_bans_confirm_ban": "確認封鎖"
+  "realm_bans_confirm_ban": "確認封鎖",
+  "search_result_kind": "結果類別",
+  "search_result_kinds": "結果類別",
+  "search_result_kinds_help": "選擇特定的結果類別，其中也包括帳號。未選擇時包含所有類別，更多選項可能在下一頁。",
+  "search_all_kinds": "所有結果類別",
+  "search_choose_kinds": "選擇特定的結果類別",
+  "search_kind_choice": "{value}類結果",
+  "search_subject_type": "條目類型",
+  "search_subject_type_help": "包含子類型。帳號請在「結果類別」中選擇。",
+  "search_all_subject_types": "不限條目類型",
+  "search_subject_types": "附加條目類型",
+  "search_subject_types_help": "結果須符合任一所選類型或其子類型。如果另有限定條目類型，則兩項條件都須符合。",
+  "search_existing_filter": "其他條件",
+  "search_close_filters": "關閉篩選"
 }

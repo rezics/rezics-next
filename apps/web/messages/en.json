@@ -874,7 +874,7 @@
   "search_no_results": "No results found.",
   "search_no_suggestions": "No suggestions found.",
   "search_placeholder": "Search…",
-  "search_results": "Matching subjects",
+  "search_results": "Results",
   "search_submit": "Search",
   "search_suggestions_failed": "Suggestions could not be loaded.",
   "search_type": "Type",
@@ -3649,5 +3649,18 @@
   "realm_bans_target_selected": "Current account selected for review.",
   "realm_bans_target_select": "Select this account",
   "realm_bans_ban_confirm": "Ban this account with the reason shown? Its current identity will be checked again before submitting.",
-  "realm_bans_confirm_ban": "Confirm ban"
+  "realm_bans_confirm_ban": "Confirm ban",
+  "search_result_kind": "Result kind",
+  "search_result_kinds": "Result kinds",
+  "search_result_kinds_help": "Choose exact kinds, including accounts. All kinds are included until you choose one. More choices may be on another page.",
+  "search_all_kinds": "All result kinds",
+  "search_choose_kinds": "Choose specific result kinds",
+  "search_kind_choice": "{value} results",
+  "search_subject_type": "Subject type",
+  "search_subject_type_help": "Includes subtypes. Accounts are chosen under Result kinds.",
+  "search_all_subject_types": "Any subject type",
+  "search_subject_types": "Additional subject types",
+  "search_subject_types_help": "Match any selected type or its subtypes. If a subject type is also set, both conditions apply.",
+  "search_existing_filter": "Other conditions",
+  "search_close_filters": "Close filters"
 }

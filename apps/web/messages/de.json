@@ -832,7 +832,7 @@
   "search_no_results": "Keine Ergebnisse gefunden.",
   "search_no_suggestions": "Keine Vorschläge gefunden.",
   "search_placeholder": "Suchen…",
-  "search_results": "Passende Einträge",
+  "search_results": "Ergebnisse",
   "search_submit": "Suchen",
   "search_suggestions_failed": "Vorschläge konnten nicht geladen werden.",
   "search_type": "Typ",
@@ -3297,5 +3297,18 @@
   "realm_bans_target_selected": "Aktuelles Konto zur Prüfung ausgewählt.",
   "realm_bans_target_select": "Dieses Konto auswählen",
   "realm_bans_ban_confirm": "Dieses Konto mit dem angezeigten Grund sperren? Die aktuelle Identität wird vor dem Senden erneut geprüft.",
-  "realm_bans_confirm_ban": "Sperre bestätigen"
+  "realm_bans_confirm_ban": "Sperre bestätigen",
+  "search_result_kind": "Ergebnisart",
+  "search_result_kinds": "Ergebnisarten",
+  "search_result_kinds_help": "Wähle einzelne Ergebnisarten, auch Konten. Ohne Auswahl sind alle Arten enthalten. Weitere Optionen können auf der nächsten Seite stehen.",
+  "search_all_kinds": "Alle Ergebnisarten",
+  "search_choose_kinds": "Bestimmte Ergebnisarten wählen",
+  "search_kind_choice": "Ergebnisse: {value}",
+  "search_subject_type": "Eintragstyp",
+  "search_subject_type_help": "Untertypen sind eingeschlossen. Konten wählst du unter Ergebnisarten.",
+  "search_all_subject_types": "Beliebiger Eintragstyp",
+  "search_subject_types": "Zusätzliche Eintragstypen",
+  "search_subject_types_help": "Ergebnisse müssen einem der gewählten Typen oder dessen Untertypen entsprechen. Ist auch ein Eintragstyp festgelegt, gelten beide Bedingungen.",
+  "search_existing_filter": "Weitere Bedingungen",
+  "search_close_filters": "Filter schließen"
 }
