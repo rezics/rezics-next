@@ -60,6 +60,8 @@ export interface CanonicalBasis {
   readonly identity: Readonly<{ digest: string }>;
   /** Actual admitted meaning/profile/projection commitment, null for curated. */
   readonly meaning: string | null;
+  /** State generations predating independent native support preparation cannot prove owner closure. */
+  readonly originalCoverage?: 'owner-facts-v1';
 }
 
 export interface CanonicalSourceRef {

@@ -4,8 +4,39 @@ import { hasLiveOperationalTransaction, type OperationalTransaction } from '../c
 import { routeOf } from '../route/route.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import type { LibraryProfilePin } from './profile.ts';
+import type { CanonicalRawKey } from './canonical-source-store.ts';
+import nativeFacts from './collection-source-native-facts.sql';
 
 type Client = Pick<PoolClient, 'query'>;
+export type OwnerNativeFactDriver = 'entry' | 'label' | 'session' | 'copy';
+
+/** Independent native ranges for retained canonical preparation, including state Sources.
+ * These are actual fact keys, never positive Source witnesses. The maintenance caller reserves work before
+ * dispatch and checks its actual owner/source fence and captured scoped observation before publication.
+ * Unlike a state Source's entry range, exhausting ALL four drivers closes independent original support.
+ */
+export async function readOwnerNativeFactPage(
+  client: Client,
+  accountId: string,
+  driver: OwnerNativeFactDriver,
+  after: CanonicalRawKey | null,
+  limit: number,
+) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Owner fact limit must be 1..100');
+  if (!['entry', 'label', 'session', 'copy'].includes(driver)) throw new TypeError('Invalid owner fact driver');
+  if (after && (after.driver !== driver || routeOf(after.storedSubjectId) === null || routeOf(after.factId) === null))
+    throw new TypeError('Invalid owner fact continuation');
+  const rows = await nativeFacts.run(client, {
+    route: key(accountId)[0],
+    account_id: accountId,
+    driver,
+    after_subject: after?.storedSubjectId ?? null,
+    after_fact: after?.factId ?? null,
+    limit,
+  });
+  const keys = rows.map((row): CanonicalRawKey => ({ driver, ...row }));
+  return { rows: keys.map((key) => ({ key })), after: keys.at(-1) ?? after, exhausted: keys.length < limit };
+}
 export type OwnerIndexPhase = 'entry' | 'session' | 'copy' | 'label' | 'ready';
 export type OwnerIndexFrontier = Readonly<{ phase: OwnerIndexPhase; subject: string | null; fact: string | null }>;
 type Control = { phase: OwnerIndexPhase; subject: string | null; fact: string | null };
