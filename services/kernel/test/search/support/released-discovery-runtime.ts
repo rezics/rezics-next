@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import type { Access } from '../../../src/request/access.ts';
+import type { DefaultPublicFilterRuntime } from '../../../src/search/public-runtime.ts';
+import type { PublicFilterConsumerOperations } from '../../../src/search/public-filter-consumer-contract.ts';
+import type { PreparationRecord } from '../../../src/search/public-preparation-store.ts';
+import type { OpenSearch } from '../../../src/search/opensearch.ts';
+import type { WorkerStats } from './outcome-worker.ts';
 import type { HttpResponse } from '../../../../../specs/semantic-driver.ts';
 import type { createKernel } from '../../../src/http/kernel.ts';
 import { rebuildSubjects } from '../../../src/search/generations.ts';
@@ -17,10 +23,36 @@ import { workerTestEnv } from '../../support/worker-env.ts';
 import { createSearchRunnerSlot } from './runner-slot.ts';
 
 type Request = (path: string, body?: unknown) => Promise<HttpResponse>;
-export interface ReleasedDiscoveryRuntime {
+/** The production factories and their returned operations retain all native admission and custody. */
+export type ReleasedNativeConsumers = Pick<
+  DefaultPublicFilterRuntime,
+  'bindRequest' | 'resumeRequest' | 'repair' | 'preparePublication'
+>;
+export type ReleasedNativeObservation = Pick<
+  PublicFilterConsumerOperations,
+  'capture' | 'query' | 'repairStep' | 'readStatus' | 'closeObservation' | 'close'
+>;
+export type ReleasedTransportBarrier = Readonly<{
+  /** Resolves only when real I/O reaches the selected transport boundary. */
+  reached: Promise<void>;
+  release(): void;
+}>;
+export type ReleasedTransportBoundary = Readonly<{
+  phase: 'request' | 'response';
+  method: Parameters<OpenSearch['request']>[0];
+  /** Exact native HTTP path, with no query/source/owner predicate. */
+  path: string;
+}>;
+export interface ReleasedDiscoveryRuntime extends ReleasedNativeConsumers {
   indexing(state: 'paused' | 'running'): Promise<void>;
   converge(subjects: readonly CreatedSubject[]): Promise<void>;
   rebuild(): Promise<{ generation: number; previous: number | null }>;
+  barrier(boundary: ReleasedTransportBoundary): ReleasedTransportBarrier;
+  preparePublic(job: Parameters<DefaultPublicFilterRuntime['repair']>[0]): Promise<string>;
+  readPreparation(id: string): Promise<PreparationRecord | null>;
+  workerStats(): Promise<WorkerStats>;
+  crash(): Promise<{ code: number | null; signal: string | null }>;
+  restart(): Promise<WorkerStats>;
 }
 
 /** One native prefix and default SDK composition, in the same process as the supplied runtime pools. */
