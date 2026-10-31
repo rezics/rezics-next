@@ -25,6 +25,7 @@ import {
   type RevisionDocumentMedia,
 } from './exact-revision-media';
 import type { ThreadDocumentMedia } from './document-media-read';
+import { loadNewThreadPage } from './new-thread-read';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -98,10 +99,7 @@ export const readNewThreadPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
   .handler(async ({ data }): Promise<{ board: Board['board']; idempotencyKey: string }> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const result = await kernelClient().boards({ id: data.id }).get();
-    const board = checkRead<Board>(result, 'board');
-    if (board.board.id !== data.id) throw notFound();
-    return { board: board.board, idempotencyKey: crypto.randomUUID() };
+    return loadNewThreadPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 
 /** The thread read that decides the slug. A redirect stops here and does not read posts. */
