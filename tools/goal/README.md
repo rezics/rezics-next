@@ -53,6 +53,34 @@ permission. A foreground compiler must finish through its already-open tool comm
 invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or interrupt
 live compilers. The controller forwards this policy through its existing prompt seam; it does not steer live sessions.
 
+Ordinary contracts can be amended before their first worker starts:
+
+```sh
+bun tools/goal/src/cli.ts amend <task> --expected-attempt 0 --brief <file>
+```
+
+`WorkerTasks.amend(taskId, { expectedAttempt: 0, brief }, actor)` is the same receiving boundary. It requires the live,
+unambiguous persisted provider session of the owning manager or configured operations manager. Only ordinary
+generation-zero tasks in `ready` or genuinely dependency-held `held` state are eligible, with no attempt, check,
+settlement or completed state. The submitted brief passes ordinary path, risk-area and dependency validation, keeps
+the same Goal and manager, preserves normal priority and its grant/history bytes, and retains frozen acceptance
+blocks unchanged. Operations can deliver this same-priority amendment directly; no owner impersonation or priority
+grant is required. Verification registration continues to use its separate existing proof entry.
+
+Under the task lease and SQLite write transaction, amendment saves an immutable current brief and archives both
+contracts, paths and hashes in the existing task events. Identical input returns `unchanged`; accepted changes return
+`amended`, each with the task, generation and current contract hash. A pending first-start intent and capacity ticket
+remain the same single intent and ticket. Amendment does not dispatch, retry, create an attempt, start a provider or
+bypass capacity. The waiting launcher rereads the accepted task under its lease after capacity admission, so the first
+native prompt contains the full latest canonical contract and current verification policy. Removing a held task's last
+dependency uses that same first-start path. Advanced/live generations refuse with their actual current identity and
+log/process handle, without changing them. This command does not steer an active worker.
+
+Each actual worker prompt boundary records its log offset and accumulated check-wait baseline in the existing
+`worker-run-started` event. Recovery uses that boundary's original timestamp rather than restarting its clock. Silence,
+startup and elapsed-limit accounting exclude earlier-turn output and waits, while retaining the current prompt's
+recorded waits across controller restart, capped to its silent interval for adoption.
+
 The dev landing train runs regression checks against the combined batch candidate. It runs the root typecheck once,
 each configured affected check whose path patterns match any changed path once, and matching sibling tests once. The
 sibling command prefix is configured by `siblingTests.command` in `defaults.json`; it receives the selected test paths.

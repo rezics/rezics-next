@@ -1169,16 +1169,19 @@ export class WorkerStore implements AttemptFence {
   }
   /** Keep the check and every associated write under BEGIN IMMEDIATE. */
   write<T>(ref: AttemptRef, action: () => T): T {
-    const result = this.db
-      .transaction(() => {
-        this.assertCurrent(ref);
-        const result = action();
-        if (result instanceof Promise) throw new Error('store transactions must be synchronous');
-        return result;
-      })
-      .immediate();
-    this.invalidateSnapshot();
-    return result;
+    try {
+      return this.db
+        .transaction(() => {
+          this.assertCurrent(ref);
+          const result = action();
+          if (result instanceof Promise) throw new Error('store transactions must be synchronous');
+          return result;
+        })
+        .immediate();
+    } finally {
+      // Nested task/event writes may populate the cache before the enclosing transaction rolls back.
+      this.invalidateSnapshot();
+    }
   }
   createTask(
     brief: Brief,

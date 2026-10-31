@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { acquireDirectoryLease } from './lease.ts';
@@ -8,9 +8,13 @@ import { StaleAttemptError } from './contracts.ts';
 import { captureLaunchContext } from './launch-context.ts';
 import { WorkerJob } from './job.ts';
 import { importAttempt } from './import-attempt.ts';
-import { git } from './tasks.ts';
+import { git, WorkerTasks } from './tasks.ts';
+import { launchCommand, workerActivityBaseline } from './launch.ts';
+import { authenticatedManager } from './priority-authority.ts';
+import { runWorkerCommand } from './worker-commands.ts';
+import type { Attempt } from './types.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
-import { harness, markdown } from './test-support.ts';
+import { harness, markdown, reading } from './test-support.ts';
 
 const provider = `#!/usr/bin/env bun
 import { randomUUID } from 'node:crypto';
@@ -63,13 +67,309 @@ function contextFromPrompt(prompt: string): Record<string, any> {
   const title = prompt.indexOf('## Current controller launch context');
   const start = prompt.indexOf('```json\n', title);
   const end = prompt.indexOf('\n```', start + 8);
-  if (title < 0 || start < 0 || end < 0) throw new Error('current launch-context JSON is missing from the provider argv');
+  if (title < 0 || start < 0 || end < 0)
+    throw new Error('current launch-context JSON is missing from the provider argv');
   return JSON.parse(prompt.slice(start + 8, end)) as Record<string, any>;
 }
 
 function hash(markdownText: string): string {
   return createHash('sha256').update(markdownText.replace(/\r\n?/g, '\n').trimEnd()).digest('hex');
 }
+
+/** Local persisted-session fixture; it exercises authentication without invoking any provider. */
+function prelaunchOwner(h: ReturnType<typeof harness>, id = 'fixture', sessionId = randomUUID()) {
+  h.store.db.exec('CREATE TABLE IF NOT EXISTS manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+  h.store.db.query('INSERT OR REPLACE INTO manager_sessions VALUES (?, ?)').run(
+    id,
+    JSON.stringify({
+      id,
+      kind: 'managed',
+      provider: 'codex',
+      status: 'running',
+      threadId: sessionId,
+    }),
+  );
+  const env = { GOAL_MANAGER: id, CODEX_THREAD_ID: sessionId };
+  const actor = authenticatedManager(h.store.db, env);
+  if (!actor) throw new Error('persisted owner fixture failed authentication');
+  return { env, actor };
+}
+
+function prelaunchTask(h: ReturnType<typeof harness>, text = markdown) {
+  mkdirSync(join(h.settings.stateDirectory, 'briefs'), { recursive: true });
+  const briefPath = fullBrief(h.root, `ordinary-${randomUUID()}`, text);
+  return h.store.createTask(
+    parseBrief(text, readRiskOwnership(h.settings.riskAreasFile)),
+    {
+      briefPath,
+      worktree: h.root,
+      branch: 'main',
+      base: git(h.root, ['rev-parse', 'HEAD']),
+    },
+    'implementation',
+  );
+}
+
+test('prelaunch amendment authenticates owner and operations, archives current input and preserves one intent and ordinary history', async () => {
+  const h = harness();
+  try {
+    const task = prelaunchTask(h);
+    const ref = { taskId: task.id, attempt: 0 };
+    const owner = prelaunchOwner(h);
+    h.settings.integration.operationsManager = 'operations';
+    const operations = prelaunchOwner(h, 'operations');
+    const intent = h.store.saveRetryIntent(ref, {});
+    h.store.updateTask(ref, (current) => {
+      current.priorityHistory = [
+        { value: 'normal', setter: null, grantor: null, at: task.createdAt, provenance: { kind: 'programmatic' } },
+      ];
+      current.priorityGrants = [];
+    });
+    const original = h.store.task(task.id);
+    const updated = markdown.replace(
+      'Write the requested result and commit it.',
+      'Use the current accepted interface contract.',
+    );
+    const file = fullBrief(h.root, 'owner-amendment', updated);
+    const printed: string[] = [];
+    expect(
+      await runWorkerCommand('amend', [task.id, '--expected-attempt', '0', '--brief', file], {
+        tasks: h.tasks,
+        env: owner.env,
+        print: (value) => printed.push(value),
+      }),
+    ).toBe(0);
+    expect(JSON.parse(printed[0]!)).toMatchObject({
+      taskId: task.id,
+      attempt: 0,
+      status: 'amended',
+      contractSha256: hash(updated),
+    });
+    let current = h.store.task(task.id);
+    expect(current.brief.markdown).toBe(updated);
+    expect(readFileSync(current.briefPath, 'utf8')).toBe(updated);
+    expect(readFileSync(original.briefPath, 'utf8')).toBe(markdown);
+    expect(current.priorityHistory).toEqual(original.priorityHistory);
+    expect(current.priorityGrants).toEqual(original.priorityGrants);
+    expect(h.store.retryIntent(ref)).toEqual(intent);
+    expect(h.store.attempts(task.id)).toEqual([]);
+    expect(
+      h.store
+        .events(task.id, 0)
+        .filter((event) => event.kind === 'prelaunch-contract-amended')
+        .map((event) => JSON.parse(event.body)),
+    ).toEqual([
+      {
+        actor: owner.actor,
+        previous: { path: original.briefPath, sha256: hash(markdown), markdown },
+        current: { path: current.briefPath, sha256: hash(updated), markdown: updated },
+      },
+    ]);
+    const beforeReplay = JSON.stringify(current);
+    expect(h.tasks.amend(task.id, { expectedAttempt: 0, brief: file }, owner.actor).status).toBe('unchanged');
+    expect(JSON.stringify(h.store.task(task.id))).toBe(beforeReplay);
+    const operationsText = updated.replace('current accepted interface', 'latest owner-supplied interface');
+    const operationsFile = fullBrief(h.root, 'operations-amendment', operationsText);
+    expect(h.tasks.amend(task.id, { expectedAttempt: 0, brief: operationsFile }, operations.actor).status).toBe(
+      'amended',
+    );
+    current = h.store.task(task.id);
+    expect(current.brief.manager).toBe(original.brief.manager);
+    expect(current.sequence).toBe(original.sequence);
+    expect(current.priorityHistory).toEqual(original.priorityHistory);
+    expect(current.priorityGrants).toEqual(original.priorityGrants);
+    expect(current.brief.criticalPath).toBe(false);
+    expect(h.store.retryIntent(ref)).toEqual(intent);
+    expect(h.store.attempts(task.id)).toEqual([]);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('prelaunch amendment refuses missing, wrong, ambiguous and stale authority and rolls back failed archival atomically', () => {
+  const h = harness();
+  try {
+    const task = prelaunchTask(h);
+    const owner = prelaunchOwner(h);
+    const stranger = prelaunchOwner(h, 'stranger');
+    const file = fullBrief(h.root, 'refused-amendment', markdown + '\nCurrent input.\n');
+    const options = { expectedAttempt: 0, brief: file };
+    const original = JSON.stringify(h.store.task(task.id));
+    const files = readdirSync(join(h.settings.stateDirectory, 'briefs'));
+    for (const actor of [null, stranger.actor, { ...owner.actor, sessionId: 'obsolete-session' }])
+      expect(() => h.tasks.amend(task.id, options, actor)).toThrow('authenticated');
+    prelaunchOwner(h, 'ambiguous-owner', owner.actor.sessionId);
+    expect(() => h.tasks.amend(task.id, options, owner.actor)).toThrow('unambiguous');
+    h.store.db.query('DELETE FROM manager_sessions WHERE id=?').run('ambiguous-owner');
+    expect(() => h.tasks.amend(task.id, { ...options, expectedAttempt: 1 }, owner.actor)).toThrow('"attempt":0');
+    const critical = fullBrief(
+      h.root,
+      'critical-amendment',
+      (markdown + '\nChanged.\n').replace('criticalPath: false', 'criticalPath: true'),
+    );
+    expect(() => h.tasks.amend(task.id, { ...options, brief: critical }, owner.actor)).toThrow('ordinary priority');
+    const outside = fullBrief(
+      h.root,
+      'unsafe-amendment',
+      markdown.replace('paths: [result.txt]', 'paths: [../escape]'),
+    );
+    expect(() => h.tasks.amend(task.id, { ...options, brief: outside }, owner.actor)).toThrow();
+    h.store.db.exec(`CREATE TRIGGER refuse_amendment BEFORE INSERT ON worker_events
+      WHEN NEW.kind='prelaunch-contract-amended' BEGIN SELECT RAISE(ABORT, 'fixture archival failure'); END`);
+    expect(() => h.tasks.amend(task.id, options, owner.actor)).toThrow('fixture archival failure');
+    expect(JSON.stringify(h.store.task(task.id))).toBe(original);
+    expect(readdirSync(join(h.settings.stateDirectory, 'briefs'))).toEqual(files);
+    expect(h.store.events(task.id, 0).some((event) => event.kind === 'prelaunch-contract-amended')).toBe(false);
+    expect(h.store.attempts(task.id)).toEqual([]);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('prelaunch amendment supports genuinely held zero, preserves frozen input and refuses completed generations', () => {
+  const h = harness();
+  try {
+    const owner = prelaunchOwner(h);
+    const dependency = prelaunchTask(h);
+    const frozenText = markdown + '\n```ts path=result.txt\nunchanged acceptance\n```\n';
+    const task = prelaunchTask(h, frozenText.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`));
+    expect(task.state).toBe('held');
+    const removed = fullBrief(h.root, 'remove-prelaunch-dependency', frozenText + '\nLatest body.\n');
+    expect(h.tasks.amend(task.id, { expectedAttempt: 0, brief: removed }, owner.actor).status).toBe('amended');
+    expect(h.store.task(task.id).state).toBe('ready');
+    const accepted = h.store.task(task.id);
+    const mutated = fullBrief(
+      h.root,
+      'mutated-frozen',
+      (frozenText + '\nNew body.\n').replace('unchanged acceptance', 'changed assertion'),
+    );
+    expect(() => h.tasks.amend(task.id, { expectedAttempt: 0, brief: mutated }, owner.actor)).toThrow(
+      'frozen acceptance',
+    );
+    expect(h.store.task(task.id)).toEqual(accepted);
+    h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
+      current.state = 'integrated';
+    });
+    expect(() => h.tasks.amend(task.id, { expectedAttempt: 0, brief: removed }, owner.actor)).toThrow(
+      '"state":"integrated"',
+    );
+    expect(h.store.attempts(task.id)).toEqual([]);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('prelaunch amendment during first capacity wait delivers exactly the latest canonical contract once through native argv', async () => {
+  const h = harness();
+  const capacity = join(h.settings.stateDirectory, 'capacity.json');
+  let pending: ReturnType<WorkerTasks['retry']> | undefined;
+  try {
+    git(h.root, ['branch', 'dev']);
+    writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'minimal');
+    const task = prelaunchTask(h);
+    const owner = prelaunchOwner(h);
+    const prompts: string[] = [];
+    const tasks = new WorkerTasks(
+      h.settings,
+      h.store,
+      reading,
+      async (store, current, attempt, pool, prompt, codex) => {
+        const [, argv] = launchCommand({ profile: attempt.profile, pool, worktree: current.worktree, prompt, codex });
+        prompts.push(argv.at(-1)!);
+        store.updateAttempt(attempt, (value) => {
+          value.state = 'running';
+        });
+        store.updateTask(attempt, (value) => {
+          value.state = 'running';
+        });
+        return { attempt: store.attempt(attempt), exited: Promise.resolve({ code: 0, signal: null }) };
+      },
+    );
+    writeFileSync(capacity, JSON.stringify({ maxWorkers: 0, minAvailableMiB: 0 }));
+    const intent = h.store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
+    pending = tasks.retry(task.id, { expectedAttempt: 0 });
+    const queue = join(h.settings.stateDirectory, 'capacity-queue');
+    const tickets = readdirSync(queue);
+    expect(tickets).toHaveLength(1);
+    const ticket = readFileSync(join(queue, tickets[0]!), 'utf8');
+    const revisedText = markdown.replace(
+      'Write the requested result and commit it.',
+      'The latest accepted interface includes the restored subject control.',
+    );
+    const revised = fullBrief(h.root, 'capacity-owner-amendment', revisedText);
+    tasks.amend(task.id, { expectedAttempt: 0, brief: revised }, owner.actor);
+    expect(readdirSync(queue)).toEqual(tickets);
+    expect(readFileSync(join(queue, tickets[0]!), 'utf8')).toBe(ticket);
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 0 })).toEqual(intent);
+    expect(h.store.attempts(task.id)).toEqual([]);
+    writeFileSync(capacity, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+    await pending;
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain(revisedText);
+    expect(prompts[0]).not.toContain('Write the requested result and commit it.');
+    expect(prompts[0]).toContain('checks:[]');
+    expect(contextFromPrompt(prompts[0]!).task).toMatchObject({
+      attempt: 1,
+      contractSha256: hash(revisedText),
+      contractProof: 'verified',
+    });
+    const current = h.store.task(task.id);
+    const currentAttempt = h.store.attempt({ taskId: task.id, attempt: 1 });
+    expect(() => tasks.amend(task.id, { expectedAttempt: 0, brief: revised }, owner.actor)).toThrow('"attempt":1');
+    expect(() => tasks.amend(task.id, { expectedAttempt: 1, brief: revised }, owner.actor)).toThrow(
+      '"attemptState":"running"',
+    );
+    expect(h.store.task(task.id)).toEqual(current);
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 })).toEqual(currentAttempt);
+    expect(h.store.attempts(task.id)).toHaveLength(1);
+    expect(prompts).toHaveLength(1);
+  } finally {
+    writeFileSync(capacity, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+    if (pending) await pending.catch(() => {});
+    h.dispose();
+  }
+});
+
+test('current prompt accounting preserves adopted elapsed waits without borrowing earlier-turn log output or waits', () => {
+  const h = harness();
+  try {
+    const task = prelaunchTask(h);
+    const ref = { taskId: task.id, attempt: 0 };
+    const logPath = join(h.settings.stateDirectory, 'accounting.jsonl');
+    const waitPath = logPath.replace(/\.jsonl$/, '.check-wait');
+    const now = Date.now();
+    const promptStart = now - 350;
+    writeFileSync(logPath, 'earlier turn output\n');
+    utimesSync(logPath, new Date(now - 60_000), new Date(now - 60_000));
+    const offset = statSync(logPath).size;
+    writeFileSync(waitPath, '60000\n350\n');
+    h.store.event(ref, 'worker-run-started', { logStartOffset: offset, checkWaitBaseline: 60000 });
+    h.store.db
+      .query("UPDATE worker_events SET at=? WHERE task_id=? AND kind='worker-run-started'")
+      .run(new Date(promptStart).toISOString(), task.id);
+    const attempt = { ...ref, logPath, startedAt: new Date(now - 120_000).toISOString() } as Attempt;
+    const baseline = workerActivityBaseline(h.store, attempt, now);
+    expect(baseline.startedAt).toBe(promptStart);
+    expect(baseline.logStartOffset).toBe(offset);
+    expect(baseline.lastLogActivityAt).toBe(promptStart);
+    expect(baseline.checkWaitBaseline).toBe(60000);
+    expect(baseline.checkWaitAtLastLogActivity).toBe(60000);
+    appendFileSync(waitPath, '200\n');
+    // Restart retains elapsed time and both waits; it does not start a new silence window.
+    const adopted = workerActivityBaseline(h.store, attempt, now + 250);
+    expect(adopted.startedAt).toBe(promptStart);
+    expect(adopted.lastLogActivityAt).toBe(promptStart);
+    expect(adopted.checkWaitAtLastLogActivity).toBe(60000);
+    expect(now + 250 - adopted.lastLogActivityAt - (60550 - adopted.checkWaitAtLastLogActivity)).toBe(50);
+    // A large historical wait may cover only the actual silent interval at adoption.
+    writeFileSync(waitPath, '60000\n60000\n');
+    expect(120000 - workerActivityBaseline(h.store, attempt, now).checkWaitAtLastLogActivity).toBe(350);
+    writeFileSync(waitPath, '60000\n');
+    expect(workerActivityBaseline(h.store, attempt, now).checkWaitAtLastLogActivity).toBe(60000);
+  } finally {
+    h.dispose();
+  }
+});
 
 function initialBrief(root: string, name: string, body: string): string {
   const path = join(root, `.temp/goal/${name}.md`);
@@ -113,12 +413,7 @@ function integratedDependency(h: ReturnType<typeof harness>, filename: string): 
   return { id: dependency.id, commit };
 }
 
-function replaceTaskContract(
-  h: ReturnType<typeof harness>,
-  taskId: string,
-  attempt: number,
-  text: string,
-): void {
+function replaceTaskContract(h: ReturnType<typeof harness>, taskId: string, attempt: number, text: string): void {
   const path = join(h.settings.stateDirectory, 'briefs', `launch-context-${randomUUID()}.md`);
   writeFileSync(path, text);
   const brief = parseBrief(text, readRiskOwnership(h.settings.riskAreasFile));
@@ -220,7 +515,10 @@ test('fresh and normal retry argv carry current contract identity and supersede 
     mkdirSync(evidence, { recursive: true });
     writeFileSync(
       join(evidence, 'failure.json'),
-      JSON.stringify({ manifest: 'Historical future-tense retry manifest: cleanup must merge before work; return waiting with checks [].' }),
+      JSON.stringify({
+        manifest:
+          'Historical future-tense retry manifest: cleanup must merge before work; return waiting with checks [].',
+      }),
     );
     const amendmentOne = amendedBrief(h.root, 'retry-one', dependency.id, 'Use contract amendment one.');
     await job.start(task.id, { brief: amendmentOne, evidence });
@@ -306,7 +604,12 @@ test('held release resumes old sessions once with actual dependency source recei
     }
 
     const firstRevision = amendedBrief(h.root, 'held-first-v1', dependency.id, 'Use the first contract amendment.');
-    const latestRevision = amendedBrief(h.root, 'held-first-v2', dependency.id, 'Use the latest contract after cleanup.');
+    const latestRevision = amendedBrief(
+      h.root,
+      'held-first-v2',
+      dependency.id,
+      'Use the latest contract after cleanup.',
+    );
     const secondRevision = amendedBrief(h.root, 'held-second-v1', dependency.id, 'Use the released task contract.');
     h.tasks.queueRetry(first.id, { brief: firstRevision });
     h.tasks.queueRetry(first.id, { brief: latestRevision });
@@ -454,7 +757,8 @@ test('a same-session wake replaces stale remote policy with the complete amended
     expect(initial.prompt).toContain('The native marker timestamp unit is epoch milliseconds.');
     const originalBriefPath = h.store.task(activeTask.id).briefPath;
 
-    const currentCommand = 'bun scripts/performance/admission-local.ts && bun scripts/performance/native-marker-local.ts';
+    const currentCommand =
+      'bun scripts/performance/admission-local.ts && bun scripts/performance/native-marker-local.ts';
     const currentText = contractRevision(
       [
         'BEGIN_WAITING_SESSION',
@@ -484,7 +788,9 @@ test('a same-session wake replaces stale remote policy with the complete amended
     expect(resumed.prompt).not.toContain(initialText);
     expect(resumed.prompt).toContain('The full canonical contract below');
     expect(resumed.prompt).toContain('supersedes conflicting saved-session instructions');
-    expect(resumed.prompt).toContain('Native marker timestamp unit correction: marker timestamps are epoch microseconds');
+    expect(resumed.prompt).toContain(
+      'Native marker timestamp unit correction: marker timestamps are epoch microseconds',
+    );
     expect(resumed.prompt).toContain('Run the acceptance command in the foreground from the worktree root');
     expect(resumed.prompt).not.toContain(remoteCommand);
     expect(resumed.prompt).not.toContain('The native marker timestamp unit is epoch milliseconds.');
@@ -521,7 +827,10 @@ test('a capacity waiter launches from the latest canonical contract snapshot', a
   const capacityPath = join(h.settings.stateDirectory, 'capacity.json');
   let launch: Promise<void> | undefined;
   try {
-    const initialText = contractRevision('Initial contract before capacity admission.', 'bun scripts/initial-local-check.ts');
+    const initialText = contractRevision(
+      'Initial contract before capacity admission.',
+      'bun scripts/initial-local-check.ts',
+    );
     const initialPath = fullBrief(h.root, 'capacity-canonical-old', initialText);
     const task = h.tasks.dispatch(initialPath);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
@@ -623,7 +932,9 @@ test('unknown, cancelled, missing and absent dependency source proofs are never 
     const afterDependency = amendedBrief(h.root, 'source-proof', dependency.id, 'Inspect current source proof.');
     replaceTaskContract(h, task.id, 1, readFileSync(afterDependency, 'utf8'));
 
-    const absent = underLease(h, task.id, () => captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'));
+    const absent = underLease(h, task.id, () =>
+      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
+    );
     expect(absent.dependencies.receipts[0]).toMatchObject({
       state: 'integrated',
       completion: 'integrated',
@@ -636,7 +947,9 @@ test('unknown, cancelled, missing and absent dependency source proofs are never 
     h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
       current.state = 'cancelled';
     });
-    const cancelled = underLease(h, task.id, () => captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'));
+    const cancelled = underLease(h, task.id, () =>
+      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
+    );
     expect(cancelled.dependencies.receipts[0]).toMatchObject({
       state: 'cancelled',
       completion: 'not-integrated',
@@ -670,7 +983,9 @@ test('unknown, cancelled, missing and absent dependency source proofs are never 
 
     const missingContract = amendedBrief(h.root, 'missing-source-proof', 'missing-task', 'Unknown dependency.');
     replaceTaskContract(h, task.id, 1, readFileSync(missingContract, 'utf8'));
-    const missing = underLease(h, task.id, () => captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'));
+    const missing = underLease(h, task.id, () =>
+      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
+    );
     expect(missing.dependencies.receipts[0]).toMatchObject({
       id: 'missing-task',
       state: 'missing',
@@ -729,7 +1044,10 @@ test('adopting an imported legacy attempt emits current metadata in the actual r
       logPath,
       [
         JSON.stringify({ type: 'thread.started', thread_id: 'legacy-session' }),
-        JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'RESULT: historical completion' } }),
+        JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: 'RESULT: historical completion' },
+        }),
         JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 4, output_tokens: 1 } }),
       ].join('\n') + '\n',
     );

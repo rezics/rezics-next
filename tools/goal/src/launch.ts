@@ -336,6 +336,41 @@ export function checkWaitMs(logPath: string): number {
     return 0;
   }
 }
+/** Reconstruct the current prompt's clock, including on adoption; earlier turns cannot buy this turn silence. */
+export function workerActivityBaseline(store: WorkerStore, ref: Attempt, now = Date.now()) {
+  const event = store.events(ref.taskId, ref.attempt).findLast((event) => event.kind === 'worker-run-started');
+  let metadata: { logStartOffset?: unknown; checkWaitBaseline?: unknown } = {};
+  try {
+    metadata = event ? JSON.parse(event.body) : {};
+    if (!metadata || typeof metadata !== 'object') metadata = {};
+  } catch {
+    // Imported attempts may have no prompt-boundary metadata.
+  }
+  const nonnegative = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const logStartOffset = nonnegative(metadata.logStartOffset) ? (metadata.logStartOffset as number) : 0;
+  const checkWaitBaseline = nonnegative(metadata.checkWaitBaseline) ? (metadata.checkWaitBaseline as number) : 0;
+  const recordedStart = event ? Date.parse(event.at) : NaN;
+  const startedAt = Number.isFinite(recordedStart)
+    ? Math.max(Date.parse(ref.startedAt), Math.min(now, recordedStart))
+    : Date.parse(ref.startedAt);
+  const stat = statSync(ref.logPath, { throwIfNoEntry: false });
+  const lastLogSize = stat?.size ?? 0;
+  const lastLogMtime = stat?.mtimeMs ?? 0;
+  const lastLogActivityAt =
+    lastLogSize > logStartOffset ? Math.max(startedAt, Math.min(now, lastLogMtime || now)) : startedAt;
+  const totalWait = checkWaitMs(ref.logPath);
+  // Preserve waits already recorded during the silent interval, capped to that interval and this prompt's waits.
+  const creditedWait = Math.min(Math.max(0, totalWait - checkWaitBaseline), Math.max(0, now - lastLogActivityAt));
+  return {
+    startedAt,
+    logStartOffset,
+    checkWaitBaseline,
+    lastLogSize,
+    lastLogMtime,
+    lastLogActivityAt,
+    checkWaitAtLastLogActivity: totalWait - creditedWait,
+  };
+}
 export type RunningWorker = {
   child?: ChildProcess;
   exited: Promise<WorkerExit>;
@@ -656,7 +691,11 @@ export async function launch(
   try {
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
     store.write(attempt, () => {
-      store.event(attempt, 'worker-run-started', { logStartOffset, resuming });
+      store.event(attempt, 'worker-run-started', {
+        logStartOffset,
+        resuming,
+        checkWaitBaseline: checkWaitMs(attempt.logPath),
+      });
       const driver = processIdentity();
       if (!driver) throw new Error('Cannot identify driver process');
       // The wrapper cannot report a missing program to the launcher, so refuse it here.

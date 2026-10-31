@@ -14,6 +14,7 @@ import type { LandingQueue, ManagerInbox } from './contracts.ts';
 import type { AttemptRecord, Effort, Settings, Task, Tokens } from './types.ts';
 import { devVerificationState } from './dev-verifier.ts';
 import { authenticatedCallingManager } from './integration-cli.ts';
+import { authenticatedManager } from './priority-authority.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -63,6 +64,19 @@ export async function runWorkerCommand(
       if (task.state === 'held') return 0;
       // The first start only: if the host already started the task, this command leaves it alone.
       await job.start(task.id, { expectedAttempt: 0 });
+    } else if (command === 'amend') {
+      let brief: string | undefined;
+      let expectedAttempt: number | undefined;
+      for (let index = 1; index < argv.length; index += 2) {
+        const flag = argv[index],
+          value = argv[index + 1];
+        if (flag === '--brief' && value && brief === undefined) brief = value;
+        else if (flag === '--expected-attempt' && value === '0' && expectedAttempt === undefined) expectedAttempt = 0;
+        else throw new Error('usage: amend <task> --expected-attempt 0 --brief <file>');
+      }
+      if (!arg || expectedAttempt !== 0 || !brief)
+        throw new Error('usage: amend <task> --expected-attempt 0 --brief <file>');
+      print(JSON.stringify(tasks.amend(arg, { expectedAttempt, brief }, authenticatedManager(store.db, env) ?? null)));
     } else if (command === 'status') {
       if (argv.length > 1) throw new Error('usage: status [task]');
       const show = (task: Task) =>

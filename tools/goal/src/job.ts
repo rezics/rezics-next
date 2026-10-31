@@ -59,7 +59,7 @@ import {
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt, Task } from './types.ts';
 import type { RunningWorker } from './launch.ts';
-import { capacityWaiters, checkWaitMs, launch, workerPrompt } from './launch.ts';
+import { capacityWaiters, checkWaitMs, launch, workerPrompt, workerActivityBaseline } from './launch.ts';
 import { awaitHostCapacity, startsFirst } from './launch.ts';
 import { agentAdapter, agentCommands } from './agents.ts';
 import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetime.ts';
@@ -87,30 +87,30 @@ const CHECK_LOG_PATH_PREFIX = '.temp/goal/checks/worker-check-';
 const CHECK_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function singleLine(value: unknown, limit: number): string {
-  return String(value).replace(/[\r\n\0]+/g, ' ').slice(0, limit);
+  return String(value)
+    .replace(/[\r\n\0]+/g, ' ')
+    .slice(0, limit);
 }
 
 function checkCommand(value: Record<string, unknown>): string {
   const argv = value.argv;
-  if (Array.isArray(argv) && argv.every((part) => typeof part === 'string'))
-    return JSON.stringify(argv).slice(0, 1200);
+  if (Array.isArray(argv) && argv.every((part) => typeof part === 'string')) return JSON.stringify(argv).slice(0, 1200);
   if (typeof value.command === 'string') return singleLine(value.command, 1200);
   return 'unknown (terminal record did not include argv)';
 }
 
-function ownedTerminalLogPath(task: Task, id: string, value: Record<string, unknown>):
-  | { path: string; original: string }
-  | { path: null; original: string; reason: string } {
+function ownedTerminalLogPath(
+  task: Task,
+  id: string,
+  value: Record<string, unknown>,
+): { path: string; original: string } | { path: null; original: string; reason: string } {
   const raw = value.log ?? value.logPath ?? value.log_path;
-  const original = typeof raw === 'string' ? singleLine(raw, 1000) : 'unknown (terminal record did not include a log path)';
+  const original =
+    typeof raw === 'string' ? singleLine(raw, 1000) : 'unknown (terminal record did not include a log path)';
   const unknown = (reason: string) => ({ path: null, original, reason });
   if (!CHECK_UUID.test(id)) return unknown('check id is not a bare UUID');
   if (value.id !== id) return unknown('terminal record identity does not match the owned check UUID');
-  if (
-    typeof value.cwd !== 'string' ||
-    !isAbsolute(value.cwd) ||
-    resolve(value.cwd) !== resolve(task.worktree)
-  )
+  if (typeof value.cwd !== 'string' || !isAbsolute(value.cwd) || resolve(value.cwd) !== resolve(task.worktree))
     return unknown('terminal record cwd does not match this task worktree');
   if (
     String(value.status ?? '').toLowerCase() !== 'finished' ||
@@ -135,11 +135,7 @@ function ownedTerminalLogPath(task: Task, id: string, value: Record<string, unkn
   const path = resolve(task.worktree, raw);
   const checksDirectory = resolve(task.worktree, '.temp/goal/checks');
   const relativePath = relative(resolve(task.worktree), path).replaceAll('\\', '/');
-  if (
-    dirname(path) !== checksDirectory ||
-    relativePath !== normalized ||
-    basename(path) !== `worker-check-${id}.log`
-  )
+  if (dirname(path) !== checksDirectory || relativePath !== normalized || basename(path) !== `worker-check-${id}.log`)
     return unknown('log path is nested or does not match this check UUID');
 
   try {
@@ -162,21 +158,16 @@ function ownedTerminalLogPath(task: Task, id: string, value: Record<string, unkn
   return { path, original };
 }
 
-function terminalCheckFailureEvidence(
-  task: Task,
-  id: string,
-  value: Record<string, unknown>,
-  status: unknown,
-): string {
+function terminalCheckFailureEvidence(task: Task, id: string, value: Record<string, unknown>, status: unknown): string {
   const command = checkCommand(value);
-  const exitValue = value.exitStatus ?? value.exit_status ?? value.exitCode ?? value.exit_code ?? value.exit ?? value.code;
+  const exitValue =
+    value.exitStatus ?? value.exit_status ?? value.exitCode ?? value.exit_code ?? value.exit ?? value.code;
   const exitCode = Number(exitValue);
   const log = ownedTerminalLogPath(task, id, value);
   const header = `check ${id} failure evidence: command ${command}; exit status ${singleLine(status, 80)}; evidence path ${log.original}`;
   if (!Number.isSafeInteger(exitCode) || exitCode === 0 || exitCode !== Number(status))
     return `${header}; excerpt unknown (terminal record exit status is missing or inconsistent).`;
-  if (log.path === null)
-    return `${header}; excerpt unknown (${log.reason}); original path ${log.original}.`;
+  if (log.path === null) return `${header}; excerpt unknown (${log.reason}); original path ${log.original}.`;
 
   let descriptor: number | undefined;
   try {
@@ -594,9 +585,8 @@ export class WorkerJob implements GateOutcomeSink {
   private async resumeWaiting(attempt: Attempt, task: Task, message: string): Promise<void> {
     const ref = { taskId: attempt.taskId, attempt: attempt.attempt };
     const failureCount = () =>
-      this.tasks.store
-        .events(ref.taskId, ref.attempt)
-        .filter((event) => event.kind === 'waiting-resume-launch-failed').length;
+      this.tasks.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'waiting-resume-launch-failed')
+        .length;
     const lastFailure = () => {
       const event = this.tasks.store
         .events(ref.taskId, ref.attempt)
@@ -700,12 +690,7 @@ export class WorkerJob implements GateOutcomeSink {
           });
         });
         if (task.brief.kind === 'verification' || count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
-          await this.endAsEnvironment(
-            ref,
-            new Error(errorLine),
-            lease !== undefined,
-            true,
-          );
+          await this.endAsEnvironment(ref, new Error(errorLine), lease !== undefined, true);
           return;
         }
         continue;
@@ -719,12 +704,7 @@ export class WorkerJob implements GateOutcomeSink {
       const count = failureCount();
       if (count === before) return;
       if (task.brief.kind === 'verification' || count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
-        await this.endAsEnvironment(
-          ref,
-          new Error(lastFailure()),
-          false,
-          true,
-        );
+        await this.endAsEnvironment(ref, new Error(lastFailure()), false, true);
         return;
       }
     }
@@ -736,7 +716,7 @@ export class WorkerJob implements GateOutcomeSink {
       await this.endAsEnvironment(worker.attempt, error);
     }
   }
-  private async followAttempt(worker: Pick<RunningWorker, 'attempt' | 'exited'>, adopted = false): Promise<void> {
+  private async followAttempt(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
     const ref = worker.attempt,
       store = this.tasks.store;
     const task = store.task(ref.taskId);
@@ -748,15 +728,8 @@ export class WorkerJob implements GateOutcomeSink {
     const silenceMs = this.tasks.settings.silenceMs ?? SILENCE_WINDOW_MS;
     let silenceFailure: string | undefined;
     let silenceStopping: Promise<void> | undefined;
-    const initialStat = statSync(ref.logPath, { throwIfNoEntry: false });
-    let lastLogSize = initialStat?.size ?? 0;
-    let lastLogMtime = initialStat?.mtimeMs ?? 0;
-    let lastLogActivityAt = initialStat?.size
-      ? Math.max(Date.parse(ref.startedAt), Math.min(Date.now(), lastLogMtime || Date.now()))
-      : Date.parse(ref.startedAt);
-    let checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
-    if (adopted)
-      checkWaitAtLastLogActivity = Math.max(0, checkWaitAtLastLogActivity - (Date.now() - lastLogActivityAt));
+    const activity = workerActivityBaseline(store, ref);
+    let { lastLogSize, lastLogMtime, lastLogActivityAt, checkWaitAtLastLogActivity } = activity;
     const checkSilence = () => {
       if (silenceStopping || silenceFailure) return;
       try {
@@ -828,7 +801,10 @@ export class WorkerJob implements GateOutcomeSink {
     };
     // Time spent waiting for or running a check does not count against the class limit: workers do no model work while
     // the check wrapper is silent.
-    const remainingMs = () => limits.maxMs + checkWaitMs(ref.logPath) - (Date.now() - Date.parse(ref.startedAt));
+    const remainingMs = () =>
+      limits.maxMs +
+      Math.max(0, checkWaitMs(ref.logPath) - activity.checkWaitBaseline) -
+      (Date.now() - activity.startedAt);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const silenceTimer = setInterval(checkSilence, Math.max(1, Math.min(SILENCE_CHECK_MS, silenceMs)));
     const scheduleLimit = () => {
@@ -843,14 +819,18 @@ export class WorkerJob implements GateOutcomeSink {
           const attempt = store.attempt(ref);
           // Only CLIs that stream their log can be judged by it; Cursor's agent writes its log once, at the end.
           if (!agentAdapter(attempt.profile.cli).streamsLog) return;
-          if (attempt.state !== 'running' || (statSync(ref.logPath, { throwIfNoEntry: false })?.size ?? 0) > 0) return;
+          if (
+            attempt.state !== 'running' ||
+            (statSync(ref.logPath, { throwIfNoEntry: false })?.size ?? 0) > activity.logStartOffset
+          )
+            return;
           console.error(`Worker ${ref.taskId} attempt ${ref.attempt} wrote nothing; stopping it so it is retried.`);
           void terminateProcessGroup(attempt.process ?? null, this.tasks.settings.terminationGraceMs).catch(() => {});
         } catch {
           /* A superseded attempt needs no check. */
         }
       },
-      Math.max(0, (this.tasks.settings.startGraceMs ?? START_GRACE_MS) - (Date.now() - Date.parse(ref.startedAt))),
+      Math.max(0, (this.tasks.settings.startGraceMs ?? START_GRACE_MS) - (Date.now() - activity.startedAt)),
     );
     try {
       watcher = watchOrPoll(
@@ -1372,7 +1352,7 @@ export class WorkerJob implements GateOutcomeSink {
               const exited = (attempt.process ? waitForProcessGroup(attempt.process) : Promise.resolve()).then(() =>
                 readWorkerExit(attempt.logPath),
               );
-              await this.followAttempt({ attempt, exited }, true);
+              await this.followAttempt({ attempt, exited });
             } catch (error) {
               await this.endAsEnvironment(ref, error);
             }
