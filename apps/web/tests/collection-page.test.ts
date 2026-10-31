@@ -12,8 +12,9 @@ import { m } from '../src/paraglide/messages.js';
 import { collectionStoryMembers } from '../src/kernel/fake/collection-stories';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 import subjectRecording from '../src/kernel/recorded/subject.json';
-import { parseListPresentation } from '@rezics/ui/cover';
+import { defaultCoverRatio, parseListPresentation, placeholderColors } from '@rezics/ui/cover';
 import { pickText } from '@rezics/composition';
+import { coverSrc } from '../src/media/cover-src';
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
 const { CollectionPage } = await import('../src/library/collection-page');
@@ -63,7 +64,7 @@ async function render(data = page, cursor?: string) {
   }
 }
 
-test('Collection phone first screen shows useful members beneath a compact truthful hero and one toolbar without unsupported controls internal status or duplicate title navigation', async () => {
+test('The Collection identity keeps its own cover frame and shared placeholder when its own art is absent', async () => {
   // The SignedIn story measures the first real row and the single toolbar at phone390.
   // This render covers the same composition and disclosure in every launch locale.
   const previousLocale = getLocale();
@@ -78,7 +79,9 @@ test('Collection phone first screen shows useful members beneath a compact truth
       expect(hero).toContain(m.library_visibility_public());
       expect(hero).not.toContain(m.library_member_count({ count: 0 }));
       expect(hero).not.toContain(m.library_member_count({ count: 4 }));
-      expect(hero).not.toContain('data-collection-cover-source');
+      expect(hero).toContain('data-collection-cover-source="pending"');
+      expect(hero).toContain('data-state="placeholder"');
+      expect(hero).toContain(`data-ratio="${defaultCoverRatio}"`);
       expect(html.match(/<h1\b/g)).toHaveLength(1);
       expect(html).not.toContain('data-library-navigation-phone');
       expect(html).not.toContain('data-library-navigation-desktop');
@@ -109,6 +112,43 @@ test('Collection phone first screen shows useful members beneath a compact truth
     expect(html).toContain(m.library_member_count({ count: 4 }));
   } finally {
     setLocale(previousLocale, { reload: false });
+  }
+
+  const ownCover = subjectOf(subjectRecording.summary)!.cover!;
+  const member = collectionStoryMembers.find((member) => {
+    const cover = member.subject.cover;
+    return cover && cover.media !== ownCover.media;
+  })!;
+  expect(member.subject.cover).not.toBeNull();
+  for (const cover of [ownCover, null, undefined]) {
+    const html = await render({
+      ...page,
+      cover,
+      coverSource: cover ? 'owner' : 'none',
+      members: [{ ...member, subject: subjectOf(member.subject) }],
+    });
+    const hero = html.match(/<header\b[^>]*data-slot="collection-hero"[\s\S]*?<\/header>/)?.[0] ?? '';
+    expect(hero.match(/data-slot="cover"/g)).toHaveLength(1);
+    expect(hero).toContain('w-16 shrink-0 sm:w-24');
+    expect(hero).toContain(`data-ratio="${defaultCoverRatio}"`);
+    expect(hero).toContain('data-size="fill"');
+    expect(html).toContain(member.subject.cover!.media);
+    expect(hero).not.toContain(member.subject.cover!.media);
+    if (cover) {
+      expect(hero).toContain('data-collection-cover-source="owner"');
+      expect(hero).toContain(`src="${coverSrc(cover.media, 'webp', 320)}"`);
+      expect(hero).toContain('alt=""');
+      expect(hero).not.toContain('data-slot="cover-placeholder-title"');
+    } else {
+      expect(hero).toContain('data-collection-cover-source="none"');
+      expect(hero).toContain('data-state="placeholder"');
+      expect(hero).toContain('data-slot="cover-placeholder-title"');
+      expect(hero).toContain(page.title);
+      expect(hero).toContain(placeholderColors({ id: page.id }).background);
+      expect(hero).toContain('aria-hidden="true"');
+      expect(hero).not.toContain('<img');
+      expect(hero).not.toContain(ownCover.media);
+    }
   }
 });
 

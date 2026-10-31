@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { PageStory, PatternStory, libraryCollectionReady, pagePaths, pageReady } from './page';
 import { pickText } from '@rezics/composition';
-import { parseListPresentation } from '@rezics/ui/cover';
+import { defaultCoverRatio, parseListPresentation } from '@rezics/ui/cover';
 import { CollectionReadMembers } from '../library/collection-page';
 import { subjectOf, type CollectionMember } from '../library/reads';
 import { getLocale } from '../paraglide/runtime.js';
@@ -132,6 +132,13 @@ async function compactCollectionReady(context: { canvasElement: HTMLElement }) {
   const hero = context.canvasElement.querySelector<HTMLElement>('[data-slot="collection-hero"]');
   const toolbar = context.canvasElement.querySelector<HTMLElement>('[data-slot="collection-toolbar"]');
   await expect(hero).toBeVisible();
+  const identityCover = hero!.querySelector('[data-slot="cover"]');
+  await expect(identityCover).toHaveAttribute('data-state', 'placeholder');
+  await expect(identityCover).toHaveAttribute('data-ratio', defaultCoverRatio);
+  await expect(identityCover!.querySelector('[data-slot="cover-placeholder-title"]')).toHaveTextContent(
+    'Books I come back to',
+  );
+  await expect(identityCover!.querySelector('img')).toBeNull();
   await expect(toolbar).toBeVisible();
   const view = context.canvasElement.ownerDocument.defaultView!;
   if (view.innerWidth === 390) {
@@ -597,10 +604,17 @@ export const UnlistedVisitor: Story = {
 export const PublicVisitor: Story = {
   name: 'Signed out, public collection',
   tags: ['!dev'],
-  render: () => render('public', 'Signed Out'),
+  render: () => render('presentation', 'Signed Out'),
   play: async (context) => {
     const view = await detailReady(context);
     await view.findByRole('link', { name: 'The Tale of Genji' });
+    const identity = context.canvasElement.querySelector('[data-collection-cover-source="owner"]');
+    await expect(identity).toBeVisible();
+    await expect(identity!.querySelector('[data-slot="cover"]')).toHaveAttribute('data-ratio', defaultCoverRatio);
+    await expect(identity!.querySelector('img')).toHaveAttribute(
+      'src',
+      `/media/${subjectRecording.summary.cover.media}/webp-320`,
+    );
   },
 };
 

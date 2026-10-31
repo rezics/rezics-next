@@ -638,22 +638,20 @@ export function CollectionPage({
       <article className="w-full min-w-0 space-y-4 sm:space-y-5">
         <header data-slot="collection-hero" className="min-w-0 space-y-3 rounded-2xl bg-card p-4 sm:p-5">
           <div className="flex min-w-0 items-start gap-3">
-            {page.cover ? (
-              <div className="w-16 shrink-0 sm:w-24" data-collection-cover-source={page.coverSource}>
-                <Cover
-                  subject={{ id: page.id, title: page.title, types: [] }}
-                  cover={page.cover}
-                  size="fill"
-                  src={coverSrc}
-                  decorative
-                  ratio={collectionMemberRatio(
-                    page.presentationKind ? { type: page.presentationKind } : null,
-                    page.typeRatios,
-                    page.listPresentations,
-                  )}
-                />
-              </div>
-            ) : null}
+            <div className="w-16 shrink-0 sm:w-24" data-collection-cover-source={page.coverSource}>
+              <Cover
+                subject={{ id: page.id, title: page.title, types: [] }}
+                cover={page.cover ?? null}
+                size="fill"
+                src={coverSrc}
+                decorative
+                ratio={collectionMemberRatio(
+                  page.presentationKind ? { type: page.presentationKind } : null,
+                  page.typeRatios,
+                  page.listPresentations,
+                )}
+              />
+            </div>
             <div className="min-w-0 flex-1 space-y-2">
               <h1 className="text-2xl leading-tight font-semibold tracking-tight [overflow-wrap:anywhere] sm:text-3xl">
                 {page.title}
