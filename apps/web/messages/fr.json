@@ -1,4 +1,12 @@
 {
+  "library_collections_cursor_reset": "La page enregistrée a expiré. Cette vue reprend maintenant à la première page.",
+  "library_collections_preparing": "Vos collections sont en cours de préparation. Réessayez dans un instant.",
+  "library_collections_read_failed": "Impossible de charger vos collections. Réessayez cette page.",
+  "library_collections_retry": "Réessayer",
+  "library_collections_page_empty": "Cette page ne contient aucune collection. Revenez à la première page pour voir vos collections.",
+  "library_collections_start": "Créez une collection pour regrouper les éléments que vous souhaitez garder ensemble.",
+  "library_collections_start_unavailable": "La création de collections est indisponible pour le moment. Vous pouvez continuer à explorer.",
+  "library_collections_first_page": "Première page",
   "content_edition_creator_unknown": "Auteur indisponible",
   "content_edition_not_published": "Cette édition n’a pas été publiée et ne peut pas être lue.",
   "content_edition_purchases": "Retour aux achats",

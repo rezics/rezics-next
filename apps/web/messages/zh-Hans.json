@@ -1,4 +1,12 @@
 {
+  "library_collections_cursor_reset": "保存的分页已失效，此视图现在从第一页开始。",
+  "library_collections_preparing": "正在准备你的收藏集，请稍后重试此页。",
+  "library_collections_read_failed": "无法加载你的收藏集，请重试此页。",
+  "library_collections_retry": "重试",
+  "library_collections_page_empty": "此页没有收藏集。请返回第一页查看你的收藏集。",
+  "library_collections_start": "创建收藏集，把想放在一起的条目整理起来。",
+  "library_collections_start_unavailable": "目前无法创建收藏集，你仍可继续探索。",
+  "library_collections_first_page": "第一页",
   "content_edition_creator_unknown": "创作者信息不可用",
   "content_edition_not_published": "此版本尚未发布，无法阅读。",
   "content_edition_purchases": "返回购买记录",

@@ -1,11 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useQuery } from '@tanstack/react-query';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { completePendingCollectionCreate, setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { PageStory, pagePaths, pageReady } from './page';
+import { PageStory, PatternStory, pagePaths, pageReady } from './page';
+import { MineCollectionsPageView } from '../library/mine-collections-page';
+import { readMineCollectionsPage } from '../library/mine-collections-route';
+import { readLibraryPinsPage } from '../library/pins-read';
 import collectionRecording from '../kernel/recorded/library-collection.json';
+import collectionsRecording from '../kernel/recorded/library-collections.json';
 
 const meta = { title: 'Pages/Library/Collections', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -62,6 +67,10 @@ export const NoCollections: Story = {
   play: async (context) => {
     await collectionsReady(context);
     await expect(within(context.canvasElement).getByText(m.library_collections_empty())).toBeVisible();
+    await expect(await within(context.canvasElement).findByText(m.library_collections_start())).toBeVisible();
+    await expect(
+      await within(context.canvasElement).findByRole('link', { name: m.library_collection_new() }),
+    ).toHaveAttribute('href', `/${getLocale()}/collections/new`);
   },
 };
 
@@ -181,7 +190,9 @@ export const Unavailable: Story = {
     }),
   play: async (context) => {
     await pageReady(context);
-    await expect(within(context.canvasElement).getByRole('heading', { name: m.error_heading() })).toBeVisible();
+    await expect(
+      within(context.canvasElement).getByRole('heading', { level: 1, name: m.library_collections_heading() }),
+    ).toBeVisible();
     await expect(
       within(context.canvasElement).getAllByText(m.library_collections_unavailable(), { exact: true }),
     ).toHaveLength(1);
@@ -198,7 +209,12 @@ export const Error: Story = {
     }),
   play: async (context) => {
     await pageReady(context);
-    await expect(within(context.canvasElement).getByRole('heading', { name: m.error_heading() })).toBeVisible();
+    await expect(
+      within(context.canvasElement).getByRole('heading', { level: 1, name: m.library_collections_heading() }),
+    ).toBeVisible();
+    await expect(within(context.canvasElement).getByRole('alert')).toHaveTextContent(
+      m.library_collections_read_failed(),
+    );
   },
 };
 
@@ -530,6 +546,78 @@ export const CollectionsAndPinsUnavailable: Story = {
     const main = within(within(context.canvasElement).getByRole('main'));
     await expect(main.getAllByText(m.library_collections_unavailable(), { exact: true })).toHaveLength(1);
     await expect(main.getAllByText(m.library_pin_read_failed(), { exact: true })).toHaveLength(1);
-    await expect(main.getByRole('link', { name: m.library_follow_retry() })).toBeVisible();
+    await expect(main.getByRole('link', { name: m.library_collections_retry() })).toBeVisible();
+  },
+};
+
+export const HealthyPinsCollectionsRecovery: Story = {
+  name: 'Healthy pins, retry Collections',
+  render: () =>
+    render('none', '/library/collections?layout=previews&cursor=requested-page', {
+      pinCount: 1,
+      builtins: 'none',
+      collectionCount: 0,
+      collectionsUnavailable: true,
+    }),
+  play: async (context) => {
+    await collectionsReady(context);
+    const main = within(within(context.canvasElement).getByRole('main'));
+    await expect(main.getAllByText(m.library_collections_unavailable(), { exact: true })).toHaveLength(1);
+    await expect(main.queryByText(m.library_pin_read_failed())).toBeNull();
+    const retry = main.getByRole('link', { name: m.library_collections_retry() });
+    await expect(retry).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library/collections?layout=previews&cursor=requested-page`,
+    );
+    const pin = context.canvasElement.querySelector('[data-library-navigation-desktop] a[data-library-pin]');
+    await expect(pin).toHaveAttribute('href', `/${getLocale()}/collections/${collectionsRecording.collections[0]!.id}`);
+    setLibraryNavigationStoryState({ pinCount: 1, builtins: 'none', collectionCount: 0 });
+    await userEvent.click(retry);
+    await expect(await main.findByText(m.library_collections_page_empty())).toBeVisible();
+    await expect(main.queryByText(m.library_collections_empty())).toBeNull();
+    await userEvent.click(main.getByRole('link', { name: m.library_collections_first_page() }));
+    await expect(await main.findByText(m.library_collections_empty())).toBeVisible();
+    await expect(main.getByRole('link', { name: m.library_collection_new() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/collections/new`,
+    );
+  },
+};
+
+// The protected route keeps its sign-in redirect. This region previews the real signed-out adapter result,
+// as can occur when the session ends after the route guard has completed.
+function SignedOutCollectionsStep() {
+  const { data } = useQuery({
+    queryKey: ['collections-signed-out-step'],
+    queryFn: async () => {
+      const [page, pins] = await Promise.all([
+        readMineCollectionsPage({ data: { layout: 'previews', cursor: 'requested-page' } }),
+        readLibraryPinsPage({ data: 100 }),
+      ]);
+      return { page, pins };
+    },
+    retry: false,
+  });
+  return data ? <MineCollectionsPageView {...data} layout="previews" cursor="requested-page" /> : null;
+}
+
+export const SignedOutNextStep: Story = {
+  name: 'Signed out, return to requested Collections view',
+  render: () => (
+    <PatternStory visitor="Signed Out" path="/library/collections?layout=previews&cursor=requested-page">
+      <main>
+        <SignedOutCollectionsStep />
+      </main>
+    </PatternStory>
+  ),
+  play: async (context) => {
+    const view = within(context.canvasElement);
+    const signIn = await view.findByRole('link', { name: m.account_sign_in() });
+    await expect(signIn).toHaveAttribute(
+      'href',
+      `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/library/collections?layout=previews&cursor=requested-page`)}`,
+    );
+    await expect(view.queryByRole('link', { name: m.library_collection_new() })).toBeNull();
+    await expect(view.queryByRole('toolbar')).toBeNull();
   },
 };

@@ -1,4 +1,12 @@
 {
+  "library_collections_cursor_reset": "The saved page has expired. This view now starts from the first page.",
+  "library_collections_preparing": "Your Collections are being prepared. Retry this page in a moment.",
+  "library_collections_read_failed": "We couldn't load your Collections. Retry this page.",
+  "library_collections_retry": "Retry",
+  "library_collections_page_empty": "There are no Collections on this page. Start from the first page to see your Collections.",
+  "library_collections_start": "Create a Collection to gather subjects you want to keep together.",
+  "library_collections_start_unavailable": "Creating Collections isn't available right now. You can still explore.",
+  "library_collections_first_page": "First page",
   "content_edition_creator_unknown": "Creator unavailable",
   "content_edition_not_published": "This edition has not been published and cannot be read.",
   "content_edition_purchases": "Back to purchases",

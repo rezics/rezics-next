@@ -1,4 +1,12 @@
 {
+  "library_collections_cursor_reset": "Die gespeicherte Seite ist abgelaufen. Diese Ansicht beginnt jetzt auf der ersten Seite.",
+  "library_collections_preparing": "Deine Sammlungen werden vorbereitet. Versuche es gleich noch einmal.",
+  "library_collections_read_failed": "Deine Sammlungen konnten nicht geladen werden. Versuche es erneut.",
+  "library_collections_retry": "Erneut versuchen",
+  "library_collections_page_empty": "Auf dieser Seite gibt es keine Sammlungen. Kehre zur ersten Seite zurück, um deine Sammlungen anzusehen.",
+  "library_collections_start": "Erstelle eine Sammlung, um Einträge zusammenzustellen, die zusammengehören.",
+  "library_collections_start_unavailable": "Sammlungen können derzeit nicht erstellt werden. Du kannst weiterhin Inhalte entdecken.",
+  "library_collections_first_page": "Erste Seite",
   "content_edition_creator_unknown": "Urheber nicht verfügbar",
   "content_edition_not_published": "Diese Ausgabe wurde noch nicht veröffentlicht und kann nicht gelesen werden.",
   "content_edition_purchases": "Zurück zu den Käufen",

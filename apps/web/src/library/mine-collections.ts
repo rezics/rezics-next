@@ -35,6 +35,7 @@ export type MineCollectionsPage = {
   navigationCollections?: MineCollection[];
   next: string | null;
   state?: 'loaded' | 'preparing' | 'denied' | 'unavailable' | 'error';
+  cursorReset?: true;
 };
 
 class MineCollectionsReadError extends Error {
@@ -55,22 +56,22 @@ async function readPage(
     curatorAccountId: accountId,
     ...(previews ? { preview: 3 } : {}),
   };
-  const result = await client.collections.get({
-    query,
-    headers: { authorization },
-  });
+  let result: Awaited<ReturnType<KernelClient['collections']['get']>>;
+  try {
+    result = await client.collections.get({ query, headers: { authorization } });
+  } catch (error) {
+    if (isPlatformClosedError(error)) throw error;
+    throw new MineCollectionsReadError('unavailable');
+  }
+  const status = result.status ?? result.error?.status;
+  // A native 202 contains preparation metadata, never a successful empty Collection page.
+  if (status === 202) throw new MineCollectionsReadError('preparing');
   try {
     return readLibraryResult(result);
   } catch (error) {
     if (error instanceof StaleCursorError || isPlatformClosedError(error)) throw error;
     throw new MineCollectionsReadError(
-      result.status === 202
-        ? 'preparing'
-        : result.status === 403
-          ? 'denied'
-          : result.status >= 500 && result.status !== 503
-            ? 'error'
-            : 'unavailable',
+      status === 403 ? 'denied' : status >= 500 && status !== 503 ? 'error' : 'unavailable',
     );
   }
 }
@@ -143,6 +144,7 @@ export async function loadMineCollectionsPage(
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, collections: [], next: null };
 
+  let cursorReset = false;
   try {
     let page: CollectionRead;
     let navigationPage: CollectionRead | undefined;
@@ -150,6 +152,7 @@ export async function loadMineCollectionsPage(
       page = await readPage(client, accountId, authorization, input.cursor, input.layout === 'previews');
     } catch (error) {
       if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
+      cursorReset = true;
       page = await readPage(client, accountId, authorization, undefined, input.layout === 'previews');
       navigationPage = page;
     }
@@ -162,10 +165,17 @@ export async function loadMineCollectionsPage(
       collections: page.collections.map(present),
       navigationCollections: navigationPage.collections.map(present),
       next: page.next,
+      ...(cursorReset ? { cursorReset: true } : {}),
     };
   } catch (error) {
-    if (error instanceof MineCollectionsReadError)
-      return { signedIn: true, state: error.state, collections: [], next: null };
+    if (error instanceof MineCollectionsReadError || (cursorReset && error instanceof StaleCursorError))
+      return {
+        signedIn: true,
+        state: error instanceof MineCollectionsReadError ? error.state : 'unavailable',
+        collections: [],
+        next: null,
+        ...(cursorReset ? { cursorReset: true } : {}),
+      };
     throw error;
   }
 }

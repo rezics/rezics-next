@@ -22,6 +22,7 @@ export type LibraryNavigationEntry = {
   current: boolean;
   pin?: { collectionId: string; available: boolean };
 };
+type CollectionsState = 'loaded' | 'preparing' | 'denied' | 'unavailable' | 'error';
 
 /** Only returned Collection identities become destinations. Pins retain their native order, including hidden targets. */
 export function libraryNavigationEntries(
@@ -204,12 +205,15 @@ export function LibraryNavigation({
   collections,
   locale = getLocale(),
   collectionsState = 'loaded',
+  showCollectionsNotice = true,
 }: {
   current: LibraryDestination;
   pins: LibraryPinsRead;
   collections: readonly BuiltinCollectionRecord[];
   locale?: string;
-  collectionsState?: 'loaded' | 'preparing' | 'unavailable';
+  collectionsState?: CollectionsState;
+  /** A leaf page can explain its own Collection read while retaining independent pin notices. */
+  showCollectionsNotice?: boolean;
 }) {
   const destinations = libraryNavigationEntries(current, pins, collections, locale);
   const overflow = destinations.overflow;
@@ -218,7 +222,7 @@ export function LibraryNavigation({
   const all = [...tabs, ...overflow];
   const phonePins = tabs.filter((entry) => entry.pin).slice(0, 3);
   return (
-    <div data-library-navigation className="min-w-0 space-y-2">
+    <div data-library-navigation data-collections-state={collectionsState} className="min-w-0 space-y-2">
       <nav
         data-library-navigation-desktop
         aria-label={m.library_nav_sidebar_label()}
@@ -243,7 +247,11 @@ export function LibraryNavigation({
         </div>
         <DestinationMenu entries={all} current={all.find((entry) => entry.current)?.label} />
       </nav>
-      <LibraryNavigationNotice pins={pins} collectionsState={collectionsState} />
+      <LibraryNavigationNotice
+        pins={pins}
+        collectionsState={collectionsState}
+        showCollectionsNotice={showCollectionsNotice}
+      />
     </div>
   );
 }
@@ -251,15 +259,24 @@ export function LibraryNavigation({
 export function LibraryNavigationNotice({
   pins,
   collectionsState = 'loaded',
+  showCollectionsNotice = true,
 }: {
   pins: LibraryPinsRead;
-  collectionsState?: 'loaded' | 'preparing' | 'unavailable';
+  collectionsState?: CollectionsState;
+  showCollectionsNotice?: boolean;
 }) {
-  return pins.state === 'unavailable' || collectionsState === 'unavailable' ? (
+  const collectionsUnavailable =
+    showCollectionsNotice &&
+    (collectionsState === 'unavailable' || collectionsState === 'denied' || collectionsState === 'error');
+  return pins.state === 'unavailable' || collectionsUnavailable ? (
     <p role="status" className="text-sm text-muted-foreground">
-      {pins.state === 'unavailable' ? m.library_pin_read_failed() : m.library_collections_unavailable()}
+      {pins.state === 'unavailable'
+        ? m.library_pin_read_failed()
+        : collectionsState === 'denied'
+          ? m.library_collections_denied()
+          : m.library_collections_unavailable()}
     </p>
-  ) : pins.state === 'preparing' || collectionsState === 'preparing' ? (
+  ) : pins.state === 'preparing' || (showCollectionsNotice && collectionsState === 'preparing') ? (
     <p role="status" className="text-sm text-muted-foreground">
       {m.library_navigation_loading()}
     </p>
