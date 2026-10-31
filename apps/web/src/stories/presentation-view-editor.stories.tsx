@@ -122,10 +122,7 @@ function headingTextField(canvasElement: HTMLElement) {
 async function editDetails(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   const controls = templateControls(canvasElement);
-  await userEvent.selectOptions(
-    controls.template,
-    JSON.stringify({ scope: 'type', key: 'schema:Book' }),
-  );
+  await userEvent.selectOptions(controls.template, JSON.stringify({ scope: 'type', key: 'schema:Book' }));
   await userEvent.selectOptions(controls.view, 'details');
   await selectDetailsHeading(canvasElement);
   const field = await headingTextField(canvasElement);
