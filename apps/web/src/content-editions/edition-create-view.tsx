@@ -266,7 +266,7 @@ export function EditionPublication({
           </div>
         </section>
       ) : null}
-      {edition && state.resumeEditionId !== null ? (
+      {edition && state.resumeEditionId !== null && edition.state !== 'draft' ? (
         <section className="space-y-4 border-b border-border pb-5" aria-label={m.edition_publication_resume_heading()}>
           <h2 className="text-lg font-semibold">{m.edition_publication_resume_heading()}</h2>
           <p className="max-w-prose text-sm text-muted-foreground">{m.edition_publication_resume_help()}</p>
@@ -286,7 +286,8 @@ export function EditionPublication({
           <p role="status" className="text-sm">
             {m.edition_publication_withdrawn_help()}
           </p>
-          <p className="font-mono text-xs">{edition.editionId}</p>
+          <EditionIdentitySummary edition={edition} />
+          <EditionTechnicalDetails edition={edition} />
         </section>
       ) : null}
       {previewSource ? (
@@ -299,24 +300,34 @@ export function EditionPublication({
             >
               {m.edition_publication_open_revision()}
             </a>
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="font-medium">{m.exact_revision_post()}</dt>
-                <dd>{previewSource.postId}</dd>
-              </div>
-              <div>
-                <dt className="font-medium">{m.exact_revision_id()}</dt>
-                <dd>{previewSource.revisionId}</dd>
-              </div>
-              <div>
-                <dt className="font-medium">{m.edition_publication_licence()}</dt>
-                <dd>{previewSource.licence}</dd>
-              </div>
-              <div>
-                <dt className="font-medium">SHA-256</dt>
-                <dd className="font-mono text-xs">{previewSource.sha256}</dd>
-              </div>
-            </dl>
+            <p className="text-sm">
+              {m.edition_publication_licence()}: {previewSource.licence}
+            </p>
+            <details className="text-xs">
+              <summary className="min-h-11 cursor-pointer py-3 text-muted-foreground">
+                {m.edition_identity_details()}
+              </summary>
+              <dl className="space-y-3">
+                <div>
+                  <dt>{m.exact_revision_post()}</dt>
+                  <dd className="select-all font-mono">{previewSource.postId}</dd>
+                </div>
+                <div>
+                  <dt>{m.exact_revision_id()}</dt>
+                  <dd className="select-all font-mono">{previewSource.revisionId}</dd>
+                </div>
+                <div>
+                  <dt>SHA-256</dt>
+                  <dd className="select-all font-mono">{previewSource.sha256}</dd>
+                </div>
+                {state.targetSubjectId && (
+                  <div>
+                    <dt>{m.edition_publication_subject()}</dt>
+                    <dd className="select-all font-mono">{state.targetSubjectId}</dd>
+                  </div>
+                )}
+              </dl>
+            </details>
           </div>
           <DocumentBody
             document={previewSource.body}
@@ -407,6 +418,11 @@ export function EditionPublication({
           <p className="text-sm">{m.edition_publication_draft_help()}</p>
           <EditionIdentitySummary edition={edition} />
           <EditionTechnicalDetails edition={edition} />
+          {state.resumeEditionId !== null && (
+            <Button variant="outline" disabled={state.busy} onClick={() => void controller.refresh()}>
+              {m.edition_publication_refresh()}
+            </Button>
+          )}
           <p className="text-sm">{m.edition_publication_edition_version({ revision: edition.editionRevision })}</p>
           <label htmlFor={confirmId} className="flex min-h-11 items-start gap-3 text-sm">
             <input
