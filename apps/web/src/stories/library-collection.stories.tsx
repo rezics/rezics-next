@@ -109,7 +109,9 @@ async function bookRowFactsReady(context: { canvasElement: HTMLElement }) {
     const publication = member.facts['schema:datePublished']?.[0];
     if (publication?.kind === 'time')
       await expect(
-        facts.getByText(new Intl.NumberFormat(locale, { useGrouping: false }).format(publication.year), { exact: true }),
+        facts.getByText(new Intl.NumberFormat(locale, { useGrouping: false }).format(publication.year), {
+          exact: true,
+        }),
       ).toBeVisible();
     const image = row.querySelector('img');
     if (member.subject.cover)

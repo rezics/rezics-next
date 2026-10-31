@@ -146,8 +146,9 @@ test('existing Collection pages render supplied Book author and publication year
         })),
       });
       expect(html.match(/data-slot="member-list-row-title"/g)).toHaveLength(4);
-      const facts = [...html.matchAll(/<p\b[^>]*data-slot="member-list-row-facts"[^>]*>([\s\S]*?)<\/p>/g)]
-        .map((match) => match[1]!);
+      const facts = [...html.matchAll(/<p\b[^>]*data-slot="member-list-row-facts"[^>]*>([\s\S]*?)<\/p>/g)].map(
+        (match) => match[1]!,
+      );
       expect(facts).toHaveLength(4);
       for (const [index, author, year] of [
         [0, locale === 'ja' ? '川端康成' : 'Yasunari Kawabata', 1937],

@@ -152,7 +152,8 @@ test('Collection Book fixture art belongs to its actual title and supplies safe 
   for (const mode of ['many', 'public-reader', 'presentation'] as const) {
     setCollectionStoryMode(mode);
     const pageRoute = pageRoutes.find(
-      (route) => route.method === 'GET' && route.path instanceof RegExp && route.path.test(new URL(request.url).pathname),
+      (route) =>
+        route.method === 'GET' && route.path instanceof RegExp && route.path.test(new URL(request.url).pathname),
     )!;
     const page = await pageRoute.story!({ request, recordings: {}, match: null });
     expect(page?.members).toEqual(collectionStoryMembers);
