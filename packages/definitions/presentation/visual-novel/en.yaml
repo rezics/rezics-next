@@ -29,3 +29,10 @@ libraryProfiles:
         disposed: 'Disposed'
       digital:
         owned: 'Owned'
+typeDescriptions:
+  wd:Q689445: "A visual novel work, independent of its language or platform releases; its characters and staff are linked through work statements."
+propertyDescriptions:
+  wdt:P144: "A creative work on which this visual novel is based; identifies the source work rather than an unspecified cross-media connection."
+  wdt:P1889: "An alternative visual novel work in the same setting or continuity; the two remain distinct works."
+  wdt:P361: "The larger work containing this work, such as a parent story or compilation."
+  rezics:spinOffOf: "The original work from which this spin-off work derives."

@@ -323,26 +323,49 @@ referable DLC as well as expansions, so their labels use broad store terms such 
 `add-on`, `追加内容` and `追加コンテンツ`, rather than expansion-pack terminology.
 The catalogue still determines which add-ons have their own work identity.
 
-Neither types nor properties previously had localized release descriptions. Type
-presentation files now accept an optional `typeDescriptions` map from type CURIE
-to text, alongside the existing `types` and `properties` label maps. Compilation
-holds that text as `types[curie].descriptions[locale]` in the release. Descriptions
-use the same BCP 47 locale keys as labels, allow one to 1,500 Unicode characters,
-and need no English entry. Omitted descriptions stay omitted, so older releases
-remain valid. Empty, malformed, unknown-type and duplicate descriptions fail
-compilation. Catalogue class descriptions still define the type contract.
+Presentation files accept `typeDescriptions` and `propertyDescriptions` maps from
+CURIE to explanatory text, alongside the existing label maps. Compilation emits
+`types[curie].descriptions[locale]` and `properties[curie].descriptions[locale]`.
+The current bundled catalogue supplies useful descriptions for every released Type
+and property in all eight UI locales: `en`, `de`, `es`, `fr`, `ja`, `ko`, `zh-Hans`
+and `zh-Hant`. Each term has one owning presentation group, following its defining
+schema; shared terms are described there rather than copied into each consumer.
 
-Every replaced label is retained verbatim in its locale's `typeDescriptions`,
-including replacements of words that were too broad, not just long glosses. Type
-labels and descriptions live in the presentation group of the schema defining the
-type. All current declarations already had one owner; there was no duplicate to
-remove. The compiler has no special case for any vertical.
+Descriptions explain the native grain and accepted values, including work versus
+edition, publication, episode and character, document-valued authored summaries,
+Concept-valued roles and classification, and identifiers without page URLs. Quantity
+guidance uses each property's existing units: cooking time is actual cooking duration
+in whole minutes, running time is in seconds, and servings are a unitless count.
+Source-record revisions are not edition names. Labels and catalogue constraints
+remain unchanged. The compiler has no special case for any vertical.
 
-The review covered all 21 released types in all eight UI locales. The following
-Chinese and Japanese labels are pinned by `test/type-labels.test.ts`; unchanged
-labels were reviewed too. Ordinary names such as film, recipe, video game, album,
-visual novel, book series and the SKOS vocabulary names remain in the other locales.
-The technical SKOS labels identify classification resources rather than works.
+Descriptions use the same BCP 47 locale keys as labels and allow one to 1,500 Unicode
+code points. The format still permits missing descriptions and no English entry,
+so historical releases and their immutable pins remain valid. Old interface glosses
+are superseded by useful explanations where they were too broad or misleading;
+they are not an additional source of native meaning. Catalogue class and slot
+declarations retain authority over semantics, attribution and disclosure.
+
+Regenerate the bundled release and both normal definitions recordings with the
+commands above. The focused default-composition regression is
+`services/kernel/test/semantic/definition-guide-meanings.test.ts`: it reads the
+mounted active/release routes from ordinary bundled setup, checks the guide-shaped
+localized read and source/recording parity, and retains an actual historical pin
+through authorized publication, activation and subsequent bootstrap. It does not
+supply substitute meanings from a fixture or change a deployed active release.
+
+#### Read Type and field guidance cost
+
+- Touches: existing immutable Type/property descriptions and guide constraints;
+  the same eight localized presentation inputs at compile time.
+- Bound: existing bounded description maps with 1–1,500-code-point strings; no
+  additional runtime request, table, permission decision or backend path.
+- Growth check: one focused bundled-producer regression; existing expansion and
+  historical release obligations remain unchanged, with no additional campaign.
+
+The following Chinese and Japanese labels are pinned by `test/type-labels.test.ts`;
+ordinary names in the other locales remain unchanged. The technical SKOS labels
+identify classification resources rather than works.
 
 | Type                       | zh-Hans  | zh-Hant  | ja                 |
 | -------------------------- | -------- | -------- | ------------------ |
@@ -758,9 +781,10 @@ runtime path changes.
 The following list cites the vocabulary terms and Wikidata mappings used here.
 SKOS and FOAF terms cite their publishing vocabularies. New terms have labels in
 `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr` and `es`, in their respective
-presentation groups. Type labels follow the interface-word policy above; external
-Wikidata glosses belong in descriptions when replaced. Property labels use the
-vocabulary's language-specific labels where appropriate. Labels are authored
+presentation groups. Type labels follow the interface-word policy above;
+descriptions explain the catalogue meaning rather than retaining obsolete glosses.
+Property labels use the
+vocabulary's language-specific labels where appropriate. Labels and descriptions are authored
 locally without a translation service.
 
 | Term                        | Source and meaning                                                                                                                                         |
@@ -878,14 +902,15 @@ Source conventions:
   256 characters, and be proved safe by the shared pattern policy above.
 - Each presentation entry uses a BCP 47 language tag or `<group>/<tag>`, where
   group matches `^[a-z][a-z0-9-]{0,63}$`, and contains a YAML object with optional
-  `types`, `properties`, `inverseProperties`, and `typeDescriptions` maps, keyed by release CURIE.
+  `types`, `properties`, `inverseProperties`, `typeDescriptions`, and
+  `propertyDescriptions` maps, keyed by release CURIE.
   Inverse-property labels belong to the group of the schema file that defines the
   property. Files with the same tag merge; a term can be labelled only once per
   tag. Labels must be nonempty strings
   of at most 256 characters. Unknown terms and other keys are refused. Every
   emitted type and property requires an `en` label; other locales may be partial.
-  Type descriptions are optional strings of one to 1,500 characters, with at most
-  one per type per tag and no required English entry.
+  Type and property descriptions are optional strings of one to 1,500 characters,
+  with at most one per term per tag and no required English entry.
 - Optional `contexts` supplies Context settings YAML keyed by id. Each id matches
   `^[a-z][a-z0-9-]{0,63}$`. The document allows only `labels` and `defaults`.
   Defaults name properties in the release and use `inherit` or `suppress`. There

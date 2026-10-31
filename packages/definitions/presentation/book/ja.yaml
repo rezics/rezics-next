@@ -139,3 +139,13 @@ libraryProfiles:
         owned: '所持'
         lent: '貸出中'
         disposed: '手放した'
+typeDescriptions:
+  schema:Book: "特定の版、翻訳、個人の所蔵本から独立した書籍の作品。"
+  bf:Instance: "特定の翻訳版など、独立して識別される書籍の刊行版。個人の所蔵本とは別です。"
+propertyDescriptions:
+  schema:wordCount: "書籍作品の正確な単語数を単位なしの整数で示します。文字数や版のページ数とは区別します。"
+  schema:exampleOfWork: "この版やリリースが具体化した作品。個人の所蔵物ではなく作品自体を参照します。"
+  schema:isbn: "版のISBN-13。9780140328721のように区切り記号なしの13桁で記録します。"
+  schema:publisher: "この版やリリースの出版者としてクレジットされた人物または組織。"
+  schema:numberOfPages: "この版のページ数。単位なしの1以上の整数の数量で記録します。"
+  schema:translator: "この版や刊行物の翻訳担当としてクレジットされた人物または組織。"

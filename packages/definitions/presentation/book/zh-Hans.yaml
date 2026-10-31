@@ -13,8 +13,8 @@ inverseProperties:
   schema:publisher: '出版作品'
   schema:translator: '翻译作品'
 typeDescriptions:
-  schema:Book: '书面作品'
-  bf:Instance: '作品版本或翻译'
+  schema:Book: "独立于具体版本、翻译及个人藏本的书籍作品。"
+  bf:Instance: "可独立识别的书籍出版版本，如某一译本；与个人持有的副本分开。"
 libraryProfiles:
   book.reading:
     states:
@@ -142,3 +142,10 @@ libraryProfiles:
         owned: '拥有'
         lent: '已借出'
         disposed: '已处置'
+propertyDescriptions:
+  schema:wordCount: "书籍作品的精确单词数，以无单位整数记录；不是字符数，也不是某版页数。"
+  schema:exampleOfWork: "此版本或发行版所体现的创作作品；链接作品本身，而非个人副本。"
+  schema:isbn: "此版本的 ISBN-13，以不带分隔符的 13 位数字记录，如 9780140328721。"
+  schema:publisher: "被署名为此版本或发行版出版者的个人或组织。"
+  schema:numberOfPages: "此版本的页数，以无单位且至少为 1 的整数数量记录。"
+  schema:translator: "被署名为此版本或出版物翻译者的个人或组织。"

@@ -1,2 +1,4 @@
 types:
   schema:MusicAlbum: álbum
+typeDescriptions:
+  schema:MusicAlbum: "Un álbum musical como obra que agrupa pistas, independiente de un ejemplar o edición distribuida concreta."

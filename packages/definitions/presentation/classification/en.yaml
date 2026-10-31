@@ -17,3 +17,14 @@ inverseProperties:
   schema:genre: 'Works in this genre'
   schema:keywords: 'Tagged subjects'
   skos:closeMatch: 'Closely matching concepts'
+typeDescriptions:
+  skos:Concept: "A classification concept used for a genre, tag, role or other named category; it may point to a subject through its focus."
+  skos:ConceptScheme: "A named scheme organizing classification concepts; a scheme and its concepts are separate catalogue subjects."
+propertyDescriptions:
+  wdt:P7937: "A Concept identifying the form of the work, such as a novel; separate from its genre and catalogue Type."
+  skos:inScheme: "The Concept Scheme to which this concept belongs."
+  skos:broader: "A broader Concept in the classification hierarchy, such as fiction above science fiction."
+  foaf:focus: "The catalogue subject that this classification concept stands for."
+  schema:keywords: "A tag Concept classifying the subject; not a comma-separated string or a personal library label."
+  schema:genre: "A genre Concept classifying this work, such as science fiction."
+  skos:closeMatch: "A distinct Concept with a closely corresponding meaning; not equivalence and not automatic filter expansion."

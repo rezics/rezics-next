@@ -22,8 +22,11 @@ inverseProperties:
   schema:isPartOf: 'エピソード'
   wdt:P449: '初回放送作品'
 typeDescriptions:
-  rezics:AnimeRelease: '作品自体とは別に識別される、アニメの刊行版または頒布版。'
-  schema:TVSeries: 'テレビ番組シリーズ'
+  rezics:AnimeRelease: "作品自体とは別に識別される、アニメの刊行版または頒布版。エピソード、再生ファイル、個人の所蔵物とも区別し、言語や形式の違いだけで別の版を作りません。"
+  schema:Episode: "第3話や特別編など、個別に識別されるアニメ作品の一回分。再生ファイルやシーズン全体ではありません。"
+  schema:Movie: "作品としての長編または短編アニメ映画。頒布された各版とは独立した対象です。"
+  schema:TVSeason: "テレビアニメの中で個別に識別される一つのシーズン。シリーズ全体や単一のエピソードとは区別します。"
+  schema:TVSeries: "シーズンやエピソードを含む作品としてのテレビアニメシリーズ。特定の刊行版とは別です。"
 libraryProfiles:
   anime.series:
     states:
@@ -113,3 +116,15 @@ libraryProfiles:
         disposed: '手放した'
       digital:
         owned: '所持'
+propertyDescriptions:
+  bf:hasPart: "このアンソロジー刊行版に収録された独立したアニメ作品。実際のシリーズ、映画、シーズン、エピソードを参照します。"
+  marcrel:fds: "この映像刊行物の配給担当としてクレジットされた人物または組織。作品側の無関係なクレジットは転記しません。"
+  schema:copyrightNotice: "出典に記された著作権表示。再利用のライセンスを示すものではありません。"
+  schema:duration: "明記された上映時間を秒（wd:Q11574）単位の0以上の整数の数量で記録します。24分なら1440です。"
+  schema:endDate: "当初の放送期間や公開期間の終了日。出典の日付の精度を保ちます。"
+  schema:episodeNumber: "出典のエピソード番号を文字列で保存します。0、特別編、小数の番号も扱い、エピソードの識別子とは区別します。"
+  schema:isPartOf: "このエピソードが属するテレビシリーズまたはシーズン。"
+  schema:numberOfEpisodes: "この作品やシーズンのエピソード数。単位なしの0以上の整数の数量です。"
+  schema:startDate: "当初の放送期間や公開期間の開始日。出典の日付の精度を保ちます。"
+  wdt:P449: "出典が初回放送局として示す組織。後の配給者すべてを指すものではありません。"
+  wdt:P973: "このアニメ作品を説明するページのURL。同一実体の完全一致とは区別します。"

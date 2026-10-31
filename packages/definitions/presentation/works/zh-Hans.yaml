@@ -1,2 +1,4 @@
 types:
   schema:MusicAlbum: 音乐专辑
+typeDescriptions:
+  schema:MusicAlbum: "汇集曲目的音乐专辑作品，独立于某一实体副本或发行版本。"

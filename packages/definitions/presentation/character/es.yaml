@@ -9,3 +9,11 @@ properties:
 inverseProperties:
   schema:gender: 'Sujetos de este género'
   wdt:P1853: 'Sujetos de este grupo sanguíneo'
+typeDescriptions:
+  wd:Q95074: "Un personaje ficticio identificable, incluida una máquina, nave u organización ficticia; las apariciones y voces se registran en las obras."
+propertyDescriptions:
+  schema:gender: "El género del personaje ficticio descrito explícitamente como concepto; no se infiere el sexo biológico."
+  schema:height: "La altura declarada como cantidad no negativa en centímetros (wd:Q174728) o metros (wd:Q11573), conservando la unidad."
+  schema:weight: "La masa declarada como cantidad no negativa en kilogramos (wd:Q11570) o gramos (wd:Q41803), conservando la unidad."
+  wdt:P1853: "El grupo sanguíneo declarado explícitamente como concepto, por ejemplo A; lo desconocido sigue siendo desconocido."
+  wdt:P6296: "El identificador numérico positivo de personaje en Bangumi; no el de un título o persona ni la URL de una página."

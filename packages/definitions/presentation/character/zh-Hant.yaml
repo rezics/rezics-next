@@ -10,4 +10,10 @@ inverseProperties:
   schema:gender: '此性別的主體'
   wdt:P1853: '此血型的主體'
 typeDescriptions:
-  wd:Q95074: '虛構角色'
+  wd:Q95074: "可獨立識別的虛構角色，也包含虛構機器、船艦或組織；登場與配音署名記錄在作品上。"
+propertyDescriptions:
+  schema:gender: "來源明確描述的虛構角色性別，以概念表示，不推斷生理性別。"
+  schema:height: "角色明確記載的身高，以非負數量保留來源單位：公分（wd:Q174728）或公尺（wd:Q11573）。"
+  schema:weight: "角色明確記載的體重，以非負數量保留來源單位：公斤（wd:Q11570）或公克（wd:Q41803）。"
+  wdt:P1853: "明確記載的血型概念，例如 A 型；未知值維持未知。"
+  wdt:P6296: "Bangumi 角色的正整數識別碼，不是條目或人物識別碼，也不是頁面 URL。"

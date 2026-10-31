@@ -9,3 +9,11 @@ properties:
 inverseProperties:
   schema:gender: 'Subjects with this gender'
   wdt:P1853: 'Subjects with this blood type'
+typeDescriptions:
+  wd:Q95074: "An independently identifiable fictional character, including a fictional machine, ship or organization; appearances and voice credits belong on works."
+propertyDescriptions:
+  schema:gender: "The fictional character's explicitly described gender as a Concept; do not infer biological sex."
+  schema:height: "The character's stated height as a nonnegative quantity in centimetres (wd:Q174728) or metres (wd:Q11573), preserving its unit."
+  schema:weight: "The character's stated mass as a nonnegative quantity in kilograms (wd:Q11570) or grams (wd:Q41803), preserving its unit."
+  wdt:P1853: "The explicitly stated blood type as a Concept, such as A; unknown remains unknown."
+  wdt:P6296: "The positive numeric Bangumi character identifier; not a subject or person ID and not a page URL."

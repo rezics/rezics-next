@@ -1,2 +1,4 @@
 types:
   schema:MusicAlbum: アルバム
+typeDescriptions:
+  schema:MusicAlbum: "楽曲をまとめた音楽アルバムの作品。特定の所蔵物や頒布版とは独立した対象です。"
