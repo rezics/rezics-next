@@ -70,8 +70,9 @@ export function NotificationsCard({
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const disabled = busy || !csrfToken;
   const uncertain = state.phase === 'uncertain' || (state.pending !== null && state.phase === 'reloading');
-  const needsReload = state.phase === 'conflict' || state.phase === 'failed';
-  const localEdit = !!state.pending || ['conflict', 'review', 'reloading'].includes(state.phase);
+  const readFailed = state.readOrigin !== null && (state.phase === 'failed' || state.phase === 'uncertain');
+  const needsReload = !readFailed && (state.phase === 'conflict' || state.phase === 'failed');
+  const localEdit = !!state.pending || readFailed || ['conflict', 'review', 'reloading'].includes(state.phase);
   const rowDisabled = disabled || (waiting && !localEdit);
   const waitDescription = waiting ? `${ids}-retry-wait` : undefined;
 
@@ -82,7 +83,9 @@ export function NotificationsCard({
           <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_notifications_text()}</CardDescription>
-        <CardDescription>{m.settings_automatic_save_help()}</CardDescription>
+        <CardDescription>
+          {localEdit ? m.settings_notifications_draft_help() : m.settings_automatic_save_help()}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div role="group" aria-label={m.settings_notifications_heading()} className="space-y-4">
@@ -161,7 +164,7 @@ export function NotificationsCard({
                 <Button
                   type="submit"
                   variant="outline"
-                  disabled={waiting || disabled || !!state.pending || state.phase === 'conflict'}
+                  disabled={waiting || disabled || !!state.pending || state.phase === 'conflict' || readFailed}
                   aria-describedby={waitDescription}
                 >
                   {m.settings_notifications_restore()}
@@ -169,13 +172,52 @@ export function NotificationsCard({
               </form>
             </div>
           </FieldGroup>
-          <div aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
-            {busy ? m.settings_saving() : state.phase === 'saved' ? m.settings_saved() : null}
+          <div role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
+            {state.phase === 'saving'
+              ? m.settings_saving()
+              : state.phase === 'reloading'
+                ? m.settings_notifications_reading()
+                : state.phase === 'saved'
+                  ? m.settings_saved()
+                  : null}
           </div>
+          {state.readOrigin !== null ? (
+            <p className="text-sm text-muted-foreground">{m.settings_notifications_retained()}</p>
+          ) : null}
           {waiting ? (
             <p id={waitDescription} role="status" className="text-sm text-muted-foreground">
               {m.settings_retry_wait()}
             </p>
+          ) : null}
+          {readFailed ? (
+            <Alert
+              variant="destructive"
+              data-response-status={state.failure?.status ?? ''}
+              data-response-code={state.failure?.code ?? ''}
+              data-retry-after={state.failure?.retryAfter}
+            >
+              <AlertTitle>{m.settings_notifications_read_failed()}</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>
+                  {state.reason === 'closed'
+                    ? m.settings_notifications_read_closed()
+                    : state.reason === 'forbidden'
+                      ? m.settings_notifications_read_denied()
+                      : m.settings_notifications_read_unavailable()}
+                </p>
+                {!state.pending ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={waiting || busy || !hydrated}
+                    aria-describedby={waitDescription}
+                    onClick={() => void editor.reload()}
+                  >
+                    {m.settings_reload()}
+                  </Button>
+                ) : null}
+              </AlertDescription>
+            </Alert>
           ) : null}
           {uncertain ? (
             <Alert
@@ -186,9 +228,9 @@ export function NotificationsCard({
               <AlertTitle>{m.settings_notifications_uncertain_title()}</AlertTitle>
               <AlertDescription className="space-y-3">
                 <p>{m.settings_notifications_uncertain_text()}</p>
-                {state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
-                {state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
-                {state.reason === 'unavailable' ? <p>{m.settings_unavailable_text()}</p> : null}
+                {!readFailed && state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
+                {!readFailed && state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
+                {!readFailed && state.reason === 'unavailable' ? <p>{m.settings_unavailable_text()}</p> : null}
                 <Button
                   type="button"
                   variant="outline"
@@ -271,7 +313,7 @@ export function NotificationsCard({
               </AlertDescription>
             </Alert>
           ) : null}
-          {!state.pending && !needsReload ? (
+          {!state.pending && !needsReload && !readFailed ? (
             <Button
               type="button"
               variant="ghost"

@@ -1,4 +1,90 @@
 import type { FakeRoute } from '../fake-modules.ts';
+import recording from '../recorded/settings-preferences.json';
+import { parseNotificationChange, type NotificationPreferences } from '../../settings/preferences';
+
+/** Native-shaped fetch responses for the default Settings journey; the real actions and editors stay connected. */
+export function notificationRecoveryTransport(fallback: typeof fetch) {
+  let current = { ...recording, notifications: { ...recording.notifications } as NotificationPreferences };
+  let receipt: { key: string; body: string; settings: typeof current } | null = null;
+  let nextFailure: { status: number; code: string; retryAfter?: string } | null = null;
+  let readGate: Promise<void> | null = null;
+  let releaseRead = () => {};
+  const reads: { path: string; authorization: string | null; key: string | null }[] = [];
+  const commands: {
+    path: string;
+    method: string;
+    key: string | null;
+    body: string;
+    authorization: string | null;
+    contentType: string | null;
+  }[] = [];
+  const fetcher = (async (input, init) => {
+    const request = new Request(input instanceof Request ? input : new URL(String(input), window.location.href), init);
+    const url = new URL(request.url);
+    if (url.origin !== 'http://kernel.local' || !/^\/v1\/accounts\/[^/]+\/preferences$/.test(url.pathname))
+      return fallback(input, init);
+    if (request.method === 'GET') {
+      reads.push({
+        path: url.pathname,
+        authorization: request.headers.get('authorization'),
+        key: request.headers.get('idempotency-key'),
+      });
+      const failure = nextFailure;
+      nextFailure = null;
+      const gate = readGate;
+      readGate = null;
+      if (gate) await gate;
+      return failure
+        ? Response.json(
+            { code: failure.code, detail: 'Private notification read diagnostic', request_id: 'notification-read' },
+            { status: failure.status, headers: failure.retryAfter ? { 'retry-after': failure.retryAfter } : {} },
+          )
+        : Response.json(current);
+    }
+    const body = await request.text();
+    const key = request.headers.get('idempotency-key');
+    commands.push({
+      path: url.pathname,
+      method: request.method,
+      key,
+      body,
+      authorization: request.headers.get('authorization'),
+      contentType: request.headers.get('content-type'),
+    });
+    if (request.method !== 'PATCH' || !key) return new Response(null, { status: 405 });
+    if (receipt?.key === key)
+      return receipt.body === body
+        ? Response.json(receipt.settings)
+        : Response.json({ code: 'invalid_request' }, { status: 422 });
+    const change = parseNotificationChange({ ...JSON.parse(body), idempotencyKey: JSON.parse(key) });
+    if (!change) return Response.json({ code: 'invalid_request' }, { status: 422 });
+    if (change.expectedVersion !== current.version) return Response.json({ code: 'conflict' }, { status: 409 });
+    const notifications: NotificationPreferences =
+      change.notifications === null ? { ...recording.notifications } : { ...current.notifications };
+    for (const [kind, enabled] of Object.entries(change.notifications ?? {})) notifications[kind] = enabled ?? true;
+    current = { ...current, notifications, version: current.version + 1 };
+    const original = receipt === null;
+    receipt = { key, body, settings: current };
+    return original ? Response.json({ code: 'dependency_unavailable' }, { status: 503 }) : Response.json(current);
+  }) as typeof fetch;
+  return {
+    fetcher,
+    reads,
+    commands,
+    failNextRead: (status: number, code: string, retryAfter?: string) => {
+      nextFailure = { status, code, ...(retryAfter ? { retryAfter } : {}) };
+    },
+    pauseNextRead: () => {
+      readGate = new Promise<void>((resolve) => {
+        releaseRead = resolve;
+      });
+    },
+    releaseRead: () => releaseRead(),
+    concurrent: (notifications: NotificationPreferences) => {
+      current = { ...current, notifications: { ...notifications }, version: current.version + 1 };
+    },
+  };
+}
 
 function notificationState(): string | null {
   const context = (globalThis as typeof globalThis & { __rezicsStoryContext?: { url?: string } }).__rezicsStoryContext;

@@ -1,10 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { useEffect, useState } from 'react';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import recording from '../kernel/recorded/settings-preferences.json';
+import { notificationRecoveryTransport } from '../kernel/fake/settings-notifications';
 import { m } from '../paraglide/messages.js';
 import { NotificationsCard } from '../settings/notifications';
 import type { NotificationEditorIO } from '../settings/notification-recovery';
+import { PageStory, pageReady } from './page';
+import { selectSettingsCategory } from './settings-category-navigation';
 
 const meta = {
   title: 'Patterns/Account/Notice preferences',
@@ -187,5 +190,193 @@ export const NativeRetryDelay: Story = {
     await expect(view.getByRole('button', { name: m.settings_reload() })).toBeDisabled();
     await expect(view.queryByText(m.settings_saved())).toBeNull();
     await view.findByText(m.settings_notifications_mandatory());
+  },
+};
+
+const recoveryFixtures = new WeakMap<Element, ReturnType<typeof notificationRecoveryTransport>>();
+
+function DefaultNotificationRecoveryPage() {
+  const [fixture, setFixture] = useState<ReturnType<typeof notificationRecoveryTransport> | null>(null);
+  useEffect(() => {
+    const fallback = globalThis.fetch;
+    const transport = notificationRecoveryTransport(fallback);
+    globalThis.fetch = transport.fetcher;
+    setFixture(transport);
+    return () => {
+      transport.releaseRead();
+      if (globalThis.fetch === transport.fetcher) globalThis.fetch = fallback;
+    };
+  }, []);
+  return (
+    <div
+      ref={(element) => {
+        if (element && fixture) recoveryFixtures.set(element, fixture);
+      }}
+    >
+      {fixture ? <PageStory visitor="Signed In" path="/settings" /> : null}
+    </div>
+  );
+}
+
+export const DefaultReadRecovery: Story = {
+  name: 'Default Notifications distinguishes current-setting reads from writes and preserves the draft and original intent through a failed read and explicit recovery',
+  tags: ['!dev'],
+  parameters: { layout: 'fullscreen' },
+  render: () => <DefaultNotificationRecoveryPage />,
+  play: async (context) => {
+    await pageReady(context);
+    const { canvasElement } = context;
+    await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
+    const region = within(canvasElement).getByRole('region', { name: m.settings_notifications_heading() });
+    const view = within(region);
+    const fixture = recoveryFixtures.get(canvasElement.firstElementChild!)!;
+    const reply = view.getByRole('switch', { name: m.settings_notification_reply() });
+    const mention = view.getByRole('switch', { name: m.settings_notification_mention() });
+    const reload = () => view.getByRole('button', { name: m.settings_reload() });
+    const expectNoSave = async () => {
+      await expect(view.queryByText(m.settings_saved())).toBeNull();
+      await expect(view.queryByText(m.settings_failed_title())).toBeNull();
+      await expect(view.queryByText('Private notification read diagnostic')).toBeNull();
+    };
+    await expect(fixture.reads).toHaveLength(1);
+    await expect(reply).toBeChecked();
+    await expect(mention).toBeChecked();
+    fixture.failNextRead(503, 'dependency_unavailable', '2');
+    fixture.pauseNextRead();
+    await userEvent.click(reload());
+    try {
+      const status = await view.findByRole('status');
+      await expect(status).toHaveTextContent(m.settings_notifications_reading());
+      await expect(status).toHaveAttribute('aria-live', 'polite');
+      await expect(view.queryByText(m.settings_saving())).toBeNull();
+      await expect(reload()).toBeDisabled();
+      await expect(fixture.reads).toHaveLength(2);
+      await expect(fixture.commands).toHaveLength(0);
+    } finally {
+      fixture.releaseRead();
+    }
+    const failure = (await view.findByText(m.settings_notifications_read_failed())).closest('[role="alert"]')!;
+    await expect(failure).toHaveTextContent(m.settings_notifications_read_unavailable());
+    await expect(failure).toHaveAttribute('data-response-status', '503');
+    await expect(failure).toHaveAttribute('data-response-code', 'dependency_unavailable');
+    await expect(failure).toHaveAttribute('data-retry-after', '2');
+    await view.findByText(m.settings_notifications_retained());
+    await expect(reply).toBeChecked();
+    await expect(mention).toBeChecked();
+    await expect(reload()).toBeDisabled();
+    await userEvent.click(reload());
+    // Edits made while current values are unknown remain local, including during Retry-After.
+    await userEvent.click(reply);
+    await expect(reply).not.toBeChecked();
+    await expect(view.getByRole('button', { name: m.settings_notifications_restore() })).toBeDisabled();
+    await expect(fixture.commands).toHaveLength(0);
+    await expectNoSave();
+    await waitFor(() => expect(reload()).toBeEnabled(), { timeout: 5000 });
+    await expect(fixture.reads).toHaveLength(2);
+    await expect(fixture.commands).toHaveLength(0);
+
+    for (const [code, explanation] of [
+      ['forbidden', m.settings_notifications_read_denied()],
+      ['platform_closed', m.settings_notifications_read_closed()],
+    ] as const) {
+      const before = fixture.reads.length;
+      fixture.failNextRead(403, code);
+      await userEvent.click(reload());
+      await view.findByText(explanation);
+      const alert = view.getByRole('alert');
+      await expect(alert).toHaveAttribute('data-response-status', '403');
+      await expect(alert).toHaveAttribute('data-response-code', code);
+      await expect(fixture.reads).toHaveLength(before + 1);
+      await expect(fixture.commands).toHaveLength(0);
+      await expect(reply).not.toBeChecked();
+      await expect(mention).toBeChecked();
+      await expectNoSave();
+    }
+    fixture.concurrent({ reply: true, mention: false });
+    const beforeRecovery = fixture.reads.length;
+    await userEvent.click(reload());
+    await view.findByText(m.settings_notifications_review_title());
+    await expect(fixture.reads).toHaveLength(beforeRecovery + 1);
+    await expect(fixture.commands).toHaveLength(0);
+    await expect(reply).not.toBeChecked();
+    await expect(mention).toBeChecked();
+    await expect(view.queryByText(m.settings_notifications_retained())).toBeNull();
+    await expectNoSave();
+    await userEvent.click(view.getByRole('button', { name: m.settings_notifications_use_current() }));
+    await expect(reply).toBeChecked();
+    await expect(mention).not.toBeChecked();
+    for (const input of region.querySelectorAll<HTMLInputElement>('[name="expectedVersion"]'))
+      await expect(input.value).toBe('2');
+
+    // A real automatic save loses its response; a later draft must never replace its original identity.
+    await userEvent.click(reply);
+    await view.findByText(m.settings_notifications_uncertain_title());
+    await expect(fixture.commands).toHaveLength(1);
+    const original = { ...fixture.commands[0]! };
+    await expect(original).toMatchObject({ method: 'PATCH', path: '/v1/accounts/story-viewer/preferences' });
+    await expect(JSON.parse(original.body)).toEqual({ expectedVersion: 2, notifications: { reply: false } });
+    await expect(JSON.parse(original.key!)).toMatch(/^[0-9a-f-]{36}$/);
+    await userEvent.click(mention);
+    await expect(fixture.commands).toHaveLength(1);
+    const beforeReplayRead = fixture.reads.length;
+    fixture.failNextRead(503, 'dependency_unavailable', '2');
+    fixture.pauseNextRead();
+    await userEvent.click(view.getByRole('button', { name: m.settings_notifications_retry_original() }));
+    try {
+      await waitFor(() => expect(view.getByRole('status')).toHaveTextContent(m.settings_notifications_reading()));
+      await expect(view.queryByText(m.settings_saving())).toBeNull();
+      await expect(fixture.commands[1]).toEqual(original);
+      await expect(fixture.reads).toHaveLength(beforeReplayRead + 1);
+    } finally {
+      fixture.releaseRead();
+    }
+    await view.findByText(m.settings_notifications_read_failed());
+    await view.findByText(m.settings_notifications_uncertain_title());
+    await expect(reply).not.toBeChecked();
+    await expect(mention).toBeChecked();
+    await expect(view.queryByRole('button', { name: m.settings_reload() })).toBeNull();
+    await expect(view.getByRole('button', { name: m.settings_notifications_restore() })).toBeDisabled();
+    const retry = view.getByRole('button', { name: m.settings_notifications_retry_original() });
+    await expect(retry).toBeDisabled();
+    await userEvent.click(retry);
+    await expect(fixture.commands).toHaveLength(2);
+    await expectNoSave();
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 5000 });
+    await expect(fixture.commands).toHaveLength(2);
+    await expect(fixture.reads).toHaveLength(beforeReplayRead + 1);
+    fixture.concurrent({ reply: true, mention: false });
+    await userEvent.click(retry);
+    await view.findByText(m.settings_notifications_review_title());
+    await expect(fixture.commands).toHaveLength(3);
+    await expect(fixture.commands[2]).toEqual(original);
+    await expect(fixture.reads).toHaveLength(beforeReplayRead + 2);
+    await expect(reply).not.toBeChecked();
+    await expect(mention).toBeChecked();
+    await expectNoSave();
+    for (const input of region.querySelectorAll<HTMLInputElement>('[name="expectedVersion"]'))
+      await expect(input.value).toBe('4');
+    await userEvent.click(view.getByRole('button', { name: m.settings_notifications_save_draft() }));
+    await view.findByText(m.settings_saved());
+    await expect(fixture.commands).toHaveLength(4);
+    await expect(JSON.parse(fixture.commands[3]!.body)).toEqual({
+      expectedVersion: 4,
+      notifications: { reply: false, mention: true },
+    });
+    await expect(fixture.commands[3]!.key).not.toBe(original.key);
+    const beforeRefresh = fixture.reads.length;
+    await userEvent.click(reload());
+    await waitFor(() => expect(reload()).toBeEnabled());
+    await expect(fixture.reads).toHaveLength(beforeRefresh + 1);
+    await expect(fixture.commands).toHaveLength(4);
+    await expectNoSave();
+    for (const read of fixture.reads) {
+      await expect(read.path).toBe('/v1/accounts/story-viewer/preferences');
+      await expect(read.authorization).toBe('Bearer recorded-story-token');
+      await expect(read.key).toBeNull();
+    }
+    for (const command of fixture.commands) {
+      await expect(command.authorization).toBe('Bearer recorded-story-token');
+      await expect(command.contentType).toContain('application/merge-patch+json');
+    }
   },
 };

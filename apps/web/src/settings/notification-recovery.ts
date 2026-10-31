@@ -15,6 +15,8 @@ export type NotificationEditorState = {
   draft: NotificationPreferences;
   pending: Attempt | null;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'review' | 'reloading' | 'failed';
+  /** A current read can fail independently of an earlier write or a retained review draft. */
+  readOrigin: 'refresh' | 'review' | 'replay' | null;
   reason?: string | undefined;
   failure?: NativePreferenceFailure | undefined;
   retryAt: number;
@@ -47,6 +49,7 @@ export class NotificationEditor {
       draft: { ...initial.notifications },
       pending: null,
       phase: initialFailed ? 'failed' : 'idle',
+      readOrigin: null,
       retryAt: 0,
     };
   }
@@ -74,14 +77,23 @@ export class NotificationEditor {
     this.io.confirmed?.(known.version);
   }
   async edit(kind: string, enabled: boolean, version: number) {
-    const local = this.state.pending || ['conflict', 'review', 'reloading'].includes(this.state.phase);
+    const local =
+      this.state.pending ||
+      ['conflict', 'review', 'reloading'].includes(this.state.phase) ||
+      (this.state.readOrigin !== null && this.state.phase === 'failed');
     if (!local && this.waiting()) return;
     this.update({ draft: { ...this.state.draft, [kind]: enabled } });
     if (local) return;
     await this.start({ [kind]: enabled }, version);
   }
   async restore(version: number) {
-    if (this.state.pending || this.state.phase === 'reloading' || this.state.phase === 'conflict') return;
+    if (
+      this.state.pending ||
+      this.state.phase === 'reloading' ||
+      this.state.phase === 'conflict' ||
+      (this.state.readOrigin !== null && this.state.phase === 'failed')
+    )
+      return;
     await this.start(null, version);
   }
   async submit(version: number) {
@@ -106,7 +118,7 @@ export class NotificationEditor {
   private async send(recovering: boolean) {
     const attempt = this.state.pending;
     if (!attempt) return;
-    this.update({ phase: 'saving', reason: undefined, failure: undefined });
+    this.update({ phase: 'saving', readOrigin: null, reason: undefined, failure: undefined });
     let result: NotificationWriteResult;
     try {
       result = await this.io.save(attempt.input);
@@ -151,7 +163,7 @@ export class NotificationEditor {
       return;
     }
     // A replay is a historical receipt. Only an uncached native GET can establish the current values.
-    this.update({ phase: 'reloading' });
+    this.update({ phase: 'reloading', readOrigin: 'replay' });
     const current = await this.readCurrent();
     if (!current) {
       this.update({ phase: 'uncertain' });
@@ -174,6 +186,7 @@ export class NotificationEditor {
       phase: matches && !edited ? 'saved' : 'review',
       reason: undefined,
       failure: undefined,
+      readOrigin: null,
     });
   }
   private async readCurrent(): Promise<Snapshot | null> {
@@ -187,7 +200,15 @@ export class NotificationEditor {
         page.preferences.version < this.state.known.version
       ) {
         this.update({
-          reason: !page.signedIn ? 'forbidden' : 'state' in page ? page.state : 'unavailable',
+          reason: !page.signedIn
+            ? 'forbidden'
+            : 'failure' in page && page.failure.code === 'platform_closed'
+              ? 'closed'
+              : 'failure' in page && (page.failure.status === 401 || page.failure.status === 403)
+                ? 'forbidden'
+                : 'state' in page && page.state === 'closed'
+                  ? 'closed'
+                  : 'unavailable',
           failure: page.signedIn && 'failure' in page ? page.failure : undefined,
         });
         return null;
@@ -201,22 +222,33 @@ export class NotificationEditor {
   async reload() {
     if (this.waiting() || this.state.pending || this.state.phase === 'reloading') return;
     const preserve =
-      !sameNotifications(this.state.draft, this.state.known.notifications) || this.state.phase === 'conflict';
-    this.update({ phase: 'reloading', failure: undefined });
+      !sameNotifications(this.state.draft, this.state.known.notifications) ||
+      this.state.phase === 'conflict' ||
+      this.state.phase === 'review' ||
+      this.state.readOrigin === 'review';
+    const draftAtRead = this.state.draft;
+    this.update({
+      phase: 'reloading',
+      readOrigin: preserve ? 'review' : 'refresh',
+      reason: undefined,
+      failure: undefined,
+    });
     const current = await this.readCurrent();
     if (!current) {
       this.update({ phase: 'failed' });
       return;
     }
+    const edited = preserve || this.state.draft !== draftAtRead;
     this.confirm(current);
     this.update({
-      draft: preserve ? this.state.draft : { ...current.notifications },
-      phase: preserve ? 'review' : 'idle',
+      draft: edited ? this.state.draft : { ...current.notifications },
+      phase: edited ? 'review' : 'idle',
+      readOrigin: null,
       reason: undefined,
     });
   }
   useCurrent() {
-    if (this.state.pending || this.state.phase === 'reloading') return;
+    if (this.state.pending || this.state.readOrigin !== null) return;
     this.update({ draft: { ...this.state.known.notifications }, phase: 'idle', reason: undefined, failure: undefined });
   }
 }
