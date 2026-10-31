@@ -320,7 +320,7 @@ export function CollectionPage({
     page.coverMediaId,
     page.visibility,
     page.memberState,
-    page.members.map((member) => `${member.id}:${member.note ?? ''}`).join('\n'),
+    JSON.stringify(page.members.map((member) => [member.id, member.note, member.subject?.id ?? null])),
   ].join('\n');
   // Capture the actual page and actor, not a row index that another read can reuse.
   const boundaryContext = JSON.stringify([
@@ -1279,7 +1279,7 @@ export function CollectionPage({
             data-collection-save
           >
             <Button type="submit" form="collection-edit-form" disabled={!hydrated || pending || conflict}>
-              {pending ? m.library_collection_save_pending() : m.library_collection_save()}
+              {writing ? m.library_collection_save_pending() : m.library_collection_save()}
             </Button>
             <Button type="button" variant="outline" disabled={pending} onClick={cancelEditing}>
               {m.library_collection_cancel()}
