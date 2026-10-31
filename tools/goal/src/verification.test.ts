@@ -1088,8 +1088,10 @@ test('exact retained local wrapper registration stays pending across host sweeps
     const submitted = submittedProof(h, { acceptance: { ...h.proofBrief.acceptance, command } });
     const task = h.store.createTask({ ...brief(), kind: 'claim' },
       { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'claim');
+    const reason = proofExecutionUnavailable(command);
+    if (!reason) throw new Error('Wrapped command must require its native producer port');
     expect(h.tasks.queueProofStart(task.id, { expectedAttempt: 0, brief: submitted.path }, h.actor)).toEqual({
-      taskId: task.id, attempt: 0, status: 'pending', reason: proofExecutionUnavailable(command),
+      taskId: task.id, attempt: 0, status: 'pending', reason,
     });
     const job = new WorkerJob(h.tasks, { enqueue() { throw new Error('proof must never land'); } }, { deliver() {} });
     job.resumePendingRetries();
