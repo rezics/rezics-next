@@ -130,6 +130,16 @@ native API. The user cannot inspect the claimed ready design at all. Supply the 
 isolated example, or use the integrated page harness when the claim exercises it. A global shell is not itself
 the cure for a missing QueryClient.
 
+The same cause also affects the published `patterns-account-managed-account-detail` exports, including
+`--member-restricted`: both widths show the QueryClient wall, also confirmed by fresh direct observation in
+`comparisons/patterns-account-managed-account-detail--member-restricted--*.png`. The source file
+`apps/web/src/stories/patterns/managed-account-detail.stories.tsx` constructs an illustrative reader but mounts
+`ManagedAccountDetailCard` without the normal harness. The card now includes `ManagedAccountActions`, whose
+`apps/web/src/settings/managed-account-actions.tsx` calls `useSession`. Supplying a read fixture did not supply
+this newly composed dependency. A restricted member state should show its intentional disclosure boundary;
+a provider exception before that state is an unexpected composition defect. These examples demonstrate why
+provider ownership must follow the mounted subtree as it evolves, rather than the original component label.
+
 The first phone capture of `pages-community-thread--editor-mention` instead shows
 `Failed to fetch dynamically imported module: https://storybook.rezics.com/assets/thread-media.stories-C5SnEn_Q.js`.
 Its desktop observation renders the mention editor, and subsequent fresh direct visits render it at both widths.
