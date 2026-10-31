@@ -94,7 +94,7 @@ async function submit(canvasElement: HTMLElement) {
 }
 async function review(canvasElement: HTMLElement) {
   const canvas = await submit(canvasElement);
-  await canvas.findByText(m.correction_proposed());
+  await canvas.findByText(m.authored_submitted());
   await userEvent.click(canvas.getByRole('button', { name: m.correction_review() }));
   const candidate = await canvas.findByRole('region', { name: m.authored_candidate() });
   await expect(within(candidate).getByText('A quiet story about friendship.')).toBeVisible();
@@ -198,7 +198,7 @@ export const Unavailable: Story = {
     const canvas = await submit(canvasElement);
     await canvas.findByText(m.correction_unavailable());
     await userEvent.click(canvas.getByRole('button', { name: m.correction_retry() }));
-    await canvas.findByText(m.correction_proposed());
+    await canvas.findByText(m.authored_submitted());
   },
 };
 export const Proposed: Story = {

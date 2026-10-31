@@ -1651,6 +1651,7 @@
   "authored_replacement": "새 대체 후보",
   "authored_preserved": "새 글을 작성하세요. 기존 문서, 서식과 후보는 보존됩니다. 숨겨진 글, 사용자 게시물이나 레시피 사이트의 조리법을 붙여 넣지 마세요.",
   "authored_draft": "초안 — 미제출",
+  "authored_submitted": "제안을 제출했습니다. 검토 상태와 현재 공개 선택은 아래에 표시됩니다.",
   "authored_invalid": "제출 전에 글, 언어, 라이선스와 출처를 확인하세요.",
   "authored_empty": "이 유형에는 허용된 문서 항목이 없습니다.",
   "authored_review_draft": "초안 검토 후 새로고침",

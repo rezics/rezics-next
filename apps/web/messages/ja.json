@@ -1651,6 +1651,7 @@
   "authored_replacement": "新しい置き換え候補",
   "authored_preserved": "ここには新しい文章を書きます。既存の文書・書式・候補は保持されます。非公開の文章、ユーザーの投稿、レシピサイトの作り方を貼り付けないでください。",
   "authored_draft": "下書き — 未送信",
+  "authored_submitted": "提案を送信しました。確認状況と現在の公開項目での選択は下に表示されます。",
   "authored_invalid": "送信前に文章・言語・ライセンス・出典を確認してください。",
   "authored_empty": "この種類には利用可能な文書項目がありません。",
   "authored_review_draft": "下書きを確認して再読み込み",

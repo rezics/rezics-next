@@ -1734,6 +1734,7 @@
   "authored_replacement": "New replacement candidate",
   "authored_preserved": "Write a new work here. Existing documents, formatting and candidates are preserved. Do not paste withheld text, user posts or recipe-site methods.",
   "authored_draft": "Draft — not submitted",
+  "authored_submitted": "Proposal submitted. Review and current public selection are shown below.",
   "authored_invalid": "Check the text, language, licence and citation before submitting.",
   "authored_empty": "This subject type has no admitted document fields.",
   "authored_review_draft": "Review draft and reload",

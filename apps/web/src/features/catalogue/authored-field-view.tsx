@@ -94,6 +94,16 @@ export function AuthoredField({
   const property = current?.property ?? requestedProperty.current;
   const draft = drafts[property];
   const failure = submissionFailure ?? (!current ? 'unavailable' : undefined);
+  const proposalSelected =
+    !!proposed &&
+    !busy &&
+    !failure &&
+    current?.public.subject.statements[property]?.some(
+      (statement) =>
+        statement.id === proposed.candidate &&
+        statement.property.id === property &&
+        (statement.rank === 'normal' || statement.rank === 'preferred'),
+    );
   const locked = busy || !!command || !!proposed || !current || failure === 'denied';
   const title = current ? pageText(current.public.subject.labels, locale).text : '';
   const id = current?.public.subject.id;
@@ -413,7 +423,11 @@ export function AuthoredField({
                 <FieldLabel htmlFor="authored-original">{labels.original}</FieldLabel>
               </Field>
               <p role="status" className="text-sm text-muted-foreground">
-                {proposed ? m.correction_proposed({}, o) : m.authored_draft({}, o)}
+                {proposed
+                  ? proposalSelected
+                    ? m.candidate_selected({}, o)
+                    : m.authored_submitted({}, o)
+                  : m.authored_draft({}, o)}
               </p>
               {!proposed && (
                 <Button type="submit" className="min-h-11" disabled={locked}>

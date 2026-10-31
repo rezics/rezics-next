@@ -1651,6 +1651,7 @@
   "authored_replacement": "新增替代候選",
   "authored_preserved": "在此撰寫新作品。既有文件、格式和候選皆會保留。請勿貼上被隱藏的文字、使用者貼文或食譜網站的做法。",
   "authored_draft": "草稿 — 尚未提交",
+  "authored_submitted": "提案已提交。審核情況與目前的公開選擇顯示於下方。",
   "authored_invalid": "提交前請檢查文字、語言、授權和來源。",
   "authored_empty": "此條目類型沒有已開放的文件欄位。",
   "authored_review_draft": "檢查草稿並重新載入",

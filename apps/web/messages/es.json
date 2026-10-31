@@ -1651,6 +1651,7 @@
   "authored_replacement": "Nueva propuesta de reemplazo",
   "authored_preserved": "Escribe una obra nueva aquí. Se conservan los documentos, formatos y propuestas existentes. No pegues texto oculto, publicaciones de usuarios ni métodos de sitios de recetas.",
   "authored_draft": "Borrador — sin enviar",
+  "authored_submitted": "Propuesta enviada. La revisión y la selección pública actual se muestran a continuación.",
   "authored_invalid": "Comprueba el texto, idioma, licencia y cita antes de enviar.",
   "authored_empty": "Este tipo no admite campos de documento.",
   "authored_review_draft": "Revisar borrador y recargar",

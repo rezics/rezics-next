@@ -1652,6 +1652,7 @@
   "authored_replacement": "新建替代候选",
   "authored_preserved": "在此撰写新作品。现有文档、格式和候选均会保留。请勿粘贴被隐藏的文本、用户帖子或食谱网站的做法。",
   "authored_draft": "草稿 — 尚未提交",
+  "authored_submitted": "提案已提交。审核情况与当前公开选择显示在下方。",
   "authored_invalid": "提交前请检查文本、语言、许可和来源。",
   "authored_empty": "此条目类型没有已开放的文档字段。",
   "authored_review_draft": "检查草稿并重新加载",

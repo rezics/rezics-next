@@ -1651,6 +1651,7 @@
   "authored_replacement": "Neuer Ersatzvorschlag",
   "authored_preserved": "Schreibe hier einen neuen Text. Vorhandene Dokumente, Formatierungen und Vorschläge bleiben erhalten. Keine gesperrten Texte, Nutzerbeiträge oder Rezeptanleitungen von Websites einfügen.",
   "authored_draft": "Entwurf — nicht eingereicht",
+  "authored_submitted": "Vorschlag eingereicht. Prüfung und aktuelle öffentliche Auswahl werden unten angezeigt.",
   "authored_invalid": "Text, Sprache, Lizenz und Beleg vor dem Einreichen prüfen.",
   "authored_empty": "Dieser Objekttyp hat keine zugelassenen Dokumentfelder.",
   "authored_review_draft": "Entwurf prüfen und neu laden",

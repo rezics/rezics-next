@@ -1651,6 +1651,7 @@
   "authored_replacement": "Nouvelle proposition de remplacement",
   "authored_preserved": "Écrivez un nouveau texte ici. Les documents, mises en forme et propositions existants sont conservés. Ne collez aucun texte masqué, message d’utilisateur ni méthode issue d’un site de recettes.",
   "authored_draft": "Brouillon — non envoyé",
+  "authored_submitted": "Proposition envoyée. L’examen et la sélection publique actuelle sont présentés ci-dessous.",
   "authored_invalid": "Vérifiez le texte, la langue, la licence et la référence avant l’envoi.",
   "authored_empty": "Ce type n’admet aucun champ de document.",
   "authored_review_draft": "Vérifier le brouillon et recharger",
