@@ -60,6 +60,8 @@ export function CollectionExport({
     message: string;
   } | null>(null);
 
+  if (!available) return null;
+
   async function perform(kind: 'download' | 'copy') {
     if (!available || pending) return;
     setPending(true);
@@ -89,7 +91,7 @@ export function CollectionExport({
         <Button
           type="button"
           variant="outline"
-          disabled={!available || pending}
+          disabled={pending}
           aria-describedby={descriptionId}
           onClick={() => void perform('download')}
         >
@@ -98,7 +100,7 @@ export function CollectionExport({
         <Button
           type="button"
           variant="outline"
-          disabled={!available || pending}
+          disabled={pending}
           aria-describedby={descriptionId}
           onClick={() => void perform('copy')}
         >
@@ -106,10 +108,10 @@ export function CollectionExport({
         </Button>
       </div>
       <p id={descriptionId} className="text-sm text-muted-foreground">
-        {available ? m.library_collection_export_note() : m.library_collection_export_unavailable()}
+        {m.library_collection_export_note()}
       </p>
       <p role="status" aria-live="polite" aria-atomic="true" className="text-sm">
-        {available && notice?.page === page && notice.origin === context.origin && notice.locale === context.locale
+        {notice?.page === page && notice.origin === context.origin && notice.locale === context.locale
           ? notice.message
           : ''}
       </p>

@@ -103,7 +103,7 @@ test('unavailable and later payloads never touch browser download or clipboard A
   expect(await copyCollectionItemList(page, context, true)).toBe(false);
 });
 
-test('the shared action exposes localized names, descriptions, disabled states and a live status in all eight locales', async () => {
+test('the shared action exposes localized names, descriptions, visibility and a live status in all eight locales', async () => {
   const previous = getLocale();
   try {
     expect(locales).toHaveLength(8);
@@ -122,12 +122,40 @@ test('the shared action exposes localized names, descriptions, disabled states a
       const unavailable = renderToStaticMarkup(
         createElement(CollectionExport, { page: { ...page, publicExport: false }, context: { ...context, locale } }),
       );
-      expect(unavailable).toContain(messages.library_collection_export_unavailable);
-      expect(unavailable.match(/<button[^>]*\sdisabled/g)).toHaveLength(2);
+      expect(unavailable).toBe('');
       expect(unavailable).not.toContain('application/ld+json');
       expect(unavailable).not.toContain('Not in the export');
     }
   } finally {
     setLocale(previous, { reload: false });
   }
+});
+
+test('Unavailable private unlisted dynamic partial filtered or unknown Collection views do not permanently display unusable export controls', () => {
+  const views: CollectionPublicPage[] = [
+    { ...page, memberState: 'unavailable' },
+    { ...page, memberState: 'preparing' },
+    { ...page, visibility: 'private' },
+    { ...page, visibility: 'public' },
+    { ...page, disclosedVisibility: 'unlisted' },
+    { ...page, preparing: false },
+    { ...page, publicExport: false },
+    { ...page, next: 'more' },
+    { ...page, firstPage: false },
+    { ...page, cursor: 'later' },
+    { ...page, filterActive: true },
+    { ...page, filter: { and: [] } },
+    { ...page, filterIgnored: ['ignored'] },
+    { ...page, filterStatus: 'failed' },
+    { ...page, memberState: undefined },
+    { ...page, visibility: undefined },
+    { ...page, disclosedVisibility: undefined },
+    { ...page, publicExport: undefined },
+    { ...page, firstPage: undefined },
+    { ...page, next: undefined },
+  ];
+  for (const view of views) {
+    expect(renderToStaticMarkup(createElement(CollectionExport, { page: view, context }))).toBe('');
+  }
+  expect(renderToStaticMarkup(createElement(CollectionExport, { page, context, laterPage: true }))).toBe('');
 });

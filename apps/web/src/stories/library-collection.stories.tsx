@@ -168,9 +168,10 @@ export const PublicItemListExport: Story = {
 async function exportUnavailable(context: { canvasElement: HTMLElement }, title: string) {
   await variantReady(context, title);
   const canvas = within(context.canvasElement);
-  await expect(canvas.getByRole('button', { name: m.library_collection_export_download() })).toBeDisabled();
-  await expect(canvas.getByRole('button', { name: m.library_collection_export_copy() })).toBeDisabled();
-  await expect(canvas.getByText(m.library_collection_export_unavailable())).toBeVisible();
+  await expect(canvas.queryByRole('group', { name: m.library_collection_export_label() })).toBeNull();
+  await expect(canvas.queryByRole('button', { name: m.library_collection_export_download() })).toBeNull();
+  await expect(canvas.queryByRole('button', { name: m.library_collection_export_copy() })).toBeNull();
+  await expect(canvas.queryByText(m.library_collection_export_unavailable())).toBeNull();
 }
 
 export const PublicItemListExportOwnerUnavailable: Story = {
