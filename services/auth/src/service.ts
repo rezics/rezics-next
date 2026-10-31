@@ -2464,8 +2464,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         );
         return json({ success: response.ok }, response.status, response.headers.getSetCookie());
       } catch (error) {
-        if (error instanceof SuspendedSignIn)
-          return json({ error: 'account_suspended', code: error.body?.code }, 403);
+        if (error instanceof SuspendedSignIn) return json({ error: 'account_suspended', code: error.body?.code }, 403);
         if (error instanceof StepUpRequired)
           return json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
         const status =
