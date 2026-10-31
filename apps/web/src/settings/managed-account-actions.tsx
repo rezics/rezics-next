@@ -102,12 +102,7 @@ function TargetActions({ viewerId, io = nativeIO, ...target }: ViewerProps) {
             {result?.state === 'unavailable' ? (
               <>
                 {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={pending || waiting}
-                  onClick={() => void read.retry()}
-                >
+                <Button type="button" variant="outline" disabled={pending || waiting} onClick={() => void read.retry()}>
                   {m.managed_actions_retry()}
                 </Button>
               </>

@@ -291,7 +291,9 @@ test('late retries cannot publish into a new viewer, target or CSRF lifetime', a
     await previous.load();
     const retry = previous.retry();
     const current = new ManagedAccountActionsRead(selection, async () => ({
-      state: 'denied', status: 403, code: 'forbidden',
+      state: 'denied',
+      status: 403,
+      code: 'forbidden',
     }));
     expect(current.snapshot()).toEqual({ result: null, pending: false });
     await current.load();
