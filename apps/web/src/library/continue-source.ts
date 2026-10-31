@@ -22,12 +22,32 @@ export type ContinueFailure =
 export type ContinueResult = { state: 'loaded'; entries: ContinueEntry[]; next: string | null } | ContinueFailure;
 export type ContinueView = ContinueResult | { state: 'unknown' };
 
-/** The producer adapter supplies one native bounded page and, when needed, one batched header read. */
+/** One native FULL page carries both private progress and currently authorized subject presentation. */
 export type ContinueSource = (
   client: KernelClient,
   authorization: string,
   input: { limit: number; cursor?: string },
+  signal?: AbortSignal,
 ) => Promise<ContinueResult>;
+
+export function continueProgress(session: (ProgressLabelInput & { id: string }) | null): ContinueProgress | null {
+  return session
+    ? {
+        sessionId: session.id,
+        mode: session.mode,
+        unit: session.unit,
+        ...(session.unitLabel === undefined ? {} : { unitLabel: session.unitLabel }),
+        ...(session.unitLabelLanguage === undefined ? {} : { unitLabelLanguage: session.unitLabelLanguage }),
+        ...(session.unitCountForms === undefined ? {} : { unitCountForms: session.unitCountForms }),
+        ...(session.dimension === undefined ? {} : { dimension: session.dimension }),
+        amount: session.amount,
+        total: session.total,
+        completedUnitCount: session.completedUnitCount,
+        locator: session.locator,
+        ...(session.position === undefined ? {} : { position: session.position }),
+      }
+    : null;
+}
 
 export class ContinueReadError extends Error {
   readonly state: ContinueFailure['state'];

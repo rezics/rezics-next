@@ -27,8 +27,23 @@ test('the private consumer preserves empty, preparation and native failure separ
   }
 });
 
-test('the missing generated caller is explicit unavailable and signed-out makes no source read', async () => {
-  expect(await loadContinueState(client, request(), {})).toEqual({ state: 'unavailable', reason: 'missing-binding' });
+test('the delivered default caller reads one native FULL page and signed-out makes no source read', async () => {
+  const calls: Request[] = [];
+  const native = createKernelClient('https://kernel.example.test', {
+    async fetch(input, init) {
+      calls.push(new Request(input, init));
+      return Response.json({ subjects: [], next: null });
+    },
+  });
+  expect(await loadContinueState(native, request(), {})).toEqual({ state: 'loaded', entries: [], next: null });
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.method).toBe('GET');
+  expect(new URL(calls[0]!.url).pathname).toBe('/v1/libraryContinue');
+  expect([...new URL(calls[0]!.url).searchParams]).toEqual([
+    ['limit', '6'],
+    ['view', 'FULL'],
+  ]);
+  expect(calls[0]!.headers.get('authorization')).toBe('Bearer owner');
   const source: ContinueSource = async () => {
     throw new Error('must not read');
   };

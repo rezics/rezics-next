@@ -6,39 +6,18 @@ import { personalRead } from '../kernel/query';
 import { MediaProblem } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import type { ProgressLabelInput } from './progress-label';
 import { nativeContinueSource } from './continue-adapter';
 import {
   CONTINUE_LIMIT,
   ContinueReadError,
   continueFailure,
   type ContinueEntry,
-  type ContinueProgress,
   type ContinueResult,
   type ContinueSource,
 } from './continue-source';
 
-export { CONTINUE_LIMIT, ContinueReadError } from './continue-source';
+export { CONTINUE_LIMIT, ContinueReadError, continueProgress } from './continue-source';
 export type { ContinueEntry, ContinueProgress, ContinueResult, ContinueView } from './continue-source';
-
-export function continueProgress(session: (ProgressLabelInput & { id: string }) | null): ContinueProgress | null {
-  return session
-    ? {
-        sessionId: session.id,
-        mode: session.mode,
-        unit: session.unit,
-        ...(session.unitLabel === undefined ? {} : { unitLabel: session.unitLabel }),
-        ...(session.unitLabelLanguage === undefined ? {} : { unitLabelLanguage: session.unitLabelLanguage }),
-        ...(session.unitCountForms === undefined ? {} : { unitCountForms: session.unitCountForms }),
-        ...(session.dimension === undefined ? {} : { dimension: session.dimension }),
-        amount: session.amount,
-        total: session.total,
-        completedUnitCount: session.completedUnitCount,
-        locator: session.locator,
-        ...(session.position === undefined ? {} : { position: session.position }),
-      }
-    : null;
-}
 
 export function homeContinueQuery<T>(locale: string, read: () => Promise<T>) {
   return queryOptions({
@@ -86,7 +65,7 @@ export async function loadContinueState(
     await prepareSession(request, sessionEnv, { refresh: false });
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'signed-out' };
-    const result = await source(client, authorization, { limit: CONTINUE_LIMIT, ...input });
+    const result = await source(client, authorization, { limit: CONTINUE_LIMIT, ...input }, request.signal);
     return result.state === 'loaded' ? { ...result, entries: result.entries.slice(0, CONTINUE_LIMIT) } : result;
   } catch (error) {
     if (error instanceof ContinueReadError) return error.failure;
