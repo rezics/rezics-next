@@ -129,7 +129,7 @@ export function HeaderSearchView({
         ref={triggerRef}
         type="button"
         onClick={onOpen}
-        aria-label={m.search_label()}
+        aria-labelledby={`${id}-trigger-label`}
         aria-expanded={expanded}
         aria-controls={`${id}-form`}
         className={cn(
@@ -138,7 +138,7 @@ export function HeaderSearchView({
         )}
       >
         <RezicsMark />
-        <span className="truncate">
+        <span id={`${id}-trigger-label`} className="truncate">
           {query || (scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global())}
         </span>
       </button>

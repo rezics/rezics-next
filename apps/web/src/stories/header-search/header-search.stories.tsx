@@ -82,10 +82,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function expand({ canvasElement }: { canvasElement: HTMLElement }) {
+async function expand({ canvasElement }: { canvasElement: HTMLElement }, triggerName = m.header_search_global()) {
   const canvas = within(canvasElement);
   if (window.matchMedia('(max-width: 767px)').matches)
-    await userEvent.click(await canvas.findByRole('button', { name: m.search_label() }));
+    await userEvent.click(await canvas.findByRole('button', { name: triggerName, exact: true }));
   else await userEvent.click(await canvas.findByRole('combobox', { name: m.search_label() }));
   const input = await canvas.findByRole('combobox', { name: m.search_label() });
   await expect(input).toHaveAttribute('aria-expanded', 'true');
@@ -106,7 +106,7 @@ export const Rest: Story = {
 export const ScopeChip: Story = {
   render: () => <Example scope={scope} />,
   play: async (context) => {
-    const { canvas } = await expand(context);
+    const { canvas } = await expand(context, m.header_search_in_scope({ scope: scope.name }));
     await expect(
       canvas.getByRole('button', { name: m.header_search_remove_scope({ scope: scope.name }) }),
     ).toBeVisible();
@@ -130,7 +130,7 @@ export const Typing: Story = {
 export const ScopeRemoved: Story = {
   render: () => <Example scope={scope} />,
   play: async (context) => {
-    const { canvas, input } = await expand(context);
+    const { canvas, input } = await expand(context, m.header_search_in_scope({ scope: scope.name }));
     await userEvent.keyboard('{Backspace}');
     await expect(
       canvas.queryByRole('button', { name: m.header_search_remove_scope({ scope: scope.name }) }),

@@ -17,6 +17,7 @@ import type { SearchScope } from '../src/search/header-search/types';
 import type { SuggestionResult } from '../src/search/suggestions';
 import { searchFormFields } from '../src/search/search-params';
 import { m } from '../src/paraglide/messages.js';
+import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 
 const scope: SearchScope = { kind: 'Collection', id: 'reading', name: 'Reading list' };
 const result: SuggestionResult = {
@@ -39,6 +40,42 @@ function present(state: HeaderSearchState, extra: Partial<Parameters<typeof Head
 function inputCount(markup: string) {
   return (markup.match(/<input\b[^>]*role="combobox"/g) ?? []).length;
 }
+
+test('the phone trigger is named by its exact visible localized brand, query or scope text', () => {
+  const previousLocale = getLocale();
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      let state = initialHeaderSearchState();
+      const named = (label: string) => {
+        const markup = present(state, { locale });
+        const trigger = markup.match(/<button\b[^>]*class="header-search-trigger[^>]*>[\s\S]*?<\/button>/)?.[0];
+        expect(trigger).toBeDefined();
+        expect(trigger).toContain('type="button"');
+        expect(trigger).toContain('aria-labelledby="header-trigger-label"');
+        expect(trigger).not.toContain('aria-label=');
+        expect(trigger).toContain(
+          renderToStaticMarkup(createElement('span', { id: 'header-trigger-label', className: 'truncate' }, label)),
+        );
+        expect(trigger).toContain('<svg aria-hidden="true"');
+        expect(inputCount(markup)).toBe(1);
+      };
+      named(m.header_search_global());
+      state = reduceHeaderSearchState(state, { type: 'sync-scope', scope });
+      named(m.header_search_in_scope({ scope: scope.name }));
+      state = reduceHeaderSearchState(state, { type: 'open-phone' });
+      state = reduceHeaderSearchState(state, { type: 'query', query: 'Prince & fox' });
+      state = reduceHeaderSearchState(state, { type: 'escape' });
+      named('Prince & fox');
+      state = reduceHeaderSearchState(state, { type: 'query', query: '' });
+      named(m.header_search_in_scope({ scope: scope.name }));
+      state = reduceHeaderSearchState(state, { type: 'remove-scope' });
+      named(m.header_search_global());
+    }
+  } finally {
+    setLocale(previousLocale, { reload: false });
+  }
+});
 
 test('one actual query surface renders and transitions through scoped expanded and failure states without a duplicate input or authority widening', async () => {
   let state = initialHeaderSearchState(scope);
