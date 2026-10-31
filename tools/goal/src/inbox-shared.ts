@@ -194,7 +194,12 @@ function message(row: InboxRow): SharedInboxMessage {
 function appendPage<T>(rows: T[], limit: number, cursorFor: (item: T) => number): InboxPage<T> {
   const hasMore = rows.length > limit;
   const entries = hasMore ? rows.slice(0, limit) : rows;
-  return { entries, limit, hasMore, nextCursor: hasMore && entries.length ? cursorFor(entries[entries.length - 1]!) : null };
+  return {
+    entries,
+    limit,
+    hasMore,
+    nextCursor: hasMore && entries.length ? cursorFor(entries[entries.length - 1]!) : null,
+  };
 }
 
 function filterWhere(filter: SharedInboxFilter): { clauses: string[]; values: (string | number)[] } {
@@ -252,7 +257,10 @@ export class SharedInboxQueries {
     return appendPage(rows.map(message), limit, (item) => item.id);
   }
 
-  thread(reference: string | number, options: { limit?: number; cursor?: number } = {}): InboxPage<SharedInboxMessage> & {
+  thread(
+    reference: string | number,
+    options: { limit?: number; cursor?: number } = {},
+  ): InboxPage<SharedInboxMessage> & {
     reference: string;
     rootId: number | null;
   } {
@@ -265,9 +273,10 @@ export class SharedInboxQueries {
     let rootId: number | null = null;
     let taskLookup = false;
     if (numericId !== undefined) {
-      const found = this.db
-        .query('SELECT id, thread_root_id FROM manager_inbox WHERE id = ?')
-        .get(numericId) as { id: number; thread_root_id: number | null } | null;
+      const found = this.db.query('SELECT id, thread_root_id FROM manager_inbox WHERE id = ?').get(numericId) as {
+        id: number;
+        thread_root_id: number | null;
+      } | null;
       if (found) rootId = found.thread_root_id ?? found.id;
       else taskLookup = true;
     } else taskLookup = true;
@@ -429,7 +438,16 @@ export function sharedInboxFields(event: unknown): {
   escalation: InboxEscalation | null;
 } {
   if (!event || typeof event !== 'object' || Array.isArray(event))
-    return { sender: null, taskId: null, goalId: null, kind: null, summary: null, replyToId: null, documentRefs: null, escalation: null };
+    return {
+      sender: null,
+      taskId: null,
+      goalId: null,
+      kind: null,
+      summary: null,
+      replyToId: null,
+      documentRefs: null,
+      escalation: null,
+    };
   const value = event as Partial<ManagerEvent>;
   if (value.replyToId !== undefined && (!Number.isSafeInteger(value.replyToId) || value.replyToId <= 0))
     throw new Error('inbox reply reference must be a positive message id');
