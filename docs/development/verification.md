@@ -107,10 +107,10 @@ before declaring the Goal complete.
 
 # Verification toolchain
 
-Use the exact `bun@1.4.4-canary.20261027.1` npm distribution pinned in the root
+Use the exact `bun@1.4.4-canary.20261031.1` npm distribution pinned in the root
 `packageManager`, development dependencies and lockfile. Its Linux x64 binary reports
-`1.4.4-canary.1+a0cc096ce` with `bun --revision` (full revision
-`a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b`). `bun --version` reports only `1.4.4`, so it
+`1.4.4-canary.1+da867c60b` with `bun --revision` (full revision
+`da867c60bf0bcbf9d6d36994f8ca0efa42075115`). `bun --version` reports only `1.4.4`, so it
 cannot distinguish this canary from the stable release.
 
 `bun install --frozen-lockfile` installs this runtime into `node_modules/.bin`.

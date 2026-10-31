@@ -329,7 +329,7 @@ test('complete executable contract accepts actual dev scripts and genuine manife
   try {
     const { root, executable, pin, artifact } = completeScriptsRoot(directory);
     expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(devFile('package.json'));
-    expect(pin).toBe('bun@1.4.4-canary.20261027.1');
+    expect(pin).toBe('bun@1.4.4-canary.20261031.1');
     const cli = spawnSync(
       process.execPath,
       [join(repositoryRoot, 'tools/goal/scripts/check-compatibility.ts'), '--scripts-root', root],

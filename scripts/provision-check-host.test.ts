@@ -96,7 +96,7 @@ if (command === 'bun' && args[0] === '--version') {
 }
 if (command === 'bun') process.exit(0);
 if (command === 'node' && args[0] === '--version') {
-  console.log('v26.8.2');
+  console.log('v26.13.0');
   process.exit(0);
 }
 if (command === 'node') process.exit(0);

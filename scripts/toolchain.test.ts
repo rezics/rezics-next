@@ -44,16 +44,16 @@ test('the repository and check-host provisioner pin the tested canary build', as
   expect(manifest.packageManager).toBe(`bun@${manifest.devDependencies.bun}`);
   const revision = run([bun, '--eval', 'console.log(Bun.revision)']);
   expect(revision.code).toBe(0);
-  expect(revision.output.trim()).toBe('a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b');
+  expect(revision.output.trim()).toBe('da867c60bf0bcbf9d6d36994f8ca0efa42075115');
   const provision = await Bun.file(join(root, 'scripts/provision-check-host.sh')).text();
   expect(provision).toContain(`bun_version=${manifest.devDependencies.bun}`);
-  expect(provision).toContain('bun_revision=a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b');
+  expect(provision).toContain('bun_revision=da867c60bf0bcbf9d6d36994f8ca0efa42075115');
 });
 
 test('the gate invokes the installed Bun explicitly instead of Bun.spawn selecting its caller', () => {
   const result = run(resolveBunCommand(['bun', '--revision'], root));
   expect(result.code, result.error).toBe(0);
-  expect(result.output.trim()).toBe('1.4.4-canary.1+a0cc096ce');
+  expect(result.output.trim()).toBe('1.4.4-canary.1+da867c60b');
   expect(resolveBunCommand(['bun', '--revision'], directory)).toEqual(['bun', '--revision']);
   expect(resolveBunCommand(['other-tool', '--version'], root)).toEqual(['other-tool', '--version']);
 });

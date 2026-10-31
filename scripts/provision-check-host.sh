@@ -78,11 +78,11 @@ if [ "$#" -eq 5 ]; then
   done
 fi
 
-bun_version=1.4.4-canary.20261027.1
-bun_revision=a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b
+bun_version=1.4.4-canary.20261031.1
+bun_revision=da867c60bf0bcbf9d6d36994f8ca0efa42075115
 # The kernel check runs npm-packaged tools (dbmate) whose launcher scripts start with `env node`, and tooling that
 # needs node:sqlite; Debian's own Node is too old for it.
-node_version=26.8.2
+node_version=26.13.0
 # The browser workspaces (apps/auth, apps/web, packages/ui) drive Chromium through Playwright; the version matches the
 # one in their package.json files, and the browser and its system libraries are installed once per version.
 playwright_version=1.64.1
