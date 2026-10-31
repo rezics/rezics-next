@@ -233,7 +233,10 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
   const placement = acceptance.placement;
   if (placement !== undefined && placement !== 'local' && placement !== 'default')
     throw new Error('acceptance.placement must be local or default');
-  const estimate = object(raw.estimate ?? (raw.kind === 'verification' ? { lines: 1, files: 1 } : undefined), 'estimate');
+  const estimate = object(
+    raw.estimate ?? (raw.kind === 'verification' ? { lines: 1, files: 1 } : undefined),
+    'estimate',
+  );
   for (const key of ['lines', 'files'])
     if (!Number.isSafeInteger(estimate[key]) || (estimate[key] as number) < 1)
       throw new Error(`estimate.${key} must be positive`);
@@ -266,7 +269,9 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
   };
   if (brief.kind === 'verification') {
     if (brief.paths.length || brief.riskAreas.length || brief.criticalPath || brief.target || placement === 'local')
-      throw new Error('verification is ordinary, read-only original acceptance; paths, risk areas, target and local override are forbidden');
+      throw new Error(
+        'verification is ordinary, read-only original acceptance; paths, risk areas, target and local override are forbidden',
+      );
     if (/^\s*```[^\n]*\bpath=/m.test(markdown)) throw new Error('verification cannot supply frozen input blocks');
   } else if (raw.proof !== undefined) throw new Error('proof metadata requires kind verification');
   if (brief.acceptance.placement === 'local') validateLocalAcceptanceCommand(brief.acceptance.command);

@@ -3,7 +3,16 @@ import type { AttemptRef, FirstFailure, ManagerEventKind } from './contracts.ts'
 
 export type Cli = 'codex' | 'grok' | 'cursor' | 'claude';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-export type TaskState = 'ready' | 'held' | 'running' | 'landing' | 'integrated' | 'merged' | 'stopped' | 'cancelled' | 'verified';
+export type TaskState =
+  | 'ready'
+  | 'held'
+  | 'running'
+  | 'landing'
+  | 'integrated'
+  | 'merged'
+  | 'stopped'
+  | 'cancelled'
+  | 'verified';
 export type TaskKind =
   | 'implementation'
   | 'interface'

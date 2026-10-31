@@ -737,8 +737,12 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
       const packageManifest = realpathSync(join(packageRoot, 'package.json'));
       const dependencyPaths = (createRequire(packageManifest).resolve.paths(binary.package) ?? []).filter((path) => {
         const fromAncestor = relative(dirname(path), dirname(packageManifest));
-        return basename(path) === 'node_modules' && !isAbsolute(fromAncestor) &&
-          fromAncestor !== '..' && !fromAncestor.startsWith(`..${sep}`);
+        return (
+          basename(path) === 'node_modules' &&
+          !isAbsolute(fromAncestor) &&
+          fromAncestor !== '..' &&
+          !fromAncestor.startsWith(`..${sep}`)
+        );
       });
       // A linked checkout can expose a hoisted edge outside the real package's ancestors.
       dependencyPaths.push(join(scriptsRoot, 'node_modules'));
@@ -785,14 +789,16 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
       const packageBinaryPath = join(dirname(packageManifest), 'bin/bun.exe');
       const packageBinary = realpathSync(packageBinaryPath);
       const actualSha256 = createHash('sha256').update(readFileSync(resolved)).digest('hex');
-      const platformSha256 = installedBinary === undefined
-        ? undefined
-        : createHash('sha256').update(readFileSync(installedBinary)).digest('hex');
+      const platformSha256 =
+        installedBinary === undefined
+          ? undefined
+          : createHash('sha256').update(readFileSync(installedBinary)).digest('hex');
       const layoutOk = platformBinaryPresent
         ? (resolved === packageBinary || resolved === installedBinary) && platformSha256 === binary.executableSha256
-        : resolved === packageBinaryPath && packageBinary === packageBinaryPath && lstatSync(packageBinaryPath).isFile();
-      const executableOk =
-        layoutOk && actualSha256 === binary.executableSha256;
+        : resolved === packageBinaryPath &&
+          packageBinary === packageBinaryPath &&
+          lstatSync(packageBinaryPath).isFile();
+      const executableOk = layoutOk && actualSha256 === binary.executableSha256;
       pushCheck(
         checks,
         'workerCheck.bun.executable',

@@ -1,4 +1,9 @@
-import { ProofCapacityQueuedError, readReservationObservation, readProofObservation, historicalProofTerminal } from './verification.ts';
+import {
+  ProofCapacityQueuedError,
+  readReservationObservation,
+  readProofObservation,
+  historicalProofTerminal,
+} from './verification.ts';
 import { taskCommits } from './workspace.ts';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { hostname } from 'node:os';
@@ -413,7 +418,12 @@ export class WorkerJob implements GateOutcomeSink {
     const adapter = agentAdapter(attempt.profile.cli);
     const canResume = adapter.canResume && !!attempt.session;
     if (task.brief.kind === 'verification' && !canResume) {
-      await this.endAsEnvironment(attempt, new Error('Original proof session unavailable; no replacement model may rerun it'), false, true);
+      await this.endAsEnvironment(
+        attempt,
+        new Error('Original proof session unavailable; no replacement model may rerun it'),
+        false,
+        true,
+      );
       return;
     }
     const prompt = [
@@ -421,7 +431,16 @@ export class WorkerJob implements GateOutcomeSink {
         ? [workerPrompt(task, attempt.evidencePath, undefined, [], this.tasks.settings.mainCheckout)]
         : []),
       `The checks you started have finished or could not be found. ${message}`,
-      ...(canResume ? [workerCheckProtocol(task.worktree, task.brief, this.tasks.settings.stateDirectory, this.tasks.store.task(task.id).proofRun)] : []),
+      ...(canResume
+        ? [
+            workerCheckProtocol(
+              task.worktree,
+              task.brief,
+              this.tasks.settings.stateDirectory,
+              this.tasks.store.task(task.id).proofRun,
+            ),
+          ]
+        : []),
       'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
     ].join('\n\n');
     const failureCount = () =>
@@ -583,7 +602,12 @@ export class WorkerJob implements GateOutcomeSink {
         const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
         const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory });
         const steps = Object.values(measurement.steps).reduce((a, b) => a + b, 0);
-        if ((timeLimit || steps > limits.maxSteps) && task.brief.kind !== 'verification' && !this.hasCommit(ref) && !stopping) {
+        if (
+          (timeLimit || steps > limits.maxSteps) &&
+          task.brief.kind !== 'verification' &&
+          !this.hasCommit(ref) &&
+          !stopping
+        ) {
           const evidencePath = evidenceBundle(task, store.attempt(ref));
           const event = {
             managerId: task.brief.manager,
@@ -714,7 +738,8 @@ export class WorkerJob implements GateOutcomeSink {
         await terminateProcessGroup(current.process, this.tasks.settings.terminationGraceMs);
         for (const process of current.auxiliaryProcesses)
           await terminateProcessGroup(process, this.tasks.settings.terminationGraceMs);
-        if (!task.workspace && task.brief.kind !== 'verification') await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs);
+        if (!task.workspace && task.brief.kind !== 'verification')
+          await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs);
       } catch (cleanupError) {
         detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(0, 4000);
       }
@@ -767,7 +792,10 @@ export class WorkerJob implements GateOutcomeSink {
           /* The failure event still carries the driver error. */
         }
         const event = {
-          managerId: reportToSupermanager && task.brief.kind !== 'verification' ? this.tasks.settings.integration.supermanager : task.brief.manager,
+          managerId:
+            reportToSupermanager && task.brief.kind !== 'verification'
+              ? this.tasks.settings.integration.supermanager
+              : task.brief.manager,
           taskId: task.id,
           kind: 'environment' as const,
           summary: `environment: driver exception: ${detail}`.slice(0, 1000),
@@ -863,18 +891,24 @@ export class WorkerJob implements GateOutcomeSink {
     const store = this.tasks.store;
     this.reportCancelledDependencies();
     // The same recovery sweep also observes detached custody after a model exit or cancellation.
-    if (adoptRunning) for (const check of store.historicalProofChecks()) {
-      const observation = await historicalProofTerminal(check);
-      if (observation.status === 'terminal') store.observeHistoricalProof(check, observation);
-    }
-    if (adoptRunning) for (const run of store.activeProofReservations()) {
-      try {
-        const observation = await readReservationObservation(run, run.native?.registry ?? (run.status === 'bound' ? undefined : join(this.tasks.settings.stateDirectory, 'check-registry')));
-        if (observation.status === 'terminal') store.observeProof(run.binding, observation);
-      } catch {
-        // Missing reader/records never release uncertain capacity.
+    if (adoptRunning)
+      for (const check of store.historicalProofChecks()) {
+        const observation = await historicalProofTerminal(check);
+        if (observation.status === 'terminal') store.observeHistoricalProof(check, observation);
       }
-    }
+    if (adoptRunning)
+      for (const run of store.activeProofReservations()) {
+        try {
+          const observation = await readReservationObservation(
+            run,
+            run.native?.registry ??
+              (run.status === 'bound' ? undefined : join(this.tasks.settings.stateDirectory, 'check-registry')),
+          );
+          if (observation.status === 'terminal') store.observeProof(run.binding, observation);
+        } catch {
+          // Missing reader/records never release uncertain capacity.
+        }
+      }
     if (adoptRunning) this.track(removeFinishedWorktree(this.tasks.settings, store).then(() => {}));
     // A held task released by a train that then ended, or handed off to newer code, has no driver: the host starts
     // it. Commands leave it to the host, so released tasks are not started from every command at once. The host
@@ -1179,9 +1213,20 @@ export class WorkerJob implements GateOutcomeSink {
         kind = attempt.failureKind;
       if (task.brief.kind === 'verification') {
         if (store.events(task.id, ref.attempt).some((event) => event.kind === 'proof-failure-routed')) return;
-        store.updateTask(ref, (current) => { current.state = 'stopped'; });
-        const event = { managerId: task.brief.manager, taskId: task.id, kind: 'instruction' as const,
-          summary: `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`.slice(0, 1000), evidencePath: attempt.evidencePath };
+        store.updateTask(ref, (current) => {
+          current.state = 'stopped';
+        });
+        const event = {
+          managerId: task.brief.manager,
+          taskId: task.id,
+          kind: 'instruction' as const,
+          summary:
+            `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`.slice(
+              0,
+              1000,
+            ),
+          evidencePath: attempt.evidencePath,
+        };
         store.event(ref, 'proof-failure-routed', event);
         this.inbox.deliver(event);
         return;

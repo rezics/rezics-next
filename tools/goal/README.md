@@ -724,7 +724,6 @@ The supermanager sets direction and the managers own the work. This applies to e
   critical-priority grants, deadlocks between owners, efficiency strategy, and a sampled review of the product, not
   every slice. When a detail reaches the supermanager, it forwards it to the owner instead of doing it.
 
-
 ### Check result reuse
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the

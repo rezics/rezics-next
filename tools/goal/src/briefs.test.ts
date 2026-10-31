@@ -42,10 +42,14 @@ test('acceptance placement is optional, typed, and restricts local checks to the
 });
 
 test('verification briefs require typed proof metadata and reject source editing, frozen inputs and priority', () => {
-  const proof = markdown.replace('kind: implementation', 'kind: verification')
+  const proof = markdown
+    .replace('kind: implementation', 'kind: verification')
     .replace('paths: [result.txt]', 'paths: []')
     .replace('estimate:\n  lines: 100\n  files: 4\n', '')
-    .replace('riskAreas: []', `riskAreas: []\nproof:\n  journey: Original journey\n  sourceTasks: [original]\n  sourceCommit: ${'a'.repeat(40)}`);
+    .replace(
+      'riskAreas: []',
+      `riskAreas: []\nproof:\n  journey: Original journey\n  sourceTasks: [original]\n  sourceCommit: ${'a'.repeat(40)}`,
+    );
   const ownership = { version: 1 as const, areas: {} };
   expect(parseBrief(proof, ownership).proof?.sourceTasks).toEqual(['original']);
   for (const invalid of [
@@ -54,5 +58,6 @@ test('verification briefs require typed proof metadata and reject source editing
     `${proof}\n\`\`\`ts path=product.ts\nexport const changed = true;\n\`\`\``,
     proof.replace('  journey: Original journey', '  authorized: true\n  journey: Original journey'),
     proof.replace('kind: verification', 'kind: implementation'),
-  ]) expect(() => parseBrief(invalid, ownership)).toThrow();
+  ])
+    expect(() => parseBrief(invalid, ownership)).toThrow();
 });

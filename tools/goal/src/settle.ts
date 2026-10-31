@@ -87,7 +87,8 @@ export async function settle(
         },
       );
       if (
-        resuming && !proofTask &&
+        resuming &&
+        !proofTask &&
         code !== 0 &&
         !measurement.session &&
         !measurement.failureKind &&
@@ -127,9 +128,21 @@ export async function settle(
         return;
       }
       const proofExit = proofTask ? parseAgentExit(measurement.result, agentAdapter(current.profile.cli)) : null;
-      const bareWaiting = proofExit && typeof proofExit === 'object' && 'checks' in proofExit &&
-        Array.isArray(proofExit.checks) && proofExit.checks.length === 1 && proofExit.checks[0] === task.proofRun?.binding.checkId;
-      if (pendingChecks?.length && (!proofTask || (bareWaiting && pendingChecks.length === 1 && pendingChecks[0] === task.proofRun?.binding.checkId && proofObservation?.status === 'running'))) {
+      const bareWaiting =
+        proofExit &&
+        typeof proofExit === 'object' &&
+        'checks' in proofExit &&
+        Array.isArray(proofExit.checks) &&
+        proofExit.checks.length === 1 &&
+        proofExit.checks[0] === task.proofRun?.binding.checkId;
+      if (
+        pendingChecks?.length &&
+        (!proofTask ||
+          (bareWaiting &&
+            pendingChecks.length === 1 &&
+            pendingChecks[0] === task.proofRun?.binding.checkId &&
+            proofObservation?.status === 'running'))
+      ) {
         store.updateAttempt(ref, (attempt) => {
           attempt.state = 'waiting';
           attempt.checks = pendingChecks;
@@ -204,19 +217,40 @@ export async function settle(
         const run = task.proofRun;
         if (run?.status === 'bound') store.observeProof(run.binding, proofObservation);
         const exit = parseAgentExit(finalMeasurement.result, agentAdapter(attempt.profile.cli));
-        const structured = Boolean(exit && typeof exit === 'object' && 'status' in exit && exit.status === 'success' &&
-          'checks' in exit && Array.isArray(exit.checks) && exit.checks.length === 0);
+        const structured = Boolean(
+          exit &&
+          typeof exit === 'object' &&
+          'status' in exit &&
+          exit.status === 'success' &&
+          'checks' in exit &&
+          Array.isArray(exit.checks) &&
+          exit.checks.length === 0,
+        );
         const unchanged = proofSourceUnchanged(task, tasks.settings.integrationBranch);
-        const verified = !finalMeasurement.failureKind && !finalMeasurement.blocker && code === 0 && structured && unchanged && proofObservation.status === 'terminal' && proofObservation.passed;
+        const verified =
+          !finalMeasurement.failureKind &&
+          !finalMeasurement.blocker &&
+          code === 0 &&
+          structured &&
+          unchanged &&
+          proofObservation.status === 'terminal' &&
+          proofObservation.passed;
         const proofRecord = makeRecord(task, attempt, finalMeasurement, verified ? 'verified' : 'stopped');
         proofRecord.proof = proofObservation;
         store.putRecord(proofRecord);
-        store.updateTask(ref, (current) => { current.state = verified ? 'verified' : 'stopped'; });
+        store.updateTask(ref, (current) => {
+          current.state = verified ? 'verified' : 'stopped';
+        });
         store.updateAttempt(ref, (current) => {
           current.failureKind = verified ? null : 'tool';
           current.result = `${finalMeasurement.result}\n${proofObservation.cause}${unchanged ? '' : '; captured source changed'}`;
         });
-        store.event(ref, verified ? 'proof-verified' : 'proof-failed', { binding: run?.binding, observation: proofObservation, unchanged, structured });
+        store.event(ref, verified ? 'proof-verified' : 'proof-failed', {
+          binding: run?.binding,
+          observation: proofObservation,
+          unchanged,
+          structured,
+        });
         return;
       }
       tasks.commitFinishedWork(task, ref.attempt);

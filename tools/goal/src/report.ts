@@ -175,7 +175,8 @@ export function report(records: AttemptRecord[]): Report {
 
   return {
     proofAttempts: records.filter((record) => record.taskKind === 'verification').length,
-    verifiedProofs: new Set(measured.filter((record) => record.outcome === 'verified').map((record) => record.taskId)).size,
+    verifiedProofs: new Set(measured.filter((record) => record.outcome === 'verified').map((record) => record.taskId))
+      .size,
     attempts: records.length,
     tasks: byTask.size,
     passedTasks: passedTasks.length,

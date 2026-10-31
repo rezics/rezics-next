@@ -205,9 +205,9 @@ test('incompatible worker result fields and missing remote options identify the 
       return record;
     });
     expect([...new Set(records.map((record) => record.status))].sort()).toEqual(['finished', 'running']);
-    expect([
-      ...new Set(records.filter((record) => record.status === 'finished').map((record) => record.exitCode)),
-    ].sort()).toEqual([0, 7]);
+    expect(
+      [...new Set(records.filter((record) => record.status === 'finished').map((record) => record.exitCode))].sort(),
+    ).toEqual([0, 7]);
     for (const field of [
       'workerCheck.start',
       'workerCheck.foreground',
@@ -487,9 +487,8 @@ test('artifact custody resolves both hoisted and nonhoisted installed Bun option
   try {
     for (const layout of ['hoisted', 'nonhoisted']) {
       const fixtureDirectory = join(directory, layout);
-      const { root, executable } = layout === 'hoisted'
-        ? completeScriptsRoot(fixtureDirectory)
-        : nonhoistedBunInstallation(fixtureDirectory);
+      const { root, executable } =
+        layout === 'hoisted' ? completeScriptsRoot(fixtureDirectory) : nonhoistedBunInstallation(fixtureDirectory);
       const checks = checkPinnedBunInstallation(root);
       expect(checks.filter((check) => check.status === 'incompatible')).toEqual([]);
       const custody = checks.find((check) => check.field === 'workerCheck.bun.executable')!;

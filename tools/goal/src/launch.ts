@@ -203,13 +203,14 @@ export function workerPrompt(
         }
       })()
     : undefined;
-  if (task.brief.kind === 'verification') return [
-    `Work only in ${task.worktree}, on branch ${task.branch}. The applicable AGENTS.md is already loaded.`,
-    `The main checkout ${mainCheckout} is read-only.`,
-    task.brief.markdown,
-    'Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.',
-    workerCheckProtocol(task.worktree, task.brief, join(mainCheckout, '.temp', 'goal'), task.proofRun),
-  ].join('\n\n');
+  if (task.brief.kind === 'verification')
+    return [
+      `Work only in ${task.worktree}, on branch ${task.branch}. The applicable AGENTS.md is already loaded.`,
+      `The main checkout ${mainCheckout} is read-only.`,
+      task.brief.markdown,
+      'Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.',
+      workerCheckProtocol(task.worktree, task.brief, join(mainCheckout, '.temp', 'goal'), task.proofRun),
+    ].join('\n\n');
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. The AGENTS.md that applies is already in your instructions; follow it.`,
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}${task.brief.kind === 'research' ? `, except the reference clones this research task keeps under ${mainCheckout}/.reference/` : ''}.`,
@@ -562,9 +563,14 @@ export async function launch(
 ): Promise<RunningWorker> {
   if (!agentAdapter(attempt.profile.cli).canResume) resumeSession = undefined;
   store.assertCurrent(attempt);
-  if (task.brief.kind === 'verification' && (!task.proofRun?.native || !proofProtocolAuthorized(task.brief, task.proofRun) ||
-      task.proofRun!.binding.taskId !== task.id || task.proofRun!.binding.attempt !== attempt.attempt ||
-      !proofSourceUnchanged(task, task.proofAuthorization?.integrationBranch ?? '')))
+  if (
+    task.brief.kind === 'verification' &&
+    (!task.proofRun?.native ||
+      !proofProtocolAuthorized(task.brief, task.proofRun) ||
+      task.proofRun!.binding.taskId !== task.id ||
+      task.proofRun!.binding.attempt !== attempt.attempt ||
+      !proofSourceUnchanged(task, task.proofAuthorization?.integrationBranch ?? ''))
+  )
     throw new Error('Proof execution unavailable: no owned producer binding');
   recordFlow(store.db, {
     taskId: attempt.taskId,

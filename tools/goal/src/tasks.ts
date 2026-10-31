@@ -1,4 +1,13 @@
-import { ProofCapacityQueuedError, authorizeProof, proofFingerprint, preflightProof, newProofBinding, productionProofProducer, readProofObservation, type ProofProducer } from './verification.ts';
+import {
+  ProofCapacityQueuedError,
+  authorizeProof,
+  proofFingerprint,
+  preflightProof,
+  newProofBinding,
+  productionProofProducer,
+  readProofObservation,
+  type ProofProducer,
+} from './verification.ts';
 import { remoteCheckEnvironment } from './merge.ts';
 import { agentAdapter, requireOriginalProofProfile } from './agents.ts';
 import { spawnSync } from 'node:child_process';
@@ -231,7 +240,11 @@ export class WorkerTasks {
     readonly store: WorkerStore,
     readonly reader: PoolReader = readPool,
     readonly launcher: typeof launch = launch,
-    readonly proofProducer: ProofProducer = productionProofProducer(store, join(settings.stateDirectory, 'check-registry'), { ...process.env, ...remoteCheckEnvironment(settings.stateDirectory) }),
+    readonly proofProducer: ProofProducer = productionProofProducer(
+      store,
+      join(settings.stateDirectory, 'check-registry'),
+      { ...process.env, ...remoteCheckEnvironment(settings.stateDirectory) },
+    ),
   ) {
     this.poolPolicies = new PoolPolicyReloader(settings.localFile, settings.pools, (summary) => {
       new SqliteManagerInbox(store.db, settings.integration.inboxDirectory).deliver({
@@ -365,7 +378,14 @@ export class WorkerTasks {
     if (brief.kind === 'verification') {
       const prior = excludingTask ? this.store.task(excludingTask).proofAuthorization : undefined;
       if (prior?.fingerprint !== proofFingerprint(brief))
-        authorizeProof(this.store, this.settings.mainCheckout, brief, actor ?? authenticatedManager(this.store.db), this.settings.integration.operationsManager, this.settings.integrationBranch);
+        authorizeProof(
+          this.store,
+          this.settings.mainCheckout,
+          brief,
+          actor ?? authenticatedManager(this.store.db),
+          this.settings.integration.operationsManager,
+          this.settings.integrationBranch,
+        );
     }
     const taskClass = classifyTask(brief);
     if (taskClass === 'mechanical') throw new Error('run mechanical commands directly without a worker');
@@ -386,8 +406,17 @@ export class WorkerTasks {
   }
   dispatch(briefFile: string, actor?: AuthenticatedManager | null): Task {
     const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile, undefined, actor);
-    const authorization = submittedBrief.kind === 'verification'
-      ? authorizeProof(this.store, this.settings.mainCheckout, submittedBrief, actor ?? authenticatedManager(this.store.db), this.settings.integration.operationsManager, this.settings.integrationBranch) : undefined;
+    const authorization =
+      submittedBrief.kind === 'verification'
+        ? authorizeProof(
+            this.store,
+            this.settings.mainCheckout,
+            submittedBrief,
+            actor ?? authenticatedManager(this.store.db),
+            this.settings.integration.operationsManager,
+            this.settings.integrationBranch,
+          )
+        : undefined;
     if (authorization) authorization.integrationBranch = this.settings.integrationBranch;
     requireNormalDispatch(submittedBrief, taskClass);
     const id = crypto.randomUUID();
@@ -479,9 +508,18 @@ export class WorkerTasks {
       throw new Error(`cannot retry ${task.state} task`);
     const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;
     if (nextBrief.kind === 'verification') {
-      const authorization = authorizeProof(this.store, this.settings.mainCheckout, nextBrief, actor ?? authenticatedManager(this.store.db), this.settings.integration.operationsManager, this.settings.integrationBranch);
+      const authorization = authorizeProof(
+        this.store,
+        this.settings.mainCheckout,
+        nextBrief,
+        actor ?? authenticatedManager(this.store.db),
+        this.settings.integration.operationsManager,
+        this.settings.integrationBranch,
+      );
       authorization.integrationBranch = this.settings.integrationBranch;
-      this.store.updateTask({ taskId, attempt: task.currentAttempt }, (current) => { current.proofAuthorization = authorization; });
+      this.store.updateTask({ taskId, attempt: task.currentAttempt }, (current) => {
+        current.proofAuthorization = authorization;
+      });
     }
     this.assertLocalAcceptanceCustody(task, nextBrief);
     const ref = { taskId, attempt: task.currentAttempt };
@@ -892,7 +930,8 @@ export class WorkerTasks {
         .flatMap((a) => [a.before, a.after])
         .filter((r) => r !== null);
       const routing = readRouting(this.settings.routingFile);
-      let fallbacks = options.profile || pinned || nextBrief.kind === 'verification' ? [] : retryFallbacks(routing, nextTaskClass);
+      let fallbacks =
+        options.profile || pinned || nextBrief.kind === 'verification' ? [] : retryFallbacks(routing, nextTaskClass);
       const paced = nextTaskClass === 'mechanical' || routing.classes[nextTaskClass]?.paced !== false;
       // A retry keeps its engine, but three failed attempts in a row on one model say the model is the problem: the
       // next attempt goes to the route's first other model. Failures no model change can fix do not count.
@@ -1024,11 +1063,18 @@ export class WorkerTasks {
           requireOriginalProofProfile(profile);
           if (task.brief.criticalPath) throw new Error('proof requires ordinary Codex routing');
           const missing = preflightProof(task.worktree, task.brief);
-          if (missing.length) throw new Error(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
+          if (missing.length)
+            throw new Error(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
           const captured = task.brief.proof!.sourceCommit;
-          if (git(task.worktree, ['rev-parse', 'HEAD']) !== captured && git(task.worktree, ['rev-parse', 'HEAD']) === task.base && !git(task.worktree, ['status', '--porcelain'])) {
+          if (
+            git(task.worktree, ['rev-parse', 'HEAD']) !== captured &&
+            git(task.worktree, ['rev-parse', 'HEAD']) === task.base &&
+            !git(task.worktree, ['status', '--porcelain'])
+          ) {
             git(task.worktree, ['reset', '--hard', captured]);
-            task = this.store.updateTask(next, (current) => { current.base = captured; });
+            task = this.store.updateTask(next, (current) => {
+              current.base = captured;
+            });
           }
           if (git(task.worktree, ['rev-parse', 'HEAD']) !== captured || git(task.worktree, ['status', '--porcelain']))
             throw new Error('Proof source is read-only; worktree differs from captured commit');
@@ -1036,14 +1082,24 @@ export class WorkerTasks {
             throw new Error('Proof pending/unavailable: integration source advanced; register a new captured source');
           const reserved = this.store.reserveProof(newProofBinding(task, next.attempt));
           if (!reserved) throw new ProofCapacityQueuedError();
-          const run = reserved.status === 'reserved'
-            ? this.store.bindProof(reserved.binding, await this.proofProducer.bind(reserved.binding)) : reserved;
+          const run =
+            reserved.status === 'reserved'
+              ? this.store.bindProof(reserved.binding, await this.proofProducer.bind(reserved.binding))
+              : reserved;
           if (run.status !== 'bound') throw new Error(`Proof pending/unavailable: ${run.cause ?? run.status}`);
           task = this.store.task(taskId);
           this.store.observeProof(run.binding, await readProofObservation(task));
           task = this.store.task(taskId);
           retryPrepared = true;
-          return await this.launcher(this.store, task, next, pool, workerPrompt(task, options.evidence, undefined, [], this.settings.mainCheckout), this.settings.codex, resumeSession);
+          return await this.launcher(
+            this.store,
+            task,
+            next,
+            pool,
+            workerPrompt(task, options.evidence, undefined, [], this.settings.mainCheckout),
+            this.settings.codex,
+            resumeSession,
+          );
         }
         if (task.workspace) {
           if (webModule(task.brief, this.settings) !== task.workspace.module)
