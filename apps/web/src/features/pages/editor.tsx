@@ -23,11 +23,13 @@ function CorrectionSelection({ children }: { children: ReactNode }) {
     const frame = requestAnimationFrame(() => {
       const { dispatch, getSelectorForId } = getPuck();
       const itemSelector = target.component ? getSelectorForId(target.component.id) : null;
+      console.log('correction selection', target.component, itemSelector, getPuck().appState.ui.itemSelector);
       if (target.component && !itemSelector) return;
       dispatch({
         type: 'setUi',
         ui: { itemSelector: itemSelector ?? null, rightSideBarVisible: true, leftSideBarVisible: true, mobilePanelExpanded: true, plugin: { current: 'fields' } },
       });
+      console.log('corrected selection', getPuck().appState.ui.itemSelector, getPuck().selectedItem?.props.id);
     });
     return () => cancelAnimationFrame(frame);
   }, [target, getPuck]);
