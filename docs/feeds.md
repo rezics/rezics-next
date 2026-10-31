@@ -104,8 +104,9 @@ O(128 log R) per step. Inventory commit and durable fanout enqueue both precede 
 success. Idempotent source-derived IDs make retries safe. Library registers follow-change
 backfill beside its existing work. Before reading recent inventory it delivers the
 existing native follow-count replacement and confirms candidate coverage, closing the
-race between new-follow backfill and concurrent activity fanout. Backfill examines at
-most 2000 references, in resumable pages of 128, within the same 30-day inventory.
+race between new-follow backfill and concurrent activity fanout. Backfill delivers at
+most 2000 references from the same 30-day inventory. It examines at most 2048 references
+in sixteen resumable pages of 128; the final page delivers only the remaining allowance.
 The inventory key remains the followed native original reason, including after a redirect;
 the inverse destination is resolved independently and never substitutes that inventory key.
 
