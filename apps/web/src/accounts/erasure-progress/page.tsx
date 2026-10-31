@@ -49,19 +49,34 @@ export function AccountErasurePage({ accountId }: { accountId: string }) {
   ) : (
     <ErasureProgressView
       page={{
-        status: reading ? 'loading' : unavailable ? 'unavailable' : session.state === 'signed-out' ? 'signed-out' : 'loading',
+        status: reading
+          ? 'loading'
+          : unavailable
+            ? 'unavailable'
+            : session.state === 'signed-out'
+              ? 'signed-out'
+              : 'loading',
       }}
       returnTo={returnTo}
       sessionRecovery={unavailable || reading}
-      reload={unavailable || reading ? () => {
-        // Infinity freshness must not turn this deliberate retry into a cached unavailable result.
-        // fetchQuery shares any in-flight session discovery; it never retries cleanup work.
-        void client.fetchQuery({ ...sessionQuery, staleTime: 0 }).catch(() => {});
-      } : undefined}
+      reload={
+        unavailable || reading
+          ? () => {
+              // Infinity freshness must not turn this deliberate retry into a cached unavailable result.
+              // fetchQuery shares any in-flight session discovery; it never retries cleanup work.
+              void client.fetchQuery({ ...sessionQuery, staleTime: 0 }).catch(() => {});
+            }
+          : undefined
+      }
     />
   );
 }
-function BoundErasure({ accountId, viewerId, binding, returnTo }: {
+function BoundErasure({
+  accountId,
+  viewerId,
+  binding,
+  returnTo,
+}: {
   accountId: string;
   viewerId: string;
   binding: NonNullable<ReturnType<typeof useSession>>;
@@ -70,10 +85,15 @@ function BoundErasure({ accountId, viewerId, binding, returnTo }: {
   const client = useQueryClient();
   const active = useRef(false);
   const [reader] = useState(
-    () => new ErasureReader({ accountId, viewerId }, () => readAccountErasure({ data: { accountId, viewerId } }), () => {
-      const read = client.getQueryState(sessionQuery.queryKey);
-      return active.current && read?.status === 'success' && read.fetchStatus === 'idle' && read.data === binding;
-    }),
+    () =>
+      new ErasureReader(
+        { accountId, viewerId },
+        () => readAccountErasure({ data: { accountId, viewerId } }),
+        () => {
+          const read = client.getQueryState(sessionQuery.queryKey);
+          return active.current && read?.status === 'success' && read.fetchStatus === 'idle' && read.data === binding;
+        },
+      ),
   );
   useEffect(() => {
     active.current = true;

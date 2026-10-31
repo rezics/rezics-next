@@ -198,43 +198,75 @@ test('Default erasure page recovers an unavailable session through explicit read
   // Use the delivered page, session query, BFF and real React/Query/Router providers. Only request/native
   // transports are controlled, as in the existing session recovery tests; no viewer provider grants authority.
   const { dirname } = await import('node:path');
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.test' });
-  const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    Node: window.Node, IS_REACT_ACT_ENVIRONMENT: true };
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const originalFetch = globalThis.fetch;
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+    await import('@tanstack/react-router');
   const start = await import('../.storybook/react-start');
   let sessionCalls = 0;
   type Identity = boolean | { signedIn: true; subject: string; csrfToken: string };
-  let nativeSession: () => Promise<Identity> = async () => { throw new Error('session unavailable'); };
+  let nativeSession: () => Promise<Identity> = async () => {
+    throw new Error('session unavailable');
+  };
   let nativeViewer = viewerId;
   const nativeCalls: Request[] = [];
   const replies: ((response: Response) => void)[] = [];
-  const deferred = <T,>() => {
+  const deferred = <T>() => {
     let resolve!: (value: T) => void;
-    const promise = new Promise<T>((yes) => { resolve = yes; });
+    const promise = new Promise<T>((yes) => {
+      resolve = yes;
+    });
     return { promise, resolve };
   };
   mock.module('@tanstack/react-start', () => start);
   mock.module('@tanstack/react-start/server', () => ({
-    getRequest: () => new Request('https://site.test/platform/erasure', {
-      headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
-    }),
+    getRequest: () =>
+      new Request('https://site.test/platform/erasure', {
+        headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+      }),
     setResponseHeader() {},
   }));
-  mock.module('cloudflare:workers', () => ({ env: {
-    AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test', WEBSITE_SCOPES: 'openid',
-    WEBSITE_CLIENT_ID: 'erasure-recovery-test', WEBSITE_CLIENT_KEY: '{}', KERNEL_ORIGIN: 'https://kernel.test',
-    SESSIONS: { idFromName: (id: string) => id, get: () => ({
-      signedIn: () => { sessionCalls++; return nativeSession(); },
-      credential: async () => ({ status: 'active', subject: nativeViewer, accessToken: nativeViewer, csrfToken: 'current-token' }),
-    }) },
-  } }));
+  mock.module('cloudflare:workers', () => ({
+    env: {
+      AUTH_ISSUER: 'https://auth.test',
+      API_RESOURCE: 'https://kernel.test',
+      WEBSITE_SCOPES: 'openid',
+      WEBSITE_CLIENT_ID: 'erasure-recovery-test',
+      WEBSITE_CLIENT_KEY: '{}',
+      KERNEL_ORIGIN: 'https://kernel.test',
+      SESSIONS: {
+        idFromName: (id: string) => id,
+        get: () => ({
+          signedIn: () => {
+            sessionCalls++;
+            return nativeSession();
+          },
+          credential: async () => ({
+            status: 'active',
+            subject: nativeViewer,
+            accessToken: nativeViewer,
+            csrfToken: 'current-token',
+          }),
+        }),
+      },
+    },
+  }));
   globalThis.fetch = (async (input, init) => {
     nativeCalls.push(new Request(input, init));
     return new Promise<Response>((resolve) => replies.push(resolve));
@@ -244,14 +276,23 @@ test('Default erasure page recovers an unavailable session through explicit read
   const { sessionQuery } = await import('../src/session/query');
   const client = new QueryClient();
   const routeRoot = createRootRoute();
-  const route = createRoute({ getParentRoute: () => routeRoot, path: '/$locale/platform/accounts/$accountId/erasure',
-    component: () => createElement(AccountErasurePage, { accountId: route.useParams().accountId }) });
+  const route = createRoute({
+    getParentRoute: () => routeRoot,
+    path: '/$locale/platform/accounts/$accountId/erasure',
+    component: () => createElement(AccountErasurePage, { accountId: route.useParams().accountId }),
+  });
   const returnTo = `/fr/platform/accounts/${accountId}/erasure?from=account&view=status#latest`;
-  const router = createRouter({ routeTree: routeRoot.addChildren([route]), history: createMemoryHistory({ initialEntries: [returnTo] }) });
+  const router = createRouter({
+    routeTree: routeRoot.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: [returnTo] }),
+  });
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const settle = () => act(async () => { await Bun.sleep(5); });
+  const settle = () =>
+    act(async () => {
+      await Bun.sleep(5);
+    });
   const button = () => host.querySelector('button')!;
   const concealed = () => {
     expect(host.querySelector('details')).toBeNull();
@@ -262,7 +303,9 @@ test('Default erasure page recovers an unavailable session through explicit read
   };
   try {
     await router.load();
-    await act(async () => { root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))); });
+    await act(async () => {
+      root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })));
+    });
     await settle();
     expect(sessionCalls).toBe(1);
     expect(nativeCalls).toHaveLength(0);
@@ -270,34 +313,58 @@ test('Default erasure page recovers an unavailable session through explicit read
     concealed();
     const discovery = deferred<Identity>();
     nativeSession = () => discovery.promise;
-    await act(async () => { button().click(); button().click(); });
+    await act(async () => {
+      button().click();
+      button().click();
+    });
     expect(sessionCalls).toBe(2);
     expect(button().disabled).toBe(true);
     expect(host.querySelector('[aria-busy="true"]')).not.toBeNull();
     concealed();
-    await act(async () => { discovery.resolve(false); });
+    await act(async () => {
+      discovery.resolve(false);
+    });
     await settle();
-    expect(host.querySelector('a')?.getAttribute('href')).toBe(`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`);
+    expect(host.querySelector('a')?.getAttribute('href')).toBe(
+      `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`,
+    );
     expect(host.querySelector('button')).toBeNull();
     expect(nativeCalls).toHaveLength(0);
     concealed();
-    for (const unsafe of ['https://outside.test', '//outside.test', '/\\outside.test', '/settings', '/platform/accounts/../erasure', '/\n/platform/accounts/x/erasure'])
+    for (const unsafe of [
+      'https://outside.test',
+      '//outside.test',
+      '/\\outside.test',
+      '/settings',
+      '/platform/accounts/../erasure',
+      '/\n/platform/accounts/x/erasure',
+    ])
       expect(erasureSignInHref(unsafe)).toBe('/auth/sign-in?return_to=%2F');
 
     // A later failed discovery must be retryable even though the existing query is fresh forever.
-    nativeSession = async () => { throw new Error('session unavailable again'); };
-    await act(async () => { await client.fetchQuery({ ...sessionQuery, staleTime: 0 }); });
+    nativeSession = async () => {
+      throw new Error('session unavailable again');
+    };
+    await act(async () => {
+      await client.fetchQuery({ ...sessionQuery, staleTime: 0 });
+    });
     await settle();
     const signedIn = deferred<Identity>();
     nativeSession = () => signedIn.promise;
-    await act(async () => { button().click(); });
+    await act(async () => {
+      button().click();
+    });
     expect(nativeCalls).toHaveLength(0);
-    await act(async () => { signedIn.resolve({ signedIn: true, subject: viewerId, csrfToken: 'current-token' }); });
+    await act(async () => {
+      signedIn.resolve({ signedIn: true, subject: viewerId, csrfToken: 'current-token' });
+    });
     await settle();
     expect(sessionCalls).toBe(4);
     expect(nativeCalls).toHaveLength(1);
     expect(nativeCalls[0]!.headers.get('authorization')).toBe(`Bearer ${viewerId}`);
-    await act(async () => { replies[0]!(Response.json(pending())); });
+    await act(async () => {
+      replies[0]!(Response.json(pending()));
+    });
     await settle();
     expect(host.textContent).toContain(m.erasure_pending());
     expect(host.querySelector('details')?.open).toBe(false);
@@ -305,32 +372,60 @@ test('Default erasure page recovers an unavailable session through explicit read
     expect(host.querySelector('details code')?.textContent).toBe('auth');
     expect(host.querySelector('section ul')?.textContent).toContain(m.erasure_participant_auth());
 
-    await act(async () => { button().click(); });
+    await act(async () => {
+      button().click();
+    });
     expect(nativeCalls).toHaveLength(2);
     concealed();
     const changed = deferred<Identity>();
     nativeSession = () => changed.promise;
     let changing!: Promise<unknown>;
-    await act(async () => { changing = client.fetchQuery({ ...sessionQuery, staleTime: 0 }); });
+    await act(async () => {
+      changing = client.fetchQuery({ ...sessionQuery, staleTime: 0 });
+    });
     // A stale terminal response cannot disclose the former private observation during session discovery.
-    await act(async () => { replies[1]!(Response.json({ ...pending(), state: 'complete', completedAt, pendingParticipants: [], lateItems: false, effectsFrontier: false })); });
+    await act(async () => {
+      replies[1]!(
+        Response.json({
+          ...pending(),
+          state: 'complete',
+          completedAt,
+          pendingParticipants: [],
+          lateItems: false,
+          effectsFrontier: false,
+        }),
+      );
+    });
     await settle();
     concealed();
     nativeViewer = '019a0000-0000-7000-8000-000000000003';
-    await act(async () => { changed.resolve({ signedIn: true, subject: nativeViewer, csrfToken: 'new-token' }); await changing; });
+    await act(async () => {
+      changed.resolve({ signedIn: true, subject: nativeViewer, csrfToken: 'new-token' });
+      await changing;
+    });
     await settle();
     expect(nativeCalls).toHaveLength(3);
     expect(nativeCalls[2]!.headers.get('authorization')).toBe(`Bearer ${nativeViewer}`);
     concealed();
     const nextAccount = '019a0000-0000-7000-8000-000000000004';
-    await act(async () => { await router.navigate({ to: '/$locale/platform/accounts/$accountId/erasure', params: { locale: 'fr', accountId: nextAccount } }); });
+    await act(async () => {
+      await router.navigate({
+        to: '/$locale/platform/accounts/$accountId/erasure',
+        params: { locale: 'fr', accountId: nextAccount },
+      });
+    });
     await settle();
     expect(nativeCalls).toHaveLength(4);
     expect(new URL(nativeCalls[3]!.url).pathname).toBe(`/v1/accounts/${nextAccount}/erasureStatus`);
-    await act(async () => { replies[2]!(Response.json(pending())); });
+    await act(async () => {
+      replies[2]!(Response.json(pending()));
+    });
     await settle();
     concealed();
-    await act(async () => { root.unmount(); replies[3]!(Response.json({ ...pending(), accountId: nextAccount })); });
+    await act(async () => {
+      root.unmount();
+      replies[3]!(Response.json({ ...pending(), accountId: nextAccount }));
+    });
     await settle();
     expect(host.textContent).toBe('');
     expect(sessionCalls).toBe(5);

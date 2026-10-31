@@ -60,7 +60,12 @@ function date(value: string) {
     </time>
   );
 }
-export function ErasureProgressView({ page, reload, returnTo, sessionRecovery = false }: {
+export function ErasureProgressView({
+  page,
+  reload,
+  returnTo,
+  sessionRecovery = false,
+}: {
   page: Page;
   reload?: (() => void) | undefined;
   returnTo?: string | undefined;
@@ -108,9 +113,7 @@ export function ErasureProgressView({ page, reload, returnTo, sessionRecovery = 
                 {value.pendingParticipants.length ? (
                   <ul className="list-inside list-disc">
                     {value.pendingParticipants.map((name) => (
-                      <li key={name}>
-                        {participantLabel(name)}
-                      </li>
+                      <li key={name}>{participantLabel(name)}</li>
                     ))}
                   </ul>
                 ) : (
@@ -123,28 +126,43 @@ export function ErasureProgressView({ page, reload, returnTo, sessionRecovery = 
                 <li>{value.effectsFrontier ? m.erasure_frontier_yes() : m.erasure_frontier_no()}</li>
               </ul>
               <details className="rounded-lg border p-4">
-                <summary className="cursor-pointer font-medium focus-visible:outline-ring">{m.erasure_details()}</summary>
+                <summary className="cursor-pointer font-medium focus-visible:outline-ring">
+                  {m.erasure_details()}
+                </summary>
                 <dl className="mt-4 grid gap-2">
                   <dt className="font-medium">{m.erasure_account()}</dt>
                   <dd className="break-all font-mono text-sm">{value.accountId}</dd>
-                  {value.pendingParticipants.length ? <>
-                    <dt className="font-medium">{m.erasure_participant_identifiers()}</dt>
-                    <dd><ul className="flex flex-col gap-2">
-                      {value.pendingParticipants.map((name) => <li key={name}>
-                        {participantLabel(name)}: <code className="break-all">{name}</code>
-                      </li>)}
-                    </ul></dd>
-                  </> : null}
+                  {value.pendingParticipants.length ? (
+                    <>
+                      <dt className="font-medium">{m.erasure_participant_identifiers()}</dt>
+                      <dd>
+                        <ul className="flex flex-col gap-2">
+                          {value.pendingParticipants.map((name) => (
+                            <li key={name}>
+                              {participantLabel(name)}: <code className="break-all">{name}</code>
+                            </li>
+                          ))}
+                        </ul>
+                      </dd>
+                    </>
+                  ) : null}
                 </dl>
               </details>
             </CardContent>
           </Card>
         ) : (
-          <p role="status">{sessionRecovery && page.status === 'unavailable' ? m.erasure_session_unavailable() : statusText(page.status)}</p>
+          <p role="status">
+            {sessionRecovery && page.status === 'unavailable'
+              ? m.erasure_session_unavailable()
+              : statusText(page.status)}
+          </p>
         )}
       </section>
       {page.status === 'signed-out' ? (
-        <a className="self-start font-medium text-primary underline underline-offset-4" href={erasureSignInHref(returnTo)}>
+        <a
+          className="self-start font-medium text-primary underline underline-offset-4"
+          href={erasureSignInHref(returnTo)}
+        >
           {m.erasure_sign_in()}
         </a>
       ) : null}

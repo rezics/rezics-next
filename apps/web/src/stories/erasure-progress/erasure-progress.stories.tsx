@@ -112,7 +112,9 @@ export const SignedOut: Story = {
   args: { page: { status: 'signed-out' } },
   render: () => (
     <PatternStory visitor="Signed Out" path={`/platform/accounts/${value.accountId}/erasure`}>
-      <AppShell><AccountErasurePage accountId={value.accountId} /></AppShell>
+      <AppShell>
+        <AccountErasurePage accountId={value.accountId} />
+      </AppShell>
     </PatternStory>
   ),
 };
@@ -122,11 +124,18 @@ export const Loading: Story = { args: { page: { status: 'loading' } } };
 export const SessionUnavailable: Story = {
   args: { page: { status: 'unavailable' } },
   parameters: {
-    docs: { description: { story: 'The existing illustrative session has no valid current account subject. The default page offers a real session read retry without reading erasure data.' } },
+    docs: {
+      description: {
+        story:
+          'The existing illustrative session has no valid current account subject. The default page offers a real session read retry without reading erasure data.',
+      },
+    },
   },
   render: () => (
     <PatternStory visitor="Signed In" path={`/platform/accounts/${value.accountId}/erasure`}>
-      <AppShell><AccountErasurePage accountId={value.accountId} /></AppShell>
+      <AppShell>
+        <AccountErasurePage accountId={value.accountId} />
+      </AppShell>
     </PatternStory>
   ),
 };
