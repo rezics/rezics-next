@@ -392,6 +392,39 @@ export const readUnreadCount = createServerFn({ method: 'GET' }).handler(async (
 
 export type InboxSeenAttempt = { through: string; idempotencyKey: string };
 
+/** Success keeps the original signedIn envelope; failures cross the wire as data, never Error fields. */
+export type InboxSeenResult = { signedIn: boolean } | { signedIn: true; failure: NativeInboxFailure };
+
+export class InboxSeenError extends Error {
+  constructor(readonly failure: NativeInboxFailure) {
+    super('Native inbox mark seen could not be confirmed');
+    this.name = 'InboxSeenError';
+  }
+}
+
+/** Project only bounded native diagnostics. Body text, credentials and body-supplied waits stay private. */
+export function inboxSeenFailure(error: unknown): Extract<InboxSeenResult, { failure: NativeInboxFailure }> {
+  const native = error instanceof InboxSeenError ? error.failure : nativeFailure(error);
+  const bounded = (value: string | undefined) =>
+    value && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value) ? value : undefined;
+  const code = bounded(native.code);
+  const requestId = bounded(native.requestId);
+  const retryAfter = bounded(native.retryAfter);
+  return {
+    signedIn: true,
+    failure: {
+      status:
+        native.status !== null && Number.isInteger(native.status) && native.status >= 100 && native.status <= 599
+          ? native.status
+          : null,
+      ...(code ? { code } : {}),
+      ...(typeof native.retryable === 'boolean' ? { retryable: native.retryable } : {}),
+      ...(requestId ? { requestId } : {}),
+      ...(retryAfter ? { retryAfter } : {}),
+    },
+  };
+}
+
 /** Replay the same marker and key after an unknown outcome; only native 204 confirms it. */
 export async function markInboxThrough(
   client: Pick<KernelClient, 'accounts'>,
@@ -405,7 +438,27 @@ export async function markInboxThrough(
       { through: attempt.through },
       { headers: { ...authHeaders(authorization), 'idempotency-key': JSON.stringify(attempt.idempotencyKey) } },
     );
-  if (result.error || result.status !== 204) throw new Error('Kernel notification mark seen failed');
+  if (result.error || result.status !== 204)
+    throw new InboxSeenError(nativeFailure(result.error, result.status, result.headers));
+}
+
+/** The private server-function result, including session/CSRF refusals, has one serializable failure shape. */
+export async function loadInboxSeen(
+  client: Pick<KernelClient, 'accounts'>,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  attempt: InboxSeenAttempt,
+): Promise<InboxSeenResult> {
+  try {
+    await prepareSession(request, sessionEnv);
+    const authorization = viewerCredential(request);
+    const accountId = sessionSubject(request);
+    if (!authorization || !accountId) return { signedIn: false };
+    await markInboxThrough(client, accountId, authorization, attempt);
+    return { signedIn: true };
+  } catch (error) {
+    return inboxSeenFailure(error);
+  }
 }
 
 export const markInboxSeen = createServerFn({ method: 'POST' })
@@ -419,13 +472,7 @@ export const markInboxSeen = createServerFn({ method: 'POST' })
       throw new Error('Invalid notice id');
     return { through: input.through, idempotencyKey: input.idempotencyKey };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<InboxSeenResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
-    const authorization = viewerCredential(request);
-    const accountId = sessionSubject(request);
-    if (!authorization || !accountId) return { signedIn: false };
-    await markInboxThrough(kernelClient(), accountId, authorization, data);
-    return { signedIn: true };
+    return loadInboxSeen(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });

@@ -19,7 +19,7 @@ import {
   receiveInboxPage,
   restartInboxPage,
 } from './inbox-pagination';
-import type { InboxSeenAttempt, ResolvedInboxPage } from './inbox-read';
+import { inboxSeenFailure, type InboxSeenAttempt, type NativeInboxFailure, type ResolvedInboxPage } from './inbox-read';
 
 function kindLabel(item: ResolvedInboxPage['items'][number]) {
   if (item.reportId || item.kind === 'moderation_decision') return m.inbox_kind_moderation();
@@ -149,7 +149,7 @@ export function ViewerInboxPage({
   const seenAttempt = useRef<InboxSeenAttempt | null>(null);
   const marking = useRef(false);
   const active = useRef(false);
-  const [seenFailed, setSeenFailed] = useState(false);
+  const [seenFailure, setSeenFailure] = useState<NativeInboxFailure>();
   const [seenRetry, setSeenRetry] = useState(0);
   const pageQuery = useQuery(inboxPageQuery(viewer, cursor, loadPage));
   const received = receiveInboxPage(pagination, pageQuery.data, pageQuery.isError);
@@ -159,6 +159,7 @@ export function ViewerInboxPage({
   const page = pageQuery.data?.signedIn && pageQuery.data.state === 'ready' ? pageQuery.data : null;
   const operationState = pageQuery.data?.signedIn && pageQuery.data.state !== 'ready' ? pageQuery.data : null;
   const waiting = usePreferenceRetry(operationState?.failure);
+  const seenWaiting = usePreferenceRetry(seenFailure);
   const pageSignedOut = pageQuery.data !== undefined && !pageQuery.data.signedIn;
 
   useEffect(() => {
@@ -169,7 +170,14 @@ export function ViewerInboxPage({
   }, []);
 
   useEffect(() => {
-    if (!viewer.isCurrent() || cursor !== undefined || !csrfToken || marking.current || marked.current || seenFailed)
+    if (
+      !viewer.isCurrent() ||
+      (cursor !== undefined && !seenAttempt.current) ||
+      !csrfToken ||
+      marking.current ||
+      marked.current ||
+      seenFailure
+    )
       return;
     const newest = page?.items[0];
     if (!seenAttempt.current) {
@@ -184,13 +192,13 @@ export function ViewerInboxPage({
         marked.current = attempt.through;
         seenAttempt.current = null;
       })
-      .catch(() => {
-        if (active.current && viewer.isCurrent()) setSeenFailed(true);
+      .catch((error: unknown) => {
+        if (active.current && viewer.isCurrent()) setSeenFailure(inboxSeenFailure(error).failure);
       })
       .finally(() => {
         if (active.current && viewer.isCurrent()) marking.current = false;
       });
-  }, [cursor, page?.items, queryClient, viewer, csrfToken, seenRetry, seenFailed]);
+  }, [cursor, page?.items, queryClient, viewer, csrfToken, seenRetry, seenFailure]);
 
   const loadMore = () => {
     if (pageQuery.isFetching || !page?.next) return;
@@ -246,13 +254,32 @@ export function ViewerInboxPage({
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
-      {seenFailed ? (
-        <section role="status" className="mt-4 space-y-2">
+      {seenFailure ? (
+        <section
+          role="status"
+          data-response-status={seenFailure.status ?? ''}
+          data-response-code={seenFailure.code ?? ''}
+          data-retry-after={seenFailure.retryAfter}
+          className="mt-4 space-y-2"
+        >
           <p>{m.inbox_seen_unavailable()}</p>
+          {seenFailure.code === 'platform_closed' ? (
+            <p>{m.inbox_seen_closed()}</p>
+          ) : seenFailure.status === 401 ||
+            seenFailure.status === 403 ||
+            seenFailure.code === 'unauthorized' ||
+            seenFailure.code === 'forbidden' ? (
+            <p>{m.inbox_seen_denied()}</p>
+          ) : seenFailure.status === 429 ? (
+            <p>{m.inbox_seen_rate_limited()}</p>
+          ) : null}
+          {seenWaiting ? <p>{m.settings_retry_wait()}</p> : null}
           <Button
             variant="outline"
+            disabled={seenWaiting || marking.current || !csrfToken || !viewer.isCurrent()}
             onClick={() => {
-              setSeenFailed(false);
+              if (seenWaiting || marking.current || !csrfToken || !viewer.isCurrent()) return;
+              setSeenFailure(undefined);
               setSeenRetry((value) => value + 1);
             }}
           >

@@ -706,3 +706,180 @@ test('discarded page responses cannot repopulate a restarted chain or outlive a 
     }
   }
 });
+
+test('Retain native failure metadata when marking Inbox notices seen with original request/privacy/recovery bounds intact', async () => {
+  const { InboxSeenError, loadInboxSeen } = await import('../src/inbox/inbox-read');
+  const { preferenceRetryDeadline } = await import('../src/settings/preference-failure-retry');
+  const token = 'A'.repeat(22);
+  const sessionEnv = {
+    SITE_ORIGINS: 'https://site.example.test',
+    AUTH_ISSUER: 'https://auth.example.test',
+    API_RESOURCE: 'https://api.rezics.test',
+    WEBSITE_SCOPES: 'openid account:read account:update',
+    WEBSITE_CLIENT_ID: 'inbox',
+    WEBSITE_CLIENT_KEY: 'unused',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: () => ({
+        credential: async () => ({
+          status: 'active',
+          subject: 'alice',
+          accessToken: 'private-token',
+          csrfToken: token,
+        }),
+      }),
+    },
+  } as Partial<import('../src/session/client').SessionEnv>;
+  const request = (csrf = token, signedIn = true) =>
+    new Request('https://site.example.test/en/inbox', {
+      method: 'POST',
+      headers: {
+        ...(signedIn ? { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } : {}),
+        origin: 'https://site.example.test',
+        'X-CSRF-Token': csrf,
+      },
+    });
+  const attempt = { through: 'original-newest', idempotencyKey: '01a17a3b-0884-721b-91ef-d7ffd7bb58f8' };
+  const now = Date.parse('2026-10-31T00:00:00.000Z');
+  for (const status of [429, 503]) {
+    for (const retryAfter of ['30', 'Sat, 31 Oct 2026 00:01:00 GMT', undefined, 'invalid']) {
+      const calls: { key: string | null; body: unknown }[] = [];
+      let nativeStatus = status;
+      const native = createKernelClient('https://kernel.example.test', {
+        fetch: (async (input, init) => {
+          const sent = new Request(input, init);
+          expect(sent.method).toBe('POST');
+          expect(new URL(sent.url).pathname).toBe('/v1/accounts/alice/notifications:markSeen');
+          expect(sent.headers.get('authorization')).toBe('Bearer private-token');
+          calls.push({ key: sent.headers.get('idempotency-key'), body: await sent.json() });
+          return nativeStatus === 204
+            ? new Response(null, { status: 204 })
+            : Response.json(
+                {
+                  status: nativeStatus,
+                  code: status === 429 ? 'rate_limited' : 'deadline_exceeded',
+                  retryable: true,
+                  request_id: 'native-seen-request',
+                  retryAfter: '999',
+                  detail: 'private native body',
+                  accessToken: 'private-token',
+                },
+                { status: nativeStatus, headers: retryAfter === undefined ? {} : { 'Retry-After': retryAfter } },
+              );
+        }) as typeof fetch,
+      });
+      const client = new QueryClient();
+      client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: token });
+      const viewer = inboxViewerStore(client).snapshot()!;
+      const countKey = unreadCountQueryFor(viewer).queryKey;
+      client.setQueryData(countKey, { signedIn: true, state: 'ready', count: 7, capped: false });
+      try {
+        const send = async ({ data, headers }: { data: typeof attempt; headers: HeadersInit }) => {
+          const result = await loadInboxSeen(
+            native,
+            request(new Headers(headers).get('X-CSRF-Token')!),
+            sessionEnv,
+            data,
+          );
+          // Server functions need only serialize plain data: no Error prototype/custom-property support.
+          return JSON.parse(JSON.stringify(result)) as typeof result;
+        };
+        const failure = await markInboxViewerSeen(client, viewer, attempt, token, send).catch(
+          (error: unknown) => error,
+        );
+        expect(failure).toBeInstanceOf(InboxSeenError);
+        expect((failure as InstanceType<typeof InboxSeenError>).failure).toEqual({
+          status,
+          code: status === 429 ? 'rate_limited' : 'deadline_exceeded',
+          retryable: true,
+          requestId: 'native-seen-request',
+          ...(retryAfter === undefined ? {} : { retryAfter }),
+        });
+        expect(JSON.stringify(failure)).not.toContain('private');
+        expect(preferenceRetryDeadline(retryAfter, now)).toBe(
+          retryAfter === '30' ? now + 30_000 : retryAfter?.endsWith('GMT') ? now + 60_000 : 0,
+        );
+        expect(client.getQueryState(countKey)?.isInvalidated).toBe(false);
+        expect(client.getQueryData(countKey)).toMatchObject({ count: 7 });
+        // Only an explicit retry with the original intent can confirm and invalidate.
+        nativeStatus = 204;
+        await markInboxViewerSeen(client, viewer, attempt, token, send);
+        expect(client.getQueryState(countKey)?.isInvalidated).toBe(true);
+        expect(calls).toEqual(
+          Array(2).fill({ key: JSON.stringify(attempt.idempotencyKey), body: { through: attempt.through } }),
+        );
+        expect(await loadInboxSeen(native, request('wrong-token'), sessionEnv, attempt)).toMatchObject({
+          signedIn: true,
+          failure: { status: 403, code: 'forbidden' },
+        });
+        expect(await loadInboxSeen(native, request(token, false), sessionEnv, attempt)).toEqual({ signedIn: false });
+        expect(calls).toHaveLength(2);
+      } finally {
+        client.clear();
+      }
+    }
+  }
+});
+
+test('seen failure envelopes bound diagnostics, preserve non-204 uncertainty, and cannot cross a viewer epoch', async () => {
+  const { inboxSeenFailure, InboxSeenError } = await import('../src/inbox/inbox-read');
+  const { withPlatformClosedRecognition } = await import('../src/kernel/platform-closed');
+  for (const status of [200, 202, 401, 403, 503]) {
+    const native = withPlatformClosedRecognition(
+      createKernelClient('https://kernel.example.test', {
+        fetch: (async () =>
+          Response.json(
+            {
+              code: status === 403 ? 'platform_closed' : 'native_failure',
+              request_id: 'x'.repeat(129),
+              retryAfter: '999',
+              detail: 'private raw body',
+            },
+            { status },
+          )) as typeof fetch,
+      }),
+    );
+    const result = await markInboxThrough(native, 'alice', 'Bearer secret', {
+      through: 'original',
+      idempotencyKey: 'original-key',
+    }).then(() => null, inboxSeenFailure);
+    expect(result).toMatchObject({ signedIn: true, failure: { status } });
+    expect(JSON.stringify(result)).not.toMatch(/requestId|retryAfter|private|secret/);
+    if (status === 403) expect(result).toMatchObject({ failure: { code: 'platform_closed' } });
+  }
+  expect(inboxSeenFailure(new Error('private lost response'))).toEqual({ signedIn: true, failure: { status: null } });
+  expect(
+    inboxSeenFailure(new InboxSeenError({ status: 429, code: 'x'.repeat(129), retryAfter: '9'.repeat(129) })),
+  ).toEqual({ signedIn: true, failure: { status: 429 } });
+
+  const client = new QueryClient();
+  const store = inboxViewerStore(client);
+  const unsubscribe = store.subscribe(() => {});
+  try {
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'alice' });
+    const alice = store.snapshot()!;
+    const late = deferred<import('../src/inbox/inbox-read').InboxSeenResult>();
+    let sends = 0;
+    const send = async () => {
+      sends++;
+      return late.promise;
+    };
+    const attempt = { through: 'alice-original', idempotencyKey: 'alice-key' };
+    const pending = markInboxViewerSeen(client, alice, attempt, 'alice-token', send).catch(
+      (error: Error) => error.name,
+    );
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'bob' });
+    const bob = store.snapshot()!;
+    client.setQueryData(unreadCountQueryFor(bob).queryKey, { signedIn: true, state: 'ready', count: 2, capped: false });
+    late.resolve({ signedIn: true, failure: { status: 429, code: 'rate_limited', retryAfter: '30' } });
+    expect(await pending).toBe('AbortError');
+    await expect(markInboxViewerSeen(client, alice, attempt, 'bob-token', send)).rejects.toThrow(
+      'Inbox viewer changed',
+    );
+    expect(sends).toBe(1);
+    expect(client.getQueryState(unreadCountQueryFor(bob).queryKey)?.isInvalidated).toBe(false);
+  } finally {
+    unsubscribe();
+    client.clear();
+  }
+});

@@ -1,6 +1,14 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import { personalRead, readQueryKey } from '../kernel/query';
-import { markInboxSeen, readInboxPage, readUnreadCount, type InboxPage, type InboxSeenAttempt } from './inbox-read';
+import {
+  InboxSeenError,
+  markInboxSeen,
+  readInboxPage,
+  readUnreadCount,
+  type InboxPage,
+  type InboxSeenAttempt,
+  type InboxSeenResult,
+} from './inbox-read';
 import { forInboxViewer, type InboxViewer } from './inbox-viewer';
 
 const inboxKey = readQueryKey(['notifications', 'inbox'], 'session');
@@ -50,7 +58,7 @@ export function unreadCountQueryFor(viewer: InboxViewer | null) {
   });
 }
 
-type SeenTransport = (request: { data: InboxSeenAttempt; headers: HeadersInit }) => Promise<{ signedIn: boolean }>;
+type SeenTransport = (request: { data: InboxSeenAttempt; headers: HeadersInit }) => Promise<InboxSeenResult>;
 
 export async function markInboxViewerSeen(
   client: QueryClient,
@@ -60,6 +68,7 @@ export async function markInboxViewerSeen(
   send: SeenTransport = markInboxSeen,
 ) {
   const result = await forInboxViewer(viewer, () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }));
+  if ('failure' in result) throw new InboxSeenError(result.failure);
   if (!result.signedIn) throw new Error('Signed out');
   await Promise.all([
     client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),

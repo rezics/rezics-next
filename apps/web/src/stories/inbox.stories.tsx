@@ -8,7 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
-import { inboxReadRecoveryStory } from '../kernel/fake/notifications';
+import { inboxReadRecoveryStory, inboxSeenRecoveryStory } from '../kernel/fake/notifications';
 
 const meta = { title: 'Pages/Account/Inbox', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -295,5 +295,105 @@ export const FirstPageRestartUnavailable: Story = {
       '01a17a3b-0884-721b-91ef-d7ffd7bb5802',
     ]);
     await expect(restartRequests).toEqual([undefined, rejectedCursor, undefined, undefined]);
+  },
+};
+
+function SeenInboxStory({ fixture, transition = false }: { fixture: string; transition?: boolean }) {
+  useState(() => {
+    inboxSeenRecoveryStory.commands = [];
+  });
+  return transition ? (
+    <PatternStory visitor="Signed In" path={`/inbox?fixture=${fixture}`}>
+      <SessionTransitionPage />
+    </PatternStory>
+  ) : (
+    <InboxStory fixture={fixture} />
+  );
+}
+
+export const SeenRetryAfterRecovery: Story = {
+  name: 'Mark seen waits, then retries the original notice after pagination',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <SeenInboxStory fixture="seen-wait" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const status = (await view.findByText(m.inbox_seen_unavailable())).closest('section')!;
+    await expect(status).toHaveAttribute('data-response-status', '429');
+    await expect(status).toHaveAttribute('data-response-code', 'rate_limited');
+    await expect(status).toHaveAttribute('data-retry-after', '2');
+    await within(status).findByText(m.inbox_seen_rate_limited());
+    await within(status).findByText(m.settings_retry_wait());
+    const retry = within(status).getByRole('button', { name: m.inbox_retry() });
+    await expect(retry).toBeDisabled();
+    retry.click();
+    await expect(inboxSeenRecoveryStory.commands).toHaveLength(1);
+    const original = inboxSeenRecoveryStory.commands[0];
+    await userEvent.click(view.getByRole('button', { name: m.inbox_load_more() }));
+    await waitFor(() => expect(view.queryByRole('button', { name: m.inbox_load_more() })).toBeNull());
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 5000 });
+    // Expiry and page reads must not replay an uncertain write.
+    await expect(inboxSeenRecoveryStory.commands).toHaveLength(1);
+    await userEvent.click(retry);
+    await waitFor(() => expect(view.queryByText(m.inbox_seen_unavailable())).toBeNull());
+    await expect(inboxSeenRecoveryStory.commands).toEqual([original, original]);
+    await expect(view.getByRole('list')).toBeVisible();
+  },
+};
+
+export const SeenUnavailable: Story = {
+  name: 'Mark seen unavailable without a native wait',
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  render: () => <SeenInboxStory fixture="seen-unavailable" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const status = (await view.findByText(m.inbox_seen_unavailable())).closest('section')!;
+    await expect(status).toHaveAttribute('data-response-status', '503');
+    await expect(status).toHaveAttribute('data-response-code', 'deadline_exceeded');
+    await expect(within(status).getByRole('button', { name: m.inbox_retry() })).toBeEnabled();
+    await expect(within(status).queryByText(m.settings_retry_wait())).toBeNull();
+    await expect(view.queryByText(m.inbox_preparing())).toBeNull();
+    await expect(view.getByRole('list')).toBeVisible();
+  },
+};
+
+export const SeenClosed: Story = {
+  name: 'Mark seen closed after a readable Inbox',
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  render: () => <SeenInboxStory fixture="seen-closed" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const status = (await view.findByText(m.inbox_seen_closed())).closest('section')!;
+    await expect(status).toHaveAttribute('data-response-code', 'platform_closed');
+    await expect(view.getByRole('list')).toBeVisible();
+  },
+};
+
+export const SeenDenied: Story = {
+  name: 'Mark seen denied after a readable Inbox',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <SeenInboxStory fixture="seen-denied" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const status = (await view.findByText(m.inbox_seen_denied())).closest('section')!;
+    await expect(status).toHaveAttribute('data-response-status', '403');
+    await expect(status).toHaveAttribute('data-response-code', 'forbidden');
+    await expect(view.queryByText(m.inbox_seen_closed())).toBeNull();
+  },
+};
+
+export const SeenViewerBecomesUnknown: Story = {
+  name: 'Viewer changes while mark seen is waiting',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <SeenInboxStory fixture="seen-wait" transition />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const main = within(await view.findByRole('main'));
+    await main.findByText(m.inbox_seen_rate_limited());
+    await userEvent.click(view.getByRole('button', { name: 'Session becomes unknown' }));
+    await main.findByText(m.inbox_loading());
+    await expect(main.queryByRole('list')).toBeNull();
+    await expect(main.queryByText(m.inbox_seen_unavailable())).toBeNull();
+    await expect(main.queryByRole('button', { name: m.inbox_retry() })).toBeNull();
+    await expect(inboxSeenRecoveryStory.commands).toHaveLength(1);
   },
 };

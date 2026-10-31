@@ -114,6 +114,7 @@ const fixtures = {
 } as const;
 
 export const inboxReadRecoveryStory = { reads: 0 };
+export const inboxSeenRecoveryStory = { commands: [] as { through: unknown; key: string | null }[] };
 
 const list: FakeRoute = {
   method: 'GET',
@@ -127,6 +128,10 @@ const list: FakeRoute = {
         : (recordings['notifications-count'] ?? { status: 200, count: 0, capped: false });
     }
     const fixture = url.searchParams.get('fixture') ?? storyFixture(request);
+    if (fixture?.startsWith('seen-'))
+      return url.searchParams.has('cursor')
+        ? { status: 200, items: fixtures.unavailable, next: null }
+        : { status: 200, items: fixtures.mixed, next: fixture === 'seen-wait' ? 'story-seen-next' : null };
     if (fixture === 'retry-after') {
       inboxReadRecoveryStory.reads += 1;
       if (inboxReadRecoveryStory.reads > 1)
@@ -215,7 +220,29 @@ const storyTargets: FakeRoute[] = [
 const seen: FakeRoute = {
   method: 'POST',
   path: /^\/v1\/accounts\/[^/]+\/notifications:markSeen$/,
-  story: () => ({ status: 204 }),
+  story: async ({ request }) => {
+    const fixture = storyFixture(request);
+    if (!fixture?.startsWith('seen-')) return { status: 204 };
+    const body = (await request.json()) as { through?: unknown };
+    inboxSeenRecoveryStory.commands.push({ through: body.through, key: request.headers.get('idempotency-key') });
+    if (fixture === 'seen-wait' && inboxSeenRecoveryStory.commands.length > 1) return { status: 204 };
+    const status = fixture === 'seen-wait' ? 429 : fixture === 'seen-closed' || fixture === 'seen-denied' ? 403 : 503;
+    const code =
+      fixture === 'seen-closed'
+        ? 'platform_closed'
+        : fixture === 'seen-denied'
+          ? 'forbidden'
+          : status === 429
+            ? 'rate_limited'
+            : 'deadline_exceeded';
+    return {
+      status,
+      code,
+      retryable: status !== 403,
+      request_id: 'story-inbox-seen',
+      ...(fixture === 'seen-wait' ? { headers: { 'Retry-After': '2' } } : {}),
+    };
+  },
   fixture: () => ({ status: 204 }),
 };
 
