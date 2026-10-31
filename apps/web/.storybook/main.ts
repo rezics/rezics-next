@@ -17,12 +17,11 @@ const config: StorybookConfig = {
     name: '@storybook/react-vite',
     options: { builder: { viteConfigPath: null } },
   },
-  // Keep the alpha's dev JSON endpoint, but batch metadata by TS project instead of parsing every JSX import.
+  // This alpha serves the dev JSON manifest only with builder-side docgen.
   features: {
     viewportStoryGlobals: true,
     componentsManifest: true,
     docgenServer: false,
-    experimentalReactComponentMeta: true,
   } as NonNullable<StorybookConfig['features']> & {
     viewportStoryGlobals: true;
   },

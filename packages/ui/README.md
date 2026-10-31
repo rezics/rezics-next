@@ -5,7 +5,7 @@
 Run `bun run storybook` in this directory to review components. Run `bun run check` to type-check the package and run its unit and accessible browser story tests.
 
 For isolated local agent inspection, follow [Storybook agent access](../../docs/development/storybook.md#agent-access).
-UI exposes `/mcp` and `/manifests/components.json` on its own dev server, using the same batched TypeScript metadata
+UI exposes `/mcp` and `/manifests/components.json` on its own dev server, using the same React docgen metadata
 configuration as Web. Discover canonical component and story IDs with the installed documentation tools after the
 index and manifest are ready. Set Web's `STORYBOOK_UI_URL` to this UI server's origin when composing both catalogues.
 

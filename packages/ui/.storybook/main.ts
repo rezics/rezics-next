@@ -23,12 +23,11 @@ const shadcnEntries = [
 
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },
-  // Match Web's local JSON/MCP contract and batch metadata extraction by TS project.
+  // Match Web's local JSON/MCP contract instead of the alpha's server-side docgen default.
   features: {
     viewportStoryGlobals: true,
     componentsManifest: true,
     docgenServer: false,
-    experimentalReactComponentMeta: true,
   } as NonNullable<StorybookConfig['features']> & { viewportStoryGlobals: true },
   stories: [
     '../src/**/*.stories.tsx',

@@ -9,8 +9,8 @@ type Entry = { id: string; type: string; title: string; tags: string[]; importPa
 type Component = {
   id: string;
   path: string;
-  stories: Record<string, { id: string; snippet?: string }>;
-  reactComponentMeta?: { props: Record<string, unknown> };
+  stories: { id: string; snippet?: string }[];
+  reactDocgen?: { props: Record<string, unknown> };
 };
 type Reply = {
   error?: unknown;
@@ -141,13 +141,13 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
       const { response, body } = await read('/manifests/components.json', 'components.json');
       expect(response.headers.get('content-type')).toContain('application/json');
       const manifest = JSON.parse(body) as { components: Record<string, Component>; meta: { docgen: string } };
-      expect(manifest.meta.docgen).toBe('react-component-meta');
+      expect(manifest.meta.docgen).toBe('react-docgen');
       const components = Object.values(manifest.components);
-      const component = components.find((candidate) => candidate.stories[selected!.id]);
+      const component = components.find((candidate) => candidate.stories.some((story) => story.id === selected!.id));
       expect(component?.path).toEndWith(source);
-      expect(Object.keys(component?.reactComponentMeta?.props ?? {}).length).toBeGreaterThan(0);
+      expect(Object.keys(component?.reactDocgen?.props ?? {}).length).toBeGreaterThan(0);
       // Every manifest-tagged canonical story remains reachable, including nested owner stories.
-      const storyIds = new Set(components.flatMap((candidate) => Object.keys(candidate.stories)));
+      const storyIds = new Set(components.flatMap((candidate) => candidate.stories.map((story) => story.id)));
       const expected = entries.filter((entry) => entry.type === 'story' && entry.tags.includes('manifest'));
       expect(expected.length).toBeGreaterThan(100);
       for (const entry of expected) expect(storyIds.has(entry.id), entry.id).toBe(true);
@@ -167,10 +167,16 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
         expect(overview).toBeDefined();
         expect(listed).toContain(overview!.id);
       }
+      const scope = (name: string) => {
+        const schema = tools?.find((tool) => tool.name === name)?.inputSchema as {
+          properties?: Record<string, unknown>;
+        };
+        return schema.properties?.storybookId ? { storybookId: 'local' } : {};
+      };
       const shown = text(
         await rpc(
           'tools/call',
-          { name: 'docs-show', arguments: { id: component!.id, storybookId: 'local' } },
+          { name: 'docs-show', arguments: { id: component!.id, ...scope('docs-show') } },
           'docs-show.txt',
         ),
       );
@@ -178,12 +184,12 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
       const story = text(
         await rpc(
           'tools/call',
-          { name: 'docs-show-story', arguments: { storyId: selected!.id, storybookId: 'local' } },
+          { name: 'docs-show-story', arguments: { storyId: selected!.id, ...scope('docs-show-story') } },
           'docs-show-story.txt',
         ),
       );
       expect(story).toContain(selected!.id);
-      expect(component!.stories[selected!.id]!.snippet?.length).toBeGreaterThan(0);
+      expect(component!.stories.find((story) => story.id === selected!.id)?.snippet?.length).toBeGreaterThan(0);
       stages.push('local MCP component and story selected');
     } finally {
       if (!terminal && child.pid) process.kill(-child.pid, 'SIGTERM');

@@ -8,8 +8,8 @@ when the composed catalogue is offline.
 
 For an isolated worktree dev server, its local `/mcp` connection and component manifest, follow
 [Agent access](../../../docs/development/storybook.md#agent-access). The web preview supplies missing connected-story
-query context while preserving page and per-story providers. Both catalogues use the alpha's batched TypeScript
-component metadata generator for the local JSON manifest. Server startup, index readiness and manifest readiness are
+query context while preserving page and per-story providers. Both catalogues use the alpha's React docgen manifest
+generator with deferred prop extraction for selected components. Server startup, index readiness and manifest readiness are
 separate stages; select canonical component/story IDs through the installed MCP documentation tools.
 
 The recursive story globs include nested owner modules. Keep each page or pattern's behavior states together under

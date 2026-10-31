@@ -59,15 +59,21 @@ curl --fail --show-error --max-time 120 http://127.0.0.1:16497/manifests/compone
 The canonical story index is at `http://127.0.0.1:16497/index.json`. A successful JSON manifest response with local
 components, props and canonical stories establishes manifest readiness. Then call `docs-list` with
 `withStoryIds: true`, select a returned component ID with `docs-show`, and select a returned story ID with
-`docs-show-story`. Use `storybookId: "local"` for local component/story reads when Web also composes UI. These tools
+`docs-show-story`. When the installed schema exposes `storybookId`, use `"local"` for local component/story reads.
+These tools
 read metadata; they do not require opening a preview or running browser story tests.
 
-Both configurations enable `componentsManifest`, `docgenServer: false` and `experimentalReactComponentMeta: true`.
+Both configurations enable `componentsManifest` and `docgenServer: false`.
 This alpha deliberately returns 404 for the dev JSON manifest with server-side docgen. With that service off, the
-React manifest preset otherwise uses synchronous React docgen for every imported JSX component, including wrappers
-and re-exports. The component-meta option resolves the same catalogue and batches selected component/subcomponent
-props by TypeScript project using a shared language service. It retains source imports, stories and docs without
-parsing every JSX dependency for props. The JSON manifest reports `meta.docgen: "react-component-meta"`.
+React manifest preset uses synchronous React docgen. The pinned renderer is patched to resolve JSX imports first,
+then extract props only for the selected component and declared subcomponents. Other JSX imports remain available
+for source examples without generating unused API payloads. This retains the complete catalogue, source imports,
+stories and docs. The JSON manifest reports `meta.docgen: "react-docgen"`.
+The patch is registered in the root `patchedDependencies`; remove it when upstream defers incidental JSX prop
+extraction. The focused default-composition regression is `apps/web/tests/storybook-local-manifest.test.ts`.
+Do not enable `experimentalReactComponentMeta` with the pinned TypeScript 7 package: it lacks the legacy compiler
+API (`ts.sys`) required by this alpha's component-meta generator, which otherwise returns component errors without
+props. Neither server-side docgen nor that experimental flag provides a working substitute with these pins.
 Builder-side docgen is deprecated for Storybook 12; revisit these flags when upgrading.
 
 Keep one server per catalogue and one outstanding request per endpoint. Retain the owned server/request handles,
