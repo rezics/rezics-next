@@ -98,7 +98,9 @@ test('native tuple admission preserves missing, empty and maximum normalized nam
     ['', id.toUpperCase()],
     ['', 'invalid'],
   ])
-    expect(() => validateScopeOrderedPrefix({ ...request, after } as ScopeOrderedPrefixRequest)).toThrow(RangeError);
+    expect(() => validateScopeOrderedPrefix({ ...request, after } as unknown as ScopeOrderedPrefixRequest)).toThrow(
+      RangeError,
+    );
   for (const count of [-1, 2147483648, 0.5, NaN, Infinity, '0', null, undefined])
     expect(() =>
       validateScopeOrderedPrefix({

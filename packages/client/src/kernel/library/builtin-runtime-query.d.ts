@@ -41,6 +41,7 @@ export declare function openOwnerQuery(deps: OwnerQueryDependencies, input: {
         scope: {
             work(result: import("../search/scope-source.ts").PreparedSearchScope | import("../search/scope-source.ts").SearchScopeEvaluation): WorkReceipt;
             prepare(filter: FilterDocument, options?: import("../search/scope-source.ts").ScopePrepareOptions): Promise<import("../search/scope-source.ts").PreparedSearchScope>;
+            orderedPrefix(prepared: import("../search/scope-source.ts").PreparedSearchScope, request: import("../search/scope-ordered.ts").ScopeOrderedPrefixRequest): Promise<import("../search/scope-ordered.ts").SearchScopeOrderedPrefix>;
             prefix(prepared: import("../search/scope-source.ts").PreparedSearchScope, request: {
                 afterSubject: string | null;
                 quota: number;

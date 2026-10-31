@@ -131,4 +131,3 @@ export declare function createSearchScopeSource({ pool, client, prefix, source: 
         allowance: WorkAllowance;
     }): Promise<SearchScopeOrdinalPrefix>;
 };
-export {};
