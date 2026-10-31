@@ -81,7 +81,7 @@ test('Manage private labels through focused rename and delete actions', async ()
   expect(initial).toContain('href="/en/library?label=first"');
   expect(initial).toContain('cursor=opaque%2Bnext%2Fcursor');
   expect(initial.match(/<details\b/g)).toHaveLength(4);
-  expect(initial).not.toMatch(/<details\b[^>]*\bopen/);
+  expect(initial).not.toMatch(/<details\b[^>]*\sopen(?:=|>)/);
   const rename = selectedForm(initial, 'rename', 'first');
   expect(rename.html).toContain('required=""');
   expect(rename.html).toContain('maxLength="1000"');
@@ -90,7 +90,7 @@ test('Manage private labels through focused rename and delete actions', async ()
   rename.body.set('name', 'Reading again');
   page = await post(rename.body);
   expect(page.labels.find((label) => label.id === 'first')).toMatchObject({ name: 'Reading again', revision: 10 });
-  expect(markup(page)).not.toMatch(/<details\b[^>]*\bopen/);
+  expect(markup(page)).not.toMatch(/<details\b[^>]*\sopen(?:=|>)/);
   expect(fake.calls.filter((call) => call.method === 'PATCH')).toEqual([
     expect.objectContaining({
       path: '/v1/libraryLabels/first',
