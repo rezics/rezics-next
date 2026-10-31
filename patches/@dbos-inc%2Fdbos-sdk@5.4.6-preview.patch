@@ -1,0 +1,63 @@
+# DBOS 5.4.6-preview lacks a permanent per-actual-workflow-ID late-writer fence.
+# Cancellation/delete/resume cannot close writers across deduplication deletion.
+# Remove when the pinned upstream SDK supplies equivalent native migration guards,
+# durable closure receipts and supported retire/read APIs covering old executors.
+# Reproducer/acceptance: services/kernel/test/work/sdk-retirement-fence.test.ts.
+diff --git a/dist/src/client.d.ts b/dist/src/client.d.ts
+--- a/dist/src/client.d.ts
++++ b/dist/src/client.d.ts
+@@ -1,3 +1,4 @@
++import type { WorkflowWriterFence } from './workflow_retirement';
+ import { SystemDatabase, type DuplicationPolicy, type VersionInfo, type ApplicationRowCounts, type DebounceParams, type DebounceResult } from './system_database';
+ import { DLogger } from './telemetry/logs';
+ import { type GetWorkflowsInput, type StepInfo, type ListWorkflowStepsOptions, type WorkflowHandle, WorkflowSerializationFormat, type WorkflowStatus } from './workflow';
+@@ -214,6 +215,10 @@
+     }): Promise<WorkflowHandle<Awaited<T>>[]>;
+     setWorkflowPriority(workflowID: string, priority: number): Promise<void>;
+     setWorkflowDelay(workflowID: string, options: number | SetWorkflowDelayOptions): Promise<void>;
++    /** Permanently fence this actual workflow ID. No cancellation or deletion. */
++    retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
++    /** Exact native closure read, independent of execution/history existence. */
++    getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
+     deleteWorkflow(workflowID: string, deleteChildren?: boolean): Promise<void>;
+     deleteWorkflows(workflowIDs: string[], deleteChildren?: boolean): Promise<void>;
+     forkWorkflow(workflowID: string, startStep: number, options?: {
+diff --git a/dist/src/dbos.d.ts b/dist/src/dbos.d.ts
+--- a/dist/src/dbos.d.ts
++++ b/dist/src/dbos.d.ts
+@@ -1,3 +1,4 @@
++import type { WorkflowWriterFence } from './workflow_retirement';
+ import { StepStatus } from './context';
+ import { DBOSConfig, DBOSExecutor } from './dbos-executor';
+ import { DBOSSpan, Tracer } from './telemetry/traces';
+@@ -371,6 +372,10 @@
+      * @param workflowID - ID of the workflow to delete
+      * @param deleteChildren - If true, also delete all child workflows recursively (default: false)
+      */
++    /** Permanently fence this actual workflow ID. No cancellation or deletion. */
++    static retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
++    /** Exact native closure read, independent of execution/history existence. */
++    static getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
+     static deleteWorkflow(workflowID: string, deleteChildren?: boolean): Promise<void>;
+     /**
+      * Delete multiple workflows and optionally all their child workflows.
+diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
+--- a/dist/src/index.d.ts
++++ b/dist/src/index.d.ts
+@@ -1,3 +1,4 @@
++export type { WorkflowWriterFence } from './workflow_retirement';
+ export { DBOS, RecvOptions, GetEventOptions, GetResultOptions, PollingOptions, WaitFirstOptions, WaitAllOptions, SetWorkflowDelayOptions, ReadStreamOptions, ReadStreamOffsetOptions, } from './dbos';
+ export { DBOSClient } from './client';
+ export { WorkflowSchedule, ScheduledWorkflowFn, ScheduleOptions } from './scheduler/scheduler';
+diff --git a/dist/src/workflow_retirement.d.ts b/dist/src/workflow_retirement.d.ts
+new file mode 100644
+--- /dev/null
++++ b/dist/src/workflow_retirement.d.ts
+@@ -0,0 +1,7 @@
++/** Permanent technical writer closure; never an authorization to erase live work. */
++export interface WorkflowWriterFence {
++    readonly workflowID: string;
++    readonly generation: string;
++    readonly closureID: string;
++    readonly closedAt: number;
++}
