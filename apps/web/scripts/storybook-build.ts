@@ -1,5 +1,6 @@
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { cleanupStorybookUiOutput } from './storybook-build-cleanup.ts';
 import { formatBuildOutput } from './storybook-build-output.ts';
 
 const app = resolve(import.meta.dir, '..');
@@ -26,10 +27,13 @@ function run(command: string[], cwd: string, env: Record<string, string | undefi
   }
 }
 
+let buildFailed = false;
+let buildError: unknown;
+
 try {
   mkdirSync(join(root, '.temp'), { recursive: true });
   rmSync(output, { recursive: true, force: true });
-  rmSync(uiOutput, { recursive: true, force: true });
+  cleanupStorybookUiOutput(root);
   run(['bun', 'run', 'generate'], app);
   run(
     ['./node_modules/.bin/storybook', 'build', '--quiet', '--config-dir', '.storybook', '--output-dir', output],
@@ -62,6 +66,24 @@ try {
   console.log(
     `Storybook build: ${output} (${bytesIn(output)} bytes, ${((Date.now() - startedAt) / 1000).toFixed(1)} s)`,
   );
-} finally {
-  rmSync(uiOutput, { recursive: true, force: true });
+} catch (error) {
+  buildFailed = true;
+  buildError = error;
 }
+
+let cleanupFailed = false;
+let cleanupError: unknown;
+try {
+  cleanupStorybookUiOutput(root);
+} catch (error) {
+  cleanupFailed = true;
+  cleanupError = error;
+}
+
+if (buildFailed && cleanupFailed) {
+  throw new AggregateError([buildError, cleanupError], 'Storybook build and generated UI cleanup both failed.', {
+    cause: buildError,
+  });
+}
+if (buildFailed) throw buildError;
+if (cleanupFailed) throw cleanupError;
