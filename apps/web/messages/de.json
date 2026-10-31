@@ -2574,6 +2574,7 @@
   "album_summary_help": "Schreibe mit dem vorhandenen Editor eine neue eigene Zusammenfassung und gib Sprache und Lizenz ausdrücklich an. Vorhandene Dokumente bleiben erhalten.",
   "album_initial_facts": "Erste Albumangaben",
   "album_initial_help": "Füge nur hier eingegebene Fakten hinzu. Bei der Erstellung werden diese Fakten in Global ausgewählt; spätere Korrekturen sind getrennte Vorschläge zur Prüfung.",
+  "commerce_full_title": "Vollständiger Titel",
   "commerce_before_tax": "Vor Steuern",
   "commerce_tax_unknown": "Steuerregelung unbekannt",
   "commerce_benefit_unknown": "Kauf erfasst; Inhalt nicht verfügbar.",

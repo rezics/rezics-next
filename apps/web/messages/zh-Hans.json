@@ -2575,6 +2575,7 @@
   "album_summary_help": "使用现有编辑器撰写新的原创摘要，并明确选择语言和许可。现有文档会保留。",
   "album_initial_facts": "专辑初始事实",
   "album_initial_help": "仅添加在此输入的事实。初次创建会在 Global 中选用这些事实；后续更正是独立提案，须等待审核。",
+  "commerce_full_title": "完整标题",
   "commerce_before_tax": "税前",
   "commerce_tax_unknown": "税务约定未知",
   "commerce_benefit_unknown": "购买已记录；内容暂不可用。",

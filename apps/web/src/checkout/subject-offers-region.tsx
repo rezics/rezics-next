@@ -1,6 +1,6 @@
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { ListRow, ListRowLink } from '@rezics/ui/list-row';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
@@ -107,13 +107,26 @@ export function SubjectOffersView({
             const href = purchaseHref(`/offers/${encodeURIComponent(offer.id)}`, locale);
             return (
               <ListRow key={offer.id} className="flex min-w-0 flex-col gap-2 p-3">
-                <h3 className="break-words font-semibold [overflow-wrap:anywhere]">{offer.title}</h3>
-                <p className="text-sm">
-                  {price ?? m.subject_purchase_price_unknown({}, { locale: language })}
-                  {price && offer.taxBehavior === 'exclusive'
-                    ? ` · ${m.commerce_before_tax({}, { locale: language })}`
-                    : ''}
-                </p>
+                <h3 className="line-clamp-2 min-w-0 break-words font-semibold [overflow-wrap:anywhere]">
+                  {offer.title}
+                </h3>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                  <p className="text-sm tabular-nums">
+                    {price ?? m.subject_purchase_price_unknown({}, { locale: language })}
+                    {price && offer.taxBehavior === 'exclusive'
+                      ? ` · ${m.commerce_before_tax({}, { locale: language })}`
+                      : ''}
+                  </p>
+                  <p className="text-sm font-medium">{m.creator_offers_active({}, { locale: language })}</p>
+                </div>
+                <ListRowControl>
+                  <details>
+                    <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                      {m.commerce_full_title({}, { locale: language })}
+                    </summary>
+                    <p className="break-words py-2 text-sm [overflow-wrap:anywhere]">{offer.title}</p>
+                  </details>
+                </ListRowControl>
                 {benefit.kind === 'mapped' ? (
                   <>
                     <p className="text-sm text-muted-foreground">{m.benefit_fixed_version({}, { locale: language })}</p>

@@ -2574,6 +2574,7 @@
   "album_summary_help": "使用現有編輯器撰寫新的原創摘要，並明確選擇語言與授權。現有文件會保留。",
   "album_initial_facts": "專輯初始事實",
   "album_initial_help": "僅新增在此輸入的事實。初次建立會在 Global 中選用這些事實；後續更正是獨立提案，須等待審核。",
+  "commerce_full_title": "完整標題",
   "commerce_before_tax": "稅前",
   "commerce_tax_unknown": "稅務約定未知",
   "commerce_benefit_unknown": "購買已記錄；內容暫不可用。",

@@ -73,6 +73,13 @@ export type CreatorOffersStory =
   | 'stale'
   | 'preparing'
   | 'long-title';
+
+let selectedStory: CreatorOffersStory | undefined;
+/** Illustrative transport state for the existing page harness; never a production caller. */
+export function setCreatorOffersStory(state?: CreatorOffersStory): void {
+  selectedStory = state;
+}
+
 export function creatorOffersStoryPage(state: CreatorOffersStory): CreatorOffersData {
   if (['denied', 'unavailable', 'error', 'stale', 'preparing'].includes(state)) {
     if (
@@ -122,7 +129,9 @@ export const routes: FakeRoute[] = [
     method: 'GET',
     path: '/v1/offers',
     story: ({ request }) => {
-      const page = creatorOffersStoryPage(new URL(request.url).searchParams.has('cursor') ? 'second-page' : 'history');
+      const page = creatorOffersStoryPage(
+        new URL(request.url).searchParams.has('cursor') ? 'second-page' : (selectedStory ?? 'history'),
+      );
       return page.kind === 'ready' ? { status: 200, offers: page.offers, next: page.next } : undefined;
     },
   },

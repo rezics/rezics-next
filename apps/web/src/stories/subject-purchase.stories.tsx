@@ -5,6 +5,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { SubjectPurchaseSlot, type SubjectPurchaseContext } from '../features/pages/subject-slots';
 import { SubjectOffersView, SubjectOwnedBenefitsRegion } from '../checkout/subject-offers-region';
 import { SubjectOffersRegion } from '../checkout/subject-purchase';
+import { formatMinorAmount } from '../checkout/money';
 import {
   subjectOfferFixture,
   subjectOffersStoryPage,
@@ -108,7 +109,29 @@ export const PartialPreparing: Story = { render: () => <PurchaseStory state="par
 export const DeniedSignedIn: Story = { render: () => <PurchaseStory state="denied" signedIn /> };
 export const Unavailable: Story = { render: () => <PurchaseStory state="unavailable" /> };
 export const CursorError: Story = { render: () => <PurchaseStory state="cursor-error" /> };
-export const LongTitle: Story = { render: () => <PurchaseStory state="long-title" /> };
+async function inspectLongTitle({ canvasElement }: { canvasElement: HTMLElement }) {
+  const page = subjectOffersStoryPage('long-title');
+  if (page.kind !== 'ready') throw new Error('Expected illustrative offers');
+  const offer = page.offers[0]!;
+  const link = within(canvasElement).getByRole('link', {
+    name: m.subject_purchase_review_offer({ title: offer.title }),
+  });
+  await expect(link).toHaveAttribute('href', `/${getLocale()}/offers/${offer.id}`);
+  const row = link.closest('li')!;
+  await expect(within(row).getByRole('heading', { name: offer.title })).toHaveClass('line-clamp-2');
+  await expect(row).toHaveTextContent(
+    formatMinorAmount(getLocale(), offer.currency, offer.unitAmountMinor, offer.moneyUnit)!,
+  );
+  await expect(within(row).getByText(m.creator_offers_active(), { exact: true })).toBeVisible();
+  const details = row.querySelector('details')!;
+  await expect(details).not.toHaveAttribute('open');
+  await userEvent.click(within(row).getByText(m.commerce_full_title(), { exact: true }));
+  await expect(details).toHaveAttribute('open');
+  await expect(details.querySelector('p')).toHaveTextContent(offer.title);
+  await userEvent.click(within(row).getByText(m.commerce_full_title(), { exact: true }));
+  await expect(details).not.toHaveAttribute('open');
+}
+export const LongTitle: Story = { render: () => <PurchaseStory state="long-title" />, play: inspectLongTitle };
 export const MappedPriceUnknown: Story = { render: () => <PurchaseStory state="mapped-price-unknown" signedIn /> };
 export const UnknownMapping: Story = { render: () => <PurchaseStory state="unknown-mapping" /> };
 export const ActualAdapterUnavailable: Story = {
@@ -131,4 +154,5 @@ export const ActualAdapterUnavailable: Story = {
 };
 export const SignedInLongTitle: Story = {
   render: () => <PurchaseStory state="long-title" signedIn />,
+  play: inspectLongTitle,
 };

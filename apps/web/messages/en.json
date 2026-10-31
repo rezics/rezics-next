@@ -2873,6 +2873,7 @@
   "account_profile_confirm_text": "Apply the changes shown to this account:",
   "account_profile_confirm": "Confirm changes",
   "account_profile_cancel": "Keep editing",
+  "commerce_full_title": "Full title",
   "commerce_before_tax": "Before tax",
   "commerce_tax_unknown": "Tax convention unknown",
   "commerce_benefit_unknown": "Purchase recorded; benefit unavailable.",

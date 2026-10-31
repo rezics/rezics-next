@@ -2574,6 +2574,7 @@
   "album_summary_help": "Rédigez un nouveau résumé original avec l’éditeur existant, en précisant la langue et la licence. Les documents existants sont conservés.",
   "album_initial_facts": "Faits initiaux sur l’album",
   "album_initial_help": "Ajoutez uniquement les faits saisis ici. La création sélectionne ces faits dans Global ; les corrections ultérieures sont des propositions distinctes en attente de révision.",
+  "commerce_full_title": "Titre complet",
   "commerce_before_tax": "Avant taxes",
   "commerce_tax_unknown": "Régime fiscal inconnu",
   "commerce_benefit_unknown": "Achat enregistré ; contenu indisponible.",

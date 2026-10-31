@@ -2574,6 +2574,7 @@
   "album_summary_help": "既存のエディターで新しい独自の概要を書き、言語とライセンスを明示してください。既存の文書は保持されます。",
   "album_initial_facts": "アルバムの初期情報",
   "album_initial_help": "ここで入力した事実だけを追加します。作成時にはこれらが Global で選択されます。その後の修正は個別の提案となり、レビューを待ちます。",
+  "commerce_full_title": "タイトル全文",
   "commerce_before_tax": "税別",
   "commerce_tax_unknown": "税区分不明",
   "commerce_benefit_unknown": "購入記録あり。コンテンツは利用できません。",
