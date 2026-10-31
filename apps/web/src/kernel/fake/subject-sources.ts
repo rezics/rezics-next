@@ -33,10 +33,10 @@ const sourceRecords = [
 ];
 
 type StoryContext = { url?: string };
-function selectedSourceRecords(): unknown[] {
+function selectedSourceRecords(): unknown[] | undefined {
   const story = (globalThis as typeof globalThis & { __rezicsStoryContext?: StoryContext }).__rezicsStoryContext;
   const fixture = new URL(story?.url ?? '/', 'https://rezics.local').searchParams.get('sourceRecords');
-  return fixture === 'all' ? sourceRecords : [];
+  return fixture === 'all' ? sourceRecords : fixture === 'empty' ? [] : undefined;
 }
 
 async function body(request: Request): Promise<Record<string, unknown>> {
@@ -47,7 +47,7 @@ async function body(request: Request): Promise<Record<string, unknown>> {
   return typeof input === 'object' && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
 }
 
-function subjectPage(): KernelRecording {
+function subjectPage(records: unknown[]): KernelRecording {
   const page = structuredClone(subjectPageRecording) as unknown as KernelRecording & {
     reads: Record<string, { status: number; body: Record<string, unknown> }>;
   };
@@ -62,10 +62,10 @@ function subjectPage(): KernelRecording {
     related: Record<string, unknown>;
     summary: unknown;
   };
-  currentRead.subject.sourceRecords = selectedSourceRecords();
+  currentRead.subject.sourceRecords = records;
   const statements = currentRead.subject.statements as Record<string, Record<string, unknown>[]>;
   const keyword = statements['schema:keywords']?.[0];
-  if (keyword && selectedSourceRecords().length) {
+  if (keyword && records.length) {
     keyword.references = [
       {
         parts: [
@@ -86,18 +86,22 @@ function subjectPage(): KernelRecording {
   return page;
 }
 
+export function subjectSourcesPage(input: Record<string, unknown>): KernelRecording | undefined {
+  const target = input.target;
+  if (typeof target !== 'object' || target === null || Array.isArray(target)) return;
+  const readTarget = target as Record<string, unknown>;
+  if (readTarget.subject !== subjectPageRecording.subject) return;
+  if (readTarget.view !== undefined && readTarget.view !== 'overview') return;
+  const records = selectedSourceRecords();
+  return records ? subjectPage(records) : undefined;
+}
+
 export const routes: FakeRoute[] = [
   {
     method: 'POST',
     path: '/v1/pages:read',
     story: async ({ request }) => {
-      const input = await body(request);
-      const target = input.target;
-      if (typeof target !== 'object' || target === null || Array.isArray(target)) return;
-      const readTarget = target as Record<string, unknown>;
-      if (readTarget.subject !== subjectPageRecording.subject) return;
-      if (readTarget.view !== undefined && readTarget.view !== 'overview') return;
-      return subjectPage();
+      return subjectSourcesPage(await body(request));
     },
   },
 ];

@@ -2,6 +2,7 @@ import defaultFixtures from '../fixtures.json' with { type: 'json' };
 import { pageRead, type Fixtures, type KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import { isRecord, languageList, localizeRecording, localizeSearchReads } from './languages.ts';
+import { subjectSourcesPage } from './subject-sources.ts';
 
 const storyFixtures = defaultFixtures as unknown as Fixtures;
 const missingSubjectId = '00000000-0000-4000-8000-000000000000';
@@ -40,7 +41,9 @@ export const routes: FakeRoute[] = [
     story: async ({ request, recordings }) => {
       const body = await input(request);
       const languages = languageList(body?.languages);
-      const recording = body && languages.length > 0 ? storyPage(body, recordings) : undefined;
+      // Select explicit Sources scenarios here, before the ordinary subject and hero recordings can answer.
+      const recording =
+        body && languages.length > 0 ? (subjectSourcesPage(body) ?? storyPage(body, recordings)) : undefined;
       return recording ? localizeSearchReads(recording, languages, storyFixtures) : undefined;
     },
     fixture: async ({ request, fixtures }) => {
