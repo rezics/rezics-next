@@ -106,7 +106,18 @@ test('A filtered queue with only deleted rows and a real next cursor shows prepa
   );
   const query = new URL(pages[1]!.path, 'https://queue.test').searchParams;
   expect(Object.fromEntries(query)).toEqual({ ...fixture.scope, limit: '20', cursor: fixture.next });
-  expect(fixture.calls).toHaveLength(4);
+  expect(fixture.calls).toHaveLength(5);
+  const subjectRead = fixture.calls[4]!;
+  expect(subjectRead).toMatchObject({
+    method: 'GET',
+    authorization: 'Bearer fixture',
+    session: 'queue-session',
+    key: null,
+  });
+  const subjectUrl = new URL(subjectRead.path, 'https://queue.test');
+  expect(subjectUrl.pathname).toBe(`/v1/subjects/${fixture.native.id}`);
+  expect(Object.fromEntries(subjectUrl.searchParams)).toEqual({ context: fixture.scope.context });
+  expect(fixture.calls.every((call) => call.method === 'GET')).toBe(true);
 });
 
 test('Mixed pages retain readable decisions while exhausted deleted pages stay empty and inconsistent native empty pages fail closed', async () => {
