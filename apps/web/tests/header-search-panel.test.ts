@@ -71,7 +71,7 @@ test('Recent omits routine storage copy while retaining history actions and trut
     const markup = render(state);
     expect(markup).toContain(message);
     expect(markup).toContain('Kokoro');
-    if (state.failure) expect(markup).toContain(m.search_history_reload());
+    if ('failure' in state) expect(markup).toContain(m.search_history_reload());
   }
 });
 

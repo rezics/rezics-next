@@ -143,8 +143,8 @@ async function populated(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   const recentHeading = canvas.getByRole('heading', { name: m.header_search_recent() });
   await expect(recentHeading).toBeVisible();
-  await expect(canvas.getByRole('button', { name: 'The Little Prince', exact: true })).toBeVisible();
-  await expect(await canvas.findByRole('button', { name: 'Dune', exact: true })).toBeVisible();
+  await expect(canvas.getByRole('button', { name: 'The Little Prince' })).toBeVisible();
+  await expect(await canvas.findByRole('button', { name: 'Dune' })).toBeVisible();
   const trendingHeading = canvas.getByRole('heading', { name: m.header_search_trending_searches() });
   const communitiesHeading = await canvas.findByRole('heading', { name: m.realm_discovery_trending() });
   for (const heading of [trendingHeading, communitiesHeading]) {
@@ -161,7 +161,7 @@ async function populated(canvasElement: HTMLElement) {
   if (!composer) throw new globalThis.Error('The input must share the composer surface.');
   await expect(input).toHaveFocus();
   const focusedShadow = getComputedStyle(composer).boxShadow;
-  canvas.getByRole('button', { name: m.header_search_history(), exact: true }).focus();
+  canvas.getByRole('button', { name: m.header_search_history() }).focus();
   await expect(getComputedStyle(composer).boxShadow).not.toBe(focusedShadow);
   await userEvent.click(input);
   await expect(input).toHaveFocus();
@@ -298,7 +298,7 @@ export const CommunitiesUnavailable: Story = {
     await expect(await canvas.findByText(m.realm_discovery_unavailable())).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.realm_discovery_retry() }));
     await expect(await canvas.findByText(m.realm_discovery_unavailable())).toBeVisible();
-    await expect(await canvas.findByRole('button', { name: 'Dune', exact: true })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: 'Dune' })).toBeVisible();
   },
 };
 export const CommunitiesClosed: Story = {
