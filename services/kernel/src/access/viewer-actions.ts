@@ -26,6 +26,21 @@ import { routeOf } from '../route/route.ts';
  * public floor are separate: a private resource may still have an explicit grant. */
 export type ViewerActionResource = Readonly<{
   readAction: string;
+  /** Native owner may prepare foreign anchors before the target connection is held. */
+  prepare?(input: {
+    pool: Pool;
+    access: Access;
+    actor: Actor;
+    ids: readonly string[];
+    deadline: number;
+  }): Promise<ViewerActionResource>;
+  /** Additional native state/target constraints; missing action keys preserve the mounted catalogue. */
+  actionAvailability?(
+    client: AccessClient,
+    ids: readonly string[],
+    actor: Actor,
+    time: import('../command/command.ts').AuthoritativeTime,
+  ): Promise<Readonly<Record<string, Readonly<Record<string, boolean>>>>>;
   read(
     client: AccessClient,
     ids: readonly string[],
@@ -216,6 +231,14 @@ export async function readViewerActions(
         if (binding.exposure.kind === 'gate') groups.add(binding.exposure.group);
     const openings = await openGroups.run(deadlineClient(deps.pool, deadline), { groups: [...groups], at });
     const open = new Set(openings.map((row) => row.group));
+    const owners = new Map<string, ViewerActionResource>();
+    for (const [type, ids] of selected) {
+      const owner = deps.resources.get(type)!;
+      owners.set(
+        type,
+        owner.prepare ? await owner.prepare({ pool: deps.pool, access: deps.access, actor, ids, deadline }) : owner,
+      );
+    }
     return await withConnection(deps.pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -272,8 +295,9 @@ export async function readViewerActions(
             ownAllowed.set(action, answer[actor.accountId]?.allowed === true);
           }
         for (const [type, ids] of selected) {
-          const owner = deps.resources.get(type)!;
+          const owner = owners.get(type)!;
           const eligibility = await owner.read(client, ids, at, time);
+          const nativeActions = await owner.actionAvailability?.(client, ids, actor, time);
           const candidates = [
             ...new Set([
               owner.readAction,
@@ -338,6 +362,7 @@ export async function readViewerActions(
             const entries = new Map<string, Set<string>>();
             for (const binding of bindings.get(type) ?? []) {
               if (binding.fixedResourceId !== undefined && binding.fixedResourceId !== id) continue;
+              if (nativeActions?.[id]?.[binding.action] === false) continue;
               const native = binding.accountAuthority
                 ? nativeAccounts.get(`${binding.accountAuthority}/${binding.action}`)?.[id]
                 : undefined;

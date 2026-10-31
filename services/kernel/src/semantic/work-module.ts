@@ -1,3 +1,4 @@
+import { contextDirectoryEffect, populateContextDirectory, registerContextDirectoryWork } from './context-directory.ts';
 import { startRelays } from '../events/relays.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { runIdentityEpochBootstrapBatch, identityBootstrapWake } from './identity-epoch-bootstrap.ts';
@@ -72,7 +73,9 @@ export const semanticWorkModule: WorkModule = {
     await registerIdentityScopedObservationWork(context);
     registerProviderReviewWork(context);
     registerIdentityEpochCoordinator(context);
+    await registerContextDirectoryWork(context);
     context.addEffects([
+      contextDirectoryEffect(context.pool, context.clock),
       createSemanticErasureEffect(context.pool),
       createSemanticLocatorEffect(context.pool),
       {
@@ -115,6 +118,7 @@ export const semanticWorkModule: WorkModule = {
       },
     ]);
     context.addService(async () => {
+      await populateContextDirectory(context.pool, context.clock);
       await runCommand(context.pool, { partition: 0 }, async () => ({
         value: null,
         // Four bounded wake chains share the existing effect registration and queue limits.

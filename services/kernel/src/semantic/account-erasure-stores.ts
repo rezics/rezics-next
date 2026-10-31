@@ -13,6 +13,8 @@ export const SEMANTIC_ERASURE_STORES = [
   'hidden_candidate',
   'moderation',
   'context',
+  'context_directory_entry',
+  'context_directory_home',
   'context_extension',
   'context_extension_activation',
   'definition_release',

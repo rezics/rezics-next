@@ -451,8 +451,10 @@ Creating a Context does not publish a catalogue or website or change the Realm r
 A readable community Context offers an explicit deletion request and confirmation; it does not assert ownership.
 Global is communal and offers no deletion. Generated `DELETE /v1/contexts/{id}` and
 `POST /v1/contexts/{id}:restore` recheck native current resource-owner grants, independently of creation history.
-Only this workspace's successful native deletion response supplies a known tombstone and restoration attempt.
-An unknown or nonvisible 404 supplies neither. No owner flag or browser deadline decides restoration eligibility.
+The selected native `GET /v1/contexts/{id}/lifecycle` read supplies current retained lifecycle metadata;
+`GET /v1/contexts?deleted=true` discovers only currently readable tombstones with native restore authority.
+The ordinary directory defaults to active authorized Contexts and supports prefix selection with an opaque cursor.
+An unknown or nonvisible 404 supplies no tombstone or inferred Global Context. No owner flag or browser deadline decides restoration eligibility.
 Denial, revoked or transferred authority, conflicts and expired native restoration remain refused outcomes.
 
 Confirmed deletion unmounts private candidate comparisons and drops cached Context labels before rereading the
@@ -461,7 +463,7 @@ separate from successful current reading. Ordinary subjects, contributions and G
 no page claims cascade deletion or completed cleanup. A failed request keeps its draft, exact action and key.
 An uncertain request remains sealed for exact retry; a definite refusal allows explicit review of a new request.
 All actions preserve current session identity, CSRF, native response/session headers and current authority through
-the existing BFF. The generated lifecycle response supplies no restoration deadline.
+the existing BFF. Lifecycle command responses carry identity and state; the lifecycle metadata read supplies the native deadline.
 
 ### Editorial Context workspace
 

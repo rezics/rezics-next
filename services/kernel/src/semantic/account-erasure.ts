@@ -264,7 +264,7 @@ async function minimizePayload(
       [partition, accountId, role, locator.source_transaction_id, locator.source_position],
     );
   }
-  if (role === 'acting-human' && store !== 'write_basis') return;
+  if (role === 'acting-human' && store !== 'write_basis' && store !== 'context_directory_entry') return;
   if (store === 'record_source_set' || store === 'record_source_set_member') return;
   if (store === 'write_basis') {
     const original = await tx.query(
@@ -408,6 +408,13 @@ async function minimizePayload(
     );
   } else if (store === 'provider_review_queue_key') {
     await tx.query(`DELETE FROM semantic.provider_review_queue_key WHERE ${where}`, values);
+  } else if (store === 'context_directory_entry') {
+    // Retain only the technical repair coordinate. A surviving owner's native Source may later prove
+    // its metadata nonpersonal; until then the directory reports preparing rather than false absence.
+    await tx.query(
+      `UPDATE semantic.context_directory_entry SET search_key='',refresh_pending=true WHERE ${where}`,
+      values,
+    );
   } else if (store === 'provider_review_queue_entry') {
     await tx.query(`DELETE FROM semantic.provider_review_queue_entry WHERE ${where}`, values);
   } else if (store === 'source_candidate' || store === 'external_claim') {
@@ -1016,6 +1023,7 @@ export function createSemanticLocatorEffect(pool: Pool): Effect {
       'com.rezics.access.role-grant.revoke.v1',
       'com.rezics.subject.created.v1',
       'com.rezics.semantic.context.created.v1',
+      'com.rezics.semantic.context-directory.changed.v1',
       'com.rezics.definitions.published.v1',
       'com.rezics.definitions.activated.v1',
       'com.rezics.subject.visibility_changed.v1',

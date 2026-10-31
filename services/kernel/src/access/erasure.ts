@@ -52,6 +52,7 @@ export const ERASURE_LOCATOR_EFFECTS: ReadonlySet<string> = new Set<string>([
   'community_party_locator',
   'semantic_erasure',
   'semantic_erasure_locator',
+  'semantic_context_directory',
 ]);
 export class SharedHistoryIncompleteError extends Error {
   constructor() {

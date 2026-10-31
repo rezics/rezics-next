@@ -22,7 +22,7 @@ import {
   type ViewerActionResources,
   type ViewerActionBindings,
 } from '../access/viewer-actions.ts';
-import { subjectViewerActionResources } from '../semantic/viewer-actions.ts';
+import { contextViewerActionResource, subjectViewerActionResources } from '../semantic/viewer-actions.ts';
 import { fixedGlobalViewerResource } from '../access/fixed-global-viewer-resource.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
 import { accountViewerActionResource } from '../access/account-viewer-actions.ts';
@@ -453,6 +453,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(continued), realmRoleReader }),
   });
   const contextual = contextRoutes(continued as unknown as ReturnType<typeof definitionRoutes>, {
+    tokens,
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
@@ -626,6 +627,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   });
   const viewerResources = new Map([
     ...subjectViewerActionResources,
+    ['semantic.context', contextViewerActionResource],
     ['access.account', accountViewerActionResource],
     ['library.collection', collectionViewerActionResource],
     ['community.realm', realmViewerActionResource],

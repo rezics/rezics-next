@@ -245,6 +245,48 @@ END; $$;
 
 
 --
+-- Name: capture_context_directory_entry(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_context_directory_entry() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ -- Reject delayed copies after the genuine local participant fence, for every inherited role.
+ IF EXISTS(SELECT 1 FROM semantic.erasure_copy_role r
+   JOIN semantic.erasure_home h ON h.partition_no=r.partition_no AND h.account_id=r.account_id
+   WHERE r.partition_no=0 AND r.store='context_directory_entry' AND r.record_key=NEW.erasure_key
+     AND r.transaction_id=NEW.recorded_transaction_id) THEN
+   RAISE EXCEPTION 'context_directory_actor_fenced';
+ END IF;
+ PERFORM semantic.capture_erasure_roles(0,'context_directory_entry',NEW.erasure_key,NEW.recorded_transaction_id);
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_context_directory_source_record(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_context_directory_source_record() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.store='context_directory_entry' THEN
+   SELECT true,context_id INTO NEW.native_present,NEW.context_id
+     FROM semantic.context_directory_entry WHERE route=NEW.partition_no*16 AND erasure_key=NEW.record_key;
+   NEW.native_present:=coalesce(NEW.native_present,false);
+ ELSIF NEW.store='context_directory_home' THEN
+   SELECT true INTO NEW.native_present FROM semantic.context_directory_home
+     WHERE route=NEW.partition_no*16 AND erasure_key=NEW.record_key;
+   NEW.native_present:=coalesce(NEW.native_present,false);
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: capture_context_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1242,6 +1284,63 @@ BEGIN
   RAISE EXCEPTION 'Semantic record source set requires a sealed native current command' USING ERRCODE='23514';
  END IF;
  RETURN NEW;
+END; $$;
+
+
+--
+-- Name: context_directory_dirty(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.context_directory_dirty() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='UPDATE' AND (NEW.labels IS DISTINCT FROM OLD.labels OR NEW.state IS DISTINCT FROM OLD.state)
+    AND NEW.security_revision=OLD.security_revision THEN
+   NEW.security_revision:=OLD.security_revision+1;
+ END IF;
+ IF TG_OP='INSERT' OR NEW.labels IS DISTINCT FROM OLD.labels OR NEW.state IS DISTINCT FROM OLD.state
+    OR NEW.security_revision IS DISTINCT FROM OLD.security_revision
+    OR (NEW.directory_pending AND NOT OLD.directory_pending) THEN
+   NEW.directory_pending:=true;
+   UPDATE semantic.context_directory_home SET complete=false,after_route=least(after_route,NEW.route),after_key=0
+     WHERE route=(NEW.route/16)*16;
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: context_directory_invalidate_home(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.context_directory_invalidate_home() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.epoch IS DISTINCT FROM OLD.epoch OR NEW.write_state IS DISTINCT FROM OLD.write_state THEN
+   UPDATE semantic.context_directory_home SET complete=false,source_epoch=NEW.epoch,
+     after_route=NEW.partition_no*16,after_key=0 WHERE route=NEW.partition_no*16;
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: context_directory_owner_dirty(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.context_directory_owner_dirty() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r integer; id uuid; role text;
+BEGIN
+ IF TG_OP='DELETE' THEN r:=OLD.route; id:=OLD.resource_id; role:=OLD.grant_role;
+ ELSE r:=NEW.route; id:=NEW.resource_id; role:=NEW.grant_role; END IF;
+ IF role='semantic.context.owner' THEN
+   UPDATE semantic.context SET directory_pending=true,security_revision=security_revision+1 WHERE route=r AND context_id=id;
+ END IF;
+ RETURN NULL;
 END; $$;
 
 
@@ -2589,6 +2688,7 @@ CREATE TABLE semantic.context (
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     deletion_generation uuid,
     deletion_transaction_id uuid,
+    directory_pending boolean DEFAULT true NOT NULL,
     CONSTRAINT context_check CHECK ((route = ((get_byte(uuid_send(context_id), 10) * 256) + get_byte(uuid_send(context_id), 11)))),
     CONSTRAINT context_defaults_check CHECK (((jsonb_typeof(defaults) = 'object'::text) AND (NOT jsonb_path_exists(defaults, '$.*?(@ != "inherit" && @ != "suppress")'::jsonpath)))),
     CONSTRAINT context_global_active CHECK (((kind <> 'global'::text) OR (state = 'active'::text))),
@@ -2601,6 +2701,44 @@ CREATE TABLE semantic.context (
     CONSTRAINT context_settings_release_check CHECK (((settings_release IS NULL) OR (settings_release ~ '^sha256:[0-9a-f]{64}$'::text))),
     CONSTRAINT context_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text, 'purged'::text]))),
     CONSTRAINT context_without_settings_defaults_check CHECK (((settings_id IS NOT NULL) OR (defaults = '{}'::jsonb)))
+);
+
+
+--
+-- Name: context_directory_entry; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.context_directory_entry (
+    route integer DEFAULT 0 NOT NULL,
+    context_id uuid NOT NULL,
+    language text NOT NULL,
+    search_key text NOT NULL COLLATE pg_catalog."C",
+    state text NOT NULL,
+    source_epoch integer NOT NULL,
+    source_version bigint NOT NULL,
+    refresh_pending boolean DEFAULT false NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT context_directory_entry_route_check CHECK ((route = 0)),
+    CONSTRAINT context_directory_entry_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text])))
+);
+
+
+--
+-- Name: context_directory_home; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.context_directory_home (
+    route integer NOT NULL,
+    partition_no integer NOT NULL,
+    source_epoch integer NOT NULL,
+    after_route integer NOT NULL,
+    after_key bigint DEFAULT 0 NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT context_directory_home_check CHECK ((route = (partition_no * 16))),
+    CONSTRAINT context_directory_home_check1 CHECK (((after_route >= route) AND (after_route <= (route + 16)))),
+    CONSTRAINT context_directory_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
 );
 
 
@@ -5496,6 +5634,38 @@ ALTER TABLE ONLY semantic.candidate
 
 
 --
+-- Name: context_directory_entry context_directory_entry_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.context_directory_entry
+    ADD CONSTRAINT context_directory_entry_pkey PRIMARY KEY (route, context_id, language);
+
+
+--
+-- Name: context_directory_entry context_directory_entry_route_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.context_directory_entry
+    ADD CONSTRAINT context_directory_entry_route_erasure_key_key UNIQUE (route, erasure_key);
+
+
+--
+-- Name: context_directory_home context_directory_home_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.context_directory_home
+    ADD CONSTRAINT context_directory_home_pkey PRIMARY KEY (route);
+
+
+--
+-- Name: context_directory_home context_directory_home_route_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.context_directory_home
+    ADD CONSTRAINT context_directory_home_route_erasure_key_key UNIQUE (route, erasure_key);
+
+
+--
 -- Name: context_extension_activation context_extension_activation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -6977,6 +7147,48 @@ CREATE INDEX context_active ON semantic.context USING btree (route, context_id) 
 
 
 --
+-- Name: context_directory_bootstrap; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX context_directory_bootstrap ON semantic.context USING btree (route, erasure_key);
+
+
+--
+-- Name: context_directory_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX context_directory_pending ON semantic.context USING btree (route, erasure_key) WHERE directory_pending;
+
+
+--
+-- Name: context_directory_prefix; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX context_directory_prefix ON semantic.context_directory_entry USING btree (route, state, search_key, context_id, language);
+
+
+--
+-- Name: context_directory_preparing; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX context_directory_preparing ON semantic.context_directory_home USING btree (complete, route) WHERE (NOT complete);
+
+
+--
+-- Name: context_directory_raw; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX context_directory_raw ON semantic.context_directory_entry USING btree (route, state, context_id) WHERE (language = ''::text);
+
+
+--
+-- Name: context_directory_refresh; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX context_directory_refresh ON semantic.context_directory_entry USING btree (route, context_id) WHERE refresh_pending;
+
+
+--
 -- Name: context_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -7994,6 +8206,24 @@ CREATE TRIGGER context_activation_record_purge_gate BEFORE INSERT OR DELETE OR U
 --
 
 CREATE CONSTRAINT TRIGGER context_activation_record_purge_writer AFTER INSERT OR UPDATE ON semantic.context_extension_activation DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_resource_writer();
+-- Name: context context_directory_dirty; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER context_directory_dirty BEFORE INSERT OR UPDATE ON semantic.context FOR EACH ROW EXECUTE FUNCTION semantic.context_directory_dirty();
+
+
+--
+-- Name: context_directory_entry context_directory_entry_erasure; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER context_directory_entry_erasure AFTER INSERT OR UPDATE ON semantic.context_directory_entry DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_context_directory_entry();
+
+
+--
+-- Name: erasure_source_record context_directory_source_record; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER context_directory_source_record BEFORE INSERT ON semantic.erasure_source_record FOR EACH ROW EXECUTE FUNCTION semantic.capture_context_directory_source_record();
 
 
 --
@@ -8162,6 +8392,13 @@ CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.candid
 --
 
 CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.context DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: context_directory_entry erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.context_directory_entry DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
 
 
 --

@@ -1,3 +1,9 @@
+import {
+  createContextDirectory,
+  ContextDirectoryEntrySchema,
+  ContextDirectoryPreparingError,
+} from '../context-directory.ts';
+import type { KeyRing } from '../../tokens/seal.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { definitionRoutes } from './definitions.ts';
@@ -78,9 +84,88 @@ function lifecycleProblem(error: unknown): never {
 
 function contextRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: import('pg').Pool; routeKey: Uint8Array; access: () => Access; clock: () => Date },
+  dependencies: {
+    pool: import('pg').Pool;
+    routeKey: Uint8Array;
+    access: () => Access;
+    clock: () => Date;
+    tokens: KeyRing;
+  },
 ) {
+  const directory = () => createContextDirectory({ ...dependencies, access: dependencies.access() });
+  const readResponses = {
+    400: problemSchema('invalid_request'),
+    401: unauthorized,
+    404: problemSchema('not_found'),
+    503: problemSchema('semantic_not_ready', 'overloaded', 'partition_unavailable', 'deadline_exceeded'),
+  };
   return app
+    .get(
+      '/v1/contexts',
+      {
+        query: t.Object(
+          {
+            query: t.Optional(t.String({ maxLength: 256 })),
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            deleted: t.Optional(t.Boolean({ default: false })),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          ...readResponses,
+          200: t.Object(
+            { contexts: t.Array(ContextDirectoryEntrySchema), next: t.Union([t.String(), t.Null()]) },
+            { additionalProperties: false },
+          ),
+        },
+        detail: {
+          operationId: 'context.list',
+          'x-exposure': 'public',
+          'x-action': 'context:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ query, actor, admission, job }) => {
+        try {
+          return await admission.run('normal', job, () =>
+            directory().list({ ...query, actor, deadline: job.deadline }),
+          );
+        } catch (error) {
+          if (error instanceof ContextDirectoryPreparingError) throw new ProblemError('semantic_not_ready');
+          throw error;
+        }
+      },
+    )
+    .get(
+      '/v1/contexts/:id/lifecycle',
+      {
+        params: t.Object({ id: t.String() }),
+        response: {
+          ...readResponses,
+          200: t.Object({ context: ContextDirectoryEntrySchema }, { additionalProperties: false }),
+        },
+        detail: {
+          operationId: 'context.lifecycle',
+          'x-exposure': 'public',
+          'x-action': 'context:read',
+          'x-resource-types': ['semantic.context'],
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, actor, admission, job }) => {
+        try {
+          const context = await admission.run('normal', job, () =>
+            directory().lifecycle({ id: params.id, actor, deadline: job.deadline }),
+          );
+          if (!context) throw new ProblemError('not_found');
+          return { context };
+        } catch (error) {
+          if (error instanceof ContextDirectoryPreparingError) throw new ProblemError('semantic_not_ready');
+          throw error;
+        }
+      },
+    )
     .post(
       '/v1/contexts',
       {

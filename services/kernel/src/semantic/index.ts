@@ -73,3 +73,16 @@ export type {
 } from './identity-scoped-public-source.ts';
 export { createIdentityScopedObservations } from './identity-scoped-observations.ts';
 export { receiveIdentityScopePrearm, cancelIdentityScopePrearm } from './identity-scoped-prearm.ts';
+
+export {
+  createContextDirectory,
+  ContextDirectoryEntrySchema,
+  ContextDirectoryPreparingError,
+} from './context-directory.ts';
+export type {
+  ContextDirectory,
+  ContextDirectoryEntry,
+  ContextDirectoryPage,
+  ContextDirectoryQuery,
+  ContextDirectoryRead,
+} from './context-directory.ts';
