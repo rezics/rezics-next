@@ -1,8 +1,4 @@
-import type {
-  AccountWorkflowPorts,
-  NativeCreationContext,
-  NativeCreationContextRequest,
-} from '@rezics/auth-contract';
+import type { AccountWorkflowPorts, NativeCreationContext, NativeCreationContextRequest } from '@rezics/auth-contract';
 import type { PoolClient } from 'pg';
 import type { CopyRole } from './erasure-copy.ts';
 import type { AccountOperation } from './workflows.ts';
@@ -89,10 +85,7 @@ export const REQUEST_PARTY_COLUMNS = `erasure_subject_id,erasure_human_id,erasur
 
 /** Approved business variants supply targets, not acting identities. Exhaustive
  * switching keeps new operations closed until their source projection is added. */
-export function operationParties(
-  input: AccountOperation,
-  source: Pick<NativeCreationContext, 'operatorAccountId'>,
-) {
+export function operationParties(input: AccountOperation, source: Pick<NativeCreationContext, 'operatorAccountId'>) {
   const base = {
     subject: null as string | null,
     operator: source.operatorAccountId,

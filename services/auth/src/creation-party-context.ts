@@ -57,8 +57,7 @@ export async function readApprovedCreationContext(
     // variants are resolved by the same native full-operation/key/digest reader;
     // this projection does not evaluate or widen their authorization formula.
     (input.operation.kind === 'automated' &&
-      (c.operation.action !== 'account:manage' ||
-        c.operation.targetResourceId !== input.operation.operatorAccountId))
+      (c.operation.action !== 'account:manage' || c.operation.targetResourceId !== input.operation.operatorAccountId))
   )
     throw Object.assign(new Error('Native creation context binding refused'), { status: 403 as const });
   // Take an exact, closed snapshot. Never persist additional runtime fields or

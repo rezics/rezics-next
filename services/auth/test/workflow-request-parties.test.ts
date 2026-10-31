@@ -238,7 +238,11 @@ describe('native request producer', () => {
       await expect(
         readRequestCreationContext(ports, context, { ...input, operationKey: randomUUID() }),
       ).rejects.toThrow();
-      const response = await f.call('/account-operations/execute', { operationKey, operation, reference }, person.cookie);
+      const response = await f.call(
+        '/account-operations/execute',
+        { operationKey, operation, reference },
+        person.cookie,
+      );
       expect(response.status).toBe(200);
       expect(requests.at(-1)).toEqual({ approvalReference: reference, operationKey, operation: input });
       const workflowId = `accounts:${createHash('sha256')
