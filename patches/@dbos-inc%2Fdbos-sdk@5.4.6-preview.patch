@@ -22,6 +22,22 @@ diff --git a/dist/src/client.d.ts b/dist/src/client.d.ts
      deleteWorkflow(workflowID: string, deleteChildren?: boolean): Promise<void>;
      deleteWorkflows(workflowIDs: string[], deleteChildren?: boolean): Promise<void>;
      forkWorkflow(workflowID: string, startStep: number, options?: {
+diff --git a/dist/src/client.js b/dist/src/client.js
+--- a/dist/src/client.js
++++ b/dist/src/client.js
+@@ -341,6 +341,12 @@
+         const delayUntilEpochMS = (0, dbos_1.resolveDelayEpochMS)(options);
+         return this.systemDatabase.setWorkflowDelay(workflowID, delayUntilEpochMS);
+     }
++    retireWorkflow(workflowID) {
++        return this.systemDatabase.retireWorkflow(workflowID);
++    }
++    getWorkflowWriterFence(workflowID) {
++        return this.systemDatabase.getWorkflowWriterFence(workflowID);
++    }
+     deleteWorkflow(workflowID, deleteChildren = false) {
+         return this.systemDatabase.deleteWorkflows([workflowID], deleteChildren);
+     }
 diff --git a/dist/src/dbos.d.ts b/dist/src/dbos.d.ts
 --- a/dist/src/dbos.d.ts
 +++ b/dist/src/dbos.d.ts
@@ -41,6 +57,25 @@ diff --git a/dist/src/dbos.d.ts b/dist/src/dbos.d.ts
      static deleteWorkflow(workflowID: string, deleteChildren?: boolean): Promise<void>;
      /**
       * Delete multiple workflows and optionally all their child workflows.
+diff --git a/dist/src/dbos.js b/dist/src/dbos.js
+--- a/dist/src/dbos.js
++++ b/dist/src/dbos.js
+@@ -774,6 +774,15 @@
+      * @param workflowID - ID of the workflow to delete
+      * @param deleteChildren - If true, also delete all child workflows recursively (default: false)
+      */
++    static async retireWorkflow(workflowID) {
++        (0, decorators_1.ensureDBOSIsLaunched)('retireWorkflow');
++        // The native receipt is independent of workflow checkpoints and execution deletion.
++        return dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.retireWorkflow(workflowID);
++    }
++    static async getWorkflowWriterFence(workflowID) {
++        (0, decorators_1.ensureDBOSIsLaunched)('getWorkflowWriterFence');
++        return dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.getWorkflowWriterFence(workflowID);
++    }
+     static async deleteWorkflow(workflowID, deleteChildren = false) {
+         return this.deleteWorkflows([workflowID], deleteChildren);
+     }
 diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
 --- a/dist/src/index.d.ts
 +++ b/dist/src/index.d.ts
@@ -49,6 +84,231 @@ diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
  export { DBOS, RecvOptions, GetEventOptions, GetResultOptions, PollingOptions, WaitFirstOptions, WaitAllOptions, SetWorkflowDelayOptions, ReadStreamOptions, ReadStreamOffsetOptions, } from './dbos';
  export { DBOSClient } from './client';
  export { WorkflowSchedule, ScheduledWorkflowFn, ScheduleOptions } from './scheduler/scheduler';
+diff --git a/dist/src/sysdb_migrations/internal/migrations.js b/dist/src/sysdb_migrations/internal/migrations.js
+--- a/dist/src/sysdb_migrations/internal/migrations.js
++++ b/dist/src/sysdb_migrations/internal/migrations.js
+@@ -1,6 +1,7 @@
+ "use strict";
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.allMigrations = exports.SHARED_MIGRATION_BASE = void 0;
++const { workflowWriterFenceMigration } = require("./workflow_writer_fence");
+ const migration_runner_1 = require("../migration_runner");
+ Object.defineProperty(exports, "SHARED_MIGRATION_BASE", { enumerable: true, get: function () { return migration_runner_1.SHARED_MIGRATION_BASE; } });
+ /**
+@@ -1164,6 +1165,7 @@
+                 `CREATE INDEX ${isCockroach ? '' : 'CONCURRENTLY'} IF NOT EXISTS "idx_application_versions_owner_timestamp" ON "${schemaName}"."application_versions" ("application_name", "version_timestamp" DESC)`,
+             ],
+         },
++        workflowWriterFenceMigration(schemaName),
+     ];
+ }
+ //# sourceMappingURL=migrations.js.mapdiff --git a/dist/src/sysdb_migrations/internal/workflow_writer_fence.js b/dist/src/sysdb_migrations/internal/workflow_writer_fence.js
+new file mode 100644
+--- /dev/null
++++ b/dist/src/sysdb_migrations/internal/workflow_writer_fence.js
+@@ -0,0 +1,120 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++// SDK-owned: old executors execute these native guards too, without new client code.
++function workflowWriterFenceMigration(schemaName) {
++    const s = '"' + schemaName.replace(/"/g, '""') + '"';
++    const tables = [
++        ['workflow_status', 'workflow_uuid'],
++        ['workflow_input', 'workflow_uuid'],
++        ['workflow_output', 'workflow_uuid'],
++        ['operation_outputs', 'workflow_uuid'],
++        ['workflow_events', 'workflow_uuid'],
++        ['workflow_events_history', 'workflow_uuid'],
++        ['notifications', 'destination_uuid'],
++        ['streams', 'workflow_uuid'],
++    ];
++    return {
++        name: '20261031003816_permanent_workflow_writer_fence',
++        pg: [
++            // No FK to execution/history. Deletion/deduplication never removes this identity.
++            `CREATE TABLE ${s}.workflow_writer_fences (
++                workflow_uuid TEXT PRIMARY KEY,
++                generation BIGINT NOT NULL DEFAULT 1,
++                closure_id UUID,
++                closed_at BIGINT,
++                CHECK ((generation = 1 AND closure_id IS NULL AND closed_at IS NULL)
++                    OR (generation = 2 AND closure_id IS NOT NULL AND closed_at IS NOT NULL))
++            )`,
++            `CREATE FUNCTION ${s}.preserve_workflow_writer_fence() RETURNS TRIGGER
++             LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
++             BEGIN
++                IF TG_OP IN ('DELETE', 'TRUNCATE') THEN
++                    RAISE EXCEPTION 'DBOS workflow writer identity is permanent';
++                END IF;
++                IF OLD.workflow_uuid IS DISTINCT FROM NEW.workflow_uuid OR
++                   (OLD.closed_at IS NOT NULL AND OLD IS DISTINCT FROM NEW) THEN
++                    RAISE EXCEPTION 'DBOS workflow writer closure is immutable';
++                END IF;
++                RETURN NEW;
++             END $$`,
++            `CREATE TRIGGER preserve_workflow_writer_fence
++             BEFORE UPDATE OR DELETE ON ${s}.workflow_writer_fences
++             FOR EACH ROW EXECUTE FUNCTION ${s}.preserve_workflow_writer_fence()`,
++            `CREATE TRIGGER preserve_workflow_writer_fence_truncate
++             BEFORE TRUNCATE ON ${s}.workflow_writer_fences
++             FOR EACH STATEMENT EXECUTE FUNCTION ${s}.preserve_workflow_writer_fence()`,
++            `ALTER TABLE ${s}.workflow_writer_fences ENABLE ALWAYS TRIGGER preserve_workflow_writer_fence`,
++            `ALTER TABLE ${s}.workflow_writer_fences ENABLE ALWAYS TRIGGER preserve_workflow_writer_fence_truncate`,
++            `CREATE FUNCTION ${s}.guard_workflow_writer(id TEXT) RETURNS VOID
++             LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
++             DECLARE live_generation BIGINT;
++             BEGIN
++                -- The conflicting tuple is checked after waiting, even with an older statement snapshot.
++                -- This row lock remains held through the writer's actual COMMIT, not just its admission.
++                INSERT INTO ${s}.workflow_writer_fences AS f (workflow_uuid) VALUES (id)
++                ON CONFLICT (workflow_uuid) DO UPDATE SET generation = f.generation
++                WHERE f.closed_at IS NULL
++                RETURNING generation INTO live_generation;
++                IF NOT FOUND THEN
++                    RAISE EXCEPTION 'DBOS workflow writer is permanently retired'
++                        USING ERRCODE = 'P0001', DETAIL = id;
++                END IF;
++             END $$`,
++            `CREATE FUNCTION ${s}.guard_workflow_writer_row() RETURNS TRIGGER
++             LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
++             DECLARE ids TEXT[]; id TEXT;
++             BEGIN
++                ids := ARRAY[to_jsonb(NEW)->>TG_ARGV[0]];
++                IF TG_OP = 'UPDATE' THEN
++                    ids := array_append(ids, to_jsonb(OLD)->>TG_ARGV[0]);
++                END IF;
++                IF TG_TABLE_NAME = 'workflow_status' THEN
++                    IF TG_OP = 'INSERT' THEN
++                        ids := ids || ARRAY[NEW.parent_workflow_id, NEW.forked_from];
++                    ELSE
++                        IF NEW.parent_workflow_id IS DISTINCT FROM OLD.parent_workflow_id THEN
++                            ids := array_append(ids, NEW.parent_workflow_id);
++                        END IF;
++                        IF NEW.forked_from IS DISTINCT FROM OLD.forked_from THEN
++                            ids := array_append(ids, NEW.forked_from);
++                        END IF;
++                    END IF;
++                END IF;
++                FOR id IN SELECT DISTINCT unnest(ids) ORDER BY 1 LOOP
++                    IF id IS NOT NULL THEN PERFORM ${s}.guard_workflow_writer(id); END IF;
++                END LOOP;
++                RETURN NEW;
++             END $$`,
++            ...tables.flatMap(([table, key]) => [
++                `CREATE TRIGGER guard_workflow_writer BEFORE INSERT OR UPDATE ON ${s}.${table}
++                 FOR EACH ROW EXECUTE FUNCTION ${s}.guard_workflow_writer_row('${key}')`,
++                // Restore/COPY replay and replication-role sessions cannot silently reopen a retired ID.
++                `ALTER TABLE ${s}.${table} ENABLE ALWAYS TRIGGER guard_workflow_writer`,
++            ]),
++            `CREATE FUNCTION ${s}.retire_workflow_writers(id TEXT)
++             RETURNS SETOF ${s}.workflow_writer_fences
++             LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
++             DECLARE fence ${s}.workflow_writer_fences%ROWTYPE;
++             BEGIN
++                -- Join the old SDK's native owner-check lock before revoking its execution token.
++                -- No terminal status, cancellation or legal erasure authority is inferred here.
++                PERFORM workflow_uuid FROM ${s}.workflow_status
++                    WHERE workflow_uuid = id FOR NO KEY UPDATE;
++                INSERT INTO ${s}.workflow_writer_fences AS f (workflow_uuid) VALUES (id)
++                ON CONFLICT (workflow_uuid) DO UPDATE SET generation = f.generation
++                RETURNING * INTO fence;
++                IF fence.closed_at IS NULL THEN
++                    -- Old sendFromStep writers check this token in their SAME notification transaction.
++                    -- Revocation makes them roll back even when sending to a different live destination.
++                    UPDATE ${s}.workflow_status SET owner_xid = NULL WHERE workflow_uuid = id;
++                    UPDATE ${s}.workflow_writer_fences
++                        SET generation = 2, closure_id = gen_random_uuid(),
++                            closed_at = (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT
++                        WHERE workflow_uuid = id RETURNING * INTO fence;
++                END IF;
++                RETURN NEXT fence;
++             END $$`,
++        ],
++    };
++}
++exports.workflowWriterFenceMigration = workflowWriterFenceMigration;
+diff --git a/dist/src/system_database.d.ts b/dist/src/system_database.d.ts
+--- a/dist/src/system_database.d.ts
++++ b/dist/src/system_database.d.ts
+@@ -1,3 +1,4 @@
++import type { WorkflowWriterFence } from './workflow_retirement';
+ /// <reference types="node" />
+ import { Pool, PoolClient, ClientBase } from 'pg';
+ import type { DatabaseError } from 'pg';
+@@ -365,6 +366,9 @@
+     debounceDelayedWorkflow(params: DebounceParams, client?: PoolClient): Promise<DebounceResult>;
+     private debounceDelayedWorkflowStandalone;
+     getWorkflowChildren(workflowID: string): Promise<string[]>;
++    retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
++    getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
++    private workflowWriterFenceReceipt;
+     deleteWorkflows(workflowIDs: string[], deleteChildren?: boolean): Promise<void>;
+     /**
+      * Drop a workflow's history from `startStep` onwards and re-enqueue it under the same
+diff --git a/dist/src/system_database.js b/dist/src/system_database.js
+--- a/dist/src/system_database.js
++++ b/dist/src/system_database.js
+@@ -1392,6 +1392,9 @@
+         const client = await this.connect();
+         try {
+             await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
++            for (const id of [...new Set(workflowIDs)].sort()) {
++                await client.query(`SELECT "${this.schemaName}".guard_workflow_writer($1)`, [id]);
++            }
+             // Check existence separately: a zero-row update also means "already complete", a legal no-op.
+             const { rows } = await client.query(`SELECT workflow_uuid FROM "${this.schemaName}".workflow_status WHERE workflow_uuid = ANY($1)`, [workflowIDs]);
+             const existing = new Set(rows.map((r) => r.workflow_uuid));
+@@ -1556,6 +1559,30 @@
+         }
+         return [...descendants];
+     }
++    /** Permanently revoke native writers, without cancellation or payload deletion. */
++    async retireWorkflow(workflowID) {
++        if (typeof workflowID !== 'string' || workflowID.length === 0)
++            throw new TypeError('An actual workflow ID is required');
++        return withDbRetry(async () => {
++            const schema = '"' + this.schemaName.replace(/"/g, '""') + '"';
++            const { rows } = await this.pool.query(
++                `SELECT * FROM ${schema}.retire_workflow_writers($1)`, [workflowID]);
++            return this.workflowWriterFenceReceipt(rows[0]);
++        });
++    }
++    async getWorkflowWriterFence(workflowID) {
++        if (typeof workflowID !== 'string' || workflowID.length === 0)
++            throw new TypeError('An actual workflow ID is required');
++        const schema = '"' + this.schemaName.replace(/"/g, '""') + '"';
++        const { rows } = await this.pool.query(
++            `SELECT * FROM ${schema}.workflow_writer_fences WHERE workflow_uuid=$1 AND closed_at IS NOT NULL`,
++            [workflowID]);
++        return rows.length ? this.workflowWriterFenceReceipt(rows[0]) : null;
++    }
++    workflowWriterFenceReceipt(row) {
++        return Object.freeze({ workflowID: row.workflow_uuid, generation: String(row.generation),
++            closureID: row.closure_id, closedAt: Number(row.closed_at) });
++    }
+     async deleteWorkflows(workflowIDs, deleteChildren = false) {
+         const allIds = [...workflowIDs];
+         if (deleteChildren) {
+@@ -1612,6 +1639,9 @@
+         const client = await this.connect();
+         try {
+             await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
++            for (const id of [...new Set([workflowID])].sort()) {
++                await client.query(`SELECT "${this.schemaName}".guard_workflow_writer($1)`, [id]);
++            }
+             const { rows: statusRows } = await client.query(`SELECT status FROM "${schema}".workflow_status WHERE workflow_uuid = $1`, [workflowID]);
+             if (statusRows.length === 0) {
+                 throw new error_1.DBOSNonExistentWorkflowError(`Workflow ${workflowID} does not exist`);
+@@ -1701,6 +1731,9 @@
+         const client = await this.connect();
+         try {
+             await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
++            for (const id of [...new Set(originalWorkflowIDs)].sort()) {
++                await client.query(`SELECT "${this.schemaName}".guard_workflow_writer($1)`, [id]);
++            }
+             // Fetch the status of all original workflows inside the transaction.
+             const { rows: statusRows } = await client.query(`SELECT ws.workflow_uuid, ws.name, ws.class_name, ws.config_name, ws.application_id,
+                 ws.authenticated_user, ws.authenticated_roles, ws.assumed_role,
 diff --git a/dist/src/workflow_retirement.d.ts b/dist/src/workflow_retirement.d.ts
 new file mode 100644
 --- /dev/null
