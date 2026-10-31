@@ -315,6 +315,18 @@ test('Default feed route applies the selected native kind across the mixed strea
     );
     expect(anonymous.sources).toEqual({ discovery: 'ready', following: 'not_requested', continue: 'not_requested' });
 
+    // Book sorts before Movie. With P=1, filtering an all-kind discovery page after
+    // enumeration would return an empty page instead of this native selected hit.
+    const movieDiscovery = await eventually(async () => {
+      const result = await page('schema:Movie', 'home', 1, undefined, false);
+      return result.sources.discovery === 'ready' ? result : undefined;
+    });
+    expect(movieDiscovery.feedItems).toHaveLength(1);
+    expect(movieDiscovery.feedItems[0]).toMatchObject({
+      source: 'discovery',
+      key: { id: movie, kind: 'schema:Movie' },
+    });
+
     const actor = await driver.fixtures.authenticatedAccount(viewer);
     const tokens = mounted.tokens!;
     const position = (cursor: string, stream: string, kind?: string) =>
