@@ -11,9 +11,7 @@ test('Collection publication Pages stories compose a real existing page shell an
 
   expect(story).toContain("title: 'Pages/Library/Collection publication'");
   expect(story).toContain("import { AppShell } from '../shell/shell'");
-  expect(story).toContain(
-    "import { CollectionPublicationPageView } from '../library/collection-publication-page'",
-  );
+  expect(story).toContain("import { CollectionPublicationPageView } from '../library/collection-publication-page'");
   // The family decorator puts every existing render inside the same production shell.
   const decorators = story.slice(story.indexOf('decorators:'), story.indexOf('parameters:'));
   expect(decorators).toMatch(
