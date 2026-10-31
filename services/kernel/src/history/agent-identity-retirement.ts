@@ -26,28 +26,15 @@ import { historyDeadline, lockHistoryBarrier, type HistoryReceivingContext } fro
 import type { HistoryArtifact, HistoryBarrier, HistoryReadiness } from './registry.ts';
 import sourceSelect from './agent-identity-retirement-source.sql';
 
-/** Declaration-only adapter from the original producer's published module. Replace with
- * original type aliases when semantic/identity-source-consumer-maintenance.ts is integrated.
- * There is no local issuer, allocation or runtime substitute for that module. */
-declare const identitySourceConsumerMaintenance: unique symbol;
-export type IdentitySourceConsumerMaintenanceWork = Readonly<{
-  [identitySourceConsumerMaintenance]: true;
-}>;
-export type IdentitySourceConsumerMaintenanceContext = Readonly<{
-  deadline: number;
-  identityConsumerWork: IdentitySourceConsumerMaintenanceWork;
-}>;
-export type IdentitySourceConsumerMaintenanceModule = {
-  withIdentitySourceConsumerMaintenance<T>(
-    deps: Readonly<{
-      pool: Pool;
-      env: Readonly<Record<string, string | undefined>>;
-      clock?: KernelClock;
-    }>,
-    context: Readonly<{ deadline: number }>,
-    body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>,
-  ): Promise<T>;
-};
+// Reuse the integrated producer's opaque work identity across the receiving boundary.
+export type {
+  IdentitySourceConsumerMaintenanceWork,
+  IdentitySourceConsumerMaintenanceContext,
+} from '../semantic/identity-source-consumer-maintenance.ts';
+export type IdentitySourceConsumerMaintenanceModule = Pick<
+  typeof import('../semantic/identity-source-consumer-maintenance.ts'),
+  'withIdentitySourceConsumerMaintenance'
+>;
 
 /** Released foreign staging is not cleanup authority. The receiving owner must verify
  * the original source and its native terminal transfer before settling its obligation. */
