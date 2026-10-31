@@ -151,14 +151,6 @@ test('one deep cleanup page stays bounded as current, history and unrelated memb
   const setup = createLifecycleCommands({ pool: db.admin, access });
   const runner = createOrganizationCloseRunner({ pool: db.pool });
   const preparation = createOrganizationCloseRunner({ pool: db.admin });
-  async function earlierPages() {
-    const target = targets[0]!;
-    while (target.sequence < target.pages) {
-      const result = await preparation.step(target.org, target.sequence);
-      expect(result.count).toBe(100);
-      target.sequence++;
-    }
-  }
   async function operation(_database: GrowthDatabase, scale: number) {
     const { org, sequence, measuredMembers } = targets.shift()!;
     // Read the runner's exact row-key neighbourhood without altering its work.
@@ -263,15 +255,14 @@ test('one deep cleanup page stays bounded as current, history and unrelated memb
         })),
       );
       await seedOrganization(scale, true);
-      for (const target of targets)
+      for (const target of targets) {
         await setup.tombstone(await context(target.owner, db.admin), { accountId: target.org, key: key() });
-    },
-    // Preparation runs after VACUUM so the measured seek must skip dead entries
-    // from all preceding pages, which grow with the organization's history.
-    prepare: earlierPages,
-    async warmup(database, scale) {
-      await earlierPages();
-      await operation(database, scale);
+        while (target.sequence < target.pages) {
+          const result = await preparation.step(target.org, target.sequence);
+          expect(result.count).toBe(100);
+          target.sequence++;
+        }
+      }
     },
     operation,
   }).catch((error: unknown) => {
