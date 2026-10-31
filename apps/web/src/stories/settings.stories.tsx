@@ -119,9 +119,9 @@ export const FocusedCategories: Story = {
     categoryRequests.length = 0;
     const original = globalThis.fetch;
     globalThis.fetch = (async (input, init) => {
-      const request = new Request(input, init);
-      const url = new URL(request.url);
+      const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
       if (url.hostname === 'kernel.local') {
+        const request = new Request(input instanceof Request ? input : url, init);
         categoryRequests.push({
           method: request.method,
           path: url.pathname,

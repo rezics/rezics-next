@@ -206,7 +206,10 @@ function SettingsSections({
   const [io] = useState(() => {
     const credential = () => {
       const session = queryClient.getQueryData(sessionQuery.queryKey);
-      return active.current && session?.state === 'signed-in' && session.subject === page.accountId
+      return active.current &&
+        session?.state === 'signed-in' &&
+        session.subject === page.accountId &&
+        session.csrfToken === csrfToken
         ? session.csrfToken
         : null;
     };
