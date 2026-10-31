@@ -94,7 +94,10 @@ export function MyLogsPageView({
                       <Exposure operation="published_log.read">
                         <a
                           href={`/${getLocale()}/logs/${encodeURIComponent(log.id)}`}
-                          aria-label={m.library_my_logs_read({ title, date: fullDateTime(log.publishedAt, getLocale()) })}
+                          aria-label={m.library_my_logs_read({
+                            title,
+                            date: fullDateTime(log.publishedAt, getLocale()),
+                          })}
                           className="inline-flex min-h-11 items-center rounded text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                         >
                           {m.library_my_logs_open_log()}
