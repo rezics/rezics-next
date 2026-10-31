@@ -1623,19 +1623,34 @@ scan, free native-work allowance, raised SQL/row/point/byte/time budget or new p
 
 Account family and canonical navigation come only from the delivered Accounts
 `readPublicAccountCanonicalTargets` reader with current reciprocal verification, publication mappings, Account
-and exact handle-claim guards, in the same bounded batch. A valid Account whose `canonicalPath` is null is omitted;
+and exact handle-claim guards. Preparation and finish each call that same native reader with the same at-most-100
+original keys and caller deadline, bracketing dependent publication work. Finish withholds missing or changed
+Account identity, canonical path or admitted views, then performs the final original Subject/profile/release and
+current disclosure checks. Both actual native owners must admit the current result; matching snapshots cannot
+supply permission. Both Account batches, their internal initial/final native checks, failures and the final Subject
+checks belong in actual Cost evidence under all existing lower native SQL/point/byte/time limits.
+A valid Account whose `canonicalPath` is null is omitted;
 no immutable profile URL or handle is invented. An Account association without a proven current canonical target
 also withholds independent Subject fallback. An ordinary unassociated Subject uses its own native page destination.
 No family is inferred from labels, types, key shape or the legacy verification flag. These are navigation data,
 not permission/custody, whole-query Account exclusion or ordering authority.
 
+Subject template offerings and Account view admission are separate native facts. Only `family: 'account'` intersects
+the offered Subject template names with the Accounts-owned `PublicAccountCanonicalView` admission:
+`overview | posts | reviews | collections`. Root overview semantics remain with Accounts; activity flags do not
+grant it. Unassociated Subject destinations retain every actually offered view. Neither templates nor labels/types
+grant an Account activity view, and navigation adds no agents/realms family or view outside the closed owner union.
+
 Integration handoff for the Semantic manager and Web: consume `target` as the canonical family/address and `views`
-as the current native offered view names. Preserve the original feed id and metadata; do not hydrate each row,
+as the current native offered names, intersected with current Account admission for Account destinations. This is
+the same feed boundary consumed by `apps/web/src/sitemap/feeds/subjects.ts`; no second producer is needed.
+Preserve the original feed id and metadata; do not hydrate each row,
 construct handleless URLs or treat bare id/labels as a complete projection. The kernel feed already passes its
 actual composed native Access and route key to the reader. `test/semantic/subject-page-feed-targets.test.ts` adds
 focused native current-target scenarios; `subject-page-http.test.ts` retains its original publication assertions
 and bootstraps the real production presentation profile. Consumer integration and native acceptance run after
-landing; this declaration does not claim Web delivery or physical cost acceptance.
+landing; this declaration does not claim native feed/publication/current-authority acceptance, Web delivery,
+physical cost acceptance or main proof.
 
 Native creation, identity labels, Global selection and selected rank changes, selected moderation, bulk retraction,
 consent disclosure, account-agent labels, verification reversal and merge gates record bounded component deltas.

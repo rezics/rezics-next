@@ -171,13 +171,79 @@ test('Native publication feed includes only currently listable canonical Subject
   expect(candidates.get(named.subjectId)).toEqual({
     id: named.subjectId,
     target: { family: 'account', accountId: named.accountId, canonicalPath: `/@${handle}` },
-    views: personViews,
+    views: ['overview', 'posts', 'reviews', 'collections'],
   });
   expect(candidates.get(handleless.subjectId)).toBeNull();
   expect(candidates.get(independent)?.target).toEqual({ family: 'subject', subjectId: independent });
+  expect(candidates.get(independent)?.views).toEqual(personViews);
   const entries = (await feed()).subjectPages;
   expect(entries.find((entry) => entry.id === named.subjectId)).toMatchObject(candidates.get(named.subjectId)!);
   expect(entries.some((entry) => entry.id === handleless.subjectId)).toBe(false);
+}, 120_000);
+
+test('Native subject feed Account destinations contain only both template-offered and currently owner-admitted views after bounded final native Account revalidation', async () => {
+  const handle = uniqueHandle();
+  const target = await linked(handle);
+  for (const { flags, views } of [
+    { flags: { posts: false, reviews: true, collections: false }, views: ['overview', 'reviews'] },
+    { flags: { posts: false, reviews: false, collections: false }, views: ['overview'] },
+    {
+      flags: { posts: true, reviews: true, collections: true },
+      views: ['overview', 'posts', 'reviews', 'collections'],
+    },
+  ]) {
+    await f.pool.query(
+      'UPDATE access.account SET public_views=public_views || $3::jsonb WHERE route=$1 AND account_id=$2',
+      [routeOf(target.accountId), target.accountId, JSON.stringify(flags)],
+    );
+    const expected = {
+      id: target.subjectId,
+      target: { family: 'account', accountId: target.accountId, canonicalPath: `/@${handle}` },
+      views,
+    };
+    expect((await readPublicSubjectPageCandidates(deps(), [target.subjectId])).get(target.subjectId)).toEqual(expected);
+    expect((await feed()).subjectPages.find((entry) => entry.id === target.subjectId)).toMatchObject(expected);
+  }
+
+  // Both revocation and newly admitted activity invalidate the captured destination for this attempt.
+  for (const enabled of [false, true]) {
+    const prepared = await preparePublicSubjectPageCandidates(deps(), [target.subjectId]);
+    await f.pool.query(
+      'UPDATE access.account SET public_views=public_views || $3::jsonb WHERE route=$1 AND account_id=$2',
+      [routeOf(target.accountId), target.accountId, JSON.stringify({ posts: enabled })],
+    );
+    expect((await prepared.finish()).get(target.subjectId)).toBeNull();
+    const views = enabled ? ['overview', 'posts', 'reviews', 'collections'] : ['overview', 'reviews', 'collections'];
+    expect((await readPublicSubjectPageCandidates(deps(), [target.subjectId])).get(target.subjectId)?.views).toEqual(views);
+    expect((await feed()).subjectPages.find((entry) => entry.id === target.subjectId)?.views).toEqual(views);
+  }
+}, 120_000);
+
+test('final native Account hydration cannot bypass the original Subject disclosure recheck', async () => {
+  const target = await linked(uniqueHandle());
+  const reader = deps();
+  let armed = false;
+  let changed = false;
+  reader.access = {
+    ...access,
+    async authorize(client, actor, action, resource, evidence, time) {
+      expect(actor.kind).toBe('anonymous');
+      const allowed = await access.authorize(client, actor, action, resource, evidence, time);
+      if (armed && !changed && action === 'subject:read' && resource.id === target.subjectId) {
+        changed = true;
+        await f.pool.query(
+          "UPDATE semantic.subject SET visibility='hidden',security_revision=security_revision+1 WHERE route=1 AND subject_id=$1",
+          [target.subjectId],
+        );
+      }
+      return allowed;
+    },
+  };
+  const prepared = await preparePublicSubjectPageCandidates(reader, [target.subjectId]);
+  armed = true;
+  expect((await prepared.finish()).get(target.subjectId)).toBeNull();
+  expect(changed).toBe(true);
+  expect((await feed()).subjectPages.some((entry) => entry.id === target.subjectId)).toBe(false);
 }, 120_000);
 
 test('unknown, moved and hidden originals cannot borrow a visible terminal or retain a stale native projection', async () => {

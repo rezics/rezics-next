@@ -22,23 +22,40 @@ export async function preparePublicSubjectPageCandidates(
     throw new TypeError('Public subject page candidates require the server route key');
   const reader: SummaryReaderDependencies = { ...deps, actor: { kind: 'anonymous' } };
   const metadata = ids.length ? await preparePublicSemanticPageMetadata(reader, ids) : null;
+  const accounts = metadata ? await readPublicAccountCanonicalTargets(reader, ids) : null;
   return {
     async finish(): Promise<Map<string, PublicSubjectPageCandidate | null>> {
       const result = new Map<string, PublicSubjectPageCandidate | null>(ids.map((id) => [id, null]));
-      if (!metadata) return result;
-      const accounts = await readPublicAccountCanonicalTargets(reader, ids);
+      if (!metadata || !accounts) return result;
+      const currentAccounts = await readPublicAccountCanonicalTargets(reader, ids);
+      // Keep the original Subject/profile/release/disclosure guards after all dependent Account work.
       const pages = await metadata.finish();
       for (const id of ids) {
         const page = pages.get(id);
         if (!page) continue;
-        const account = accounts.get(id);
-        if (account) {
+        if (!accounts.has(id) || !currentAccounts.has(id)) continue;
+        const before = accounts.get(id);
+        const account = currentAccounts.get(id);
+        if (before || account) {
+          // Equality only rejects changed navigation. Both reads enforce current native Account admission.
+          if (
+            !before ||
+            !account ||
+            before.accountId !== account.accountId ||
+            before.accountKind !== account.accountKind ||
+            before.handle !== account.handle ||
+            before.canonicalPath !== account.canonicalPath ||
+            before.views.length !== account.views.length ||
+            before.views.some((view, index) => view !== account.views[index])
+          )
+            continue;
+          const admitted = new Set<string>(account.views);
           // A valid identity with no current claim has no native navigable Account destination.
           if (account.canonicalPath !== null)
             result.set(id, {
               id,
               target: { family: 'account', accountId: account.accountId, canonicalPath: account.canonicalPath },
-              views: page.views,
+              views: page.views.filter((view) => admitted.has(view)),
             });
         } else if (page.independentSubject) {
           result.set(id, { id, target: { family: 'subject', subjectId: id }, views: page.views });
