@@ -144,24 +144,18 @@ export function RatingControlView({
       onKeyDownCapture={clearOnKey}
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <label className="font-medium text-sm" htmlFor={`rating-${subjectId}`}>
-          {question.label}
-        </label>
+        <span className="font-medium text-sm">{question.label}</span>
         <output
           aria-live="polite"
           className="font-semibold tabular-nums"
           data-slot="rating-control-value"
-          htmlFor={`rating-${subjectId}`}
         >
           {valueText}
         </output>
       </div>
       <Slider
-        aria-label={question.label}
-        aria-valuetext={valueText}
         className="[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary"
         disabled={pending}
-        id={`rating-${subjectId}`}
         max={question.scale.max}
         min={question.scale.min}
         onValueChange={(next) => {
@@ -180,6 +174,7 @@ export function RatingControlView({
           }
         }}
         step={question.scale.displayStep}
+        thumbProps={{ 'aria-label': question.label, 'aria-valuetext': valueText }}
         value={[sliderValue]}
       />
       <div aria-hidden="true" className="flex justify-between text-muted-foreground text-xs tabular-nums">

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { readOwnRating } from '../src/features/pages/subject-ratings';
+import { QUESTION, readOwnRating, type RatingQuestion } from '../src/features/pages/subject-ratings';
 import {
   applyOptimisticRatingChange,
   RatingControlView,
@@ -12,15 +12,23 @@ import { subjectOwnRatingQuery } from '../src/features/pages/subject-queries';
 
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const returnTo = `/en/subjects/${subjectId}/kokoro`;
+const ratingQuestion: RatingQuestion = {
+  id: QUESTION,
+  revision: 1,
+  label: 'Your rating',
+  grain: 'work',
+  scale: { min: 0, max: 20, displayStep: 1 },
+};
 
-function view(state: RatingControlState) {
+function view(state: RatingControlState, { question = ratingQuestion, pending = false, locale = 'en' } = {}) {
   return renderToStaticMarkup(
     createElement(RatingControlView, {
+      question,
       subjectId,
-      locale: 'en',
+      locale,
       returnTo,
       state,
-      pending: false,
+      pending,
       failure: null,
       onSet: () => {},
       onClear: () => {},
@@ -42,6 +50,63 @@ test('the rating control has an accessible 0-to-10 slider in half-point steps an
   expect(html).toContain('type="range"');
   expect(html).toContain('name="units"');
   expect(html).toContain('step="1"');
+});
+
+test.each([
+  { units: 15, rangeValue: 15, text: '7.5 out of 10', pending: false, locale: 'en' },
+  { units: null, rangeValue: 10, text: 'Not rated', pending: false, locale: 'en' },
+  { units: 0, rangeValue: 0, text: '0 out of 10', pending: false, locale: 'en' },
+  { units: 20, rangeValue: 20, text: '10 out of 10', pending: true, locale: 'en' },
+  { units: 15, rangeValue: 15, text: '7.5 / 10', pending: false, locale: 'zh-Hans' },
+  { units: null, rangeValue: 10, text: '尚未评分', pending: true, locale: 'zh-Hans' },
+])('the native rating input owns its label and current value text: %j', ({ units, rangeValue, text, pending, locale }) => {
+  const html = view({ kind: 'ready', units }, { pending, locale });
+  const interactive = html.split('<noscript>')[0]!;
+  const ranges = (interactive.match(/<input\b[^>]*>/g) ?? []).filter((tag) => tag.includes('type="range"'));
+  expect(ranges).toHaveLength(1);
+  const input = ranges[0]!;
+  for (const attribute of [
+    `aria-label="${ratingQuestion.label}"`,
+    `aria-valuetext="${text}"`,
+    `aria-valuenow="${rangeValue}"`,
+    `value="${rangeValue}"`,
+    'min="0"',
+    'max="20"',
+    'step="1"',
+  ])
+    expect(input).toContain(attribute);
+  expect(input.includes('disabled=""')).toBe(pending);
+  expect(input).not.toContain('tabindex="-1"');
+  expect(interactive).toContain(`>${text}</output>`);
+  const group = interactive.match(/<div\b[^>]*data-slot="slider"[^>]*>/)?.[0];
+  expect(group).toBeDefined();
+  expect(group).toContain('role="group"');
+  expect(group).not.toMatch(/aria-label=|aria-labelledby=|aria-valuetext=/);
+  const thumb = interactive.match(/<div\b[^>]*data-slot="slider-thumb"[^>]*>/)?.[0];
+  expect(thumb).toBeDefined();
+  expect(thumb).not.toMatch(/role="slider"|aria-label=|aria-valuetext=/);
+  expect(interactive).not.toContain(`for="rating-${subjectId}"`);
+});
+
+test('the native input retains the question scale and question-specific label through the shared thumb props', () => {
+  const question: RatingQuestion = {
+    ...ratingQuestion,
+    label: 'How much did you like this work?',
+    scale: { min: 4, max: 44, displayStep: 4 },
+  };
+  const html = view({ kind: 'ready', units: null }, { question });
+  const interactive = html.split('<noscript>')[0]!;
+  const input = interactive.match(/<input\b[^>]*type="range"[^>]*>/)?.[0];
+  expect(input).toBeDefined();
+  for (const attribute of [
+    `aria-label="${question.label}"`,
+    'aria-valuetext="Not rated"',
+    'min="4"',
+    'max="44"',
+    'step="4"',
+    'value="24"',
+  ])
+    expect(input).toContain(attribute);
 });
 
 test('signed-out readers get a sign-in link returning to this subject', () => {
