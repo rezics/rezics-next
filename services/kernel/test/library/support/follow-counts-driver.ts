@@ -208,8 +208,6 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
         return target;
       },
       async libraryFollow(as, target) {
-        // Preserve the original target. A Collection cannot be substituted with a
-        // different Book merely to make an implied-entry oracle succeed.
         await json(await write(as, 'PUT', `/v1/libraryEntries/${target.targetId}`, { state: 'in_progress' }), 201);
       },
       async capture(as, target) {
@@ -277,7 +275,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
             if (typeof result !== 'object' || result === null) throw new Error('Invalid Library participant result');
             if ('state' in result && result.state === 'acknowledged') {
               const status = await readErasureStatus(pool, accountId);
-              const outcome = status?.participants.library.outcome;
+              const outcome = status?.participants.library?.outcome;
               return {
                 pages,
                 maxRows: await observedMaxPage(accountId),
@@ -285,7 +283,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
               };
             }
             for (const field of ['counts', 'facts', 'owned'] as const) {
-              const stats = field in result ? result[field] : undefined;
+              const stats: unknown = Reflect.get(result, field);
               if (typeof stats !== 'object' || stats === null || !('pages' in stats) || typeof stats.pages !== 'number')
                 throw new Error(`Invalid Library participant ${field} stats`);
               pages += stats.pages;

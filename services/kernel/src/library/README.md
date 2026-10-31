@@ -1758,11 +1758,11 @@ whole-participant completion. The original bootstrap contract file is absent, an
 already bootstrap-complete under the runtime migration; they cannot stand in for pre-hook legacy coverage.
 The retained first-page inputs require that native legacy population boundary rather than a SQL reset.
 
-Two frozen outcome bindings also require an owning ruling: `explicit unfollow wins over later implied Library
-intent` supplies a Collection to the subject-only Library entry command; `suspension and reactivation reconcile
-current truth and never resurrect explicit unfollow` captures after `followed()` has already delivered and
-acknowledged the edge, while capture requires genuinely pending work. The binding preserves the original target
-and refuses to invent pending work. Neither assertion is changed here.
+The frozen `suspension and reactivation reconcile current truth and never resurrect explicit unfollow` and
+`terminal account event starts bounded private purge immediately and all old work remains fenced` outcomes
+capture after `followed()` has already reconciled the edge. Native delivery acknowledges its pending source row,
+while the closed driver contract requires capture before pending work's first target command. The binding refuses
+to invent pending work; this native capture boundary needs an owning ruling. The frozen assertions remain unchanged.
 
 Create/refollow requires real current target authority at native command T through prepared command support.
 Stored source originals never change when Semantic identity moves. Exact authorized receipt replay precedes deferred
