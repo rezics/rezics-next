@@ -1675,7 +1675,7 @@
   "realm_publication_conflict": "게시가 변경되었습니다. 현재 서가를 검토한 후 결정을 다시 적용하세요.",
   "realm_publication_review": "현재 게시에 적용",
   "realm_publication_head_unavailable": "현재 게시 버전을 읽을 수 없습니다. 서가를 다시 불러와 확인하세요.",
-  "realm_publication_global_fallback": "대상 링크는 현재 Global 정보를 엽니다. 이 서가에서는 아직 Realm 정보를 이용할 수 없습니다.",
+  "realm_publication_open_view": "주제 링크를 열면 이 Realm에 게시된 보기가 표시됩니다.",
   "realm_publication_actions": "{title} 게시 작업",
   "realm_publication_withdraw": "철회",
   "realm_publication_reject": "거부",

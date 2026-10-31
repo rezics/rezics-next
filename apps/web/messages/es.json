@@ -1675,7 +1675,7 @@
   "realm_publication_conflict": "Esta publicación ha cambiado. Revisa la estantería actual antes de volver a aplicar tu decisión.",
   "realm_publication_review": "Aplicar a la publicación actual",
   "realm_publication_head_unavailable": "No se puede leer la versión actual de la publicación. Recarga la estantería para revisar el contenido disponible.",
-  "realm_publication_global_fallback": "Los enlaces de los temas abren actualmente los hechos globales. Los hechos del Realm aún no están disponibles desde esta estantería.",
+  "realm_publication_open_view": "Los enlaces de los temas abren la vista publicada en este Realm.",
   "realm_publication_actions": "Acciones de publicación para {title}",
   "realm_publication_withdraw": "Retirar",
   "realm_publication_reject": "Rechazar",

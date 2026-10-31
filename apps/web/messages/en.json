@@ -1764,7 +1764,7 @@
   "realm_publication_conflict": "This publication changed. Review the current shelf before applying your decision again.",
   "realm_publication_review": "Apply to current publication",
   "realm_publication_head_unavailable": "The current publication head is not readable. Reload the shelf to review what is available.",
-  "realm_publication_global_fallback": "Subject links currently open Global facts. Realm facts are not available from this shelf yet.",
+  "realm_publication_open_view": "Subject links open this Realm's published view.",
   "realm_publication_actions": "Publication actions for {title}",
   "realm_publication_withdraw": "Withdraw",
   "realm_publication_reject": "Reject",

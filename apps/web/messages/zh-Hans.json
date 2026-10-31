@@ -1676,7 +1676,7 @@
   "realm_publication_conflict": "此发布已更改。请查看当前书架，再次应用决定。",
   "realm_publication_review": "应用到当前发布",
   "realm_publication_head_unavailable": "无法读取当前发布版本。请重新加载书架以查看可用内容。",
-  "realm_publication_global_fallback": "主题链接目前打开全局事实，此书架暂不提供领域事实。",
+  "realm_publication_open_view": "主题链接会打开此 Realm 发布的视图。",
   "realm_publication_actions": "{title} 的发布操作",
   "realm_publication_withdraw": "撤回",
   "realm_publication_reject": "拒绝",

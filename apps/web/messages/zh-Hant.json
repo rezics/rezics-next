@@ -1675,7 +1675,7 @@
   "realm_publication_conflict": "此發布已變更。請查看目前書架，再次套用決定。",
   "realm_publication_review": "套用到目前發布",
   "realm_publication_head_unavailable": "無法讀取目前發布版本。請重新載入書架以查看可用內容。",
-  "realm_publication_global_fallback": "主題連結目前開啟全域事實，此書架尚未提供領域事實。",
+  "realm_publication_open_view": "主題連結會開啟此 Realm 發布的檢視。",
   "realm_publication_actions": "{title} 的發布操作",
   "realm_publication_withdraw": "撤回",
   "realm_publication_reject": "拒絕",

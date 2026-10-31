@@ -132,14 +132,14 @@ function Published({
       <h2 id="realm-published-heading" className="text-xl font-semibold">
         {m.realm_published_heading()}
       </h2>
-      <p className="text-sm text-muted-foreground">{m.realm_publication_global_fallback()}</p>
+      <p className="text-sm text-muted-foreground">{m.realm_publication_open_view()}</p>
       {editable ? <PublicationControls control={control} refresh={refresh} search={search} /> : null}
       {titled.length ? (
         <CoverRow ratio={ratio} label={`${m.realm_published_heading()} (${titled.length})`}>
           {titled.map(({ subject, cover }) => (
             <CoverCard
               key={subject.id}
-              href={subjectHref({ id: subject.id, label: subjectTitle(subject, locale) }, locale).href}
+              href={`${subjectHref({ id: subject.id, label: subjectTitle(subject, locale) }, locale).href}?realm=${encodeURIComponent(realm.id)}`}
               cover={{ subject: cover, cover: subject.cover, src: coverSrc }}
               title={cover.title}
               secondary={subject.typeName}

@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { BOARD_ROW_LIMIT, COVER_ROW_LIMIT, loadRealmShelfPage, loadSpacePage } from '../src/community/space';
 import { changePublication, type PublicationChange } from '../src/community/publication-controls';
+import { loadSubjectPage } from '../src/features/pages/subject';
+import { validatePageRealm } from '../src/features/pages/view-cursor';
 
 const id = (value: number) => `01a1a000-0000-7000-8000-${String(value).padStart(12, '0')}`;
 const realmId = id(2);
@@ -176,4 +178,32 @@ test('publishing, withdrawing and rejecting address the same subject shelf with 
   });
   expect(writes.length).toBe(before);
   expect(writes.every((write) => write.path.startsWith(`/v1/realms/${realmId}/publications`))).toBe(true);
+});
+
+test('the existing subject reader carries Realm selection and current authorization into native denial without a Global rescue or body', async () => {
+  const calls: { path: string; authorization: string | null; body: unknown }[] = [];
+  const kernel = clientFor(async (request) => {
+    calls.push({
+      path: new URL(request.url).pathname,
+      authorization: request.headers.get('authorization'),
+      body: await request.json(),
+    });
+    return problem(404, 'not_found');
+  });
+  const selector = validatePageRealm(
+    new URL(`https://site.example/ja/subjects/${subjectId}/book?realm=${realmId}`).searchParams.get('realm'),
+  );
+  expect(
+    await loadSubjectPage(kernel, subjectId, undefined, 'ja', {
+      realm: selector,
+      authorization: 'Bearer current-reader',
+    }),
+  ).toEqual({ kind: 'missing' });
+  expect(calls).toEqual([
+    {
+      path: '/v1/pages:read',
+      authorization: 'Bearer current-reader',
+      body: { target: { subject: subjectId, realm: realmId }, languages: ['ja'] },
+    },
+  ]);
 });

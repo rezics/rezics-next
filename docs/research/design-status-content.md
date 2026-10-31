@@ -99,7 +99,10 @@ reads despite independent grants while removal runs; public reads retain the ano
 never become empty lists. Curation requires native `realm:publish`, current subject visibility and head CAS, including
 replay. A retained Context pointer survives removed/restored containers; publication binding needs its version/fence
 before and at final output. A removed container never produces Global fallback. A separate live Context retains
-its own authority; a query parameter cannot implement Realm selection.
+its own authority. The shared Published/RealmShelf renderer now retains the exact Realm selector on canonical
+localized subject links, including continued shelves, and explains opening the Realm's published view. The existing
+Subject reader owns current Realm/publication/Space/Context checks and reader partitioning; shelf metadata grants
+no later access, and the shelf adds no Global rescue or transport reads. This is source, not native or visual proof.
 
 Native Accounts has only its installed roles: no invented administrator. Its explicit-holder guard, atomic native
 ownership helper, erasure succession and claim approval source have been handed off; these remain the sole

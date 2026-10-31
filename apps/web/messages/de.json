@@ -1675,7 +1675,7 @@
   "realm_publication_conflict": "Diese Veröffentlichung wurde geändert. Prüfe das aktuelle Regal, bevor du deine Entscheidung erneut anwendest.",
   "realm_publication_review": "Auf aktuelle Veröffentlichung anwenden",
   "realm_publication_head_unavailable": "Die aktuelle Veröffentlichung ist nicht lesbar. Lade das Regal erneut, um verfügbare Inhalte zu prüfen.",
-  "realm_publication_global_fallback": "Themenlinks öffnen derzeit globale Fakten. Realm-Fakten sind über dieses Regal noch nicht verfügbar.",
+  "realm_publication_open_view": "Themenlinks öffnen die in diesem Realm veröffentlichte Ansicht.",
   "realm_publication_actions": "Veröffentlichungsaktionen für {title}",
   "realm_publication_withdraw": "Zurückziehen",
   "realm_publication_reject": "Ablehnen",

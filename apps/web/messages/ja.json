@@ -1675,7 +1675,7 @@
   "realm_publication_conflict": "掲載が変更されました。現在の棚を確認してから判断を再適用してください。",
   "realm_publication_review": "現在の掲載に適用",
   "realm_publication_head_unavailable": "現在の掲載版を読み取れません。棚を再読み込みして確認してください。",
-  "realm_publication_global_fallback": "対象のリンクは現在 Global の情報を開きます。この棚から Realm の情報はまだ利用できません。",
+  "realm_publication_open_view": "対象のリンクは、この Realm で公開された表示を開きます。",
   "realm_publication_actions": "{title} の掲載操作",
   "realm_publication_withdraw": "取り下げ",
   "realm_publication_reject": "却下",
