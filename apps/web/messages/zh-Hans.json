@@ -833,6 +833,7 @@
   "settings_account_sign_in_text": "请先登录，再管理账号安全或删除账号。",
   "settings_account_sign_out_text": "退出当前的网站会话。",
   "settings_sections_loading": "正在确认可用的设置项…",
+  "settings_session_unavailable": "无法确认这些账号设置所需的登录状态。请重试。你仍可使用显示设置。",
   "settings_account_heading": "账户",
   "settings_account_text": "密码、通行密钥和登录会话都在认证站点上管理。",
   "settings_conflict_text": "你的选择没有保存。请重新加载以查看当前设置，然后再选一次。",

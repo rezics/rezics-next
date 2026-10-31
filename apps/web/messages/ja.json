@@ -832,6 +832,7 @@
   "settings_account_sign_in_text": "アカウントのセキュリティ管理や削除にはログインが必要です。",
   "settings_account_sign_out_text": "このサイトの現在のセッションからログアウトします。",
   "settings_sections_loading": "利用できる設定を確認しています…",
+  "settings_session_unavailable": "アカウント設定に必要なログイン状態を確認できませんでした。もう一度お試しください。表示設定は引き続き利用できます。",
   "settings_account_heading": "アカウント",
   "settings_account_text": "パスワード、パスキー、ログイン中のセッションは認証サイトで管理します。",
   "settings_conflict_text": "選択は保存されていません。再読み込みして現在の設定を確認し、もう一度選んでください。",

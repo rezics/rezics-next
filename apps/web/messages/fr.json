@@ -832,6 +832,7 @@
   "settings_account_sign_in_text": "Connectez-vous pour gérer la sécurité de votre compte ou le supprimer.",
   "settings_account_sign_out_text": "Déconnectez-vous de votre session actuelle sur ce site.",
   "settings_sections_loading": "Vérification des paramètres disponibles…",
+  "settings_session_unavailable": "Votre session pour ces paramètres de compte n’a pas pu être confirmée. Réessayez. Les paramètres d’affichage restent disponibles.",
   "settings_account_heading": "Compte",
   "settings_account_text": "Votre mot de passe, vos clés d’accès et vos sessions se gèrent sur le site d’authentification.",
   "settings_conflict_text": "Votre choix n’a pas été enregistré. Rechargez pour voir les paramètres actuels, puis choisissez à nouveau.",

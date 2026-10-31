@@ -832,6 +832,7 @@
   "settings_account_sign_in_text": "請先登入，再管理帳號安全性或刪除帳號。",
   "settings_account_sign_out_text": "登出目前的網站工作階段。",
   "settings_sections_loading": "正在確認可用的設定項目…",
+  "settings_session_unavailable": "無法確認這些帳號設定所需的登入狀態。請再試一次。你仍可使用顯示設定。",
   "settings_account_heading": "帳戶",
   "settings_account_text": "密碼、通行密鑰與登入工作階段都在驗證網站上管理。",
   "settings_conflict_text": "你的選擇尚未儲存。請重新載入以查看目前的設定，然後再選一次。",

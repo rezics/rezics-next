@@ -832,6 +832,7 @@
   "settings_account_sign_in_text": "Inicia sesión para gestionar la seguridad de tu cuenta o eliminarla.",
   "settings_account_sign_out_text": "Cierra tu sesión actual en este sitio.",
   "settings_sections_loading": "Comprobando los ajustes disponibles…",
+  "settings_session_unavailable": "No se pudo confirmar tu sesión para estos ajustes de la cuenta. Inténtalo de nuevo. Los ajustes de pantalla siguen disponibles.",
   "settings_account_heading": "Cuenta",
   "settings_account_text": "Tu contraseña, tus llaves de acceso y tus sesiones se gestionan en el sitio de autenticación.",
   "settings_conflict_text": "Tu elección no se guardó. Recarga para ver la configuración actual y vuelve a elegir.",

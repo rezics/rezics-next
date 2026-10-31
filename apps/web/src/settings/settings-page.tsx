@@ -1,6 +1,6 @@
 import { exposureQuery, sessionQuery, useSession } from '../session/query';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { useQuery, useQueryClient, type QueryClient, type QueryState } from '@tanstack/react-query';
+import { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore, useCallback } from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -288,6 +288,59 @@ function SettingsSections({
 }
 
 const subscribeHydration = () => () => {};
+const serverSessionRead = () => undefined;
+const sessionRetries = new WeakMap<QueryClient, Promise<void>>();
+
+/** Coalesce the deliberate native session read and the subsequent guarded page reload. */
+export function retrySettingsSession(client: QueryClient, invalidate: () => Promise<unknown>): Promise<void> {
+  const pending = sessionRetries.get(client);
+  if (pending) return pending;
+  const retry = client
+    .fetchQuery({ ...sessionQuery, staleTime: 0 })
+    .then((session) => {
+      // Unavailable or identity-less responses cannot authorize another private page read.
+      if (session.state === 'unavailable' || (session.state === 'signed-in' && !session.subject)) return;
+      return invalidate();
+    })
+    .then(() => {})
+    .finally(() => sessionRetries.delete(client));
+  sessionRetries.set(client, retry);
+  return retry;
+}
+
+/** The same fallback is used by the page and illustrative isolated recovery stories. */
+export function SettingsSessionRecovery({
+  state,
+  sessionRead,
+  retrying = false,
+  retryFailed = false,
+  onRetry,
+}: {
+  state: ReturnType<typeof useSession>['state'];
+  sessionRead?: Pick<QueryState, 'status' | 'fetchStatus'> | undefined;
+  retrying?: boolean;
+  retryFailed?: boolean;
+  onRetry: () => void;
+}) {
+  const failed = retryFailed || state === 'unavailable' || sessionRead?.status === 'error';
+  const retryable = failed || retrying || state !== 'unknown';
+  const pending = retrying || sessionRead?.fetchStatus === 'fetching' || !retryable;
+  return (
+    <div className="space-y-3">
+      <p role="status" aria-busy={pending} className="text-sm text-muted-foreground">
+        {failed ? m.settings_session_unavailable() : m.settings_sections_loading()}
+      </p>
+      {retryable ? (
+        <Button type="button" variant="outline" disabled={pending} onClick={onRetry}>
+          {m.settings_retry()}
+        </Button>
+      ) : null}
+      <section id="display" aria-labelledby="settings-display-heading" className="scroll-mt-6">
+        <DisplayPreferences />
+      </section>
+    </div>
+  );
+}
 
 export function SettingsPageView({
   page,
@@ -311,13 +364,43 @@ export function SettingsPageView({
     () => false,
   );
   const browserSession = useSession();
+  // Observe the installed query, as Inbox does; useSession owns the initial request.
+  const observeSession = useCallback(
+    (changed: () => void) =>
+      queryClient.getQueryCache().subscribe(({ query }) => {
+        if (query.queryKey.length === 1 && query.queryKey[0] === sessionQuery.queryKey[0]) changed();
+      }),
+    [queryClient],
+  );
+  const sessionRead = useSyncExternalStore(
+    observeSession,
+    () => queryClient.getQueryState(sessionQuery.queryKey),
+    serverSessionRead,
+  );
+  const [retrying, setRetrying] = useState(false);
+  const [retryFailed, setRetryFailed] = useState(false);
   // Match the server snapshot on first hydration; later renders require the live browser identity.
   // A loader page or a seeded cache alone never establishes this route-bound session.
   const session = hydrated ? browserSession : (requestSession ?? browserSession);
   const managedTarget = managedAccountTarget(location.publicHref);
-  const signedOut = !page.signedIn && (session.state === 'unknown' || session.state === 'signed-out');
+  const signedOut =
+    !retrying &&
+    (session.state === 'signed-out' || (!hydrated && !page.signedIn && session.state === 'unknown'));
   const ready =
-    page.signedIn && session.state === 'signed-in' && !!session.subject && page.accountId === session.subject;
+    !retrying &&
+    !retryFailed &&
+    sessionRead?.status !== 'error' &&
+    page.signedIn &&
+    session.state === 'signed-in' &&
+    !!session.subject &&
+    page.accountId === session.subject;
+  const retry = () => {
+    setRetrying(true);
+    setRetryFailed(false);
+    void retrySettingsSession(queryClient, () => router.invalidate())
+      .catch(() => setRetryFailed(true))
+      .finally(() => setRetrying(false));
+  };
   return (
     <article className="mx-auto w-full max-w-6xl space-y-8 px-4 text-foreground sm:px-6">
       <header>
@@ -337,28 +420,25 @@ export function SettingsPageView({
         <AccountSafetyCard state="signed-out" returnTo={location.publicHref} />
       ) : (
         <div className="space-y-3">
-          <p role="status" className="text-sm text-muted-foreground">
-            {session.state === 'unavailable' ? m.settings_unavailable_text() : m.settings_sections_loading()}
-          </p>
-          {session.state !== 'unknown' ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                void queryClient
-                  .invalidateQueries({ queryKey: sessionQuery.queryKey, exact: true })
-                  .then(() => router.invalidate())
-              }
-            >
-              {m.settings_retry()}
-            </Button>
-          ) : null}
-          <section id="display" aria-labelledby="settings-display-heading" className="scroll-mt-6">
-            <DisplayPreferences />
-          </section>
+          <SettingsSessionRecovery
+            state={session.state}
+            sessionRead={sessionRead}
+            retrying={retrying}
+            retryFailed={retryFailed}
+            onRetry={retry}
+          />
           {page.signedIn && managedTarget !== undefined ? (
             <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
-              <ManagedAccountDetail accountId={managedTarget} backHref={managedAccountsBackHref(location.publicHref)} />
+              <Card>
+                <CardHeader>
+                  <a className="text-sm text-primary underline" href={managedAccountsBackHref(location.publicHref)}>
+                    {m.managed_back()}
+                  </a>
+                  <CardTitle>
+                    <h2 id="settings-account-heading">{m.managed_detail_title()}</h2>
+                  </CardTitle>
+                </CardHeader>
+              </Card>
             </section>
           ) : null}
         </div>

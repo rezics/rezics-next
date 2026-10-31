@@ -832,6 +832,7 @@
   "settings_account_sign_in_text": "Melde dich an, um die Kontosicherheit zu verwalten oder dein Konto zu löschen.",
   "settings_account_sign_out_text": "Melde dich von deiner aktuellen Sitzung auf dieser Website ab.",
   "settings_sections_loading": "Verfügbare Einstellungen werden geprüft…",
+  "settings_session_unavailable": "Deine Sitzung für diese Kontoeinstellungen konnte nicht bestätigt werden. Versuche es erneut. Die Anzeigeeinstellungen sind weiterhin verfügbar.",
   "settings_account_heading": "Konto",
   "settings_account_text": "Passwort, Passkeys und Sitzungen verwaltest du auf der Auth-Website.",
   "settings_conflict_text": "Deine Auswahl wurde nicht gespeichert. Lade neu, um die aktuellen Einstellungen zu sehen, und wähle dann noch einmal.",

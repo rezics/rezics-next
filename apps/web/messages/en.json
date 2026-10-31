@@ -874,6 +874,7 @@
   "settings_account_sign_in_text": "Sign in to manage account security and deletion.",
   "settings_account_sign_out_text": "Sign out of your current website session.",
   "settings_sections_loading": "Checking which settings are available…",
+  "settings_session_unavailable": "Your session could not be confirmed for these account settings. Try again. Display settings are still available.",
   "settings_account_heading": "Account",
   "settings_account_text": "Your password, passkeys and sessions are managed on the Auth site.",
   "settings_conflict_text": "Your choice was not saved. Reload to see the current settings, then choose again.",
