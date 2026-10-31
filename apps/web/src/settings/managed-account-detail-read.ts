@@ -208,6 +208,7 @@ export class ManagedAccountReader {
     readonly viewerId: string,
     readonly accountId: string,
     private read: DetailRead,
+    readonly csrfToken: string | null = null,
   ) {}
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {

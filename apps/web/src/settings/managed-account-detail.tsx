@@ -249,6 +249,7 @@ export function ManagedAccountDetailCard({
               operated={detail.operated}
               self={detail.self}
               authNavigation={state.authNavigation}
+              authCsrfToken={reader.csrfToken}
             />
             <Button type="button" variant="outline" disabled={busy} onClick={() => void reader.load()}>
               {m.managed_refresh()}
@@ -276,7 +277,7 @@ export function ManagedAccountDetail({ accountId, backHref }: { accountId: strin
   const reader = useMemo(
     () =>
       viewerId && accountId
-        ? new ManagedAccountReader(viewerId, accountId, (data) => readManagedAccountDetail({ data }))
+        ? new ManagedAccountReader(viewerId, accountId, (data) => readManagedAccountDetail({ data }), session.csrfToken)
         : null,
     [viewerId, accountId, session.csrfToken],
   );

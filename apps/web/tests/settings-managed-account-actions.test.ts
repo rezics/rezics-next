@@ -455,6 +455,12 @@ test('missing, unavailable or malformed entry dependencies never gain links from
   expect(render()).toContain(`https://auth.test/organizations/delete?organizationId=${accountId}`);
   // Profile is still loading in this render: it cannot hide a separately proven Auth entry.
   expect(render()).not.toContain(`/accounts/${accountId}/profile`);
-  for (const changes of [{ accountId: viewerId }, { viewerId: accountId }, { nativeAccountKind: 'actor' }])
+  expect(render({ csrfToken: 'current-lifetime', authCsrfToken: 'current-lifetime' })).toContain('https://auth.test/');
+  for (const changes of [
+    { accountId: viewerId },
+    { viewerId: accountId },
+    { nativeAccountKind: 'actor' },
+    { csrfToken: 'new-lifetime', authCsrfToken: 'previous-lifetime' },
+  ])
     expect(render(changes)).not.toContain('https://auth.test/');
 });

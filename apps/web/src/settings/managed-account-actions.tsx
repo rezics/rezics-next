@@ -25,10 +25,13 @@ const labels: Record<ManagedActionName, () => string> = {
   delete: () => m.managed_actions_delete(),
 };
 
-type ActionsProps = ManagedAccountActionsTarget & { authNavigation?: ManagedAuthNavigation | undefined };
-type ViewerProps = ActionsProps & { viewerId: string; io?: ManagedAccountActionsIO };
+type ActionsProps = ManagedAccountActionsTarget & {
+  authNavigation?: ManagedAuthNavigation | undefined;
+  authCsrfToken?: string | null | undefined;
+};
+type ViewerProps = ActionsProps & { viewerId: string; csrfToken?: string | null; io?: ManagedAccountActionsIO };
 
-function TargetActions({ viewerId, io = nativeIO, authNavigation, ...target }: ViewerProps) {
+function TargetActions({ viewerId, csrfToken, authCsrfToken, io = nativeIO, authNavigation, ...target }: ViewerProps) {
   const [read] = useState(() => new ManagedAccountActionsRead({ accountId: target.accountId, viewerId }, io));
   const { result, pending } = useSyncExternalStore(read.subscribe, read.snapshot, read.snapshot);
   const retryFailure = useMemo(
@@ -40,7 +43,11 @@ function TargetActions({ viewerId, io = nativeIO, authNavigation, ...target }: V
   );
   const waiting = usePreferenceRetry(retryFailure);
   const navigation =
-    authNavigation?.viewerId === viewerId && authNavigation.accountId === target.accountId ? authNavigation : undefined;
+    authNavigation?.viewerId === viewerId &&
+    authNavigation.accountId === target.accountId &&
+    authCsrfToken === csrfToken
+      ? authNavigation
+      : undefined;
   useEffect(() => {
     void read.load();
   }, [read]);
@@ -135,7 +142,14 @@ function TargetActions({ viewerId, io = nativeIO, authNavigation, ...target }: V
 export function ManagedAccountActionsForViewer(props: ViewerProps) {
   return (
     <TargetActions
-      key={JSON.stringify([props.viewerId, props.accountId, props.nativeAccountKind, props.operated, props.self])}
+      key={JSON.stringify([
+        props.viewerId,
+        props.csrfToken,
+        props.accountId,
+        props.nativeAccountKind,
+        props.operated,
+        props.self,
+      ])}
       {...props}
     />
   );
@@ -160,6 +174,7 @@ export function ManagedAccountActions(props: ActionsProps) {
       ])}
       {...props}
       viewerId={session.subject}
+      csrfToken={session.csrfToken}
     />
   );
 }

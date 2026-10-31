@@ -175,7 +175,7 @@ function unavailable(owner: string): Extract<Availability, { state: 'unavailable
   return { state: 'unavailable', owner };
 }
 
-/** Deployment never supplies a missing native operation binding. No Auth URL reaches the browser yet. */
+/** The profile-only read cannot supply Auth bindings; the management GET projects those independently. */
 function unmappedAuthAction(
   env: AuthManagementEnv,
   path: AuthManagementPagePath,
