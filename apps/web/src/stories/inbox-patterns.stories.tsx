@@ -123,8 +123,12 @@ export const NativeRows: Story = {
   render: () => <Example fixture="mixed" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    const list = within(await view.findByRole('list'));
+    const list = within(await view.findByRole('list', { name: m.inbox_heading() }));
     await expect(list.getAllByRole('listitem')).toHaveLength(3);
+    await expect(list.getAllByRole('link')[0]).toHaveAttribute(
+      'href',
+      '/threads/01a17a3b-0884-721b-91ef-d7ffd7bb58f1#post-01a17a3b-0884-721b-91ef-d7ffd7bb58f2',
+    );
     await userEvent.tab();
     await expect(list.getAllByRole('link')[0]).toHaveFocus();
   },

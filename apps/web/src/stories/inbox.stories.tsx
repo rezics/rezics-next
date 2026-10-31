@@ -18,6 +18,14 @@ async function rowsReady({ canvasElement }: { canvasElement: HTMLElement }) {
   await within(canvasElement).findByRole('list');
 }
 
+const recordedPostHref =
+  '/threads/01a17a3b-0884-721b-91ef-d7ffd7bb58f1#post-01a17a3b-0884-721b-91ef-d7ffd7bb58f2';
+
+async function readablePostAnchor({ canvasElement }: { canvasElement: HTMLElement }) {
+  const list = within(await within(canvasElement).findByRole('list', { name: m.inbox_heading() }));
+  await expect(list.getAllByRole('link')[0]).toHaveAttribute('href', recordedPostHref);
+}
+
 async function emptyReady({ canvasElement }: { canvasElement: HTMLElement }) {
   await within(canvasElement).findByText(m.inbox_empty());
 }
@@ -30,7 +38,7 @@ export const Empty: Story = { name: 'Empty', render: () => <InboxStory fixture="
 export const Mixed: Story = {
   name: 'Mixed replies and moderation',
   render: () => <InboxStory fixture="mixed" />,
-  play: rowsReady,
+  play: readablePostAnchor,
 };
 export const Unavailable: Story = {
   name: 'Unavailable item',
@@ -110,7 +118,7 @@ export const MoreThanNinetyNine: Story = {
 export const RowOverlay: Story = {
   name: 'Row overlay',
   render: () => <InboxStory fixture="row-overlay" />,
-  play: rowsReady,
+  play: readablePostAnchor,
 };
 
 const reportHref = '/moderation/reports/01a17a3b-0884-721b-91ef-d7ffd7bb58f3';

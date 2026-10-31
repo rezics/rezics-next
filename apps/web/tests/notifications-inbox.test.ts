@@ -77,6 +77,29 @@ test('inbox lists the kernel notification page newest first and renders each ite
   expect(calls).toEqual([`post:${thread}:post-2`, `decision:${decision}`, `post:${thread}:${post}`]);
 });
 
+test('readable replies and mentions use native post anchors when target reads omit an href', async () => {
+  const reads: InboxReads = {
+    post: async (_threadId, postId) => ({ text: `Readable ${postId}` }),
+    decision: async () => null,
+    report: async () => null,
+  };
+  const page = await resolveInboxItems(
+    {
+      items: [
+        notice({ id: 'reply-without-href', postId: 'reply-post' }),
+        notice({ id: 'mention-without-href', kind: 'mention', postId: 'mentioned-post' }),
+      ],
+      next: null,
+    },
+    reads,
+  );
+
+  expect(page.items.map(({ href, unavailable }) => ({ href, unavailable }))).toEqual([
+    { href: `/threads/${thread}#post-reply-post`, unavailable: false },
+    { href: `/threads/${thread}#post-mentioned-post`, unavailable: false },
+  ]);
+});
+
 test('items the reader can no longer see render as neutral unavailable rows', async () => {
   const reads: InboxReads = {
     post: async () => null,
@@ -162,6 +185,69 @@ test('inbox resolves repeated records once and stays within one list read plus o
 
 const { loadInboxPage, markInboxThrough } = await import('../src/inbox/inbox-read');
 const { loadReporterStatus } = await import('../src/moderation/reporter-status-read');
+
+test('a readable native post gets its exact Thread post anchor through loadInboxPage', async () => {
+  const readableNotice = notice({ id: 'native-post-notice', actorId: null, postId: 'native-post' });
+  const requests: string[] = [];
+  const client = createKernelClient('http://kernel.local', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      requests.push(`${request.method} ${path}`);
+      if (path === '/v1/accounts/reporter-1/notifications')
+        return Response.json({ items: [readableNotice], next: null });
+      expect(path).toBe('/v1/posts/native-post');
+      return Response.json({
+        post: {
+          threadId: thread,
+          body: { type: 'paragraph', content: [{ type: 'text', text: 'A readable reply.' }] },
+        },
+      });
+    }) as typeof fetch,
+  });
+
+  const page = await loadInboxPage(client, 'reporter-1', 'Bearer reporter');
+
+  expect(page.items[0]).toMatchObject({
+    href: `/threads/${thread}#post-native-post`,
+    text: 'A readable reply.',
+    unavailable: false,
+  });
+  expect(requests).toEqual(['GET /v1/accounts/reporter-1/notifications', 'GET /v1/posts/native-post']);
+});
+
+test('missing, wrong-thread and erased native posts stay unavailable within one page and one target read', async () => {
+  const unreadableNotice = notice({ id: 'guarded-post-notice', actorId: null, postId: 'guarded-post' });
+  const cases = [
+    { name: 'missing', status: 404, post: undefined },
+    { name: 'wrong-thread', status: 200, post: { threadId: 'another-thread', body: {} } },
+    { name: 'erased', status: 200, post: { threadId: thread, availability: 'erased', body: {} } },
+  ] as const;
+
+  for (const target of cases) {
+    const requests: string[] = [];
+    const client = createKernelClient('http://kernel.local', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        const path = new URL(request.url).pathname;
+        requests.push(`${request.method} ${path}`);
+        if (path === '/v1/accounts/reporter-1/notifications')
+          return Response.json({ items: [unreadableNotice], next: null });
+        expect(path).toBe('/v1/posts/guarded-post');
+        return Response.json(target.post ? { post: target.post } : { code: 'not_found' }, { status: target.status });
+      }) as typeof fetch,
+    });
+
+    const page = await loadInboxPage(client, 'reporter-1', 'Bearer reporter');
+
+    expect(page.items[0]?.unavailable, target.name).toBe(true);
+    expect(page.items[0]?.href, target.name).toBeUndefined();
+    expect(requests, target.name).toEqual([
+      'GET /v1/accounts/reporter-1/notifications',
+      'GET /v1/posts/guarded-post',
+    ]);
+  }
+});
 
 const submittedReport: ReporterStatus = {
   id: report,

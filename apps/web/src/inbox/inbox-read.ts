@@ -172,7 +172,7 @@ export async function resolveInboxItems(page: NoticePage, reads: InboxReads): Pr
           const post = await reads.post(notice.threadId!, notice.postId!);
           return post
             ? {
-                href: post.href ?? `/threads/${notice.threadId}#${notice.postId}`,
+                href: post.href ?? `/threads/${notice.threadId}#post-${notice.postId}`,
                 text: post.text ?? post.title ?? '',
               }
             : null;
@@ -243,7 +243,7 @@ async function currentInboxReads(client: InboxKernelClient, authorization: strin
         data.post.removed === true
       )
         return null;
-      return { text: postText(data.post), href: `/threads/${threadId}#${postId}` };
+      return { text: postText(data.post), href: `/threads/${threadId}#post-${postId}` };
     },
     decision: async (id) => {
       const result = await client['moderation-decisions']({ id }).get({ headers: authHeaders(authorization) });

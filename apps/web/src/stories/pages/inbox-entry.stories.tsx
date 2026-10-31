@@ -124,7 +124,11 @@ export const RecoveredSession: Story = {
     const view = within(canvasElement);
     await view.findByText(m.inbox_session_unavailable());
     await userEvent.click(view.getByRole('button', { name: m.inbox_retry() }));
-    await view.findByRole('list', { name: m.inbox_heading() });
+    const list = within(await view.findByRole('list', { name: m.inbox_heading() }));
+    await expect(list.getAllByRole('link')[0]).toHaveAttribute(
+      'href',
+      '/threads/01a17a3b-0884-721b-91ef-d7ffd7bb58f1#post-01a17a3b-0884-721b-91ef-d7ffd7bb58f2',
+    );
     await expect(view.queryByText(m.inbox_session_unavailable())).toBeNull();
   },
 };
