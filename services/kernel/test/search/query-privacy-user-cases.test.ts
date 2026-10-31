@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { FilterDocument } from '@rezics/filter';
 import type { HttpResponse, Subject } from '../../../../specs/semantic-driver.ts';
-import type { CollectionView, DynamicCollectionView } from '../../../../specs/dynamic-collections-driver.ts';
+import type {
+  CollectionMemberView,
+  CollectionView,
+  DynamicCollectionView,
+} from '../../../../specs/dynamic-collections-driver.ts';
 import type { SearchRequest } from '../../src/search/service.ts';
 import type { SearchHit } from '../../src/search/hits.ts';
 import type { FacetDiscovery200Response } from '../../src/search/facet-discovery-contract.ts';
@@ -1046,6 +1050,7 @@ async function collectionPrivacyPages(
   expected: readonly string[],
 ): Promise<void> {
   const found: string[] = [];
+  const members = new Set<string>();
   const cursors = new Set<string>();
   let cursor: string | undefined;
   const deadline = Date.now() + 60_000;
@@ -1061,10 +1066,16 @@ async function collectionPrivacyPages(
     countFreeList(response.body);
     expect(Object.keys(response.body).sort()).toEqual(['members', 'next']);
     assert(Array.isArray(response.body.members));
-    const rows = response.body.members as { subjectId: string }[];
+    const rows = response.body.members as CollectionMemberView[];
     expect(rows.map(({ subjectId }) => subjectId)).toEqual(expected.slice(page * 2, page * 2 + 2));
     found.push(...rows.map(({ subjectId }) => subjectId));
-    expect(new Set(found).size).toBe(found.length);
+    for (const row of rows) {
+      // Curated occurrences retain separate native IDs even for one Subject;
+      // dynamic membership is unique by its actual Subject ID.
+      const key = 'id' in row ? row.id : row.subjectId;
+      expect(members.has(key)).toBe(false);
+      members.add(key);
+    }
     if (response.body.next === null) {
       expect(found).toEqual([...expected]);
       return;
@@ -1140,8 +1151,9 @@ for (const surface of ['public-curated', 'own-everything-without-state', 'own-st
     const positive: FilterDocument = { and: [harem, filters.words] };
     const negative: FilterDocument = { and: [notHarem, filters.words] };
     const personas = surface === 'public-curated' ? (['anonymous', 'editor', 'alice'] as const) : (['alice'] as const);
+    const expected = surface === 'public-curated' ? ids(['B-long', 'B-long']) : ids(['B-long']);
     for (const persona of personas) {
-      await collectionPrivacyPages(persona, collectionId, positive, ids(['B-long']));
+      await collectionPrivacyPages(persona, collectionId, positive, expected);
       await collectionPrivacyPages(persona, collectionId, negative, []);
     }
     await fixture.search!.indexing('paused');
@@ -1155,7 +1167,7 @@ for (const surface of ['public-curated', 'own-everything-without-state', 'own-st
       await fixture.search!.indexing('running');
       for (const persona of personas) {
         await collectionPrivacyPages(persona, collectionId, positive, []);
-        await collectionPrivacyPages(persona, collectionId, negative, ids(['B-long']));
+        await collectionPrivacyPages(persona, collectionId, negative, expected);
       }
     } finally {
       if (hidden) await setOriginalTagHidden(false);
