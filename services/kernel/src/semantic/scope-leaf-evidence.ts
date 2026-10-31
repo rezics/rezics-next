@@ -23,7 +23,7 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { FactClause } from '../search/disclosure/check.ts';
 import type { IndexedStatement } from '../search/source.ts';
-import { type ScopeWorkContext } from '../search/scope-work-context.ts';
+import { admitScopeWork, type ScopeWorkContext } from '../search/scope-work-context.ts';
 
 export type LeafWork = Readonly<{
   keys: number;
@@ -451,7 +451,10 @@ export async function readScopeLeafEvidence(
   const work = new LeafNativeWork(request.budget, options.deadline);
   // Work admission has no receipt-producing native adapter in its owning module.
   // Refuse BEFORE IO rather than borrowing a request Actor or hiding owner IO.
-  if (options.work) work.accounting.unavailable('Commerce Members preparation work-definition/native work producer');
+  if (options.work) {
+    await admitScopeWork(options.work, { pool, access: options.access, deadline: options.deadline });
+    work.accounting.unavailable('Library scoped native leaf work producer');
+  }
   const result = await work.accounting.capture(() =>
     withPublicStatementReader(() =>
       withRequestDeadline(options.deadline, () => readNativeLeaf(pool, request, options, work)),

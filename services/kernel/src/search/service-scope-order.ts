@@ -71,10 +71,10 @@ export function createSearchScopeOrder(
       order.kind !== ('definition' in native ? native.definition.sort : 'id') ||
       !isDeepStrictEqual(order.source, native.sourceIdentity) ||
       (observation !== undefined && !isDeepStrictEqual(observation, native.observation)) ||
-      (expected !== undefined && !isDeepStrictEqual(expected, native))
+      (expected !== undefined && !isDeepStrictEqual(expected, structuredClone(native)))
     )
       throw new ProblemError('semantic_not_ready');
-    return native;
+    return structuredClone(native);
   }
   return {
     async prepare(
@@ -91,6 +91,7 @@ export function createSearchScopeOrder(
         options.work &&
         ((options.work.kind === 'members-preparation' ? identity.scope !== 'curated' : identity.scope === 'curated') ||
           identity.collectionId !== options.work.locator.collectionId ||
+          (options.work.kind === 'collection-publication' && identity.scope !== 'private_builtin') ||
           identity.route !== options.work.locator.route ||
           (identity.scope !== 'public_output' && identity.accountId !== options.work.locator.ownerAccountId))
       )

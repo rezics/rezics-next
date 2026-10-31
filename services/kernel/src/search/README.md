@@ -495,6 +495,27 @@ receipt and source custody. Search also checks the returned source/observation/c
 whole native result comparison before settlement. Neither getter data nor a successful admission scalar grants
 reader access.
 
+Whole-query publication has its own additive `{kind:'collection-publication',tx,locator}` branch,
+`CollectionPublicationWorkContext`. It imports the original `CollectionPublicationLocator`,
+`CollectionPublicationWorkDefinition`, `admitCollectionPublicationStep` and
+`readCollectionPublicationWorkDefinition` from `library/collection-publication-work-admission.ts`.
+`readCollectionPublicationScopeWorkDefinition` requires the genuine live work-step client, original deadline,
+pool, partition, fenced owner and command time before calling both native functions on that client.
+It compares the entire returned locator, pinned definition, immutable rule, original creation source,
+private input, target, Source/identity observation, repair receipt and custody. The actual input is the same
+Collection's `private_working_source` / `private_builtin`, even when complete A remains selected.
+Output B must remain building with no complete receipt; A cannot supply B's input or exhaustion proof.
+Search compares the committed creation data and its commitments without rebuilding it or restoring an Actor.
+
+Publication dispatch pins the complete filter/release and ID order in the existing Scope compiler and Source
+path. Whole native data is detached for comparisons, reread after foreign evidence and before progress settlement,
+and kept only in the factory-local work handle. Private owner rows never enter public Search storage.
+Public clauses still require independent physical/query proof. These guards do not implement Library's
+unavailable native publication episode/admission/getter, same-client owner closure or scoped leaf producer;
+they establish no native completeness or C5 proof. The final ordinary reader still checks current Access,
+original/terminal subjects, Source and identity. Accounts' final `collection:update` authorization, restored
+initiator at the actual command time, write basis and Library's atomic complete publication remain separate.
+
 Kind dispatch uses the existing Source preparation, plan compiler, evaluator and ledger. It selects the native
 pinned release and exact ID-ordered source; the Kind default predicate remains Library-owned. Private predicates
 stay within the admitted owner/source namespace; a public-output source cannot select private owner leaves.

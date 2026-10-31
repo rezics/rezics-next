@@ -69,6 +69,7 @@ export async function readCollectionSourceWorkState(
       source.collectionId !== work.locator.collectionId ||
       source.route !== work.locator.route ||
       source.scope === 'public_output' ||
+      (work.kind === 'collection-publication' && source.scope !== 'private_builtin') ||
       source.accountId !== work.locator.ownerAccountId ||
       (work.kind === 'members-preparation' ? source.scope !== 'curated' : source.scope === 'curated')
     )
@@ -150,7 +151,8 @@ export async function readCollectionSourceWorkState(
       basis,
       generation: head.generation,
       observation: native.observation,
-      definition: native,
+      // Detached data for whole-result comparison; copied brands never supply admission.
+      definition: structuredClone(native),
       work: l.receipt(),
     };
   } catch (error) {
