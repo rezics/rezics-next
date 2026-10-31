@@ -338,7 +338,10 @@ test('profile and activity failure controls honor native delay/date headers whil
         createElement('div', null, createElement(ProfileCard, { editor }), createElement(PublicViewsCard, { editor })),
       );
       const controls = [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)];
-      for (const label of [m.settings_profile_retry_save(), m.settings_profile_reload_current()]) {
+      for (const label of [
+        scope === 'views' ? m.settings_public_activity_retry() : m.settings_profile_retry_save(),
+        m.settings_profile_reload_current(),
+      ]) {
         const matching = controls.filter((control) => control[2]?.includes(label));
         expect(matching).toHaveLength(label === m.settings_profile_reload_current() ? 2 : 1);
         for (const control of matching) expect(/\sdisabled(?:=|\s|$)/.test(control[1] ?? '')).toBe(!!waiting);
