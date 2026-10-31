@@ -77,9 +77,7 @@ test('The signed-in new-thread page reads its protected board through the existi
   expectBoardRead(calls);
   expect(viewer.reads()).toBe(1);
   expect(page).toEqual({ board, idempotencyKey: expect.any(String) });
-  expect(page.idempotencyKey).toMatch(
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-  );
+  expect(page.idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   expect(JSON.stringify(page)).not.toContain(accessToken);
   expect(JSON.stringify(page)).not.toContain('server-csrf-token');
 });
@@ -106,9 +104,7 @@ test('a board transport failure remains an error without an anonymous retry', as
     throw new TypeError('Kernel connection unavailable');
   });
 
-  await expect(loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId })).rejects.toBeInstanceOf(
-    Error,
-  );
+  await expect(loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId })).rejects.toBeInstanceOf(Error);
   expectBoardRead(calls);
 });
 
@@ -121,10 +117,8 @@ test.each(['absent', 'unavailable', 'failed'] as const)(
       (error: unknown) => error,
     );
 
-    if (state === 'absent')
-      expect(failure).toEqual(new Error('A signed-in session is required to start a thread.'));
-    else if (state === 'unavailable')
-      expect(failure).toMatchObject({ problem: { code: 'dependency_unavailable' } });
+    if (state === 'absent') expect(failure).toEqual(new Error('A signed-in session is required to start a thread.'));
+    else if (state === 'unavailable') expect(failure).toMatchObject({ problem: { code: 'dependency_unavailable' } });
     else expect(failure).toEqual(new Error('Session store unavailable'));
     expect(viewer.reads()).toBe(1);
     expect(calls).toEqual([]);
