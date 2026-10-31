@@ -1,5 +1,7 @@
 import {
   decideProviderCandidate as decideNativeProviderCandidate,
+  readProviderDecisionSubjects,
+  providerSelectionLimit,
   type ProviderDecisionRow,
   type ProviderFailure,
   type ProviderScope,
@@ -31,7 +33,13 @@ export type QueuePage = Omit<NativeQueuePage, 'candidates'> & { candidates: Queu
 export type QueueState =
   | { state: 'idle' | 'loading' | 'denied' | 'missing' | 'invalid' | 'unavailable' }
   | { state: 'preparing'; next?: string }
-  | { state: 'ready'; page: QueuePage; names: Record<string, Record<string, string>>; session?: string };
+  | {
+      state: 'ready';
+      page: QueuePage;
+      names: Record<string, Record<string, string>>;
+      readings?: ProviderReading[];
+      session?: string;
+    };
 export type QueueDecision = QueueScope & {
   subject: string;
   candidate: string;
@@ -86,7 +94,7 @@ const stateFor = (status: number): QueueState => {
   return { state: reason === 'stale' ? 'invalid' : reason };
 };
 
-/** One native queue request; labels are an independent definitions read, never per-row hydration. */
+/** One bounded queue page and one authenticated point read per distinct visible subject/Context. */
 export function readProviderQueue(): Promise<ProviderQueueRead>;
 export function readProviderQueue(
   client: KernelClient,
@@ -118,6 +126,7 @@ export async function readProviderQueue(
     if (result.status === 202 && result.data && 'next' in result.data && !('candidates' in result.data))
       return { state: 'preparing', next: result.data.next };
     if (result.status !== 200 || !result.data || !('candidates' in result.data)) return stateFor(result.status);
+    if (result.data.candidates.length > providerSelectionLimit) return { state: 'unavailable' };
     const candidates = result.data.candidates.flatMap((row) =>
       candidateHasPayload(row.candidate) ? [{ ...row, candidate: row.candidate }] : [],
     );
@@ -129,7 +138,12 @@ export async function readProviderQueue(
       }
       if (!result.data.freshness.caught_up) return { state: 'unavailable' };
     }
-    const token = new Headers(result.headers).get('rezics-session-token');
+    const token = new Headers(result.headers).get('rezics-session-token') ?? session;
+    const readings = await readProviderDecisionSubjects(
+      client,
+      authorization,
+      candidates.map(({ subject }) => ({ subject, context: scope.context, ...(token ? { session: token } : {}) })),
+    );
     const names = Object.fromEntries(
       Object.entries(release.properties).map(([id, definition]) => [id, definition.labels ?? {}]),
     );
@@ -151,6 +165,7 @@ export async function readProviderQueue(
         candidates,
       },
       names,
+      readings,
       ...(token ? { session: token } : {}),
     };
   } catch {

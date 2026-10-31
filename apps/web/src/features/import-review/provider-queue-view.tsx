@@ -9,7 +9,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { CandidateValue, pageText } from '../pages/data';
+import { pageText } from '../pages/data';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { subjectHref } from '../../subject/subject-href';
@@ -79,10 +79,6 @@ export function ProviderQueue({
       setBusy(false);
     }
   }
-  const names =
-    page.state === 'ready'
-      ? Object.fromEntries(Object.entries(page.names).map(([key, labels]) => [key, { labels }]))
-      : {};
   function prepared(state: QueueState, current: QueueScope): ProviderQueueRead {
     if (state.state !== 'ready')
       return {
@@ -102,14 +98,28 @@ export function ProviderQueue({
         sourceLabel: current.source,
         contextLabel: current.context === globalReviewContext ? m.prq_global() : m.prq_context(),
         statusLabel: current.status === 'pending' ? m.prq_pending() : m.prq_accepted(),
-        rows: state.page.candidates.map(({ subject, candidate }) => ({
-          subject,
-          candidate,
-          label: m.prq_subject(),
-          href: subjectHref({ id: subject, label: '' }, locale).href,
-          propertyLabel: pageText(state.names[candidate.statement.property.id], locale).text || m.candidate_field(),
-          related,
-        })),
+        rows: state.page.candidates.map(({ subject, candidate }) => {
+          const reading = state.readings?.find((entry) => entry.subject === subject)?.result ?? {
+            ok: false as const,
+            reason: 'unavailable' as const,
+          };
+          const current = reading.ok ? reading.current : undefined;
+          const label = pageText(current?.subject.labels, locale).text || m.prq_subject();
+          return {
+            subject,
+            candidate,
+            label,
+            href: subjectHref({ id: subject, label }, locale).href,
+            propertyLabel:
+              pageText(
+                current?.related[candidate.statement.property.id]?.labels ??
+                  state.names[candidate.statement.property.id],
+                locale,
+              ).text || m.candidate_field(),
+            related: { ...related, ...current?.related },
+            reading,
+          };
+        }),
         ...(state.session ? { session: state.session } : {}),
       },
     };
@@ -212,6 +222,10 @@ export function ProviderQueue({
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              {scope.source} · {scope.context === globalReviewContext ? m.prq_global() : scope.context} ·{' '}
+              {scope.status === 'pending' ? m.prq_pending() : m.prq_accepted()}
+            </p>
             <Button type="button" variant="outline" disabled={locked} onClick={() => void read()}>
               {m.prq_refresh()}
             </Button>
@@ -273,50 +287,6 @@ export function ProviderQueue({
           setPage(next);
           if (next.state === 'ready') session.current = next.session;
         }}
-        renderDetails={({ candidate }) => (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              {candidate.decision === 'accepted' ? m.prq_accepted() : m.prq_pending()}
-            </p>
-            {candidate.statement.qualifiers.map((snak, index) => (
-              <div key={index}>
-                <span className="font-medium">
-                  {pageText(page.state === 'ready' ? page.names[snak.property.id] : undefined, locale).text ||
-                    m.candidate_field()}
-                  :{' '}
-                </span>
-                <CandidateValue snak={snak} related={names} locale={locale} />
-              </div>
-            ))}
-            <details>
-              <summary className="cursor-pointer py-2 text-primary">{m.candidate_provenance()}</summary>
-              <div className="space-y-3 py-3">
-                {candidate.statement.references.map((reference, index) => (
-                  <div key={index} className="space-y-2">
-                    {reference.parts.map((snak, part) => (
-                      <div key={part}>
-                        <CandidateValue snak={snak} related={names} locale={locale} />
-                      </div>
-                    ))}
-                  </div>
-                ))}
-                {candidate.source && 'source' in candidate.source && (
-                  <dl className="grid gap-2 text-sm">
-                    <dt>{m.prq_source()}</dt>
-                    <dd>{candidate.source.source}</dd>
-                    <dt>{m.prq_record()}</dt>
-                    <dd className="break-words">{candidate.source.external_id}</dd>
-                    <dt>{m.prq_revision()}</dt>
-                    <dd>{candidate.source.record_revision}</dd>
-                    <dt>{m.prq_converter()}</dt>
-                    <dd>{candidate.source.converter_revision}</dd>
-                  </dl>
-                )}
-              </div>
-            </details>
-            <p className="text-sm text-muted-foreground">{m.prq_selection_help()}</p>
-          </div>
-        )}
       />
     </section>
   );

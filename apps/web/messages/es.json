@@ -30,6 +30,8 @@
   "prq_refresh": "Actualizar desde el inicio",
   "prq_empty": "No hay sugerencias para este ámbito.",
   "prq_subject": "Abrir ficha",
+  "prq_identifiers": "Identificadores del tema y de la sugerencia",
+  "prq_comparison_unavailable": "No se pudieron leer los valores actuales. Actualiza para compararlos.",
   "prq_selection_help": "Aceptar no selecciona este valor. La selección requiere revisar la ficha y tener permiso específico.",
   "prq_record": "Registro de origen",
   "prq_revision": "Revisión de origen",

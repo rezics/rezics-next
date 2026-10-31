@@ -30,6 +30,8 @@
   "prq_refresh": "从头刷新",
   "prq_empty": "此范围内没有符合条件的建议。",
   "prq_subject": "打开条目",
+  "prq_identifiers": "条目和建议标识符",
+  "prq_comparison_unavailable": "无法读取当前值。请刷新后比较。",
   "prq_selection_help": "接受建议不会选用此值。选用需要单独审核条目并具备相应权限。",
   "prq_record": "来源记录",
   "prq_revision": "来源版本",

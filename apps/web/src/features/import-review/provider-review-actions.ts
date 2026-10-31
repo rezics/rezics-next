@@ -11,6 +11,8 @@ export type ProviderDecisionRow = {
   href: string;
   propertyLabel: string;
   related: SubjectRead['related'];
+  /** Only this page's exact authenticated Context read; absence is not an empty selection. */
+  reading?: ProviderReading['result'];
 };
 export type ProviderDecision = {
   subject: string;
@@ -34,7 +36,7 @@ export type ProviderReading = { subject: string; result: ProviderFailure | { ok:
 export async function readProviderDecisionSubjects(
   client: KernelClient,
   authorization: string,
-  commands: readonly ProviderDecision[],
+  commands: readonly Pick<ProviderDecision, 'subject' | 'context' | 'session'>[],
 ): Promise<ProviderReading[]> {
   const unique = new Map(commands.map((command) => [JSON.stringify([command.subject, command.context]), command]));
   return Promise.all(
@@ -73,7 +75,17 @@ export function providerSelectionInScope(selection: { scope: string; ids: string
 
 export function providerRowIsSelectable(row: ProviderDecisionRow, scope: ProviderScope): boolean {
   const source = row.candidate.source;
-  return row.candidate.retracted === null && !!source && 'source' in source && source.source === scope.source;
+  return (
+    !providerRowIsConcealed(row) &&
+    row.candidate.retracted === null &&
+    !!source &&
+    'source' in source &&
+    source.source === scope.source
+  );
+}
+
+export function providerRowIsConcealed(row: ProviderDecisionRow): boolean {
+  return !!row.reading && !row.reading.ok && (row.reading.reason === 'denied' || row.reading.reason === 'missing');
 }
 
 /** Seal only explicit checkboxes on this visible page, including each independent decision head. */

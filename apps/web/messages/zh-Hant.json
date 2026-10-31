@@ -30,6 +30,8 @@
   "prq_refresh": "從頭重新整理",
   "prq_empty": "此範圍內沒有符合條件的建議。",
   "prq_subject": "開啟條目",
+  "prq_identifiers": "條目與建議識別碼",
+  "prq_comparison_unavailable": "無法讀取目前的值。請重新整理後比較。",
   "prq_selection_help": "接受建議不會選用此值。選用需要另外審核條目並具備相應權限。",
   "prq_record": "來源紀錄",
   "prq_revision": "來源版本",

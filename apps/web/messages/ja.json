@@ -30,6 +30,8 @@
   "prq_refresh": "最初から更新",
   "prq_empty": "この範囲に該当する提案はありません。",
   "prq_subject": "項目を開く",
+  "prq_identifiers": "項目と提案の識別子",
+  "prq_comparison_unavailable": "現在の値を読み取れませんでした。再読み込みして比較してください。",
   "prq_selection_help": "承認だけでは値は採用されません。採用には項目での別の確認と権限が必要です。",
   "prq_record": "提供元のレコード",
   "prq_revision": "提供元の版",

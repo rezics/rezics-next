@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
+import type { SubjectRead } from '@rezics/client';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -11,7 +12,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
 } from '@rezics/ui/shadcn/alert-dialog';
-import { CandidateValue } from '../pages/data';
+import { CandidateValue, pageText } from '../pages/data';
 import { pickText } from '@rezics/composition';
 import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
@@ -19,6 +20,7 @@ import {
   prepareProviderBatch,
   providerRowKey,
   providerRowIsSelectable,
+  providerRowIsConcealed,
   providerScopeKey,
   providerSelectionInScope,
   providerSelectionLimit,
@@ -51,6 +53,125 @@ export function providerOutcomeText(result: ProviderDecisionResult, locale: stri
     'key-conflict': () => m.provider_key_conflict({}, o),
   };
   return messages[result.reason]();
+}
+
+/** The queue and its sealed confirmation share the exact statement and provenance presentation. */
+function ProviderStatement({
+  statement,
+  row,
+  locale,
+}: {
+  statement: SubjectRead['subject']['statements'][string][number];
+  row: ProviderDecisionRow;
+  locale: string;
+}) {
+  const o = { locale: locale as never };
+  const value = (snak: (typeof statement.qualifiers)[number]) => (
+    <CandidateValue snak={snak} related={row.related} locale={locale} subject={row.subject} />
+  );
+  return (
+    <div className="space-y-2">
+      {value(statement)}
+      {!!statement.qualifiers.length && (
+        <div className="space-y-1 text-sm">
+          <p className="font-medium">{m.subject_qualifiers({}, o)}</p>
+          {statement.qualifiers.map((snak, index) => (
+            <p key={index}>
+              {pageText(row.related[snak.property.id]?.labels, locale).text || m.candidate_field({}, o)}: {value(snak)}
+            </p>
+          ))}
+        </div>
+      )}
+      {!!statement.references.length && (
+        <details className="text-sm">
+          <summary className="cursor-pointer py-2 text-primary">{m.subject_sources({}, o)}</summary>
+          <ul className="space-y-2">
+            {statement.references.map((reference, index) => (
+              <li key={index}>
+                {reference.parts.map((snak, part) => (
+                  <div key={part}>
+                    {pageText(row.related[snak.property.id]?.labels, locale).text || m.candidate_field({}, o)}:{' '}
+                    {value(snak)}
+                  </div>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <p className="break-all text-xs text-muted-foreground">
+        {m.candidate_rank({}, o)}:{' '}
+        {statement.rank === 'preferred' ? m.candidate_rank_preferred({}, o) : m.candidate_rank_normal({}, o)}
+        {' · '}
+        {statement.id}
+      </p>
+    </div>
+  );
+}
+
+function ProviderProposal({ row, locale }: { row: ProviderDecisionRow; locale: string }) {
+  const o = { locale: locale as never };
+  const source = row.candidate.source;
+  return (
+    <div className="space-y-2">
+      <ProviderStatement statement={row.candidate.statement} row={row} locale={locale} />
+      {source && 'source' in source && (
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+          <dt>{m.prq_source({}, o)}</dt>
+          <dd>{source.source}</dd>
+          <dt>{m.prq_record({}, o)}</dt>
+          <dd className="break-words">{source.external_id}</dd>
+          <dt>{m.prq_revision({}, o)}</dt>
+          <dd className="break-words">{source.record_revision}</dd>
+          <dt>{m.prq_converter({}, o)}</dt>
+          <dd className="break-words">{source.converter_revision}</dd>
+        </dl>
+      )}
+      <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer py-2">{m.prq_identifiers({}, o)}</summary>
+        <p className="break-all">
+          {row.subject} · {row.candidate.id} · {row.candidate.statement.property.id}
+        </p>
+      </details>
+    </div>
+  );
+}
+
+function ProviderComparison({ row, locale }: { row: ProviderDecisionRow; locale: string }) {
+  const o = { locale: locale as never };
+  const reading = row.reading;
+  const selected = reading?.ok
+    ? (reading.current.subject.statements[row.candidate.statement.property.id] ?? []).filter(
+        (statement) => statement.rank === 'normal' || statement.rank === 'preferred',
+      )
+    : [];
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <section className="min-w-0 space-y-2 rounded-lg bg-muted/40 p-3" aria-label={m.context_selected_values({}, o)}>
+        <h3 className="text-sm font-semibold">{m.context_selected_values({}, o)}</h3>
+        {!reading?.ok ? (
+          <p role="status">{m.prq_comparison_unavailable({}, o)}</p>
+        ) : selected.length ? (
+          <ul className="space-y-3">
+            {selected.map((statement) => (
+              <li key={statement.id}>
+                <ProviderStatement statement={statement} row={row} locale={locale} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>{m.context_no_values({}, o)}</p>
+        )}
+      </section>
+      <section
+        className="min-w-0 space-y-2 rounded-lg border border-primary/40 p-3"
+        aria-label={m.candidate_proposed({}, o)}
+      >
+        <h3 className="text-sm font-semibold">{m.candidate_proposed({}, o)}</h3>
+        <ProviderProposal row={row} locale={locale} />
+      </section>
+    </div>
+  );
 }
 
 /** Selection and sealed action drafts only; the owning queue retains all query and row authority. */
@@ -90,6 +211,37 @@ export function ProviderReviewActions({
   if (confirmation && providerScopeKey(confirmation.scope) !== scope) setConfirmation(undefined);
   const selected = providerSelectionInScope(selection, scope);
   const visible = page?.rows ?? [];
+  function concealed(row: ProviderDecisionRow) {
+    return (
+      concealRows ||
+      providerRowIsConcealed(row) ||
+      page?.rows.some((current) => current.subject === row.subject && providerRowIsConcealed(current)) ||
+      batch?.attempts.some(
+        (attempt) =>
+          providerRowKey(attempt.row) === providerRowKey(row) &&
+          attempt.result &&
+          !attempt.result.ok &&
+          (attempt.result.reason === 'denied' || attempt.result.reason === 'missing'),
+      ) ||
+      readings.some(
+        (entry) =>
+          entry.subject === row.subject &&
+          !entry.result.ok &&
+          (entry.result.reason === 'denied' || entry.result.reason === 'missing'),
+      )
+    );
+  }
+  if (
+    confirmation &&
+    (!page ||
+      concealRows ||
+      confirmation.attempts.some(
+        ({ row }) =>
+          concealed(row) ||
+          !visible.some((current) => providerRowKey(current) === providerRowKey(row) && !concealed(current)),
+      ))
+  )
+    setConfirmation(undefined);
   const sameScope = !batch || providerScopeKey(batch.scope) === lastScope.current;
   const attempted = batch?.attempts.some((attempt) => attempt.result);
   const uncertain = batch?.attempts.some(
@@ -105,6 +257,9 @@ export function ProviderReviewActions({
   }
 
   async function refresh(current: ProviderBatch) {
+    setReadings((previous) =>
+      previous.map((entry) => (entry.result.ok ? { ...entry, result: { ok: false, reason: 'unavailable' } } : entry)),
+    );
     try {
       const next = await transport.refresh(current);
       setReadings(next.readings);
@@ -136,7 +291,7 @@ export function ProviderReviewActions({
 
   return (
     <div className="space-y-5">
-      {page && (
+      {page && visible.length > 0 && !concealRows && (
         <>
           <div
             className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3"
@@ -177,6 +332,12 @@ export function ProviderReviewActions({
             {visible.map((row, index) => {
               const key = providerRowKey(row);
               const checked = selected.includes(key);
+              if (concealed(row))
+                return (
+                  <li key={key} className="rounded-lg border border-border p-3" role="status">
+                    {m.provider_missing({}, o)}
+                  </li>
+                );
               return (
                 <ListRow key={key} className="flex min-w-0 gap-3 p-2">
                   <ListRowLink href={row.href}>{row.label}</ListRowLink>
@@ -207,9 +368,10 @@ export function ProviderReviewActions({
                     <p className="font-semibold">{row.label}</p>
                     <p className="text-sm text-muted-foreground">{row.propertyLabel}</p>
                     <ListRowControl>
-                      <CandidateValue snak={row.candidate.statement} related={row.related} locale={locale} />
+                      <ProviderComparison row={row} locale={locale} />
                     </ListRowControl>
                     {renderDetails?.(row)}
+                    <p className="text-sm text-muted-foreground">{m.prq_selection_help({}, o)}</p>
                   </div>
                 </ListRow>
               );
@@ -223,7 +385,7 @@ export function ProviderReviewActions({
           if (!open) setConfirmation(undefined);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>{m.provider_confirm_title({}, o)}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -231,8 +393,20 @@ export function ProviderReviewActions({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <p className="text-sm">
-            {page?.sourceLabel} · {page?.contextLabel} · {page?.statusLabel}
+            {confirmation?.scope.source} · {confirmation?.scope.context} · {page?.statusLabel}
           </p>
+          <ul className="space-y-4">
+            {confirmation?.attempts.map(({ row, command }) => (
+              <li key={command.key} className="space-y-2 rounded-lg border border-border p-3">
+                <p className="font-semibold">
+                  {row.label} · {row.propertyLabel}
+                </p>
+                <h3 className="text-sm font-medium">{m.candidate_proposed({}, o)}</h3>
+                <ProviderProposal row={row} locale={locale} />
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-muted-foreground">{m.prq_selection_help({}, o)}</p>
           <AlertDialogFooter>
             <Button variant="outline" className="min-h-11" onClick={() => setConfirmation(undefined)}>
               {m.provider_cancel({}, o)}
@@ -263,28 +437,24 @@ export function ProviderReviewActions({
           <ul className="space-y-3" aria-live="polite">
             {batch.attempts.map((attempt) => {
               const reading = readings.find((entry) => entry.subject === attempt.row.subject)?.result;
-              const concealed =
-                concealRows ||
+              const rowConcealed =
+                concealed(attempt.row) ||
                 (attempt.result &&
                   !attempt.result.ok &&
                   (attempt.result.reason === 'denied' || attempt.result.reason === 'missing')) ||
                 (reading && !reading.ok && (reading.reason === 'denied' || reading.reason === 'missing'));
               return (
                 <li key={attempt.command.key} className="space-y-1 break-words">
-                  {!concealed && (
+                  {!rowConcealed && (
                     <>
                       <p className="font-medium">
                         {attempt.row.label} · {attempt.row.propertyLabel}
                       </p>
-                      <CandidateValue
-                        snak={attempt.row.candidate.statement}
-                        related={attempt.row.related}
-                        locale={locale}
-                      />
+                      <ProviderProposal row={attempt.row} locale={locale} />
                     </>
                   )}
                   <p>{attempt.result ? providerOutcomeText(attempt.result, locale) : m.provider_working({}, o)}</p>
-                  {!concealed &&
+                  {!rowConcealed &&
                     reading &&
                     (reading.ok ? (
                       <a

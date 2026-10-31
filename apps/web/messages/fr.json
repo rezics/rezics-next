@@ -30,6 +30,8 @@
   "prq_refresh": "Actualiser depuis le début",
   "prq_empty": "Aucune suggestion ne correspond à ce périmètre.",
   "prq_subject": "Ouvrir la fiche",
+  "prq_identifiers": "Identifiants du sujet et de la suggestion",
+  "prq_comparison_unavailable": "Impossible de lire les valeurs actuelles. Actualisez pour les comparer.",
   "prq_selection_help": "Accepter ne sélectionne pas cette valeur. La sélection nécessite une vérification distincte de la fiche et une autorisation.",
   "prq_record": "Enregistrement source",
   "prq_revision": "Révision source",

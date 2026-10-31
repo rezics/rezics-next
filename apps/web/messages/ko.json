@@ -30,6 +30,8 @@
   "prq_refresh": "처음부터 새로고침",
   "prq_empty": "이 범위에 해당하는 제안이 없습니다.",
   "prq_subject": "항목 열기",
+  "prq_identifiers": "항목 및 제안 식별자",
+  "prq_comparison_unavailable": "현재 값을 읽을 수 없습니다. 비교하려면 새로고침하세요.",
   "prq_selection_help": "승인만으로 값이 채택되지는 않습니다. 채택에는 별도의 항목 검토와 권한이 필요합니다.",
   "prq_record": "원본 레코드",
   "prq_revision": "원본 버전",

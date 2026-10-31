@@ -30,6 +30,8 @@
   "prq_refresh": "Von vorn aktualisieren",
   "prq_empty": "Keine passenden Vorschläge in diesem Bereich.",
   "prq_subject": "Eintrag öffnen",
+  "prq_identifiers": "Kennungen von Eintrag und Vorschlag",
+  "prq_comparison_unavailable": "Die aktuellen Werte konnten nicht gelesen werden. Zum Vergleichen aktualisieren.",
   "prq_selection_help": "Zustimmung wählt diesen Wert nicht aus. Die Auswahl erfordert eine eigene Eintragsprüfung und Berechtigung.",
   "prq_record": "Quelldatensatz",
   "prq_revision": "Quellrevision",

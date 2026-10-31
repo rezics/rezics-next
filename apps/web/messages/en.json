@@ -59,6 +59,8 @@
   "prq_refresh": "Refresh from start",
   "prq_empty": "No suggestions match this scope.",
   "prq_subject": "Open subject",
+  "prq_identifiers": "Subject and suggestion identifiers",
+  "prq_comparison_unavailable": "Current values could not be read. Refresh to compare.",
   "prq_selection_help": "Accepting does not select this value. Selection requires a separate subject review and permission.",
   "prq_record": "Source record",
   "prq_revision": "Source revision",

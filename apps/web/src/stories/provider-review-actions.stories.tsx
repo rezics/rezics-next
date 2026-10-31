@@ -5,7 +5,6 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { ProviderQueueView } from '../features/import-review/provider-queue-view';
 import type { ProviderQueueRead } from '../features/import-review/provider-queue';
 import { providerReviewFixture, type ProviderReviewScenario } from '../kernel/fake/provider-review-actions';
-import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -15,9 +14,7 @@ function QueueStory({ scenario = 'ready' }: { scenario?: ProviderReviewScenario 
   const fixture = useMemo(() => providerReviewFixture(scenario, locale), [scenario, locale]);
   return (
     <PatternStory path="/imports/review" visitor="Signed In">
-      <AppShell>
-        <StoryQueue key={`${scenario}:${locale}`} fixture={fixture} scenario={scenario} locale={locale} />
-      </AppShell>
+      <StoryQueue key={`${scenario}:${locale}`} fixture={fixture} scenario={scenario} locale={locale} />
     </PatternStory>
   );
 }
@@ -62,7 +59,7 @@ function StoryQueue({
   );
 }
 const meta = {
-  title: 'Pages/Imports/Review',
+  title: 'Patterns/Imports/Review decisions',
   component: QueueStory,
   tags: ['autodocs'],
   parameters: {
