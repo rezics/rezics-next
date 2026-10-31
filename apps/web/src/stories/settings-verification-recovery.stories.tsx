@@ -311,6 +311,7 @@ export const DefaultReadRecovery: StoryObj = {
     });
     const originalKey = JSON.parse(fixture.commands[0]!.key!);
     const subject = getLocale() === 'ja' ? demoAgentSubjects[0]!.labels.ja! : demoAgentSubjects[0]!.labels.en!;
+    await expect(view.getByText(m.settings_verification_request_unconfirmed())).toBeVisible();
     await expect(view.getByText(m.settings_verification_request_action({ subject }))).toBeVisible();
     await expect(view.getByText(m.settings_verification_check_guidance())).toBeVisible();
     await expect(view.getByText(m.settings_verification_retry_request_guidance())).toBeVisible();
@@ -421,6 +422,7 @@ export const DefaultReadRecovery: StoryObj = {
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_withdraw() }));
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_confirm_withdraw() }));
     await view.findByText(m.settings_verification_uncertain_withdraw());
+    await expect(view.getByText(m.settings_verification_withdraw_unconfirmed())).toBeVisible();
     await expect(view.getByText(m.settings_verification_withdraw_action({ subject }))).toBeVisible();
     await expect(view.getByText(m.settings_verification_retry_withdraw_guidance())).toBeVisible();
     await expect(view.queryByText(m.settings_verification_withdrawn())).toBeNull();

@@ -353,15 +353,20 @@ export function VerificationCard({
         {state.attempt && !pending ? (
           <Alert>
             <AlertTitle>
-              {state.attempt.receipt
-                ? state.attempt.kind === 'request'
-                  ? m.settings_verification_request_received()
-                  : m.settings_verification_withdraw_received()
-                : state.attempt.kind === 'request'
-                  ? m.settings_verification_uncertain_request()
-                  : m.settings_verification_uncertain_withdraw()}
+              {state.attempt.kind === 'request'
+                ? m.settings_verification_uncertain_request()
+                : m.settings_verification_uncertain_withdraw()}
             </AlertTitle>
             <AlertDescription className="space-y-3">
+              <p>
+                {state.attempt.receipt
+                  ? state.attempt.kind === 'request'
+                    ? m.settings_verification_request_received()
+                    : m.settings_verification_withdraw_received()
+                  : state.attempt.kind === 'request'
+                    ? m.settings_verification_request_unconfirmed()
+                    : m.settings_verification_withdraw_unconfirmed()}
+              </p>
               <p>
                 {state.attempt.kind === 'request'
                   ? m.settings_verification_request_action({
