@@ -12,21 +12,12 @@ import type {
   PublicFilterProjectionMeaning,
 } from '../semantic/public-filter-source-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
-import type {
-  PublicFilterSourceBinding,
-  PublicFilterBindingFailure,
-  PublicSourceRepair,
-} from '../semantic/public-filter-source-binding.ts';
+import type { PublicFilterSourceBinding, PublicFilterBindingFailure, PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
 
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
 export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> =
   Readonly<{
-    source: Readonly<{
-      id: string;
-      partition: number;
-      epoch: number;
-      configuration: string;
-    }>;
+    source: Readonly<{ id: string; partition: number; epoch: number; configuration: string }>;
     readDefinition: string;
     meaning: PublicFilterProjectionMeaning;
     capture: Capture;
@@ -56,12 +47,7 @@ export type CustodyExecution = Readonly<{
 /** Durable bounded lease: the producer must release in finally, including failed native work. */
 export type CustodyUse = Readonly<{ observation: string; token: string }>;
 export type CustodyCost = PublicFilterCost &
-  Readonly<{
-    statements: number;
-    rows: number;
-    bytes: number;
-    engineRequests: number;
-  }>;
+  Readonly<{ statements: number; rows: number; bytes: number; engineRequests: number }>;
 export type CustodyFailure = Readonly<{
   status: 'unready' | 'unavailable';
   reason:
@@ -89,16 +75,10 @@ export type CustodyRetained = Readonly<{
   queried: PublicFilterQueriedObservation;
   cost: CustodyCost;
 }>;
-export type CustodyRead = Readonly<{
-  queried: PublicFilterQueriedObservation;
-  execution?: string;
-}>;
+export type CustodyRead = Readonly<{ queried: PublicFilterQueriedObservation; execution?: string }>;
 /** Only the native reader may return this opaque locator. It is never caller evidence. */
 declare const privateProducerBrand: unique symbol;
-export type NativePublicFilterRepairSettlement = Readonly<{
-  id: string;
-  [privateProducerBrand]: true;
-}>;
+export type NativePublicFilterRepairSettlement = Readonly<{ id: string; [privateProducerBrand]: true }>;
 export type PublicFilterRepairSettlementResult =
   | CustodyFailure
   | Readonly<{
@@ -207,11 +187,7 @@ export interface PublicFilterCustody {
     | CustodyFailure
   >;
   openPit(
-    request: Readonly<{
-      registration: CustodyRegistration;
-      covered: PrivacyReductionStart;
-      keepAliveMs: number;
-    }>,
+    request: Readonly<{ registration: CustodyRegistration; covered: PrivacyReductionStart; keepAliveMs: number }>,
     search: OpenSearch,
     context: PublicFilterConsumerContext,
   ): Promise<CustodyRetained | CustodyFailure>;
@@ -241,11 +217,7 @@ export interface PublicFilterCustody {
   ): Promise<Readonly<{ status: 'released'; cost: CustodyCost }> | CustodyFailure>;
   /** Retain the actual query response locator under the existing active use, including malformed results. */
   retainPit(
-    request: Readonly<{
-      use: CustodyUse;
-      queried: PublicFilterQueriedObservation;
-      pit: string;
-    }>,
+    request: Readonly<{ use: CustodyUse; queried: PublicFilterQueriedObservation; pit: string }>,
     context: PublicFilterConsumerContext,
   ): Promise<CustodyRetained | CustodyFailure>;
   renewPit(

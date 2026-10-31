@@ -249,9 +249,7 @@ function isReleaseReference(
 async function requireReleaseAuthority(pool: Pool, meter: Meter, digest: string) {
   // Use the existing immutable owner lookups. Charge their actual SQL and returned metadata too.
   // Neither lookup loads a release body, joins homes, nor consults/caches permission.
-  const db = {
-    query: (query: string, values?: unknown[]) => sql(pool, meter, query, values),
-  } as Pool;
+  const db = { query: (query: string, values?: unknown[]) => sql(pool, meter, query, values) } as Pool;
   if (await releaseExists.run(db, { route: 0, digest })) return;
   if (await compositeReference.run(db, { digest })) return;
   throw new Failure('definition_missing');
@@ -270,10 +268,7 @@ async function retainedDefinition(
       meaning: {
         digest: definition.meaning.digest,
         type: definition.meaning.type,
-        release: {
-          authority: 'semantic.readRelease',
-          digest: definition.meaning.digest,
-        },
+        release: { authority: 'semantic.readRelease', digest: definition.meaning.digest },
       },
     };
     encoded = encode({ digest: digest(retained), data: retained });
@@ -347,10 +342,7 @@ function validateDefinition(definition: CustodyDefinition<PublicCanonicalCapture
     admitFilter(input.filterDocument, definition.meaning.release);
   }
   const filter = input.filterDocument
-    ? compileFilter(input.filterDocument, {
-        prefix: 'f',
-        relationOverflow: true,
-      })
+    ? compileFilter(input.filterDocument, { prefix: 'f', relationOverflow: true })
     : undefined;
   const compiledText = input.text ? compileText(input.text, { field: 'search_text', prefix: 't' }) : undefined;
   const properties = [
@@ -403,10 +395,7 @@ async function read(
   check(context);
   if (!row) throw new Failure('observation_lost');
   if (row.failure) throw new Failure(row.failure);
-  const definition = decode<{
-    digest: string;
-    data: CustodyRetainedDefinition;
-  }>(row.definition);
+  const definition = decode<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
   requireValue(definition.digest === digest(definition.data));
   if (isReleaseReference(definition.data.meaning.release)) {
     requireValue(definition.data.meaning.release.digest === definition.data.meaning.digest);
@@ -1082,12 +1071,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           );
           if (!result.rowCount) throw new Failure('binding_mismatch');
         });
-        return {
-          status: 'registered' as const,
-          registration: identity,
-          consumer,
-          cost: meter,
-        };
+        return { status: 'registered' as const, registration: identity, consumer, cost: meter };
       });
     },
     openPit(request, search, context) {
@@ -1099,10 +1083,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
         if ((await native(search, meter, context, consumer.physicalTarget)) !== consumer.incarnation)
           throw new Failure('binding_mismatch');
         const openedAt = Date.now();
-        const opened = await engine<{
-          pit_id: string;
-          _shards: { failed: number };
-        }>(
+        const opened = await engine<{ pit_id: string; _shards: { failed: number } }>(
           search,
           meter,
           context,
@@ -1203,11 +1184,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           ],
         );
         if (!result.rowCount) throw new Failure('observation_lost');
-        return {
-          status: 'acquired' as const,
-          use: { observation: input.snapshot.observation, token },
-          cost: meter,
-        };
+        return { status: 'acquired' as const, use: { observation: input.snapshot.observation, token }, cost: meter };
       });
     },
     appendExecution(request, context) {
@@ -1315,16 +1292,19 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           if ((await native(search, meter, context, input.consumer.physicalTarget)) !== input.consumer.incarnation)
             throw new Failure('binding_mismatch');
           const renewedAt = Date.now();
-          const response = await engine<{
-            pit_id?: string;
-            _shards: { failed: number };
-            timed_out: boolean;
-          }>(search, meter, context, 'POST', '/_search', {
-            size: 0,
-            track_total_hits: false,
-            query: { match_none: {} },
-            pit: { id: input.snapshot.pit, keep_alive: `${keepAliveMs}ms` },
-          }).catch(async (error: unknown) => {
+          const response = await engine<{ pit_id?: string; _shards: { failed: number }; timed_out: boolean }>(
+            search,
+            meter,
+            context,
+            'POST',
+            '/_search',
+            {
+              size: 0,
+              track_total_hits: false,
+              query: { match_none: {} },
+              pit: { id: input.snapshot.pit, keep_alive: `${keepAliveMs}ms` },
+            },
+          ).catch(async (error: unknown) => {
             if (error instanceof OpenSearchError && error.status === 404)
               await sql(
                 pool,
@@ -1341,10 +1321,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           });
           const successor: PublicFilterQueriedObservation = {
             consumer: input.consumer,
-            snapshot: {
-              ...input.snapshot,
-              pit: response.pit_id ?? input.snapshot.pit,
-            },
+            snapshot: { ...input.snapshot, pit: response.pit_id ?? input.snapshot.pit },
           };
           await sql(
             pool,
@@ -1376,11 +1353,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             ],
           );
           if (!updated.rowCount) throw new Failure('observation_lost');
-          return {
-            status: 'retained' as const,
-            queried: successor,
-            cost: meter,
-          };
+          return { status: 'retained' as const, queried: successor, cost: meter };
         } finally {
           addCost(meter, (await api.release(acquired.use, context)).cost);
         }
@@ -1482,9 +1455,7 @@ function addCost(target: Meter, value: CustodyCost) {
 }
 async function deletePit(pit: string, search: OpenSearch, context: PublicFilterConsumerContext, meter: Meter) {
   try {
-    await engine(search, meter, context, 'DELETE', '/_search/point_in_time', {
-      pit_id: [pit],
-    });
+    await engine(search, meter, context, 'DELETE', '/_search/point_in_time', { pit_id: [pit] });
   } catch (error) {
     if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
   }
@@ -1523,10 +1494,7 @@ export async function readGenerationPublicationCustody(
     const row = registered.rows[0];
     if (!row || registered.rows.length !== 1) throw new Failure('definition_missing');
     sourceHome = row.partition_no as number;
-    const definition = decode<{
-      digest: string;
-      data: CustodyRetainedDefinition;
-    }>(row.definition);
+    const definition = decode<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
     requireValue(definition.digest === digest(definition.data));
     const found =
       observation === undefined
@@ -1548,11 +1516,7 @@ export async function readGenerationPublicationCustody(
     const q = decode<PublicFilterQueriedObservation>(found.rows[0].queried);
     requireValue(encode(q.consumer) === encode(consumer));
     const native = await read(pool, { queried: q }, context, meter);
-    return {
-      definition: native.definition,
-      queried: native.queried,
-      cost: meter,
-    };
+    return { definition: native.definition, queried: native.queried, cost: meter };
   } catch (error) {
     return failure(error, meter);
   }

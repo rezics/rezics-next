@@ -210,14 +210,8 @@ export function compilePublicFilterConsumerCapture(
   if (capture.sort === 'collections' || capture.sort === 'rating') orders.add('name');
   const dependencyKeys: PublicFilterDependencyKey[] = [
     { kind: 'type' },
-    ...dependencyProperties.map((property): PublicFilterDependencyKey => ({
-      kind: 'property',
-      property,
-    })),
-    ...[...orders].map((order): PublicFilterDependencyKey => ({
-      kind: 'order',
-      order,
-    })),
+    ...dependencyProperties.map((property): PublicFilterDependencyKey => ({ kind: 'property', property })),
+    ...[...orders].map((order): PublicFilterDependencyKey => ({ kind: 'order', order })),
   ];
   return freeze({
     capture,
@@ -228,10 +222,7 @@ export function compilePublicFilterConsumerCapture(
   });
 }
 
-function targetParts(physicalTarget: string): {
-  prefix: string;
-  generation: number;
-} {
+function targetParts(physicalTarget: string): { prefix: string; generation: number } {
   const match = /^([a-z0-9][a-z0-9-]{0,47})subjects-g([1-9][0-9]*)$/.exec(physicalTarget);
   if (!match || match[0] !== physicalTarget) throw new TypeError('Consumer requires one physical subject index');
   const prefix = match[1]!;
@@ -315,9 +306,7 @@ function iteratorSteps(body: unknown): number {
   return count;
 }
 
-type OrdinaryPlan = SearchPlan & {
-  sort: 'relevance' | 'name' | 'id' | 'collections';
-};
+type OrdinaryPlan = SearchPlan & { sort: 'relevance' | 'name' | 'id' | 'collections' };
 type NativePitPayload = {
   pit_id: string;
   hits: {
@@ -356,13 +345,7 @@ export async function queryPublicFilterConsumerPit(
   retainedPlan: OrdinaryPlan,
   context: PublicFilterConsumerContext,
   retainPit?: (pit: string) => Promise<void>,
-): Promise<
-  Readonly<{
-    result: SearchResult;
-    successorPit: string;
-    engineIteratorSteps: number;
-  }>
-> {
+): Promise<Readonly<{ result: SearchResult; successorPit: string; engineIteratorSteps: number }>> {
   const queried = structuredClone(retainedQueried);
   const plan = structuredClone(retainedPlan);
   if (queried.snapshot.kind !== 'pit') throw new TypeError('PIT execution requires a retained PIT');
@@ -405,21 +388,10 @@ export async function queryPublicFilterConsumerPit(
       profile: true,
       _source: ['partition', 'security_revision'],
       ...(hasOverflow
-        ? {
-            aggs: {
-              overflow: {
-                filter: {
-                  terms: { relation_facet_overflow: plan.overflowProperties },
-                },
-              },
-            },
-          }
+        ? { aggs: { overflow: { filter: { terms: { relation_facet_overflow: plan.overflowProperties } } } } }
         : {}),
     },
-    {
-      timeoutMs: remaining(context),
-      query: { allow_partial_search_results: false },
-    },
+    { timeoutMs: remaining(context), query: { allow_partial_search_results: false } },
   );
   if (record(body) && typeof body.pit_id === 'string' && retainPit) await retainPit(body.pit_id);
   if (status !== 200) throw new SearchUnavailableError('Native consumer PIT query did not complete');
@@ -440,11 +412,7 @@ export async function queryPublicFilterConsumerPit(
     },
     ...(hasOverflow ? { overflow: requireSearchOverflow(body) } : {}),
   };
-  return {
-    result,
-    successorPit: body.pit_id,
-    engineIteratorSteps: iteratorSteps(body),
-  };
+  return { result, successorPit: body.pit_id, engineIteratorSteps: iteratorSteps(body) };
 }
 
 /**
@@ -504,10 +472,7 @@ export async function applyPublicFilterConsumerActions(
   // Recompute the actual remaining deadline for each normalization and native bulk request.
   const bounded: OpenSearch = {
     request(method, path, body, options) {
-      return search.request(method, path, body, {
-        ...options,
-        timeoutMs: remaining(context),
-      });
+      return search.request(method, path, body, { ...options, timeoutMs: remaining(context) });
     },
     bulk(lines, options) {
       return search.bulk(lines, { ...options, timeoutMs: remaining(context) });
@@ -515,9 +480,7 @@ export async function applyPublicFilterConsumerActions(
   };
   const prepared = await prepareBoundedSortKeys(bounded, target, actions);
   admitBytes(prepared);
-  await writeIndexActions(bounded, target, prepared, {
-    versionConflict: 'reject',
-  });
+  await writeIndexActions(bounded, target, prepared, { versionConflict: 'reject' });
   // A delete/create race must fail this attempt even if the name and every bulk item look valid.
   if ((await readPublicFilterConsumerIncarnation(search, target, context)) !== consumer.incarnation)
     throw new SearchUnavailableError('Repair physical incarnation changed');
@@ -559,11 +522,7 @@ import {
   withPublicFilterRepairAllowance,
   verifyPublicFilterRepairSourcePage,
 } from './public-filter-custody.ts';
-import type {
-  RetainedRepairSettlement,
-  RetainedRepairPage,
-  RetainedSourceRepair,
-} from './public-filter-custody-contract.ts';
+import type { RetainedRepairSettlement, RetainedRepairPage, RetainedSourceRepair } from './public-filter-custody-contract.ts';
 import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
@@ -654,23 +613,13 @@ type ConsumerWork = {
     complete: boolean;
   } | null;
   records: PublicFilterProjectionRecord[];
-  dispatch: Readonly<{
-    id: string;
-    version: bigint;
-    document: SubjectDocument;
-    state: 'uncertain' | 'visible';
-  }> | null;
+  dispatch: Readonly<{ id: string; version: bigint; document: SubjectDocument; state: 'uncertain' | 'visible' }> | null;
   rounds: number;
   charged: number;
   adopted: boolean;
 };
 function retainedBootstrap(bootstrap: PublicSourceBootstrap): Omit<PublicSourceBootstrap, 'definition'> {
-  return {
-    id: bootstrap.id,
-    consumer: bootstrap.consumer,
-    snapshot: bootstrap.snapshot,
-    covered: bootstrap.covered,
-  };
+  return { id: bootstrap.id, consumer: bootstrap.consumer, snapshot: bootstrap.snapshot, covered: bootstrap.covered };
 }
 function locatorHome(locator: string): number {
   const matched = /^(0|[1-9][0-9]{0,3}):/.exec(locator);
@@ -752,10 +701,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         cost.engineRequests++;
         cost.bytes += Buffer.byteLength(encodeState(body));
         if (path.endsWith('/_search') || path.endsWith('/_search/template')) cost.engineSearches++;
-        const result = await config.search.request(method, path, body, {
-          ...options,
-          timeoutMs: remaining(context),
-        });
+        const result = await config.search.request(method, path, body, { ...options, timeoutMs: remaining(context) });
         cost.bytes += Buffer.byteLength(encodeState(result.body));
         // Physical keyed repair readbacks have no public query profile. Charge their actual shards;
         // the retained PIT path separately charges its native profile iterator work.
@@ -770,10 +716,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         check();
         cost.engineRequests++;
         cost.bytes += Buffer.byteLength(encodeState(lines));
-        const result = await config.search.bulk(lines, {
-          ...options,
-          timeoutMs: remaining(context),
-        });
+        const result = await config.search.bulk(lines, { ...options, timeoutMs: remaining(context) });
         cost.bytes += Buffer.byteLength(encodeState(result));
         check();
         return result as any;
@@ -894,11 +837,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const work = decodeState<ConsumerWork>(row.consumer_work);
       if (work.bootstrap.id !== bootstrap || !isDeepStrictEqual(work.bootstrap.consumer, job.consumer))
         throw new ConsumerFailure('registration_missing');
-      return {
-        work,
-        encoded: row.consumer_work,
-        registration: row.registration,
-      };
+      return { work, encoded: row.consumer_work, registration: row.registration };
     }
     const registration = false;
     const row = (
@@ -969,13 +908,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       await config.source.readPrivacyReductionHeads(
         start === null
           ? { kind: 'population', queried: q, start: null, context }
-          : {
-              kind: 'population',
-              queried: q,
-              start,
-              execution: execution!,
-              context,
-            },
+          : { kind: 'population', queried: q, start, execution: execution!, context },
       ),
     );
     if (observed.status !== 'observed') throw new ConsumerFailure('source_pending');
@@ -1057,12 +990,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           track_total_hits: false,
           ...(after === undefined ? {} : { search_after: after }),
         },
-        {
-          query: {
-            allow_partial_search_results: false,
-            search_type: 'dfs_query_then_fetch',
-          },
-        },
+        { query: { allow_partial_search_results: false, search_type: 'dfs_query_then_fetch' } },
       );
       const body = response.body;
       if (record(body) && typeof body.pit_id === 'string') await retain(body.pit_id);
@@ -1082,12 +1010,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         ...(after === undefined ? {} : { after }),
       }).hits;
       m.cost.engineIteratorSteps += iteratorSteps(body);
-      return {
-        queried: current,
-        raw,
-        exhausted: raw.length < size,
-        total: undefined,
-      };
+      return { queried: current, raw, exhausted: raw.length < size, total: undefined };
     }
     if ('purpose' in plan) {
       validatePublicSuggestionInput(plan);
@@ -1098,12 +1021,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const executed = await queryPublicFilterConsumerPit(
       m.native,
       q,
-      {
-        ...plan,
-        sort: plan.sort,
-        size,
-        ...(after === undefined ? {} : { after }),
-      },
+      { ...plan, sort: plan.sort, size, ...(after === undefined ? {} : { after }) },
       context,
       retain,
     );
@@ -1134,11 +1052,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if (work.queried === null && work.materializing === null) {
       const retained = m.take(
         await custody.openPit(
-          {
-            registration: work.registration,
-            covered: work.bootstrap.covered,
-            keepAliveMs: 300_000,
-          },
+          { registration: work.registration, covered: work.bootstrap.covered, keepAliveMs: 300_000 },
           config.search,
           context,
         ),
@@ -1295,13 +1209,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
       const begun = m.take(
         await binding.begin(
-          {
-            source: config.source,
-            meaning,
-            capture: canonical,
-            consumer: registered.consumer,
-            snapshot,
-          },
+          { source: config.source, meaning, capture: canonical, consumer: registered.consumer, snapshot },
           context,
         ),
       );
@@ -1346,11 +1254,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     let q = structuredClone(input);
     const prefix = refill === undefined ? undefined : structuredClone(refill);
     const m = meter(context);
-    const preparing = () => ({
-      status: 'preparing' as const,
-      queried: q,
-      cost: m.cost,
-    });
+    const preparing = () => ({ status: 'preparing' as const, queried: q, cost: m.cost });
     let use: CustodyUse | undefined;
     try {
       m.check();
@@ -1486,10 +1390,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const execution = randomUUID();
       const appended = m.take(
         await custody.appendExecution(
-          {
-            use,
-            execution: { id: execution, start: started.start, ownRows: rows },
-          },
+          { use, execution: { id: execution, start: started.start, ownRows: rows } },
           context,
         ),
       );
@@ -1513,11 +1414,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       encoded = await save(work, encoded, false, m);
       const finalJoined = await join(q, execution, m, context);
       if (
-        !isDeepStrictEqual(finalJoined.execution, {
-          id: execution,
-          start: started.start,
-          ownRows: rows,
-        }) ||
+        !isDeepStrictEqual(finalJoined.execution, { id: execution, start: started.start, ownRows: rows }) ||
         !isDeepStrictEqual(finalJoined.covered, joined.covered)
       )
         return m.unavailable('observation_lost');
@@ -1560,10 +1457,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
   }
   async function readStatus(
-    request: Readonly<{
-      queried: PublicFilterQueriedObservation;
-      execution?: string;
-    }>,
+    request: Readonly<{ queried: PublicFilterQueriedObservation; execution?: string }>,
     context: PublicFilterConsumerContext,
   ): Promise<PublicFilterConsumerStatus> {
     const input = structuredClone(request);
@@ -1602,7 +1496,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       next_work: next,
       execution: work.execution!,
       settlement: encodeNative(state),
-      previous,
+      previous: previous ?? '',
     });
     if (!saved) throw new ConsumerFailure('source_pending');
     m.cost.frontierWrites++;
@@ -1923,19 +1817,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   const operations: PublicDiscoveryConsumerOperations = {
     capture(request, context) {
       const copied = structuredClone(request);
-      return track(() =>
-        capturePlan(copied.plan, copied.snapshot, {
-          deadline: context.deadline,
-        }),
-      );
+      return track(() => capturePlan(copied.plan, copied.snapshot, { deadline: context.deadline }));
     },
     captureDiscovery(request, context) {
       const copied = structuredClone(request);
-      return track(() =>
-        capturePlan(copied.plan, copied.snapshot, {
-          deadline: context.deadline,
-        }),
-      );
+      return track(() => capturePlan(copied.plan, copied.snapshot, { deadline: context.deadline }));
     },
     query(q, context, refill) {
       return track(
@@ -1954,9 +1840,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     closeObservation(input, context) {
       const q = structuredClone(input);
       return track(async () => {
-        const result = await custody.closeObservation(q, config.search, {
-          deadline: context.deadline,
-        });
+        const result = await custody.closeObservation(q, config.search, { deadline: context.deadline });
         if (result.status !== 'closed') throw new ConsumerFailure('observation_lost');
         owned.delete(q.snapshot.observation);
         if (bootstrapBinding(binding)) {
@@ -1968,12 +1852,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             )
           ).rows[0];
           if (row?.consumer_work)
-            await binding.abort(
-              {
-                bootstrap: decodeState<ConsumerWork>(row.consumer_work).bootstrap.id,
-              },
-              context,
-            );
+            await binding.abort({ bootstrap: decodeState<ConsumerWork>(row.consumer_work).bootstrap.id }, context);
         }
       });
     },
