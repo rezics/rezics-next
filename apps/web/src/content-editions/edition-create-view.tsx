@@ -434,11 +434,13 @@ export function EditionPublication({
               onChange={(event) => setConfirmed(event.target.checked)}
             />
             <span>
-              {m.edition_publication_confirm({
-                revision: editionRevisionDate(edition.identity?.revisionCreatedAt),
-                licence: edition.licence,
-                subject: editionSubjectName(target),
-              })}
+              {recognized
+                ? m.edition_publication_confirm({
+                    revision: editionRevisionDate(edition.identity?.revisionCreatedAt),
+                    licence: edition.licence,
+                    subject: editionSubjectName(target),
+                  })
+                : m.edition_identity_recovery()}
             </span>
           </label>
           <Button

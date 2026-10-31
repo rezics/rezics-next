@@ -212,7 +212,7 @@ test('A creator recognizes a bounded edition list item by authorized document or
   expect(source.recognition?.subjects[0]?.label?.value).toBe('夜の航路');
   const selection = renderToStaticMarkup(createElement(EditionPublication, { controller: fixture.controller }));
   expect(selection).toContain('lang="ja"');
-  expect(selection).toContain(`value="${subjectId}">夜の航路</option>`);
+  expect(selection).toMatch(new RegExp(`<option[^>]*value="${subjectId}"[^>]*>夜の航路</option>`));
   expect(selection).not.toContain(`>${subjectId}</option>`);
   fixture.controller.chooseSubject(subjectId);
   await fixture.controller.create();
