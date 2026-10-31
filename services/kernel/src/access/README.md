@@ -3573,6 +3573,8 @@ remains durable; retries rotate through blocked phases with an indexed prefix se
 commands use the original continuation keys, validated against the permanent obligation and exact current deletion
 fence instead of an expired caller approval. One invocation attempts one root's bounded local steps. Authorization
 records are not treated as Auth consumption witnesses, and continuation evidence is retained.
+An exact key already purged through another role clears only that stale locator; it does not discharge any other
+consumer's evidence dependency.
 
 Verified rate charges store their account association in the counter/chunk transaction. The transaction locks the
 account against deletion and checks the permanent obligation, preventing a pre-deletion authenticated context from

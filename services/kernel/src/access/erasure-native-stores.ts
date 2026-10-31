@@ -197,12 +197,15 @@ export async function nativeStoreBlocker(
     // operator transition. Even ended history remains input to delayed Rating
     // vote events/recounts at event T; a current controller change alone is not
     // a projection-consumption witness.
-    const row = await tx.query(
-      `SELECT 1 FROM access.account
-       WHERE route=$1 AND account_id=$2 AND account_id<>$3 AND controller_id=$3 FOR SHARE`,
-      [key[0], key[1], accountId],
+    const row = await tx.query<{ current_controller: boolean | null }>(
+      `SELECT a.account_id<>$4 AND a.controller_id=$4 AS current_controller
+       FROM access.rating_counter_controller h LEFT JOIN access.account a
+         ON a.route=h.route AND a.account_id=h.account_id
+       WHERE h.route=$1 AND h.account_id=$2 AND h.effective_at=$3::timestamptz FOR SHARE OF h`,
+      [...key, accountId],
     );
-    if (row.rowCount) return 'controller-transition-consumer';
+    if (!row.rowCount) return null;
+    if (row.rows[0]!.current_controller) return 'controller-transition-consumer';
     return 'rating-controller-projection-custody';
   }
   return null;

@@ -154,6 +154,13 @@ export async function terminalStoreBlocker(
     }
   }
   if (store === 'lifecycle_fence_receipt') {
+    // A different discovered role can have committed the same row's purge.
+    // Absence clears only this stale page key, never another live dependency.
+    const selected = await tx.query(
+      'SELECT 1 FROM access.lifecycle_fence_receipt WHERE route=$1 AND account_id=$2 AND receipt_id=$3 FOR UPDATE',
+      [...key],
+    );
+    if (!selected.rowCount) return null;
     // Source Realm succession still reads the original tombstone fence. First
     // discover its actual roles; Auth consumption discharges only Auth's need.
     if (!forwardComplete) return 'native-terminal-consumer';
@@ -311,7 +318,14 @@ export async function foreignTerminalBlockers(
     if (store === 'membership_inverse_terminal' && key[2] === 'realm') {
       // Realm publication/cancellation owns its original terminal proof. No
       // Access-side inverse observation can discharge the source consumer.
-      blocked.set(JSON.stringify(key), 'membership-terminal-consumer');
+      const selected = await withConnection(pool, (tx) =>
+        tx.query(
+          `SELECT 1 FROM access.membership_inverse_terminal
+           WHERE route=$1 AND account_id=$2 AND kind=$3 AND group_id=$4 AND reservation_id=$5`,
+          [...key],
+        ),
+      );
+      if (selected.rowCount) blocked.set(JSON.stringify(key), 'membership-terminal-consumer');
     }
     if (store === 'operator_relation_slot') {
       // Retirement is before release. Require the actual original release
