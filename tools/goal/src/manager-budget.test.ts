@@ -286,11 +286,13 @@ test('inbox send reports a continuation confirmation to the manager host', async
     });
   });
   const priorManager = process.env.GOAL_MANAGER;
+  const priorCodexThread = process.env.CODEX_THREAD_ID;
   try {
     const started = await s.managers.start(s.spec);
     await report(s, started.threadId!, 'active', 900);
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
     process.env.GOAL_MANAGER = started.id;
+    process.env.CODEX_THREAD_ID = started.threadId!;
     const runtime: IntegrationRuntime = {
       db: s.db,
       mainCheckout: s.path,
@@ -317,6 +319,8 @@ test('inbox send reports a continuation confirmation to the manager host', async
   } finally {
     if (priorManager === undefined) delete process.env.GOAL_MANAGER;
     else process.env.GOAL_MANAGER = priorManager;
+    if (priorCodexThread === undefined) delete process.env.CODEX_THREAD_ID;
+    else process.env.CODEX_THREAD_ID = priorCodexThread;
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
     await s.close();
   }

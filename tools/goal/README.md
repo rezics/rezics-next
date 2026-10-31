@@ -729,6 +729,54 @@ The supermanager sets direction and the managers own the work. This applies to e
   critical-priority grants, deadlocks between owners, efficiency strategy, and a sampled review of the product, not
   every slice. When a detail reaches the supermanager, it forwards it to the owner instead of doing it.
 
+#### Shared inbox
+
+Any authenticated manager, including the registered supermanager, can inspect every recipient's conversation. Shared
+queries use the persisted provider session identity (`CODEX_THREAD_ID` or `CLAUDE_CODE_SESSION_ID`); `GOAL_MANAGER`
+alone and worker task identity do not authorize them. Log, thread and digest queries are read-only: they do not mark a
+recipient's message read or acknowledged, set notification state, wake a manager, or deliver a message. Existing
+`inbox wait`, `inbox read` and `inbox ack` retain their per-recipient behavior.
+
+```sh
+bun tools/goal/src/cli.ts inbox log [--from <manager>] [--to <manager>] [--goal <goal>] [--task <task>] \
+  [--since <time>] [--grep <text>] [--limit <1..100>] [--cursor <id>] [--json]
+bun tools/goal/src/cli.ts inbox thread <message-id|task-id> [--limit <1..100>] [--cursor <id>] [--json]
+bun tools/goal/src/cli.ts inbox digest --since <time> [--limit <1..100>] [--cursor <id>] [--json]
+bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] [--evidence <path>] \
+  [--reply <message-id>] [--document <path-or-JSON-reference>] [--escalation <reason-or-JSON>]
+```
+
+Pages default to 50 rows and stop at 100. Results are newest first for `log`; a page with more results returns
+`hasMore` and `nextCursor`, which is passed back as `--cursor`. `thread` returns a conversation in message order and
+uses the same continuation fields. `--since` accepts an ISO timestamp or Unix seconds/milliseconds. `--grep` searches
+the stored summary without inferring links. `--json` prints the complete page object, including row metadata, the event,
+the page limit, continuation cursor and `hasMore`. The exported `SharedInboxQueries` API provides the same `log`,
+`thread` and `digest` reads to operations reports after they have actually been delivered; it does not schedule or send
+an hourly report.
+
+Inbox kinds are explicit. `question` starts an open question. Only a direct linked `info` or `decision` reply answers
+it; another `question` is a clarification and remains open. A `blocker`, `handoff`, `instruction`, system event, read,
+notification or acknowledgement is not an answer. `--reply` takes an existing numeric message id, stores that exact
+parent, and keeps its thread root and task/Goal provenance across managers. It is valid for a reply to be another
+question, so nested clarifications remain visible. Decisions may repeat `--document` with either a path or a JSON
+reference such as `'{"path":"docs/contract.md","change":"Added the retry rule"}'`. Escalation metadata can be a
+one-line reason or JSON such as `'{"target":"supermanager","reason":"Owner deadlock after one exchange"}'`.
+Only explicit escalation metadata is reported as an escalation; historical system kinds are retained as-is rather than
+reinterpreted. Existing instruction and internal system events continue using the same durable per-recipient wake/read/
+ack columns. A worker with a current persisted task attempt may send instruction, question, blocker, handoff or info
+messages; the sender is recorded as `worker:<source-task>/<attempt>` with the source owner in structured provenance.
+`--task` still selects the conversation task, so a cross-owner handoff can retain its target task separately. Worker
+messages keep the recipient's existing delivery behavior and do not authorize shared reads or manager actions.
+
+The digest groups known events by their stored Goal and includes decisions and their document references, blockers,
+explicit escalations, open questions older than 30 minutes, and blockers older than one hour. A linked direct `info` or
+`decision` resolves a blocker for intervention reporting. Its per-Goal and total counts cover every matching record;
+bounded detail pages expose `hasMore` and `nextCursor`, so continuation does not change those totals. Overdue questions
+and old blockers are considered even when their arrival predates `--since`. Historical rows receive an indexed metadata
+migration where those values were already present, but their missing arrival timestamp stays `null`/unknown. Time
+filters and age thresholds cannot classify a row whose creation time is unknown, and missing Goal/document metadata
+stays unknown rather than being inferred from summary text, read time or row id.
+
 ### Check result reuse
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the
