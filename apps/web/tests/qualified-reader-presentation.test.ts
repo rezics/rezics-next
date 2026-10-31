@@ -20,7 +20,7 @@ const { holderItems } = await import('../src/features/pages/overview');
 
 test('qualified reader journey keeps complete statement fields and presentation-specific native continuation', async () => {
   const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))),
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: 'https://rezics.test' });
   const host = window.document.createElement('main');
@@ -33,7 +33,8 @@ test('qualified reader journey keeps complete statement fields and presentation-
   first.statement.id = 'complete-credit';
   second.statement.id = 'another-credit';
   const snak = (id: string, data_type: string, content: unknown) => ({
-    property: { id, data_type }, value: { type: 'value', content },
+    property: { id, data_type },
+    value: { type: 'value', content },
   });
   const creditedAs = '旅人の声と回想場面の語りを担当したアレクサンドラ・プレイヤー';
   first.statement.qualifiers = [
@@ -43,26 +44,46 @@ test('qualified reader journey keeps complete statement fields and presentation-
     snak('wdt:P518', 'wikibase-item', '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e99'),
     snak('wdt:P3831', 'wikibase-item', 'withheld-role'),
   ];
-  first.related['0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e99'] = { id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e99', type: 'wd:Q2620972', label: { value: 'The return', language: 'en' } };
+  first.related['0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e99'] = {
+    id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e99',
+    type: 'wd:Q2620972',
+    label: { value: 'The return', language: 'en' },
+  };
   second.statement.qualifiers = [snak('schema:position', 'string', '1'), snak('wdt:P1932', 'string', 'Other credit')];
   const hidden = structuredClone(first);
   hidden.statement.id = 'spoiler-credit';
   hidden.label = 'Spoiler performer';
   hidden.statement.qualifiers.push(snak('rezics:spoilerLevel', 'quantity', { amount: '+2', unit: '1' }));
-  cast.relations = [first, second, hidden, { ...first, target: 'missing-person', summary: null, label: 'Unavailable person' }];
+  cast.relations = [
+    first,
+    second,
+    hidden,
+    { ...first, target: 'missing-person', summary: null, label: 'Unavailable person' },
+  ];
   // Exercise release-backed presentation rather than the fixture's authored English title.
   const castNode = page.document.content.find((node) => node.props.id === 'cast')!;
   delete castNode.props.title;
   function render(current: SubjectPageData, locale = 'en') {
-    return renderToStaticMarkup(createElement(QueryClientProvider, {
-      client: new QueryClient(),
-      children: createElement(SubjectPage, {
-        page: current, locale, renderJsonLd: false,
-        relations: relationDefinitions(traversalRelease, pageRelationProperties(current), locale),
-        reader: { spoilerLevel: 0, suitability: 'blur' },
-        messages: { unknown: 'Unknown', none: 'None', unlabelled: 'Unlabelled', sources: 'Sources', aliases: 'Aliases', spoilerShow: 'Show spoiler' },
+    return renderToStaticMarkup(
+      createElement(QueryClientProvider, {
+        client: new QueryClient(),
+        children: createElement(SubjectPage, {
+          page: current,
+          locale,
+          renderJsonLd: false,
+          relations: relationDefinitions(traversalRelease, pageRelationProperties(current), locale),
+          reader: { spoilerLevel: 0, suitability: 'blur' },
+          messages: {
+            unknown: 'Unknown',
+            none: 'None',
+            unlabelled: 'Unlabelled',
+            sources: 'Sources',
+            aliases: 'Aliases',
+            spoilerShow: 'Show spoiler',
+          },
+        }),
       }),
-    }));
+    );
   }
   try {
     host.innerHTML = render(page);
@@ -72,7 +93,11 @@ test('qualified reader journey keeps complete statement fields and presentation-
     const secondRow = section.querySelector('[data-statement="another-credit"]')!;
     expect(firstRow.textContent).toContain('Ada Player');
     expect(Array.from(firstRow.querySelectorAll('li')).map((li) => li.textContent)).toEqual([
-      'Order: 2', 'Role: Voice', 'Character: The Traveller', `Credited as: ${creditedAs} Japanese`, 'Applies to part: The return',
+      'Order: 2',
+      'Role: Voice',
+      'Character: The Traveller',
+      `Credited as: ${creditedAs} Japanese`,
+      'Applies to part: The return',
     ]);
     expect(firstRow.querySelector('[lang="ja"]')!.textContent).toBe(`Credited as: ${creditedAs}`);
     // The essential slot is independent of the generic card's clamped secondary metadata at every breakpoint.
@@ -97,36 +122,83 @@ test('qualified reader journey keeps complete statement fields and presentation-
     expect(url.searchParams.get('realm')).toBe(qualifiedRealm);
     const requests: unknown[] = [];
     const fake = createFakeKernelFetch(fixtures as never);
-    const client = createKernelClient('https://kernel.invalid', { fetch: (async (input, init) => {
-      const request = new Request(input, init);
-      requests.push(await request.clone().json());
-      return fake(request);
-    }) as typeof fetch });
-    const request = { subject: page.subject!, locale: 'en', view: 'credits' as const, node: 'cast', cursor: 'cast-next', realm: qualifiedRealm, context: qualifiedRealm, population: 'realm' as const, reader: 'current-reader' };
+    const client = createKernelClient('https://kernel.invalid', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(await request.clone().json());
+        return fake(request);
+      }) as typeof fetch,
+    });
+    const request = {
+      subject: page.subject!,
+      locale: 'en',
+      view: 'credits' as const,
+      node: 'cast',
+      cursor: 'cast-next',
+      realm: qualifiedRealm,
+      context: qualifiedRealm,
+      population: 'realm' as const,
+      reader: 'current-reader',
+    };
     const next = await readRelationGroup(client, request, 'Bearer current-reader');
     expect(next.ok).toBe(true);
-    expect(requests).toEqual([expect.objectContaining({ target: expect.objectContaining({ subject: page.subject, view: 'credits', realm: qualifiedRealm }), continuation: { node: 'cast', cursor: 'cast-next' } })]);
+    expect(requests).toEqual([
+      expect.objectContaining({
+        target: expect.objectContaining({ subject: page.subject, view: 'credits', realm: qualifiedRealm }),
+        continuation: { node: 'cast', cursor: 'cast-next' },
+      }),
+    ]);
     expect(relationGroupKey(request)).not.toEqual(relationGroupKey({ ...request, reader: 'other-reader' }));
     expect(relationGroupKey(request)).not.toEqual(relationGroupKey({ ...request, context: 'other-context' }));
     // Inverse item shapes can omit the redundant statement ID; the assertion's immutable ID still associates rows.
-    const inverse = holderItems({ links: [first, second].map((row) => ({ subject: 'work', label: 'Work', summary: { id: 'work' }, assertion: row.statement, related: row.related })) }, 12)!;
+    const inverse = holderItems(
+      {
+        links: [first, second].map((row) => ({
+          subject: 'work',
+          label: 'Work',
+          summary: { id: 'work' },
+          assertion: row.statement,
+          related: row.related,
+        })),
+      },
+      12,
+    )!;
     expect(inverse.items.map((item) => item.statement)).toEqual(['complete-credit', 'another-credit']);
-    const localized = { en: 'Cast', 'zh-Hant': '演出人員', 'zh-Hans': '演出人员', ja: 'キャスト', ko: '출연진', de: 'Besetzung', fr: 'Distribution', es: 'Reparto' };
+    const localized = {
+      en: 'Cast',
+      'zh-Hant': '演出人員',
+      'zh-Hans': '演出人员',
+      ja: 'キャスト',
+      ko: '출연진',
+      de: 'Besetzung',
+      fr: 'Distribution',
+      es: 'Reparto',
+    };
     for (const [locale, label] of Object.entries(localized)) {
       host.innerHTML = render(page, locale);
       const stream = host.querySelector('[data-node="cast"]')!;
       expect(stream.querySelector('h2')!.textContent).toBe(label);
-      expect(stream.querySelector('[data-slot="continue-group"]')!.textContent).toBe(m.subject_section_more({ label }, { locale: locale as never }));
+      expect(stream.querySelector('[data-slot="continue-group"]')!.textContent).toBe(
+        m.subject_section_more({ label }, { locale: locale as never }),
+      );
       expect(stream.textContent).toContain(creditedAs);
     }
-    for (const [scenario, node, label] of [['edition', 'edition-work', 'Work'], ['work', 'editions', 'Editions']] as const) {
+    for (const [scenario, node, label] of [
+      ['edition', 'edition-work', 'Work'],
+      ['work', 'editions', 'Editions'],
+    ] as const) {
       const current = traversalPage(scenario, scenario === 'work' ? 'editions' : 'overview', { realm: qualifiedRealm });
       host.innerHTML = render(current);
       const section = host.querySelector(`[data-node="${node}"], section[id="${node}"]`)!;
       expect(section.querySelector('h2')!.textContent).toBe(label);
-      if (scenario === 'work') expect(section.querySelector('[data-slot="continue-group"]')!.textContent).toBe('More: Editions');
+      if (scenario === 'work')
+        expect(section.querySelector('[data-slot="continue-group"]')!.textContent).toBe('More: Editions');
     }
-    const refused = qualifiedRelationsPage({ realm: qualifiedRealm, continuation: { node: 'cast', cursor: 'refuse' }, error: 409 });
+    const refused = qualifiedRelationsPage({
+      realm: qualifiedRealm,
+      continuation: { node: 'cast', cursor: 'refuse' },
+      error: 409,
+    });
     host.innerHTML = render(refused);
     expect(host.textContent).toContain('The list changed.');
     const restart = host.querySelector('[data-node="cast"] a')!;

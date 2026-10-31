@@ -18,7 +18,13 @@ function QualifiedRelationsReader({ error = false }: { error?: boolean }) {
   return (
     <PatternStory>
       <AppShell>
-        <SubjectPage page={page} locale={locale} relations={relationDefinitions(definitions.release, pageRelationProperties(page), locale)} messages={subjectPageMessages()} renderJsonLd={false} />
+        <SubjectPage
+          page={page}
+          locale={locale}
+          relations={relationDefinitions(definitions.release, pageRelationProperties(page), locale)}
+          messages={subjectPageMessages()}
+          renderJsonLd={false}
+        />
       </AppShell>
     </PatternStory>
   );

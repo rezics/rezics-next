@@ -144,10 +144,16 @@ export function CoverCard({
       className={`group relative flex min-w-0 text-foreground focus-within:ring-2 focus-within:ring-ring ${credit ? 'items-start gap-4' : 'h-full flex-col'}`}
     >
       {credit ? (
-        <div className={listPresentation?.imageAspect === 'landscape' ? 'w-32 shrink-0 sm:w-48' : 'w-[72px] shrink-0 sm:w-24'}>
+        <div
+          className={
+            listPresentation?.imageAspect === 'landscape' ? 'w-32 shrink-0 sm:w-48' : 'w-[72px] shrink-0 sm:w-24'
+          }
+        >
           {image}
         </div>
-      ) : image}
+      ) : (
+        image
+      )}
       {selectable ? (
         <button
           type="button"
@@ -183,19 +189,11 @@ export function CoverCard({
       {badge != null && <div className="pointer-events-none absolute top-2 right-2 z-10">{badge}</div>}
       <div data-slot="cover-card-text" className={`flex min-w-0 flex-1 flex-col ${credit ? 'gap-2' : 'gap-1 p-2'}`}>
         {selectable ? (
-          <span
-            data-slot="cover-card-title"
-            className={titleClass}
-            lang={titleLang}
-          >
+          <span data-slot="cover-card-title" className={titleClass} lang={titleLang}>
             {title}
           </span>
         ) : href === undefined ? (
-          <div
-            data-slot="cover-card-title"
-            lang={titleLang}
-            className={titleClass}
-          >
+          <div data-slot="cover-card-title" lang={titleLang} className={titleClass}>
             {title}
           </div>
         ) : (

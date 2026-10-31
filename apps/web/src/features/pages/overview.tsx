@@ -180,7 +180,15 @@ function StreamLink({
       href={`${base}${base.includes('?') ? '&' : '?'}${query}`}
     >
       {cursor
-        ? m.subject_section_more({ label: title || readerViewLabel(view, value.locale) || m.subject_relations({}, { locale: value.locale as never }) }, { locale: value.locale as never })
+        ? m.subject_section_more(
+            {
+              label:
+                title ||
+                readerViewLabel(view, value.locale) ||
+                m.subject_relations({}, { locale: value.locale as never }),
+            },
+            { locale: value.locale as never },
+          )
         : m.subject_relation_restart({}, { locale: value.locale as never })}
     </a>
   );
@@ -556,7 +564,11 @@ export function RelationGroups(props: Record<string, unknown>) {
         {nodes.map((node) => {
           const section = value.sections.get(node.id);
           const property = String(node.props.property ?? '');
-          const title = pageText(node.props.title, value.locale).text || value.relations[property]?.readerLabel || value.relations[property]?.label || heading;
+          const title =
+            pageText(node.props.title, value.locale).text ||
+            value.relations[property]?.readerLabel ||
+            value.relations[property]?.label ||
+            heading;
           return (
             <RelationStream
               key={node.id}
