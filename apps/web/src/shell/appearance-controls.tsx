@@ -24,9 +24,28 @@ const names = {
   fr: 'Français',
   es: 'Español',
 } as const;
+
+// Older media-query implementations and browsers without a matching feature keep the fallback.
+function watchPreference(query: string, apply: (matches: boolean) => void) {
+  let media: MediaQueryList | undefined;
+  try {
+    media = window.matchMedia?.(query);
+  } catch {}
+  const update = () => apply(media?.matches ?? false);
+  update();
+  if (!media) return;
+  if (typeof media.addEventListener === 'function') {
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }
+  media.addListener?.(update);
+  return () => media.removeListener?.(update);
+}
+
 export function ThemeControl() {
   const hydrated = useHydrated();
   const [theme, setTheme] = useState<'system' | 'light' | 'dark' | null>(null);
+  const [contrast, setContrast] = useState<'system' | 'standard' | 'more' | null>(null);
   useLayoutEffect(() => {
     const sync = () => {
       const cookie = /(?:^|;\s*)rezics_theme=(system|light|dark)(?:;|$)/.exec(document.cookie)?.[1];
@@ -37,18 +56,33 @@ export function ThemeControl() {
     return () => window.removeEventListener('rezics:theme', sync);
   }, []);
   useLayoutEffect(() => {
+    const sync = () => {
+      const cookie = /(?:^|;\s*)rezics_contrast=(system|standard|more)(?:;|$)/.exec(document.cookie)?.[1];
+      setContrast(cookie === 'standard' || cookie === 'more' ? cookie : 'system');
+    };
+    sync();
+    window.addEventListener('rezics:contrast', sync);
+    return () => window.removeEventListener('rezics:contrast', sync);
+  }, []);
+  useLayoutEffect(() => {
     if (theme === null) return;
-    const preference = matchMedia('(prefers-color-scheme: dark)');
-    const apply = () => {
-      const dark = theme === 'dark' || (theme === 'system' && preference.matches);
+    const apply = (matches = false) => {
+      const dark = theme === 'dark' || (theme === 'system' && matches);
       document.documentElement.classList.toggle('dark', dark);
       document.documentElement.classList.toggle('light', !dark);
     };
+    if (theme === 'system') return watchPreference('(prefers-color-scheme: dark)', apply);
     apply();
-    if (theme !== 'system') return;
-    preference.addEventListener('change', apply);
-    return () => preference.removeEventListener('change', apply);
   }, [theme]);
+  useLayoutEffect(() => {
+    if (contrast === null) return;
+    const apply = (matches = false) => {
+      document.documentElement.dataset.contrast =
+        contrast === 'more' || (contrast === 'system' && matches) ? 'more' : 'standard';
+    };
+    if (contrast === 'system') return watchPreference('(prefers-contrast: more)', apply);
+    apply();
+  }, [contrast]);
   const icons = { system: Monitor, light: Sun, dark: Moon };
   const Icon = icons[theme ?? 'system'];
   const choose = (value: string) => {
@@ -58,6 +92,12 @@ export function ThemeControl() {
     if (next !== 'system') document.documentElement.classList.add(next);
     document.cookie = `rezics_theme=${next}; Max-Age=31536000; Path=/; SameSite=Lax`;
     window.dispatchEvent(new Event('rezics:theme'));
+  };
+  const chooseContrast = (value: string) => {
+    const next = value === 'standard' || value === 'more' ? value : 'system';
+    setContrast(next);
+    document.cookie = `rezics_contrast=${next}; Max-Age=31536000; Path=/; SameSite=Lax`;
+    window.dispatchEvent(new Event('rezics:contrast'));
   };
   return (
     <Menu
@@ -73,6 +113,24 @@ export function ThemeControl() {
             { value: 'dark', label: m.shell_theme_dark() },
           ],
           onValueChange: choose,
+        },
+        { type: 'separator' },
+        {
+          type: 'submenu',
+          label: m.shell_contrast(),
+          entries: [
+            {
+              type: 'radio',
+              label: m.shell_contrast(),
+              value: contrast ?? 'system',
+              options: [
+                { value: 'system', label: m.shell_contrast_system() },
+                { value: 'standard', label: m.shell_contrast_standard() },
+                { value: 'more', label: m.shell_contrast_more() },
+              ],
+              onValueChange: chooseContrast,
+            },
+          ],
         },
       ]}
       trigger={

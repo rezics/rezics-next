@@ -441,6 +441,78 @@
   }
 }
 
+/* Reader opt-in. Keep the warm grounds, decorative borders and semantic danger/disabled states.
+   Let forced-colors use the browser's palette and control treatment. */
+@media (forced-colors: none) {
+  :root[data-contrast='more'],
+  :root[data-contrast='more'] .dark {
+    --foreground: #171f27;
+    --card-foreground: #171f27;
+    --popover-foreground: #171f27;
+    --secondary-foreground: #171f27;
+    --muted-foreground: #41484f;
+    --primary: #184477;
+    --primary-foreground: #ffffff;
+    --accent: #d6e4f5;
+    --accent-foreground: #12345d;
+    --control: #49443e;
+    --ring: #123f78;
+    --sidebar-foreground: #171f27;
+    --sidebar-primary: #184477;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #d6e4f5;
+    --sidebar-accent-foreground: #12345d;
+    --sidebar-ring: #123f78;
+
+    @variant dark {
+      --foreground: #faf6ef;
+      --card-foreground: #faf6ef;
+      --popover-foreground: #faf6ef;
+      --secondary-foreground: #faf6ef;
+      --muted-foreground: #d1cac0;
+      --primary: #b2d1fc;
+      --primary-foreground: #071528;
+      --accent: #263f5e;
+      --accent-foreground: #f4f7fc;
+      --control: #bcb5aa;
+      --ring: #bfd8ff;
+      --sidebar-foreground: #faf6ef;
+      --sidebar-primary: #b2d1fc;
+      --sidebar-primary-foreground: #071528;
+      --sidebar-accent: #263f5e;
+      --sidebar-accent-foreground: #f4f7fc;
+      --sidebar-ring: #bfd8ff;
+    }
+  }
+
+  :root[data-contrast='more']
+    :is(
+      [data-slot='checkbox']:not([data-checked]),
+      [data-slot='radio-group-item']:not([data-checked]),
+      [data-slot='switch']:not([data-checked]),
+      [data-slot='button'][class*='border-border'],
+      [data-slot='toggle'].border,
+      [data-slot='toggle-group-item'].border
+    ):not(:disabled, [data-disabled], [aria-disabled='true'], [aria-invalid='true']) {
+    border-color: var(--control);
+  }
+
+  :root[data-contrast='more']
+    :is(
+      [data-slot='tabs-list'][data-variant='default'] > [data-slot='tabs-trigger'][data-active],
+      [data-slot='toggle'][aria-pressed='true'],
+      [data-slot='toggle-group-item'][aria-pressed='true']
+    ) {
+    background-color: var(--accent);
+    color: var(--accent-foreground);
+  }
+
+  :root[data-contrast='more'] :is([data-slot], a, button, input, select, textarea):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
 /* Adapt generated Rhea states without changing their text, focus rings or control behavior. */
 [data-slot='button'].text-destructive,
 :is(
