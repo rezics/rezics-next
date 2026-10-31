@@ -908,7 +908,7 @@ export class WorkerJob implements GateOutcomeSink {
           integrationBranch: this.tasks.settings.integrationBranch,
         });
       } catch (error) {
-        // Proof admission stays unavailable, with a bounded durable diagnostic. Other recovery must continue.
+        // Optional native history stays unavailable with one bounded diagnostic; ordinary recovery continues.
         if (!(error instanceof ProofUnavailableError)) throw error;
       }
     }
@@ -929,7 +929,7 @@ export class WorkerJob implements GateOutcomeSink {
           );
           if (observation.status === 'terminal') store.observeProof(run.binding, observation);
         } catch {
-          // Missing reader/records never release uncertain capacity.
+          // Optional evidence cannot assert native terminal status from missing reader/records.
         }
       }
     if (adoptRunning) this.track(removeFinishedWorktree(this.tasks.settings, store).then(() => {}));

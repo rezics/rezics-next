@@ -47,7 +47,7 @@ export const unavailableProofProducer = {
   }),
 };
 
-/** Native producer integration required in every captured proof source. */
+/** Required producer ancestry for optional native custody readers, independent of ordinary proof execution. */
 export const PROOF_PRODUCER_COMMIT = '4669e2280c9511a2157d683c09a25eb96f7d5c09';
 export function nativeProofBinding(binding: ProofBinding): ControllerProofBindingV1 {
   const { reservationToken, ...facts } = binding;

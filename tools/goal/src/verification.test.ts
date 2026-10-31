@@ -37,7 +37,7 @@ test('proof metadata requires explicit originals and a captured commit instead o
     expect(() => parseProofMetadata(input)).toThrow();
 });
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { harness, brief } from './test-support.ts';
 import { git } from './tasks.ts';
@@ -83,8 +83,10 @@ function attempt(taskId: string, n: number, directory: string): Attempt {
     approaches: [],
   };
 }
-function registeredFixture() {
+function registeredFixture(withoutDependencies = false) {
   const h = harness();
+  // Lifecycle-only cases have no dependency manifest, installer or provider to execute.
+  if (withoutDependencies) rmSync(join(h.root, 'package.json'));
   // These are the current delivered reader exports and record layout, without launching any native check.
   writeFileSync(
     join(h.root, 'scripts/worker-check.ts'),
@@ -94,7 +96,7 @@ export function readWorkerCheckRecord(id, cwd) { return JSON.parse(readFileSync(
 export function readWorkerCheckHistory(id, physical, cwd) { return JSON.parse(readFileSync(join(cwd,'.temp/goal/checks/history',id,physical+'.json'),'utf8')); }
 `,
   );
-  git(h.root, ['add', 'scripts/worker-check.ts']);
+  git(h.root, ['add', 'scripts/worker-check.ts', 'package.json']);
   git(h.root, ['commit', '-m', 'Fixture managed check reader']);
   const commit = git(h.root, ['rev-parse', 'HEAD']);
   git(h.root, ['branch', 'dev', commit]);
@@ -890,7 +892,7 @@ test('stopped same-generation and never-started held proof conversion persists a
 });
 
 test('registered READY0 recovery uses ordinary start/wait/wake/result once without metadata resubmission, producer binding or a second UUID', async () => {
-  const h = registeredFixture();
+  const h = registeredFixture(true);
   const db = openDb(join(h.settings.stateDirectory, 'goal.sqlite'));
   try {
     const submitted = submittedProof(h);
@@ -1485,5 +1487,81 @@ test('public logical release authenticates exact generation, retains unknown bin
     expect(h.tasks.releaseProof(h.proof.id, 1, h.actor).checks).toEqual([]);
     expect(h.store.events(h.proof.id).filter((event) => event.kind === 'proof-logical-released')).toHaveLength(1);
     expect(h.store.events(h.proof.id).some((event) => event.kind === 'historical-proof-terminal')).toBe(false);
+  } finally { h.dispose(); }
+});
+
+test('ordinary proof preparation preserves clean retained empty-report commits and launches only the fresh authorized capture', async () => {
+  const h = registeredFixture(true);
+  try {
+    const retained = join(h.root, '.temp/retained-product');
+    git(h.root, ['worktree', 'add', '-b', 'retained-product', retained, h.binding.sourceCommit]);
+    git(retained, ['commit', '--allow-empty', '-m', 'Retained empty product report']);
+    const retainedHead = git(retained, ['rev-parse', 'HEAD']);
+    const task = h.store.createTask({ ...brief(), kind: 'claim' },
+      { briefPath: h.briefFile, worktree: retained, branch: 'retained-product', base: h.binding.sourceCommit }, 'claim');
+    const old = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory));
+    h.store.updateAttempt(old, (value) => { value.result = 'Retained paid report'; value.session = 'retained-session'; });
+    h.store.close(old, 'stopped');
+    writeFileSync(join(h.root, 'fresh-capture'), 'Current integrated source');
+    git(h.root, ['add', 'fresh-capture']);
+    git(h.root, ['commit', '-m', 'Fresh proof capture']);
+    const sourceCommit = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
+    const submitted = submittedProof(h, { proof: { ...h.proofBrief.proof, sourceCommit } });
+    h.tasks.queueProofStart(task.id, { expectedAttempt: 1, brief: submitted.path }, h.actor);
+    let launches = 0;
+    const tasks = new WorkerTasks(h.settings, h.store, (pool) => reading(pool), async (store, current, next) => {
+      launches++;
+      expect(current.worktree).not.toBe(retained);
+      expect(git(current.worktree, ['rev-parse', 'HEAD'])).toBe(sourceCommit);
+      expect(git(current.worktree, ['branch', '--show-current'])).toBe('');
+      expect(current.brief.acceptance.command).toEqual(submitted.brief.acceptance.command);
+      expect(current.proofRun).toBeUndefined();
+      const saved = store.updateAttempt(next, (value) => { value.state = 'running'; });
+      store.updateTask(next, (value) => { value.state = 'running'; });
+      return { attempt: saved, exited: Promise.resolve({ code: 0, signal: null }) };
+    });
+    await tasks.retry(task.id, { expectedAttempt: 1 });
+    expect(launches).toBe(1);
+    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    expect(git(retained, ['rev-parse', 'HEAD'])).toBe(retainedHead);
+    expect(git(retained, ['status', '--porcelain'])).toBe('');
+    expect(h.store.attempt(old)).toMatchObject({ result: 'Retained paid report', session: 'retained-session' });
+    expect(h.store.record(old)?.taskKind).toBe('claim');
+    expect(h.store.events(task.id).filter((event) => event.kind === 'proof-source-prepared')).toHaveLength(1);
+    expect(h.store.events(task.id).filter((event) => event.kind === 'proof-command-ready')).toHaveLength(1);
+    expect(h.store.retryIntents().filter((intent) => intent.taskId === task.id)).toHaveLength(1);
+  } finally { h.dispose(); }
+});
+
+test('interrupted ordinary proof launch never replays a prepared command or permits same-source argv replacement', async () => {
+  const h = registeredFixture(true);
+  try {
+    const submitted = submittedProof(h);
+    const task = h.store.createTask(submitted.brief,
+      { briefPath: submitted.path, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
+    h.tasks.queueProofStart(task.id, { expectedAttempt: 0 }, h.actor);
+    const current = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => ({
+      ...attempt(task.id, n, h.settings.stateDirectory), state: 'pending', startedAt: new Date(0).toISOString(),
+    }), undefined, true);
+    h.store.event(current, 'proof-command-ready', { argv: task.brief.acceptance.command, cwd: task.worktree });
+    let launches = 0;
+    const tasks = new WorkerTasks(h.settings, h.store, (pool) => reading(pool), async () => {
+      launches++;
+      throw new Error('Unknown original invocation must not replay');
+    });
+    const job = new WorkerJob(tasks, { enqueue() {} }, { deliver() {} });
+    await job.recoverOrphans();
+    await job.drain();
+    expect(launches).toBe(0);
+    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'stopped' });
+    expect(h.store.attempt(current)).toMatchObject({ state: 'exited', failureKind: 'tool', blocker: expect.stringContaining('no automatic replay') });
+    expect(h.store.attempts(task.id)).toHaveLength(1);
+    expect(h.store.proofReservation(task.id, 1)).toBeUndefined();
+    expect(h.store.proofCapacityAvailable('fixture', 'another')).toBe(true);
+    expect(() => h.store.assertProofRegistration(current, { ...task.brief,
+      acceptance: { ...task.brief.acceptance, command: ['bun', 'test', 'different.test.ts'] },
+    })).toThrow('may never be replaced');
+    expect(h.store.events(task.id).some((event) => event.kind === 'proof-verified')).toBe(false);
   } finally { h.dispose(); }
 });

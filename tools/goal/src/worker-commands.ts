@@ -147,7 +147,7 @@ export async function runWorkerCommand(
         );
       }
     } else if (command === 'retry') {
-      if (!arg) throw new Error('usage: retry <task> [--proof-start] [--expected-attempt <n>] [--brief <file>] [--remove-after <task>]');
+      if (!arg) throw new Error('usage: retry <task> [--proof-start | --release-proof] [--expected-attempt <n>] [--brief <file>] [--remove-after <task>]');
       let brief: string | undefined;
       let expectedAttempt: number | undefined;
       const removeAfter: string[] = [];

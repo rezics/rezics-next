@@ -939,7 +939,8 @@ export class WorkerStore implements AttemptFence {
       throw new Error('a reshaped brief must keep the same goal and manager');
     const reservations = this.db.query('SELECT body FROM worker_proof_reservations WHERE task_id=?').all(task.id)
       .map((row) => decode<ProofReservation>(row)!);
-    if (reservations.length && (proofFingerprint(task.brief) !== proofFingerprint(brief) ||
+    const commandPrepared = this.db.query("SELECT 1 FROM worker_events WHERE task_id=? AND kind='proof-command-ready' LIMIT 1").get(task.id);
+    if ((reservations.length || commandPrepared) && (proofFingerprint(task.brief) !== proofFingerprint(brief) ||
         reservations.some(({ binding }) => binding.sourceCommit !== brief.proof?.sourceCommit ||
           !isDeepStrictEqual(binding.argv, brief.acceptance.command))))
       throw new Error('a reserved proof source and command may never be replaced');

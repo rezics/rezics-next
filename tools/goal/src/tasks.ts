@@ -937,7 +937,7 @@ export class WorkerTasks {
     }
     return task;
   }
-  /** Refuse stale captures and unavailable invocation ports before reserving or creating an attempt. */
+  /** Refuse stale captures and missing original inputs before creating an ordinary proof attempt. */
   assertProofStart(task: Task): void {
     if (task.brief.kind !== 'verification') return;
     if (!task.brief.proof || task.proofAuthorization?.fingerprint !== proofFingerprint(task.brief))
