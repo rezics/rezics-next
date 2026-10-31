@@ -12,6 +12,8 @@
  * invokes native current-source reconciliation, then the target command: it never
  * retargets a saved positive. Revision comparison/count logic stays in native code.
  * Captures are opaque handles to pending native work, not a proposed kernel API.
+ * A handle originally captured genuinely pending can be delivered/replayed after
+ * its acknowledgement, as the duplicate-projection outcome requires.
  */
 import type { FollowRow, FollowTargetType } from '../services/kernel/src/library/follow-model.ts';
 

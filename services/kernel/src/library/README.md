@@ -1366,6 +1366,38 @@ Signed-only cursors and Library-local AES/HMAC wrappers do not satisfy this cont
 maps the typed checkpoint through the shared helper; it implements no cryptography. This shared helper supersedes
 the research's open token representation question. See [Opaque list cursors](../../README.md#opaque-list-cursors).
 
+## FULL Collection member facts
+
+`http/kernel.ts` supplies the trusted route key to `collectionRoutes`; the members route passes its admitted
+request deadline to `fullMembers`. BASIC keeps its existing wire shape. FULL adds optional `facts` beside `subject`
+using the existing Search Fact schema and the actual member Type, independently of a Collection presentation override.
+Both views use private, no-store responses. Requested Semantic readiness failure is the standard 503 problem.
+
+`collection-list-facts.ts` exports `attachCollectionListFacts(deps, rawMembers, { languages?, revalidate })` for the
+common members caller and the future independent preview caller. It accepts at most 100 raw original member rows,
+including duplicate occurrences. A preview caller must pass its entire globally bounded prefix once, with all homes
+released, and supply a final native source/membership reauthorization and fence comparison. It must not add another
+row-fact producer. There is no preview caller in this checkout yet.
+
+The helper consumes exactly one actual Semantic `readListPresentationFacts` batch. That owner decides current Type
+configuration, native public values, original/terminal/related-item disclosure, release and source-tuple fences.
+Shared `readSubjectSummaries` preserves summary language and cover handling under its independent legacy 256-ID bound;
+no subject details or browser per-row requests supply facts. Commerce rechecks its native Collection/page after foreign
+reads, then checks current original-to-terminal identity/epoch equality against both the returned native facts and
+summary. Changed identity or source fails closed. Denied/missing entries expose neither a subject nor sibling facts;
+only a complete visible no-facts result becomes `{}`. Neither permission nor source authority is cached.
+
+The existing `CollectionSource` work-context branch admits the native Members or Kind episode on the same live
+Core work-step client before Source I/O and rereads native admission and current Source/canonical keys before
+returning. Its local metadata, complete-generation seeks, structural membership probes and raw stored/ordinal
+pages share the caller's Source reservation. Mechanical handles bind the exact native episode and cannot enter
+the ordinary reader branch. Structural evidence grants no Subject readability: the ordinary reader still checks
+current original and terminal Subjects, Source, scoped identity and the full private owner formula. Work performs
+no foreign lookup while holding the home transaction. Public and frozen output remain unavailable in this branch
+because private native capture cannot establish public capture authority. Members remains curated-only; Kind uses
+its distinct native locator and audience/custody admission. The current Members and Kind admission implementations
+still report unavailable; this Source integration supplies neither a replacement producer nor proof of readiness.
+
 ## Cost
 
 These are derivations from the library commands, SQL, `db/library/schema.sql` and `db/library/migrations/`, not measurements or guaranteed PostgreSQL plans.
@@ -1759,11 +1791,10 @@ bootstrap contract file is absent, and newly provisioned accounts are
 already bootstrap-complete under the runtime migration; they cannot stand in for pre-hook legacy coverage.
 The retained first-page inputs require that native legacy population boundary rather than a SQL reset.
 
-The frozen `suspension and reactivation reconcile current truth and never resurrect explicit unfollow` and
-`terminal account event starts bounded private purge immediately and all old work remains fenced` outcomes
-capture after `followed()` has already reconciled the edge. Native delivery acknowledges its pending source row,
-while the closed driver contract requires capture before pending work's first target command. The binding refuses
-to invent pending work; this native capture boundary needs an owning ruling. The frozen assertions remain unchanged.
+The suspension/reactivation and terminal-purge outcomes capture genuinely pending native work before its first
+target application, deliver that same handle and observe count 1 before their lifecycle commands. Later deliveries
+replay the original handle after acknowledgement, as the duplicate-projection outcome also requires. Every replay
+still reconciles current native source eligibility; capture never manufactures pending work.
 
 Create/refollow requires real current target authority at native command T through prepared command support.
 Stored source originals never change when Semantic identity moves. Exact authorized receipt replay precedes deferred
@@ -2180,26 +2211,10 @@ Retained history is never searched. `collection-batch-growth.test.ts` adds API r
 and native 64/512/4096 live/retained/unrelated growth at fixed batches 1 and 100, including fixed full destinations; captures use the existing inclusive
 Access, receipt, custody, outbox and listing accounting with unchanged bounds and raw plans/bytes.
 
-## FULL Collection member facts
+### FULL member facts cost
 
-`http/kernel.ts` supplies the trusted route key to `collectionRoutes`; the members route passes its admitted
-request deadline to `fullMembers`. BASIC keeps its existing wire shape. FULL adds optional `facts` beside `subject`
-using the existing Search Fact schema and the actual member Type, independently of a Collection presentation override.
-Both views use private, no-store responses. Requested Semantic readiness failure is the standard 503 problem.
-
-`collection-list-facts.ts` exports `attachCollectionListFacts(deps, rawMembers, { languages?, revalidate })` for the
-common members caller and the future independent preview caller. It accepts at most 100 raw original member rows,
-including duplicate occurrences. A preview caller must pass its entire globally bounded prefix once, with all homes
-released, and supply a final native source/membership reauthorization and fence comparison. It must not add another
-row-fact producer. There is no preview caller in this checkout yet.
-
-The helper consumes exactly one actual Semantic `readListPresentationFacts` batch. That owner decides current Type
-configuration, native public values, original/terminal/related-item disclosure, release and source-tuple fences.
-Shared `readSubjectSummaries` preserves summary language and cover handling under its independent legacy 256-ID bound;
-no subject details or browser per-row requests supply facts. Commerce rechecks its native Collection/page after foreign
-reads, then checks current original-to-terminal identity/epoch equality against both the returned native facts and
-summary. Changed identity or source fails closed. Denied/missing entries expose neither a subject nor sibling facts;
-only a complete visible no-facts result becomes `{}`. Neither permission nor source authority is cached.
+See the [FULL Collection member facts runtime contract](#full-collection-member-facts) for API, authority and
+native work-context requirements.
 
 Cost: one <=100 raw-original fact batch plus the bounded shared summary batch, exact identity reads and repeated native
 Collection/keyset page. Each member returns <=4 configured properties with <=3 actual values each. Raw IDs, source work,
@@ -2207,14 +2222,3 @@ rows, statements, blocks and bytes remain independent inclusive bounds; no nativ
 `collection-list-facts.test.ts` supplies native API/persona, configuration, concealment, tuple/identity/source-race and
 raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed native page and its actual helpers at
 64/512/4096 unrelated fact/history populations, including failed and private/source-change work.
-
-The existing `CollectionSource` work-context branch admits the native Members or Kind episode on the same live
-Core work-step client before Source I/O and rereads native admission and current Source/canonical keys before
-returning. Its local metadata, complete-generation seeks, structural membership probes and raw stored/ordinal
-pages share the caller's Source reservation. Mechanical handles bind the exact native episode and cannot enter
-the ordinary reader branch. Structural evidence grants no Subject readability: the ordinary reader still checks
-current original and terminal Subjects, Source, scoped identity and the full private owner formula. Work performs
-no foreign lookup while holding the home transaction. Public and frozen output remain unavailable in this branch
-because private native capture cannot establish public capture authority. Members remains curated-only; Kind uses
-its distinct native locator and audience/custody admission. The current Members and Kind admission implementations
-still report unavailable; this Source integration supplies neither a replacement producer nor proof of readiness.

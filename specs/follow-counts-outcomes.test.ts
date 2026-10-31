@@ -235,8 +235,11 @@ test('a delayed reverse positive cannot beat a newer negative even on its first 
 });
 
 test('suspension and reactivation reconcile current truth and never resurrect explicit unfollow', async () => {
-  const f = await followed();
+  const f = await native().fixture('collection');
+  await write(f, 'follow');
   const old = await native().capture(f.follower, f.target);
+  await native().deliver(old);
+  await count(f, 1);
   await native().accountState(f.follower.accountId, 'suspended');
   await native().reconcile(f.follower, f.target);
   await native().deliver(old);
@@ -261,8 +264,11 @@ test('a positive first application rechecks current account state without waitin
 });
 
 test('terminal account event starts bounded private purge immediately and all old work remains fenced', async () => {
-  const f = await followed();
+  const f = await native().fixture('collection');
+  await write(f, 'follow');
   const old = await native().capture(f.follower, f.target);
+  await native().deliver(old);
+  await count(f, 1);
   await native().accountState(f.follower.accountId, 'deleted');
   await native().accountSignal(f.follower.accountId);
   const result = await native().purge(f.follower.accountId);
