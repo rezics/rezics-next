@@ -7,7 +7,7 @@ const meta = {
   parameters: pattern.parameters,
 } satisfies Meta<typeof directory.DirectoryExample>;
 export default meta;
-export const Current = { ...directory.Current, args: { page: true } };
+export const Current = { ...directory.Current, args: { ...directory.Current.args, page: true } };
 export const SelectPurpose = { ...directory.SelectPurpose, args: { ...directory.SelectPurpose.args, page: true } };
 export const Continue = { ...directory.Continue, args: { ...directory.Continue.args, page: true } };
 export const Open = { ...directory.Open, args: { page: true } };

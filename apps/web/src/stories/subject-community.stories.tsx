@@ -10,6 +10,8 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectViewHref } from '../subject/subject-href';
 import { PageStory, PatternStory } from './page';
+import { DirectoryExample } from './board-directory.stories';
+import { boardDirectorySearch, type BoardDirectorySearch } from '../threads/board-directory';
 
 type State = 'populated' | 'empty' | 'loading' | 'unavailable' | 'closed' | 'continuation';
 
@@ -19,6 +21,7 @@ function CommunityPattern({ state = 'populated' }: { state?: State }) {
   const [cursor, setCursor] = useState<string>();
   const [paged, setPaged] = useState(false);
   const [entry, setEntry] = useState<string>();
+  const [directory, setDirectory] = useState<BoardDirectorySearch>();
   useEffect(() => {
     let current = true;
     const client = createKernelClient('https://kernel.invalid', { fetch: createStoryRecordedKernelFetch() });
@@ -30,12 +33,13 @@ function CommunityPattern({ state = 'populated' }: { state?: State }) {
     };
   }, [paged, cursor, locale]);
   if (entry) return <PageStory visitor="Signed In" path={entry} />;
+  if (directory) return <DirectoryExample initialSearch={directory} />;
   const loaded = data?.regions.review ?? { state: 'loading' };
   const region: CommunityRegion =
     state === 'populated'
       ? loaded
       : state === 'empty'
-        ? { state: 'ready', threads: [], next: null }
+        ? { state: 'ready', threads: [], next: null, contributionScope: 'global' }
         : state === 'continuation'
           ? { state: 'ready', threads: [], next: 'community-next' }
           : { state };
@@ -47,7 +51,10 @@ function CommunityPattern({ state = 'populated' }: { state?: State }) {
         onClick={(event) => {
           const anchor = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a') : null;
           if (!anchor) return;
-          if (anchor.dataset.slot === 'create-thread') {
+          if (anchor.dataset.slot === 'choose-board') {
+            event.preventDefault();
+            setDirectory(boardDirectorySearch(Object.fromEntries(new URL(anchor.href).searchParams)));
+          } else if (anchor.dataset.slot === 'create-thread') {
             event.preventDefault();
             setEntry(anchor.pathname.replace(`/${locale}`, '') + anchor.search);
           } else if (anchor.dataset.slot === 'see-all' || anchor.dataset.slot === 'community-next') {
@@ -92,7 +99,29 @@ export const Populated: Story = {
     await expect(canvas.queryByRole('link', { name: m.subject_community_more() })).toBeNull();
   },
 };
-export const Empty: Story = { args: { state: 'empty' } };
+export const Empty: Story = {
+  args: { state: 'empty' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Illustrative terminal Global empty region. The real action opens the default directory with the exact Subject preset. No native directory recording is supplied; its response remains unavailable.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const choose = canvas.getByRole('link', { name: m.subject_choose_review_board() });
+    const url = new URL(choose.getAttribute('href')!, window.location.origin);
+    await expect(url.searchParams.get('subject')).toBe(communitySubject.id);
+    await expect(url.searchParams.get('subjectTitle')).toBe(communitySubject.label);
+    await expect(url.searchParams.get('purpose')).toBe('reviews');
+    await userEvent.click(choose);
+    await expect(await canvas.findByRole('heading', { name: m.board_directory_heading() })).toBeVisible();
+    await expect(await canvas.findByText(m.board_directory_unavailable())).toBeVisible();
+    await expect(canvas.queryByText(m.board_directory_empty())).toBeNull();
+  },
+};
 export const Loading: Story = { args: { state: 'loading' } };
 export const Unavailable: Story = { args: { state: 'unavailable' } };
 export const Closed: Story = { args: { state: 'closed' } };

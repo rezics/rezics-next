@@ -3,6 +3,7 @@ import { m } from '../../paraglide/messages.js';
 import { Byline } from '../../threads/byline';
 import { threadLocation } from '../../threads/thread-href';
 import { reviewThreadHref } from '../../threads/review-policy';
+import { boardContribution, boardDirectoryHref, boardDirectoryRequest } from '../../threads/board-directory';
 import type { CommunityKind, CommunityRegion, SubjectCommunity } from './subject-community';
 import { linkClass, linkColor } from './shared';
 
@@ -41,6 +42,11 @@ export function SubjectCommunityRegion({
   const threads = region.state === 'ready' ? region.threads : [];
   const empty = region.state === 'ready' && threads.length === 0;
   const next = region.state === 'ready' ? region.next : null;
+  const contribution = boardContribution({ subject: subject.id, subjectTitle: subject.label });
+  const chooseBoard =
+    empty && next === null && region.contributionScope === 'global' && contribution
+      ? boardDirectoryHref(boardDirectoryRequest({ purpose: review ? 'reviews' : 'discussion' }), locale, contribution)
+      : undefined;
   const state = empty ? (next ? 'continuation' : 'empty') : region.state === 'ready' ? 'populated' : region.state;
   const [path, search = ''] = href.split('?');
   const retryHref = paged ? href : `?${search}`;
@@ -99,7 +105,13 @@ export function SubjectCommunityRegion({
                 ? m.subject_reviews_empty({}, options)
                 : m.subject_threads_empty({}, options)}
           </p>
-          {!next && <p>{m.subject_community_board_unavailable({}, options)}</p>}
+          {chooseBoard ? (
+            <a data-slot="choose-board" className={actionClass} href={chooseBoard}>
+              {review ? m.subject_choose_review_board({}, options) : m.subject_choose_discussion_board({}, options)}
+            </a>
+          ) : !next ? (
+            <p>{m.subject_community_board_unavailable({}, options)}</p>
+          ) : null}
         </div>
       )}
       {threads.length > 0 && (

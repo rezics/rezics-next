@@ -7,13 +7,17 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import {
   boardDirectoryHref,
+  sameBoardContribution,
+  type BoardContribution,
   type BoardDirectoryPrevious,
   type BoardDirectoryRequest,
   type BoardDirectoryState,
 } from './board-directory';
+import { reviewThreadHref } from './review-policy';
 
 type Props = {
   request: BoardDirectoryRequest;
+  contribution?: BoardContribution;
   result: BoardDirectoryState;
   previous?: BoardDirectoryPrevious;
   onNavigate?: (request: BoardDirectoryRequest) => void;
@@ -21,7 +25,7 @@ type Props = {
 };
 
 /** Shared directory region for the route and its Patterns/Pages stories. Listing never grants creation. */
-export function BoardDirectory({ request, result, previous, onNavigate, onRetry }: Props) {
+export function BoardDirectory({ request, contribution, result, previous, onNavigate, onRetry }: Props) {
   const locale = getLocale();
   const navigate = (destination: BoardDirectoryRequest) => (event: MouseEvent<HTMLAnchorElement>) => {
     if (!onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -30,7 +34,10 @@ export function BoardDirectory({ request, result, previous, onNavigate, onRetry 
   };
   const purposeLabel = (purpose: BoardDirectoryRequest['purpose']) =>
     purpose === 'reviews' ? m.board_directory_reviews() : m.board_directory_discussion();
-  const canGoBack = previous?.request.purpose === request.purpose && previous.target === request.cursor;
+  const canGoBack =
+    previous?.request.purpose === request.purpose &&
+    previous.target === request.cursor &&
+    sameBoardContribution(previous.contribution, contribution);
   const next = result.state === 'ready' && result.next !== request.cursor ? result.next : null;
   return (
     <article className="max-w-4xl space-y-6 text-foreground">
@@ -38,6 +45,7 @@ export function BoardDirectory({ request, result, previous, onNavigate, onRetry 
         <p className="text-sm font-medium text-muted-foreground">{m.board_directory_global()}</p>
         <PageHeading>{m.board_directory_heading()}</PageHeading>
         <p className="max-w-2xl text-muted-foreground">{m.board_directory_description()}</p>
+        {contribution ? <p>{m.board_directory_subject({ title: contribution.subjectTitle })}</p> : null}
       </header>
       <nav aria-label={m.board_directory_purpose()} className="flex flex-wrap gap-2">
         {(['discussion', 'reviews'] as const).map((purpose) => {
@@ -45,7 +53,7 @@ export function BoardDirectory({ request, result, previous, onNavigate, onRetry 
           return (
             <a
               key={purpose}
-              href={boardDirectoryHref(destination, locale)}
+              href={boardDirectoryHref(destination, locale, contribution)}
               onClick={navigate(destination)}
               aria-current={request.purpose === purpose ? 'page' : undefined}
               className={buttonVariants({ variant: request.purpose === purpose ? 'secondary' : 'ghost', size: 'lg' })}
@@ -78,6 +86,14 @@ export function BoardDirectory({ request, result, previous, onNavigate, onRetry 
               {result.boards.map((board) => {
                 const title = board.title ?? m.threads_untitled();
                 const href = `/${locale}/boards/${encodeURIComponent(board.id)}`;
+                const write =
+                  contribution &&
+                  board.realmId === null &&
+                  board.purpose === request.purpose &&
+                  board.visibility === 'published' &&
+                  board.availability === 'available';
+                const writeLabel =
+                  board.purpose === 'reviews' ? m.subject_community_review() : m.subject_community_discuss();
                 return (
                   <ListRow key={board.id} className="flex items-center gap-4 py-4">
                     <ListRowLink href={href}>{title}</ListRowLink>
@@ -96,11 +112,21 @@ export function BoardDirectory({ request, result, previous, onNavigate, onRetry 
                     </div>
                     <ListRowControl>
                       <a
-                        href={href}
-                        aria-label={m.board_directory_open_named({ title })}
+                        href={
+                          write
+                            ? reviewThreadHref(locale, board.id, contribution.subject, contribution.subjectTitle)
+                            : href
+                        }
+                        aria-label={
+                          write
+                            ? board.purpose === 'reviews'
+                              ? m.board_directory_review_named({ title, subject: contribution.subjectTitle })
+                              : m.board_directory_discuss_named({ title, subject: contribution.subjectTitle })
+                            : m.board_directory_open_named({ title })
+                        }
                         className={buttonVariants({ variant: 'outline' })}
                       >
-                        {m.board_directory_open()}
+                        {write ? writeLabel : m.board_directory_open()}
                       </a>
                     </ListRowControl>
                   </ListRow>
@@ -118,7 +144,7 @@ export function BoardDirectory({ request, result, previous, onNavigate, onRetry 
         <nav aria-label={m.board_directory_pages()} className="flex flex-wrap gap-3">
           {canGoBack && previous ? (
             <a
-              href={boardDirectoryHref(previous.request, locale)}
+              href={boardDirectoryHref(previous.request, locale, contribution)}
               onClick={navigate(previous.request)}
               className={buttonVariants({ variant: 'outline', size: 'lg' })}
             >
@@ -127,7 +153,7 @@ export function BoardDirectory({ request, result, previous, onNavigate, onRetry 
           ) : null}
           {next ? (
             <a
-              href={boardDirectoryHref({ ...request, cursor: next }, locale)}
+              href={boardDirectoryHref({ ...request, cursor: next }, locale, contribution)}
               onClick={navigate({ ...request, cursor: next })}
               className={buttonVariants({ variant: 'outline', size: 'lg' })}
             >

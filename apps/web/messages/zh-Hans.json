@@ -956,7 +956,7 @@
   "subject_relations": "相关作品",
   "subject_relations_more": "更多关联",
   "subject_reviews": "评论",
-  "subject_reviews_empty": "写下第一条评论。",
+  "subject_reviews_empty": "暂无评论。",
   "subject_section_failed": "无法加载这个区块。",
   "subject_section_retry": "重试",
   "subject_source": "来源",
@@ -964,7 +964,7 @@
   "subject_sources": "来源",
   "subject_spoiler_show": "显示剧透",
   "subject_tags": "标签",
-  "subject_threads_empty": "发起第一个讨论。",
+  "subject_threads_empty": "暂无讨论。",
   "subject_value_none": "没有值",
   "subject_value_unknown": "未知的值",
   "subject_value_unlabelled": "未标记的条目",
@@ -1405,7 +1405,7 @@
   "library_current_choices": "当前可选项",
   "subject_community_loading": "正在加载社区帖子…",
   "subject_community_continue": "后面可能还有帖子，请继续查看下一页。",
-  "subject_community_board_unavailable": "请选择版块参与讨论。此页面暂时无法选择版块。",
+  "subject_community_board_unavailable": "此区域暂时没有可用的投稿版块入口。",
   "subject_community_board": "打开版块",
   "subject_community_review": "在此版块写评论",
   "subject_community_discuss": "在此版块发起讨论",
@@ -3343,5 +3343,10 @@
   "library_sort_apply": "应用排序",
   "library_sort_restarted": "页面链接已过期或书库已更改。现按所选顺序显示第一页。",
   "library_sort_denied": "你没有权限按此顺序查看书库。",
-  "library_sort_preparing": "正在准备你的书库，请稍后重试。"
+  "library_sort_preparing": "正在准备你的书库，请稍后重试。",
+  "subject_choose_review_board": "选择版块撰写评论",
+  "subject_choose_discussion_board": "选择版块发起讨论",
+  "board_directory_subject": "关于《{title}》的投稿",
+  "board_directory_review_named": "在{title}撰写《{subject}》的评论",
+  "board_directory_discuss_named": "在{title}发起关于《{subject}》的讨论"
 }

@@ -955,7 +955,7 @@
   "subject_relations": "Obras relacionadas",
   "subject_relations_more": "Más relaciones",
   "subject_reviews": "Reseñas",
-  "subject_reviews_empty": "Escribe la primera reseña.",
+  "subject_reviews_empty": "Aún no hay reseñas.",
   "subject_section_failed": "No se pudo cargar esta sección.",
   "subject_section_retry": "Reintentar",
   "subject_source": "Fuente",
@@ -963,7 +963,7 @@
   "subject_sources": "Fuentes",
   "subject_spoiler_show": "Mostrar spoilers",
   "subject_tags": "Etiquetas",
-  "subject_threads_empty": "Inicia el primer debate.",
+  "subject_threads_empty": "Aún no hay debates.",
   "subject_value_none": "Sin valor",
   "subject_value_unknown": "Valor desconocido",
   "subject_value_unlabelled": "Ficha sin etiqueta",
@@ -1404,7 +1404,7 @@
   "library_current_choices": "Opciones actuales",
   "subject_community_loading": "Cargando publicaciones…",
   "subject_community_continue": "Puede haber más publicaciones. Continúa a la página siguiente.",
-  "subject_community_board_unavailable": "Elige un foro para participar. Aún no se puede seleccionar uno desde esta página.",
+  "subject_community_board_unavailable": "No hay un foro disponible para esta sección.",
   "subject_community_board": "Abrir foro",
   "subject_community_review": "Escribir una reseña en este foro",
   "subject_community_discuss": "Iniciar una discusión en este foro",
@@ -3342,5 +3342,10 @@
   "library_sort_apply": "Aplicar orden",
   "library_sort_restarted": "Este enlace ha caducado o la biblioteca ha cambiado. Se muestra la primera página en el orden seleccionado.",
   "library_sort_denied": "No tienes permiso para consultar este orden de la biblioteca.",
-  "library_sort_preparing": "Tu biblioteca se está preparando. Inténtalo de nuevo en unos momentos."
+  "library_sort_preparing": "Tu biblioteca se está preparando. Inténtalo de nuevo en unos momentos.",
+  "subject_choose_review_board": "Elegir un foro para una reseña",
+  "subject_choose_discussion_board": "Elegir un foro para debatir",
+  "board_directory_subject": "Contribuir sobre {title}",
+  "board_directory_review_named": "Escribir una reseña de {subject} en {title}",
+  "board_directory_discuss_named": "Iniciar un debate sobre {subject} en {title}"
 }

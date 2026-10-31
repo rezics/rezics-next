@@ -997,7 +997,7 @@
   "subject_relations": "Relations",
   "subject_relations_more": "More relations",
   "subject_reviews": "Reviews",
-  "subject_reviews_empty": "Write the first review.",
+  "subject_reviews_empty": "No reviews yet.",
   "subject_section_failed": "This section could not be loaded.",
   "subject_section_retry": "Retry",
   "subject_source": "Source",
@@ -1005,7 +1005,7 @@
   "subject_sources": "Sources",
   "subject_spoiler_show": "Show spoilers",
   "subject_tags": "Tags",
-  "subject_threads_empty": "Start the first discussion.",
+  "subject_threads_empty": "No discussions yet.",
   "subject_value_none": "No value",
   "subject_value_unknown": "Unknown value",
   "subject_value_unlabelled": "Unlabelled subject",
@@ -1487,7 +1487,7 @@
   "library_current_choices": "Current choices",
   "subject_community_loading": "Loading community posts…",
   "subject_community_continue": "More posts may follow. Continue to see the next page.",
-  "subject_community_board_unavailable": "Choose a board to contribute. No board can be selected from this page yet.",
+  "subject_community_board_unavailable": "A board destination is unavailable for this section.",
   "subject_community_board": "Open board",
   "subject_community_review": "Write a review on this board",
   "subject_community_discuss": "Start a discussion on this board",
@@ -3694,5 +3694,10 @@
   "library_sort_apply": "Apply sort",
   "library_sort_restarted": "This page link has expired or the Library changed. Showing the first page in the selected order.",
   "library_sort_denied": "You do not have permission to read this Library order.",
-  "library_sort_preparing": "Your Library is being prepared. Try again shortly."
+  "library_sort_preparing": "Your Library is being prepared. Try again shortly.",
+  "subject_choose_review_board": "Choose a board to review",
+  "subject_choose_discussion_board": "Choose a board to discuss",
+  "board_directory_subject": "Contribute about {title}",
+  "board_directory_review_named": "Write a review of {subject} in {title}",
+  "board_directory_discuss_named": "Start a discussion about {subject} in {title}"
 }

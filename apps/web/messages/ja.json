@@ -955,7 +955,7 @@
   "subject_relations": "関連作品",
   "subject_relations_more": "関連をさらに表示",
   "subject_reviews": "レビュー",
-  "subject_reviews_empty": "最初のレビューを書きましょう。",
+  "subject_reviews_empty": "レビューはまだありません。",
   "subject_section_failed": "このセクションを読み込めませんでした。",
   "subject_section_retry": "再試行",
   "subject_source": "出典",
@@ -963,7 +963,7 @@
   "subject_sources": "出典",
   "subject_spoiler_show": "ネタバレを表示",
   "subject_tags": "タグ",
-  "subject_threads_empty": "最初のディスカッションを始めましょう。",
+  "subject_threads_empty": "ディスカッションはまだありません。",
   "subject_value_none": "値なし",
   "subject_value_unknown": "不明な値",
   "subject_value_unlabelled": "ラベルのない項目",
@@ -1404,7 +1404,7 @@
   "library_current_choices": "現在の選択肢",
   "subject_community_loading": "投稿を読み込み中…",
   "subject_community_continue": "続きの投稿がある可能性があります。次のページへ進んでください。",
-  "subject_community_board_unavailable": "投稿するにはボードを選んでください。このページからはまだ選択できません。",
+  "subject_community_board_unavailable": "このセクションでは投稿先のボードを利用できません。",
   "subject_community_board": "ボードを開く",
   "subject_community_review": "このボードにレビューを書く",
   "subject_community_discuss": "このボードで話題を始める",
@@ -3342,5 +3342,10 @@
   "library_sort_apply": "並べ替えを適用",
   "library_sort_restarted": "ページのリンクが期限切れか、ライブラリが変更されました。選択した順序で最初のページを表示しています。",
   "library_sort_denied": "この順序でライブラリを閲覧する権限がありません。",
-  "library_sort_preparing": "ライブラリを準備中です。しばらくしてから再試行してください。"
+  "library_sort_preparing": "ライブラリを準備中です。しばらくしてから再試行してください。",
+  "subject_choose_review_board": "レビューするボードを選ぶ",
+  "subject_choose_discussion_board": "話し合うボードを選ぶ",
+  "board_directory_subject": "「{title}」について投稿",
+  "board_directory_review_named": "「{title}」で「{subject}」のレビューを書く",
+  "board_directory_discuss_named": "「{title}」で「{subject}」について話し合う"
 }

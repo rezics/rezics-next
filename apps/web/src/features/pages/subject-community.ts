@@ -13,9 +13,10 @@ export type NativeCommunityThread = NativePage['threads'][number];
 export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'authorId' | 'boardId' | 'createdAt'> & {
   summary: string;
 };
-export type CommunityRegion =
+export type CommunityRegion = (
   | { state: 'loading' | 'unavailable' | 'closed' }
-  | { state: 'ready'; threads: CommunityThread[]; next: string | null };
+  | { state: 'ready'; threads: CommunityThread[]; next: string | null }
+) & { contributionScope?: 'global' | 'realm' };
 export type SubjectCommunity = {
   regions: Partial<Record<CommunityKind, CommunityRegion>>;
   nodes?: Record<string, CommunityRegion>;
@@ -82,7 +83,10 @@ export async function readSubjectCommunity(
               thread.firstPost.availability === 'available' &&
               thread.firstPost.visibility === 'published',
           );
-        return [kind, { state: 'ready', threads: threads.map(project), next: result.data.next }];
+        return [
+          kind,
+          { state: 'ready', threads: threads.map(project), next: result.data.next, contributionScope: 'global' },
+        ];
       } catch (error) {
         return [kind, { state: isPlatformClosedError(error) ? 'closed' : 'unavailable' }];
       }
@@ -123,6 +127,14 @@ export async function withComposedCommunity(client: KernelClient, loaded: Subjec
     const descriptor = plan.reads[key];
     if (descriptor?.kind !== 'subjectThreads') continue;
     const region = composedCommunityRegion(loaded.page.reads[key]);
+    // An omitted Context is the native ordinary Global page. A Realm selector, including a native
+    // publication fallback, must never turn into an invitation to a Global destination.
+    const population = loaded.page.context?.population;
+    if (!loaded.page.requestedRealm && descriptor.id === loaded.page.subject) {
+      if ((!loaded.page.context || population?.kind === 'global') && descriptor.place === GLOBAL)
+        region.contributionScope = 'global';
+      else if (population?.kind === 'realm' && descriptor.place === population.id) region.contributionScope = 'realm';
+    }
     nodes[node] = region;
     regions[descriptor.threadKind] ??= region;
   }
@@ -151,7 +163,8 @@ export async function withSubjectCommunity(
   cursor?: string,
 ): Promise<SubjectPageLoad> {
   if (loaded.kind !== 'page' || !loaded.page.subject || loaded.page.account) return loaded;
-  if (loaded.page.context?.population.kind === 'realm') return loaded;
+  if (loaded.page.requestedRealm || (loaded.page.context && loaded.page.context.population.kind !== 'global'))
+    return loaded;
   const kinds = communityKinds(loaded.page.document.content);
   if (!kinds.length) return loaded;
   const community = await readSubjectCommunity(client, loaded.page.subject, kinds, view !== undefined, cursor);

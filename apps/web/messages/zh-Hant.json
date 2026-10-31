@@ -955,7 +955,7 @@
   "subject_relations": "相關作品",
   "subject_relations_more": "更多關聯",
   "subject_reviews": "評論",
-  "subject_reviews_empty": "寫下第一則評論。",
+  "subject_reviews_empty": "暫無評論。",
   "subject_section_failed": "無法載入這個區塊。",
   "subject_section_retry": "重試",
   "subject_source": "來源",
@@ -963,7 +963,7 @@
   "subject_sources": "來源",
   "subject_spoiler_show": "顯示劇透",
   "subject_tags": "標籤",
-  "subject_threads_empty": "發起第一個討論。",
+  "subject_threads_empty": "暫無討論。",
   "subject_value_none": "沒有值",
   "subject_value_unknown": "未知的值",
   "subject_value_unlabelled": "未標示的條目",
@@ -1404,7 +1404,7 @@
   "library_current_choices": "目前可選項",
   "subject_community_loading": "正在載入社群貼文…",
   "subject_community_continue": "後面可能還有貼文，請繼續查看下一頁。",
-  "subject_community_board_unavailable": "請選擇看板參與討論。此頁面暫時無法選擇看板。",
+  "subject_community_board_unavailable": "此區域暫時沒有可用的投稿看板入口。",
   "subject_community_board": "開啟看板",
   "subject_community_review": "在此看板撰寫評論",
   "subject_community_discuss": "在此看板發起討論",
@@ -3342,5 +3342,10 @@
   "library_sort_apply": "套用排序",
   "library_sort_restarted": "頁面連結已過期或書庫已變更。現按所選順序顯示第一頁。",
   "library_sort_denied": "你沒有權限依此順序查看書庫。",
-  "library_sort_preparing": "正在準備你的書庫，請稍後重試。"
+  "library_sort_preparing": "正在準備你的書庫，請稍後重試。",
+  "subject_choose_review_board": "選擇看板撰寫評論",
+  "subject_choose_discussion_board": "選擇看板發起討論",
+  "board_directory_subject": "關於《{title}》的投稿",
+  "board_directory_review_named": "在{title}撰寫《{subject}》的評論",
+  "board_directory_discuss_named": "在{title}發起關於《{subject}》的討論"
 }

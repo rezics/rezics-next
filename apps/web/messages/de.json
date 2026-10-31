@@ -955,7 +955,7 @@
   "subject_relations": "Verwandte Werke",
   "subject_relations_more": "Weitere Beziehungen",
   "subject_reviews": "Rezensionen",
-  "subject_reviews_empty": "Schreibe die erste Rezension.",
+  "subject_reviews_empty": "Noch keine Rezensionen.",
   "subject_section_failed": "Dieser Abschnitt konnte nicht geladen werden.",
   "subject_section_retry": "Erneut versuchen",
   "subject_source": "Quelle",
@@ -963,7 +963,7 @@
   "subject_sources": "Quellen",
   "subject_spoiler_show": "Spoiler anzeigen",
   "subject_tags": "Schlagwörter",
-  "subject_threads_empty": "Starte die erste Diskussion.",
+  "subject_threads_empty": "Noch keine Diskussionen.",
   "subject_value_none": "Kein Wert",
   "subject_value_unknown": "Unbekannter Wert",
   "subject_value_unlabelled": "Unbeschrifteter Eintrag",
@@ -1404,7 +1404,7 @@
   "library_current_choices": "Aktuelle Auswahl",
   "subject_community_loading": "Beiträge werden geladen…",
   "subject_community_continue": "Weitere Beiträge können folgen. Öffne die nächste Seite.",
-  "subject_community_board_unavailable": "Wähle ein Forum, um einen Beitrag zu schreiben. Hier kann noch kein Forum ausgewählt werden.",
+  "subject_community_board_unavailable": "Für diesen Abschnitt ist kein Board verfügbar.",
   "subject_community_board": "Forum öffnen",
   "subject_community_review": "In diesem Forum eine Rezension schreiben",
   "subject_community_discuss": "In diesem Forum eine Diskussion beginnen",
@@ -3342,5 +3342,10 @@
   "library_sort_apply": "Sortierung anwenden",
   "library_sort_restarted": "Dieser Seitenlink ist abgelaufen oder die Bibliothek hat sich geändert. Die erste Seite wird in der gewählten Reihenfolge angezeigt.",
   "library_sort_denied": "Du hast keine Berechtigung, diese Bibliotheksreihenfolge zu lesen.",
-  "library_sort_preparing": "Deine Bibliothek wird vorbereitet. Versuche es gleich erneut."
+  "library_sort_preparing": "Deine Bibliothek wird vorbereitet. Versuche es gleich erneut.",
+  "subject_choose_review_board": "Board für eine Rezension wählen",
+  "subject_choose_discussion_board": "Board für eine Diskussion wählen",
+  "board_directory_subject": "Beitrag zu {title}",
+  "board_directory_review_named": "Rezension zu {subject} in {title} schreiben",
+  "board_directory_discuss_named": "Diskussion zu {subject} in {title} beginnen"
 }

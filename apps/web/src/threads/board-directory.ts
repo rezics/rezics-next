@@ -7,6 +7,14 @@ type DirectoryPage = NonNullable<Awaited<ReturnType<KernelClient['boards']['get'
 export type DirectoryBoard = DirectoryPage['boards'][number];
 export type BoardPurpose = DirectoryBoard['purpose'];
 export type BoardDirectoryRequest = { purpose: BoardPurpose; cursor?: string; limit: number };
+/** Navigation only. The native directory query and signed cursor never include a Subject preset. */
+export type BoardContribution = { subject: string; subjectTitle: string };
+export type BoardDirectorySearch = {
+  purpose: BoardPurpose;
+  cursor?: string;
+  subject?: string;
+  subjectTitle?: string;
+};
 export type BoardDirectoryResult =
   | { state: 'ready'; boards: DirectoryBoard[]; next: string | null }
   | { state: 'unavailable' | 'denied' | 'closed' };
@@ -21,6 +29,29 @@ export function boardDirectoryRequest(input: Record<string, unknown>): BoardDire
   const limit = typeof input.limit === 'number' ? input.limit : 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Board page limit must be 1..100');
   return { purpose, ...(cursor ? { cursor } : {}), limit };
+}
+
+const subjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Match the existing composer's UUID/title bounds, preserving valid text exactly as presentation. */
+export function boardContribution(input: Record<string, unknown>): BoardContribution | undefined {
+  if (
+    typeof input.subject !== 'string' ||
+    !subjectId.test(input.subject) ||
+    typeof input.subjectTitle !== 'string' ||
+    input.subjectTitle.length > 512
+  )
+    return;
+  return { subject: input.subject, subjectTitle: input.subjectTitle };
+}
+
+export function boardDirectorySearch(input: Record<string, unknown>): BoardDirectorySearch {
+  const { purpose, cursor } = boardDirectoryRequest(input);
+  return { purpose, ...(cursor ? { cursor } : {}), ...boardContribution(input) };
+}
+
+export function sameBoardContribution(a: BoardContribution | undefined, b: BoardContribution | undefined): boolean {
+  return a?.subject === b?.subject && a?.subjectTitle === b?.subjectTitle;
 }
 
 /** The mounted native collection owns anonymous FINAL disclosure, even when credentials are supplied. */
@@ -94,24 +125,37 @@ export async function loadBoardDirectory(
   }
 }
 
-export function boardDirectoryHref(request: BoardDirectoryRequest, locale: string): string {
+export function boardDirectoryHref(
+  request: BoardDirectoryRequest,
+  locale: string,
+  contribution?: BoardContribution,
+): string {
   const query = new URLSearchParams({ purpose: request.purpose });
   if (request.cursor) query.set('cursor', request.cursor);
+  if (contribution) {
+    query.set('subject', contribution.subject);
+    query.set('subjectTitle', contribution.subjectTitle);
+  }
   return `/${locale}/boards?${query}`;
 }
 
 /** A single remembered predecessor, established only by following the native next cursor. */
-export type BoardDirectoryPrevious = { request: BoardDirectoryRequest; target: string };
+export type BoardDirectoryPrevious = {
+  request: BoardDirectoryRequest;
+  target: string;
+  contribution?: BoardContribution;
+};
 export function boardDirectoryPrevious(
   current: BoardDirectoryRequest,
   result: BoardDirectoryResult,
   destination: BoardDirectoryRequest,
+  contribution?: BoardContribution,
 ): BoardDirectoryPrevious | undefined {
   return result.state === 'ready' &&
     result.next !== null &&
     result.next !== current.cursor &&
     current.purpose === destination.purpose &&
     result.next === destination.cursor
-    ? { request: current, target: result.next }
+    ? { request: current, target: result.next, ...(contribution ? { contribution } : {}) }
     : undefined;
 }
