@@ -372,6 +372,7 @@ export const RateWithOneControl: Story = {
     await expect(canvas.getAllByRole('slider')).toHaveLength(1);
     const slider = canvas.getByRole('slider', { name: /^Your rating/ });
     await expect(readout(canvasElement)).toHaveTextContent('Not rated');
+    await expect(slider).toHaveAttribute('aria-valuetext', 'Not rated');
     slider.focus();
     await userEvent.keyboard('{End}');
     await waitFor(() => expect(saved).toHaveBeenLastCalledWith(20));
@@ -380,6 +381,7 @@ export const RateWithOneControl: Story = {
     await waitFor(() => expect(saved).toHaveBeenLastCalledWith(19));
     await waitFor(() => expect(readout(canvasElement)).toHaveTextContent('9.5 out of 10'));
     await expect(slider).toHaveValue('9.5');
+    await expect(slider).toHaveAttribute('aria-valuetext', '9.5 out of 10');
   },
 };
 

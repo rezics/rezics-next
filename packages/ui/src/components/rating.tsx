@@ -576,7 +576,7 @@ export function RatingInput(props: RatingInputProps) {
             aria-labelledby={units === null ? `${id}-label ${id}-value` : `${id}-label`}
             aria-valuetext={text}
             data-slot="slider-thumb"
-            className="block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+            className="block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary not-dark:bg-clip-padding transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
           />
         </Slider.Control>
       </Slider.Root>

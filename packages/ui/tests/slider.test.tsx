@@ -13,6 +13,7 @@ test('supported label and number formatting reach the nested native range', () =
       <Slider
         defaultValue={[40]}
         className="root-marker"
+        name="rating"
         aria-labelledby="rating-label"
         locale="en"
         format={{ minimumFractionDigits: 1 }}
@@ -21,6 +22,7 @@ test('supported label and number formatting reach the nested native range', () =
   );
   expect(inputs(html)).toHaveLength(1);
   expect(inputs(html)[0]).toContain('aria-labelledby="rating-label"');
+  expect(inputs(html)[0]).toContain('name="rating"');
   expect(inputs(html)[0]).toContain('aria-valuetext="40.0"');
   const root = slot(html, 'slider');
   expect(root).toContain('root-marker');
@@ -50,8 +52,7 @@ test.each([
     const input = ranges[0]!;
     const labelIds = input.match(/aria-labelledby="([^"]+)"/)?.[1]?.split(' ') ?? [];
     expect(labelIds.length).toBeGreaterThan(0);
-    expect(html).toContain(`id="${labelIds[0]}"`);
-    expect(html).toContain('How much did you like it?');
+    expect(html).toMatch(new RegExp(`<span[^>]+id="${labelIds[0]}"[^>]*>How much did you like it\\?</span>`));
     for (const attribute of [
       `aria-valuetext="${text}"`,
       `value="${rangeValue}"`,
