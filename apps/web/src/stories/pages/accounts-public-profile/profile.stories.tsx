@@ -6,6 +6,7 @@ import { subjectPageMessages, viewTabLabels } from '../../../features/pages/rout
 import { subjectTabs } from '../../../features/pages/views';
 import { getLocale } from '../../../paraglide/runtime.js';
 import { m } from '../../../paraglide/messages.js';
+import { AppShell } from '../../../shell/shell';
 import { PatternStory, PageStory, pageReady } from '../../page';
 import { profilePage } from './fixtures';
 
@@ -37,22 +38,33 @@ function Example({
   });
   const locale = getLocale();
   return (
-    <PatternStory>
-      <PublicProfilePage
-        page={page}
-        locale={locale}
-        messages={subjectPageMessages()}
-        tabs={subjectTabs(page)}
-        tabLabels={viewTabLabels()}
-        base={`/${locale}/@${page.account!.handle}`}
-        {...(mode === 'operator'
-          ? { operator: { id: 'public-operator', handle: null, displayName: 'Reading Room' } }
-          : {})}
-        publicRealms={mode !== 'private'}
-        renderJsonLd={false}
-      />
+    <PatternStory visitor="Signed Out" path={`/@${page.account!.handle}`}>
+      <AppShell>
+        <PublicProfilePage
+          page={page}
+          locale={locale}
+          messages={subjectPageMessages()}
+          tabs={subjectTabs(page)}
+          tabLabels={viewTabLabels()}
+          base={`/${locale}/@${page.account!.handle}`}
+          {...(mode === 'operator'
+            ? { operator: { id: 'public-operator', handle: null, displayName: 'Reading Room' } }
+            : {})}
+          publicRealms={mode !== 'private'}
+          renderJsonLd={false}
+        />
+      </AppShell>
     </PatternStory>
   );
+}
+
+async function profileShellReady(canvasElement: HTMLElement, heading = m.public_account_heading()) {
+  const canvas = within(canvasElement);
+  const main = await canvas.findByRole('main');
+  await expect(canvas.getAllByRole('main')).toHaveLength(1);
+  const view = within(main);
+  await expect(view.getByRole('heading', { level: 1, name: heading, exact: true })).toBeVisible();
+  return view;
 }
 
 const meta = {
@@ -86,6 +98,7 @@ export const Organization: Story = { render: () => <Example mode="organization" 
 export const Automated: Story = {
   render: () => <Example mode="automated" />,
   play: async ({ canvasElement }) => {
+    await profileShellReady(canvasElement, 'Reading Assistant');
     await expect(within(canvasElement).getByText(m.public_account_automated())).toBeVisible();
     await expect(canvasElement.querySelector('a[href$="/@"]')).toBeNull();
   },
@@ -93,6 +106,7 @@ export const Automated: Story = {
 export const HandlelessOperator: Story = {
   render: () => <Example mode="operator" />,
   play: async ({ canvasElement }) => {
+    await profileShellReady(canvasElement, 'Reading Assistant');
     await expect(within(canvasElement).getByText('Reading Room')).toBeVisible();
     await expect(canvasElement.querySelector('a[href$="/@"]')).toBeNull();
   },
@@ -109,22 +123,40 @@ export const EmptyActivity: Story = { render: () => <Example mode="empty" /> };
 export const DeniedActivity: Story = { render: () => <Example mode="denied" /> };
 export const Preparing: Story = {
   render: () => (
-    <PatternStory>
-      <PublicAccountState page state="preparing" retry={() => {}} />
+    <PatternStory visitor="Signed Out" path="/@mira">
+      <AppShell>
+        <PublicAccountState page state="preparing" retry={() => {}} />
+      </AppShell>
     </PatternStory>
   ),
+  play: async ({ canvasElement }) => {
+    const view = await profileShellReady(canvasElement);
+    await expect(view.getByRole('status')).toHaveTextContent(m.public_account_preparing());
+  },
 };
 export const Denied: Story = {
   render: () => (
-    <PatternStory>
-      <PublicAccountState page state="denied" />
+    <PatternStory visitor="Signed Out" path="/@mira">
+      <AppShell>
+        <PublicAccountState page state="denied" />
+      </AppShell>
     </PatternStory>
   ),
+  play: async ({ canvasElement }) => {
+    const view = await profileShellReady(canvasElement);
+    await expect(view.getByRole('status')).toHaveTextContent(m.public_account_denied());
+  },
 };
 export const Unavailable: Story = {
   render: () => (
-    <PatternStory>
-      <PublicAccountState page state="unavailable" retry={() => {}} />
+    <PatternStory visitor="Signed Out" path="/@mira">
+      <AppShell>
+        <PublicAccountState page state="unavailable" retry={() => {}} />
+      </AppShell>
     </PatternStory>
   ),
+  play: async ({ canvasElement }) => {
+    const view = await profileShellReady(canvasElement);
+    await expect(view.getByRole('alert')).toHaveTextContent(m.public_account_unavailable());
+  },
 };
