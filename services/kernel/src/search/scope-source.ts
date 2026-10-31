@@ -397,17 +397,19 @@ export function createSearchScopeSource({
         if (!isDeepStrictEqual(final, native)) unavailable();
         throw new ProblemError('dependency_unavailable');
       }
-      const nativeWorkDefinition =
-        evidence?.work?.kind === 'collection-kind-preparation'
-          ? await readCollectionKindPreparationWorkDefinition(evidence.work, { ...evidence, pool })
-          : evidence?.work?.kind === 'collection-publication'
-            ? await readCollectionPublicationScopeWorkDefinition(evidence.work, { ...evidence, pool })
-            : undefined;
-      const workDefinition = nativeWorkDefinition ? structuredClone(nativeWorkDefinition) : undefined;
+      const publicationWorkDefinition =
+        evidence?.work?.kind === 'collection-publication'
+          ? structuredClone(await readCollectionPublicationScopeWorkDefinition(evidence.work, { ...evidence, pool }))
+          : undefined;
+      const workDefinition =
+        publicationWorkDefinition ??
+        (evidence?.work?.kind === 'collection-kind-preparation'
+          ? structuredClone(await readCollectionKindPreparationWorkDefinition(evidence.work, { ...evidence, pool }))
+          : undefined);
       if (workDefinition) {
         const nativeOrder: SearchScopeOrder = { kind: 'id', source: workDefinition.sourceIdentity };
         if (
-          ('definition' in workDefinition && !isDeepStrictEqual(filter, workDefinition.definition.filter)) ||
+          (publicationWorkDefinition && !isDeepStrictEqual(filter, publicationWorkDefinition.definition.filter)) ||
           (options?.releaseDigest !== undefined && options.releaseDigest !== workDefinition.releaseDigest) ||
           (options?.order !== undefined && !isDeepStrictEqual(options.order, nativeOrder))
         )
@@ -473,8 +475,8 @@ export function createSearchScopeSource({
       if (
         !nativeRelease ||
         (injectedBody !== undefined && !isDeepStrictEqual(injectedBody, nativeRelease)) ||
-        (workDefinition && 'definition' in workDefinition &&
-          !isDeepStrictEqual(workDefinition.definition.release.value, nativeRelease))
+        (publicationWorkDefinition &&
+          !isDeepStrictEqual(publicationWorkDefinition.definition.release.value, nativeRelease))
       )
         unavailable();
       // Re-admit with the exact immutable body. A changed current-release callback cannot
@@ -613,6 +615,10 @@ export function createSearchScopeSource({
           collection: nativeBasis,
           filter: admitted,
         });
+        if (workDefinition && reader.work) {
+          const current = await readScopeWorkDefinition(reader.work, { ...reader, pool });
+          if (!isDeepStrictEqual(structuredClone(current), workDefinition)) unavailable();
+        }
         work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 262144 });
         await store.retain(publicIdentity, publicDefinition);
         await createScopePreparation({ pool, prefix, routeKey: reader.routeKey, access: reader.access, clock }).prepare(

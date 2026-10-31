@@ -7,7 +7,11 @@ import { ProblemError } from '../http/problem.ts';
 import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
 import type { Access } from '../request/access.ts';
 import { nativeSourceFence, type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
-import { readNativeCollectionMetadata, type NativeCollectionMetadata } from './collection-source-native.ts';
+import {
+  readNativeCollectionMetadata,
+  readNativeCollectionWorkingMetadata,
+  type NativeCollectionMetadata,
+} from './collection-source-native.ts';
 import { CollectionSourceLedger } from './collection-source-work.ts';
 import type { CollectionSourceObservation, WorkAllowance } from './collection-source.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
@@ -76,11 +80,15 @@ export async function readCollectionSourceWorkState(
       throw new ProblemError('dependency_unavailable');
     // Public/frozen output needs its own native public capture proof. Never borrow private capture here.
     const { metadata } = await l.run((allowance) =>
-      readNativeCollectionMetadata(pool, source, {
-        deadline: options.deadline,
-        allowance,
-        tx: work.tx,
-      }),
+      (work.kind === 'collection-publication' ? readNativeCollectionWorkingMetadata : readNativeCollectionMetadata)(
+        pool,
+        source,
+        {
+          deadline: options.deadline,
+          allowance,
+          tx: work.tx,
+        },
+      ),
     );
     if (!metadata || metadata.state !== 'active') throw new ProblemError('not_found');
     if (
@@ -90,7 +98,20 @@ export async function readCollectionSourceWorkState(
       metadata.sourceGeneration !== source.generation ||
       metadata.stamp.epoch !== source.ownerEpoch ||
       metadata.revision !== native.observation.revision ||
-      (metadata.authority === 'private_builtin' && (!metadata.factFence || !metadata.builtinKind))
+      (metadata.authority === 'private_builtin' &&
+        (!metadata.factFence ||
+          ('rule' in native
+            ? native.rule.kind === 'saved'
+              ? metadata.builtinKind !== null ||
+                !metadata.ruleReady ||
+                metadata.ruleRevision !== String(native.rule.revision) ||
+                metadata.ruleReleaseDigest !== native.rule.releaseDigest
+              : metadata.builtinKind !== native.rule.key.kind ||
+                (native.rule.key.kind === 'state' &&
+                  (metadata.profileId !== native.rule.key.profileId ||
+                    metadata.stateSetId !== native.rule.key.stateSetId ||
+                    metadata.stateId !== native.rule.key.stateId))
+            : !metadata.builtinKind)))
     )
       throw new ProblemError('semantic_not_ready');
     const fence = nativeSourceFence(metadata);

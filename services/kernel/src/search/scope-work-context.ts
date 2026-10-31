@@ -87,6 +87,7 @@ export async function readCollectionPublicationScopeWorkDefinition(
     resources.accounts.length !== 1 ||
     resources.accounts[0] !== locator.ownerAccountId ||
     !Number.isFinite(options.deadline) ||
+    options.deadline > resources.deadline ||
     Date.now() >= deadline
   )
     throw new ProblemError('semantic_not_ready');
@@ -122,12 +123,18 @@ export async function readCollectionPublicationScopeWorkDefinition(
     source.route !== route ||
     source.collectionId !== locator.collectionId ||
     source.accountId !== locator.ownerAccountId ||
-    !source.incarnation || !source.generation || !source.receivingEpoch || !source.effectKey ||
+    !source.incarnation ||
+    !source.generation ||
+    !source.receivingEpoch ||
+    !source.effectKey ||
     target.kind !== 'collection_output' ||
-    target.route !== route || target.collectionId !== locator.collectionId ||
+    target.route !== route ||
+    target.collectionId !== locator.collectionId ||
     (target.visibility !== 'public' && target.visibility !== 'unlisted') ||
     definition.sort !== 'id' ||
-    !native.releaseDigest || !native.audience || !rule.digest ||
+    !native.releaseDigest ||
+    !native.audience ||
+    !rule.digest ||
     definition.release.digest !== native.releaseDigest ||
     rule.releaseDigest !== native.releaseDigest ||
     rule.incarnation !== source.incarnation ||
@@ -136,22 +143,32 @@ export async function readCollectionPublicationScopeWorkDefinition(
     (rule.kind !== 'saved' && rule.kind !== 'builtin') ||
     (rule.kind === 'saved' && (!Number.isSafeInteger(rule.revision) || rule.revision < 1)) ||
     (rule.kind === 'builtin' && rule.key.kind !== 'everything' && rule.key.kind !== 'state') ||
-    observation.collectionId !== source.collectionId || observation.route !== source.route ||
+    observation.collectionId !== source.collectionId ||
+    observation.route !== source.route ||
     observation.incarnation !== source.incarnation ||
     observation.authority.kind !== 'private_builtin' ||
     observation.authority.curatorAccountId !== locator.ownerAccountId ||
-    observation.stamp.partition !== resources.partition || observation.stamp.epoch !== source.ownerEpoch ||
+    observation.stamp.partition !== resources.partition ||
+    observation.stamp.epoch !== source.ownerEpoch ||
     !observation.basis.profilePins.includes(native.releaseDigest) ||
     identityObservation.key.source.kind !== 'library' ||
     !isDeepStrictEqual(identityObservation.key.source.identity, source) ||
-    !identityObservation.key.scopeId || !identityObservation.captureId || identityObservation.committedRevision < 0n ||
+    !identityObservation.key.scopeId ||
+    !identityObservation.captureId ||
+    identityObservation.committedRevision < 0n ||
     identityObservation.captureId !== custody.captureId ||
-    !isDeepStrictEqual(custody.identity, source) || !custody.holdId || !custody.transactionId ||
-    repairReceipt.partition !== resources.partition || repairReceipt.epoch !== source.ownerEpoch ||
-    !repairReceipt.transactionId || repairReceipt.position < 0n ||
+    !isDeepStrictEqual(custody.identity, source) ||
+    !custody.holdId ||
+    !custody.transactionId ||
+    repairReceipt.partition !== resources.partition ||
+    repairReceipt.epoch !== source.ownerEpoch ||
+    !repairReceipt.transactionId ||
+    repairReceipt.position < 0n ||
     (native.phase !== 'staging' && native.phase !== 'awaiting_activation') ||
-    output.state !== 'building' || 'publication' in output ||
-    output.ref.route !== target.route || output.ref.collectionId !== target.collectionId ||
+    output.state !== 'building' ||
+    'publication' in output ||
+    output.ref.route !== target.route ||
+    output.ref.collectionId !== target.collectionId ||
     !uuid.test(output.ref.generation) ||
     !isDeepStrictEqual(creation.source.locator, locator) ||
     !isDeepStrictEqual(creation.source.input, input) ||
@@ -160,23 +177,29 @@ export async function readCollectionPublicationScopeWorkDefinition(
     !isDeepStrictEqual(creation.source.output, output.ref) ||
     creation.initiator.creation.target.route !== route ||
     creation.initiator.creation.target.id !== locator.collectionId ||
-    (selected !== null && (
-      selected.state !== 'complete' || selected.ref.route !== route ||
-      selected.ref.collectionId !== locator.collectionId || !uuid.test(selected.ref.generation) ||
-      selected.ref.generation === output.ref.generation ||
-      selected.publication.generation !== selected.ref.generation ||
-      !selected.publication.transactionId || !selected.publication.nativeXid ||
-      !selected.publication.sourceGeneration || !selected.publication.memberFence ||
-      !/^(0|[1-9][0-9]*)$/.test(selected.publication.position) ||
-      !/^(0|[1-9][0-9]*)$/.test(selected.publication.members)
-    ))
+    (selected !== null &&
+      (selected.state !== 'complete' ||
+        selected.ref.route !== route ||
+        selected.ref.collectionId !== locator.collectionId ||
+        !uuid.test(selected.ref.generation) ||
+        selected.ref.generation === output.ref.generation ||
+        selected.publication.generation !== selected.ref.generation ||
+        !selected.publication.transactionId ||
+        !selected.publication.nativeXid ||
+        !selected.publication.sourceGeneration ||
+        !selected.publication.memberFence ||
+        !/^(0|[1-9][0-9]*)$/.test(selected.publication.position) ||
+        !/^(0|[1-9][0-9]*)$/.test(selected.publication.members)))
   )
     throw new ProblemError('semantic_not_ready');
   // Re-admission checks the expanded pinned meaning, not just a copied release scalar.
   // Creation is compared as committed data; its initiator is never restored as an Actor.
   try {
     if (
-      !isDeepStrictEqual(admitFilter(parseFilter(definition.filter), definition.release.value, { owner: true }), definition.filter) ||
+      !isDeepStrictEqual(
+        admitFilter(parseFilter(definition.filter), definition.release.value, { owner: true }),
+        definition.filter,
+      ) ||
       creation.initiator.sourceDigest !== createHash('sha256').update(canonicalize(creation.source)!).digest('hex') ||
       creation.durableInitiator !== durableInitiatorCommitment(creation.initiator)
     )
@@ -258,7 +281,10 @@ export async function readCollectionKindPreparationWorkDefinition(
 }
 
 /** Dispatch only; the original native modules remain the sole episode and result authorities. */
-export async function readScopeWorkDefinition(work: ScopeWorkContext, options: WorkOptions) {
+export async function readScopeWorkDefinition(
+  work: ScopeWorkContext,
+  options: WorkOptions,
+): Promise<MembersPreparationWorkDefinition | CollectionKindWorkDefinition | CollectionPublicationWorkDefinition> {
   switch (work.kind) {
     case 'members-preparation':
       return readMembersPreparationWorkDefinition(work, options);
