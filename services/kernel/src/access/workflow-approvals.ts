@@ -91,10 +91,14 @@ export type WorkflowApprovalBinding = Readonly<{
 }>;
 const bindings = new WeakMap<LifecycleRequest, WorkflowApprovalBinding>();
 type CreationSource = Pick<NativeCreationContext, 'approvalReference' | 'operation' | 'operatorAccountId'>;
-const creationSources = new WeakMap<LifecycleRequest, Readonly<CreationSource>>();
+const creationSources = new WeakMap<LifecycleRequest, { pool: Pool; source: Readonly<CreationSource> }>();
 /** Same native resolution as workflowApprovalBinding, with no business payload. */
-export function workflowApprovalCreationSource(request: LifecycleRequest): Readonly<CreationSource> | undefined {
-  return creationSources.get(request);
+export function workflowApprovalCreationSource(
+  request: LifecycleRequest,
+  pool: Pool,
+): Readonly<CreationSource> | undefined {
+  const entry = creationSources.get(request);
+  return entry?.pool === pool ? entry.source : undefined;
 }
 /** Return only durable binding metadata; never serialize the resolved context. */
 export function workflowApprovalBinding(request: LifecycleRequest): WorkflowApprovalBinding | undefined {
@@ -688,9 +692,9 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       }),
     );
     if (operation.kind !== 'credential' && operation.kind !== 'transfer-acceptance' && operation.kind !== 'consent')
-      creationSources.set(
-        request,
-        Object.freeze({
+      creationSources.set(request, {
+        pool: config.pool,
+        source: Object.freeze({
           approvalReference: reference,
           operatorAccountId:
             operation.kind === 'automated' || operation.kind === 'opening' || operation.kind === 'transfer'
@@ -707,7 +711,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
             targetClientId: operation.kind === 'client-reduction' ? operation.clientId : null,
           }),
         }),
-      );
+      });
     return { request, row, actor, operation, descriptor };
   }
   async function resolve(

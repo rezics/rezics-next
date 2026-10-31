@@ -58,7 +58,11 @@ import { readNativeCopyActors, readNativeCreationContext } from './native-creati
  * Each callback must have a concrete bounded implementation, without enumerating
  * staging records, command receipts, or lifecycle history to locate a match.
  */
-export type NativeWorkflowProofPorts = AuthWorkflowProofPorts;
+export type NativeWorkflowProofPorts = {
+  recordPending(input: { accountId: string; reservationId: string; reference: string }): Promise<void>;
+  pendingReference(input: { accountId: string; reservationId: string }): Promise<string | null>;
+  provisioningEvidence(input: { accountId: string; reservationId: string }): Promise<unknown>;
+};
 /** The Auth host composes the actual verifier factories with its private storage
  * and keys. Kernel receives verification capabilities only. Missing recovery
  * evidence must fail closed; it cannot be replaced by a synthetic receipt.
@@ -185,7 +189,7 @@ function authWorkflowBoundary<T extends object>(ports: T): T {
 export function createNativeAccountBindings(config: NativeAccountBindingsConfig): NativeAccountBindings {
   const { pool, access, actions, referenceKeys, proofs } = config;
   if (config.clock) installAccessClock(access, config.clock);
-  const workflow = proofs.workflow;
+  const workflow = proofs.workflow as AuthWorkflowProofPorts;
   const internalLifecycle = createLifecycleInternals({
     pool,
     routeKey: config.routeKey,

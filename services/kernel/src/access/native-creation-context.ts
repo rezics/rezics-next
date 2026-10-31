@@ -25,9 +25,8 @@ type CopyActor = { accountId: string; role: 'human' | 'initiator' | 'delegate' }
  * human (or prove that no human was involved) from its actor claim alone. */
 async function readParties(config: NativeSource, request: LifecycleRequest) {
   requireAccessDeadline(request.deadline);
-  if (request.pool !== config.pool) throw new WorkflowApprovalDeniedError();
   const binding = workflowApprovalBinding(request);
-  const source = workflowApprovalCreationSource(request);
+  const source = workflowApprovalCreationSource(request, config.pool);
   if (!binding || !source) return { kind: 'unavailable', reason: 'historical-provenance' } as const;
   if (accessClock(config.access)().getTime() >= Date.parse(binding.expiresAt)) throw new WorkflowApprovalDeniedError();
   const actor = request.actor;
