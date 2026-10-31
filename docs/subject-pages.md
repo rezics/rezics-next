@@ -677,7 +677,8 @@ Discussion.
 
 ## Covers on pages
 
-The cover area always renders, at the frame ratio of the subject's type, on every surface that shows a subject,
+The cover area always renders with a portrait 5:7 default for every subject Type, matching Collection cards and
+lists. Explicit valid released frame ratios remain supported. Wide artwork stays whole inside the reserved frame,
 with the designed placeholder when there is no image. On a subject page, the cover opens a viewer with the original
 image and its credit; credits and notices are collected in Sources at the end of the page, never as a caption. See
 [Cover](../packages/ui/README.md#cover).

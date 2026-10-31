@@ -10,6 +10,10 @@ const subjects = [
   { id: 'album', title: '夜空中最亮的星與漫長旅途的故事', types: ['schema:MusicAlbum'] },
   { id: 'other', title: 'A short title', types: ['schema:Book'] },
   { id: 'four', title: '四季', types: ['schema:MusicAlbum'] },
+  { id: 'person', title: 'A performer', types: ['schema:Person'] },
+  { id: 'organization', title: 'A studio', types: ['schema:Organization'] },
+  { id: 'recipe', title: 'Miso soup', types: ['schema:Recipe'] },
+  { id: 'screen', title: 'A film with wide artwork', types: ['schema:Movie'] },
 ];
 const ratio = sharedRatio(subjects);
 const cards = () =>
@@ -19,7 +23,26 @@ const cards = () =>
       href={`/${subject.id}`}
       title={subject.title}
       titleLang={index % 2 ? 'zh' : 'en'}
-      cover={{ subject, cover: null, src: () => '' }}
+      cover={{
+        subject,
+        cover:
+          subject.id === 'screen'
+            ? {
+                media: 'wide-film',
+                width: 1600,
+                height: 900,
+                variants: [{ format: 'webp', width: 640 }],
+                placeholder: { color: '#435c67', thumbhash: '' },
+                focalPoint: null,
+                credit: null,
+              }
+            : null,
+        src: () =>
+          'data:image/svg+xml,' +
+          encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900"><rect width="1600" height="900" fill="#435c67"/><circle cx="800" cy="450" r="300" fill="#e2d3af"/></svg>',
+          ),
+      }}
       secondary={index < 2 ? 'A creator' : undefined}
       progress={index === 0 ? { value: 0.42, label: '42%' } : undefined}
       state={index === 1 ? 'Reading' : undefined}
@@ -47,7 +70,8 @@ export const Grid: Story = {
     await expect(articles[2]!.getBoundingClientRect().top).toBe(articles[0]!.getBoundingClientRect().top);
     container.style.width = '';
     const ratios = articles.map((article) => article.querySelector('[data-slot=cover]')?.getAttribute('data-ratio'));
-    await expect(ratios).toEqual(['3:4', '1:1', '3:4', '1:1']);
+    await expect(ratios).toEqual(subjects.map(() => '5:7'));
+    await expect(articles[7]!.querySelector('[data-slot=cover]')).toHaveAttribute('data-fit', 'contain');
     const articleRadius = getComputedStyle(articles[0]!).borderTopLeftRadius;
     const frame = articles[0]!.querySelector('[data-slot=aspect-ratio]')!;
     const frameRadius = getComputedStyle(frame).borderTopLeftRadius;

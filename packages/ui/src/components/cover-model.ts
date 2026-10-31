@@ -24,16 +24,8 @@ export const coverWidths = { xs: 48, sm: 96, md: 160, lg: 240, xl: 320 } as cons
 /** The width an intrinsic `width` and `height` are computed from when a frame fills its parent. */
 export const fillReferenceWidth = 320;
 
-type Family = 'work' | 'game' | 'music' | 'recipe' | 'person' | 'other';
-
-const familyRatios: Record<Family, CoverRatio> = {
-  work: '5:7',
-  game: '5:7',
-  music: '1:1',
-  recipe: '4:3',
-  person: '3:4',
-  other: '1:1',
-};
+/** The default identity frame for every kind, independent of the source artwork's dimensions. */
+export const defaultCoverRatio: CoverRatio = '5:7';
 
 const validCoverRatio = /^(?:[1-9]|[1-5][0-9]|6[0-4]):(?:[1-9]|[1-5][0-9]|6[0-4])$(?![\s\S])/u;
 
@@ -42,82 +34,14 @@ export function parseCoverRatio(value: string): CoverRatio | undefined {
   return validCoverRatio.test(value) ? (value as CoverRatio) : undefined;
 }
 
-// The default table of the Cover README, by type CURIE. A definition release that carries a `coverRatio` annotation
-// replaces it: the site resolves that and passes `ratio`, so this map is the fallback.
-const familyOf: Record<string, Family> = {
-  'schema:Book': 'work',
-  'wd:Q47461344': 'work',
-  'bf:Instance': 'work',
-  'wd:Q3331189': 'work',
-  'schema:BookSeries': 'work',
-  'wd:Q277759': 'work',
-  'schema:ComicSeries': 'work',
-  'wd:Q21198342': 'work',
-  'schema:PublicationVolume': 'work',
-  'wd:Q1238720': 'work',
-  'schema:TVSeries': 'work',
-  'wd:Q5398426': 'work',
-  'schema:TVSeason': 'work',
-  'wd:Q3464665': 'work',
-  'schema:Movie': 'work',
-  'wd:Q11424': 'work',
-  'wd:Q1983062': 'work',
-  'wd:Q689445': 'game',
-  'wd:Q7889': 'game',
-  'wd:Q20631656': 'game',
-  'wd:Q209163': 'game',
-  'schema:VideoGame': 'game',
-  'schema:MusicAlbum': 'music',
-  'schema:Recipe': 'recipe',
-  'schema:Place': 'recipe',
-  'schema:Event': 'recipe',
-  'schema:Person': 'person',
-  'wd:Q5': 'person',
-  'wd:Q95074': 'person',
-  'schema:Organization': 'other',
-  'wd:Q43229': 'other',
-  'wd:Q219239': 'recipe',
-  'wd:Q482994': 'music',
-};
-
-// Creative-work types with no more specific entry above: they still use the work ratio.
-const creativeWorks = new Set([
-  'schema:CreativeWork',
-  'schema:CreativeWorkSeries',
-  'schema:CreativeWorkSeason',
-  'schema:Episode',
-  'schema:MusicComposition',
-  'wd:Q7725310',
-]);
-
-/** The type family of a subject: the nearest listed type with an entry, else creative work, else other. */
-function coverFamily(types: readonly string[]): Family {
-  for (const type of types) {
-    const family = familyOf[type];
-    if (family) return family;
-  }
-  return types.some((type) => creativeWorks.has(type)) ? 'work' : 'other';
+/** Every semantic Type has the same default frame, never inferred from its image. */
+export function coverRatio(_types: readonly string[]): CoverRatio {
+  return defaultCoverRatio;
 }
 
-/** The frame ratio of a subject's type, never the image's. */
-export function coverRatio(types: readonly string[]): CoverRatio {
-  return familyRatios[coverFamily(types)];
-}
-
-/** One ratio for a row, grid or list that mixes types: the most common one, 5:7 when tied. */
-export function sharedRatio(subjects: readonly CoverSubject[]): CoverRatio {
-  const counts = new Map<CoverRatio, number>();
-  for (const subject of subjects) {
-    const ratio = coverRatio(subject.types);
-    counts.set(ratio, (counts.get(ratio) ?? 0) + 1);
-  }
-  let best = 0;
-  let winners: CoverRatio[] = [];
-  for (const [ratio, count] of counts) {
-    if (count > best) [best, winners] = [count, [ratio]];
-    else if (count === best) winners.push(ratio);
-  }
-  return winners.length === 1 ? winners[0]! : '5:7';
+/** A stable default for rows and grids, including empty and mixed-kind compositions. */
+export function sharedRatio(_subjects: readonly CoverSubject[]): CoverRatio {
+  return defaultCoverRatio;
 }
 
 export function ratioValue(ratio: CoverRatio): number {
@@ -127,7 +51,7 @@ export function ratioValue(ratio: CoverRatio): number {
 
 /** Portraits of characters and people keep the top of the image when it is cropped. */
 export function keepsTop(types: readonly string[]): boolean {
-  return coverFamily(types) === 'person';
+  return types.some((type) => ['schema:Person', 'wd:Q5', 'wd:Q95074'].includes(type));
 }
 
 /**

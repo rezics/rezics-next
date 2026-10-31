@@ -23,7 +23,7 @@ Release.types[typeId].listPresentation?: {
 }
 ```
 
-`portrait` means 3:4, `landscape` 16:9 and `square` 1:1 for list/card frames. `keyFacts` is an ordered unique array
+`portrait` means 5:7, `landscape` 16:9 and `square` 1:1 for list/card frames. `keyFacts` is an ordered unique array
 of 0–4 effective property CURIEs of that Type. They are property identifiers, not formatter functions, JSON paths,
 private Library facts or labels. Existing localized property/value labels and unit metadata supply wording.
 The nearest explicit base supplies the **whole object**, replaced as a whole by a nearer explicit declaration;
@@ -36,18 +36,14 @@ keyFacts may select ONLY effective properties representable by the EXISTING Fact
 Document/media/free-text properties are rejected at authoring/compilation; they never silently become fake code or
 complete-empty facts. No new Fact variant, engine or endpoint is introduced.
 
-Until actual generated handoff, Web treats new fields as additive/optional and uses explicit released Type anchors:
-`schema:Book` (including a book classified by a light novel work-form Concept, not a new light novel Type),
-`bf:Instance`, `schema:ComicSeries` and `schema:PublicationVolume` use portrait 3:4; `schema:Movie`,
-`schema:TVSeries`, `schema:TVSeason`, `schema:Episode` and `rezics:AnimeRelease` use landscape 16:9;
-`schema:MusicAlbum` uses square 1:1 and `schema:Recipe` uses landscape 16:9. Apply an anchor to an actual released
-descendant through its declared ancestry, using the nearest explicit declaration. In the current release TVSeries
-inherits CreativeWorkSeries; Movie, TVSeason, Episode and AnimeRelease inherit CreativeWork. Those shared bases do
-not classify their other descendants as video. The released inventory has no separate general-purpose video Type;
-Semantic owns any future native definition, and clients must not invent a video or light novel TypeId. Other Types
-use their existing valid `coverRatio`, otherwise square 1:1; legacy `coverRatio` values remain unchanged. Do not
-infer a visual family from a label or substring. A missing or retired Collection kind uses this member-Type
-fallback; it never converts member Types.
+Every default catalogue kind uses portrait 5:7, including book/edition/manga, anime/film/series/episode,
+game, album, recipe, person, character, organization and unknown or retired Types. Current effective released
+annotations, standalone Cover and list/card/Collection fallbacks agree. A missing or retired Collection kind
+never converts member Types or changes the default. No label, substring, loaded member sample or source image
+orientation decides geometry. Explicit configured list aspects and valid `coverRatio`/composition ratios remain
+supported; released list presentation wins over a composition fallback. Historical releases stay immutable.
+Landscape and square artwork remains whole in the reserved portrait frame through Cover's contain treatment
+and its own image/placeholder backdrop. Loading, withheld/reveal, failed and missing images reserve that frame.
 Facts remain absent without a delivered producer; no guessed author, runtime, episode or page count fills a row.
 
 ## Collection kind reads and writes
@@ -143,6 +139,11 @@ image; do not use a cached hidden first row. Complete absence yields null/`none`
 null/`pending`, never fabricated empty. The authorized owner editor may receive its stored `coverMediaId`; public
 reads disclose only an actually authorized descriptor. Never return storage keys, original URLs or external image
 URLs, or invent source, credit, container or retention claims. The existing served-media ID+variant path owns bytes.
+
+The Collection identity frame always renders from its own `cover` summary, including a placeholder when that
+summary is absent, null, denied or pending. The client never derives it from the loaded first member or unrelated
+hero art. It preserves the native `coverSource`, dimensions and rights; this frame contract adds no media producer,
+selection scan or upload/claim API.
 
 ## Editor endpoints and delivery inventory
 

@@ -305,26 +305,7 @@ test('published catalogue and both normal recordings share the new immutable rel
   // Every pre-existing semantic member, label, unit, profile and source role is
   // recovered by removing only the new inert bytes.
   expect(withoutHints(bundledRelease)).toEqual(await compileCatalogue(unhinted));
-  for (const [aspect, types] of [
-    [
-      'portrait',
-      [
-        'schema:Book',
-        'bf:Instance',
-        'schema:ComicSeries',
-        'schema:PublicationVolume',
-        'wd:Q689445',
-        'schema:Person',
-        'wd:Q95074',
-      ],
-    ],
-    [
-      'landscape',
-      ['schema:Movie', 'schema:TVSeries', 'schema:TVSeason', 'schema:Episode', 'rezics:AnimeRelease', 'schema:Recipe'],
-    ],
-    ['square', ['schema:MusicAlbum']],
-  ] as const)
-    for (const type of types) expect(bundledRelease.types[type]!.listPresentation!.imageAspect).toBe(aspect);
+  for (const type of Object.values(bundledRelease.types)) expect(type.listPresentation!.imageAspect).toBe('portrait');
   const active = await Bun.file(
     new URL('../../../apps/web/src/kernel/recorded/definitions-active.json', import.meta.url),
   ).json();

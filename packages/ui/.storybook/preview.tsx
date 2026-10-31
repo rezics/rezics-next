@@ -19,6 +19,8 @@ const preview: Preview = {
     a11y: { test: 'error' },
     viewport: {
       options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '860px' } },
         phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
         desktop: { name: 'Desktop', styles: { width: '1280px', height: '860px' } },
       },

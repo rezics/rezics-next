@@ -112,19 +112,19 @@ async function expectStories(names: string[]) {
   for (const name of names) expect(outcomes, name).toContain(`${name}: passed`);
 }
 
-test('a directly supplied invalid frame ratio falls back to the subject type', () => {
+test('a directly supplied invalid frame ratio falls back to the portrait default', () => {
   for (const ratio of ['0:1', '65:1', '1.5:2', 'portrait'] as CoverRatio[]) {
     expect(attr(tag(render({ subject: book, cover: null, ratio }), 'div'), 'data-ratio')).toBe('5:7');
-    expect(attr(tag(render({ subject: person, cover: null, ratio }), 'div'), 'data-ratio')).toBe('3:4');
+    expect(attr(tag(render({ subject: person, cover: null, ratio }), 'div'), 'data-ratio')).toBe('5:7');
   }
 });
 
-test('the cover frame keeps its type’s ratio and named size before the image loads, after it loads and when it fails', async () => {
+test('the cover frame keeps its portrait default and named size before the image loads, after it loads and when it fails', async () => {
   const expected: [CoverSubject, CoverRatio][] = [
     [book, '5:7'],
-    [person, '3:4'],
-    [{ id: 'album', title: 'Kind of Blue', types: ['schema:MusicAlbum'] }, '1:1'],
-    [{ id: 'recipe', title: 'Miso soup', types: ['schema:Recipe'] }, '4:3'],
+    [person, '5:7'],
+    [{ id: 'album', title: 'Kind of Blue', types: ['schema:MusicAlbum'] }, '5:7'],
+    [{ id: 'recipe', title: 'Miso soup', types: ['schema:Recipe'] }, '5:7'],
   ];
   for (const [subject, ratio] of expected) {
     for (const size of sizes) {
@@ -149,14 +149,14 @@ test('the cover frame keeps its type’s ratio and named size before the image l
   expect(coverRatio(['schema:Movie'])).toBe('5:7');
   expect(coverRatio(['wd:Q689445'])).toBe('5:7');
   expect(coverRatio(['schema:VideoGame', 'schema:CreativeWork'])).toBe('5:7');
-  expect(coverRatio(['schema:MusicAlbum', 'schema:CreativeWork'])).toBe('1:1');
-  expect(coverRatio(['schema:Recipe'])).toBe('4:3');
-  expect(coverRatio(['schema:Person'])).toBe('3:4');
-  expect(coverRatio(['wd:Q95074'])).toBe('3:4');
-  expect(coverRatio(['schema:Organization'])).toBe('1:1');
+  expect(coverRatio(['schema:MusicAlbum', 'schema:CreativeWork'])).toBe('5:7');
+  expect(coverRatio(['schema:Recipe'])).toBe('5:7');
+  expect(coverRatio(['schema:Person'])).toBe('5:7');
+  expect(coverRatio(['wd:Q95074'])).toBe('5:7');
+  expect(coverRatio(['schema:Organization'])).toBe('5:7');
   expect(coverRatio(['schema:CreativeWorkSeries', 'schema:CreativeWork'])).toBe('5:7');
-  expect(coverRatio(['schema:Thing'])).toBe('1:1');
-  expect(coverRatio([])).toBe('1:1');
+  expect(coverRatio(['schema:Thing'])).toBe('5:7');
+  expect(coverRatio([])).toBe('5:7');
   // The browser measures the frame before the image loads, after it loads and after it fails.
   await expectStories(['Frame Keeps Size']);
 }, 300_000);
@@ -360,18 +360,18 @@ test('Cover never renders a credit caption or credit control at any size', async
   await expectStories(['Credit Viewer']);
 }, 300_000);
 
-test('a mixed row uses the ratio of most of its items, 5:7 when tied', () => {
+test('mixed and homogeneous rows share the stable portrait default', () => {
   const of = (...types: string[]): CoverSubject[] =>
     types.map((type, index) => ({ id: `${type}${index}`, title: type, types: [type] }));
   expect(sharedRatio(of('schema:Book', 'schema:Book', 'schema:Person'))).toBe('5:7');
-  expect(sharedRatio(of('schema:MusicAlbum', 'schema:MusicAlbum', 'schema:Book'))).toBe('1:1');
-  expect(sharedRatio(of('schema:Person', 'schema:Person', 'schema:Person', 'schema:Book'))).toBe('3:4');
+  expect(sharedRatio(of('schema:MusicAlbum', 'schema:MusicAlbum', 'schema:Book'))).toBe('5:7');
+  expect(sharedRatio(of('schema:Person', 'schema:Person', 'schema:Person', 'schema:Book'))).toBe('5:7');
   expect(sharedRatio(of('schema:Recipe', 'schema:Recipe', 'schema:Book', 'schema:Book', 'schema:Person'))).toBe('5:7');
-  // A tie goes to 5:7 even when 5:7 is not one of the tied ratios, and an empty row uses it too.
+  // Kind counts and empty rows do not change the default frame.
   expect(sharedRatio(of('schema:Person', 'schema:MusicAlbum'))).toBe('5:7');
   expect(sharedRatio(of('schema:Recipe', 'schema:Recipe', 'schema:Organization', 'schema:Organization'))).toBe('5:7');
   expect(sharedRatio([])).toBe('5:7');
-  expect(sharedRatio(of('schema:Person'))).toBe('3:4');
+  expect(sharedRatio(of('schema:Person'))).toBe('5:7');
   // Rows share the ratio through the prop; items keep their own images fitted to it.
   expect(attr(tag(render({ subject: person, cover: null, ratio: '2:3' }), 'div'), 'data-ratio')).toBe('2:3');
 });

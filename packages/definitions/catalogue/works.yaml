@@ -28,8 +28,8 @@ classes:
       - bangumiSubjectId
     annotations:
       list_presentation:
-        imageAspect: square
+        imageAspect: portrait
         keyFacts: [schema:datePublished, schema:genre]
       facets: contributor partOfSeries genre keywords inLanguage
-      cover_ratio: 1:1
+      cover_ratio: 5:7
       schema_org_type: https://schema.org/MusicAlbum

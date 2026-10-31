@@ -99,7 +99,7 @@
       ],
       "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "landscape",
+        "imageAspect": "portrait",
         "keyFacts": ["schema:datePublished", "schema:director"]
       },
       "schemaOrgType": "https://schema.org/CreativeWork",
@@ -194,7 +194,7 @@
       ],
       "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "landscape",
+        "imageAspect": "portrait",
         "keyFacts": ["schema:director", "schema:datePublished", "schema:duration"]
       },
       "schemaOrgType": "https://schema.org/Episode",
@@ -283,7 +283,7 @@
       ],
       "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "landscape",
+        "imageAspect": "portrait",
         "keyFacts": ["schema:director", "schema:datePublished", "schema:duration"]
       },
       "schemaOrgType": "https://schema.org/Movie",
@@ -372,7 +372,7 @@
       ],
       "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "landscape",
+        "imageAspect": "portrait",
         "keyFacts": ["schema:director", "schema:datePublished", "schema:numberOfEpisodes"]
       },
       "schemaOrgType": "https://schema.org/TVSeason",
@@ -471,7 +471,7 @@
       ],
       "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "landscape",
+        "imageAspect": "portrait",
         "keyFacts": ["schema:director", "schema:datePublished", "schema:numberOfEpisodes"]
       },
       "schemaOrgType": "https://schema.org/TVSeries",
@@ -685,7 +685,7 @@
         "wdt:P6296"
       ],
       "facets": ["schema:keywords", "schema:gender", "wdt:P1853", "schema:birthDate", "schema:height", "schema:weight"],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
         "keyFacts": []
@@ -725,9 +725,9 @@
         "skos:inScheme"
       ],
       "facets": [],
-      "coverRatio": "1:1",
+      "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": []
       },
       "schemaOrgType": "https://schema.org/DefinedTerm"
@@ -748,9 +748,9 @@
       "bases": ["schema:Thing"],
       "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
       "facets": [],
-      "coverRatio": "1:1",
+      "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": []
       },
       "schemaOrgType": "https://schema.org/DefinedTermSet"
@@ -771,9 +771,9 @@
       "bases": ["schema:Thing"],
       "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
       "facets": [],
-      "coverRatio": "1:1",
+      "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": []
       },
       "schemaOrgType": "https://schema.org/Thing"
@@ -794,9 +794,9 @@
       "bases": ["schema:Thing"],
       "properties": ["rezics:penNameOf", "schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
       "facets": [],
-      "coverRatio": "1:1",
+      "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": []
       },
       "schemaOrgType": "https://schema.org/Organization"
@@ -828,7 +828,7 @@
         "wdt:P648"
       ],
       "facets": [],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
         "keyFacts": ["schema:birthDate"]
@@ -857,9 +857,9 @@
       "bases": ["schema:Thing"],
       "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
       "facets": [],
-      "coverRatio": "1:1",
+      "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": []
       },
       "schemaOrgType": "https://schema.org/SoftwareApplication"
@@ -908,7 +908,7 @@
       "facets": ["schema:contributor", "schema:genre", "schema:keywords", "wdt:P179"],
       "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": []
       },
       "schemaOrgType": "https://schema.org/CreativeWork"
@@ -995,7 +995,7 @@
       ],
       "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": []
       },
       "schemaOrgType": "https://schema.org/VideoGame",
@@ -1086,7 +1086,7 @@
       ],
       "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": []
       },
       "schemaOrgType": "https://schema.org/CreativeWork",
@@ -1369,9 +1369,9 @@
         "schema:recipeYield",
         "schema:suitableForDiet"
       ],
-      "coverRatio": "4:3",
+      "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "landscape",
+        "imageAspect": "portrait",
         "keyFacts": ["schema:cookTime", "schema:suitableForDiet"]
       },
       "schemaOrgType": "https://schema.org/Recipe",
@@ -1438,7 +1438,7 @@
       ],
       "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": []
       },
       "schemaOrgType": "https://schema.org/BookSeries"
@@ -1488,7 +1488,7 @@
       "facets": ["schema:genre", "schema:keywords", "schema:contributor", "wdt:P179"],
       "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": []
       },
       "schemaOrgType": "https://schema.org/CreativeWorkSeries",
@@ -1628,9 +1628,9 @@
         "wdt:P5732"
       ],
       "facets": ["schema:contributor", "wdt:P179", "schema:genre", "schema:keywords", "schema:inLanguage"],
-      "coverRatio": "1:1",
+      "coverRatio": "5:7",
       "listPresentation": {
-        "imageAspect": "square",
+        "imageAspect": "portrait",
         "keyFacts": ["schema:datePublished", "schema:genre"]
       },
       "schemaOrgType": "https://schema.org/MusicAlbum"

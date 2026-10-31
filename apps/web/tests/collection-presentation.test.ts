@@ -98,8 +98,8 @@ test('Collection geometry follows actual Type hints while owner/dominant Collect
     'schema:Book': { imageAspect: 'square', keyFacts: ['schema:datePublished'] },
   };
   expect(collectionMemberRatio(member.subject, {}, configured)).toBe('1:1');
-  expect(collectionMemberRatio({ type: 'schema:Movie' }, {}, presentations)).toBe('16:9');
-  expect(collectionMemberRatio({ type: 'concept:Book' }, {}, presentations)).toBe('1:1');
+  expect(collectionMemberRatio({ type: 'schema:Movie' }, {}, presentations)).toBe('5:7');
+  expect(collectionMemberRatio({ type: 'concept:Book' }, {}, presentations)).toBe('5:7');
   for (const presentationKind of ['schema:Book', 'schema:Movie', null]) {
     const html = renderToStaticMarkup(
       createElement(CollectionReadMembers, {

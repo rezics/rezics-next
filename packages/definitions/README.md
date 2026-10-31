@@ -21,7 +21,7 @@ bundled catalogue and both normal definitions recordings. Collection runtime and
 ## Type list presentation
 
 `TypeDefinition.listPresentation?: { imageAspect: 'portrait' | 'landscape' | 'square'; keyFacts: string[] }`
-is a closed inert object. Frames mean 3:4, 16:9 and 1:1 respectively. `keyFacts` preserves author order,
+is a closed inert object. Frames mean 5:7, 16:9 and 1:1 respectively. `keyFacts` preserves author order,
 contains 0–4 unique effective property CURIEs, and admits only existing Search Fact projections:
 `wikibase-item`, `time`, `quantity`, or a `string` with an admitted pattern. Documents, media, free text,
 external IDs, executable formatters, JSON paths and private Library fields cannot supply these hints.
@@ -35,18 +35,19 @@ with source pointers. Release validation enforces the same closure and reference
 Only this custom object and the existing library mapping are removed before ordinary LinkML induction;
 all other annotations and LinkML validation remain intact. Older releases may omit hints entirely.
 
-The published inventory is data in `catalogue/`: Book and edition, manga work and volume, and visual novel
-use portrait; Movie, TV series, season, episode, anime release and Recipe use landscape; MusicAlbum uses
-square; person and character use portrait. Generic Types inherit the safe square frame and empty facts
-from Thing. Book selects author/datePublished/wordCount; Movie selects director/datePublished/duration;
-Recipe selects cookTime/suitableForDiet; MusicAlbum selects datePublished/genre. Other selections use only
-each Type's effective properties. Existing `coverRatio`, media dimensions, source authority, membership,
-LibraryProfileSource and accepted profile pins remain unchanged; hints convey no authority or fact values.
+The published inventory in `catalogue/` defaults every Type to portrait 5:7, including generic Types through
+Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, person and character. Current `coverRatio`
+annotations agree with the portrait list aspect. Explicit landscape/square configuration and any valid ratio
+remain supported by the schema; historical immutable releases retain their bytes. Book selects
+author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
+cookTime/suitableForDiet; MusicAlbum selects datePublished/genre. These ordered factual hints, media dimensions,
+source authority, membership, LibraryProfileSource and accepted profile pins retain their meaning. Hints convey
+no authority or fact values.
 
 Regenerate `release/rezics.json` with `bun run --cwd packages/definitions release`, then regenerate both
 `apps/web/src/kernel/recorded/definitions-active.json` and `definitions-release.json` in the same change with
-`bun apps/web/scripts/record.ts definitions-active definitions-release`. The normal recorder owns stack
-placement and returned artifacts; generated release identity and recording bodies must agree.
+`bun apps/web/scripts/record.ts definitions-active definitions-release`. This exact two-recording selection uses the recorder's bundled-release path without a runtime; all other
+recordings retain their normal stack placement and artifact boundary; generated release identity and recording bodies must agree.
 
 ### Cost
 

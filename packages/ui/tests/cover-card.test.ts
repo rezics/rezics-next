@@ -32,7 +32,7 @@ test('member Types set known list frames and composition supplies the unknown Ty
   const row = renderToStaticMarkup(
     createElement(CoverRow, { ratio: '2:3', label: 'Continue', children: card(unknown) }),
   );
-  expect([...grid.matchAll(/data-ratio="([^"]+)"/gu)].map((match) => match[1])).toEqual(['3:4', '1:1']);
+  expect([...grid.matchAll(/data-ratio="([^"]+)"/gu)].map((match) => match[1])).toEqual(['5:7', '1:1']);
   expect(row).toContain('data-ratio="2:3"');
   expect(row).toContain('aria-label="Continue"');
   expect(row).toContain('tabindex="0"');

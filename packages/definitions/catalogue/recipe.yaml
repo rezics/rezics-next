@@ -33,7 +33,7 @@ classes:
       - suitableForDiet
     annotations:
       list_presentation:
-        imageAspect: landscape
+        imageAspect: portrait
         keyFacts: [schema:cookTime, schema:suitableForDiet]
       library:
         id: recipe.cooking
@@ -62,7 +62,7 @@ classes:
               statuses: [{ id: owned }]
         importSources: []
       facets: author keywords datePublished cookTime recipeYield suitableForDiet
-      cover_ratio: 4:3
+      cover_ratio: 5:7
       schema_org_type: https://schema.org/Recipe
 slots:
   suitableForDiet:

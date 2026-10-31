@@ -11,6 +11,8 @@ const movie: CoverSubject = { id: 'list-movie', title: 'The Red Turtle', types: 
 const anime: CoverSubject = { id: 'list-anime', title: 'My Neighbor Totoro', types: ['rezics:AnimeRelease'] };
 const music: CoverSubject = { id: 'list-music', title: 'Kind of Blue', types: ['schema:MusicAlbum'] };
 const recipe: CoverSubject = { id: 'list-recipe', title: 'Miso soup', types: ['schema:Recipe'] };
+const person: CoverSubject = { id: 'list-person', title: 'A performer', types: ['schema:Person'] };
+const organization: CoverSubject = { id: 'list-organization', title: 'A studio', types: ['schema:Organization'] };
 const unknown: CoverSubject = { id: 'list-unknown', title: 'Unclassified work', types: ['type:NotReleased'] };
 
 function summary(subject: CoverSubject, aspect: 'portrait' | 'landscape' | 'square', withheld = false): CoverSummary {
@@ -129,21 +131,30 @@ export const Recipe: Story = {
   ),
 };
 
-const mixedSubjects = [book, movie, anime, music, recipe] as const;
+const mixedSubjects = [
+  { subject: book, aspect: 'portrait', label: 'book' },
+  { subject: movie, aspect: 'landscape', label: 'film' },
+  { subject: anime, aspect: 'landscape', label: 'Anime release' },
+  { subject: music, aspect: 'square', label: 'album' },
+  { subject: person, aspect: 'portrait', label: 'person' },
+  { subject: organization, aspect: null, label: 'organization' },
+  { subject: recipe, aspect: 'landscape', label: 'recipe' },
+  { subject: unknown, aspect: null, label: 'Type unavailable' },
+] as const;
 const mixedRatio = '5:7' as const;
 
 export const Mixed: Story = {
   render: () => (
     <CoverGrid ratio={mixedRatio}>
-      {mixedSubjects.map((subject, index) => (
+      {mixedSubjects.map(({ subject, aspect, label }, index) => (
         <CoverCard
           key={subject.id}
           href={`/${subject.id}`}
           title={subject.title}
-          secondary={['book', 'film', 'Anime release', 'album', 'recipe'][index]}
+          secondary={label}
           cover={{
             subject,
-            cover: summary(subject, fallbackListPresentation(subject.types)?.imageAspect ?? 'square'),
+            cover: aspect ? summary(subject, aspect) : null,
             src: imageSource,
           }}
           {...(index === 0
@@ -156,7 +167,12 @@ export const Mixed: Story = {
   async play({ canvasElement }) {
     const cards = [...canvasElement.querySelectorAll<HTMLElement>('[data-slot="cover-card"]')];
     const ratios = cards.map((card) => card.querySelector('[data-slot="cover"]')?.getAttribute('data-ratio'));
-    await expect(ratios).toEqual(['3:4', '16:9', '16:9', '1:1', '16:9']);
+    await expect(ratios).toEqual(mixedSubjects.map(() => '5:7'));
+    for (const index of [1, 2, 3, 6]) {
+      await expect(cards[index]!.querySelector('[data-slot="cover"]')).toHaveAttribute('data-fit', 'contain');
+      await expect(cards[index]!.querySelector('img')).toHaveClass('object-contain');
+    }
+    await expect(cards[5]!.querySelector('[data-slot="cover"]')).toHaveAttribute('data-state', 'placeholder');
 
     const trigger = within(cards[0]!).getByRole('button', { name: 'More actions for The Little Prince' });
     await userEvent.click(trigger);
@@ -229,7 +245,7 @@ export const UnknownType: Story = {
     </ul>
   ),
   play: async ({ canvasElement }) => {
-    await expect(canvasElement.querySelector('[data-slot="cover"]')).toHaveAttribute('data-ratio', '1:1');
+    await expect(canvasElement.querySelector('[data-slot="cover"]')).toHaveAttribute('data-ratio', '5:7');
     await expect(canvasElement.querySelector('[data-slot="cover"]')).toHaveAttribute('data-state', 'placeholder');
   },
 };

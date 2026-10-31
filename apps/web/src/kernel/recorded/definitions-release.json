@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:77ff1bcbcb9aab2d788fb176c53e64872162985285f6e4f49d5d1a8f5391ec8d",
+  "digest": "sha256:d0d61a1631a004658548605aae9cd169a30676613edecec9084489968db230a4",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -17,10 +17,10 @@
           "zh-Hant": "食物"
         },
         "mappings": [],
-        "coverRatio": "1:1",
+        "coverRatio": "5:7",
         "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
         "schemaOrgType": "https://schema.org/Thing",
-        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       },
       "wd:Q95074": {
         "iri": "http://www.wikidata.org/entity/Q95074",
@@ -44,7 +44,7 @@
           "zh-Hant": "角色"
         },
         "mappings": ["wd:Q95074"],
-        "coverRatio": "3:4",
+        "coverRatio": "5:7",
         "properties": [
           "schema:abstract",
           "schema:alternateName",
@@ -166,7 +166,7 @@
           "zh-Hant": "資料片"
         },
         "schemaOrgType": "https://schema.org/CreativeWork",
-        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       },
       "wd:Q689445": {
         "iri": "http://www.wikidata.org/entity/Q689445",
@@ -456,7 +456,7 @@
           "wdt:P361"
         ],
         "schemaOrgType": "https://schema.org/CreativeWork",
-        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       },
       "wd:Q7725310": {
         "iri": "http://www.wikidata.org/entity/Q7725310",
@@ -511,7 +511,7 @@
           "zh-Hant": "系列創意作品"
         },
         "schemaOrgType": "https://schema.org/CreativeWorkSeries",
-        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       },
       "schema:Movie": {
         "iri": "http://schema.org/Movie",
@@ -597,7 +597,7 @@
         "schemaOrgType": "https://schema.org/Movie",
         "listPresentation": {
           "keyFacts": ["schema:director", "schema:datePublished", "schema:duration"],
-          "imageAspect": "landscape"
+          "imageAspect": "portrait"
         }
       },
       "skos:Concept": {
@@ -615,7 +615,7 @@
           "zh-Hant": "概念"
         },
         "mappings": [],
-        "coverRatio": "1:1",
+        "coverRatio": "5:7",
         "properties": [
           "foaf:focus",
           "schema:image",
@@ -627,7 +627,7 @@
           "skos:inScheme"
         ],
         "schemaOrgType": "https://schema.org/DefinedTerm",
-        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       },
       "wd:Q20631656": {
         "iri": "http://www.wikidata.org/entity/Q20631656",
@@ -718,7 +718,7 @@
           "zh-Hant": "人物"
         },
         "mappings": ["wd:Q5"],
-        "coverRatio": "3:4",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:penNameOf",
           "schema:birthDate",
@@ -758,7 +758,7 @@
         },
         "library": { "profileId": "recipe.cooking" },
         "mappings": ["wd:Q219239"],
-        "coverRatio": "4:3",
+        "coverRatio": "5:7",
         "properties": [
           "schema:abstract",
           "schema:author",
@@ -776,7 +776,7 @@
           "wdt:P186"
         ],
         "schemaOrgType": "https://schema.org/Recipe",
-        "listPresentation": { "keyFacts": ["schema:cookTime", "schema:suitableForDiet"], "imageAspect": "landscape" }
+        "listPresentation": { "keyFacts": ["schema:cookTime", "schema:suitableForDiet"], "imageAspect": "portrait" }
       },
       "schema:Episode": {
         "iri": "http://schema.org/Episode",
@@ -861,7 +861,7 @@
         "schemaOrgType": "https://schema.org/Episode",
         "listPresentation": {
           "keyFacts": ["schema:director", "schema:datePublished", "schema:duration"],
-          "imageAspect": "landscape"
+          "imageAspect": "portrait"
         }
       },
       "schema:TVSeason": {
@@ -955,7 +955,7 @@
         "schemaOrgType": "https://schema.org/TVSeason",
         "listPresentation": {
           "keyFacts": ["schema:director", "schema:datePublished", "schema:numberOfEpisodes"],
-          "imageAspect": "landscape"
+          "imageAspect": "portrait"
         }
       },
       "schema:TVSeries": {
@@ -1046,7 +1046,7 @@
         "schemaOrgType": "https://schema.org/TVSeries",
         "listPresentation": {
           "keyFacts": ["schema:director", "schema:datePublished", "schema:numberOfEpisodes"],
-          "imageAspect": "landscape"
+          "imageAspect": "portrait"
         }
       },
       "schema:VideoGame": {
@@ -1132,7 +1132,7 @@
           "wdt:P973"
         ],
         "schemaOrgType": "https://schema.org/VideoGame",
-        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       },
       "schema:BookSeries": {
         "iri": "http://schema.org/BookSeries",
@@ -1193,7 +1193,7 @@
           "wdt:P973"
         ],
         "schemaOrgType": "https://schema.org/BookSeries",
-        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       },
       "schema:MusicAlbum": {
         "iri": "http://schema.org/MusicAlbum",
@@ -1210,7 +1210,7 @@
           "zh-Hant": "音樂專輯"
         },
         "mappings": ["wd:Q482994"],
-        "coverRatio": "1:1",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -1244,7 +1244,7 @@
           "wdt:P5732"
         ],
         "schemaOrgType": "https://schema.org/MusicAlbum",
-        "listPresentation": { "keyFacts": ["schema:datePublished", "schema:genre"], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": ["schema:datePublished", "schema:genre"], "imageAspect": "portrait" }
       },
       "schema:ComicSeries": {
         "iri": "http://schema.org/ComicSeries",
@@ -1340,10 +1340,10 @@
           "zh-Hant": "概念體系"
         },
         "mappings": [],
-        "coverRatio": "1:1",
+        "coverRatio": "5:7",
         "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
         "schemaOrgType": "https://schema.org/DefinedTermSet",
-        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       },
       "rezics:AnimeRelease": {
         "iri": "https://rezics.com/vocab/AnimeRelease",
@@ -1435,7 +1435,7 @@
           "zh-Hant": "具有獨立識別身分的動畫出版或發行版本，與作品本身分開。"
         },
         "schemaOrgType": "https://schema.org/CreativeWork",
-        "listPresentation": { "keyFacts": ["schema:datePublished", "schema:director"], "imageAspect": "landscape" }
+        "listPresentation": { "keyFacts": ["schema:datePublished", "schema:director"], "imageAspect": "portrait" }
       },
       "schema:Organization": {
         "iri": "http://schema.org/Organization",
@@ -1452,10 +1452,10 @@
           "zh-Hant": "組織"
         },
         "mappings": ["wd:Q43229"],
-        "coverRatio": "1:1",
+        "coverRatio": "5:7",
         "properties": ["rezics:penNameOf", "schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
         "schemaOrgType": "https://schema.org/Organization",
-        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       },
       "schema:PublicationVolume": {
         "iri": "http://schema.org/PublicationVolume",
@@ -1544,10 +1544,10 @@
           "zh-Hant": "軟體應用程式"
         },
         "mappings": ["wd:Q166142"],
-        "coverRatio": "1:1",
+        "coverRatio": "5:7",
         "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
         "schemaOrgType": "https://schema.org/SoftwareApplication",
-        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       }
     },
     "format": "https://rezics.com/definitions/release/1",

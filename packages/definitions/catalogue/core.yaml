@@ -24,9 +24,9 @@ classes:
       - sameAs
     annotations:
       list_presentation:
-        imageAspect: square
+        imageAspect: portrait
         keyFacts: []
-      cover_ratio: 1:1
+      cover_ratio: 5:7
   CreativeWork:
     abstract: true
     is_a: Thing
@@ -73,7 +73,7 @@ classes:
       list_presentation:
         imageAspect: portrait
         keyFacts: []
-      cover_ratio: 3:4
+      cover_ratio: 5:7
   CreativeWorkSeries:
     abstract: true
     is_a: CreativeWork
@@ -98,7 +98,7 @@ classes:
       list_presentation:
         imageAspect: portrait
         keyFacts: [schema:birthDate]
-      cover_ratio: 3:4
+      cover_ratio: 5:7
       schema_org_type: https://schema.org/Person
   Organization:
     is_a: Thing
@@ -124,7 +124,7 @@ classes:
     exact_mappings:
       - wd:Q166142
     annotations:
-      cover_ratio: 1:1
+      cover_ratio: 5:7
       schema_org_type: https://schema.org/SoftwareApplication
 slots:
   madeFromMaterial:

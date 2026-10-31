@@ -3,21 +3,21 @@ import { bundledRelease } from '../src/bundled.ts';
 import { compileCatalogue } from '../src/compile.ts';
 import { validateRelease } from '../src/index.ts';
 const hint = (type: string) => Reflect.get(bundledRelease.types[type]!, 'listPresentation');
-test('actual released book film and recipe lists carry different inert frames and real property hints', () => {
+test('actual released book film and recipe lists carry portrait defaults and real property hints', () => {
   expect(hint('schema:Book')).toEqual({
     imageAspect: 'portrait',
     keyFacts: ['schema:author', 'schema:datePublished', 'schema:wordCount'],
   });
   expect(hint('schema:Movie')).toEqual({
-    imageAspect: 'landscape',
+    imageAspect: 'portrait',
     keyFacts: ['schema:director', 'schema:datePublished', 'schema:duration'],
   });
   expect(hint('schema:Recipe')).toEqual({
-    imageAspect: 'landscape',
+    imageAspect: 'portrait',
     keyFacts: ['schema:cookTime', 'schema:suitableForDiet'],
   });
   expect(hint('schema:MusicAlbum')).toEqual({
-    imageAspect: 'square',
+    imageAspect: 'portrait',
     keyFacts: ['schema:datePublished', 'schema:genre'],
   });
   expect(validateRelease(bundledRelease)).toEqual([]);

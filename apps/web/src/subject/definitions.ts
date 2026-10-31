@@ -188,7 +188,8 @@ export async function typeNames(types: Iterable<string>, locale: string): Promis
 
 /**
  * The type's name in the reader's language and the cover frame its definition declares, taken from the nearest type
- * of its own bases that declares one. A type the release does not know has neither.
+ * of its own bases that declares one. Current catalogue defaults are portrait 5:7 for every kind; an explicit
+ * valid configured ratio remains supported. A type the release does not know leaves Cover's default in control.
  */
 export async function typeFrame(
   type: string,

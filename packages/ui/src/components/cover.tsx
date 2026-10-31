@@ -24,12 +24,13 @@ import {
   type CoverSummary,
 } from './cover-model.ts';
 
-export { coverRatio, parseCoverRatio, placeholderColors, sharedRatio } from './cover-model.ts';
+export { coverRatio, defaultCoverRatio, parseCoverRatio, placeholderColors, sharedRatio } from './cover-model.ts';
 export type { CoverRatio, CoverSize, CoverSubject, CoverSummary } from './cover-model.ts';
 export {
   fallbackListFactProperties,
   fallbackListPresentation,
   listPresentationForCover,
+  listPresentationRatio,
   parseListPresentation,
 } from './list-presentation-model.ts';
 export type { ListImageAspect, ListPresentation } from './list-presentation-model.ts';
@@ -68,7 +69,7 @@ export interface CoverProps {
   src: (media: string, format: CoverFormat, width: number) => string;
   /** Additional classes for the ratio frame around the image. */
   frameClassName?: string;
-  /** A row's shared ratio; otherwise the ratio of the subject's type. */
+  /** A configured frame ratio; otherwise the shared portrait default. */
   ratio?: CoverRatio;
   /** The list-specific aspect and ordered fact keys already resolved for this Type. */
   listPresentation?: ListPresentation;
@@ -88,7 +89,8 @@ type Status = { media: string; value: 'loaded' | 'failed' };
 
 /**
  * The image area of any subject, which always renders: the image fitted to a frame whose ratio comes from the
- * subject's type, or the typographic placeholder when there is no image, it fails to load or it was taken down.
+ * configured presentation or the shared portrait default, or the typographic placeholder when there is no image,
+ * it fails to load or it was taken down.
  * shadcn has no cover or poster component; this one adds what a subject needs on top of its `AspectRatio` and
  * `Button`: the ThumbHash and colour painted while the image loads, the fit rule, the deterministic placeholder,
  * the suitability blur.

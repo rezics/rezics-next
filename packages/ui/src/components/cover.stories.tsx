@@ -89,7 +89,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The image area of any subject, which always renders. The frame takes its ratio from the subject’s type and its width from a named size, so nothing shifts while an image loads, fails or is withheld. A missing, failed or taken-down image shows the typographic placeholder: the title in the Work title face and the byline in the interface face on a colour fixed by the subject. Covers withheld for suitability stay blurred behind a label and a reveal control. A subject page opens its cover viewer from a usable image.',
+          'The image area of any subject, which always renders. Every kind defaults to the same portrait frame and its width from a named size, so nothing shifts while an image loads, fails or is withheld. A missing, failed or taken-down image shows the typographic placeholder: the title in the Work title face and the byline in the interface face on a colour fixed by the subject. Covers withheld for suitability stay blurred behind a label and a reveal control. A subject page opens its cover viewer from a usable image.',
       },
     },
   },
@@ -151,7 +151,7 @@ function Grid({ className }: { className?: string }) {
           <Cover key={size} subject={album} cover={null} size={size} src={artSrc} />
         ))}
       </Row>
-      <Row kind="ratios" label="Frame ratios: 5:7, 3:4, 1:1, 4:3">
+      <Row kind="ratios" label="Portrait defaults with portrait, square and wide artwork">
         <Cover subject={book} cover={summary(1200, 1800)} size="md" src={artSrc} />
         <Cover subject={person} cover={summary(900, 1200)} size="md" src={artSrc} />
         <Cover subject={album} cover={summary(1000, 1000)} size="md" src={artSrc} />
@@ -181,14 +181,11 @@ export const States: Story = {
     for (const cover of canvasElement.querySelectorAll('[data-row="withheld"] [data-slot="cover"]'))
       expect(cover).toHaveAttribute('data-state', 'withheld');
     expect(canvasElement.querySelector('[data-row="error"] img')).toBeNull();
-    // Each cover keeps the ratio of its type: heights follow widths.
-    const [portrait, three, square, landscape] = [
-      ...canvasElement.querySelectorAll('[data-row="ratios"] [data-slot="cover"]'),
-    ].map((element) => element.getBoundingClientRect());
-    expect(portrait!.height / portrait!.width).toBeCloseTo(7 / 5, 1);
-    expect(three!.height / three!.width).toBeCloseTo(4 / 3, 1);
-    expect(square!.height / square!.width).toBeCloseTo(1, 1);
-    expect(landscape!.height / landscape!.width).toBeCloseTo(3 / 4, 1);
+    // All kinds reserve the same portrait area, independently of artwork orientation.
+    for (const frame of canvasElement.querySelectorAll('[data-row="ratios"] [data-slot="cover"]')) {
+      const { width, height } = frame.getBoundingClientRect();
+      expect(height / width).toBeCloseTo(7 / 5, 1);
+    }
   },
 };
 
@@ -212,9 +209,9 @@ function Measured({
 
 const measures: [string, CoverSubject, number][] = [
   ['book', book, 5 / 7],
-  ['character', person, 3 / 4],
-  ['album', album, 1],
-  ['recipe', recipe, 4 / 3],
+  ['character', person, 5 / 7],
+  ['album', album, 5 / 7],
+  ['recipe', recipe, 5 / 7],
 ];
 
 /**
@@ -319,10 +316,12 @@ const mixed: { subject: CoverSubject; shape: [number, number] }[] = [
   { subject: game, shape: [1600, 900] },
   { subject: album, shape: [1000, 1000] },
   { subject: person, shape: [900, 1200] },
-  { subject: { ...book, id: 'second-book', title: 'Norwegian Wood' }, shape: [1000, 1500] },
+  { subject: recipe, shape: [1600, 900] },
+  { subject: { id: 'organization', title: 'A studio', types: ['schema:Organization'] }, shape: [1000, 1000] },
+  { subject: { id: 'screen', title: 'A film', types: ['schema:Movie'] }, shape: [1600, 900] },
 ];
 
-/** A row that mixes types uses the ratio of most of its items; each image is then fitted to the shared frame. */
+/** Mixed kinds share a stable portrait default; wide and square artwork stays whole. */
 export const MixedRow: Story = {
   render: () => {
     const ratio: CoverRatio = sharedRatio(mixed.map((item) => item.subject));

@@ -1,4 +1,4 @@
-import type { CoverRatio, CoverSubject } from './cover-model.ts';
+import { defaultCoverRatio, type CoverRatio, type CoverSubject } from './cover-model.ts';
 
 export type ListImageAspect = 'portrait' | 'landscape' | 'square';
 
@@ -9,7 +9,7 @@ export type ListPresentation = {
 };
 
 const aspectRatios: Record<ListImageAspect, CoverRatio> = {
-  portrait: '3:4',
+  portrait: defaultCoverRatio,
   landscape: '16:9',
   square: '1:1',
 };
@@ -49,19 +49,19 @@ const typeFallbacks = new Map<string, ListImageAspect>([
   ['wd:Q21198342', 'portrait'],
   ['schema:PublicationVolume', 'portrait'],
   ['wd:Q1238720', 'portrait'],
-  ['schema:Movie', 'landscape'],
-  ['wd:Q11424', 'landscape'],
-  ['schema:TVSeries', 'landscape'],
-  ['wd:Q5398426', 'landscape'],
-  ['schema:TVSeason', 'landscape'],
-  ['wd:Q3464665', 'landscape'],
-  ['schema:Episode', 'landscape'],
-  ['wd:Q1983062', 'landscape'],
-  ['rezics:AnimeRelease', 'landscape'],
-  ['schema:MusicAlbum', 'square'],
-  ['wd:Q482994', 'square'],
-  ['schema:Recipe', 'landscape'],
-  ['wd:Q219239', 'landscape'],
+  ['schema:Movie', 'portrait'],
+  ['wd:Q11424', 'portrait'],
+  ['schema:TVSeries', 'portrait'],
+  ['wd:Q5398426', 'portrait'],
+  ['schema:TVSeason', 'portrait'],
+  ['wd:Q3464665', 'portrait'],
+  ['schema:Episode', 'portrait'],
+  ['wd:Q1983062', 'portrait'],
+  ['rezics:AnimeRelease', 'portrait'],
+  ['schema:MusicAlbum', 'portrait'],
+  ['wd:Q482994', 'portrait'],
+  ['schema:Recipe', 'portrait'],
+  ['wd:Q219239', 'portrait'],
 ]);
 
 const factualFallbacks = new Map<string, readonly string[]>([
@@ -94,7 +94,7 @@ export function fallbackListFactProperties(types: readonly string[]): readonly s
   return firstTypeValue(types, factualFallbacks);
 }
 
-/** Resolve the list geometry while leaving standalone Cover's legacy coverRatio behavior untouched. */
+/** Explicit released configuration wins; current Type fallbacks share Cover's portrait default. */
 export function listPresentationForCover(
   subject: Pick<CoverSubject, 'types'>,
   optionalPresentation?: unknown,
