@@ -20,7 +20,7 @@ import type {
   Task,
   WorktreeCleanupDisposition,
 } from './types.ts';
-import { recordFlow, ensureFlow } from './flow.ts';
+import { recordFlow, ensureFlow, closePendingFlow } from './flow.ts';
 import type {
   ProofBinding,
   ProofReservation,
@@ -1215,6 +1215,7 @@ export class WorkerStore implements AttemptFence {
   private saveTask(task: Task): void {
     if (task.brief.kind === 'verification' && ['landing', 'integrated', 'merged'].includes(task.state))
       throw new Error('proof tasks cannot land or publish source integration');
+    if (['integrated', 'merged', 'cancelled', 'stopped'].includes(task.state)) closePendingFlow(this.db, task);
     this.db
       .query('UPDATE worker_tasks SET current_attempt=?, body=? WHERE id=?')
       .run(task.currentAttempt, JSON.stringify(task), task.id);
