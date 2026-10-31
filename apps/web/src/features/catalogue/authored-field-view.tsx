@@ -301,9 +301,7 @@ export function AuthoredField({
             <p role="alert">
               {readFailure === 'denied'
                 ? m.catalogue_result_read_denied({}, o)
-                : readFailure === 'concealed'
-                  ? m.catalogue_create_concealed({}, o)
-                  : m.catalogue_result_read_unavailable({}, o)}
+                : m.catalogue_result_read_unavailable({}, o)}
             </p>
           ) : (
             <EditorFailure reason={failure} locale={locale} />
