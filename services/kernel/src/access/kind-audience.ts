@@ -121,6 +121,28 @@ export type CaptureKindAudienceOriginResult =
     }>
   | Readonly<{ status: 'unavailable'; work: WorkReceipt }>;
 
+/** Source-local lookup AFTER Library commits the bounded input and BEFORE Type
+ * completion. Read the original episode/interval/custody under native admission;
+ * resolve Accounts' matching enrollment, without foreign IO or a completed-Type
+ * prerequisite. Release this home before calling detached preparation.
+ */
+export type ResolveKindAudienceInput = Readonly<{
+  work: CollectionKindPreparationWorkContext;
+  origin: KindAudienceOriginRef;
+  allowance: WorkAllowance;
+  deadline: number;
+}>;
+
+export type ResolveKindAudienceResult =
+  | Readonly<{
+      status: 'resolved';
+      origin: KindAudienceOriginRef;
+      input: KindAudienceInputRef;
+      binding: KindAudienceBinding;
+      work: WorkReceipt;
+    }>
+  | Readonly<{ status: 'unavailable'; work: WorkReceipt }>;
+
 /** Detached native orchestration: NO Actor, JWT, client principal, claims,
  * arbitrary Subject keys, caller T or held Source transaction. The native bodies
  * resolve original committed origin/expiry/current consent/client/basis and exact
@@ -185,6 +207,7 @@ export type VerifyKindAudienceSourceResult =
  */
 export type KindAudienceAccess = Readonly<{
   capture: KindAudienceOperation<CaptureKindAudienceOriginInput, CaptureKindAudienceOriginResult>;
+  resolveInput: KindAudienceOperation<ResolveKindAudienceInput, ResolveKindAudienceResult>;
   prepare: KindAudienceOperation<PrepareKindAudienceInput, PrepareKindAudienceResult>;
   verifySource: KindAudienceOperation<VerifyKindAudienceSourceInput, VerifyKindAudienceSourceResult>;
 }>;

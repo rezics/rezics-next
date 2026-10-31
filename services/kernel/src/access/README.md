@@ -137,6 +137,7 @@ The selected authority keeps automatic Kind maintenance and fixed-size metadata 
 `Access.kindAudience` is additive and optional for existing callers/mocks. The native factory installs:
 
 - `capture: KindAudienceOperation<CaptureKindAudienceOriginInput, CaptureKindAudienceOriginResult>`
+- `resolveInput: KindAudienceOperation<ResolveKindAudienceInput, ResolveKindAudienceResult>`
 - `prepare: KindAudienceOperation<PrepareKindAudienceInput, PrepareKindAudienceResult>`
 - `verifySource: KindAudienceOperation<VerifyKindAudienceSourceInput, VerifyKindAudienceSourceResult>`
 
@@ -152,6 +153,8 @@ and custody; a caller-supplied definition cannot establish that binding. Origin 
 authentication floor and formula operands must come from native producer provenance, never serialized claims,
 default expiry or an Actor reconstructed in a worker. No opaque identity brand is introduced.
 
+`resolveInput` runs on the admitted Source home after Library commits bounded raw input and before Type completion;
+it resolves the matching native enrollment without foreign IO or requiring completed Type evidence.
 Detached preparation receives only native origin/input lookup keys, a pool/deadline and the existing allowance.
 `KindAudienceInputRef` names Accounts' enrollment of a Library-committed bounded raw interval; it is not a new
 Library input writer or a list of arbitrary Subject keys. `KindAudienceBinding` imports the original Library locator

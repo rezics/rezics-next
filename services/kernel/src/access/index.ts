@@ -71,6 +71,7 @@ import type {
   ReadDecisions,
   ActionCatalogue,
 } from '../request/access.ts';
+import type { CaptureKindAudienceOriginInput } from './kind-audience.ts';
 import { accessRoot } from './derived-access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess, readDecisionTime, authorizePreparedReadGate } from './permission.ts';
@@ -341,35 +342,29 @@ export function createAccess(config: AccessConfig): Access {
     AccessContext,
     { actor: Actor; handle: ReadDecisions; time: AuthoritativeTime; checks: Map<string, Promise<boolean>> }
   >();
+  function hasKindRequestOrigin(input: CaptureKindAudienceOriginInput): boolean {
+    // Anonymous is a request for native floor production, never asserted proof.
+    if (input.actor.kind === 'anonymous') return true;
+    const identity = authentication.identity(input.actor);
+    return (
+      !!identity &&
+      identity.pool === input.context.pool &&
+      !identity.durableTime &&
+      identity.expiryClock === 'wall' &&
+      !identityExpired(identity, clock) &&
+      Date.now() < identity.deadline
+    );
+  }
   const access: Access = {
     kindAudience: Object.freeze({
       ...permissions.kindAudience!,
       capture: Object.freeze({
-        bound(input) {
-          const identity = input.actor.kind === 'account' ? authentication.identity(input.actor) : undefined;
-          if (
-            input.actor.kind === 'account' &&
-            (!identity ||
-              identity.pool !== input.context.pool ||
-              identity.durableTime ||
-              identity.expiryClock !== 'wall' ||
-              identityExpired(identity, clock) ||
-              Date.now() >= identity.deadline)
-          )
-            return undefined;
+        bound(input: CaptureKindAudienceOriginInput) {
+          if (!hasKindRequestOrigin(input)) return undefined;
           return permissions.kindAudience!.capture.bound(input);
         },
-        async run(input) {
-          const identity = input.actor.kind === 'account' ? authentication.identity(input.actor) : undefined;
-          if (
-            input.actor.kind === 'account' &&
-            (!identity ||
-              identity.pool !== input.context.pool ||
-              identity.durableTime ||
-              identity.expiryClock !== 'wall' ||
-              identityExpired(identity, clock) ||
-              Date.now() >= identity.deadline)
-          )
+        async run(input: CaptureKindAudienceOriginInput) {
+          if (!hasKindRequestOrigin(input))
             throw new AccessWorkUnavailableError('Collection Kind audience actual native request origin');
           // Anonymous requires native floor evidence in the original producer.
           // The staged producer refuses before IO for both genuine origin kinds.

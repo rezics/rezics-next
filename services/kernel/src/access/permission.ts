@@ -4,6 +4,7 @@ import {
   addAccessWork,
   accessCheckout,
   accessOwnerWork,
+  AccessWorkUnavailableError,
   type AccessWorkAccounting,
   type AccessWorkProducer,
 } from './work.ts';
@@ -78,7 +79,6 @@ import {
 } from './governance-reach.ts';
 import { prepareAnonymousEligibility, type PreparedEligibilityVerify } from './eligibility.ts';
 import type { KindAudienceAccess, KindAudienceOperation } from './kind-audience.ts';
-import { AccessWorkUnavailableError } from './work.ts';
 
 /** Literal native seam only. Missing owner provenance/admission/currentness must
  * refuse before checkout, formula, owner callback or any other IO. No zero receipt
@@ -97,6 +97,7 @@ function createKindAudienceAccess(): KindAudienceAccess {
     });
   return Object.freeze({
     capture: unavailable('origin capture'),
+    resolveInput: unavailable('committed input lookup'),
     prepare: unavailable('evidence preparation'),
     verifySource: unavailable('Source-local currentness'),
   });
