@@ -99,9 +99,9 @@ test('Subject overview is readable on phones and complete views remain reachable
   expect(html.match(/aria-current="page"/g)).toHaveLength(1);
   expect(html).not.toContain('role="tab"');
 
-  // The existing large-data native fixture uses the same default template and real URL continuation.
+  // The existing large-data fake fixture uses the same default template and real URL continuation.
   const preview = await loadSubjectPage(client, continuationSubject.id);
-  if (preview.kind !== 'page') throw new Error('Expected the native large-data page.');
+  if (preview.kind !== 'page') throw new Error('Expected the large-data fixture page.');
   content = (
     <SubjectPage
       page={preview.page}
