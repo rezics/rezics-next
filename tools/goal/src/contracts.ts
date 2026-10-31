@@ -6,6 +6,27 @@ import type { AffectedTestResult } from './types.ts';
 
 export type AttemptRef = { taskId: string; attempt: number };
 
+/** Immutable input to the controller; identities come from accepted current queue requests. */
+export type ControlPlaneBatchManifest = {
+  version: 1;
+  managerId: string;
+  members: readonly (AttemptRef & { acceptedCommit: string })[];
+};
+
+export type ControlPlaneBatchDisposition = AttemptRef & {
+  acceptedCommit: string;
+  disposition: 'released' | 'already-represented' | 'excluded';
+  mergedCommit?: string;
+  logPath: string;
+  reason?: string;
+  files?: readonly string[];
+};
+
+export type ControlPlaneBatchResult = {
+  batchId: string;
+  members: ControlPlaneBatchDisposition[];
+};
+
 /** Thrown when a write carries an attempt number that is no longer the task's current attempt. */
 export class StaleAttemptError extends Error {
   constructor(
