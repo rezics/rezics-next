@@ -152,8 +152,7 @@ export async function readNativeKindTypeAnchor(
     lockReservation.settle({ bytes: lockBytes + sourceBytes(locked.rows), emptySeeks: 0 });
   } catch (error) {
     lockReservation.settle();
-    if (error instanceof Error)
-      Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
+    if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
     throw error;
   }
   const parameters = {
@@ -184,8 +183,7 @@ export async function readNativeKindTypeAnchor(
   } catch (error) {
     // A failure after dispatch burns the whole declared native footprint.
     reservation.settle();
-    if (error instanceof Error)
-      Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
+    if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
     throw error;
   }
 }

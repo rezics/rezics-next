@@ -81,11 +81,7 @@ test('Native Kind Type evidence requires genuine purpose-bound audience origin a
   const identities = await identityFixture(f.database.pool, f.database.admin);
   const collection = await f.collection({ visibility: 'public' });
   const root = await identities.create(0x6e00);
-  const originals = [
-    await identities.create(0x6e10),
-    await identities.create(0x6e20),
-    await identities.create(0x6e30),
-  ];
+  const originals = [await identities.create(0x6e10), await identities.create(0x6e20), await identities.create(0x6e30)];
   const movies = [await f.subject('schema:Movie'), await f.subject('schema:Movie')];
   for (const id of [...originals, ...movies]) await f.add(collection.id, id);
   expect(await f.complete(collection.id, null)).toMatchObject({

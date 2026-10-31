@@ -122,8 +122,7 @@ export function createNativeKindTypeEvidence(config: Readonly<{ pool: Pool; acce
       };
       // This is the original owner's PURE declaration only. No run/actual or
       // authority follows from reference equality or a defined footprint.
-      if (port.prepare.bound(nativeInput) === undefined)
-        return { status: 'unavailable', work: work.receipt() };
+      if (port.prepare.bound(nativeInput) === undefined) return { status: 'unavailable', work: work.receipt() };
       // The Library getter currently has no bounded attempt/origin or native work receipt.
       // Original per-home Core admission is also missing. Do not start detached
       // native work merely because the Accounts interface now exists.
@@ -220,4 +219,3 @@ export function selectNativeKindTypeDependency(dependencies: KindTypeDependencyP
     return result('unavailable');
   return { state: 'candidate', typeId: terminal.type, dependencies };
 }
-
