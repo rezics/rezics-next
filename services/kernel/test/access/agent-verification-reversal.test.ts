@@ -1848,16 +1848,20 @@ async function acceptedTechnicalFixture() {
     receipt: (await accountState(account.id)).agent_verification_receipt_id as string,
   };
   const original = await readAccountIdentityUndo(pool, receipt);
-  const erased = (await pool.query(
-    'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
-    [accountRoute, account.id],
-  )).rows[0];
+  const erased = (
+    await pool.query(
+      'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
+      [accountRoute, account.id],
+    )
+  ).rows[0];
   const reference: import('../../src/semantic/identity-source-consumer-custody.ts').IdentitySourceConsumerReference = {
     receipt,
     job: original.job,
     source: {
-      partition: original.source.partition, epoch: original.source.epoch,
-      position: original.source.position, transactionId: original.source.transactionId,
+      partition: original.source.partition,
+      epoch: original.source.epoch,
+      position: original.source.position,
+      transactionId: original.source.transactionId,
     },
     sourceDigest: original.source.digest,
     barrier: { accountId: account.id, accountRoute, version: erased.version, at: erased.at },
@@ -1866,14 +1870,17 @@ async function acceptedTechnicalFixture() {
   return { account, token, original, reference };
 }
 
-const technicalWake = (accountId: string) => [{
-  type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId },
-}];
+const technicalWake = (accountId: string) => [
+  {
+    type: 'com.rezics.access.account-updated.v1',
+    subject: accountId,
+    data: { accountId },
+  },
+];
 
 test('Native Account identity technical receiver retains indispensable accepted undo custody after original personal source minimization', async () => {
-  const {
-    acceptAccountIdentityTechnicalSource, verifyAccountIdentityTechnicalSource, readAccountIdentitySource,
-  } = await import('../../src/access/agent-verification-identity.ts');
+  const { acceptAccountIdentityTechnicalSource, verifyAccountIdentityTechnicalSource, readAccountIdentitySource } =
+    await import('../../src/access/agent-verification-identity.ts');
   const { readAccountIdentityUndo } = await import('../../src/semantic/identity-epoch-binding.ts');
   const { identityEpochStore } = await import('../../src/semantic/identity-epoch-store.ts');
   const { account, original, reference } = await acceptedTechnicalFixture();
@@ -1886,39 +1893,56 @@ test('Native Account identity technical receiver retains indispensable accepted 
   });
   const receiving = accepted.value;
   expect(receiving).toEqual({
-    partition: accepted.partition, epoch: accepted.epoch, position: accepted.position,
+    partition: accepted.partition,
+    epoch: accepted.epoch,
+    position: accepted.position,
     transactionId: accepted.transactionId,
   });
   expect(receiving.transactionId).not.toBe(original.source.transactionId);
   const replay = await runCommand(pool, { partition: original.source.partition }, async (tx) =>
-    noEffect(await acceptAccountIdentityTechnicalSource(tx, reference)));
+    noEffect(await acceptAccountIdentityTechnicalSource(tx, reference)),
+  );
   expect(replay.value).toEqual(receiving);
-  const technical = (await pool.query(
-    `SELECT * FROM access.agent_identity_technical_source
+  const technical = (
+    await pool.query(
+      `SELECT * FROM access.agent_identity_technical_source
      WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
-    [accountRoute, account.id, reference.receipt.kind, reference.receipt.receipt],
-  )).rows[0];
+      [accountRoute, account.id, reference.receipt.kind, reference.receipt.receipt],
+    )
+  ).rows[0];
   expect(technical.intent).toEqual(original.source.input.intent);
   expect(technical.source_digest).toBe(original.source.digest);
   expect(technical.accepted_job_id).toBe(original.job.jobId);
   for (const field of ['reason', 'requested_by', 'decided_by', 'barrier', 'requester', 'roles'])
     expect(Object.hasOwn(technical, field)).toBe(false);
-  const inventory = (await pool.query(
-    `SELECT role_account_id::text,roles FROM access.agent_identity_technical_role
+  const inventory = (
+    await pool.query(
+      `SELECT role_account_id::text,roles FROM access.agent_identity_technical_role
      WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
-    [accountRoute, account.id, reference.receipt.kind, reference.receipt.receipt],
-  )).rows;
+      [accountRoute, account.id, reference.receipt.kind, reference.receipt.receipt],
+    )
+  ).rows;
   expect(inventory.some((role) => role.role_account_id === account.id)).toBe(true);
   expect(inventory.some((role) => role.role_account_id === staff.id)).toBe(true);
 
   await pool.query(
     `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-     VALUES($1,$2,$2,'account:delete','(,)',$2)`, [accountRoute, account.id]);
-  const actor = await authenticateAccount(access, { pool, deadline: Date.now() + 10_000 }, {
-    accountId: account.id, clientId: 'technical-undo-test', scopes: ['account:delete'],
-  });
+     VALUES($1,$2,$2,'account:delete','(,)',$2)`,
+    [accountRoute, account.id],
+  );
+  const actor = await authenticateAccount(
+    access,
+    { pool, deadline: Date.now() + 10_000 },
+    {
+      accountId: account.id,
+      clientId: 'technical-undo-test',
+      scopes: ['account:delete'],
+    },
+  );
   await createLifecycleCommands({ pool, access, clock }).tombstone(
-    { actor, deadline: Date.now() + 10_000 }, { accountId: account.id, key: key() });
+    { actor, deadline: Date.now() + 10_000 },
+    { accountId: account.id, key: key() },
+  );
 
   // Use the existing old-image loss fixture: remove the actual personal source bytes and
   // minimize its real native command response. No Source terminal state or ACK is seeded.
@@ -1929,10 +1953,12 @@ test('Native Account identity technical receiver retains indispensable accepted 
     await loss.query("SET LOCAL session_replication_role='replica'");
     await loss.query(
       'DELETE FROM access.agent_identity_recovery WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4',
-      [accountRoute, account.id, reference.receipt.kind, reference.receipt.receipt]);
+      [accountRoute, account.id, reference.receipt.kind, reference.receipt.receipt],
+    );
     await loss.query(
       'DELETE FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4',
-      [accountRoute, account.id, reference.receipt.kind, reference.receipt.receipt]);
+      [accountRoute, account.id, reference.receipt.kind, reference.receipt.receipt],
+    );
     await loss.query('COMMIT');
   } catch (error) {
     await loss.query('ROLLBACK');
@@ -1943,19 +1969,29 @@ test('Native Account identity technical receiver retains indispensable accepted 
   await pool.query(
     `UPDATE core.receipt SET response='null'::jsonb,payload_state='minimized'
      WHERE partition_no=$1 AND transaction_id=$2`,
-    [original.source.partition, original.source.transactionId]);
-  const undo = await readAccountIdentityUndo(pool, reference.receipt as
-    Extract<typeof reference.receipt, { kind: 'account-agent.verify' }>);
+    [original.source.partition, original.source.transactionId],
+  );
+  const undo = await readAccountIdentityUndo(
+    pool,
+    reference.receipt as Extract<typeof reference.receipt, { kind: 'account-agent.verify' }>,
+  );
   expect(undo.job).toEqual(original.job);
   expect(undo.source).toEqual(original.source);
   expect(() => assertAccountIdentitySource(undo.source, reference.receipt)).toThrow();
   await expect(loadAccountIdentitySource(pool, reference.receipt)).rejects.toThrow();
   await expect(identityEpochStore.prepareAdmission(pool, {}, undo.source.input)).rejects.toThrow();
-  expect((await runCommand(pool, { partition: original.source.partition }, async (tx) =>
-    noEffect(await verifyAccountIdentityTechnicalSource(tx, reference, receiving)))).value).toBe(true);
-  await expect(runCommand(pool, { partition: original.source.partition }, async (tx) =>
-    noEffect(await readAccountIdentitySource(tx, { ...reference.receipt, receipt: randomUUID() }, undefined, true))))
-    .rejects.toThrow('missing original');
+  expect(
+    (
+      await runCommand(pool, { partition: original.source.partition }, async (tx) =>
+        noEffect(await verifyAccountIdentityTechnicalSource(tx, reference, receiving)),
+      )
+    ).value,
+  ).toBe(true);
+  await expect(
+    runCommand(pool, { partition: original.source.partition }, async (tx) =>
+      noEffect(await readAccountIdentitySource(tx, { ...reference.receipt, receipt: randomUUID() }, undefined, true)),
+    ),
+  ).rejects.toThrow('missing original');
 }, 60_000);
 
 test('technical identity receiver rejects mismatched originals without callbacks or inventory and rolls back a failed local post-write verification', async () => {
@@ -1971,20 +2007,34 @@ test('technical identity receiver rejects mismatched originals without callbacks
     { ...reference, receipt: { ...reference.receipt, receipt: randomUUID() } },
   ];
   for (const candidate of candidates)
-    expect((await runCommand(pool, { partition: original.source.partition }, async (tx) =>
-      noEffect(await acceptAccountIdentityTechnicalSource(tx, candidate)))).value).toBeNull();
-  const rows = async () => (await pool.query(
-    `SELECT (SELECT count(*)::int FROM access.agent_identity_technical_source WHERE route=$1 AND account_id=$2) AS sources,
+    expect(
+      (
+        await runCommand(pool, { partition: original.source.partition }, async (tx) =>
+          noEffect(await acceptAccountIdentityTechnicalSource(tx, candidate)),
+        )
+      ).value,
+    ).toBeNull();
+  const rows = async () =>
+    (
+      await pool.query(
+        `SELECT (SELECT count(*)::int FROM access.agent_identity_technical_source WHERE route=$1 AND account_id=$2) AS sources,
             (SELECT count(*)::int FROM access.agent_identity_technical_role WHERE route=$1 AND account_id=$2) AS roles`,
-    [accountRoute, account.id],
-  )).rows[0];
+        [accountRoute, account.id],
+      )
+    ).rows[0];
   expect(await rows()).toEqual({ sources: 0, roles: 0 });
-  await expect(runCommand(pool, { partition: original.source.partition }, async (tx) => {
-    const receipt = await acceptAccountIdentityTechnicalSource(tx, reference);
-    if (!receipt) throw new Error('Expected real native technical receiving acceptance');
-    await verifyAccountIdentityTechnicalSource(tx, { ...reference, receipt: { ...reference.receipt, receipt: randomUUID() } }, receipt);
-    return { value: null, events: technicalWake(account.id) };
-  })).rejects.toThrow('technical receiver mismatch after write');
+  await expect(
+    runCommand(pool, { partition: original.source.partition }, async (tx) => {
+      const receipt = await acceptAccountIdentityTechnicalSource(tx, reference);
+      if (!receipt) throw new Error('Expected real native technical receiving acceptance');
+      await verifyAccountIdentityTechnicalSource(
+        tx,
+        { ...reference, receipt: { ...reference.receipt, receipt: randomUUID() } },
+        receipt,
+      );
+      return { value: null, events: technicalWake(account.id) };
+    }),
+  ).rejects.toThrow('technical receiver mismatch after write');
   expect(await rows()).toEqual({ sources: 0, roles: 0 });
 });
 
@@ -2002,27 +2052,52 @@ test('accepted reversal technical custody binds its current accepted job indepen
   if (source.input.intent.kind !== 'unmerge') throw new Error('Expected actual closed reversal input');
   const priorJob = source.input.intent.undoJob;
   expect(job.jobId).not.toBe(priorJob.jobId);
-  const erased = (await pool.query(
-    'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
-    [accountRoute, account.id],
-  )).rows[0];
+  const erased = (
+    await pool.query(
+      'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
+      [accountRoute, account.id],
+    )
+  ).rows[0];
   const reference = {
-    receipt, job,
-    source: { partition: source.partition, epoch: source.epoch, position: source.position, transactionId: source.transactionId },
+    receipt,
+    job,
+    source: {
+      partition: source.partition,
+      epoch: source.epoch,
+      position: source.position,
+      transactionId: source.transactionId,
+    },
     sourceDigest: source.digest,
     barrier: { accountId: account.id, accountRoute, version: erased.version, at: erased.at },
     erasedRole: 'subject' as const,
   };
-  expect((await runCommand(pool, { partition: source.partition }, async (tx) =>
-    noEffect(await acceptAccountIdentityTechnicalSource(tx, { ...reference, job: priorJob })))).value).toBeNull();
-  const native = (await runCommand(pool, { partition: source.partition }, async (tx) => {
-    const accepted = await acceptAccountIdentityTechnicalSource(tx, reference);
-    expect(accepted).not.toBeNull();
-    return { value: accepted, events: technicalWake(account.id) };
-  })).value;
+  expect(
+    (
+      await runCommand(pool, { partition: source.partition }, async (tx) =>
+        noEffect(await acceptAccountIdentityTechnicalSource(tx, { ...reference, job: priorJob })),
+      )
+    ).value,
+  ).toBeNull();
+  const native = (
+    await runCommand(pool, { partition: source.partition }, async (tx) => {
+      const accepted = await acceptAccountIdentityTechnicalSource(tx, reference);
+      expect(accepted).not.toBeNull();
+      return { value: accepted, events: technicalWake(account.id) };
+    })
+  ).value;
   if (!native) throw new Error('Expected actual reversal receiving custody');
-  expect((await runCommand(pool, { partition: source.partition }, async (tx) =>
-    noEffect(await verifyAccountIdentityTechnicalSource(tx, reference, native)))).value).toBe(true);
-  expect((await runCommand(pool, { partition: source.partition }, async (tx) =>
-    noEffect(await verifyAccountIdentityTechnicalSource(tx, { ...reference, job: priorJob }, native)))).value).toBe(false);
+  expect(
+    (
+      await runCommand(pool, { partition: source.partition }, async (tx) =>
+        noEffect(await verifyAccountIdentityTechnicalSource(tx, reference, native)),
+      )
+    ).value,
+  ).toBe(true);
+  expect(
+    (
+      await runCommand(pool, { partition: source.partition }, async (tx) =>
+        noEffect(await verifyAccountIdentityTechnicalSource(tx, { ...reference, job: priorJob }, native)),
+      )
+    ).value,
+  ).toBe(false);
 });

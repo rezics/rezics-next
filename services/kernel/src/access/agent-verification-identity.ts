@@ -1,4 +1,8 @@
-import { acceptTechnicalSource, verifyTechnicalSource, readAccountIdentityTechnicalSource } from './agent-verification-identity-retention.ts';
+import {
+  acceptTechnicalSource,
+  verifyTechnicalSource,
+  readAccountIdentityTechnicalSource,
+} from './agent-verification-identity-retention.ts';
 import type { IdentitySourceConsumerReference } from '../semantic/identity-source-consumer-custody.ts';
 import { recordAgentIdentityWorkSource } from '../history/agent-identity-source.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';

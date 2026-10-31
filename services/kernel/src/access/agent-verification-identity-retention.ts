@@ -35,7 +35,9 @@ const json = (value: unknown): string =>
 const normalized = (value: unknown): string => canonicalize(JSON.parse(json(value)))!;
 const keyOf = (receipt: AccountReceipt) => JSON.stringify([receipt.kind, receipt.account, receipt.receipt]);
 const digestOf = (input: IdentityAdmissionInput) =>
-  createHash('sha256').update(normalized([input.intent, input.receipt])).digest('hex');
+  createHash('sha256')
+    .update(normalized([input.intent, input.receipt]))
+    .digest('hex');
 
 /** This is a dependency boundary, not a replacement binding implementation. Once the
  * owner delivers the original export, call that export with its original opaque result.
@@ -86,14 +88,18 @@ async function accepted(tx: CommandTransaction, input: AccountIdentitySource['in
   const binding = await read(tx, input);
   if (!binding) return null;
   const data = nativeBinding.identityBindingData(binding);
-  return data.state === 'accepted' && data.partition === currentCommand(tx).partition &&
-    data.digest === digestOf(input) && data.key === keyOf(input.receipt) &&
+  return data.state === 'accepted' &&
+    data.partition === currentCommand(tx).partition &&
+    data.digest === digestOf(input) &&
+    data.key === keyOf(input.receipt) &&
     normalized(data.receipt) === normalized(input.receipt)
-    ? data : null;
+    ? data
+    : null;
 }
 
 async function receiver(tx: CommandTransaction, receipt: AccountReceipt) {
-  return (await tx.query(select.sql, [routeOf(receipt.account), receipt.account, receipt.kind, receipt.receipt])).rows[0];
+  return (await tx.query(select.sql, [routeOf(receipt.account), receipt.account, receipt.kind, receipt.receipt]))
+    .rows[0];
 }
 type Receiver = NonNullable<Awaited<ReturnType<typeof receiver>>>;
 function receiving(row: Receiver): IdentityNativeReceipt {
@@ -105,16 +111,22 @@ function receiving(row: Receiver): IdentityNativeReceipt {
   });
 }
 function sameReceipt(a: IdentityNativeReceipt, b: IdentityNativeReceipt): boolean {
-  return a.partition === b.partition && a.epoch === b.epoch && a.position === b.position &&
-    a.transactionId === b.transactionId;
+  return (
+    a.partition === b.partition &&
+    a.epoch === b.epoch &&
+    a.position === b.position &&
+    a.transactionId === b.transactionId
+  );
 }
 async function inventory(tx: CommandTransaction, receipt: AccountReceipt) {
-  const rows = (await tx.query<{ account_id: string; source_roles: number }>(
-    `SELECT role_account_id::text AS account_id,source_roles FROM access.agent_identity_technical_role
+  const rows = (
+    await tx.query<{ account_id: string; source_roles: number }>(
+      `SELECT role_account_id::text AS account_id,source_roles FROM access.agent_identity_technical_role
      WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4
      ORDER BY role_account_id LIMIT 65 FOR SHARE`,
-    [routeOf(receipt.account), receipt.account, receipt.kind, receipt.receipt],
-  )).rows;
+      [routeOf(receipt.account), receipt.account, receipt.kind, receipt.receipt],
+    )
+  ).rows;
   if (!rows.length || rows.length > 64) return [];
   const roles = rows.flatMap((row) => [
     ...(row.source_roles & 1 ? [{ account_id: row.account_id, role: 'subject' }] : []),
@@ -122,7 +134,9 @@ async function inventory(tx: CommandTransaction, receipt: AccountReceipt) {
     ...(row.source_roles & 4 ? [{ account_id: row.account_id, role: 'editor' }] : []),
   ]);
   const order = ['subject', 'actor', 'editor'];
-  return roles.sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || a.account_id.localeCompare(b.account_id));
+  return roles.sort(
+    (a, b) => order.indexOf(a.role) - order.indexOf(b.role) || a.account_id.localeCompare(b.account_id),
+  );
 }
 
 /** Read the genuine bounded serializer role union; source.roles alone omits inherited undo,
@@ -131,16 +145,27 @@ async function inventory(tx: CommandTransaction, receipt: AccountReceipt) {
 async function producerInventory(tx: CommandTransaction, source: AccountIdentitySource) {
   const receipt = source.input.receipt;
   const native = await readAgentIdentityInventoryInTransaction(tx, {
-    route: routeOf(receipt.account)!, accountId: receipt.account,
-    direction: receipt.kind, receiptId: receipt.receipt,
+    route: routeOf(receipt.account)!,
+    accountId: receipt.account,
+    direction: receipt.kind,
+    receiptId: receipt.receipt,
   });
-  if (native.state !== 'sealed' || !sameReceipt(native.proof.original, source) ||
-    native.proof.original.digest !== source.digest) return null;
-  const accounts = unionHistoryScope('command-receipt/v1',
-    ...native.proof.artifacts.map((artifact) => artifact.accounts)).accounts;
+  if (
+    native.state !== 'sealed' ||
+    !sameReceipt(native.proof.original, source) ||
+    native.proof.original.digest !== source.digest
+  )
+    return null;
+  const accounts = unionHistoryScope(
+    'command-receipt/v1',
+    ...native.proof.artifacts.map((artifact) => artifact.accounts),
+  ).accounts;
   const sourceMask = { subject: 1, actor: 2, editor: 4 };
-  const historyMask = { subject: ACCOUNT_ROLE_BITS.subject, actor: ACCOUNT_ROLE_BITS.actor,
-    editor: ACCOUNT_ROLE_BITS.reviewer };
+  const historyMask = {
+    subject: ACCOUNT_ROLE_BITS.subject,
+    actor: ACCOUNT_ROLE_BITS.actor,
+    editor: ACCOUNT_ROLE_BITS.reviewer,
+  };
   for (const role of source.roles) {
     if (!(role.role in sourceMask)) return null;
     const name = role.role as keyof typeof sourceMask;
@@ -148,8 +173,14 @@ async function producerInventory(tx: CommandTransaction, source: AccountIdentity
   }
   return {
     domainGeneration: native.proof.domainGeneration,
-    accounts: accounts.map((a) => ({ ...a, sourceRoles: source.roles.reduce((mask, role) =>
-      role.account_id === a.accountId ? mask | sourceMask[role.role as keyof typeof sourceMask] : mask, 0) })),
+    accounts: accounts.map((a) => ({
+      ...a,
+      sourceRoles: source.roles.reduce(
+        (mask, role) =>
+          role.account_id === a.accountId ? mask | sourceMask[role.role as keyof typeof sourceMask] : mask,
+        0,
+      ),
+    })),
   };
 }
 
@@ -166,18 +197,32 @@ export async function readAccountIdentityTechnicalSource(
 }
 
 async function decodeTechnicalSource(tx: CommandTransaction, receipt: AccountReceipt, row: Receiver) {
-  if (row.current_write_state !== 'active' || row.receiving_epoch !== row.current_epoch ||
+  if (
+    row.current_write_state !== 'active' ||
+    row.receiving_epoch !== row.current_epoch ||
     String(row.domain_generation) !== row.current_domain ||
     (BigInt(row.current_position) < BigInt(row.receiving_position) &&
-      !(row.same_transaction && row.receiving_transaction_id === currentCommand(tx).transactionId &&
-        BigInt(row.receiving_position) === BigInt(row.current_position) + 1n))) return null;
+      !(
+        row.same_transaction &&
+        row.receiving_transaction_id === currentCommand(tx).transactionId &&
+        BigInt(row.receiving_position) === BigInt(row.current_position) + 1n
+      ))
+  )
+    return null;
   const intent = technicalIntent(row.intent as IdentityIntent, receipt);
   if (!intent) return null;
   const input = Object.freeze({ intent: Object.freeze(intent), receipt: Object.freeze({ ...receipt }) });
   const binding = await accepted(tx, input);
-  if (!binding || binding.job.jobId !== row.accepted_job_id || binding.job.epoch !== BigInt(row.accepted_job_epoch) ||
-    binding.generation !== String(row.binding_generation) || binding.transactionId !== row.binding_transaction_id ||
-    binding.digest !== row.source_digest || normalized(row.intent) !== normalized(intent)) return null;
+  if (
+    !binding ||
+    binding.job.jobId !== row.accepted_job_id ||
+    binding.job.epoch !== BigInt(row.accepted_job_epoch) ||
+    binding.generation !== String(row.binding_generation) ||
+    binding.transactionId !== row.binding_transaction_id ||
+    binding.digest !== row.source_digest ||
+    normalized(row.intent) !== normalized(intent)
+  )
+    return null;
   const roles = await inventory(tx, receipt);
   if (!roles.length || roles.length > 8 || !roles.some((r) => r.account_id === receipt.account && r.role === 'subject'))
     return null;
@@ -196,11 +241,16 @@ async function decodeTechnicalSource(tx: CommandTransaction, receipt: AccountRec
 function matches(reference: IdentitySourceConsumerReference, source: AccountIdentitySource): boolean {
   const { barrier } = reference;
   const role = { subject: 'subject', requester: 'actor', decider: 'editor' }[reference.erasedRole];
-  return sameReceipt(reference.source, source) && reference.sourceDigest === source.digest &&
+  return (
+    sameReceipt(reference.source, source) &&
+    reference.sourceDigest === source.digest &&
     normalized(reference.receipt) === normalized(source.input.receipt) &&
-    routeOf(barrier.accountId) === barrier.accountRoute && Number.isSafeInteger(barrier.version) &&
-    barrier.version > 0 && Number.isFinite(Date.parse(barrier.at)) &&
-    source.roles.some((r) => r.account_id === barrier.accountId && r.role === role);
+    routeOf(barrier.accountId) === barrier.accountRoute &&
+    Number.isSafeInteger(barrier.version) &&
+    barrier.version > 0 &&
+    Number.isFinite(Date.parse(barrier.at)) &&
+    source.roles.some((r) => r.account_id === barrier.accountId && r.role === role)
+  );
 }
 
 export async function acceptTechnicalSource(
@@ -221,7 +271,7 @@ export async function acceptTechnicalSource(
   const prior = await receiver(tx, reference.receipt);
   if (prior) {
     const receipt = receiving(prior);
-    return await verifyTechnicalSource(tx, reference, receipt) ? receipt : null;
+    return (await verifyTechnicalSource(tx, reference, receipt)) ? receipt : null;
   }
   const intent = technicalIntent(source.input.intent, reference.receipt);
   if (!intent || normalized(intent) !== normalized(source.input.intent) || source.roles.length > 8) return null;
@@ -229,12 +279,27 @@ export async function acceptTechnicalSource(
   if (!producers) return null;
   // All rejection paths precede the first write/callback. SQL reserves the locked owner's
   // forthcoming fence, checked against the actual executor outbox by a deferred constraint.
-  const row = (await tx.query(insert.sql, [
-    routeOf(reference.receipt.account), reference.receipt.account, reference.receipt.kind, reference.receipt.receipt,
-    json(intent), source.digest, source.partition, source.epoch, source.position.toString(), source.transactionId,
-    reference.job.jobId, reference.job.epoch.toString(), binding.generation, binding.transactionId,
-    source.workflowId, currentCommand(tx).transactionId, producers.domainGeneration,
-  ])).rows[0];
+  const row = (
+    await tx.query(insert.sql, [
+      routeOf(reference.receipt.account),
+      reference.receipt.account,
+      reference.receipt.kind,
+      reference.receipt.receipt,
+      json(intent),
+      source.digest,
+      source.partition,
+      source.epoch,
+      source.position.toString(),
+      source.transactionId,
+      reference.job.jobId,
+      reference.job.epoch.toString(),
+      binding.generation,
+      binding.transactionId,
+      source.workflowId,
+      currentCommand(tx).transactionId,
+      producers.domainGeneration,
+    ])
+  ).rows[0];
   if (!row) throw accountIdentityUnavailable('technical receiver lost its locked native owner');
   wroteTechnical.add(tx);
   for (const account of producers.accounts) {
@@ -242,14 +307,20 @@ export async function acceptTechnicalSource(
       `INSERT INTO access.agent_identity_technical_role
        (route,account_id,direction,receipt_id,role_account_id,roles,source_roles)
        VALUES($1,$2,$3,$4,$5,$6,$7)`,
-      [routeOf(reference.receipt.account), reference.receipt.account, reference.receipt.kind, reference.receipt.receipt,
-        account.accountId, account.roles, account.sourceRoles],
+      [
+        routeOf(reference.receipt.account),
+        reference.receipt.account,
+        reference.receipt.kind,
+        reference.receipt.receipt,
+        account.accountId,
+        account.roles,
+        account.sourceRoles,
+      ],
     );
   }
   registerCommandCallback(tx, async (transactionId) => {
     await tx.query("SELECT set_config('access.identity_technical_transaction',$1,true)", [transactionId]);
-    if (transactionId !== row.receiving_transaction_id ||
-      !(await verifyTechnicalSource(tx, reference, receiving(row))))
+    if (transactionId !== row.receiving_transaction_id || !(await verifyTechnicalSource(tx, reference, receiving(row))))
       throw accountIdentityUnavailable('technical receiving finalization changed');
   });
   const receipt = receiving(row);
@@ -269,11 +340,14 @@ export async function verifyTechnicalSource(
   }
   const row = await receiver(tx, reference.receipt);
   const source = row ? await decodeTechnicalSource(tx, reference.receipt, row) : null;
-  const valid = !!row && !!source && matches(reference, source) &&
-    row.accepted_job_id === reference.job.jobId && BigInt(row.accepted_job_epoch) === reference.job.epoch &&
+  const valid =
+    !!row &&
+    !!source &&
+    matches(reference, source) &&
+    row.accepted_job_id === reference.job.jobId &&
+    BigInt(row.accepted_job_epoch) === reference.job.epoch &&
     sameReceipt(receiving(row), native);
   // A false post-write observation must never let Source commit only its terminal half.
-  if (!valid && wroteTechnical.has(tx))
-    throw accountIdentityUnavailable('technical receiver mismatch after write');
+  if (!valid && wroteTechnical.has(tx)) throw accountIdentityUnavailable('technical receiver mismatch after write');
   return valid;
 }
