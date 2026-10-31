@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 import type { SubjectLibrarySlotData } from '../../library/subject-slot';
 import { SubjectLibrarySlot } from '../../library/subject-slot-view';
 import type { useSession } from '../../session/query';
@@ -24,10 +24,18 @@ const signedOut: SubjectLibrarySlotData = { ...unavailable, session: 'signed-out
 export function subjectLibraryLeafQuery(frame: SubjectFrameData, locale: string, session: ReaderSession) {
   const query = subjectLibraryQuery(frame.id, locale, false, undefined, undefined, frame.type);
   const ready = session.state === 'signed-in' && !!session.subject && !!session.csrfToken;
-  return {
-    ...query,
-    queryKey: [...query.queryKey, ready ? { viewer: session.subject, credential: session.csrfToken } : null],
+  return queryOptions({
+    queryKey: [...query.queryKey, ready ? { viewer: session.subject, credential: session.csrfToken } : null] as const,
+    queryFn: async (context) => {
+      if (typeof query.queryFn !== 'function') return unavailable;
+      const data = await query.queryFn({ ...context, queryKey: query.queryKey });
+      context.signal.throwIfAborted();
+      return data;
+    },
     enabled: query.enabled && ready,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     select: (data: SubjectLibrarySlotData): SubjectLibrarySlotData =>
@@ -37,7 +45,7 @@ export function subjectLibraryLeafQuery(frame: SubjectFrameData, locale: string,
       (!data.entry || data.entry.subjectId === frame.id)
         ? data
         : unavailable,
-  };
+  });
 }
 
 /** The host has already resolved and guarded this exact current reader frame, including any selected Realm. */
