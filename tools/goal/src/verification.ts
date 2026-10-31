@@ -250,7 +250,7 @@ export type ProofObservation = {
   record: unknown;
   physical: unknown[];
 };
-export function proofFingerprint(brief: Brief): string {
+export function proofFingerprint(brief: Pick<Brief, 'goal' | 'manager' | 'kind' | 'proof' | 'acceptance'>): string {
   return createHash('sha256')
     .update(JSON.stringify([brief.goal, brief.manager, brief.kind, brief.proof, brief.acceptance]))
     .digest('hex');
@@ -423,6 +423,39 @@ export function proofProtocolAuthorized(brief: Partial<Brief>, run?: ProofReserv
       same(brief.acceptance?.command, run.binding.argv),
     )
   );
+}
+/** A saved authorization, never a kind label alone, grants ordinary original-command execution. */
+export function registeredProof(brief: Partial<Brief>, authorization?: ProofAuthorization): boolean {
+  return Boolean(brief.kind === 'verification' && brief.proof && brief.goal && brief.manager && brief.acceptance &&
+    authorization?.fingerprint === proofFingerprint({
+      goal: brief.goal, manager: brief.manager, kind: brief.kind, proof: brief.proof, acceptance: brief.acceptance,
+    }));
+}
+/** Preserve the original wrapped invocation; compare its recorded child without executing another wrapper. */
+export function ordinaryProofCommand(argv: string[]): { invocation: string[]; recordedArgv: string[] } {
+  if (!originalCommandHasInputs(argv)) throw new Error('proof cannot execute a broad root, gate or nested wrapper campaign');
+  const offset = commandOffset(argv);
+  const wrapped = same(argv.slice(offset, offset + 4), ['bun', 'scripts/worker-check.ts', '--local', '--']);
+  return {
+    invocation: wrapped ? [...argv] : ['bun', 'scripts/worker-check.ts', '--', ...argv],
+    recordedArgv: wrapped ? argv.slice(offset + 4) : [...argv],
+  };
+}
+/** Ordinary wrapper facts authorize a result; native token/custody/cleanup are optional evidence only. */
+export function observeOrdinaryProof(task: Task, checkId: string, record: unknown): ProofObservation {
+  const result = (status: ProofObservation['status'], passed: boolean, cause: string): ProofObservation =>
+    ({ status, passed, cause, record, physical: [] });
+  if (!registeredProof(task.brief, task.proofAuthorization))
+    return result('unknown', false, 'Authenticated original proof registration unavailable');
+  if (!nativeCheckId.test(checkId) || !isObject(record) || record.id !== checkId || record.cwd !== task.worktree ||
+      !same(record.argv, ordinaryProofCommand(task.brief.acceptance.command).recordedArgv) ||
+      !isObject(record.ownership) || record.ownership.taskId !== task.id || record.ownership.attempt !== task.currentAttempt)
+    return result('unknown', false, 'Ordinary proof result does not match this current owner, cwd and exact original argv');
+  if (record.status === 'running') return result('running', false, `Original check ${checkId} is running`);
+  if (record.status !== 'finished' || typeof record.exitCode !== 'number' || !Number.isInteger(record.exitCode))
+    return result('unknown', false, 'Original wrapper terminal exit status unavailable');
+  return result('terminal', record.exitCode === 0,
+    `Original check ${checkId}: exit ${record.exitCode}; ${String(record.failureSummary ?? record.infrastructureFailureFinal ?? '')}; log ${String(record.log ?? 'unavailable')}`);
 }
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -632,17 +665,33 @@ export async function readReservationObservation(
     return unknown(error);
   }
 }
-export async function readProofObservation(task: Task): Promise<ProofObservation> {
-  if (task.proofRun?.status === 'released' && task.proofRun.observation) return task.proofRun.observation;
-  if (!task.proofRun || task.proofRun.status !== 'bound')
-    return {
-      status: 'unknown',
-      passed: false,
-      cause: 'proof producer binding unavailable',
-      record: null,
-      physical: [],
-    };
-  return readReservationObservation(task.proofRun);
+export async function readProofObservation(task: Task, checkIds?: string[]): Promise<ProofObservation> {
+  const unknown = (cause: string, record: unknown = null): ProofObservation =>
+    ({ status: 'unknown', passed: false, cause, record, physical: [] });
+  const directory = join(task.worktree, '.temp/goal/checks/results');
+  try {
+    if (checkIds?.length && (checkIds.length !== 1 || !nativeCheckId.test(checkIds[0]!)))
+      return unknown('Proof waiting requires one bare wrapper UUID');
+    const ids = readdirSync(directory)
+      .filter((name) => name.endsWith('.json') && nativeCheckId.test(name.slice(0, -5)))
+      .map((name) => name.slice(0, -5));
+    const owned: { id: string; record: unknown }[] = [];
+    for (const id of ids) {
+      let record: unknown;
+      try { record = JSON.parse(readFileSync(join(directory, `${id}.json`), 'utf8')); }
+      catch (error) {
+        if (checkIds?.includes(id)) return unknown(`Original wrapper result unreadable: ${String(error)}`);
+        continue; // An unrelated historical result is not this current invocation's evidence.
+      }
+      if ((isObject(record) && isObject(record.ownership) &&
+          record.ownership.taskId === task.id && record.ownership.attempt === task.currentAttempt) || checkIds?.includes(id))
+        owned.push({ id, record });
+    }
+    if (checkIds?.length && !owned.some(({ id }) => id === checkIds[0]))
+      return unknown(`Original wrapper result missing for ${checkIds[0]}`);
+    if (owned.length !== 1) return unknown('Expected exactly one ordinary original invocation for this attempt', owned);
+    return observeOrdinaryProof(task, owned[0]!.id, owned[0]!.record);
+  } catch (error) { return unknown(`Original wrapper result unavailable: ${String(error)}`); }
 }
 
 export type HistoricalProofCheck = { taskId: string; attempt: number; checkId: string; cwd: string };
@@ -885,13 +934,13 @@ export async function historicalProofTerminal(check: HistoricalProofCheck): Prom
 
 /** Passing evidence belongs only to this exact source and integration ref, never a later source. */
 export function proofSourceUnchanged(task: Task, integrationBranch: string): boolean {
-  if (!task.brief.proof || !task.proofRun || task.proofAuthorization?.fingerprint !== proofFingerprint(task.brief))
+  if (!registeredProof(task.brief, task.proofAuthorization))
     return false;
   try {
     return (
-      git(task.worktree, ['rev-parse', 'HEAD']) === task.proofRun.binding.sourceCommit &&
-      git(task.worktree, ['rev-parse', 'HEAD^{tree}']) === task.proofRun.binding.sourceTree &&
-      git(task.worktree, ['rev-parse', `refs/heads/${integrationBranch}`]) === task.proofRun.binding.sourceCommit &&
+      git(task.worktree, ['rev-parse', 'HEAD']) === task.brief.proof!.sourceCommit &&
+      git(task.worktree, ['rev-parse', 'HEAD^{tree}']) === task.proofAuthorization!.sourceTree &&
+      git(task.worktree, ['rev-parse', `refs/heads/${integrationBranch}`]) === task.brief.proof!.sourceCommit &&
       git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) === ''
     );
   } catch {
@@ -901,7 +950,7 @@ export function proofSourceUnchanged(task: Task, integrationBranch: string): boo
 
 export class ProofCapacityQueuedError extends Error {
   constructor() {
-    super('Proof queued: three owned checks active or prior task custody unresolved');
+    super('Proof queued: three current ordinary checks active');
   }
 }
 

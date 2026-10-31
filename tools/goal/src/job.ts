@@ -328,9 +328,8 @@ export class WorkerJob implements GateOutcomeSink {
   }
   private async checkWakeMessage(attempt: Attempt, task: Task): Promise<string | null> {
     if (task.brief.kind === 'verification') {
-      const observed = await readProofObservation(task);
+      const observed = await readProofObservation(task, attempt.checks);
       if (observed.status === 'running') return null;
-      if (task.proofRun?.status === 'bound') this.tasks.store.observeProof(task.proofRun.binding, observed);
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
     const checks = attempt.checks ?? [];
@@ -446,7 +445,8 @@ export class WorkerJob implements GateOutcomeSink {
               task.worktree,
               task.brief,
               this.tasks.settings.stateDirectory,
-              this.tasks.store.task(task.id).proofRun,
+              task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined,
+              task.proofAuthorization,
             ),
           ]
         : []),
@@ -910,6 +910,13 @@ export class WorkerJob implements GateOutcomeSink {
       } catch (error) {
         // Proof admission stays unavailable, with a bounded durable diagnostic. Other recovery must continue.
         if (!(error instanceof ProofUnavailableError)) throw error;
+      }
+    }
+    if (adoptRunning) {
+      for (const task of store.tasks()) {
+        if (task.currentAttempt && !['running', 'landing'].includes(task.state) &&
+            ['stopped', 'exited', 'cancelled', 'superseded'].includes(store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state))
+          store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
       }
     }
     if (adoptRunning)

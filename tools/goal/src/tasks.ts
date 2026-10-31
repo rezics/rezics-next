@@ -1,16 +1,12 @@
 import {
   ProofCapacityQueuedError,
   ProofUnavailableError,
-  proofExecutionUnavailable,
   type ProofAuthorization,
   authorizeProof,
   authenticateProofManager,
   proofFingerprint,
   preflightProof,
-  newProofBinding,
   productionProofProducer,
-  readProofObservation,
-  refreshHistoricalProofAdmission,
   type ProofProducer,
 } from './verification.ts';
 import { remoteCheckEnvironment } from './merge.ts';
@@ -577,8 +573,6 @@ export class WorkerTasks {
         this.store.saveRetryIntent(ref, {});
       });
       briefPath = undefined; // The committed registration owns this immutable file.
-      const unavailable = proofExecutionUnavailable(nextBrief.acceptance.command);
-      if (unavailable) return { taskId, attempt: ref.attempt, status: 'pending', reason: unavailable };
       if (!this.dependenciesMet({ brief: nextBrief }))
         return { taskId, attempt: ref.attempt, status: 'waiting', reason: 'Dependencies pending' };
       if (!this.store.proofCapacityAvailable(nextBrief.goal, taskId))
@@ -921,6 +915,28 @@ export class WorkerTasks {
       return { hold: false, first: startsFirst(this.store.task(taskId)) };
     }
   }
+  /** Prepare an authorized unreserved capture without rewriting retained empty-report branches. */
+  private prepareProofWorktree(task: Task, ref: Attempt): Task {
+    const captured = task.brief.proof!.sourceCommit;
+    const tip = git(task.worktree, ['rev-parse', 'HEAD']);
+    if (git(task.worktree, ['status', '--porcelain', '--untracked-files=all']))
+      throw new Error('Proof source is read-only; worktree differs from captured commit');
+    if (tip !== captured) {
+      if (this.store.db.query('SELECT 1 FROM worker_proof_reservations WHERE task_id=?').get(task.id) ||
+          this.store.events(task.id).some((event) => event.kind === 'proof-command-ready') ||
+          git(task.worktree, ['merge-base', task.base, tip]) !== task.base ||
+          git(task.worktree, ['diff', '--name-only', task.base, tip]))
+        throw new Error('Proof source is read-only; only an unreserved clean retained empty-report branch can prepare a fresh capture');
+      const worktree = join(this.settings.worktreeRoot, `${task.id}-proof-${captured}`);
+      if (!existsSync(worktree)) git(this.settings.mainCheckout, ['worktree', 'add', '--detach', worktree, captured]);
+      if (git(worktree, ['rev-parse', 'HEAD']) !== captured || git(worktree, ['status', '--porcelain', '--untracked-files=all']))
+        throw new Error('Proof captured source preparation differs from its registered commit');
+      this.store.event(ref, 'proof-source-prepared', { retainedWorktree: task.worktree, retainedBranch: task.branch,
+        retainedHead: tip, worktree, sourceCommit: captured });
+      task = this.store.updateTask(ref, (current) => { current.worktree = worktree; current.base = captured; });
+    }
+    return task;
+  }
   /** Refuse stale captures and unavailable invocation ports before reserving or creating an attempt. */
   assertProofStart(task: Task): void {
     if (task.brief.kind !== 'verification') return;
@@ -929,18 +945,16 @@ export class WorkerTasks {
     const head = this.branchHead(this.settings.integrationBranch, false);
     if (head !== task.brief.proof.sourceCommit)
       throw new ProofUnavailableError(`Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> before any reservation; bound proof sources cannot refresh`);
+    if (spawnSync('git', ['cat-file', '-e', `${task.brief.proof.sourceCommit}:scripts/worker-check.ts`],
+      { cwd: this.settings.mainCheckout, stdio: 'ignore' }).status !== 0)
+      throw new ProofUnavailableError('Proof pending/unavailable: captured ordinary scripts/worker-check.ts is missing');
     const missing = preflightProof(this.settings.mainCheckout, task.brief);
     if (missing.length) throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
-    const unavailable = proofExecutionUnavailable(task.brief.acceptance.command);
-    if (unavailable) throw new ProofUnavailableError(unavailable);
   }
   async refreshProofAdmission(task: Task): Promise<void> {
-    if (task.brief.kind === 'verification')
-      await refreshHistoricalProofAdmission(this.store, join(this.settings.stateDirectory, 'check-registry'), {
-        root: this.settings.integration.checkScriptReaderRoot ?? resolve(import.meta.dir, '../../..'),
-        integrationRoot: this.settings.mainCheckout,
-        integrationBranch: this.settings.integrationBranch,
-      }, task.brief.goal);
+    if (task.currentAttempt && ['stopped', 'exited', 'cancelled', 'superseded'].includes(
+      this.store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state))
+      this.store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
   }
   /** `leased` when the caller already holds the task's lease. */
   private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
@@ -1173,8 +1187,8 @@ export class WorkerTasks {
       });
       const next =
         task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'stopped'
-          ? this.store.retryStopped(taskId, make, oldConfigDirectory)
-          : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make, oldConfigDirectory);
+          ? this.store.retryStopped(taskId, make, oldConfigDirectory, nextBrief.kind === 'verification')
+          : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make, oldConfigDirectory, nextBrief.kind === 'verification');
       this.writeTaskPriority(this.store.task(taskId));
       // Include older groups after a controller crash between superseding and termination.
       for (const previous of this.store
@@ -1218,31 +1232,16 @@ export class WorkerTasks {
           const missing = preflightProof(task.worktree, task.brief);
           if (missing.length)
             throw new Error(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
-          const captured = task.brief.proof!.sourceCommit;
-          if (
-            git(task.worktree, ['rev-parse', 'HEAD']) !== captured &&
-            git(task.worktree, ['rev-parse', 'HEAD']) === task.base &&
-            !git(task.worktree, ['status', '--porcelain'])
-          ) {
-            git(task.worktree, ['reset', '--hard', captured]);
-            task = this.store.updateTask(next, (current) => {
-              current.base = captured;
-            });
-          }
-          if (git(task.worktree, ['rev-parse', 'HEAD']) !== captured || git(task.worktree, ['status', '--porcelain']))
-            throw new Error('Proof source is read-only; worktree differs from captured commit');
-          if (this.branchHead(this.settings.integrationBranch, false) !== captured)
-            throw new Error('Proof pending/unavailable: integration source advanced; register a new captured source');
-          const reserved = this.store.reserveProof(newProofBinding(task, next.attempt));
-          if (!reserved) throw new ProofCapacityQueuedError();
-          const run =
-            reserved.status === 'reserved'
-              ? this.store.bindProof(reserved.binding, await this.proofProducer.bind(reserved.binding))
-              : reserved;
-          if (run.status !== 'bound') throw new Error(`Proof pending/unavailable: ${run.cause ?? run.status}`);
-          task = this.store.task(taskId);
-          this.store.observeProof(run.binding, await readProofObservation(task));
-          task = this.store.task(taskId);
+          task = this.prepareProofWorktree(task, next);
+          setupStep = 'installing worktree dependencies';
+          installWorktreeDependencies(task.worktree);
+          if (existsSync(join(task.worktree, 'package.json')) && !existsSync(join(task.worktree, 'node_modules/.bin/bun')))
+            throw new Error('Proof dependency preparation did not provide node_modules/.bin/bun; no system Bun fallback is allowed');
+          // Ordinary shared/pinned preparation is outside SQLite, before any worker can invoke its command.
+          if (this.branchHead(this.settings.integrationBranch, false) !== task.brief.proof!.sourceCommit)
+            throw new ProofUnavailableError('Proof pending/unavailable: integration source advanced; authenticated fresh registration required');
+          this.store.event(next, 'proof-command-ready', { sourceCommit: task.brief.proof!.sourceCommit,
+            argv: task.brief.acceptance.command, cwd: task.worktree });
           retryPrepared = true;
           return await this.launcher(
             this.store,

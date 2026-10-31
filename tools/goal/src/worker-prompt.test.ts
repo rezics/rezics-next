@@ -467,3 +467,37 @@ test('original integrated journey proof bypasses only its registered task-scoped
     directory.close();
   }
 });
+
+import { proofFingerprint } from './verification.ts';
+
+test('ordinary registered proof prompt bypasses minimal only with authentic saved authorization and preserves one original wrapper invocation', () => {
+  const directory = temporaryDirectory();
+  try {
+    const state = join(directory.path, '.temp/goal');
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(state, 'verification-mode'), 'minimal\n');
+    const contract = { ...brief(), kind: 'verification' as const, paths: [],
+      proof: { journey: 'Original', sourceTasks: ['original'], sourceCommit: 'a'.repeat(40) },
+      acceptance: { ...brief().acceptance, command: ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test', 'a.test.ts'] } };
+    const authorization = { fingerprint: proofFingerprint(contract), manager: contract.manager, sessionId: 'owner',
+      sourceTree: 'b'.repeat(40), integrationBranch: 'dev',
+      originals: [{ taskId: 'original', commit: contract.proof.sourceCommit, argv: contract.acceptance.command }] };
+    const prompt = workerCheckProtocol(directory.path, contract, state, undefined, authorization);
+    expect(prompt).toContain("'bun' 'scripts/worker-check.ts' '--local' '--' 'bun' 'test' 'a.test.ts'");
+    expect(prompt).toContain('never wrap it again');
+    expect(prompt).toContain('Never invent a UUID');
+    expect(prompt).toContain('same session');
+    expect(prompt).toContain('optional evidence, never execution or success prerequisites');
+    expect(prompt).not.toContain('TYPECHECK ONLY');
+    expect(prompt).not.toContain('controller has already started');
+    expect(workerCheckProtocol(directory.path, contract, state)).toContain('do not run it, a root check, worker-check or remote-check');
+    expect(workerCheckProtocol(directory.path, contract, state, undefined, { ...authorization, fingerprint: 'forged' }))
+      .toContain('do not run it, a root check, worker-check or remote-check');
+    const product = workerCheckProtocol(directory.path, brief(), state);
+    expect(product).toContain('existing supported compiler command and placement');
+    expect(product).toContain('await its EXISTING tool command/session result');
+    expect(product).toContain('never return waiting with an empty checks array or manufacture UUIDs');
+    expect(product).not.toContain('Run exactly one ordinary worker-check invocation');
+    expect(product).not.toContain('REZICS_CHECK_LOCAL_ONLY');
+  } finally { directory.close(); }
+});

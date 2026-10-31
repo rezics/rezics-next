@@ -1,4 +1,4 @@
-import { nativeCheckId, proofFingerprint } from './verification.ts';
+import { nativeCheckId, proofFingerprint, ProofCapacityQueuedError } from './verification.ts';
 import type { Database } from 'bun:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { CheckResults, checkResultsMigration } from './check-results.ts';
@@ -367,7 +367,10 @@ export class WorkerStore implements AttemptFence {
   historicalProofChecks(goal?: string): HistoricalProofCheck[] {
     return this.db
       .query(`SELECT a.task_id, a.attempt, a.body, t.body AS task FROM worker_attempts a JOIN worker_tasks t ON t.id=a.task_id
-      WHERE json_array_length(json_extract(a.body,'$.checks')) > 0
+      WHERE a.attempt=json_extract(t.body,'$.currentAttempt')
+      AND json_extract(a.body,'$.state') IN ('running','waiting')
+      AND json_extract(t.body,'$.state') NOT IN ('stopped','cancelled','integrated','merged','verified')
+      AND json_array_length(json_extract(a.body,'$.checks')) > 0
       AND (? IS NULL OR json_extract(t.body,'$.brief.goal')=?)
       AND NOT EXISTS (SELECT 1 FROM worker_proof_reservations p WHERE p.task_id=a.task_id AND p.attempt=a.attempt)`)
       .all(goal ?? null, goal ?? null)
@@ -410,14 +413,9 @@ export class WorkerStore implements AttemptFence {
         .run(check.taskId, check.attempt, 'historical-proof-reader-unavailable', new Date().toISOString(), body);
     }).immediate();
   }
-  /** Unclassified facts wait for the trusted reader. Only explicitly archived historical unknowns leave the cap. */
+  /** Only the current running/waiting check IDs count; optional historical custody cannot gate execution. */
   historicalProofSlots(goal?: string): HistoricalProofCheck[] {
-    return this.historicalProofChecks(goal).filter((check) => {
-      const row = this.db.query(`SELECT body FROM worker_events WHERE task_id=? AND attempt=?
-        AND kind='historical-proof-classified' AND json_extract(body,'$.checkId')=? ORDER BY sequence DESC LIMIT 1`)
-        .get(check.taskId, check.attempt, check.checkId) as { body: string } | null;
-      return !row || JSON.parse(row.body).admission.classification !== 'historical-unknown';
-    });
+    return this.historicalProofChecks(goal);
   }
   observeHistoricalProof(check: HistoricalProofCheck, observation: ProofObservation): void {
     if (observation.status !== 'terminal' || observation.passed)
@@ -437,25 +435,32 @@ export class WorkerStore implements AttemptFence {
       })
       .immediate();
   }
+  /** Current ordinary proof incarnations reserve one slot before preparation, across waits and controller crashes. */
+  private ordinaryProofSlots(goal: string): { taskId: string; attempt: number; state: Attempt['state'] }[] {
+    return this.db.query(`SELECT t.id AS taskId, a.attempt, json_extract(a.body,'$.state') AS state
+      FROM worker_tasks t JOIN worker_attempts a ON a.task_id=t.id AND a.attempt=json_extract(t.body,'$.currentAttempt')
+      WHERE json_extract(t.body,'$.brief.goal')=? AND json_extract(t.body,'$.brief.kind')='verification'
+      AND json_extract(t.body,'$.proofAuthorization.fingerprint') IS NOT NULL
+      AND json_extract(t.body,'$.state') NOT IN ('stopped','cancelled','integrated','merged','verified')
+      AND json_extract(a.body,'$.state') IN ('pending','running','waiting')`)
+      .all(goal) as { taskId: string; attempt: number; state: Attempt['state'] }[];
+  }
   proofCapacityAvailable(goal: string, taskId: string): boolean {
-    const row = this.db
-      .query(
-        "SELECT count(*) AS count, coalesce(max(task_id=?),0) AS own FROM worker_proof_reservations WHERE status != 'released' AND (goal=? OR task_id=?)",
-      )
-      .get(taskId, goal, taskId) as { count: number; own: number };
-    const historical = this.historicalProofSlots(goal);
-    return (
-      row.count + historical.length < 3 &&
-      row.own === 0 &&
-      !this.historicalProofSlots().some((check) => check.taskId === taskId)
-    );
+    const ordinary = this.ordinaryProofSlots(goal);
+    const historical = this.historicalProofSlots(goal).filter((check) =>
+      !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt));
+    // An orphaned pending preparation may be replaced, but an active command cannot be retried by admission.
+    return ordinary.filter((slot) => slot.taskId !== taskId).length + historical.length < 3 &&
+      !ordinary.some((slot) => slot.taskId === taskId && slot.state !== 'pending') &&
+      !historical.some((check) => check.taskId === taskId);
   }
   proofCapacityReason(goal: string, taskId: string): string {
-    const historical = this.historicalProofSlots().filter((check) => check.taskId === taskId ||
-      this.task(check.taskId).brief.goal === goal);
-    const current = this.activeProofReservations().filter((run) => run.binding.goal === goal || run.binding.taskId === taskId);
-    return `Proof cap 3 pending: ${current.length} current reservations (unknown custody retains its slot); ` +
-      `live or unclassified historical checks: ${historical.map((check) => `${check.checkId} (${check.taskId}/${check.attempt})`).join(', ') || 'none'}`;
+    const ordinary = this.ordinaryProofSlots(goal);
+    const checks = this.historicalProofSlots(goal).filter((check) =>
+      !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt));
+    return `Proof cap 3 pending: ${ordinary.length} current ordinary runs; current running/waiting checks: ` +
+      (checks.map((check) => `${check.checkId} (${check.taskId}/${check.attempt})`).join(', ') || 'none') +
+      `; requesting task ${taskId}. Historical and stopped/exited runs do not occupy logical slots; physical leases remain independent`;
   }
   /** The existing store write transaction owns admission across every controller and detached model exit. */
   reserveProof(binding: ProofBinding): ProofReservation | null {
@@ -474,16 +479,11 @@ export class WorkerStore implements AttemptFence {
         throw new Error('proof admission requires registered exact source and command');
       const existing = this.proofReservation(binding.taskId, binding.attempt);
       if (existing) return existing;
-      const active = this.db
-        .query("SELECT body FROM worker_proof_reservations WHERE status != 'released' AND (goal=? OR task_id=?)")
-        .all(binding.goal, binding.taskId)
-        .map((row) => decode<ProofReservation>(row)!);
-      if (
-        active.some((run) => run.binding.taskId === binding.taskId) ||
-        active.length + this.historicalProofSlots(binding.goal).length >= 3 ||
-        this.historicalProofSlots().some((check) => check.taskId === binding.taskId)
-      )
-        return null;
+      const ordinary = this.ordinaryProofSlots(binding.goal);
+      const historical = this.historicalProofSlots(binding.goal).filter((check) =>
+        !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt));
+      if (ordinary.filter((slot) => slot.taskId !== binding.taskId).length + historical.length >= 3 ||
+          historical.some((check) => check.taskId === binding.taskId)) return null;
       const run: ProofReservation = { binding: structuredClone(binding), status: 'reserved' };
       this.db
         .query('INSERT INTO worker_proof_reservations VALUES (?,?,?,?,?,?)')
@@ -952,7 +952,7 @@ export class WorkerStore implements AttemptFence {
     if (task.currentAttempt !== ref.attempt || !['ready', 'held', 'stopped'].includes(task.state))
       throw new StaleAttemptError(ref, task.currentAttempt);
     if (task.proofRun || this.db.query('SELECT 1 FROM worker_proof_reservations WHERE task_id=?').get(task.id) ||
-        this.db.query("SELECT 1 FROM worker_events WHERE task_id=? AND kind IN ('proof-reserved','proof-binding') LIMIT 1").get(task.id))
+        this.db.query("SELECT 1 FROM worker_events WHERE task_id=? AND kind IN ('proof-reserved','proof-binding','proof-command-ready') LIMIT 1").get(task.id))
       throw new Error('a reserved proof source and command may never be replaced');
     if (ref.attempt > 0) {
       const attempt = this.attempt(ref);
@@ -1252,7 +1252,7 @@ export class WorkerStore implements AttemptFence {
     });
   }
   /** Superseding and publishing the next sequence are atomic, before stopping any external process. */
-  nextAttempt(ref: AttemptRef, make: (n: number) => Attempt, configDirectory?: string): Attempt {
+  nextAttempt(ref: AttemptRef, make: (n: number) => Attempt, configDirectory?: string, admitProof = false): Attempt {
     return this.write(ref, () => {
       const task = this.task(ref.taskId);
       if (
@@ -1262,6 +1262,7 @@ export class WorkerStore implements AttemptFence {
         task.state === 'cancelled'
       )
         throw new Error(`cannot retry ${task.state} task`);
+      if (admitProof && !this.proofCapacityAvailable(task.brief.goal, task.id)) throw new ProofCapacityQueuedError();
       if (ref.attempt) {
         const old = this.attempt(ref);
         old.state = 'superseded';
@@ -1415,7 +1416,7 @@ export class WorkerStore implements AttemptFence {
       .immediate();
   }
   /** A stopped task may be explicitly retried; it remains fenced until the replacement is published. */
-  retryStopped(taskId: string, make: (n: number) => Attempt, configDirectory?: string): Attempt {
+  retryStopped(taskId: string, make: (n: number) => Attempt, configDirectory?: string, admitProof = false): Attempt {
     return this.db
       .transaction(() => {
         const task = this.task(taskId);
@@ -1424,7 +1425,7 @@ export class WorkerStore implements AttemptFence {
         if (old.state !== 'stopped') throw new Error('current attempt is not stopped');
         old.state = 'exited';
         this.saveAttempt(old);
-        return this.nextAttempt(old, make, configDirectory);
+        return this.nextAttempt(old, make, configDirectory, admitProof);
       })
       .immediate();
   }

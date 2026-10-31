@@ -309,67 +309,40 @@ import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import { proofFingerprint, proofSourceUnchanged } from './verification.ts';
 
-test('one SQLite admission transaction limits each Goal to three owned originals across controllers, waits and crashes', () => {
+test('ordinary SQLite admission caps current runs at three across controllers, preparation, waits and crashes without native binding', () => {
   const h = registeredFixture();
-  const secondDb = openDb(join(h.settings.stateDirectory, 'goal.sqlite'));
+  const db = openDb(join(h.settings.stateDirectory, 'goal.sqlite'));
   try {
-    const second = new WorkerStore(secondDb);
-    const add = (goal = h.proofBrief.goal) => {
-      const contract = { ...h.proofBrief, goal };
-      const task = h.store.createTask(
-        contract,
-        { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit },
-        'implementation',
-      );
+    const second = new WorkerStore(db);
+    const add = () => {
+      const task = h.store.createTask(h.proofBrief,
+        { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
       h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
-        current.proofAuthorization = {
-          ...h.store.task(h.proof.id).proofAuthorization!,
-          fingerprint: proofFingerprint(contract),
-        };
+        current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization;
       });
-      const current = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) =>
-        attempt(task.id, n, h.settings.stateDirectory),
-      );
-      return { current, binding: newProofBinding(h.store.task(task.id), current.attempt) };
+      return { taskId: task.id, attempt: 0 };
     };
-    const two = add(),
-      three = add(),
-      queued = add(),
-      other = add('other-goal');
-    expect(second.reserveProof(two.binding)?.status).toBe('reserved');
-    h.store.bindProof(two.binding, { status: 'unavailable', cause: 'producer lost after reservation' });
-    expect(h.store.reserveProof(three.binding)?.status).toBe('reserved');
-    h.store.bindProof(three.binding, { status: 'bound', binding: three.binding });
-    h.store.updateAttempt(h.current, (current) => {
-      current.state = 'waiting';
-      current.checks = [h.binding.checkId];
-    });
-    h.store.updateAttempt(three.current, (current) => {
-      current.state = 'exited';
-    });
-    expect(second.reserveProof(queued.binding)).toBeNull();
-    expect(second.reserveProof(other.binding)?.status).toBe('reserved');
-    // A new controller observes durable unknown, waiting and detached ownership instead of freeing it.
-    const recovered = new WorkerStore(secondDb);
-    expect(recovered.reserveProof(queued.binding)).toBeNull();
-    expect(recovered.proofReservation(two.binding.taskId, 1)?.status).toBe('unknown');
-    const { record, physical } = records(h.binding);
-    const terminal = observeProof(h.binding, { record: () => record, history: () => physical });
-    h.store.observeProof(h.binding, terminal);
-    expect(recovered.reserveProof(queued.binding)?.status).toBe('reserved');
-    // Only explicit, proven never-started producer refusal releases an unstarted reservation.
-    h.store.bindProof(queued.binding, {
-      status: 'refused',
-      provenNeverStarted: true,
-      cause: 'runner refused before exec',
-    });
-    expect(recovered.proofReservation(queued.binding.taskId, 1)?.status).toBe('released');
-  } finally {
-    secondDb.close();
-    h.dispose();
-  }
+    const two = add(), three = add(), queued = add();
+    const make = (ref: typeof two) => (n: number) => ({ ...attempt(ref.taskId, n, h.settings.stateDirectory), state: 'pending' as const });
+    const nextTwo = second.nextAttempt(two, make(two), undefined, true);
+    const nextThree = h.store.nextAttempt(three, make(three), undefined, true);
+    h.store.updateAttempt(nextTwo, (current) => { current.state = 'waiting'; current.checks = [crypto.randomUUID()]; });
+    expect(() => second.nextAttempt(queued, make(queued), undefined, true)).toThrow('three current ordinary checks');
+    expect(second.task(queued.taskId).currentAttempt).toBe(0);
+    expect(second.proofReservation(nextTwo.taskId, nextTwo.attempt)).toBeUndefined();
+    expect(new WorkerStore(db).proofCapacityAvailable('fixture', queued.taskId)).toBe(false);
+    // Unknown current optional evidence still counts while its attempt is running/waiting.
+    // The initial fixture retains a bound native identity, independent of the ordinary runs.
+    expect(h.store.proofReservation(h.proof.id, 1)?.binding).toEqual(h.binding);
+    h.store.close(nextTwo, 'stopped');
+    expect(second.proofCapacityAvailable('fixture', queued.taskId)).toBe(true);
+    const next = second.nextAttempt(queued, make(queued), undefined, true);
+    expect(next.attempt).toBe(1);
+    expect(second.proofReservation(next.taskId, 1)).toBeUndefined();
+    expect(second.attempt(nextThree).state).toBe('pending');
+    expect(second.proofCapacityAvailable('fixture', 'another')).toBe(false);
+  } finally { db.close(); h.dispose(); }
 });
-
 import { WorkerJob } from './job.ts';
 import type { ManagerEvent } from './contracts.ts';
 
@@ -916,7 +889,7 @@ test('stopped same-generation and never-started held proof conversion persists a
   }
 });
 
-test('registered READY0 recovery uses normal first start once across controllers, with no metadata resubmission or duplicate binding', async () => {
+test('registered READY0 recovery uses ordinary start/wait/wake/result once without metadata resubmission, producer binding or a second UUID', async () => {
   const h = registeredFixture();
   const db = openDb(join(h.settings.stateDirectory, 'goal.sqlite'));
   try {
@@ -926,54 +899,54 @@ test('registered READY0 recovery uses normal first start once across controllers
     h.store.updateTask({ taskId: ready.id, attempt: 0 }, (current) => {
       current.proofAuthorization = authorizeProof(h.store, h.root, submitted.brief, h.actor, 'operations', 'dev');
     });
-    // Simulate dispatch dying after accepting READY0 but before recording or launching its start.
-    expect(h.store.retryIntent({ taskId: ready.id, attempt: 0 })).toBeUndefined();
-    let binds = 0, launches = 0;
+    const id = crypto.randomUUID();
+    const directory = join(h.root, '.temp/goal/checks/results');
+    mkdirSync(directory, { recursive: true });
+    let launches = 0, binds = 0;
     const second = new WorkerStore(db);
-    const tasks = new WorkerTasks(h.settings, second, (pool) => reading(pool), async (store, task, next) => {
+    const tasks = new WorkerTasks(h.settings, second, (pool) => reading(pool), async (store, task, next, _pool, prompt) => {
       launches++;
-      expect(task.proofRun).toMatchObject({
-        status: 'released', binding: { taskId: task.id, attempt: next.attempt },
-        observation: { status: 'terminal', passed: true },
-      });
+      expect(prompt).toContain('Run exactly one ordinary worker-check invocation');
+      expect(task.proofRun).toBeUndefined();
+      const record = { id, cwd: task.worktree, argv: task.brief.acceptance.command,
+        ownership: { taskId: task.id, attempt: next.attempt }, status: 'running', log: '.temp/original.log' };
+      writeFileSync(join(directory, `${id}.json`), JSON.stringify(record));
       mkdirSync(dirname(next.logPath), { recursive: true });
-      writeFileSync(next.logPath, JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ status: 'success', summary: 'Original fixture terminal evidence', blocker: null, checks: [], approaches: [] }) } }) + '\n');
+      writeFileSync(next.logPath, JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text:
+        JSON.stringify({ status: 'waiting', summary: 'Original active', blocker: null, checks: [id], approaches: [] }) } }) + '\n');
       store.updateTask(next, (current) => { current.state = 'running'; });
       const saved = store.updateAttempt(next, (current) => { current.state = 'running'; current.session = 'proof-session'; });
       return { attempt: saved, exited: Promise.resolve({ code: 0, signal: null }) };
-    }, { async bind(binding) {
-      binds++;
-      const { record, physical } = records(binding);
-      const checks = join(h.root, '.temp/goal/checks');
-      mkdirSync(join(checks, 'results'), { recursive: true });
-      mkdirSync(join(checks, 'history', binding.checkId), { recursive: true });
-      writeFileSync(join(checks, 'results', `${binding.checkId}.json`), JSON.stringify(record));
-      writeFileSync(join(checks, 'history', binding.checkId, `${record.physicalRunId}.json`), JSON.stringify(physical));
-      return { status: 'bound', binding };
-    } });
+    }, { async bind() { binds++; throw new Error('Ordinary proof must not call a producer'); } });
     const job = new WorkerJob(tasks, { enqueue() { throw new Error('proof must never land'); } }, { deliver() {} });
     job.resumePendingRetries();
     job.resumePendingRetries();
     await job.drain();
-    expect(binds).toBe(1);
     expect(launches).toBe(1);
-    expect(second.task(ready.id).state).toBe('verified');
-    expect(second.attempts(ready.id)).toHaveLength(1);
+    expect(binds).toBe(0);
+    expect(second.attempt({ taskId: ready.id, attempt: 1 })).toMatchObject({ state: 'waiting', checks: [id] });
     expect(second.retryIntent({ taskId: ready.id, attempt: 0 })).toMatchObject({ status: 'started', nextAttempt: 1 });
-    const retained = second.proofReservation(ready.id, 1)!;
-    expect(retained.binding).toMatchObject({ sourceCommit: h.binding.sourceCommit, sourceTree: h.binding.sourceTree, argv: submitted.brief.acceptance.command });
-    expect(retained.binding.reservationToken).toMatch(/^[0-9a-f-]{36}$/);
+    expect(second.proofReservation(ready.id, 1)).toBeUndefined();
+    const current = second.attempt({ taskId: ready.id, attempt: 1 });
+    expect(await job['checkWakeMessage'](current, second.task(ready.id))).toBeNull();
+    const record = JSON.parse(readFileSync(join(directory, `${id}.json`), 'utf8'));
+    writeFileSync(join(directory, `${id}.json`), JSON.stringify({ ...record, status: 'finished', exitCode: 0 }));
+    expect(await job['checkWakeMessage'](current, second.task(ready.id))).toContain('exit 0');
+    // Exercise settlement of the same resumed generation without invoking a real provider in this receiving test.
+    writeFileSync(current.logPath, JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text:
+      JSON.stringify({ status: 'success', summary: 'Actual original terminal zero', blocker: null, checks: [], approaches: [] }) } }) + '\n');
+    await settle(tasks, { attempt: current, exited: Promise.resolve({ code: 0, signal: null }), resuming: true },
+      { enqueue() { throw new Error('proof must never land'); } });
+    expect(second.task(ready.id).state).toBe('verified');
+    expect(second.record(current)?.proof).toMatchObject({ status: 'terminal', passed: true, record: { id, exitCode: 0 } });
     await job.start(ready.id, { expectedAttempt: 0 });
     job.resumePendingRetries();
     await job.drain();
-    expect(binds).toBe(1);
+    expect(second.attempts(ready.id)).toHaveLength(1);
     expect(launches).toBe(1);
-  } finally {
-    db.close();
-    h.dispose();
-  }
+    expect(binds).toBe(0);
+  } finally { db.close(); h.dispose(); }
 });
-
 test('first-start cap waits and old captures keep one durable intent; only authenticated unreserved generation zero can refresh', async () => {
   const h = registeredFixture();
   try {
@@ -1086,7 +1059,7 @@ test('configured operations receives stopped and held conversions with authentic
   }
 });
 
-test('exact retained local wrapper registration stays pending across host sweeps before any nested check or attempt', async () => {
+test('exact retained local wrapper registers for ordinary execution without stripping provenance, native port or nested invocation', async () => {
   const h = registeredFixture();
   try {
     const command = ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test', 'fixture.test.ts'];
@@ -1094,29 +1067,20 @@ test('exact retained local wrapper registration stays pending across host sweeps
     const submitted = submittedProof(h, { acceptance: { ...h.proofBrief.acceptance, command } });
     const task = h.store.createTask({ ...brief(), kind: 'claim' },
       { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'claim');
-    const reason = proofExecutionUnavailable(command);
-    if (!reason) throw new Error('Wrapped command must require its native producer port');
     expect(h.tasks.queueProofStart(task.id, { expectedAttempt: 0, brief: submitted.path }, h.actor)).toEqual({
-      taskId: task.id, attempt: 0, status: 'pending', reason,
+      taskId: task.id, attempt: 0, status: 'created',
     });
-    const job = new WorkerJob(h.tasks, { enqueue() { throw new Error('proof must never land'); } }, { deliver() {} });
-    job.resumePendingRetries();
-    await job.drain();
-    job.resumePendingRetries();
-    await job.drain();
-    await expect(job.start(task.id, { expectedAttempt: 0 })).rejects.toThrow('ONE logical invocation');
-    expect(h.store.task(task.id).brief.acceptance.command).toEqual(command);
-    expect(h.store.task(task.id).proofAuthorization?.originals[0]?.argv).toEqual(command);
+    const saved = h.store.task(task.id);
+    expect(saved.brief.acceptance.command).toEqual(command);
+    expect(saved.proofAuthorization?.originals[0]?.argv).toEqual(command);
+    expect(ordinaryProofCommand(command)).toEqual({ invocation: command, recordedArgv: ['bun', 'test', 'fixture.test.ts'] });
+    expect(workerPrompt(saved, undefined, undefined, [], h.root)).toContain("'bun' 'scripts/worker-check.ts' '--local' '--' 'bun' 'test' 'fixture.test.ts'");
     expect(h.store.task(task.id).currentAttempt).toBe(0);
     expect(h.store.attempts(task.id)).toEqual([]);
     expect(h.store.proofReservation(task.id, 1)).toBeUndefined();
     expect(h.store.retryIntents().filter((intent) => intent.taskId === task.id)).toHaveLength(1);
-    expect(h.store.retryIntent({ taskId: task.id, attempt: 0 })?.status).toBe('pending');
-  } finally {
-    h.dispose();
-  }
+  } finally { h.dispose(); }
 });
-
 test('historical admission distinguishes retained live identities from gone, missing, remote and reused identities without claiming terminal cleanup', () => {
   const check = { taskId: 'original', attempt: 28, checkId: crypto.randomUUID(), cwd: '/retained/original' };
   const identity = processIdentity();
@@ -1156,70 +1120,45 @@ test('historical admission distinguishes retained live identities from gone, mis
   expect(foreign.processes).toEqual([]);
 });
 
-test('one hundred historical unknowns archive durably and allow exactly three new checks while current unknown reservations retain capacity', () => {
+test('one hundred older active-looking and current stopped rows preserve archives and raw leases without regrowing logical cap after restart', () => {
   const h = registeredFixture();
-  let restarted: ReturnType<typeof openDb> | undefined;
+  const db = openDb(join(h.settings.stateDirectory, 'goal.sqlite'));
   try {
     const old = h.store.createTask(brief(),
       { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
-    const ref = h.store.nextAttempt({ taskId: old.id, attempt: 0 }, (n) => attempt(old.id, n, h.settings.stateDirectory));
+    const first = h.store.nextAttempt({ taskId: old.id, attempt: 0 }, (n) => attempt(old.id, n, h.settings.stateDirectory));
     const checks = Array.from({ length: 100 }, () => crypto.randomUUID());
-    h.store.updateAttempt(ref, (current) => {
-      current.checks = [...checks, 'bun test labelled-not-a-native-uuid'];
-      current.result = 'Retained historical unknown report';
-    });
-    h.store.close(ref, 'stopped');
-    const raw = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(old.id, 1);
-    const reservations = h.store.activeProofReservations();
+    h.store.updateAttempt(first, (current) => { current.state = 'waiting'; current.checks = checks; current.result = 'Raw unknown report'; });
+    const next = h.store.nextAttempt(first, (n) => attempt(old.id, n, h.settings.stateDirectory));
+    // Retained older rows may look active; only the exact current generation is eligible for cap inspection.
+    const rawOld = JSON.parse((h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=1').get(old.id) as { body: string }).body);
+    h.store.db.query('UPDATE worker_attempts SET body=? WHERE task_id=? AND attempt=1').run(JSON.stringify({ ...rawOld, state: 'waiting' }), old.id);
+    h.store.updateAttempt(next, (current) => { current.checks = [...checks, 'bun test labelled-not-a-UUID']; });
+    h.store.close(next, 'stopped');
+    for (const checkId of checks) h.store.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+      .run(old.id, 1, 'historical-proof-terminal', new Date().toISOString(), JSON.stringify({ checkId, status: 'historical-unknown', passed: false, archivedBy: 'supermanager' }));
+    const raw = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? ORDER BY attempt').all(old.id);
+    const events = h.store.events(old.id);
     const leasePath = join(h.settings.stateDirectory, 'retained-physical-lease.json');
     writeFileSync(leasePath, '{"physical":"unresolved"}');
-    expect(h.store.historicalProofChecks()).toHaveLength(100);
-    const reader: HistoricalProofReader = {
-      record() { throw new Error('Retained historical result absent'); }, history() { return undefined; },
-      registrations() { return []; }, valid() { return false; },
-    };
-    for (const check of h.store.historicalProofChecks())
-      h.store.classifyHistoricalProof(check, classifyHistoricalProof(check, reader));
-    expect(h.store.historicalProofChecks()).toHaveLength(100);
-    expect(h.store.historicalProofSlots()).toEqual([]);
-    expect(h.store.activeProofReservations()).toEqual(reservations);
-    expect(h.store.events(old.id).filter((event) => event.kind === 'historical-proof-classified')).toHaveLength(100);
-    expect(h.store.events(old.id).some((event) => event.kind === 'historical-proof-terminal')).toBe(false);
-    expect(h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(old.id, 1)).toEqual(raw);
-    expect(h.store.task(old.id).proofAuthorization).toBeUndefined();
-    expect(h.store.task(old.id).proofRun).toBeUndefined();
-    expect(readFileSync(leasePath, 'utf8')).toBe('{"physical":"unresolved"}');
-    restarted = openDb(join(h.settings.stateDirectory, 'goal.sqlite'));
-    const store = new WorkerStore(restarted);
+    const store = new WorkerStore(db);
+    expect(store.historicalProofChecks()).toEqual([]);
     expect(store.historicalProofSlots()).toEqual([]);
-    expect(store.historicalProofChecks()).toHaveLength(100);
-    // The fixture already has the first new bound proof. Two further reservations fill cap3, including unknown custody.
-    for (let index = 0; index < 3; index++) {
+    expect(store.proofCapacityAvailable('fixture', 'new-proof')).toBe(true);
+    for (let i = 0; i < 2; i++) {
       const task = store.createTask(h.proofBrief,
         { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
-      store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
-        current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization!;
-      });
-      const next = store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory));
-      const binding = newProofBinding(store.task(task.id), next.attempt);
-      const reservation = store.reserveProof(binding);
-      if (index < 2) {
-        expect(reservation?.status).toBe('reserved');
-        store.bindProof(binding, { status: 'unknown', cause: 'Current native custody unknown' });
-      } else expect(reservation).toBeNull();
+      store.updateTask({ taskId: task.id, attempt: 0 }, (current) => { current.proofAuthorization = h.store.task(h.proof.id).proofAuthorization; });
+      store.nextAttempt({ taskId: task.id, attempt: 0 }, (n) => attempt(task.id, n, h.settings.stateDirectory), undefined, true);
     }
-    expect(store.activeProofReservations()).toHaveLength(3);
-    expect(store.proofCapacityAvailable('fixture', 'next-proof')).toBe(false);
-    expect(store.proofCapacityReason('fixture', 'next-proof')).toContain('3 current reservations');
-    expect(store.events(old.id).some((event) => event.kind === 'historical-proof-terminal')).toBe(false);
+    expect(store.proofCapacityAvailable('fixture', 'fourth-proof')).toBe(false);
+    expect(store.db.query('SELECT body FROM worker_attempts WHERE task_id=? ORDER BY attempt').all(old.id)).toEqual(raw);
+    expect(store.events(old.id)).toEqual(events);
+    expect(store.task(old.id).proofRun).toBeUndefined();
     expect(readFileSync(leasePath, 'utf8')).toBe('{"physical":"unresolved"}');
-  } finally {
-    restarted?.close();
-    h.dispose();
-  }
+  } finally { db.close(); h.dispose(); }
 });
-
-test('live historical runner occupies cap3 until its actual identity is gone and archival never releases a physical lease', () => {
+test('current waiting historical runner occupies cap3 regardless of optional classification until its logical attempt stops', () => {
   const h = registeredFixture();
   try {
     const old = h.store.createTask(brief(),
@@ -1249,6 +1188,9 @@ test('live historical runner occupies cap3 until its actual identity is gone and
     // A mismatched start time denotes a gone/reused identity; no process is signalled or stopped by this case.
     const gone = { ...record, runnerIdentity: { ...identity, start: String(BigInt(identity.start) + 1n) } };
     h.store.classifyHistoricalProof(check, classifyHistoricalProof(check, { ...reader, record() { return gone; } }));
+    expect(h.store.historicalProofSlots()).toEqual([check]);
+    expect(h.store.proofCapacityAvailable('fixture', 'another-proof')).toBe(false);
+    h.store.close(ref, 'stopped');
     expect(h.store.historicalProofSlots()).toEqual([]);
     expect(h.store.proofCapacityAvailable('fixture', 'another-proof')).toBe(true);
     expect(h.store.attempt(ref).checks).toEqual([check.checkId]);
@@ -1294,7 +1236,10 @@ test('unreserved retained product generations refresh through authenticated publ
     expect(h.store.proofReservation(task.id, 2)).toBeUndefined();
     h.tasks.queueProofStart(task.id, { expectedAttempt: 2 }, h.actor);
     expect(h.store.retryIntent(ref)).toEqual(originalIntent);
-    const next = h.store.retryStopped(task.id, (number) => attempt(task.id, number, h.settings.stateDirectory));
+    const registeredRef = { taskId: task.id, attempt: h.store.task(task.id).currentAttempt };
+    const next = h.store.attempt(registeredRef).state === 'stopped'
+      ? h.store.retryStopped(task.id, (number) => attempt(task.id, number, h.settings.stateDirectory))
+      : h.store.nextAttempt(registeredRef, (number) => attempt(task.id, number, h.settings.stateDirectory));
     const binding = newProofBinding(h.store.task(task.id), next.attempt);
     h.store.reserveProof(binding);
     h.store.bindProof(binding, { status: 'unknown', cause: 'Bound current proof is uncertain' });
@@ -1397,7 +1342,7 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
   } finally { directory.close(); }
 });
 
-test('unavailable historical reader fails proof admission closed once while ordinary orphan and durable retry recovery continue', async () => {
+test('unavailable optional historical reader records one diagnostic while ordinary admission and orphan/retry recovery continue', async () => {
   const h = registeredFixture();
   try {
     h.settings.integration.checkScriptReaderRoot = join(h.root, '.temp/missing-reader');
@@ -1405,14 +1350,14 @@ test('unavailable historical reader fails proof admission closed once while ordi
       { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
     const oldRef = h.store.nextAttempt({ taskId: old.id, attempt: 0 }, (n) => attempt(old.id, n, h.settings.stateDirectory));
     h.store.updateAttempt(oldRef, (current) => { current.checks = [crypto.randomUUID()]; current.result = 'Raw historical report'; });
-    h.store.close(oldRef, 'stopped');
     const raw = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=?').all(old.id);
     const checks = h.store.historicalProofChecks();
     const reservations = h.store.activeProofReservations();
     const source = { root: h.settings.integration.checkScriptReaderRoot, integrationRoot: h.root, integrationBranch: 'dev' };
     await expect(refreshHistoricalProofAdmission(h.store, join(h.settings.stateDirectory, 'check-registry'), source))
       .rejects.toBeInstanceOf(ProofUnavailableError);
-    await expect(h.tasks.refreshProofAdmission(h.store.task(h.proof.id))).rejects.toThrow('trusted current native reader');
+    await h.tasks.refreshProofAdmission(h.store.task(h.proof.id));
+    expect(h.store.proofCapacityAvailable('fixture', 'another')).toBe(true);
 
     const ordinary = h.store.createTask(brief(),
       { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: h.binding.sourceCommit }, 'implementation');
@@ -1437,5 +1382,106 @@ test('unavailable historical reader fails proof admission closed once while ordi
     expect(h.store.historicalProofSlots()).toEqual(checks);
     expect(h.store.activeProofReservations()).toEqual(reservations);
     expect(h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=?').all(old.id)).toEqual(raw);
+  } finally { h.dispose(); }
+});
+
+import { ordinaryProofCommand, observeOrdinaryProof, readProofObservation, registeredProof } from './verification.ts';
+
+function ordinaryTask(root: string): import('./types.ts').Task {
+  const contract = { ...brief(), kind: 'verification' as const, paths: [],
+    acceptance: { ...brief().acceptance, command: ['bun', 'test', 'fixture.test.ts'] },
+    proof: { journey: 'Original', sourceTasks: ['original'], sourceCommit: 'a'.repeat(40) } };
+  return {
+    id: 'ordinary-proof', sequence: 1, brief: contract, briefPath: '', state: 'running', worktree: root,
+    branch: 'worker/ordinary-proof', base: contract.proof.sourceCommit, taskClass: 'implementation',
+    currentAttempt: 1, createdAt: new Date().toISOString(),
+    proofAuthorization: { fingerprint: proofFingerprint(contract), manager: contract.manager, sessionId: 'authenticated-owner',
+      integrationBranch: 'dev', sourceTree: 'b'.repeat(40),
+      originals: [{ taskId: 'original', commit: contract.proof.sourceCommit, argv: contract.acceptance.command }] },
+  };
+}
+
+test('ordinary original invocation preserves whole Auth, helper union and exact env/local wrapper argv without a native port or double wrapping', () => {
+  const auth = ['bun', 'run', '--cwd', 'services/auth', 'check'];
+  expect(ordinaryProofCommand(auth)).toEqual({ invocation: ['bun', 'scripts/worker-check.ts', '--', ...auth], recordedArgv: auth });
+  const helpers = ['env', '-u', 'KERNEL_CHECK_REMOTE', 'bun', 'run', '--cwd', 'services/kernel', 'check',
+    'identity-fixture.ts', 'identity-driver.ts', 'identity-outcomes.test.ts'];
+  expect(ordinaryProofCommand(helpers).recordedArgv).toEqual(helpers);
+  const wrapped = ['env', '-u', 'KERNEL_CHECK_REMOTE', 'bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test',
+    'fixture.ts', 'driver.ts', 'outcomes.test.ts'];
+  expect(ordinaryProofCommand(wrapped)).toEqual({ invocation: wrapped, recordedArgv: wrapped.slice(7) });
+  expect(wrapped.filter((word) => word === 'scripts/worker-check.ts')).toHaveLength(1);
+  for (const invalid of [
+    ['bun', 'run', 'check'], ['bun', 'scripts/gate857.ts'], ['sh', '-c', auth.join(' ')],
+    ['bun', 'scripts/worker-check.ts', '--local', '--', ...wrapped],
+    ['bun', 'run', '--cwd', 'services/kernel', 'check', '--changed', 'outcomes.test.ts'],
+  ]) expect(() => ordinaryProofCommand(invalid)).toThrow();
+});
+
+test('ordinary original result uses actual wrapper exit without optional custody and rejects wrong owner, attempt, argv or unknown terminal status', () => {
+  const task = ordinaryTask('/work/proof');
+  const id = '11111111-1111-4111-8111-111111111111';
+  const record = { id, cwd: task.worktree, ownership: { taskId: task.id, attempt: 1 },
+    argv: task.brief.acceptance.command, status: 'finished', exitCode: 0, log: '.temp/original.log' };
+  expect(registeredProof(task.brief, task.proofAuthorization)).toBe(true);
+  expect(observeOrdinaryProof(task, id, record)).toMatchObject({ status: 'terminal', passed: true, physical: [] });
+  expect(observeOrdinaryProof(task, id, { ...record, status: 'running', exitCode: undefined }).status).toBe('running');
+  expect(observeOrdinaryProof(task, id, { ...record, exitCode: 1, failureSummary: 'actual failed assertion' }))
+    .toMatchObject({ status: 'terminal', passed: false, cause: expect.stringContaining('actual failed assertion') });
+  for (const wrong of [
+    { ...record, ownership: undefined }, { ...record, ownership: { taskId: 'foreign', attempt: 1 } },
+    { ...record, ownership: { taskId: task.id, attempt: 2 } }, { ...record, cwd: '/other' },
+    { ...record, argv: ['bun', 'test', 'narrowed.test.ts'] }, { ...record, exitCode: undefined },
+    { ...record, exitCode: '0' },
+  ]) expect(observeOrdinaryProof(task, id, wrong)).toMatchObject({ status: 'unknown', passed: false });
+  expect(observeOrdinaryProof({ ...task, proofAuthorization: undefined }, id, record).passed).toBe(false);
+});
+
+test('ordinary original records wait then terminate without token/physical receipts and detect duplicate current invocation while ignoring older evidence', async () => {
+  const directory = temporaryDirectory();
+  try {
+    const task = ordinaryTask(directory.path);
+    const results = join(directory.path, '.temp/goal/checks/results');
+    mkdirSync(results, { recursive: true });
+    const id = crypto.randomUUID(), old = crypto.randomUUID(), duplicate = crypto.randomUUID();
+    const record = { id, cwd: task.worktree, ownership: { taskId: task.id, attempt: 1 },
+      argv: task.brief.acceptance.command, status: 'running', log: '.temp/original.log' };
+    writeFileSync(join(results, `${id}.json`), JSON.stringify(record));
+    writeFileSync(join(results, `${old}.json`), JSON.stringify({ ...record, id: old, ownership: { taskId: task.id, attempt: 0 } }));
+    expect((await readProofObservation(task, [id])).status).toBe('running');
+    expect((await readProofObservation(task, [`bun check ${id}`])).passed).toBe(false);
+    writeFileSync(join(results, `${id}.json`), JSON.stringify({ ...record, status: 'finished', exitCode: 0 }));
+    expect(await readProofObservation(task)).toMatchObject({ status: 'terminal', passed: true, record: { id } });
+    writeFileSync(join(results, `${duplicate}.json`), JSON.stringify({ ...record, id: duplicate }));
+    expect(await readProofObservation(task, [id])).toMatchObject({ status: 'unknown', passed: false,
+      cause: expect.stringContaining('exactly one') });
+  } finally { directory.close(); }
+});
+
+test('public logical release authenticates exact generation, retains unknown binding and physical facts, and refuses a live ordinary run', async () => {
+  const h = registeredFixture();
+  try {
+    const unknown = { status: 'unknown' as const, passed: false, cause: 'Optional native custody unavailable', record: null, physical: [{ retained: 'unknown' }] };
+    h.store.observeProof(h.binding, unknown);
+    expect(() => h.tasks.releaseProof(h.proof.id, 1, h.actor)).toThrow('stopped or exited');
+    h.store.close(h.current, 'stopped');
+    const raw = h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=?').all(h.proof.id);
+    const path = join(h.settings.stateDirectory, 'physical-lease');
+    writeFileSync(path, 'unknown physical owner retained');
+    expect(() => h.tasks.releaseProof(h.proof.id, 0, h.actor)).toThrow('stale');
+    expect(() => h.tasks.releaseProof(h.proof.id, 1, null)).toThrow('authenticated');
+    const output: string[] = [];
+    const runtime = createRuntime({ tasks: h.tasks, db: h.store.db });
+    expect(await runWorkerCommand('retry', [h.proof.id, '--release-proof', '--expected-attempt', '1'], {
+      runtime, env: { CODEX_THREAD_ID: h.actor.sessionId }, print: (value) => output.push(value),
+    })).toBe(0);
+    expect(JSON.parse(output[0]!)).toEqual({ taskId: h.proof.id, attempt: 1, status: 'released', checks: [h.binding.checkId] });
+    expect(h.store.proofReservation(h.proof.id, 1)).toMatchObject({ status: 'released', binding: h.binding,
+      observation: unknown, logicalRelease: { reason: expect.stringContaining('native custody remains independent') } });
+    expect(h.store.db.query('SELECT body FROM worker_attempts WHERE task_id=?').all(h.proof.id)).toEqual(raw);
+    expect(readFileSync(path, 'utf8')).toBe('unknown physical owner retained');
+    expect(h.tasks.releaseProof(h.proof.id, 1, h.actor).checks).toEqual([]);
+    expect(h.store.events(h.proof.id).filter((event) => event.kind === 'proof-logical-released')).toHaveLength(1);
+    expect(h.store.events(h.proof.id).some((event) => event.kind === 'historical-proof-terminal')).toBe(false);
   } finally { h.dispose(); }
 });
