@@ -88,11 +88,14 @@ function portTransport(port: MessagePort): OutcomeRpcTransport {
   return {
     send: (packet) => port.postMessage(packet),
     subscribe(message, failure) {
-      port.on('message', message);
-      port.on('messageerror', failure);
+      const receive = (event: MessageEvent) => message(event.data);
+      const failed = () => failure(new Error('Clock message could not be deserialized'));
+      port.addEventListener('message', receive);
+      port.addEventListener('messageerror', failed);
+      port.start();
       return () => {
-        port.off('message', message);
-        port.off('messageerror', failure);
+        port.removeEventListener('message', receive);
+        port.removeEventListener('messageerror', failed);
       };
     },
   };
@@ -113,6 +116,7 @@ test('clock RPC waits for a matching response and refuses pending or later updat
     reached = resolve;
   });
   const parent = createOutcomeRpc(portTransport(port1), {
+    timeoutMs: 1000,
     onRequest() {
       throw new Error('Unexpected child request');
     },
@@ -132,7 +136,7 @@ test('clock RPC waits for a matching response and refuses pending or later updat
       acknowledged = true;
       return value;
     });
-    await received;
+    await Promise.race([received, pending]);
     expect(clock.clock().getTime()).toBe(instant);
     expect(acknowledged).toBe(false); // Delivery and even application alone are not an IPC acknowledgment.
     release();
