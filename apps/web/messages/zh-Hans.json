@@ -3890,5 +3890,14 @@
   "edition_identity_revision_date": "固定修订版本 · {date}",
   "edition_identity_recovery": "请重新读取当前信息以获取标题。确认原始目标的身份前，无法发布。",
   "edition_identity_details": "技术引用（选中即可复制）",
-  "edition_identity_recorded": "命令已成功，回执已保留，但无法读取当前的版本。请重新读取当前信息，无须再次执行命令。"
+  "edition_identity_recorded": "命令已成功，回执已保留，但无法读取当前的版本。请重新读取当前信息，无须再次执行命令。",
+  "home_kind_label": "种类",
+  "home_kind_all": "所有种类",
+  "home_kind_unnamed": "未命名种类",
+  "home_kinds_load": "加载种类选项",
+  "home_kinds_loading": "正在加载种类选项…",
+  "home_kinds_empty": "暂无可选种类。",
+  "home_kinds_unavailable": "无法加载种类选项。当前动态选择保持不变。",
+  "home_kinds_retry": "重试种类选项",
+  "home_kinds_next": "更多种类选项"
 }

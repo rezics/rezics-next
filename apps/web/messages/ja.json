@@ -3889,5 +3889,14 @@
   "edition_identity_revision_date": "固定された改訂版 · {date}",
   "edition_identity_recovery": "現在の情報を再取得してタイトルを確認してください。元の対象を識別できるまで公開できません。",
   "edition_identity_details": "技術的な参照情報（選択してコピー）",
-  "edition_identity_recorded": "操作は成功し、受領記録は保持されていますが、現在のエディションを読み取れませんでした。現在の情報を再取得してください。操作を再実行する必要はありません。"
+  "edition_identity_recorded": "操作は成功し、受領記録は保持されていますが、現在のエディションを読み取れませんでした。現在の情報を再取得してください。操作を再実行する必要はありません。",
+  "home_kind_label": "種類",
+  "home_kind_all": "すべての種類",
+  "home_kind_unnamed": "名前のない種類",
+  "home_kinds_load": "種類を読み込む",
+  "home_kinds_loading": "種類を読み込み中…",
+  "home_kinds_empty": "選択できる種類がありません。",
+  "home_kinds_unavailable": "種類を読み込めませんでした。フィードの選択は保持されています。",
+  "home_kinds_retry": "種類の読み込みを再試行",
+  "home_kinds_next": "ほかの種類"
 }

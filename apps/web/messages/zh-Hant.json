@@ -3889,5 +3889,14 @@
   "edition_identity_revision_date": "固定修訂版本 · {date}",
   "edition_identity_recovery": "請重新讀取目前資訊以取得標題。確認原始目標的身分前，無法發行。",
   "edition_identity_details": "技術參照（選取即可複製）",
-  "edition_identity_recorded": "指令已成功，收據已保留，但無法讀取目前的版本。請重新讀取目前資訊，無須再次執行指令。"
+  "edition_identity_recorded": "指令已成功，收據已保留，但無法讀取目前的版本。請重新讀取目前資訊，無須再次執行指令。",
+  "home_kind_label": "種類",
+  "home_kind_all": "所有種類",
+  "home_kind_unnamed": "未命名種類",
+  "home_kinds_load": "載入種類選項",
+  "home_kinds_loading": "正在載入種類選項…",
+  "home_kinds_empty": "暫無可選種類。",
+  "home_kinds_unavailable": "無法載入種類選項。目前動態選擇保持不變。",
+  "home_kinds_retry": "重試種類選項",
+  "home_kinds_next": "更多種類選項"
 }

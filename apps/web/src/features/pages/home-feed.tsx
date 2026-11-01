@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Cover } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../../media/cover-src';
@@ -7,6 +7,9 @@ import { continueProgress } from '../../library/continue-source';
 import { progressView } from '../../library/progress-label';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
+import { createHomeKindChoices, type HomeKindsReader } from './home-feed-kinds';
+import { HomeFeedKindControl } from './home-feed-kind-control';
+import type { ReactNode } from 'react';
 import { PageHeading } from '../../shell/page-heading';
 import { homeFeedDestination, homeFeedResume, homeFeedTitle } from './home-feed-destination';
 import {
@@ -95,6 +98,7 @@ export function HomeFeed({
   signedIn = false,
   busy = false,
   onSelect,
+  kindControl,
   onRetry,
   onNext,
   onRestart,
@@ -105,6 +109,7 @@ export function HomeFeed({
   signedIn?: boolean;
   busy?: boolean;
   onSelect?: (stream: FeedStream) => void;
+  kindControl?: ReactNode;
   onRetry?: () => void;
   onNext?: (cursor: string) => void;
   onRestart?: () => void;
@@ -144,6 +149,7 @@ export function HomeFeed({
           </Button>
         ) : null}
       </nav>
+      {kindControl}
       {signedIn ? (
         <p className="text-sm text-muted-foreground">
           {m.home_feed_horizon({}, options)}{' '}
@@ -254,13 +260,18 @@ export function HomeFeedConsumer({
   locale,
   signedIn,
   read,
+  readKinds,
 }: {
   initial: HomeFeedResult;
   locale: string;
   signedIn: boolean;
-  read: (input: FeedInput) => Promise<HomeFeedResult>;
+  read: (input: FeedInput, signal: AbortSignal) => Promise<HomeFeedResult>;
+  readKinds: HomeKindsReader;
 }) {
-  const window = useMemo(() => createHomeFeedWindow(initial, read), [initial, read]);
+  const window = useState(() => createHomeFeedWindow(initial, read))[0];
+  const choices = useState(() => createHomeKindChoices(readKinds))[0];
+  const kinds = useSyncExternalStore(choices.subscribe, choices.snapshot, choices.snapshot);
+  useEffect(() => () => choices.retire(), [choices]);
   const snapshot = useSyncExternalStore(window.subscribe, window.snapshot, window.snapshot);
   useEffect(() => {
     if (signedIn) void window.load({ stream: 'home' });
@@ -273,10 +284,28 @@ export function HomeFeedConsumer({
       signedIn={signedIn}
       stream={snapshot.input.stream}
       busy={snapshot.busy}
-      onSelect={(stream) => void window.load({ stream })}
+      kindControl={
+        <HomeFeedKindControl
+          choices={choices}
+          snapshot={kinds}
+          locale={locale}
+          onSelect={(choice) => {
+            choices.select(choice);
+            void window.load({ stream: snapshot.input.stream, ...(choice ? { kind: choice.id } : {}) });
+          }}
+        />
+      }
+      onSelect={(stream) => {
+        choices.retire();
+        const { cursor: _cursor, ...selection } = snapshot.input;
+        void window.load({ ...selection, stream });
+      }}
       onRetry={() => void window.load(snapshot.input)}
-      onRestart={() => void window.load({ stream: snapshot.input.stream })}
-      onNext={(cursor) => void window.load({ stream: snapshot.input.stream, cursor })}
+      onRestart={() => {
+        const { cursor: _cursor, ...selection } = snapshot.input;
+        void window.load(selection);
+      }}
+      onNext={(cursor) => void window.load({ ...snapshot.input, cursor })}
     />
   );
 }

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, within, userEvent } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
 
@@ -65,5 +65,46 @@ export const Following: Story = {
     await userEvent.click(following);
     await expect(await canvas.findByRole('link', { name: 'Books I come back to' })).toBeVisible();
     await expect(context.canvasElement.querySelector('[data-feed-source="discovery"]')).toBeNull();
+  },
+};
+
+export const KindSelection: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByRole('link', { name: 'Letters from B-612' });
+    await userEvent.click(await canvas.findByRole('button', { name: m.home_kinds_load() }));
+    await canvas.findByRole('option', { name: 'Book' });
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.home_kind_label() }), 'schema:Book');
+    await expect(canvas.getByRole('combobox', { name: m.home_kind_label() })).toHaveValue('schema:Book');
+    await expect(await canvas.findByRole('link', { name: 'The Little Prince' })).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: 'Letters from B-612' })).toBeNull();
+  },
+};
+export const KindChoicesUnavailable: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="kinds-unavailable" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByRole('link', { name: 'Letters from B-612' });
+    await userEvent.click(await canvas.findByRole('button', { name: m.home_kinds_load() }));
+    await expect(await canvas.findByText(m.home_kinds_unavailable())).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Letters from B-612' })).toBeVisible();
+  },
+};
+export const KindChoicesNextPage: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="kinds-next" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByRole('link', { name: 'Letters from B-612' });
+    await userEvent.click(await canvas.findByRole('button', { name: m.home_kinds_load() }));
+    await canvas.findByRole('option', { name: 'Book' });
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.home_kind_label() }), 'schema:Book');
+    await canvas.findByRole('link', { name: 'The Little Prince' });
+    await userEvent.click(canvas.getByRole('button', { name: m.home_kinds_next() }));
+    await expect(await canvas.findByRole('option', { name: 'Account' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: m.home_kind_label() })).toHaveValue('schema:Book');
   },
 };

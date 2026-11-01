@@ -155,7 +155,7 @@ export function PageStory({
   selectRatingsFixture(ratingsFixture);
   const { router, queryClient } = useMemo(() => {
     setStoryRequestContext({ visitor, url: entry });
-    selectHomeFeedStory(homeFeedFixture);
+    selectHomeFeedStory(homeFeedFixture, deLocalizeUrl(new URL(entry, 'http://rezics.local')).pathname === '/');
     resetLabelAssignmentStory();
     if (!labelsFixture) setLabelCatalogueStory(false);
     if (labelsFixture) selectLabelStory(labelsFixture);

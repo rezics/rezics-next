@@ -3889,5 +3889,14 @@
   "edition_identity_revision_date": "Revisión fija · {date}",
   "edition_identity_recovery": "Vuelve a cargar la información actual para recuperar el título. La publicación seguirá deshabilitada hasta que se pueda reconocer el destino original.",
   "edition_identity_details": "Referencias técnicas (selecciona para copiar)",
-  "edition_identity_recorded": "La operación se completó. Se conserva su comprobante, pero no se pudo leer la edición actual. Vuelve a cargar la información actual; no hace falta repetir la operación."
+  "edition_identity_recorded": "La operación se completó. Se conserva su comprobante, pero no se pudo leer la edición actual. Vuelve a cargar la información actual; no hace falta repetir la operación.",
+  "home_kind_label": "Clase",
+  "home_kind_all": "Todas las clases",
+  "home_kind_unnamed": "Clase sin nombre",
+  "home_kinds_load": "Cargar clases",
+  "home_kinds_loading": "Cargando clases…",
+  "home_kinds_empty": "No hay clases disponibles.",
+  "home_kinds_unavailable": "No se pudieron cargar las clases. Se conserva tu selección del feed.",
+  "home_kinds_retry": "Reintentar cargar clases",
+  "home_kinds_next": "Más clases"
 }

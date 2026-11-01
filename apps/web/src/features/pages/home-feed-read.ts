@@ -5,7 +5,7 @@ import { isPlatformClosedError } from '../../kernel/platform-closed';
 export type FeedPage = NonNullable<Awaited<ReturnType<KernelClient['feedItems']['get']>>['data']>;
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedStream = 'home' | 'following';
-export type FeedInput = { stream: FeedStream; cursor?: string };
+export type FeedInput = { stream: FeedStream; cursor?: string; kind?: string };
 export type FeedFailure = 'request' | 'auth' | 'denied' | 'closed' | 'cursor' | 'deadline' | 'unavailable';
 export type HomeFeedResult = { state: 'ready'; page: FeedPage } | { state: FeedFailure | 'loading'; code: string };
 export const HOME_FEED_LIMIT = 20;
@@ -26,7 +26,7 @@ function failure(status: number, value: unknown): HomeFeedResult {
             ? 'auth'
             : status === 403
               ? 'denied'
-              : status === 400
+              : status === 400 || status === 422
                 ? 'request'
                 : 'unavailable';
   return { state, code };
@@ -67,15 +67,24 @@ export async function readHomeFeedPage(
 }
 
 /** Public loader and browser continuation deliberately never inspect a session. */
-export function loadPublicHomeFeed(client: KernelClient, cursor?: string) {
-  return readHomeFeedPage(client, { stream: 'home', ...(cursor === undefined ? {} : { cursor }) });
+export function loadPublicHomeFeed(client: KernelClient, cursor?: string, kind?: string, signal?: AbortSignal) {
+  return readHomeFeedPage(
+    client,
+    { stream: 'home', ...(cursor === undefined ? {} : { cursor }), ...(kind === undefined ? {} : { kind }) },
+    undefined,
+    signal,
+  );
 }
 
 export type FeedWindow = { result: HomeFeedResult; busy: boolean; input: FeedInput };
 /** A single displayed page. Replaced pages and late responses never accumulate in a query cache. */
-export function createHomeFeedWindow(initial: HomeFeedResult, read: (input: FeedInput) => Promise<HomeFeedResult>) {
+export function createHomeFeedWindow(
+  initial: HomeFeedResult,
+  read: (input: FeedInput, signal: AbortSignal) => Promise<HomeFeedResult>,
+) {
   let snapshot: FeedWindow = { result: initial, busy: false, input: { stream: 'home' } };
   let generation = 0;
+  let pending: AbortController | undefined;
   const listeners = new Set<() => void>();
   const emit = () => {
     for (const listener of listeners) listener();
@@ -90,20 +99,27 @@ export function createHomeFeedWindow(initial: HomeFeedResult, read: (input: Feed
     },
     clear: () => {
       generation++;
+      pending?.abort();
       snapshot = { result: initial, busy: false, input: { stream: 'home' } };
       emit();
     },
     async load(input: FeedInput) {
       const current = ++generation;
+      pending?.abort();
+      const controller = new AbortController();
+      pending = controller;
       snapshot = {
-        result: input.stream === snapshot.input.stream ? snapshot.result : { state: 'loading', code: 'loading' },
+        result:
+          input.stream === snapshot.input.stream && input.kind === snapshot.input.kind
+            ? snapshot.result
+            : { state: 'loading', code: 'loading' },
         busy: true,
         input,
       };
       emit();
       let result: HomeFeedResult;
       try {
-        result = await read(input);
+        result = await read(input, controller.signal);
       } catch {
         result = { state: 'unavailable', code: 'dependency_unavailable' };
       }

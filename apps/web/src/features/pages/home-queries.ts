@@ -4,6 +4,9 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { kernelClient } from '../../kernel/client';
+import { requestLanguages } from '../../kernel/languages';
+import { readDiscovery, readDiscoveryKinds, type DiscoveryRequest } from '../../search/discovery';
+import { homeFeedKind } from './home-feed-kinds';
 import { publicRead } from '../../kernel/query';
 import { validatePublicOrigin } from '../../shell/origin';
 import { loadPublicHomeFeed, readHomeFeedPage, type FeedInput, type HomeFeedResult } from './home-feed-read';
@@ -12,8 +15,9 @@ function localeInput(locale: unknown): string {
   if (typeof locale !== 'string' || !locale || locale.length > 35) throw new Error('Invalid locale');
   return locale;
 }
-function feedInput(input: { locale: string; stream: 'home' | 'following'; cursor?: string }) {
+function feedInput(input: FeedInput & { locale: string }) {
   localeInput(input.locale);
+  homeFeedKind(input.kind);
   if (
     !['home', 'following'].includes(input.stream) ||
     (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 32768))
@@ -40,8 +44,8 @@ export const homePageQuery = (locale: string) =>
   });
 
 export const readPublicHomePage = createServerFn({ method: 'GET' })
-  .validator((input: { locale: string; cursor?: string }) => feedInput({ ...input, stream: 'home' }))
-  .handler(({ data }) => loadPublicHomeFeed(kernelClient(data.locale), data.cursor));
+  .validator((input: { locale: string; cursor?: string; kind?: string }) => feedInput({ ...input, stream: 'home' }))
+  .handler(({ data }) => loadPublicHomeFeed(kernelClient(data.locale), data.cursor, data.kind, getRequest().signal));
 
 /** Private feed data lives in the mounted viewer's component, outside shared query/hydration caches. */
 export const readPrivateHomePage = createServerFn({ method: 'GET' })
@@ -64,6 +68,7 @@ export const readPrivateHomePage = createServerFn({ method: 'GET' })
         kernelClient(data.locale),
         {
           stream: data.stream,
+          ...(data.kind === undefined ? {} : { kind: data.kind }),
           ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
         },
         authorization,
@@ -72,4 +77,43 @@ export const readPrivateHomePage = createServerFn({ method: 'GET' })
     } catch {
       return { state: 'unavailable', code: 'dependency_unavailable' };
     }
+  });
+
+/** Anonymous bounded registry metadata, read only when the Home control needs choices. No hits are retained. */
+export const readHomeKinds = createServerFn({ method: 'GET' })
+  .validator((input: { locale: string; cursor?: string }) => {
+    localeInput(input.locale);
+    if (
+      input.cursor !== undefined &&
+      (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 32768)
+    )
+      throw new Error('Invalid kind cursor');
+    return input;
+  })
+  .handler(async ({ data }) => {
+    const client = kernelClient(data.locale);
+    const request: DiscoveryRequest = {
+      representation: 'discovery-v1',
+      languages: requestLanguages(data.locale),
+      limit: 1,
+      kindPage: { limit: 8 },
+    };
+    const send = (body: DiscoveryRequest) =>
+      client.subjects.$search.post(body, {
+        fetch: { signal: getRequest().signal, cache: 'no-store', redirect: 'manual' },
+      });
+    const result =
+      data.cursor !== undefined
+        ? await readDiscoveryKinds(request, data.cursor, send)
+        : await readDiscovery(request, send).then(({ discovery }) =>
+            discovery.status === 'ready' ? { status: 'ready' as const, kinds: discovery.page.kinds } : discovery,
+          );
+    if (result.status === 'ready') {
+      try {
+        for (const kind of result.kinds.values) homeFeedKind(kind.id);
+      } catch {
+        return { status: 'unavailable' as const };
+      }
+    }
+    return result;
   });

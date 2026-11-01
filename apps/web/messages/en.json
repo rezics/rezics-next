@@ -3892,5 +3892,14 @@
   "edition_identity_revision_date": "Fixed revision · {date}",
   "edition_identity_recovery": "Read current information again to recover the title. Publication stays unavailable until the original target is recognizable.",
   "edition_identity_details": "Technical references (select to copy)",
-  "edition_identity_recorded": "The command succeeded. Its receipt is retained, but the current edition could not be read. Read current information again; no new command is needed."
+  "edition_identity_recorded": "The command succeeded. Its receipt is retained, but the current edition could not be read. Read current information again; no new command is needed.",
+  "home_kind_label": "Kind",
+  "home_kind_all": "All kinds",
+  "home_kind_unnamed": "Unnamed kind",
+  "home_kinds_load": "Load kind choices",
+  "home_kinds_loading": "Loading kind choices…",
+  "home_kinds_empty": "No kind choices are available.",
+  "home_kinds_unavailable": "Kind choices could not be loaded. Your feed choice is unchanged.",
+  "home_kinds_retry": "Retry kind choices",
+  "home_kinds_next": "More kind choices"
 }

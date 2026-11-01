@@ -4,7 +4,7 @@ import { useCallback } from 'react';
 import { useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { homePageQuery, readPrivateHomePage, readPublicHomePage } from '../features/pages/home-queries';
+import { homePageQuery, readPrivateHomePage, readPublicHomePage, readHomeKinds } from '../features/pages/home-queries';
 import { HomeFeedConsumer } from '../features/pages/home-feed';
 import { homeFeedViewer, type FeedInput } from '../features/pages/home-feed-read';
 import { homeJsonLd } from '../features/pages/jsonld';
@@ -31,11 +31,16 @@ export function Home() {
   const viewer = homeFeedViewer(useSession());
   const subject = viewer?.subject;
   const read = useCallback(
-    (input: FeedInput) =>
+    (input: FeedInput, signal: AbortSignal) =>
       subject
-        ? readPrivateHomePage({ data: { locale, viewer: subject, ...input } })
-        : readPublicHomePage({ data: { locale, ...(input.cursor === undefined ? {} : { cursor: input.cursor }) } }),
+        ? readPrivateHomePage({ data: { locale, viewer: subject, ...input }, signal })
+        : readPublicHomePage({ data: { locale, ...input }, signal }),
     [locale, subject],
+  );
+  const readKinds = useCallback(
+    (cursor: string | undefined, signal: AbortSignal) =>
+      readHomeKinds({ data: { locale, ...(cursor === undefined ? {} : { cursor }) }, signal }),
+    [locale],
   );
   return (
     <HomeFeedConsumer
@@ -44,6 +49,7 @@ export function Home() {
       locale={locale}
       signedIn={viewer !== null}
       read={read}
+      readKinds={readKinds}
     />
   );
 }

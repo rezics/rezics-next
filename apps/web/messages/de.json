@@ -3889,5 +3889,14 @@
   "edition_identity_revision_date": "Feste Revision · {date}",
   "edition_identity_recovery": "Lade die aktuellen Informationen erneut, um den Titel zu sehen. Die Veröffentlichung bleibt gesperrt, bis das ursprüngliche Ziel erkennbar ist.",
   "edition_identity_details": "Technische Referenzen (zum Kopieren markieren)",
-  "edition_identity_recorded": "Der Vorgang war erfolgreich. Die Bestätigung bleibt gespeichert, aber die aktuelle Ausgabe konnte nicht gelesen werden. Lade die aktuellen Informationen erneut; ein neuer Vorgang ist nicht nötig."
+  "edition_identity_recorded": "Der Vorgang war erfolgreich. Die Bestätigung bleibt gespeichert, aber die aktuelle Ausgabe konnte nicht gelesen werden. Lade die aktuellen Informationen erneut; ein neuer Vorgang ist nicht nötig.",
+  "home_kind_label": "Art",
+  "home_kind_all": "Alle Arten",
+  "home_kind_unnamed": "Unbenannte Art",
+  "home_kinds_load": "Arten laden",
+  "home_kinds_loading": "Arten werden geladen…",
+  "home_kinds_empty": "Keine Arten verfügbar.",
+  "home_kinds_unavailable": "Arten konnten nicht geladen werden. Die Feed-Auswahl bleibt erhalten.",
+  "home_kinds_retry": "Arten erneut laden",
+  "home_kinds_next": "Weitere Arten"
 }

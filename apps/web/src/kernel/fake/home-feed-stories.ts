@@ -1,14 +1,26 @@
 import type { FeedItem, FeedPage } from '../../features/pages/home-feed-read';
+import { discoveryExample } from './search-discovery';
+import type { DiscoveryKinds } from '../../search/discovery';
 import type { FakeRoute } from '../fake-modules';
 import home from '../recorded/home-page.json';
 import thread from '../recorded/thread.json';
 import collection from '../recorded/library-collection.json';
 import sessions from '../recorded/library-continue-progress-sessions.json';
 
-export type HomeFeedStory = 'mixed' | 'partial' | 'preparing' | 'unavailable' | 'empty' | 'following';
+export type HomeFeedStory =
+  | 'mixed'
+  | 'partial'
+  | 'preparing'
+  | 'unavailable'
+  | 'empty'
+  | 'following'
+  | 'kinds-unavailable'
+  | 'kinds-next';
 let selected: HomeFeedStory = 'mixed';
-export function selectHomeFeedStory(state: HomeFeedStory = 'mixed') {
+let homeActive = false;
+export function selectHomeFeedStory(state: HomeFeedStory = 'mixed', active = true) {
   selected = state;
+  homeActive = active;
 }
 
 /** Illustrative feed envelopes from recorded native owner summaries, NOT native feed acceptance recordings. */
@@ -17,6 +29,7 @@ export function homeFeedStoryPage(
   personal = true,
   state: HomeFeedStory = selected,
   cursor?: string,
+  kind?: string,
 ): FeedPage {
   const first = home.reads.r0.body.subjects[0]!;
   const labels = first.labels as Record<string, string>;
@@ -71,13 +84,19 @@ export function homeFeedStoryPage(
     },
     destination: { kind: 'collection', id: collection.collection.id, title: collection.collection.title },
   };
-  const items = !personal
-    ? [discovery]
-    : state === 'following'
-      ? [followed, curated]
-      : cursor
-        ? [curated]
-        : [discovery, followed, continued];
+  // Explicit selected wire examples; this fake is not the native candidate-selection implementation.
+  const selectedItems =
+    kind === first.type ? (state === 'following' || cursor ? [] : personal ? [discovery, continued] : [discovery]) : [];
+  const items =
+    kind !== undefined
+      ? selectedItems
+      : !personal
+        ? [discovery]
+        : state === 'following'
+          ? [followed, curated]
+          : cursor
+            ? [curated]
+            : [discovery, followed, continued];
   return {
     feedItems:
       state === 'empty' || state === 'preparing' || state === 'unavailable'
@@ -85,7 +104,7 @@ export function homeFeedStoryPage(
         : state === 'partial' && personal
           ? [discovery, continued]
           : items,
-    next: state === 'mixed' && personal && !cursor ? 'illustrative-signed-frontier' : null,
+    next: !cursor && (kind !== undefined || (state === 'mixed' && personal)) ? 'illustrative-signed-frontier' : null,
     asOf: '2026-11-01T00:00:00.000Z',
     sources: {
       discovery:
@@ -115,7 +134,38 @@ export function homeFeedStoryPage(
   };
 }
 
+/** Bounded Home-only illustrative metadata using the existing native-kind example identities/labels. */
+export function homeKindStoryPage(cursor?: string): DiscoveryKinds {
+  const book = discoveryExample.kinds.values.find((kind) => kind.id === 'schema:Book')!;
+  const account = discoveryExample.kinds.values.find((kind) => kind.id === 'account')!;
+  return cursor ? { values: [account], next: null } : { values: [book], next: 'illustrative-kind-frontier' };
+}
+
 export const routes: FakeRoute[] = [
+  {
+    method: 'POST',
+    path: '/v1/subjects:search',
+    story: async ({ request }) => {
+      if (!homeActive) return;
+      const body = (await request.json()) as {
+        representation?: string;
+        limit?: number;
+        kindPage?: { cursor?: string };
+      };
+      if (body.representation !== 'discovery-v1' || (body.limit !== 1 && !body.kindPage?.cursor)) return;
+      if (selected === 'kinds-unavailable') return { status: 503, code: 'dependency_unavailable' };
+      const kinds = homeKindStoryPage(body.kindPage?.cursor);
+      return body.kindPage?.cursor
+        ? { status: 200, kinds, as_of: '2026-11-01T00:00:00Z' }
+        : {
+            status: 200,
+            hits: [],
+            kinds: { ...kinds, next: selected === 'kinds-next' ? kinds.next : null },
+            next: null,
+            as_of: '2026-11-01T00:00:00Z',
+          };
+    },
+  },
   {
     method: 'GET',
     path: '/v1/feedItems',
@@ -126,7 +176,13 @@ export const routes: FakeRoute[] = [
       const state = url.searchParams.get('stream') === 'following' ? 'following' : selected;
       return {
         status: 200,
-        ...homeFeedStoryPage(locale, personal, state, url.searchParams.get('cursor') ?? undefined),
+        ...homeFeedStoryPage(
+          locale,
+          personal,
+          state,
+          url.searchParams.get('cursor') ?? undefined,
+          url.searchParams.get('kind') ?? undefined,
+        ),
       };
     },
   },

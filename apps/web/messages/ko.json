@@ -3889,5 +3889,14 @@
   "edition_identity_revision_date": "고정된 수정본 · {date}",
   "edition_identity_recovery": "현재 정보를 다시 불러와 제목을 확인하세요. 원래 대상을 식별할 수 있을 때까지 발행할 수 없습니다.",
   "edition_identity_details": "기술 참조 정보 (선택하여 복사)",
-  "edition_identity_recorded": "명령은 성공했으며 처리 기록이 보관되어 있지만 현재 에디션을 읽지 못했습니다. 현재 정보를 다시 불러오세요. 명령을 다시 실행할 필요는 없습니다."
+  "edition_identity_recorded": "명령은 성공했으며 처리 기록이 보관되어 있지만 현재 에디션을 읽지 못했습니다. 현재 정보를 다시 불러오세요. 명령을 다시 실행할 필요는 없습니다.",
+  "home_kind_label": "종류",
+  "home_kind_all": "모든 종류",
+  "home_kind_unnamed": "이름 없는 종류",
+  "home_kinds_load": "종류 불러오기",
+  "home_kinds_loading": "종류 불러오는 중…",
+  "home_kinds_empty": "선택할 수 있는 종류가 없습니다.",
+  "home_kinds_unavailable": "종류를 불러오지 못했습니다. 피드 선택은 유지됩니다.",
+  "home_kinds_retry": "종류 다시 불러오기",
+  "home_kinds_next": "다른 종류"
 }
