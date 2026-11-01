@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { CreatorStatementCurrent } from '../../../checkout/creator-statements-current';
 import { CreatorStatementPage } from '../../../checkout/creator-statement-page';
-import { readCreatorStatement, statementDetailSearch } from '../../../checkout/creator-statements';
+import { readCreatorStatementCurrent, statementDetailSearch } from '../../../checkout/creator-statements';
 import { requireSignedIn } from '../../../session/guard';
 import { pageHead } from '../../../shell/head';
 import { pageHeadContext } from '../../../shell/head-context';
@@ -12,9 +13,11 @@ export const Route = createFileRoute('/creator/statements/$id')({
   validateSearch: statementDetailSearch,
   loaderDeps: ({ search }) => statementDetailSearch(search),
   loader: ({ params, deps }) =>
-    readCreatorStatement({
+    readCreatorStatementCurrent({
       data: {
         id: params.id,
+        locale: getLocale(),
+        ...(deps.from ? { from: deps.from } : {}),
         ...(deps.cursor ? { cursor: deps.cursor } : {}),
       },
     }),
@@ -26,8 +29,8 @@ export const Route = createFileRoute('/creator/statements/$id')({
   component: function CreatorStatementRoute() {
     const { cursor, from } = Route.useSearch();
     return (
-      <CreatorStatementPage
-        page={Route.useLoaderData()}
+      <CreatorStatementCurrent
+        initial={Route.useLoaderData()}
         id={Route.useParams().id}
         locale={getLocale()}
         {...(cursor ? { cursor } : {})}
