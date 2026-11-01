@@ -524,10 +524,11 @@ async function verifiedTerminal(
   let reversal: AccountIdentityReversalSettlement | null = null;
   if (row.state === 'discharged') {
     if (reference.erasedRole !== 'subject') return null;
-    reversal = await (await owners()).technical.readAccountIdentityReversalSettlement?.(pool, reference, {
-      deadline,
-      identityConsumerWork,
-    });
+    reversal =
+      (await (await owners()).technical.readAccountIdentityReversalSettlement?.(pool, reference, {
+        deadline,
+        identityConsumerWork,
+      })) ?? null;
     if (!reversal) return null;
   }
   const proof = nativeProof(reference, row, reversal);
@@ -952,10 +953,11 @@ async function finishConsumers(
   if (!ports.binding.lockIdentitySourceConsumerCut || !ports.binding.verifyIdentitySourceConsumerCut) return null;
   let reversal: AccountIdentityReversalSettlement | null = null;
   if (reference.erasedRole === 'subject') {
-    reversal = await ports.technical.readAccountIdentityReversalSettlement?.(pool, reference, {
-      deadline,
-      identityConsumerWork,
-    });
+    reversal =
+      (await ports.technical.readAccountIdentityReversalSettlement?.(pool, reference, {
+        deadline,
+        identityConsumerWork,
+      })) ?? null;
     if (!reversal) return null;
   }
   if (
