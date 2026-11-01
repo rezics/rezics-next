@@ -159,7 +159,9 @@ test('native Source repair receipts revalidate original steps, replay, and curre
   try {
     const person = await f.create();
     const book = await f.create('schema:Book', {
-      'schema:author': [{ property: { id: 'schema:author' }, value: { type: 'value', content: person }, qualifiers: [] }],
+      'schema:author': [
+        { property: { id: 'schema:author' }, value: { type: 'value', content: person }, qualifiers: [] },
+      ],
     });
     const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
     const source = publicFilterSource(f.config);
@@ -191,22 +193,42 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       readContext(),
     );
     if (retained.status !== 'retained') throw new Error(retained.reason);
-    expect((await binding.adopt({ bootstrap: begun.bootstrap.id, queried: retained.queried }, readContext())).status).toBe('adopted');
+    expect(
+      (await binding.adopt({ bootstrap: begun.bootstrap.id, queried: retained.queried }, readContext())).status,
+    ).toBe('adopted');
     const acquired = await custody.acquire(retained.queried, readContext());
     if (acquired.status !== 'acquired') throw new Error(acquired.reason);
     const execution = crypto.randomUUID();
     try {
-      expect((await custody.appendExecution({ use: acquired.use, execution: {
-        id: execution, start: begun.bootstrap.covered, ownRows: [{ original: book, terminal: book }],
-      } }, readContext())).status).toBe('appended');
+      expect(
+        (
+          await custody.appendExecution(
+            {
+              use: acquired.use,
+              execution: {
+                id: execution,
+                start: begun.bootstrap.covered,
+                ownRows: [{ original: book, terminal: book }],
+              },
+            },
+            readContext(),
+          )
+        ).status,
+      ).toBe('appended');
     } finally {
       await custody.release(acquired.use, readContext());
     }
     const original = { bootstrap: begun.bootstrap.id, queried: retained.queried, execution };
     const forged: NativeSourceRepairLocator = {
-      bootstrap: original.bootstrap, execution, step: crypto.randomUUID(), locatorDigest: '0'.repeat(64),
+      bootstrap: original.bootstrap,
+      execution,
+      step: crypto.randomUUID(),
+      locatorDigest: '0'.repeat(64),
     };
-    expect((await binding.readRepairReceipt({ receipt: forged, queried: retained.queried, execution }, readContext())).status).not.toBe('verified');
+    expect(
+      (await binding.readRepairReceipt({ receipt: forged, queried: retained.queried, execution }, readContext()))
+        .status,
+    ).not.toBe('verified');
     expect((await binding.settle(original, readContext())).status).not.toBe('joined');
 
     // Ordinary native pages are the only way to reach the original produced step. No fixture receipt setter.
@@ -237,17 +259,30 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       expect(replay.status).toBe('progress');
       if (replay.status !== 'progress') throw new Error('Lost-response replay did not recover the native step');
       expect(replay.frontier).toBe(page.frontier);
-      expect(replay.repairs.map((entry) => entry.receipt.step)).toEqual(page.repairs.map((entry) => entry.receipt.step));
+      expect(replay.repairs.map((entry) => entry.receipt.step)).toEqual(
+        page.repairs.map((entry) => entry.receipt.step),
+      );
       const receipt: NativeSourceRepairLocator = JSON.parse(JSON.stringify(repair.receipt));
       const read = { receipt, queried: retained.queried, execution };
       expect((await recovered.readRepairReceipt(read, readContext())).status).toBe('verified');
-      expect((await recovered.readRepairReceipt({ ...read, receipt: { ...receipt, locatorDigest: 'f'.repeat(64) } }, readContext())).status).not.toBe('verified');
-      expect((await recovered.readRepairReceipt({ ...read, execution: crypto.randomUUID() }, readContext())).status).not.toBe('verified');
+      expect(
+        (
+          await recovered.readRepairReceipt(
+            { ...read, receipt: { ...receipt, locatorDigest: 'f'.repeat(64) } },
+            readContext(),
+          )
+        ).status,
+      ).not.toBe('verified');
+      expect(
+        (await recovered.readRepairReceipt({ ...read, execution: crypto.randomUUID() }, readContext())).status,
+      ).not.toBe('verified');
       expect((await recovered.repairPage({ ...request, inputLimit: 1 }, readContext())).status).not.toBe('progress');
       expect((await recovered.settle(original, readContext())).status).not.toBe('joined');
       await f.propose(book, person);
       expect((await recovered.readRepairReceipt(read, readContext())).status).not.toBe('verified');
-      await f.db.admin.query('UPDATE core.partition SET epoch = epoch + 1 WHERE partition_no = $1', [repair.source.partition]);
+      await f.db.admin.query('UPDATE core.partition SET epoch = epoch + 1 WHERE partition_no = $1', [
+        repair.source.partition,
+      ]);
       expect((await recovered.readRepairReceipt(read, readContext())).status).not.toBe('verified');
       break;
     }
@@ -260,10 +295,8 @@ test('native Source repair receipts revalidate original steps, replay, and curre
 });
 
 test('Native public Source repair step and complete original cut are durably revalidated before joining genuine Search dispatch settlement without current ACK or incomplete enumeration substitutes', async () => {
-  const {
-    readPublicFilterConsumerCustody,
-    readPublicFilterRepairSettlement,
-  } = await import('../../src/search/public-filter-custody.ts');
+  const { readPublicFilterConsumerCustody, readPublicFilterRepairSettlement } =
+    await import('../../src/search/public-filter-custody.ts');
   const { publicFilterSource } = await nativeProducer();
   const f = await fixture();
   let consumer: Awaited<ReturnType<typeof consumerFixture>> | undefined;
