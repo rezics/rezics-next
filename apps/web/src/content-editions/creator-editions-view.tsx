@@ -1,4 +1,5 @@
 import { EditionTechnicalDetails, editionSubjectName, editionRevisionDate } from './edition-identity';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { localizeHref } from '../paraglide/runtime.js';
@@ -68,88 +69,86 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
                   : m.creator_editions_empty()}
             </p>
           ) : (
-            <ul className="min-w-0 divide-y divide-border border-y border-border">
+            <ul className="min-w-0 space-y-2">
               {page.editions.map((edition) => (
-                <li
+                <ContentItem
                   key={edition.editionId}
-                  className="grid min-w-0 gap-5 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:gap-7"
-                >
-                  <div className="min-w-0 space-y-3">
-                    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                      <span className="rounded-md bg-muted px-2 py-1 font-medium">
-                        {edition.state === 'draft'
-                          ? m.creator_editions_draft()
-                          : edition.state === 'published'
-                            ? m.creator_editions_published()
-                            : m.creator_editions_withdrawn()}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {m.creator_editions_version({ version: edition.editionRevision })}
-                      </span>
-                    </p>
-                    <h2
-                      className="break-words text-lg font-semibold [overflow-wrap:anywhere]"
-                      lang={edition.identity?.subject.label?.language}
-                    >
-                      {editionSubjectName(edition.identity?.subject)}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                      {m.edition_identity_revision_date({
-                        date: editionRevisionDate(edition.identity?.revisionCreatedAt),
-                      })}
-                    </p>
-                    {edition.identity?.subject.kind !== 'available' && (
-                      <p role="status" className="text-sm text-muted-foreground">
-                        {m.edition_identity_recovery()}
+                  headingLevel={2}
+                  title={editionSubjectName(edition.identity?.subject)}
+                  titleLang={edition.identity?.subject.label?.language}
+                  href={
+                    edition.state === 'published'
+                      ? localizeHref(`/editions/${encodeURIComponent(edition.editionId)}`)
+                      : undefined
+                  }
+                  state={
+                    <span className="rounded-md bg-muted px-2 py-1 text-sm font-medium">
+                      {edition.state === 'draft'
+                        ? m.creator_editions_draft()
+                        : edition.state === 'published'
+                          ? m.creator_editions_published()
+                          : m.creator_editions_withdrawn()}
+                    </span>
+                  }
+                  metadata={
+                    <div className="min-w-0 space-y-3">
+                      <p>{m.creator_editions_version({ version: edition.editionRevision })}</p>
+                      <p>
+                        {m.edition_identity_revision_date({
+                          date: editionRevisionDate(edition.identity?.revisionCreatedAt),
+                        })}
                       </p>
-                    )}
-                    <EditionTechnicalDetails edition={edition} />
-                  </div>
-                  <dl className="min-w-0 space-y-3 text-sm">
-                    <div>
-                      <dt className="text-xs text-muted-foreground">{m.creator_editions_licence()}</dt>
-                      <dd className="mt-1 break-words [overflow-wrap:anywhere]">{edition.licence}</dd>
+                      {edition.identity?.subject.kind !== 'available' && (
+                        <p role="status">{m.edition_identity_recovery()}</p>
+                      )}
+                      <dl>
+                        <div>
+                          <dt className="text-xs text-muted-foreground">{m.creator_editions_licence()}</dt>
+                          <dd className="mt-1 break-words text-foreground [overflow-wrap:anywhere]">
+                            {edition.licence}
+                          </dd>
+                        </div>
+                      </dl>
+                      <EditionTechnicalDetails edition={edition} />
                     </div>
-                  </dl>
-                  <div className="flex flex-wrap items-start gap-3 lg:flex-col">
-                    {edition.state === 'draft' && (
-                      <Button
-                        variant="outline"
-                        className="min-h-11"
-                        nativeButton={false}
-                        render={
-                          <a href={localizeHref(`/editions/new?editionId=${encodeURIComponent(edition.editionId)}`)} />
-                        }
-                      >
-                        {m.creator_editions_resume()}
-                      </Button>
-                    )}
-                    {edition.state === 'published' && (
+                  }
+                  actions={
+                    edition.state !== 'withdrawn' && (
                       <>
-                        <Button
-                          variant="outline"
-                          className="min-h-11"
-                          nativeButton={false}
-                          render={
-                            <a
-                              href={localizeHref(
-                                `/creator/offers/new?editionId=${encodeURIComponent(edition.editionId)}`,
-                              )}
-                            />
-                          }
-                        >
-                          {m.creator_editions_offer()}
-                        </Button>
-                        <a
-                          className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
-                          href={localizeHref(`/editions/${encodeURIComponent(edition.editionId)}`)}
-                        >
-                          {m.creator_editions_read()}
-                        </a>
+                        {edition.state === 'draft' && (
+                          <Button
+                            variant="outline"
+                            className="min-h-11"
+                            nativeButton={false}
+                            render={
+                              <a
+                                href={localizeHref(`/editions/new?editionId=${encodeURIComponent(edition.editionId)}`)}
+                              />
+                            }
+                          >
+                            {m.creator_editions_resume()}
+                          </Button>
+                        )}
+                        {edition.state === 'published' && (
+                          <Button
+                            variant="outline"
+                            className="min-h-11"
+                            nativeButton={false}
+                            render={
+                              <a
+                                href={localizeHref(
+                                  `/creator/offers/new?editionId=${encodeURIComponent(edition.editionId)}`,
+                                )}
+                              />
+                            }
+                          >
+                            {m.creator_editions_offer()}
+                          </Button>
+                        )}
                       </>
-                    )}
-                  </div>
-                </li>
+                    )
+                  }
+                />
               ))}
             </ul>
           )}
