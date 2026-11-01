@@ -52,6 +52,12 @@ function after(value: string | null): readonly [number,string,string] {
  */
 async function apply(pool: Pool, pending: Pending, enrollment: Enrollment, deadline: number) {
   return transaction(pool,deadline,async (client) => {
+    // Take native owner custody before registration custody, matching domain commands.
+    const owner = (await client.query<{ write_state: string }>(
+      'SELECT write_state FROM core.partition WHERE partition_no=$1 FOR SHARE',
+      [enrollment.registration_partition],
+    )).rows[0];
+    if (!owner || owner.write_state !== 'active') return false;
     const registered = (await client.query<{ state: string; write_state: string }>(
       `SELECT r.state,p.write_state FROM search.public_filter_registration r
        JOIN core.partition p ON p.partition_no=r.partition_no
@@ -129,11 +135,13 @@ export async function maintainPublicFilterCoverageHome(
   const captured = await transaction(pool,context.deadline,async (client) => {
     // This is the same native Source home lock acquired by both writer families.
     const owner = (await client.query<{ epoch: number; write_state: string }>(
-      `SELECT p.epoch,p.write_state FROM semantic.public_filter_privacy_head h
-       JOIN core.partition p ON p.partition_no=h.partition_no
-       WHERE h.partition_no=$1 FOR UPDATE OF h`, [partition],
+      'SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE', [partition],
     )).rows[0];
     if (!owner || owner.write_state !== 'active') throw new CommandUnavailableError('fenced',partition);
+    const head = await client.query(
+      'SELECT 1 FROM semantic.public_filter_privacy_head WHERE partition_no=$1 FOR UPDATE', [partition],
+    );
+    if (head.rowCount !== 1) throw new CommandUnavailableError('fenced',partition);
     const pending = (await client.query<Pending>(
       `SELECT * FROM semantic.public_filter_privacy_pending
        WHERE partition_no=$1 AND live ORDER BY input_key LIMIT 1 FOR UPDATE`, [partition],
@@ -180,7 +188,15 @@ export async function maintainPublicFilterCoverageHome(
   }
   const all = applied === enrollments.length && enrollments.length < limit;
   await transaction(pool,context.deadline,async (client) => {
-    await client.query('SELECT 1 FROM semantic.public_filter_privacy_head WHERE partition_no=$1 FOR UPDATE',[partition]);
+    const owner = (await client.query<{ epoch: number; write_state: string }>(
+      'SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE',[partition],
+    )).rows[0];
+    // A move never adopts an old owner's receipt or retires its pending interval.
+    if (!owner || owner.write_state !== 'active' || owner.epoch !== captured.owner_epoch) return;
+    const head = await client.query(
+      'SELECT 1 FROM semantic.public_filter_privacy_head WHERE partition_no=$1 FOR UPDATE',[partition],
+    );
+    if (head.rowCount !== 1) return;
     const account = captured.input_key === PUBLIC_FILTER_ACCOUNT_DOMAIN;
     const settled = account ? captured.native_captured_enqueue : captured.captured_revision;
     const changed = await client.query(
