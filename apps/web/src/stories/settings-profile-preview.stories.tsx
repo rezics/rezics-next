@@ -6,16 +6,16 @@ import { PageStory, pageReady } from './page';
 
 type PreviewTraffic = {
   patches: { path: string; body: unknown; key: string | null }[];
-  editableReads: Request[];
-  publicReads: Request[];
+  editableReads: number;
+  publicReads: number;
 };
 
-const traffic: PreviewTraffic = { patches: [], editableReads: [], publicReads: [] };
+const traffic: PreviewTraffic = { patches: [], editableReads: 0, publicReads: 0 };
 
 function captureProfilePreviewTraffic() {
   traffic.patches = [];
-  traffic.editableReads = [];
-  traffic.publicReads = [];
+  traffic.editableReads = 0;
+  traffic.publicReads = 0;
   const original = globalThis.fetch;
   let denyEditableRead = false;
 
@@ -26,7 +26,7 @@ function captureProfilePreviewTraffic() {
     const request = new Request(input, init);
     const editableProfile = /^\/v1\/accounts\/[^/]+\/profile$/.test(url.pathname);
     if (request.method === 'GET' && editableProfile) {
-      traffic.editableReads.push(request.clone());
+      traffic.editableReads++;
       if (denyEditableRead) {
         return Response.json(
           {
@@ -46,7 +46,7 @@ function captureProfilePreviewTraffic() {
       url.pathname.startsWith('/v1/accounts') &&
       !editableProfile
     ) {
-      traffic.publicReads.push(request.clone());
+      traffic.publicReads++;
     }
 
     if (request.method === 'PATCH' && /^\/v1\/accounts\/[^/]+$/.test(url.pathname)) {
@@ -111,8 +111,8 @@ export const DraftPreview: Story = {
 
         await expect(profile.getByText(m.settings_profile_unsaved())).toBeVisible();
         await expect(traffic.patches).toHaveLength(0);
-        await expect(traffic.publicReads).toHaveLength(initialPublicReads);
-        await expect(traffic.editableReads).toHaveLength(initialEditableReads);
+        await expect(traffic.publicReads).toBe(initialPublicReads);
+        await expect(traffic.editableReads).toBe(initialEditableReads);
 
         const toggle = profile.getByRole('button', { name: m.settings_profile_preview_open() });
         toggle.focus();
@@ -129,8 +129,8 @@ export const DraftPreview: Story = {
         await expect(preview.queryByText(savedName)).toBeNull();
         await expect(preview.queryByText(savedBiography)).toBeNull();
         await expect(traffic.patches).toHaveLength(0);
-        await expect(traffic.publicReads).toHaveLength(initialPublicReads);
-        await expect(traffic.editableReads).toHaveLength(initialEditableReads);
+        await expect(traffic.publicReads).toBe(initialPublicReads);
+        await expect(traffic.editableReads).toBe(initialEditableReads);
 
         const layout = preview.getByRole('region', { name: m.settings_profile_preview_heading() });
         await expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
@@ -147,8 +147,8 @@ export const DraftPreview: Story = {
         await expect(reopened.getByText(draftBiography, { exact: true })).toBeVisible();
         await expect(reopened.getByRole('link', { name: draftLabel })).toBeVisible();
         await expect(traffic.patches).toHaveLength(0);
-        await expect(traffic.publicReads).toHaveLength(initialPublicReads);
-        await expect(traffic.editableReads).toHaveLength(initialEditableReads);
+        await expect(traffic.publicReads).toBe(initialPublicReads);
+        await expect(traffic.editableReads).toBe(initialEditableReads);
 
         await userEvent.click(profile.getByRole('button', { name: m.settings_profile_save() }));
         await profile.findByText(m.settings_profile_read_denied());
@@ -163,8 +163,8 @@ export const DraftPreview: Story = {
         });
         const idempotencyKey = JSON.parse(traffic.patches[0]!.key!);
         await expect(idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-        await expect(traffic.editableReads).toHaveLength(initialEditableReads + 1);
-        await expect(traffic.publicReads).toHaveLength(initialPublicReads);
+        await expect(traffic.editableReads).toBe(initialEditableReads + 1);
+        await expect(traffic.publicReads).toBe(initialPublicReads);
       },
     );
   },
