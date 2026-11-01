@@ -6,7 +6,12 @@ import { m } from '../src/paraglide/messages.js';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createHomeFeedWindow, homeFeedViewer } from '../src/features/pages/home-feed-read';
 import { HomeFeed } from '../src/features/pages/home-feed';
-import { homeFeedStoryPage, homeKindStoryPage, type HomeFeedStory } from '../src/kernel/fake/home-feed-stories';
+import {
+  homeFeedStoryPage,
+  homeKindStoryPage,
+  homeQuestionStoryPage,
+  type HomeFeedStory,
+} from '../src/kernel/fake/home-feed-stories';
 import { setLocale } from '../src/paraglide/runtime.js';
 
 let request = new Request('https://rezics.example/en');
@@ -38,7 +43,8 @@ mock.module('@tanstack/react-start/server', () => ({
     headers[name] = value;
   },
 }));
-const { homePageQuery, readPrivateHomePage, readPublicHomePage } = await import('../src/features/pages/home-queries');
+const { homePageQuery, readPrivateHomePage, readPublicHomePage, readHomeQuestions } =
+  await import('../src/features/pages/home-queries');
 const { Home } = await import('../src/routes/index');
 const liveFetch = globalThis.fetch;
 afterAll(() => {
@@ -54,11 +60,68 @@ test('The default home route renders a bounded mixed discovery Following and Con
   let choicePause: Promise<void> | undefined;
   let feedStatus = 200;
   let choicesUnavailable = false;
+  let questionStatus = 200;
+  let pointStatus = 200;
+  let questionRevision = 1;
+  let emptyQuestionPage = false;
+  let oversizedQuestions = false;
+  let directoryPause: Promise<void> | undefined;
+  let pointPause: Promise<void> | undefined;
+  const firstQuestion = homeQuestionStoryPage().ratingQuestions[0]!;
+  const secondQuestion = homeQuestionStoryPage('illustrative-question-frontier').ratingQuestions[0]!;
   // Selected HTTP source response for a consumer regression, not proof of native producer acceptance.
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const call = new Request(input, init);
     calls.push(call);
     const url = new URL(call.url);
+    if (url.pathname === '/v1/rating-questions') {
+      expect(url.searchParams.get('limit')).toBe('20');
+      expect([...url.searchParams.keys()].sort()).toEqual(
+        url.searchParams.has('cursor') ? ['cursor', 'limit'] : ['limit'],
+      );
+      expect(call.cache).toBe('no-store');
+      expect(call.redirect).toBe('manual');
+      if (directoryPause) await directoryPause;
+      if (questionStatus !== 200)
+        return Response.json(
+          {
+            code:
+              questionStatus === 409
+                ? 'stale_cursor'
+                : questionStatus === 400
+                  ? 'invalid_cursor'
+                  : 'dependency_unavailable',
+          },
+          { status: questionStatus },
+        );
+      const page = homeQuestionStoryPage(url.searchParams.get('cursor') ?? undefined);
+      return Response.json({
+        ...page,
+        ratingQuestions: oversizedQuestions
+          ? Array.from({ length: 21 }, (_, index) => ({
+              ...firstQuestion,
+              id: `00000000-0000-7000-8000-${String(index).padStart(12, '0')}`,
+            }))
+          : emptyQuestionPage
+            ? []
+            : page.ratingQuestions.map((question) => ({ ...question, revision: questionRevision })),
+      });
+    }
+    if (url.pathname.startsWith('/v1/rating-questions/')) {
+      expect([...url.searchParams.keys()]).toEqual([]); // No revision, counts or eligibility query.
+      expect(call.cache).toBe('no-store');
+      expect(call.redirect).toBe('manual');
+      const id = url.pathname.split('/').at(-1);
+      const question = id === firstQuestion.id ? firstQuestion : secondQuestion;
+      const revision = questionRevision;
+      if (pointPause) await pointPause;
+      if (pointStatus !== 200)
+        return Response.json(
+          { code: pointStatus === 404 ? 'not_found' : 'permission_denied' },
+          { status: pointStatus },
+        );
+      return Response.json({ ...question, revision });
+    }
     if (url.pathname === '/v1/subjects:search') {
       const body = (await call.json()) as {
         representation: string;
@@ -103,6 +166,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
       state,
       url.searchParams.get('cursor') ?? undefined,
       url.searchParams.get('kind') ?? undefined,
+      url.searchParams.get('ratingQuestionId') ?? undefined,
     );
     return Response.json(page, { headers: { 'cache-control': personal ? 'private, no-store' : 'public, max-age=60' } });
   }) as typeof fetch;
@@ -390,6 +454,298 @@ test('The default home route renders a bounded mixed discovery Following and Con
         .filter((entry) => entry.queryKey[0] === 'home-page'),
     ).toHaveLength(1);
     expect(host.querySelector('select')!.value).toBe('');
+
+    // Default Home selects a real bounded-directory rating question and carries its exact identity
+    // through public and private mixed-feed requests while retiring stale choices rows and cursors.
+    const questionControl = () => host.querySelectorAll<HTMLSelectElement>('select')[1]!;
+    const chooseQuestion = (id: string) =>
+      act(async () => {
+        questionControl().value = id;
+        questionControl().dispatchEvent(new browser.Event('change', { bubbles: true }) as unknown as Event);
+      });
+    const questionCalls = () => calls.filter((call) => new URL(call.url).pathname === '/v1/rating-questions');
+    const pointCalls = () => calls.filter((call) => new URL(call.url).pathname.startsWith('/v1/rating-questions/'));
+    const feedCalls = () => calls.filter((call) => new URL(call.url).pathname === '/v1/feedItems');
+    const beforeInvalidQuestion = calls.length;
+    await expect(async () =>
+      readPublicHomePage({ data: { locale: 'en', ratingQuestionId: 'invalid' } }),
+    ).rejects.toThrow();
+    await expect(async () => readHomeQuestions({ data: { locale: 'en', questionId: '' } })).rejects.toThrow();
+    expect(calls).toHaveLength(beforeInvalidQuestion);
+    await click(m.home_kinds_load());
+    await choose(nativeKind);
+    let count = calls.length;
+    await click(m.home_questions_load());
+    expect(calls).toHaveLength(count + 1);
+    expect(questionCalls()).toHaveLength(1);
+    expect(pointCalls()).toHaveLength(0); // No per-option point reads.
+    expect(questionControl().options).toHaveLength(2);
+    expect(host.querySelector(`label[for="${questionControl().id}"]`)?.textContent).toBe(m.home_question_label());
+    count = feedCalls().length;
+    const publicSessionReads = sessionReads;
+    await chooseQuestion(firstQuestion.id);
+    expect(pointCalls()).toHaveLength(1);
+    expect(feedCalls()).toHaveLength(count + 1); // One mixed load; no per-dimension requests/refill.
+    expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('kind')).toBe(nativeKind);
+    expect(query().has('cursor')).toBe(false);
+    expect(query().has('revision')).toBe(false);
+    expect(lastFeed().headers.has('authorization')).toBe(false);
+    expect(pointCalls().at(-1)!.headers.has('authorization')).toBe(false);
+    expect(host.textContent).toContain(firstQuestion.label);
+    expect(sessionReads).toBe(publicSessionReads);
+    const beforeAnonymousMetadata = sessionReads;
+    await click(m.home_questions_next());
+    expect(sessionReads).toBe(beforeAnonymousMetadata);
+    expect(questionCalls()).toHaveLength(2);
+    expect(new URL(questionCalls()[1]!.url).searchParams.get('cursor')).toBe('illustrative-question-frontier');
+    expect(questionControl().options).toHaveLength(3); // All + one page + retained selected metadata.
+    expect(questionControl().value).toBe(firstQuestion.id); // Absence from another page is not lost identity.
+    expect(pointCalls()).toHaveLength(1);
+    expect(button(m.home_questions_next()).disabled).toBe(true); // Actual next=null.
+    await click(m.library_next_page());
+    expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('kind')).toBe(nativeKind);
+    expect(query().get('cursor')).toBe('illustrative-signed-frontier');
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0); // Sparse is not refilled.
+    const pointsBeforeRefresh = pointCalls().length;
+    questionRevision = 2;
+    await click(m.home_question_refresh());
+    expect(pointCalls()).toHaveLength(pointsBeforeRefresh + 1);
+    expect(query().has('cursor')).toBe(false);
+    expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(host.textContent).toContain('Revision 2');
+
+    // An actual point loss/refusal retains the selected identity, removes rows and offers refresh/clear.
+    pointStatus = 404;
+    count = feedCalls().length;
+    await click(m.home_question_refresh());
+    expect(host.textContent).toContain(m.home_questions_lost());
+    expect(questionControl().value).toBe(firstQuestion.id);
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0);
+    expect(feedCalls()).toHaveLength(count);
+    pointStatus = 403;
+    await click(m.home_question_refresh());
+    expect(host.textContent).toContain(m.home_questions_denied());
+    expect(feedCalls()).toHaveLength(count);
+    pointStatus = 200;
+    await click(m.home_question_refresh());
+    expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    await click(m.home_question_clear());
+    expect(query().has('ratingQuestionId')).toBe(false);
+    expect(query().get('kind')).toBe(nativeKind);
+    expect(query().has('cursor')).toBe(false);
+    await chooseQuestion(secondQuestion.id);
+    expect(query().get('ratingQuestionId')).toBe(secondQuestion.id);
+    await click(m.home_question_clear());
+
+    // A real metadata read observes changed revision and resets a selected feed frontier.
+    // Start a fresh mounted directory because terminal pages do not invent more pages.
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', csrfToken: 'question-view', subject: 'viewer-a' });
+    request = new Request('https://rezics.example/en', {
+      headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+    });
+    await render();
+    await settle();
+    await click(m.home_kinds_load());
+    await choose(nativeKind);
+    await click(m.home_questions_load());
+    await chooseQuestion(firstQuestion.id);
+    expect(lastFeed().headers.get('authorization')).toBe('Bearer private-token');
+    expect(pointCalls().at(-1)!.headers.get('authorization')).toBe('Bearer private-token');
+    expect(questionCalls().at(-1)!.headers.get('authorization')).toBe('Bearer private-token');
+    expect(headers['Cache-Control']).toBe('private, no-store');
+    await click(m.library_next_page());
+    expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    await click(m.home_feed_following());
+    expect(query().get('stream')).toBe('following');
+    expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('kind')).toBe(nativeKind);
+    expect(query().has('cursor')).toBe(false);
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0);
+    expect(button(m.library_next_page()).disabled).toBe(false); // Empty-with-next stays usable.
+    feedStatus = 409;
+    await click(m.library_next_page());
+    feedStatus = 200;
+    await click(m.home_feed_restart());
+    expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('kind')).toBe(nativeKind);
+    expect(query().has('cursor')).toBe(false);
+    feedStatus = 503;
+    await click(m.library_next_page());
+    expect(host.textContent).toContain(m.home_feed_unavailable());
+    feedStatus = 200;
+    await click(m.library_follow_retry());
+    expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('cursor')).toBe('illustrative-signed-frontier');
+    await click(m.home_heading());
+    await click(m.library_next_page());
+    questionStatus = 409;
+    await click(m.home_questions_next());
+    expect(host.textContent).toContain(m.home_questions_restart());
+    questionStatus = 200;
+    questionRevision = 3;
+    count = feedCalls().length;
+    await click(m.home_questions_restart_action());
+    expect(new URL(questionCalls().at(-1)!.url).searchParams.has('cursor')).toBe(false);
+    expect(feedCalls()).toHaveLength(count + 1);
+    expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().has('cursor')).toBe(false);
+    expect(host.textContent).toContain('Revision 3');
+    emptyQuestionPage = true;
+    await click(m.home_questions_next());
+    expect(host.textContent).toContain(m.home_questions_empty());
+    expect(questionControl().value).toBe(firstQuestion.id);
+    emptyQuestionPage = false;
+
+    // Delayed selected metadata cannot restore a cleared question; the old cursor retires immediately.
+    let releasePoint!: () => void;
+    pointPause = new Promise<void>((resolve) => {
+      releasePoint = resolve;
+    });
+    await click(m.home_question_refresh());
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0);
+    await click(m.home_question_clear());
+    await act(async () => {
+      releasePoint();
+    });
+    pointPause = undefined;
+    expect(questionControl().value).toBe('');
+    expect(query().has('ratingQuestionId')).toBe(false);
+
+    // A pending directory page is retired by selection; stale options cannot replace current metadata.
+    client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      csrfToken: 'question-view-2',
+      subject: 'viewer-a',
+    });
+    await render();
+    await settle();
+    await click(m.home_questions_load());
+    let releaseDirectory!: () => void;
+    directoryPause = new Promise<void>((resolve) => {
+      releaseDirectory = resolve;
+    });
+    await click(m.home_questions_next());
+    await chooseQuestion(firstQuestion.id);
+    await act(async () => {
+      releaseDirectory();
+    });
+    directoryPause = undefined;
+    expect(questionControl().querySelector(`option[value="${secondQuestion.id}"]`)).toBeNull();
+    expect(questionControl().value).toBe(firstQuestion.id);
+
+    let releaseSelectedFeed!: () => void;
+    pause = new Promise<void>((resolve) => {
+      releaseSelectedFeed = resolve;
+    });
+    await click(m.home_question_clear());
+    await chooseQuestion(firstQuestion.id);
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0);
+    await click(m.home_question_clear());
+    await act(async () => {
+      releaseSelectedFeed();
+    });
+    pause = undefined;
+    expect(questionControl().value).toBe('');
+    expect(query().has('ratingQuestionId')).toBe(false);
+
+    // A delayed question-selected private feed cannot enter a different viewer's mounted window.
+    pause = new Promise<void>((resolve) => {
+      releaseSelectedFeed = resolve;
+    });
+    await chooseQuestion(firstQuestion.id);
+    request = new Request('https://rezics.example/en');
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', csrfToken: 'viewer-b-csrf', subject: 'viewer-b' });
+    await render();
+    await settle();
+    await act(async () => {
+      releaseSelectedFeed();
+    });
+    pause = undefined;
+    expect(questionControl().value).toBe('');
+    expect(host.querySelector('[data-feed-source="continue"]')).toBeNull();
+    request = new Request('https://rezics.example/en', {
+      headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+    });
+    client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      csrfToken: 'question-view-3',
+      subject: 'viewer-a',
+    });
+    await render();
+    await settle();
+    await click(m.home_questions_load());
+    directoryPause = new Promise<void>((resolve) => {
+      releaseDirectory = resolve;
+    });
+    await click(m.home_questions_next());
+    client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      csrfToken: 'question-view-4',
+      subject: 'viewer-a',
+    });
+    await render();
+    await settle();
+    await act(async () => {
+      releaseDirectory();
+    });
+    directoryPause = undefined;
+    expect(questionControl().options).toHaveLength(0); // A rotated private window has no prior directory.
+    await click(m.home_questions_load());
+
+    // Late private directory/point/feed results cannot reach another viewer or a public window.
+    pointPause = new Promise<void>((resolve) => {
+      releasePoint = resolve;
+    });
+    await chooseQuestion(firstQuestion.id);
+    request = new Request('https://rezics.example/en');
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null, subject: null });
+    await render();
+    await settle();
+    await act(async () => {
+      releasePoint();
+    });
+    pointPause = undefined;
+    expect(questionControl().value).toBe('');
+    expect(host.querySelector('[data-feed-source="continue"]')).toBeNull();
+    expect(client.getQueryData(homePageQuery('en').queryKey)).toEqual(loaded);
+    expect(
+      client
+        .getQueryCache()
+        .getAll()
+        .filter((entry) => entry.queryKey[0] === 'home-page'),
+    ).toHaveLength(1);
+    questionStatus = 403;
+    await click(m.home_questions_load());
+    expect(host.textContent).toContain(m.home_questions_denied());
+    questionStatus = 404;
+    await click(m.home_questions_retry());
+    expect(host.textContent).toContain(m.home_questions_unavailable());
+    questionStatus = 503;
+    await click(m.home_questions_retry());
+    expect(host.textContent).toContain(m.home_questions_unavailable());
+    questionStatus = 200;
+    oversizedQuestions = true;
+    await click(m.home_questions_retry());
+    expect(host.textContent).toContain(m.home_questions_unavailable());
+    expect(questionControl().options).toHaveLength(1); // Oversized wire pages are refused, never truncated.
+    oversizedQuestions = false;
+    await click(m.home_questions_retry());
+    expect(questionControl().options).toHaveLength(2);
+    questionStatus = 400;
+    await click(m.home_questions_next());
+    expect(host.textContent).toContain(m.home_questions_invalid());
+    questionStatus = 200;
+    await click(m.home_questions_restart_action());
+    expect(new URL(questionCalls().at(-1)!.url).searchParams.has('cursor')).toBe(false);
+    expect(questionControl().options).toHaveLength(2);
+    const beforeMismatchMetadata = calls.length;
+    expect(await readHomeQuestions({ data: { locale: 'en', viewer: 'viewer-b' } })).toEqual({
+      status: 'auth',
+      code: 'authentication_required',
+    });
+    expect(calls).toHaveLength(beforeMismatchMetadata);
   } finally {
     await act(async () => root.unmount());
     client.clear();

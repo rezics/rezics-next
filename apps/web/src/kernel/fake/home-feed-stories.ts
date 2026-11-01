@@ -1,3 +1,4 @@
+import type { HomeQuestion, HomeQuestionPage } from '../../features/pages/home-feed-questions';
 import type { FeedItem, FeedPage } from '../../features/pages/home-feed-read';
 import { discoveryExample } from './search-discovery';
 import type { DiscoveryKinds } from '../../search/discovery';
@@ -18,7 +19,10 @@ export type HomeFeedStory =
   | 'kinds-next'
   | 'space-selection'
   | 'space-unavailable'
-  | 'space-identity-changed';
+  | 'space-identity-changed'
+  | 'questions-selection'
+  | 'questions-unavailable'
+  | 'questions-next';
 let selected: HomeFeedStory = 'mixed';
 let homeActive = false;
 let spaceReads = 0;
@@ -36,6 +40,7 @@ export function homeFeedStoryPage(
   cursor?: string,
   kind?: string,
   spaceId?: string,
+  ratingQuestionId?: string,
 ): FeedPage {
   const first = home.reads.r0.body.subjects[0]!;
   const labels = first.labels as Record<string, string>;
@@ -103,17 +108,29 @@ export function homeFeedStoryPage(
           : cursor
             ? [curated]
             : [discovery, followed, continued];
+  // Question examples contain only reviewed Subjects. They do not claim native witness proof.
+  const questionItems =
+    ratingQuestionId === homeQuestionStoryPage().ratingQuestions[0]!.id &&
+    (kind === undefined || kind === first.type) &&
+    state !== 'following' &&
+    !cursor
+      ? personal
+        ? [discovery, continued]
+        : [discovery]
+      : [];
   return {
     feedItems:
       state === 'empty' || state === 'preparing' || state === 'unavailable'
         ? []
-        : state === 'partial' && personal
+        : ratingQuestionId !== undefined
+          ? questionItems
+          : state === 'partial' && personal
           ? kind === undefined || kind === first.type
             ? [discovery, continued]
             : []
           : items,
     next:
-      !cursor && (kind !== undefined || ((state === 'mixed' || spaceId !== undefined) && personal))
+      !cursor && (ratingQuestionId !== undefined || kind !== undefined || ((state === 'mixed' || spaceId !== undefined) && personal))
         ? 'illustrative-signed-frontier'
         : null,
     asOf: '2026-11-01T00:00:00.000Z',
@@ -168,7 +185,41 @@ export const homeStorySpace = {
   revisionCreatedAt: '2026-11-01T00:00:00.000Z',
 };
 
+/** Native-format illustrative metadata only, isolated to the Home route. */
+export function homeQuestionStoryPage(cursor?: string): HomeQuestionPage {
+  const question: HomeQuestion = {
+    id: cursor ? '00000000-0000-7000-8000-000000000002' : '00000000-0000-7000-8000-000000000001',
+    revision: 1,
+    label: cursor ? 'Character portrayal' : 'Overall impression',
+    grain: cursor ? 'character' : 'work',
+    scale: { min: 0, max: 100, displayStep: 5 },
+  };
+  return { ratingQuestions: [question], next: cursor ? null : 'illustrative-question-frontier' };
+}
+
 export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: '/v1/rating-questions',
+    story: ({ request }) => {
+      if (!homeActive) return;
+      if (selected === 'questions-unavailable') return { status: 503, code: 'dependency_unavailable' };
+      const page = homeQuestionStoryPage(new URL(request.url).searchParams.get('cursor') ?? undefined);
+      return { status: 200, ...page };
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/rating-questions\/([^/]+)$/,
+    story: ({ match }) => {
+      if (!homeActive) return;
+      const question = [homeQuestionStoryPage(), homeQuestionStoryPage('illustrative-question-frontier')]
+        .flatMap((page) => page.ratingQuestions)
+        .find((question) => question.id === match?.[1]);
+      return question ? { status: 200, ...question } : { status: 404, code: 'not_found' };
+    },
+  },
+
   {
     method: 'GET',
     path: '/v1/spaceAddresses/home-reading-room',
@@ -237,6 +288,7 @@ export const routes: FakeRoute[] = [
           url.searchParams.get('cursor') ?? undefined,
           url.searchParams.get('kind') ?? undefined,
           url.searchParams.get('spaceId') ?? undefined,
+          url.searchParams.get('ratingQuestionId') ?? undefined,
         ),
       };
     },

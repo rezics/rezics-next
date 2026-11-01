@@ -14,6 +14,13 @@ import {
   type HomeSpaceResult,
 } from './home-feed-spaces';
 import { homeFeedKind } from './home-feed-kinds';
+import {
+  homeQuestionId,
+  readHomeQuestionPage,
+  readHomeQuestion,
+  type QuestionPageResult,
+  type QuestionPointResult,
+} from './home-feed-questions';
 import { publicRead } from '../../kernel/query';
 import { validatePublicOrigin } from '../../shell/origin';
 import { loadPublicHomeFeed, readHomeFeedPage, type FeedInput, type HomeFeedResult } from './home-feed-read';
@@ -170,5 +177,40 @@ export const readHomeSpaceChoice = createServerFn({ method: 'GET' })
       return readHomeSpace(kernelClient(data.locale), input, authorization, request.signal);
     } catch {
       return { status: 'unavailable' };
+    }
+  });
+
+/** Viewer-local metadata shares the feed's prepared identity, never its hydration/cache. */
+export const readHomeQuestions = createServerFn({ method: 'GET' })
+  .validator((input: { locale: string; cursor?: string; questionId?: string; viewer?: string }) => {
+    localeInput(input.locale);
+    homeQuestionId(input.questionId);
+    if (
+      input.cursor !== undefined &&
+      (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 32768)
+    )
+      throw new Error('Invalid question cursor');
+    if (input.questionId !== undefined && input.cursor !== undefined) throw new Error('Invalid question request');
+    if (input.viewer !== undefined && (typeof input.viewer !== 'string' || !input.viewer || input.viewer.length > 256))
+      throw new Error('Invalid viewer');
+    return input;
+  })
+  .handler(async ({ data }): Promise<QuestionPageResult | QuestionPointResult> => {
+    setResponseHeader('Cache-Control', 'private, no-store');
+    const request = getRequest();
+    try {
+      let authorization: string | undefined;
+      if (data.viewer !== undefined) {
+        const { env } = await import('cloudflare:workers');
+        await prepareSession(request, env as Partial<SessionEnv>, { refresh: false });
+        authorization = viewerCredential(request) ?? undefined;
+        if (!authorization || sessionSubject(request) !== data.viewer)
+          return { status: 'auth', code: 'authentication_required' };
+      }
+      return data.questionId === undefined
+        ? readHomeQuestionPage(kernelClient(data.locale), data.cursor, authorization, request.signal)
+        : readHomeQuestion(kernelClient(data.locale), data.questionId, authorization, request.signal);
+    } catch {
+      return { status: 'unavailable', code: 'dependency_unavailable' };
     }
   });

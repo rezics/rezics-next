@@ -10,6 +10,7 @@ import {
   readPublicHomePage,
   readHomeKinds,
   readHomeSpaceChoice,
+  readHomeQuestions,
 } from '../features/pages/home-queries';
 import { HomeFeedConsumer } from '../features/pages/home-feed';
 import type { HomeSpaceRequest } from '../features/pages/home-feed-spaces';
@@ -57,6 +58,30 @@ export function Home() {
       }),
     [locale, subject],
   );
+  const readQuestions = useCallback(
+    async (cursor: string | undefined, signal: AbortSignal) => {
+      const result = await readHomeQuestions({
+        data: { locale, ...(subject ? { viewer: subject } : {}), ...(cursor === undefined ? {} : { cursor }) },
+        signal,
+      });
+      return result.status === 'ready' && !('page' in result)
+        ? { status: 'unavailable' as const, code: 'invalid_question_response' }
+        : result;
+    },
+    [locale, subject],
+  );
+  const readQuestion = useCallback(
+    async (questionId: string, signal: AbortSignal) => {
+      const result = await readHomeQuestions({
+        data: { locale, ...(subject ? { viewer: subject } : {}), questionId },
+        signal,
+      });
+      return result.status === 'ready' && !('question' in result)
+        ? { status: 'unavailable' as const, code: 'invalid_question_response' }
+        : result;
+    },
+    [locale, subject],
+  );
   return (
     <HomeFeedConsumer
       key={`${locale}:${viewer?.scope ?? 'public'}`}
@@ -66,6 +91,8 @@ export function Home() {
       read={read}
       readKinds={readKinds}
       readSpace={readSpace}
+      readQuestions={readQuestions}
+      readQuestion={readQuestion}
       origin={loaded.origin}
     />
   );

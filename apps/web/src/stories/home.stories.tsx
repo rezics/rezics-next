@@ -155,3 +155,37 @@ export const SpaceIdentityChanged: Story = {
   },
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="space-identity-changed" />,
 };
+
+export const QuestionSelection: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Load questions and select a returned question. The actual default consumer refreshes its identity, reads the selected feed, and supports clear and refresh. Envelopes are illustrative, not native evidence.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="questions-selection" />,
+};
+export const QuestionChoicesUnavailable: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Load questions to see the unavailable response and retry action while the existing mixed Home remains usable.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="questions-unavailable" />,
+};
+export const QuestionChoicesNextPage: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Load and select a question, then request the next directory page. The page is replaced while the selected metadata remains. The real next/null frontier controls continuation.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="questions-next" />,
+};

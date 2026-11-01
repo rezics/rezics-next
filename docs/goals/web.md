@@ -167,6 +167,36 @@ independent ready sources and current disclosure. A selection change resets curs
 request generations; late responses cannot restore a previous selection or viewer's content. Missing authority must
 remain fail closed rather than becoming known empty, an all-candidate fallback or fake browser filtering.
 
+The default consumer source now includes a labelled rating-question choice, explicit bounded directory paging,
+selected metadata, clear and exact-identity refresh. It sends optional singular `ratingQuestionId` alongside kind and Space
+through public and prepared private server functions and keeps it through continuation, retry and restart. A new
+selection, observed metadata revision, kind, Space or stream retires the previous rows and feed cursor. Selected metadata
+survives absence from a later directory page; a denied or lost exact identity remains selected with a refusal and
+refresh/clear actions. Directory errors remain distinct from successful empty pages. Reads are abortable and fenced
+by selection and the route's locale, subject and CSRF remount. No selected/private response enters shared cache,
+hydration, URLs or persistent state. The initial anonymous preload remains unselected.
+
+The implementation holds one directory page of at most twenty questions plus selected metadata. Each explicit feed
+load reads one native page of at most twenty rows; there is no browser qualification, refill or parallel feed. The
+exact question point route is used at selection and explicit currentness refresh, not per option. Labels use native
+question text; grain, revision, scale and all control/error text have all eight launch-locale messages.
+
+The existing default-route composition regression has additional authored cases for question propagation, bounded
+paging, sparse continuation, revision/lost identity and stale request isolation. It has not been executed for this
+source delivery. Home-only illustrative native-format envelopes support the interactive PageStory IDs
+`pages-discovery-home--question-selection`, `pages-discovery-home--question-choices-unavailable` and
+`pages-discovery-home--question-choices-next-page`; existing IDs remain. These are consumer fixtures, not native
+recordings or visual proof.
+
+The mounted native question directory and its normal generated Client declaration have now been received. The
+consumer uses the generated directory and point routes without handwritten declarations, casts or generator changes.
+The exact `spaceId` and `ratingQuestionId` selections remain independent request fields; no Realm or carrier authority
+object is sent. Content's native question predicate, readable-review witnesses, all three lane bindings, retained
+Source coverage/privacy reduction, current authority and signed question/revision cursor binding still require
+producer delivery through the controller. Until then, actual native refusal/unavailable responses remain visible;
+the directory alone cannot establish a successful selected feed. Original acceptance, native/default proof, visual
+review and promotion remain owed separately from this consumer source.
+
 The [integrated quality review](../research/terra-period-quality-review.md) supports retaining useful mixed-feed work,
 safe refusals and corrected UI, including edition admission, optional naming, qualified credits, phone controls and
 typography. It is limited source evidence, not a causal model benchmark. Adopted meaning, installed source,
@@ -184,8 +214,11 @@ results. No Space page loader, directory, follows enumeration or per-option read
 
 The selection retains the actual Space id, title/current address, head revision and independently viewer-derived
 Realm id. Realm-backed Space is a genuine scope. A null or unreadable Realm makes the selected scope unavailable;
-it never becomes Global, unselected success or known empty. The schema has no Zone id: native carried-Zone
-association/read/lifecycle is still a Semantic seam, not a browser mapping from Space or Realm. Choice metadata
+it never becomes Global, unselected success or known empty. The schema has no Zone id. Content owns the native
+Space association tuple, attach/replace/remove authority, versioned read and lifecycle; Semantic owns independent
+Zone meaning and ports, and Search owns server continuity and current-primary eligibility. Current Space lifecycle
+is remove/restore. Account remover-attribution cleanup is not terminal Space erasure or an association ACK prerequisite.
+The browser does not map Space or Realm into Zone. Choice metadata
 supplies no membership or authority. The [feed contract](../feeds.md) retains native currentness, original/terminal
 binding and authority/witness/cost obligations.
 
@@ -200,8 +233,8 @@ carrier refusal, conjunctive selectors, generation changes and late private resu
 the current implementation policy. The interactive `pages-discovery-home--space-selection`,
 `pages-discovery-home--space-unavailable` and `pages-discovery-home--space-identity-changed` stories mount the actual
 PageStory/default Home with explicitly illustrative native-format data. They are neither native recordings nor
-visual review. Producer receipt and normal generated declaration receiving for optional feed `spaceId` and
-`ratingQuestionId` remain prerequisites for installed integration. Positive native/default journey proof, original
+visual review. The Home/Space consumer and real directory declarations are received; actual native scoped Space
+and question predicate/default producer receiving remain distinct obligations. Positive native/default journey proof, original
 acceptance, visual review and public delivery are separate prerequisites for whole-feature completion; local typing
 establishes only source consistency. Preserve the parallel question consumer and all original Goal outcomes.
 
