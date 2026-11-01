@@ -34,7 +34,8 @@ export function UnreadBadgeView({ data, failed = false }: { data?: UnreadCount |
 export function useInboxUnreadCount() {
   const { viewer } = useInboxViewer();
   const query = useQuery(unreadCountQueryFor(viewer));
-  return { ...query, data: viewer ? query.data : undefined, viewer };
+  const current = viewer?.isCurrent() ? viewer : null;
+  return { ...query, data: current ? query.data : undefined, viewer: current };
 }
 
 export function UnreadBadge() {

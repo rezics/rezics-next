@@ -29,6 +29,7 @@ export function inboxPageQuery(viewer: InboxViewer, cursor?: string, loadPage: I
     queryFn: ({ signal }) => forInboxViewer(viewer, () => loadPage(cursor, signal), signal),
     retry: false,
     gcTime: 0,
+    enabled: personalRead.enabled && viewer.isCurrent(),
   });
 }
 
@@ -53,7 +54,7 @@ export function unreadCountQueryFor(viewer: InboxViewer | null) {
       if (!viewer) throw new DOMException('Inbox viewer unavailable', 'AbortError');
       return forInboxViewer(viewer, () => readUnreadCount({ signal }), signal);
     },
-    enabled: personalRead.enabled && viewer !== null,
+    enabled: personalRead.enabled && viewer !== null && viewer.isCurrent(),
     gcTime: 0,
   });
 }
@@ -67,11 +68,15 @@ export async function markInboxViewerSeen(
   csrfToken: string,
   send: SeenTransport = markInboxSeen,
 ) {
-  const result = await forInboxViewer(viewer, () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }));
-  if ('failure' in result) throw new InboxSeenError(result.failure);
-  if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
-  await Promise.all([
-    client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),
-    client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) }),
-  ]);
+  return forInboxViewer(viewer, async () => {
+    const result = await forInboxViewer(viewer, () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }));
+    if ('failure' in result) throw new InboxSeenError(result.failure);
+    if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
+    await Promise.all([
+      forInboxViewer(viewer, () =>
+        client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),
+      ),
+      forInboxViewer(viewer, () => client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) })),
+    ]);
+  });
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItem, type ContentItemProps } from '@rezics/ui/content-item';
@@ -6,7 +6,7 @@ import { RelativeTime } from '@rezics/ui/relative-time';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Flag, Gavel, MessageCircleReply } from 'lucide-react';
 import { inboxPageQuery, inboxViewerQueryKey, markInboxViewerSeen, type InboxPageLoader } from './inbox-query';
-import { useInboxViewer, type InboxViewer } from './inbox-viewer';
+import { inboxViewerCsrfToken, useInboxViewer, type InboxViewer } from './inbox-viewer';
 import { InboxEntryState, retryInboxSession } from './inbox-entry-state';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -209,7 +209,7 @@ export function ViewerInboxPage({
     page !== null &&
     (accessRefused(seenFailure) ? accessCheck === 'checked' : seenFailure?.retryable !== false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
@@ -218,12 +218,14 @@ export function ViewerInboxPage({
 
   const sendSeenAttempt = useCallback(
     async (attempt: InboxSeenAttempt) => {
-      if (!csrfToken || marking.current || seenAttempt.current !== attempt || !viewer.isCurrent()) return;
+      if (!active.current || marking.current || seenAttempt.current !== attempt || !viewer.isCurrent()) return;
+      const token = inboxViewerCsrfToken(queryClient, viewer);
+      if (!token) return;
       marking.current = true;
       setMarkingPending(true);
       const loaded = seenLoaded.current;
       try {
-        await markInboxViewerSeen(queryClient, viewer, attempt, csrfToken);
+        await markInboxViewerSeen(queryClient, viewer, attempt, token);
         if (!active.current || !viewer.isCurrent()) return;
         setPagination((current) => {
           if (!active.current || !viewer.isCurrent() || !loaded) return current;
@@ -252,12 +254,13 @@ export function ViewerInboxPage({
         }
       }
     },
-    [queryClient, viewer, csrfToken],
+    [queryClient, viewer],
   );
 
   const markLoadedThroughLatest = () => {
     if (
-      !csrfToken ||
+      !active.current ||
+      !inboxViewerCsrfToken(queryClient, viewer) ||
       !viewer.isCurrent() ||
       !page ||
       !readable?.items.length ||
@@ -284,6 +287,7 @@ export function ViewerInboxPage({
 
   const checkAccess = async () => {
     if (
+      !active.current ||
       accessPending.current ||
       marking.current ||
       pageQuery.isFetching ||
@@ -312,18 +316,22 @@ export function ViewerInboxPage({
   };
 
   const loadMore = () => {
-    if (pageQuery.isFetching || accessPending.current || !page?.next) return;
+    if (!active.current || !viewer.isCurrent() || pageQuery.isFetching || accessPending.current || !page?.next) return;
     const next = nextInboxPage(received);
     if (next === received) void pageQuery.refetch();
     else setPagination(next);
   };
   const startAtFirstPage = () => {
-    if (pageQuery.isFetching || accessPending.current || waiting || !viewer.isCurrent()) return;
+    if (!active.current || pageQuery.isFetching || accessPending.current || waiting || !viewer.isCurrent()) return;
     const first = restartInboxPage(received);
     if (first === received) return;
     // Discard cached pages and cancel their responses before observing the same native first-page query.
     queryClient.removeQueries({ queryKey: inboxViewerQueryKey(viewer) });
     setPagination(first);
+  };
+  const retryPage = () => {
+    if (!active.current || !viewer.isCurrent() || pageQuery.isFetching || accessPending.current || waiting) return;
+    void pageQuery.refetch({ cancelRefetch: false });
   };
   const failed = pageQuery.isError || operationState !== null;
   const failure = failed ? (
@@ -352,7 +360,7 @@ export function ViewerInboxPage({
           <Button
             variant="outline"
             className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-            onClick={() => void pageQuery.refetch({ cancelRefetch: false })}
+            onClick={retryPage}
             disabled={pageQuery.isFetching || checkingAccess || waiting}
           >
             {m.inbox_retry()}
@@ -430,7 +438,15 @@ export function ViewerInboxPage({
                     !viewer.isCurrent()
                   }
                   onClick={() => {
-                    if (seenWaiting || waiting || accessPending.current || pageQuery.isFetching || !seenAttempt.current)
+                    if (
+                      !active.current ||
+                      !viewer.isCurrent() ||
+                      seenWaiting ||
+                      waiting ||
+                      accessPending.current ||
+                      pageQuery.isFetching ||
+                      !seenAttempt.current
+                    )
                       return;
                     setAccessCheck(undefined);
                     void sendSeenAttempt(seenAttempt.current);

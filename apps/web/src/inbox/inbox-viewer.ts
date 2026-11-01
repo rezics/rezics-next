@@ -11,33 +11,73 @@ export type InboxViewer = {
 };
 
 function subject(session: InboxSession | undefined): string | null {
-  return session?.state === 'signed-in' && session.subject ? session.subject : null;
+  return session?.state === 'signed-in' && typeof session.subject === 'string' && session.subject.trim()
+    ? session.subject
+    : null;
 }
 
 /** One current identity per query client, shared by the inbox and every badge consumer. */
 function createViewerStore(client: QueryClient) {
-  let currentSubject: string | null = null;
   let epoch = 0;
   let current: InboxViewer | null = null;
-  const snapshot = (): InboxViewer | null => {
-    const next = subject(client.getQueryData<InboxSession>(sessionQuery.queryKey));
-    if (next !== currentSubject) {
-      currentSubject = next;
-      epoch += 1;
-      const viewer: InboxViewer | null = next ? { subject: next, epoch, isCurrent: () => snapshot() === viewer } : null;
-      current = viewer;
+  const listeners = new Set<() => void>();
+  let release: (() => void) | undefined;
+  const disconnect = () => {
+    release?.();
+    release = undefined;
+  };
+  const reconcile = () => {
+    const query = client.getQueryState<InboxSession>(sessionQuery.queryKey);
+    const next = query?.status === 'success' ? subject(query.data) : null;
+    if (next !== (current?.subject ?? null)) {
+      // Replacing this object permanently retires it, including same-stack loss/recovery.
+      current = null;
+      if (next) {
+        const viewer: InboxViewer = {
+          subject: next,
+          epoch: ++epoch,
+          isCurrent: () => {
+            if (current !== viewer) return false;
+            reconcile();
+            return current === viewer;
+          },
+        };
+        current = viewer;
+      }
     }
+    if (!current && listeners.size === 0) disconnect();
     return current;
   };
+  const connect = () => {
+    if (release) return;
+    // One cache observation outlives UI subscriptions while an imperative viewer is live.
+    // A guard cannot infer an intervening loss from the final retained data alone.
+    release = client.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+      reconcile();
+      for (const changed of listeners) changed();
+    });
+  };
   return {
-    snapshot,
-    subscribe: (changed: () => void) =>
-      client.getQueryCache().subscribe((event) => {
-        if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
-        // Observe even a loss and recovery that React batches into a single render.
-        snapshot();
-        changed();
-      }),
+    snapshot: () => {
+      connect();
+      return reconcile();
+    },
+    subscribe: (changed: () => void) => {
+      listeners.add(changed);
+      connect();
+      reconcile();
+      return () => {
+        listeners.delete(changed);
+        // StrictMode reconnects in the same stack. A real last unmount disposes the
+        // observation and retires its callbacks; a later mount gets a new epoch.
+        queueMicrotask(() => {
+          if (listeners.size !== 0) return;
+          current = null;
+          disconnect();
+        });
+      };
+    },
   };
 }
 
@@ -55,14 +95,22 @@ export function currentInboxViewer(client: QueryClient): InboxViewer | null {
   return inboxViewerStore(client).snapshot();
 }
 
+/** Read current credentials at dispatch, including a refresh before React rerenders. */
+export function inboxViewerCsrfToken(client: QueryClient, viewer: InboxViewer): string | null {
+  if (!viewer.isCurrent()) return null;
+  const query = client.getQueryState<InboxSession & { csrfToken?: string | null }>(sessionQuery.queryKey);
+  return query?.status === 'success' && subject(query.data) === viewer.subject ? query.data?.csrfToken || null : null;
+}
+
 const serverViewer = () => null;
 const serverSessionRead = () => undefined;
 export type InboxSessionRead = { status: 'pending' | 'error' | 'success'; fetchStatus: 'fetching' | 'paused' | 'idle' };
 
 /** A failed initial read has no session data, so useSession alone still reports unknown. */
 export function inboxEntryState(state: ReturnType<typeof useSession>['state'], read?: InboxSessionRead) {
+  if (read?.status === 'error') return 'unavailable';
   if (state === 'signed-out') return 'signed-out';
-  if (state === 'unknown' && read?.status !== 'error') return 'loading';
+  if (state === 'unknown') return 'loading';
   return 'unavailable';
 }
 
@@ -87,7 +135,10 @@ export async function forInboxViewer<T>(viewer: InboxViewer, read: () => Promise
     if (signal?.aborted || !viewer.isCurrent()) throw new DOMException('Inbox viewer changed', 'AbortError');
   };
   assertCurrent();
-  const result = await read();
-  assertCurrent();
-  return result;
+  try {
+    return await read();
+  } finally {
+    // Failed transports must also lose their old owner's completion authority.
+    assertCurrent();
+  }
 }
