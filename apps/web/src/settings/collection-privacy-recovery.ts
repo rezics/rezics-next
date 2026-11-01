@@ -35,7 +35,12 @@ type EditorState = {
 class Observable<State> {
   protected listeners = new Set<() => void>();
   protected generation = 0;
-  constructor(protected state: State) {}
+  protected disposed = false;
+  protected live = () => !this.disposed && this.isCurrent();
+  constructor(
+    protected state: State,
+    private isCurrent: () => boolean = () => true,
+  ) {}
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -44,9 +49,11 @@ class Observable<State> {
     };
   };
   dispose = () => {
+    this.disposed = true;
     this.generation++;
   };
   protected update(patch: Partial<State>) {
+    if (!this.live()) return;
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((listener) => listener());
   }
@@ -58,8 +65,9 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   constructor(
     current: OwnedCollection,
     private io: CollectionPrivacyIO,
+    isCurrent: () => boolean = () => true,
   ) {
-    super({ current, desired: current.visibility, attempt: null, readRefusal: null, phase: 'idle' });
+    super({ current, desired: current.visibility, attempt: null, readRefusal: null, phase: 'idle' }, isCurrent);
   }
   needsListRestartProtection = () =>
     this.state.attempt !== null ||
@@ -68,6 +76,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     this.state.phase === 'reloading';
   /** A fresh list may update a clean mounted row, but cannot resolve its command or replace a draft. */
   receive(current: OwnedCollection) {
+    if (!this.live()) return;
     if (
       this.needsListRestartProtection() ||
       this.state.readRefusal ||
@@ -80,12 +89,14 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     this.update({ current, desired: current.visibility, phase: 'idle' });
   }
   async edit(desired: CollectionVisibility) {
+    if (!this.live()) return;
     if (this.state.readRefusal) return;
     this.edits++;
     this.update({ desired });
     if (this.state.phase === 'idle' || this.state.phase === 'saved') await this.submit();
   }
   async submit() {
+    if (!this.live()) return;
     if (this.state.readRefusal || this.state.attempt || !['idle', 'saved', 'review'].includes(this.state.phase)) return;
     if (this.state.desired === this.state.current.visibility) return;
     const attempt = Object.freeze({
@@ -98,16 +109,18 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     await this.send(false);
   }
   async retry() {
+    if (!this.live()) return;
     if (!this.state.readRefusal && this.state.attempt && this.state.phase === 'uncertain') await this.send(true);
   }
   private async send(recovering: boolean) {
+    if (!this.live()) return;
     const attempt = this.state.attempt;
     if (!attempt) return;
     const generation = this.generation;
     this.update({ phase: 'saving', failure: undefined, nativeFailure: undefined });
     try {
       const answer = await this.io.save(attempt);
-      if (generation !== this.generation) return;
+      if (!this.live() || generation !== this.generation) return;
       if (!answer.ok) {
         this.update(
           answer.reason === 'unavailable' || (recovering && answer.reason !== 'conflict')
@@ -142,7 +155,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       // A replay receipt is historical. Read current native state without replacing a later draft.
       this.update({ phase: 'reloading', nativeFailure: undefined });
       const read = await this.io.read(attempt.collectionId);
-      if (generation !== this.generation) return;
+      if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
         this.update({
           phase: 'uncertain',
@@ -163,7 +176,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       }
       this.update({ current, attempt: null, phase: 'review', readRefusal: null });
     } catch (error) {
-      if (generation === this.generation)
+      if (this.live() && generation === this.generation)
         this.update({
           phase: 'uncertain',
           failure: 'unavailable',
@@ -172,6 +185,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     }
   }
   async reload() {
+    if (!this.live()) return;
     if (this.state.phase === 'saving' || this.state.phase === 'reloading') return;
     const generation = this.generation;
     const edits = this.edits;
@@ -179,7 +193,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     this.update({ phase: 'reloading', nativeFailure: undefined });
     try {
       const read = await this.io.read(this.state.current.id);
-      if (generation !== this.generation) return;
+      if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
         this.update({
           phase: previous,
@@ -206,7 +220,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         nativeFailure: undefined,
       });
     } catch (error) {
-      if (generation === this.generation)
+      if (this.live() && generation === this.generation)
         this.update({
           phase: previous,
           failure: 'unavailable',
@@ -231,12 +245,16 @@ export type CollectionPrivacyPageRead = (cursor: string | null) => Promise<Colle
 export class CollectionPrivacyPager extends Observable<PageState> {
   private rows = new Set<() => boolean>();
   private failedRequest: { cursor: string | null; replace: boolean } | null = null;
-  constructor(private read: CollectionPrivacyPageRead) {
-    super({ collections: [], next: null, loaded: false, loading: false, failure: null });
+  constructor(
+    private read: CollectionPrivacyPageRead,
+    isCurrent: () => boolean = () => true,
+  ) {
+    super({ collections: [], next: null, loaded: false, loading: false, failure: null }, isCurrent);
   }
   override dispose = () => {
-    this.generation++;
     this.update({ loading: false, ...(this.state.restarting ? { restarting: false } : {}) });
+    this.disposed = true;
+    this.generation++;
   };
   /** Read-only registration: drafts and immutable commands remain inside their mounted row editors. */
   registerRow = (row: Pick<CollectionPrivacyEditor, 'needsListRestartProtection' | 'subscribe'>) => {
@@ -256,13 +274,16 @@ export class CollectionPrivacyPager extends Observable<PageState> {
   private hasUnresolvedRows = () => [...this.rows].some((needsDecision) => needsDecision());
   retryReplacesRows = () => this.failedRequest?.replace === true;
   async load() {
+    if (!this.live()) return;
     if (this.state.loaded && this.state.next === null && !this.failedRequest) return;
     await this.requestPage(this.failedRequest ?? { cursor: this.state.next, replace: false });
   }
   async restart() {
+    if (!this.live()) return;
     await this.requestPage({ cursor: null, replace: true });
   }
   private async requestPage(request: { cursor: string | null; replace: boolean }) {
+    if (!this.live()) return;
     if (this.state.loading || (request.replace && this.hasUnresolvedRows())) return;
     const generation = this.generation;
     this.update({
@@ -273,7 +294,7 @@ export class CollectionPrivacyPager extends Observable<PageState> {
     });
     try {
       const read = await this.read(request.cursor);
-      if (generation !== this.generation) return;
+      if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
         this.failedRequest = isCollectionPrivacyReadRefusal(read.reason) ? null : request;
         this.update(
@@ -289,12 +310,12 @@ export class CollectionPrivacyPager extends Observable<PageState> {
       for (const row of read.value.collections) if (!rows.has(row.id)) rows.set(row.id, row);
       this.update({ collections: [...rows.values()], next: read.value.next, loaded: true });
     } catch (error) {
-      if (generation === this.generation) {
+      if (this.live() && generation === this.generation) {
         this.failedRequest = request;
         this.update({ failure: 'unavailable', nativeFailure: collectionPrivacyFailureMetadata(error) });
       }
     } finally {
-      if (generation === this.generation)
+      if (this.live() && generation === this.generation)
         this.update({ loading: false, ...(request.replace ? { restarting: false } : {}) });
     }
   }

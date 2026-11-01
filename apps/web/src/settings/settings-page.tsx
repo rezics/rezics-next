@@ -28,6 +28,7 @@ import { managedAccountTarget, managedAccountsBackHref } from './managed-account
 import { readSettingsPage, saveNotifications, savePreferences } from './actions';
 import type { ReadingIO } from './reading-preferences';
 import type { NotificationEditorIO } from './notification-recovery';
+import { SettingsSessionContext, useSettingsSessionOwner } from './settings-session-owner';
 
 type PreferenceIO = {
   read: ReadingIO['read'];
@@ -67,7 +68,8 @@ export function accountPreferenceIO(
         const token = credential();
         if (!token) return { ok: false, reason: 'forbidden' };
         const result = await transport.saveReading(input, token);
-        return credential() ? result : { ok: false, reason: 'forbidden' };
+        if (!credential()) throw new Error('Settings viewer changed');
+        return result;
       },
     },
     notifications: {
@@ -77,7 +79,8 @@ export function accountPreferenceIO(
         const token = credential();
         if (!token) return { ok: false, reason: 'forbidden' };
         const result = await transport.saveNotifications(input, token);
-        return credential() ? result : { ok: false, reason: 'forbidden' };
+        if (!credential()) throw new Error('Settings viewer changed');
+        return result;
       },
     },
   };
@@ -202,26 +205,11 @@ function SettingsSections({
   const location = useLocation();
   const router = useRouter();
   const [version, setVersion] = useState('preferences' in page ? page.preferences.version : 0);
-  const active = useRef(true);
-  useLayoutEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-    };
-  }, []);
+  const owner = useSettingsSessionOwner(csrfToken, page.accountId)!;
   const [io] = useState(() => {
-    const credential = () => {
-      const session = queryClient.getQueryData(sessionQuery.queryKey);
-      return active.current &&
-        session?.state === 'signed-in' &&
-        session.subject === page.accountId &&
-        session.csrfToken === csrfToken
-        ? session.csrfToken
-        : null;
-    };
     return accountPreferenceIO(
       page.accountId,
-      credential,
+      owner.credential,
       (next) => setVersion((current) => Math.max(current, next)),
       preferenceIO,
     );
@@ -229,8 +217,9 @@ function SettingsSections({
   const notificationError = new URL(location.publicHref, 'https://rezics.local').searchParams.has('notificationError');
   const managedTarget = managedAccountTarget(location.publicHref);
   useEffect(() => {
-    if ('preferences' in page) setVersion((current) => Math.max(current, page.preferences.version));
-  }, [page]);
+    if (owner.isCurrent() && 'preferences' in page)
+      setVersion((current) => Math.max(current, page.preferences.version));
+  }, [page, owner]);
   const sections = settingsSections({
     display: true,
     notifications: 'preferences' in page,
@@ -439,6 +428,35 @@ export function SignedOutSettings({ returnTo }: { returnTo: string }) {
   );
 }
 
+function OwnedSettingsPage({
+  page,
+  csrfToken,
+  preferenceIO,
+  managedAccountsIO,
+  onRetry,
+}: {
+  page: Extract<SettingsPage, { signedIn: true }> & { accountId: string };
+  csrfToken: string | null;
+  preferenceIO: PreferenceIO;
+  managedAccountsIO?: ManagedAccountsIO | undefined;
+  onRetry: () => void;
+}) {
+  const owner = useSettingsSessionOwner(csrfToken, page.accountId)!;
+  if (!owner.isCurrent()) return <SettingsSessionRecovery state="unavailable" onRetry={onRetry} />;
+  return (
+    <SettingsSessionContext.Provider value={owner}>
+      <SettingsNavigationProvider>
+        <SettingsSections
+          page={page}
+          csrfToken={csrfToken}
+          preferenceIO={preferenceIO}
+          managedAccountsIO={managedAccountsIO}
+        />
+      </SettingsNavigationProvider>
+    </SettingsSessionContext.Provider>
+  );
+}
+
 export function SettingsPageView({
   page,
   requestSession,
@@ -474,6 +492,7 @@ export function SettingsPageView({
     () => queryClient.getQueryState(sessionQuery.queryKey),
     serverSessionRead,
   );
+  const [generation, setGeneration] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
   // Match the server snapshot on first hydration; later renders require the live browser identity.
@@ -494,6 +513,7 @@ export function SettingsPageView({
     setRetrying(true);
     setRetryFailed(false);
     void retrySettingsSession(queryClient, () => router.invalidate())
+      .then(() => setGeneration((current) => current + 1))
       .catch(() => setRetryFailed(true))
       .finally(() => setRetrying(false));
   };
@@ -503,15 +523,14 @@ export function SettingsPageView({
         <PageHeading>{m.settings_heading()}</PageHeading>
       </header>
       {ready ? (
-        <SettingsNavigationProvider key={JSON.stringify([session.subject, session.csrfToken])}>
-          <SettingsSections
-            key={session.subject}
-            page={{ ...page, accountId: page.accountId! }}
-            csrfToken={session.csrfToken}
-            preferenceIO={preferenceIO}
-            managedAccountsIO={managedAccountsIO}
-          />
-        </SettingsNavigationProvider>
+        <OwnedSettingsPage
+          key={JSON.stringify([session.subject, session.csrfToken, generation])}
+          page={{ ...page, accountId: page.accountId! }}
+          csrfToken={session.csrfToken}
+          preferenceIO={preferenceIO}
+          managedAccountsIO={managedAccountsIO}
+          onRetry={retry}
+        />
       ) : signedOut ? (
         <SignedOutSettings returnTo={location.publicHref} />
       ) : (

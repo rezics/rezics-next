@@ -40,11 +40,17 @@ export class NotificationEditor {
   private state: NotificationEditorState;
   private listeners = new Set<() => void>();
   private versionFloor = 0;
+  private disposed = false;
+  dispose = () => {
+    this.disposed = true;
+  };
+  private live = () => !this.disposed && this.isCurrent();
   constructor(
     initial: Snapshot,
     private io: NotificationEditorIO,
     initialFailed = false,
     private sharedVersion: () => number = () => initial.version,
+    private isCurrent: () => boolean = () => true,
   ) {
     this.state = {
       known: { ...initial, notifications: { ...initial.notifications } },
@@ -63,6 +69,7 @@ export class NotificationEditor {
     };
   };
   private update(patch: Partial<NotificationEditorState>) {
+    if (!this.live()) return;
     this.state = {
       ...this.state,
       ...patch,
@@ -80,9 +87,10 @@ export class NotificationEditor {
   }
   private confirm(known: Snapshot) {
     this.update({ known });
-    this.io.confirmed?.(known.version);
+    if (this.live()) this.io.confirmed?.(known.version);
   }
   async edit(kind: string, enabled: boolean, version: number) {
+    if (!this.live()) return;
     this.minimumVersion(version);
     const local =
       this.state.pending ||
@@ -94,6 +102,7 @@ export class NotificationEditor {
     await this.start({ [kind]: enabled }, version);
   }
   async restore(version: number) {
+    if (!this.live()) return;
     this.minimumVersion(version);
     if (
       this.state.pending ||
@@ -105,11 +114,13 @@ export class NotificationEditor {
     await this.start(null, version);
   }
   async submit(version: number) {
+    if (!this.live()) return;
     this.minimumVersion(version);
     if (this.state.pending || this.state.phase !== 'review') return;
     await this.start({ ...this.state.draft }, version);
   }
   private async start(notifications: NotificationPatch, version: number) {
+    if (!this.live()) return;
     if (this.waiting() || this.state.pending || this.state.phase === 'reloading') return;
     // Reading's version is a floor for a new read, never a baseline for these retained values.
     if (this.minimumVersion(version) > this.state.known.version) {
@@ -125,17 +136,20 @@ export class NotificationEditor {
     await this.send(false);
   }
   async retry() {
+    if (!this.live()) return;
     if (this.waiting() || !this.state.pending || this.state.phase === 'saving' || this.state.phase === 'reloading')
       return;
     await this.send(true);
   }
   private async send(recovering: boolean) {
+    if (!this.live()) return;
     const attempt = this.state.pending;
     if (!attempt) return;
     this.update({ phase: 'saving', readOrigin: null, reason: undefined, failure: undefined });
     let result: NotificationWriteResult;
     try {
       result = await this.io.save(attempt.input);
+      if (!this.live()) return;
     } catch {
       this.update({ phase: 'uncertain', reason: 'unavailable' });
       return;
@@ -181,6 +195,7 @@ export class NotificationEditor {
     // A replay is a historical receipt. Only an uncached native GET can establish the current values.
     this.update({ phase: 'reloading', readOrigin: 'replay' });
     const current = await this.readCurrent();
+    if (!this.live()) return;
     if (!current || current.version < this.minimumVersion()) {
       this.update({ phase: 'uncertain', ...(!current ? {} : { reason: 'unavailable', failure: undefined }) });
       return;
@@ -206,8 +221,10 @@ export class NotificationEditor {
     });
   }
   private async readCurrent(): Promise<Snapshot | null> {
+    if (!this.live()) return null;
     try {
       const page = await this.io.read();
+      if (!this.live()) return null;
       if (
         !page.signedIn ||
         !('preferences' in page) ||
@@ -236,6 +253,7 @@ export class NotificationEditor {
     }
   }
   async reload() {
+    if (!this.live()) return;
     if (this.waiting() || this.state.pending || this.state.phase === 'reloading') return;
     const preserve =
       !sameNotifications(this.state.draft, this.state.known.notifications) ||
@@ -250,6 +268,7 @@ export class NotificationEditor {
       failure: undefined,
     });
     const current = await this.readCurrent();
+    if (!this.live()) return;
     if (!current || current.version < this.minimumVersion()) {
       this.update({ phase: 'failed', ...(!current ? {} : { reason: 'unavailable', failure: undefined }) });
       return;
@@ -264,6 +283,7 @@ export class NotificationEditor {
     });
   }
   useCurrent() {
+    if (!this.live()) return;
     if (this.state.pending || this.state.readOrigin !== null) return;
     if (this.minimumVersion() > this.state.known.version) {
       this.update({ phase: 'conflict', reason: undefined, failure: undefined });

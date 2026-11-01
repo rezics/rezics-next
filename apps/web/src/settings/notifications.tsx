@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezi
 import { Field, FieldContent, FieldGroup, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
-import { csrfHeaders } from '../threads/composer';
 import { readSettingsPage, saveNotifications } from './actions';
 import {
   NotificationEditor,
@@ -14,7 +13,9 @@ import {
 } from './notification-recovery';
 import type { NotificationPreferences } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
-import { useSettingsNavigationCurrent, useSettingsNavigationDraft } from './reading-navigation';
+import { useSettingsNavigationDraft } from './reading-navigation';
+
+import { useSettingsCurrent, useSettingsDisposal } from './settings-session-owner';
 
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
 
@@ -49,21 +50,23 @@ export function NotificationsCard({
   const [hydrated, setHydrated] = useState(false);
   const sharedVersion = useRef(version);
   sharedVersion.current = Math.max(sharedVersion.current, version);
+  const isCurrent = useSettingsCurrent(csrfToken, !!io);
   const [editor] = useState(
     () =>
       new NotificationEditor(
         { notifications: initial, version },
         io ?? {
-          save: (data) => saveNotifications({ data, headers: csrfHeaders() }),
+          save: (data) => saveNotifications({ data, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
           read: () => readSettingsPage(),
           confirmed: onVersionChange,
         },
         initialFailed,
         () => sharedVersion.current,
+        isCurrent,
       ),
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
-  const isCurrent = useSettingsNavigationCurrent(csrfToken);
+  useSettingsDisposal(editor.dispose);
   useSettingsNavigationDraft(
     'notifications',
     isCurrent() && notificationsNeedNavigationDecision(state),
@@ -73,7 +76,7 @@ export function NotificationsCard({
   const waiting = usePreferenceRetry(state.failure, state.retryAt);
   useLayoutEffect(() => setHydrated(true), []);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
-  const disabled = busy || !csrfToken;
+  const disabled = busy || !csrfToken || !isCurrent();
   const uncertain = state.phase === 'uncertain' || (state.pending !== null && state.phase === 'reloading');
   const readFailed = state.readOrigin !== null && (state.phase === 'failed' || state.phase === 'uncertain');
   const needsReload = !readFailed && (state.phase === 'conflict' || state.phase === 'failed');

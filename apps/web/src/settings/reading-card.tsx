@@ -15,15 +15,10 @@ import {
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
-import { csrfHeaders } from '../threads/composer';
 import { readSettingsPage, savePreferences } from './actions';
 import type { NativePreferenceFailure, PreferenceChange, ReadingPreferences, SpoilerLevel } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
-import {
-  readingNeedsNavigationDecision,
-  useReadingNavigationCurrent,
-  useSettingsNavigationDraft,
-} from './reading-navigation';
+import { readingNeedsNavigationDecision, useSettingsNavigationDraft } from './reading-navigation';
 import {
   readingMutation,
   readReading,
@@ -32,6 +27,7 @@ import {
   type ReadingIO,
   type ReadingValues,
 } from './reading-preferences';
+import { useSettingsCurrent } from './settings-session-owner';
 
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
 
@@ -76,27 +72,45 @@ export function ReadingCard({
     knownCurrent: true,
   }));
   const current = useRef(state);
-  const isCurrent = useReadingNavigationCurrent();
-  const lifetime = useRef<object | null>(null);
+  const isCurrent = useSettingsCurrent(csrfToken, !!io);
+  const lifetime = useRef({ active: false, retired: false });
+  const mounted = () => lifetime.current.active && !lifetime.current.retired;
   useLayoutEffect(() => {
-    const mounted = {};
-    lifetime.current = mounted;
+    lifetime.current.active = true;
     return () => {
-      lifetime.current = null;
+      lifetime.current.active = false;
+      queueMicrotask(() => {
+        if (!lifetime.current.active) lifetime.current.retired = true;
+      });
     };
   }, []);
   useSettingsNavigationDraft(
     'reading',
     readingNeedsNavigationDecision(state),
-    () => !!lifetime.current && isCurrent() && readingNeedsNavigationDecision(current.current),
+    () => mounted() && isCurrent() && readingNeedsNavigationDecision(current.current),
   );
   const waiting = usePreferenceRetry(state.failure);
   const draftRevision = useRef(0);
   const sharedVersion = useRef(version);
   sharedVersion.current = Math.max(sharedVersion.current, version, initial.version);
-  const transport = io ?? {
-    save: (data: Readonly<PreferenceChange>) => savePreferences({ data, headers: csrfHeaders() }),
+  const source = io ?? {
+    save: (data: Readonly<PreferenceChange>) => savePreferences({ data, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
     read: () => readSettingsPage(),
+  };
+  // sendReading can perform a second recovery GET internally; guard that boundary as well.
+  const transport: ReadingIO = {
+    save: async (input) => {
+      if (!isCurrent()) throw new Error('Settings viewer unavailable');
+      const result = await source.save(input);
+      if (!isCurrent()) throw new Error('Settings viewer changed');
+      return result;
+    },
+    read: async () => {
+      if (!isCurrent()) throw new Error('Settings viewer unavailable');
+      const result = await source.read();
+      if (!isCurrent()) throw new Error('Settings viewer changed');
+      return result;
+    },
   };
   function update(patch: Partial<ReadingState>) {
     current.current = { ...current.current, ...patch };
@@ -105,11 +119,10 @@ export function ReadingCard({
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   async function send(recovering: boolean) {
     const input = current.current.pending;
-    const mounted = lifetime.current;
-    if (!input || !mounted || !isCurrent()) return;
+    if (!input || !mounted() || !isCurrent()) return;
     update({ phase: 'saving', reason: undefined, failure: undefined, failureOrigin: undefined, knownCurrent: false });
     const result = await sendReading(transport, input, recovering, () => sharedVersion.current);
-    if (lifetime.current !== mounted || !isCurrent()) return;
+    if (!mounted() || !isCurrent()) return;
     if (result.kind !== 'confirmed') {
       update({
         pending: result.kind === 'uncertain' ? input : null,
@@ -133,7 +146,14 @@ export function ReadingCard({
     onVersionChange(Math.max(sharedVersion.current, preferences.version));
   }
   async function submit() {
-    if (!isCurrent() || !hydrated || !csrfToken || current.current.pending || current.current.phase === 'reloading')
+    if (
+      !mounted() ||
+      !isCurrent() ||
+      !hydrated ||
+      !csrfToken ||
+      current.current.pending ||
+      current.current.phase === 'reloading'
+    )
       return;
     if (sharedVersion.current > current.current.known.version) {
       update({
@@ -154,16 +174,15 @@ export function ReadingCard({
     await send(false);
   }
   async function edit(next: Partial<ReadingValues>) {
-    if (!isCurrent() || !hydrated || !csrfToken) return;
+    if (!mounted() || !isCurrent() || !hydrated || !csrfToken) return;
     const autosave = current.current.phase === 'idle' || current.current.phase === 'saved';
     draftRevision.current++;
     update({ draft: { ...current.current.draft, ...next } });
     if (autosave && !current.current.pending) await submit();
   }
   async function reload(keepDraft = false) {
-    const mounted = lifetime.current;
     if (
-      !mounted ||
+      !mounted() ||
       !isCurrent() ||
       waiting ||
       current.current.phase === 'saving' ||
@@ -179,7 +198,7 @@ export function ReadingCard({
       failureOrigin: undefined,
     });
     const result = await readReading(transport, () => Math.max(current.current.known.version, sharedVersion.current));
-    if (lifetime.current !== mounted || !isCurrent()) return;
+    if (!mounted() || !isCurrent()) return;
     if (!result.ok) {
       update({
         phase: current.current.pending ? 'uncertain' : 'failed',

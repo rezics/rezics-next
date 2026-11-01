@@ -1,9 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useRef, useState } from 'react';
+import { StrictMode, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { sessionQuery, useSession } from '../../session/query';
+import recording from '../../kernel/recorded/settings-preferences.json';
+import { readingFixture } from '../../kernel/fake/settings-preferences-reading';
+import type { NotificationWriteResult } from '../../settings/preferences';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import { SettingsSessionRecovery, SignedOutSettings } from '../../settings/settings-page';
+import { SettingsPageView, SettingsSessionRecovery, SignedOutSettings } from '../../settings/settings-page';
 import { PageHeading } from '../../shell/page-heading';
 import { AppShell } from '../../shell/shell';
 import { PatternStory } from '../page';
@@ -142,5 +147,97 @@ export const RecoveredSignedOut: Story = {
     await expect(view.queryByRole('button', { name: m.settings_retry() })).toBeNull();
     await expect(view.queryByRole('button', { name: m.account_sign_out() })).toBeNull();
     await recoveryView(canvasElement);
+  },
+};
+
+/** Uses the production page, retained editors and owner; only preference transport outcomes are illustrative. */
+function ActualSessionPage() {
+  const client = useQueryClient();
+  const session = useSession();
+  const original = useRef(session);
+  const [fixture] = useState(() => readingFixture('lost'));
+  const [sends, setSends] = useState(0);
+  const [generation, setGeneration] = useState(0);
+  if (session.state !== 'signed-in' || !session.subject) return <p role="status">{m.settings_sections_loading()}</p>;
+  original.current = session;
+  const page = {
+    signedIn: true as const,
+    accountId: session.subject,
+    preferences: fixture.initial,
+    notifications: recording.notifications,
+    securityHref: null,
+  };
+  return (
+    <>
+      <div aria-label="Session regression controls" className="flex flex-wrap gap-2 p-4">
+        <button
+          type="button"
+          onClick={() => {
+            const current = original.current;
+            // Retained signed-in data is deliberately unchanged; error then success happen in one event.
+            client
+              .getQueryCache()
+              .find({ queryKey: sessionQuery.queryKey, exact: true })
+              ?.setState({
+                status: 'error',
+                error: new Error('Illustrative session failure with retained data'),
+              });
+            client.setQueryData(sessionQuery.queryKey, current);
+          }}
+        >
+          Fail session and restore retained data
+        </button>
+        <button type="button" onClick={() => setGeneration((current) => current + 1)}>
+          Mount fresh Settings owner
+        </button>
+        <output aria-label="Preference dispatches">{sends}</output>
+      </div>
+      <AppShell>
+        <SettingsPageView
+          key={generation}
+          page={page}
+          csrfToken={session.csrfToken}
+          preferenceIO={{
+            read: async () => ({ ...page, ...(await fixture.io.read()), accountId: original.current.subject ?? null }),
+            saveReading: async (input) => {
+              setSends((current) => current + 1);
+              return fixture.io.save(input);
+            },
+            saveNotifications: async (): Promise<NotificationWriteResult> => {
+              setSends((current) => current + 1);
+              return { ok: false, reason: 'unavailable' };
+            },
+          }}
+        />
+      </AppShell>
+    </>
+  );
+}
+
+export const RetainedSessionCannotReviveEditors: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/settings#notifications">
+      <StrictMode>
+        <ActualSessionPage />
+      </StrictMode>
+    </PatternStory>
+  ),
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const main = within(await canvas.findByRole('main'));
+    const toggle = await main.findByRole('switch', { name: m.settings_notification_reply() });
+    await userEvent.click(toggle);
+    await expect(canvas.getByLabelText('Preference dispatches')).toHaveTextContent('1');
+    await userEvent.click(canvas.getByRole('button', { name: 'Fail session and restore retained data' }));
+    await main.findByText(m.settings_session_unavailable());
+    await expect(main.queryByRole('switch')).toBeNull();
+    await expect(canvasElement.querySelector('[name="csrf_token"]')).toBeNull();
+    await expect(main.getByRole('region', { name: m.shell_appearance() })).toBeVisible();
+    await expect(canvas.getByLabelText('Preference dispatches')).toHaveTextContent('1');
+    await userEvent.click(canvas.getByRole('button', { name: 'Mount fresh Settings owner' }));
+    await userEvent.click(await main.findByRole('switch', { name: m.settings_notification_reply() }));
+    await expect(canvas.getByLabelText('Preference dispatches')).toHaveTextContent('2');
+    await expect(main.queryByText(m.settings_session_unavailable())).toBeNull();
   },
 };

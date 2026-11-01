@@ -1,5 +1,5 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -10,7 +10,6 @@ import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
-import { csrfHeaders } from '../threads/composer';
 import { useSession } from '../session/query';
 import {
   unwrapVerificationRead,
@@ -34,8 +33,11 @@ import {
   canWithdrawVerification,
   verificationQueryKey,
   type VerificationSnapshot,
+  type VerificationRecoveryIO,
 } from './verification-recovery';
 import { readVerificationState, requestVerificationAction, withdrawVerificationAction } from './verification-actions';
+
+import { SettingsSessionOwner, useSettingsSessionOwner, useSettingsDisposal } from './settings-session-owner';
 
 const verificationActionClassName =
   'h-auto min-h-11 min-w-11 w-full max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] sm:w-auto';
@@ -112,27 +114,69 @@ export function VerificationSection() {
   return <ViewerVerification key={JSON.stringify([subject, csrfToken])} accountId={subject} csrfToken={csrfToken} />;
 }
 
+/** Original credentials and a guarded query producer prevent late reads from entering another owner's cache. */
+export function verificationRecoveryIO(
+  owner: SettingsSessionOwner,
+  client: QueryClient,
+  transport = {
+    read: (accountId: string) =>
+      readVerificationState({ data: { accountId } }).then((result) =>
+        unwrapVerificationRead<VerificationSnapshot>(result),
+      ),
+    request: (accountId: string, input: VerificationInput, token: string) =>
+      requestVerificationAction({ data: { ...input, accountId }, headers: { 'X-CSRF-Token': token } }),
+    withdraw: (accountId: string, input: { idempotencyKey: string }, token: string) =>
+      withdrawVerificationAction({ data: { ...input, accountId }, headers: { 'X-CSRF-Token': token } }),
+  },
+): VerificationRecoveryIO {
+  const key = verificationQueryKey(owner.subject);
+  // This subscription owns only the original query, and runs synchronously on retirement.
+  const release = owner.subscribe(() => {
+    if (owner.isCurrent()) return;
+    release();
+    void client.cancelQueries({ queryKey: key, exact: true });
+    client.removeQueries({ queryKey: key, exact: true });
+  });
+  return {
+    read: (accountId) =>
+      owner.guard(async () => {
+        if (accountId !== owner.subject) throw new Error('Verification account changed');
+        return client.fetchQuery({
+          ...personalRead,
+          queryKey: key,
+          queryFn: () =>
+            owner.guard(async () => {
+              const result = await transport.read(accountId);
+              if (result.accountId !== owner.subject) throw new Error('Verification account changed');
+              return result;
+            }),
+          staleTime: 0,
+          retry: false,
+        });
+      }),
+    request: (accountId, input) =>
+      owner.guard((token) => {
+        if (accountId !== owner.subject) throw new Error('Verification account changed');
+        return transport.request(accountId, input, token);
+      }),
+    withdraw: (accountId, input) =>
+      owner.guard((token) => {
+        if (accountId !== owner.subject) throw new Error('Verification account changed');
+        return transport.withdraw(accountId, input, token);
+      }),
+  };
+}
+
 function ViewerVerification({ accountId, csrfToken }: { accountId: string; csrfToken: string | null }) {
   const queryClient = useQueryClient();
+  const owner = useSettingsSessionOwner(csrfToken, accountId)!;
   const [controller] = useState(
-    () =>
-      new VerificationRecovery(accountId, {
-        read: () =>
-          queryClient.fetchQuery({
-            ...personalRead,
-            queryKey: verificationQueryKey(accountId),
-            queryFn: async () =>
-              unwrapVerificationRead<VerificationSnapshot>(await readVerificationState({ data: { accountId } })),
-            retry: false,
-          }),
-        request: (_, input) => requestVerificationAction({ data: { ...input, accountId }, headers: csrfHeaders() }),
-        withdraw: (_, input) => withdrawVerificationAction({ data: { ...input, accountId }, headers: csrfHeaders() }),
-      }),
+    () => new VerificationRecovery(accountId, verificationRecoveryIO(owner, queryClient), owner.isCurrent),
   );
+  const dispose = useCallback(() => controller.deactivate(), [controller]);
+  useSettingsDisposal(dispose);
   useEffect(() => {
-    controller.activate();
     void controller.reload();
-    return () => controller.deactivate();
   }, [controller]);
   return <VerificationCard controller={controller} csrfToken={csrfToken} />;
 }
@@ -200,15 +244,17 @@ export function VerificationCard({
   }
 
   async function recover(action: () => Promise<void>) {
+    if (!isCurrent()) return;
     const command = action();
     const original = controller.snapshot().attempt;
     await command;
+    if (!isCurrent()) return;
     const current = controller.snapshot();
     if (original?.kind === 'request' && !current.attempt && current.phase === 'review') setAcknowledged(original.input);
   }
 
   async function submit() {
-    if (!csrfToken || !canRequest) return;
+    if (!isCurrent() || !csrfToken || !canRequest) return;
     const invalid = validateVerificationDraft(draft);
     setShowValidation(true);
     if (invalid.length) {
@@ -220,10 +266,10 @@ export function VerificationCard({
   }
 
   async function withdraw() {
-    if (!csrfToken || !confirmation || !canWithdraw) return;
+    if (!isCurrent() || !csrfToken || !confirmation || !canWithdraw) return;
     setAction({ kind: 'withdraw', subject: subjectLabel(subjectTitle, verification?.catalogueSubjectId) });
     await controller.withdraw(true);
-    setConfirmation(false);
+    if (isCurrent()) setConfirmation(false);
   }
 
   return (

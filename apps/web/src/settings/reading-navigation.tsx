@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from 'react';
 import { useBlocker, type ShouldBlockFn } from '@tanstack/react-router';
-import { QueryClientContext, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
   AlertDialog,
@@ -22,10 +21,9 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../paraglide/messages.js';
-import { sessionQuery, useSession } from '../session/query';
 import type { PreferenceChange, ReadingPreferences } from './preferences';
 import { sameReading, type ReadingValues } from './reading-preferences';
-import { settingsDraftViewerIsCurrent } from './settings-draft-state';
+import { SettingsSessionContext, useSettingsCurrent, useSettingsSessionOwner } from './settings-session-owner';
 
 type DraftKind = 'reading' | 'profile' | 'notifications' | 'collection-privacy' | 'verification';
 type Draft = { kind: DraftKind; needsDecision: () => boolean };
@@ -110,24 +108,7 @@ export function useSettingsNavigationOwner() {
 
 /** A mounted editor cannot lend an old viewer's draft to a new session, even before React tears it down. */
 export function useSettingsNavigationCurrent(csrfToken: string | null) {
-  const client = useContext(QueryClientContext);
-  // Standalone cards need no session provider. Observe the existing cache without starting another session read.
-  const subscribe = useCallback(
-    (listener: () => void) => client?.getQueryCache().subscribe(listener) ?? (() => {}),
-    [client],
-  );
-  const snapshot = useCallback(() => client?.getQueryData(sessionQuery.queryKey), [client]);
-  const session = useSyncExternalStore(subscribe, snapshot, snapshot);
-  const owner = useRef<{ subject: string; csrfToken: string | null } | null>(null);
-  const retired = useRef(false);
-  if (!owner.current && session?.state === 'signed-in' && session.subject)
-    owner.current = { subject: session.subject, csrfToken: session.csrfToken };
-  const isCurrent = useCallback(() => {
-    const current = client?.getQueryData(sessionQuery.queryKey);
-    return !retired.current && settingsDraftViewerIsCurrent(owner.current, current, csrfToken);
-  }, [client, csrfToken]);
-  if (owner.current && !isCurrent()) retired.current = true;
-  return isCurrent;
+  return useSettingsCurrent(csrfToken, true);
 }
 
 export function useSettingsNavigationDraft(
@@ -149,6 +130,14 @@ export function useSettingsNavigationDraft(
 /** One router blocker and one accessible decision cover every mounted Settings editor. */
 export function SettingsNavigationProvider({ children }: { children: ReactNode }) {
   const [navigation] = useState(() => new SettingsNavigationDrafts());
+  const sessionOwner = useContext(SettingsSessionContext);
+  useLayoutEffect(
+    () =>
+      sessionOwner?.subscribe(() => {
+        if (!sessionOwner.isCurrent()) navigation.deactivate();
+      }),
+    [navigation, sessionOwner],
+  );
   useSyncExternalStore(navigation.subscribe, navigation.snapshot, navigation.snapshot);
   const returnFocus = useRef<HTMLElement | null>(null);
   const stay = useRef<HTMLButtonElement | null>(null);
@@ -249,25 +238,9 @@ export function useReadingNavigationCurrent() {
 
 /** Retire this mounted reading card when its session changes, even while the route loader is stale. */
 export function ReadingNavigation({ csrfToken, children }: { csrfToken: string | null; children: ReactNode }) {
-  const session = useSession();
-  const client = useQueryClient();
-  const owner = useRef<{ token: string; subject: string | null } | null>(null);
-  const retired = useRef(false);
-  if (!owner.current && session.state === 'signed-in' && session.csrfToken)
-    owner.current = { token: session.csrfToken, subject: session.subject ?? null };
-  const isCurrent = useCallback(() => {
-    const current = client.getQueryData(sessionQuery.queryKey);
-    return (
-      !retired.current &&
-      !!owner.current &&
-      current?.state === 'signed-in' &&
-      current.csrfToken === owner.current.token &&
-      (current.subject ?? null) === owner.current.subject &&
-      csrfToken === owner.current.token
-    );
-  }, [client, csrfToken]);
-  if ((owner.current && !isCurrent()) || session.state === 'signed-out') retired.current = true;
-  return retired.current ? (
+  const owner = useSettingsSessionOwner(csrfToken);
+  const isCurrent = owner?.isCurrent ?? alwaysCurrent;
+  return owner && !owner.isCurrent() ? (
     <div className="min-w-0 max-w-full space-y-3">
       <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
       <p role="status">{m.settings_reading_session_changed()}</p>

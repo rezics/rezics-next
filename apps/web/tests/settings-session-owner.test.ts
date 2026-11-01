@@ -1,0 +1,620 @@
+import { expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, createElement, StrictMode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import * as start from '../.storybook/react-start';
+import { NotificationEditor } from '../src/settings/notification-recovery';
+import { CollectionPrivacyEditor, CollectionPrivacyPager } from '../src/settings/collection-privacy-recovery';
+import {
+  VerificationRecovery,
+  verificationQueryKey,
+  type VerificationSnapshot,
+} from '../src/settings/verification-recovery';
+import { readingMutation, sendReading } from '../src/settings/reading-preferences';
+import type {
+  CollectionVisibilityWrite,
+  PreferenceWriteResult,
+  NotificationWriteResult,
+  SettingsPage,
+} from '../src/settings/preferences';
+import type { VerificationCommandResult } from '../src/settings/verification-core';
+
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => ({
+  ...start,
+  getRequest: () => {
+    throw new Error('Unexpected session read');
+  },
+}));
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { sessionQuery, exposureQuery } = await import('../src/session/query');
+const { SettingsSessionOwner } = await import('../src/settings/settings-session-owner');
+const { accountPreferenceIO, SettingsPageView } = await import('../src/settings/settings-page');
+const { collectionPrivacyIO } = await import('../src/settings/collection-privacy');
+const { verificationRecoveryIO } = await import('../src/settings/verification');
+const { SettingsNavigationDrafts } = await import('../src/settings/reading-navigation');
+const { m } = await import('../src/paraglide/messages.js');
+
+const identity = { state: 'signed-in' as const, subject: 'alice', csrfToken: 'original-token' };
+const page = {
+  signedIn: true as const,
+  accountId: 'alice',
+  securityHref: null,
+  preferences: { spoilerLevel: 2 as const, suitability: 'show' as const, version: 4 },
+  notifications: { reply: true, mention: false },
+};
+const collection = { id: 'owned', title: 'Reading', visibility: 'private' as const, revision: 7 };
+const empty: VerificationSnapshot = { accountId: 'alice', verificationRequest: null, subjectTitle: null };
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
+function setup() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  client.setQueryData(sessionQuery.queryKey, identity);
+  const owner = new SettingsSessionOwner(client, identity.csrfToken, identity.subject);
+  const release = owner.mount();
+  return {
+    client,
+    owner,
+    release,
+    close() {
+      release();
+      owner.retire();
+      client.clear();
+    },
+  };
+}
+const transitions = {
+  'retained data on query error': (client: QueryClient) => {
+    client
+      .getQueryCache()
+      .find({ queryKey: sessionQuery.queryKey })!
+      .setState({ status: 'error', error: new Error('session failed') });
+    expect(client.getQueryData(sessionQuery.queryKey)).toEqual(identity);
+  },
+  'synchronous subject away and back': (client: QueryClient) => {
+    client.setQueryData(sessionQuery.queryKey, { ...identity, subject: 'bob' });
+    client.setQueryData(sessionQuery.queryKey, identity);
+  },
+  'synchronous signed-out and back': (client: QueryClient) => {
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+    client.setQueryData(sessionQuery.queryKey, identity);
+  },
+  'token rotation and back': (client: QueryClient) => {
+    client.setQueryData(sessionQuery.queryKey, { ...identity, csrfToken: 'rotated-token' });
+    client.setQueryData(sessionQuery.queryKey, identity);
+  },
+  'query removal and replacement': (client: QueryClient) => {
+    client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+    client.setQueryData(sessionQuery.queryKey, identity);
+  },
+  'unavailable and back': (client: QueryClient) => {
+    client.setQueryData(sessionQuery.queryKey, { state: 'unavailable', csrfToken: null, subject: null });
+    client.setQueryData(sessionQuery.queryKey, identity);
+  },
+};
+
+for (const [name, transition] of Object.entries(transitions)) {
+  test(`Retired Settings sessions cannot resume private reads writes drafts or late receipts from retained cache data: ${name}`, async () => {
+    const h = setup();
+    let dispatches = 0;
+    let confirmed = 4;
+    const preferences = accountPreferenceIO(
+      'alice',
+      h.owner.credential,
+      (v) => {
+        confirmed = v;
+      },
+      {
+        read: async () => {
+          dispatches++;
+          return page;
+        },
+        saveReading: async () => {
+          dispatches++;
+          return { ok: true, preferences: page.preferences };
+        },
+        saveNotifications: async () => {
+          dispatches++;
+          return { ok: true, notifications: page.notifications, version: 5 };
+        },
+      },
+    );
+    const row = new CollectionPrivacyEditor(
+      collection,
+      collectionPrivacyIO(h.owner, {
+        read: async () => {
+          dispatches++;
+          return { ok: true, value: collection };
+        },
+        save: async () => {
+          dispatches++;
+          return { ok: false, reason: 'unavailable' };
+        },
+      }),
+      h.owner.isCurrent,
+    );
+    const pager = new CollectionPrivacyPager(async () => {
+      dispatches++;
+      return { ok: true, value: { collections: [collection], next: 'cursor' } };
+    }, h.owner.isCurrent);
+    const verification = new VerificationRecovery(
+      'alice',
+      verificationRecoveryIO(h.owner, h.client, {
+        read: async () => {
+          dispatches++;
+          return empty;
+        },
+        request: async () => {
+          dispatches++;
+          return { ok: false, status: 503, message: 'unknown' };
+        },
+        withdraw: async () => {
+          dispatches++;
+          return { ok: false, status: 503, message: 'unknown' };
+        },
+      }),
+      h.owner.isCurrent,
+    );
+    const notification = new NotificationEditor(
+      { notifications: page.notifications, version: 4 },
+      preferences.notifications,
+      false,
+      () => confirmed,
+      h.owner.isCurrent,
+    );
+    const drafts = new SettingsNavigationDrafts();
+    drafts.register({ kind: 'notifications', needsDecision: () => h.owner.isCurrent() });
+    const leaving = drafts.block('/settings', '/inbox');
+    const stop = h.owner.subscribe(drafts.refresh);
+    try {
+      transition(h.client);
+      expect(h.owner.isCurrent()).toBe(false);
+      expect(await leaving).toBe(false);
+      await expect(preferences.reading.read()).rejects.toThrow('Settings viewer unavailable');
+      expect(await preferences.reading.save({ expectedVersion: 4, spoilerLevel: 1, idempotencyKey: 'old' })).toEqual({
+        ok: false,
+        reason: 'forbidden',
+      });
+      await notification.edit('reply', false, 4);
+      await notification.restore(4);
+      await notification.reload();
+      await row.edit('public');
+      await row.reload();
+      await row.retry();
+      await pager.load();
+      await pager.restart();
+      await verification.reload();
+      await verification.retry();
+      await verification.withdraw(true);
+      preferences.notifications.confirmed(99);
+      expect(dispatches).toBe(0);
+      expect(confirmed).toBe(4);
+      expect(notification.snapshot().draft).toEqual(page.notifications);
+      expect(row.snapshot().attempt).toBeNull();
+      expect(drafts.needsDecision()).toBe(false);
+      h.client.setQueryData(sessionQuery.queryKey, identity);
+      const fresh = new SettingsSessionOwner(h.client, identity.csrfToken);
+      const end = fresh.mount();
+      expect(fresh.isCurrent()).toBe(true);
+      expect(h.owner.isCurrent()).toBe(false);
+      end();
+      fresh.retire();
+    } finally {
+      stop();
+      h.close();
+    }
+  });
+}
+
+test('late Reading and Notifications receipts cannot confirm versions; exact dispatched inputs stay immutable and unresolved', async () => {
+  const h = setup();
+  const reading = deferred<PreferenceWriteResult>();
+  const notices = deferred<NotificationWriteResult>();
+  const sent: unknown[] = [];
+  const tokens: string[] = [];
+  let confirmations = 0;
+  const io = accountPreferenceIO('alice', h.owner.credential, () => confirmations++, {
+    read: async () => {
+      throw new Error('A retired receipt must not trigger recovery GET');
+    },
+    saveReading: (input, token) => {
+      sent.push(input);
+      tokens.push(token);
+      return reading.promise;
+    },
+    saveNotifications: (input, token) => {
+      sent.push(input);
+      tokens.push(token);
+      return notices.promise;
+    },
+  });
+  const original = readingMutation(page.preferences, { spoilerLevel: 1, suitability: 'blur' })!;
+  const result = sendReading(io.reading, original, true, () => 4);
+  const editor = new NotificationEditor(
+    { notifications: page.notifications, version: 4 },
+    io.notifications,
+    false,
+    () => 4,
+    h.owner.isCurrent,
+  );
+  const sending = editor.edit('reply', false, 4);
+  const attempt = editor.snapshot().pending!;
+  const frozen = JSON.stringify(attempt);
+  const before = editor.snapshot();
+  try {
+    transitions['token rotation and back'](h.client);
+    reading.resolve({ ok: true, preferences: { spoilerLevel: 1, suitability: 'blur', version: 5 } });
+    notices.resolve({ ok: true, notifications: { reply: false, mention: false }, version: 5 });
+    expect(await result).toMatchObject({ kind: 'uncertain' });
+    await sending;
+    await editor.retry();
+    editor.useCurrent();
+    expect(editor.snapshot()).toBe(before);
+    expect(editor.snapshot().pending).toBe(attempt);
+    expect(JSON.stringify(attempt)).toBe(frozen);
+    expect(Object.isFrozen(attempt.input)).toBe(true);
+    expect(Object.isFrozen(attempt.input.notifications)).toBe(true);
+    expect(sent).toEqual([original, attempt.input]);
+    expect(tokens).toEqual(['original-token', 'original-token']);
+    expect(confirmations).toBe(0);
+  } finally {
+    h.close();
+  }
+});
+
+test('late preference and privacy page reads cannot replace old snapshots or release list reservations', async () => {
+  const h = setup();
+  const read = deferred<SettingsPage>();
+  const list = deferred<{ ok: true; value: { collections: (typeof collection)[]; next: string | null } }>();
+  let reads = 0;
+  const io = accountPreferenceIO(
+    'alice',
+    h.owner.credential,
+    () => {
+      throw new Error('Late version');
+    },
+    {
+      read: () => {
+        reads++;
+        return read.promise;
+      },
+      saveReading: async () => ({ ok: false, reason: 'unavailable' }),
+      saveNotifications: async () => ({ ok: false, reason: 'unavailable' }),
+    },
+  );
+  const editor = new NotificationEditor(
+    { notifications: page.notifications, version: 4 },
+    io.notifications,
+    false,
+    () => 4,
+    h.owner.isCurrent,
+  );
+  const reload = editor.reload();
+  const pager = new CollectionPrivacyPager(() => list.promise, h.owner.isCurrent);
+  const load = pager.load();
+  const before = editor.snapshot();
+  const beforeList = pager.snapshot();
+  try {
+    transitions['retained data on query error'](h.client);
+    read.resolve({ ...page, notifications: { reply: false }, preferences: { ...page.preferences, version: 20 } });
+    list.resolve({ ok: true, value: { collections: [collection], next: 'private-cursor' } });
+    await Promise.all([reload, load]);
+    await editor.reload();
+    await pager.restart();
+    expect(editor.snapshot()).toBe(before);
+    expect(pager.snapshot()).toBe(beforeList);
+    expect(reads).toBe(1);
+  } finally {
+    h.close();
+  }
+});
+
+test('privacy original retry is exact; retirement prevents late row writes and reads from clearing its reservation', async () => {
+  const h = setup();
+  const pending = deferred<CollectionVisibilityWrite>();
+  const calls: unknown[] = [];
+  const tokens: string[] = [];
+  const row = new CollectionPrivacyEditor(
+    collection,
+    collectionPrivacyIO(h.owner, {
+      read: async () => ({ ok: true, value: collection }),
+      save: async (input, token) => {
+        calls.push(input);
+        tokens.push(token);
+        if (calls.length === 1) throw new Error('lost response');
+        return pending.promise;
+      },
+    }),
+    h.owner.isCurrent,
+  );
+  const pager = new CollectionPrivacyPager(
+    async () => ({ ok: true, value: { collections: [collection], next: 'next' } }),
+    h.owner.isCurrent,
+  );
+  const unregister = pager.registerRow(row);
+  try {
+    await row.edit('public');
+    const attempt = row.snapshot().attempt!;
+    const bytes = JSON.stringify(attempt);
+    await row.edit('unlisted');
+    const retry = row.retry();
+    const before = row.snapshot();
+    expect(calls[1]).toBe(calls[0]);
+    transitions['synchronous signed-out and back'](h.client);
+    pending.resolve({ ok: true, collection: { ...collection, visibility: 'public', revision: 8 } });
+    await retry;
+    await row.reload();
+    await pager.restart();
+    expect(row.snapshot()).toBe(before);
+    expect(row.snapshot().attempt).toBe(attempt);
+    expect(JSON.stringify(attempt)).toBe(bytes);
+    expect(tokens).toEqual(['original-token', 'original-token']);
+    expect(pager.snapshot().restartBlocked).toBe(true);
+  } finally {
+    unregister();
+    h.close();
+  }
+});
+
+test('Verification original request remains immutable and a retired query cannot populate fresh-owner cache', async () => {
+  const h = setup();
+  const late = deferred<VerificationSnapshot>();
+  const sent: unknown[] = [];
+  const tokens: string[] = [];
+  const transport = {
+    read: async () => empty,
+    request: async (
+      _: string,
+      input: Parameters<VerificationRecovery['submit']>[0] & { idempotencyKey: string },
+      token: string,
+    ): Promise<VerificationCommandResult> => {
+      sent.push(input);
+      tokens.push(token);
+      throw new Error('lost response');
+    },
+    withdraw: async (): Promise<VerificationCommandResult> => {
+      throw new Error('Unexpected withdrawal');
+    },
+  };
+  const controller = new VerificationRecovery(
+    'alice',
+    verificationRecoveryIO(h.owner, h.client, transport),
+    h.owner.isCurrent,
+  );
+  try {
+    await controller.reload();
+    await controller.submit({
+      subject: 'agent',
+      statement: 'Original evidence',
+      links: [{ label: 'Site', url: 'https://example.test' }],
+    });
+    const attempt = controller.snapshot().attempt!;
+    const bytes = JSON.stringify(attempt);
+    await controller.retry();
+    expect(sent[1]).toBe(sent[0]);
+    expect(Object.isFrozen(attempt.input)).toBe(true);
+    expect(Object.isFrozen((attempt.input as { links: unknown[] }).links)).toBe(true);
+    const oldReader = verificationRecoveryIO(h.owner, h.client, { ...transport, read: () => late.promise });
+    const pending = oldReader.read('alice').catch(() => null);
+    transitions['synchronous subject away and back'](h.client);
+    const fresh = new SettingsSessionOwner(h.client, identity.csrfToken);
+    const release = fresh.mount();
+    const current = { ...empty, subjectTitle: 'fresh status' };
+    const freshReader = verificationRecoveryIO(fresh, h.client, { ...transport, read: async () => current });
+    expect(await freshReader.read('alice')).toEqual(current);
+    late.resolve({ ...empty, subjectTitle: 'late private status' });
+    await pending;
+    await controller.retry();
+    await controller.reload();
+    expect(controller.snapshot().attempt).toBe(attempt);
+    expect(JSON.stringify(attempt)).toBe(bytes);
+    expect(sent).toHaveLength(2);
+    expect(tokens).toEqual(['original-token', 'original-token']);
+    expect(h.client.getQueryData(verificationQueryKey('alice'))).toEqual(current);
+    release();
+    fresh.retire();
+  } finally {
+    h.close();
+  }
+});
+
+test('StrictMode reconnect keeps one lifetime; real disposal and an intervening loss cannot revive old callbacks', async () => {
+  const h = setup();
+  h.release();
+  expect(h.owner.isCurrent()).toBe(false); // The effect replay gap cannot dispatch either.
+  const reconnect = h.owner.mount();
+  await Promise.resolve();
+  expect(h.owner.isCurrent()).toBe(true);
+  reconnect();
+  await Promise.resolve();
+  const afterUnmount = h.owner.mount();
+  expect(h.owner.isCurrent()).toBe(false);
+  await expect(h.owner.guard(async () => 'private')).rejects.toThrow('Settings viewer unavailable');
+  afterUnmount();
+  h.close();
+});
+
+// Actual page wiring, including its retained Reading/Notifications controllers and navigation provider.
+test('the StrictMode Settings page retires synchronous away/back callbacks and recovers with a fresh owner', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/settings#notifications' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Node: window.Node,
+    HTMLFormElement: window.HTMLFormElement,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const client = new QueryClient();
+  client.setQueryData(sessionQuery.queryKey, identity);
+  client.setQueryData(exposureQuery.queryKey, []);
+  let writes = 0;
+  const preferenceIO = {
+    read: async () => page,
+    saveReading: async (): Promise<PreferenceWriteResult> => {
+      writes++;
+      return { ok: false, reason: 'unavailable' };
+    },
+    saveNotifications: async (): Promise<NotificationWriteResult> => {
+      writes++;
+      return { ok: false, reason: 'unavailable' };
+    },
+  };
+  const route = createRootRoute({
+    component: () => createElement(SettingsPageView, { page, csrfToken: identity.csrfToken, preferenceIO }),
+  });
+  const router = createRouter({
+    routeTree: route,
+    history: createMemoryHistory({ initialEntries: ['/en/settings#notifications'] }),
+  });
+  await router.load();
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(host as unknown as HTMLElement);
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
+        ),
+      );
+    });
+    const toggle = host.querySelector('[role="switch"]');
+    expect(toggle).not.toBeNull();
+    await act(async () => {
+      toggle!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    });
+    expect(writes).toBe(1); // StrictMode reconnect did not retire the actual producer.
+    await act(async () => {
+      transitions['synchronous subject away and back'](client);
+      toggle!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    });
+    expect(writes).toBe(1);
+    expect(host.textContent).toContain(m.settings_session_unavailable());
+    expect(host.querySelector('[data-settings-panel]')).toBeNull();
+    expect(host.querySelector('#display')).not.toBeNull();
+    // A new mounted page can use the same successful observation; no old attempt is replayed.
+    await act(async () => {
+      root.render(null);
+    });
+    await act(async () => {
+      root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })));
+    });
+    const fresh = host.querySelector('[role="switch"]');
+    expect(fresh).not.toBeNull();
+    await act(async () => {
+      fresh!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    });
+    expect(writes).toBe(2);
+    await act(async () => {
+      root.unmount();
+    });
+    fresh!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(writes).toBe(2);
+  } finally {
+    if (host.isConnected) {
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    }
+    client.clear();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    await window.happyDOM.close();
+  }
+});
+
+test('Verification late request settlement keeps the original unknown command and never dispatches a follow-up status read', async () => {
+  const h = setup();
+  const pending = deferred<VerificationCommandResult>();
+  let reads = 0;
+  const commands: { token: string; input: unknown }[] = [];
+  const controller = new VerificationRecovery(
+    'alice',
+    verificationRecoveryIO(h.owner, h.client, {
+      read: async () => {
+        reads++;
+        return empty;
+      },
+      request: async (_, input, token) => {
+        commands.push({ input, token });
+        return pending.promise;
+      },
+      withdraw: async () => {
+        throw new Error('Unexpected withdrawal');
+      },
+    }),
+    h.owner.isCurrent,
+  );
+  try {
+    await controller.reload();
+    const sending = controller.submit({ subject: 'agent', statement: 'Original', links: [] });
+    const before = controller.snapshot();
+    const attempt = before.attempt!;
+    transitions['retained data on query error'](h.client);
+    pending.resolve({ ok: false, outcome: 'refused', status: 403, message: 'another session' });
+    await sending;
+    await controller.reload();
+    await controller.retry();
+    expect(controller.snapshot()).toBe(before);
+    expect(controller.snapshot().attempt).toBe(attempt);
+    expect(commands).toEqual([{ token: 'original-token', input: attempt.input }]);
+    expect(reads).toBe(1);
+    expect(h.client.getQueryState(verificationQueryKey('alice'))).toBeUndefined();
+  } finally {
+    h.close();
+  }
+});
+
+test('a late privacy row read cannot adopt values or resolve an immutable uncertain command after retirement', async () => {
+  const h = setup();
+  const read = deferred<{ ok: true; value: typeof collection }>();
+  let reads = 0;
+  const row = new CollectionPrivacyEditor(
+    collection,
+    collectionPrivacyIO(h.owner, {
+      save: async () => ({ ok: false, reason: 'unavailable' }),
+      read: () => {
+        reads++;
+        return read.promise;
+      },
+    }),
+    h.owner.isCurrent,
+  );
+  try {
+    await row.edit('public');
+    const attempt = row.snapshot().attempt!;
+    const reloading = row.reload();
+    const before = row.snapshot();
+    transitions['token rotation and back'](h.client);
+    read.resolve({ ok: true, value: collection });
+    await reloading;
+    await row.retry();
+    await row.reload();
+    expect(row.snapshot()).toBe(before);
+    expect(row.snapshot().attempt).toBe(attempt);
+    expect(row.needsListRestartProtection()).toBe(true);
+    expect(reads).toBe(1);
+  } finally {
+    h.close();
+  }
+});

@@ -84,6 +84,7 @@ export class VerificationRecovery {
   constructor(
     readonly accountId: string,
     private io: VerificationRecoveryIO,
+    private isCurrent: () => boolean = () => true,
   ) {}
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -93,6 +94,8 @@ export class VerificationRecovery {
     };
   };
   activate() {
+    if (this.active) return;
+    if (!this.isCurrent()) return;
     this.active = true;
     if (this.busy()) this.update({ phase: this.state.attempt ? 'uncertain' : 'loading', readStatus: 'idle' });
   }
@@ -101,9 +104,10 @@ export class VerificationRecovery {
     this.epoch++;
   }
   private live(epoch: number) {
-    return this.active && epoch === this.epoch;
+    return this.active && this.isCurrent() && epoch === this.epoch;
   }
   private update(patch: Partial<VerificationRecoveryState>) {
+    if (!this.active || !this.isCurrent()) return;
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((listener) => listener());
   }
@@ -114,7 +118,14 @@ export class VerificationRecovery {
     return this.state.retryAt > Date.now();
   }
   async submit(draft: Omit<VerificationInput, 'idempotencyKey'>) {
-    if (!this.active || this.busy() || this.state.attempt || !canRequestVerification(this.state.current)) return;
+    if (
+      !this.active ||
+      !this.isCurrent() ||
+      this.busy() ||
+      this.state.attempt ||
+      !canRequestVerification(this.state.current)
+    )
+      return;
     const input = frozen({
       ...draft,
       links: draft.links.map((link) => ({ ...link })),
@@ -124,7 +135,14 @@ export class VerificationRecovery {
     await this.send(false);
   }
   async withdraw(confirmed: boolean) {
-    if (!confirmed || !this.active || this.busy() || this.state.attempt || !canWithdrawVerification(this.state.current))
+    if (
+      !confirmed ||
+      !this.active ||
+      !this.isCurrent() ||
+      this.busy() ||
+      this.state.attempt ||
+      !canWithdrawVerification(this.state.current)
+    )
       return;
     this.update({
       attempt: frozen({
@@ -137,12 +155,12 @@ export class VerificationRecovery {
     await this.send(false);
   }
   async retry() {
-    if (!this.active || !this.state.attempt || this.busy() || this.waiting()) return;
+    if (!this.active || !this.isCurrent() || !this.state.attempt || this.busy() || this.waiting()) return;
     await this.send(true);
   }
   private async send(recovering: boolean) {
     const attempt = this.state.attempt;
-    if (!attempt) return;
+    if (!attempt || !this.active || !this.isCurrent()) return;
     const epoch = this.epoch;
     this.update({ phase: 'sending', readStatus: 'idle', current: null, failure: undefined, retryAt: 0 });
     let result: VerificationCommandResult;
@@ -194,10 +212,11 @@ export class VerificationRecovery {
     );
   }
   async reload() {
-    if (!this.active || this.busy() || this.waiting()) return;
+    if (!this.active || !this.isCurrent() || this.busy() || this.waiting()) return;
     await this.readCurrent(this.epoch);
   }
   private async readCurrent(epoch: number) {
+    if (!this.live(epoch)) return;
     this.update({ phase: 'reading', readStatus: 'reading', current: null, failure: undefined, retryAt: 0 });
     let current: VerificationSnapshot;
     try {

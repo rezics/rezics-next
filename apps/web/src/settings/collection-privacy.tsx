@@ -10,12 +10,11 @@ import { getLocale } from '../paraglide/runtime.js';
 import { useOperation } from '../kernel/exposure';
 import { useSession } from '../session/query';
 import type { CollectionVisibility } from '../library/reads';
-import { csrfHeaders } from '../threads/composer';
 import { readOwnedCollection, readOwnedCollectionsPage, saveCollectionVisibility } from './actions';
 import type { OwnedCollection } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
 import type { CollectionPrivacyFailure } from './collection-privacy-data';
-import { useSettingsNavigationCurrent, useSettingsNavigationDraft } from './reading-navigation';
+import { useSettingsNavigationDraft } from './reading-navigation';
 import { collectionPrivacyNeedsNavigationDecision } from './settings-draft-state';
 import {
   CollectionPrivacyEditor,
@@ -24,13 +23,24 @@ import {
   type CollectionPrivacyPageRead,
 } from './collection-privacy-recovery';
 
+import { SettingsSessionOwner, useSettingsSessionOwner, useSettingsDisposal } from './settings-session-owner';
+
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
 
 const visibilityOptions = ['private', 'unlisted', 'public'] as const;
-const nativeIO: CollectionPrivacyIO = {
-  save: (data) => saveCollectionVisibility({ data, headers: csrfHeaders() }),
-  read: (data) => readOwnedCollection({ data }),
-};
+export function collectionPrivacyIO(
+  owner: SettingsSessionOwner,
+  transport = {
+    save: (data: Parameters<CollectionPrivacyIO['save']>[0], token: string) =>
+      saveCollectionVisibility({ data, headers: { 'X-CSRF-Token': token } }),
+    read: (data: string) => readOwnedCollection({ data }),
+  },
+): CollectionPrivacyIO {
+  return {
+    save: (data) => owner.guard((token) => transport.save(data, token)),
+    read: (id) => owner.guard(() => transport.read(id)),
+  };
+}
 const nativePageRead: CollectionPrivacyPageRead = (data) => readOwnedCollectionsPage({ data });
 const ListRestartContext = createContext<CollectionPrivacyPager | null>(null);
 
@@ -58,21 +68,19 @@ function failureText(failure: CollectionPrivacyFailure | 'invalid' | undefined |
         : m.settings_privacy_unavailable();
 }
 
-export function CollectionRow({
-  collection,
-  io = nativeIO,
-}: {
-  collection: OwnedCollection;
-  io?: CollectionPrivacyIO;
-}) {
+export function CollectionRow({ collection, io }: { collection: OwnedCollection; io?: CollectionPrivacyIO }) {
   const { csrfToken } = useSession();
   const canSave = useOperation('collection.update');
   const canRead = useOperation('collection.get');
-  const [editor] = useState(() => new CollectionPrivacyEditor(collection, io));
+  const owner = useSettingsSessionOwner(csrfToken, undefined, !!io);
+  const isCurrent = owner?.isCurrent ?? (() => !!io);
+  const [editor] = useState(
+    () => new CollectionPrivacyEditor(collection, io ?? collectionPrivacyIO(owner!), isCurrent),
+  );
+  useSettingsDisposal(editor.dispose);
   const pager = useContext(ListRestartContext);
   const restarting = !!pager?.snapshot().restarting;
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
-  const isCurrent = useSettingsNavigationCurrent(csrfToken);
   useSettingsNavigationDraft(
     'collection-privacy',
     isCurrent() && collectionPrivacyNeedsNavigationDecision(state),
@@ -81,7 +89,6 @@ export function CollectionRow({
   );
   useLayoutEffect(() => pager?.registerRow(editor), [editor, pager]);
   useLayoutEffect(() => editor.receive(collection), [collection, editor]);
-  useEffect(() => () => editor.dispose(), [editor]);
   const waiting = usePreferenceRetry(state.nativeFailure);
   const id = useId();
   const busy = state.phase === 'saving' || state.phase === 'reloading';
@@ -142,7 +149,13 @@ export function CollectionRow({
             id={id}
             value={desired}
             aria-describedby={`${id}-current`}
-            disabled={restarting || !csrfToken || !canSave || (waiting && (phase === 'idle' || phase === 'saved'))}
+            disabled={
+              !isCurrent() ||
+              restarting ||
+              !csrfToken ||
+              !canSave ||
+              (waiting && (phase === 'idle' || phase === 'saved'))
+            }
             onChange={(event) => {
               if (pager?.snapshot().restarting) return;
               const value = visibilityOptions.find((option) => option === event.target.value);
@@ -251,17 +264,22 @@ export function CollectionPrivacySection() {
 
 export function CollectionPrivacyView({
   read = nativePageRead,
-  io = nativeIO,
+  io,
 }: {
   read?: CollectionPrivacyPageRead;
   io?: CollectionPrivacyIO;
 }) {
-  const [pager] = useState(() => new CollectionPrivacyPager(read));
+  const { csrfToken } = useSession();
+  const owner = useSettingsSessionOwner(csrfToken, undefined, !!io || read !== nativePageRead);
+  const isCurrent = owner?.isCurrent ?? (() => read !== nativePageRead);
+  const [pager] = useState(
+    () => new CollectionPrivacyPager((cursor) => (owner ? owner.guard(() => read(cursor)) : read(cursor)), isCurrent),
+  );
+  useSettingsDisposal(pager.dispose);
   const state = useSyncExternalStore(pager.subscribe, pager.snapshot, pager.snapshot);
   const waiting = usePreferenceRetry(state.nativeFailure);
   useEffect(() => {
     void pager.load();
-    return () => pager.dispose();
   }, [pager]);
   return (
     <section id="privacy" aria-labelledby="settings-privacy-heading" className="scroll-mt-6">
