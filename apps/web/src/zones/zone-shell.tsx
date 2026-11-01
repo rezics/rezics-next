@@ -8,16 +8,16 @@ import { SubjectFrame, subjectFrame, SubjectViewPage } from '../features/pages/s
 import { SubjectPage, subjectPageTitle, subjectPageType, type SubjectPageData } from '../features/pages/subject';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import { SubjectHeaderActions } from '../features/pages/subject-reactions-view';
-import { useSubjectReactionAdmissionForZone } from '../features/pages/subject-reaction-reader';
+import { useSubjectReactionReader } from '../features/pages/subject-reaction-reader';
 import { loadSubjectReactions } from '../features/pages/subject-reactions';
 import { SubjectLibrarySlot } from '../library/subject-slot-view';
 import { loadSubjectLibrarySlot } from '../library/subject-slot';
-import type { SubjectReactionKind, SubjectReactions } from '../features/pages/subject-reactions';
+import type { SubjectReactions } from '../features/pages/subject-reactions';
 import type { SubjectLibrarySlotData } from '../library/subject-slot';
 import type { SessionEnv } from '../session/client';
 import { defaultReader, type Reader } from '../subject/reader';
 import { loadReader } from '../subject/load-reader';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NotFoundPage, StatusPage } from '../shell/shell';
 import type { PagePaths } from '../shell/head';
 import {
@@ -213,7 +213,7 @@ const personalInput = (input: unknown) => {
   };
 };
 
-const loadZoneSubjectPersonal = createServerFn({ method: 'GET', strict: false })
+export const loadZoneSubjectPersonal = createServerFn({ method: 'GET', strict: false })
   .validator(personalInput)
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -255,65 +255,104 @@ const loadZoneSubjectPersonal = createServerFn({ method: 'GET', strict: false })
 
 type ZoneSubjectPersonal = Awaited<ReturnType<typeof loadZoneSubjectPersonal>>;
 
+type ZoneSubjectPersonalInput = {
+  data: {
+    id: string;
+    locale: string;
+    overview: boolean;
+    expectedReader?: string;
+    subjectType?: string;
+  };
+};
+
+export type ZoneSubjectPersonalTransport = (input: ZoneSubjectPersonalInput) => Promise<ZoneSubjectPersonal>;
+
+const defaultZoneSubjectPersonalTransport: ZoneSubjectPersonalTransport = (input) => loadZoneSubjectPersonal(input);
+
 function ZoneSubjectPage({
   outcome,
   locale,
   view,
+  personalTransport = defaultZoneSubjectPersonalTransport,
 }: {
   outcome: Extract<ZonePageRouteOutcome, { kind: 'page' }>;
   locale: string;
   view: View;
+  personalTransport?: ZoneSubjectPersonalTransport;
 }) {
   const zone = outcome.page.zone;
   const subjectId = outcome.page.subject;
   const common = outcome.common;
-  const [personal, setPersonal] = useState<ZoneSubjectPersonal | null>(null);
+  const routeSignature = JSON.stringify([subjectId, locale, view]);
+  const routeVisit = useRef({ signature: routeSignature, revision: 0 });
+  if (routeVisit.current.signature !== routeSignature) {
+    routeVisit.current = { signature: routeSignature, revision: routeVisit.current.revision + 1 };
+  }
+  const currentPersonalTarget = JSON.stringify([routeSignature, routeVisit.current.revision]);
+  const [personalObservation, setPersonalObservation] = useState<{
+    target: string;
+    value: ZoneSubjectPersonal;
+  } | null>(null);
+  const personal = personalObservation?.target === currentPersonalTarget ? personalObservation.value : null;
+  const desiredPersonalTarget = useRef(currentPersonalTarget);
+  desiredPersonalTarget.current = currentPersonalTarget;
+  const personalLoad = useRef<{
+    target: string;
+    transport: ZoneSubjectPersonalTransport;
+    active: boolean;
+  } | null>(null);
   const browserSession = useSession();
   const { state: session } = browserSession;
-  const reactionAdmission = useSubjectReactionAdmissionForZone({
+  const reactionReader = useSubjectReactionReader({
     subjectId: subjectId ?? '',
     locale,
     view,
     session: browserSession,
-    enabled: Boolean(subjectId),
+    enabled: Boolean(subjectId && view === 'overview'),
   });
-  const [personalReactionTarget, setPersonalReactionTarget] = useState('');
-  const [personalReactionScope, setPersonalReactionScope] = useState('');
   const returnTo = useLocation().publicHref.split(/[?#]/, 1)[0] ?? '';
   const nonce = useRouter().options.ssr?.nonce;
+  const subjectType = common?.overview ? subjectPageType(common.overview) : undefined;
 
   useEffect(() => {
-    if (!subjectId || !reactionAdmission.active) return;
-    let active = true;
-    const subjectType = common?.overview ? subjectPageType(common.overview) : undefined;
-    const expectedReader = view === 'overview' ? reactionAdmission.reader : null;
-    void loadZoneSubjectPersonal({
-      data: {
-        id: subjectId,
-        locale,
-        overview: view === 'overview',
-        ...(expectedReader ? { expectedReader } : {}),
-        ...(subjectType ? { subjectType } : {}),
-      },
-    })
-      .then((data) => {
-        if (active && reactionAdmission.origin.isCurrent()) {
-          setPersonal(data);
-          setPersonalReactionTarget(JSON.stringify([subjectId, locale, view]));
-          setPersonalReactionScope(reactionAdmission.key);
-        }
-      })
-      .catch(() => {
-        if (active && reactionAdmission.origin.isCurrent()) {
-          setPersonal({ reader: defaultReader, verification: { sitekey: '', scriptUrl: '' } });
-          setPersonalReactionTarget(JSON.stringify([subjectId, locale, view]));
-          setPersonalReactionScope(reactionAdmission.key);
-        }
-      });
+    if (!subjectId) return;
+    let load = personalLoad.current;
+    if (!load || load.target !== currentPersonalTarget || load.transport !== personalTransport) {
+      load = { target: currentPersonalTarget, transport: personalTransport, active: false };
+      personalLoad.current = load;
+      const invocationTransport = load.transport;
+      let pending: Promise<ZoneSubjectPersonal>;
+      try {
+        pending = invocationTransport({
+          data: {
+            id: subjectId,
+            locale,
+            overview: view === 'overview',
+            ...(subjectType ? { subjectType } : {}),
+          },
+        });
+      } catch (error) {
+        pending = Promise.reject(error);
+      }
+      void pending.then(
+        (data) => {
+          if (load?.active && personalLoad.current === load && desiredPersonalTarget.current === load.target)
+            setPersonalObservation({ target: load.target, value: data });
+        },
+        () => {
+          if (load?.active && personalLoad.current === load && desiredPersonalTarget.current === load.target)
+            setPersonalObservation({
+              target: load.target,
+              value: { reader: defaultReader, verification: { sitekey: '', scriptUrl: '' } },
+            });
+        },
+      );
+    }
+    load.active = true;
     return () => {
-      active = false;
+      if (load) load.active = false;
     };
-  }, [subjectId, locale, view, reactionAdmission.key, reactionAdmission.active]);
+  }, [subjectId, locale, view, subjectType, currentPersonalTarget, personalTransport]);
 
   if (!zone || !subjectId || !common) return <StatusPage heading={m.error_heading()} message={m.error_message()} />;
 
@@ -326,18 +365,18 @@ function ZoneSubjectPage({
   const relations = common.relations ?? {};
   const tabLabels = viewTabLabels();
   const base = `/${encodeURIComponent(locale)}/zones/${encodeURIComponent(zone.id)}/subjects/${encodeURIComponent(subjectId)}`;
-  const currentReactionTarget = JSON.stringify([subjectId, locale, view]);
-  const targetReactions = personalReactionTarget === currentReactionTarget ? (personal?.reactions ?? null) : null;
   const privateReactionReady = Boolean(
     view === 'overview' &&
-    reactionAdmission.reader &&
-    reactionAdmission.active &&
-    reactionAdmission.origin.isCurrent() &&
-    personalReactionScope === reactionAdmission.key &&
-    targetReactions?.reader === reactionAdmission.reader,
+    reactionReader.reader &&
+    reactionReader.ready &&
+    reactionReader.ownReaction?.reader === reactionReader.reader,
   );
-  const reactions = targetReactions
-    ? { ...targetReactions, value: privateReactionReady ? targetReactions.value : null }
+  const reactions = personal?.reactions
+    ? {
+        counts: personal.reactions.counts,
+        value: privateReactionReady ? reactionReader.ownReaction!.value : null,
+        ...(privateReactionReady && reactionReader.ownReaction ? { reader: reactionReader.ownReaction.reader } : {}),
+      }
     : null;
   const actions = (subject: { id: string; type: string; locale: string }) => {
     if (!personal?.library) return null;
@@ -347,25 +386,10 @@ function ZoneSubjectPage({
         reactions={reactions}
         signedIn={session === 'signed-in'}
         personalReady={session !== 'signed-in' || privateReactionReady}
-        reactionOrigin={reactionAdmission.origin}
+        reactionOrigin={reactionReader.origin}
         onPersonalChange={async (kind) => {
-          const scope = reactionAdmission.key;
-          const reader = reactionAdmission.reader;
-          if (!reader || !reactionAdmission.origin.isCurrent()) return;
-          setPersonal((current) => {
-            if (
-              !reactionAdmission.origin.isCurrent() ||
-              personalReactionTarget !== currentReactionTarget ||
-              personalReactionScope !== scope ||
-              !current?.reactions ||
-              current.reactions.reader !== reader
-            )
-              return current;
-            return {
-              ...current,
-              reactions: { ...current.reactions, value: kind as SubjectReactionKind | null },
-            };
-          });
+          if (!privateReactionReady || !reactionReader.origin.isCurrent()) return;
+          reactionReader.applyMutation(kind);
         }}
         returnTo={returnTo}
         verification={personal.verification}

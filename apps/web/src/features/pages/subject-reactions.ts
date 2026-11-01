@@ -41,14 +41,13 @@ export async function readOwnReaction(
     if (!authorization || !reader || reader !== expectedReader) return null;
     // Capture the identity from the same preparation that supplied this request's credential.
     const preparedReader = reader;
-    const own = await (client.subjects({ id }) as unknown as OwnReactionRoute).reaction
-      .get({ headers: { authorization } })
-      .catch(() => null);
-    const kind = own?.status === 200 ? own.data?.kind : null;
-    return {
-      reader: preparedReader,
-      value: kind && admitted.has(kind) ? (kind as SubjectReactionKind) : null,
-    };
+    const own = await (client.subjects({ id }) as unknown as OwnReactionRoute).reaction.get({
+      headers: { authorization },
+    });
+    if (own.status !== 200 || !isOwnReactionResponse(own.data)) return null;
+    if (own.data.kind === null) return { reader: preparedReader, value: null };
+    if (typeof own.data.kind !== 'string' || !admitted.has(own.data.kind)) return null;
+    return { reader: preparedReader, value: own.data.kind as SubjectReactionKind };
   } catch {
     return null;
   }
@@ -59,9 +58,20 @@ type OwnReactionRoute = {
   reaction: {
     get(options: {
       headers: { authorization: string };
-    }): Promise<{ status: number; data?: { kind: string | null } | null }>;
+    }): Promise<{ status: number; data?: unknown }>;
   };
 };
+
+function isOwnReactionResponse(value: unknown): value is { kind: string | null } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    Object.hasOwn(value, 'kind') &&
+    ((value as { kind?: unknown }).kind === null || typeof (value as { kind?: unknown }).kind === 'string')
+  );
+}
 
 const admitted = new Set<string>(subjectReactionKinds);
 
