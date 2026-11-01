@@ -1,3 +1,5 @@
+-- migrate:up
+
 -- The existing mixed writer retains the original independent Account input with
 -- its immutable action array. Legacy Subject receipts intentionally have none.
 ALTER TABLE search.identity_writer

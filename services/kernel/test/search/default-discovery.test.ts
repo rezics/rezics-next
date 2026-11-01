@@ -368,6 +368,32 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         expect(row.sealed).toBe(true);
         expect(row.original).toBe(true);
       }
+      // The default repair job must retain the native Account input alongside
+      // actual writer effects. Neither a Subject projection nor an intent tick
+      // can stand in for the independent Account and claim tuple.
+      const accountRepairs = await pool.query<{
+        id: string; owner: string; original: boolean; settled: boolean;
+        revision: string; claim: string; currentRevision: string; currentClaim: string;
+      }>(
+        `SELECT w.repair_account::jsonb->>'id' AS id,w.repair_receipt::jsonb->>'owner' AS owner,
+           w.repair_receipt::jsonb->'account'=w.repair_account::jsonb AS original,
+           (w.dispatch_state='settled' AND w.writer_token IS NULL AND w.closed_job IS NULL
+             AND w.visible_position=w.settled_position AND w.visible_transaction_id=w.settled_transaction_id) AS settled,
+           w.repair_account::jsonb->'head'->'revision'->>'nativeBigint' AS revision,
+           w.repair_account::jsonb->'head'->'claimRevision'->>'nativeBigint' AS claim,
+           p.revision::text AS "currentRevision",p.claim_revision::text AS "currentClaim"
+         FROM search.identity_writer w JOIN access.account_discovery_population p USING(partition_no)
+         WHERE w.original_id=$1 AND w.physical_target LIKE $2`, [account.accountId,`${prefix}%`],
+      );
+      expect(accountRepairs.rows.length).toBeGreaterThan(0);
+      for (const row of accountRepairs.rows) {
+        expect(row.id).toBe(account.accountId);
+        expect(row.owner).toBe('accounts');
+        expect(row.original).toBe(true);
+        expect(row.settled).toBe(true);
+        expect(row.revision).toBe(row.currentRevision);
+        expect(row.claim).toBe(row.currentClaim);
+      }
       const route = routeOf(account.accountId)!;
       const accountHome = partitionOf(route);
       const head = async () => (await pool.query<{ revision: string; claim: string }>(

@@ -8,7 +8,10 @@ WHERE a.partition_no = :partition_no::integer AND a.bootstrap = :bootstrap::uuid
   AND a.route = :route::integer AND a.subject_id = :subject_id::uuid
   AND a.transaction_id IS NOT NULL AND a.native_xid IS NOT NULL
   AND p.epoch = a.owner_epoch AND p.write_state = 'active'
-  AND p.position = :source_position::bigint AND a.position <= p.position
+  -- Projection writers advance core.position without changing these Subject
+  -- fences. Its original Source advancement and exact current data/dependency
+  -- checks remain mandatory; unrelated native commands cannot undo that repair.
+  AND p.position >= :source_position::bigint AND a.position <= :source_position::bigint
   AND s.security_revision::text = :security_revision::text
   AND s.current_release = :current_release::text
   AND (SELECT revision FROM semantic.revision r

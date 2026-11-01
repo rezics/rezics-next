@@ -1674,10 +1674,10 @@ export function createPublicFilterSourceBinding(
       const row = await repairRead.run(db, {
         bootstrap: nativeId(request.bootstrap), execution: request.execution, predecessor: request.predecessor ?? '',
       });
-      if (!row || row.receipt_protocol !== 1 || row.complete) throw new BindingError('owner_unavailable');
+      if (!row || row.receipt_protocol !== 1) throw new BindingError('owner_unavailable');
       const record = decode<RepairRecord>(row.state);
       if (!record.account) return { status: 'account' as const, account: null, cost };
-      if (!('representation' in cut.definition.capture) || record.input.owner !== 'accounts' ||
+      if (row.complete || !('representation' in cut.definition.capture) || record.input.owner !== 'accounts' ||
         record.input.phase !== 'account' || record.input.subject !== record.account.id ||
         record.account.head.partition !== record.input.partition || record.account.head.epoch !== record.input.epoch)
         throw new BindingError('binding_mismatch');
