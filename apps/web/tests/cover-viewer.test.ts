@@ -39,6 +39,7 @@ async function bundleSubjectCover() {
       import React from ${JSON.stringify(react)};
       import { createRoot } from ${JSON.stringify(reactDom)};
       import { SubjectPageCover } from ${JSON.stringify(join(app, 'src/features/pages/subject-page-cover.tsx'))};
+      import { Cover as OverviewCover, OverviewContext } from ${JSON.stringify(join(app, 'src/features/pages/overview.tsx'))};
 
       const subject = { id: 'subject', title: 'The Little Prince', types: ['schema:Book'] };
       const credit = {
@@ -65,6 +66,47 @@ async function bundleSubjectCover() {
         size: 'lg', src: kind === 'failed' ? () => failed : src, suitability: 'blur', labels: {},
         title: subject.title, via: 'via', openLabel: 'Open cover: The Little Prince', closeLabel: 'Close cover',
       }));
+      const journeyImage = (value) => value.cover === false ? null : {
+        ...image,
+        media: value.media || image.media,
+        variants: image.variants.map((variant) => ({ ...variant })),
+        ...(value.withheld ? { withheld: 'suitability' } : {}),
+      };
+      const journeySubject = (value) => ({
+        id: value.subjectId || 'journey-subject',
+        title: value.title,
+        types: ['schema:Book'],
+      });
+      const journeySource = (value) => (media, format, width) =>
+        'https://media.test/' + value.base + '/' + media + '/' + format + '/' + width;
+      window.mountSubjectJourney = (value) => root.render(React.createElement(SubjectPageCover, {
+        subject: journeySubject(value), cover: journeyImage(value), size: 'lg', src: journeySource(value),
+        suitability: value.suitability || 'blur', labels: {}, title: value.title, via: 'via',
+        openLabel: 'Open cover: ' + value.title, closeLabel: 'Close cover',
+      }));
+      window.updateSubjectJourney = window.mountSubjectJourney;
+      window.mountOverviewJourney = (value) => {
+        const subject = journeySubject(value);
+        const summary = journeyImage(value)
+          ? { id: subject.id, type: 'schema:Book', types: subject.types, cover: journeyImage(value) }
+          : { id: subject.id, type: 'schema:Book', types: subject.types, cover: null };
+        const readSubject = {
+          id: subject.id, labels: { en: value.title }, statements: {}, type: 'schema:Book', types: subject.types,
+        };
+        const section = {
+          ok: true, read: { kind: 'subject' }, body: { subject: readSubject, related: {}, summary },
+        };
+        const context = {
+          locale: 'en', subject: subject.id, reader: { suitability: value.suitability || 'blur' },
+          labels: { cover: {} }, unlabelled: 'Untitled subject', cover: 'Cover', coverVia: 'via',
+          sections: new Map([['cover', section]]), relations: {}, relationNodes: [], link: () => null,
+          spoilerShow: 'Show', details: 'Details', licence: 'Licence', source: 'Source', sources: 'Sources',
+        };
+        root.render(React.createElement(OverviewContext.Provider, { value: context },
+          React.createElement(OverviewCover, { id: 'cover' }),
+        ));
+      };
+      window.updateOverviewJourney = window.mountOverviewJourney;
       window.coverSources = sources;
     `;
     await writeFile(entry, source);
@@ -79,17 +121,51 @@ async function bundleSubjectCover() {
   return componentBundle;
 }
 
-async function mountCover(kind: 'loaded' | 'missing' | 'failed' | 'withheld') {
+async function harnessPage() {
   browser ??= await chromium.launch();
   const page = await browser.newPage();
   const kernelRequests: string[] = [];
+  const mediaRequests: string[] = [];
   page.on('request', (request) => {
     if (/\/v\d+\/pages(?::read|\/)/.test(request.url())) kernelRequests.push(request.url());
   });
-  await page.setContent('<main id="app"></main>');
+  await page.route('https://media.test/**', async (route) => {
+    const url = new URL(route.request().url());
+    mediaRequests.push(url.href);
+    const failed = url.pathname.split('/')[1] === 'failed-source';
+    await route.fulfill({
+      status: failed ? 404 : 200,
+      contentType: 'image/svg+xml',
+      headers: { 'cache-control': 'no-store' },
+      body: failed ? 'not an image' : '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="6"><rect width="4" height="6" fill="#456"/></svg>',
+    });
+  });
+  await page.setContent('<html><head><base href="https://media.test/"></head><body><main id="app"></main></body></html>');
   await page.addScriptTag({ content: await bundleSubjectCover() });
+  return { page, kernelRequests, mediaRequests };
+}
+
+async function mountCover(kind: 'loaded' | 'missing' | 'failed' | 'withheld') {
+  const mounted = await harnessPage();
+  const { page } = mounted;
   await page.evaluate((mode) => (window as Window & { mountCover: (value: string) => void }).mountCover(mode), kind);
-  return { page, kernelRequests };
+  return mounted;
+}
+
+async function mountJourney(wrapper: 'subject' | 'overview', value: Record<string, unknown>) {
+  const mounted = await harnessPage();
+  const mount = wrapper === 'subject' ? 'mountSubjectJourney' : 'mountOverviewJourney';
+  await mounted.page.evaluate(({ method, state }) => {
+    (window as Window & { [key: string]: (value: unknown) => void })[method]!(state);
+  }, { method: mount, state: value });
+  return mounted;
+}
+
+async function updateJourney(page: Page, wrapper: 'subject' | 'overview', value: Record<string, unknown>) {
+  const update = wrapper === 'subject' ? 'updateSubjectJourney' : 'updateOverviewJourney';
+  await page.evaluate(({ method, state }) => {
+    (window as Window & { [key: string]: (value: unknown) => void })[method]!(state);
+  }, { method: update, state: value });
 }
 
 async function closePage(page: Page) {
@@ -192,5 +268,90 @@ test('missing, failed, and still-withheld covers have no viewer trigger until a 
     await dialog.waitFor({ state: 'detached' });
   } finally {
     await closePage(withheld.page);
+  }
+});
+
+test('SubjectPageCover and overview Cover close on replacement and preserve only equivalent viewer state', async () => {
+  for (const wrapper of ['subject', 'overview'] as const) {
+    const first = {
+      base: 'journey-a',
+      media: 'same-media',
+      subjectId: 'journey-subject',
+      title: 'Journey A',
+    };
+    const { page, kernelRequests, mediaRequests } = await mountJourney(wrapper, first);
+    try {
+      await page.locator('[data-slot="cover"][data-state="loaded"]').waitFor();
+      const firstTrigger = page.getByRole('button', { name: 'Open cover: Journey A' });
+      await firstTrigger.click();
+      const firstDialog = page.getByRole('dialog', { name: 'Journey A' });
+      await firstDialog.waitFor();
+      await page.keyboard.press('Tab');
+      expect(await firstDialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+      await page.keyboard.press('Escape');
+      await firstDialog.waitFor({ state: 'detached' });
+      expect(await firstTrigger.evaluate((element) => element === document.activeElement)).toBe(true);
+
+      await firstTrigger.click();
+      await page.getByRole('dialog', { name: 'Journey A' }).waitFor();
+      const requestsBeforeEquivalentRender = mediaRequests.length;
+      await updateJourney(page, wrapper, { ...first, title: 'Translated title' });
+      await page.getByRole('dialog', { name: 'Translated title' }).waitFor();
+      expect(await page.locator('[data-slot="cover"]').getAttribute('data-state')).toBe('loaded');
+      expect(mediaRequests.length).toBe(requestsBeforeEquivalentRender);
+
+      // The same media id with a changed published URL is a new image incarnation. An open A viewer closes before B.
+      await updateJourney(page, wrapper, { ...first, base: 'journey-b', title: 'Journey B' });
+      await page.getByRole('dialog', { name: 'Translated title' }).waitFor({ state: 'detached' });
+      await page.locator('[data-slot="cover"][data-state="loaded"]').waitFor();
+      expect(await page.getByRole('dialog').count()).toBe(0);
+
+      // Equivalent allocations retain the new current image and labels while its viewer is open.
+      const secondTrigger = page.getByRole('button', { name: 'Open cover: Journey B' });
+      await secondTrigger.click();
+      await page.getByRole('dialog', { name: 'Journey B' }).waitFor();
+      const requestsBeforeBRender = mediaRequests.length;
+      await updateJourney(page, wrapper, { ...first, base: 'journey-b', title: 'Journey B' });
+      await page.getByRole('dialog', { name: 'Journey B' }).waitFor();
+      expect(mediaRequests.length).toBe(requestsBeforeBRender);
+
+      // A suitability replacement closes the open viewer and sends no source request until the explicit reveal.
+      const requestsBeforeWithheld = mediaRequests.length;
+      await updateJourney(page, wrapper, {
+        ...first,
+        base: 'withheld-b',
+        media: 'sensitive-media',
+        title: 'Withheld B',
+        withheld: true,
+        suitability: 'blur',
+      });
+      await page.getByRole('dialog', { name: 'Journey B' }).waitFor({ state: 'detached' });
+      await page.locator('[data-slot="cover"][data-state="withheld"]').waitFor();
+      expect(await page.locator('[data-slot="cover"] img').count()).toBe(0);
+      expect(mediaRequests.length).toBe(requestsBeforeWithheld);
+
+      await page.getByRole('button', { name: 'Show cover' }).click();
+      await page.locator('[data-slot="cover"][data-state="loaded"]').waitFor();
+      await page.getByRole('button', { name: 'Open cover: Withheld B' }).click();
+      await page.getByRole('dialog', { name: 'Withheld B' }).waitFor();
+      await updateJourney(page, wrapper, {
+        ...first,
+        base: 'missing-b',
+        title: 'Missing B',
+        cover: false,
+      });
+      await page.getByRole('dialog', { name: 'Withheld B' }).waitFor({ state: 'detached' });
+      await page.locator('[data-slot="cover"][data-state="placeholder"]').waitFor();
+      expect(await page.getByRole('dialog').count()).toBe(0);
+
+      // Removal and A-to-B-to-A do not revive the first A viewer activation.
+      await updateJourney(page, wrapper, first);
+      await page.locator('[data-slot="cover"][data-state="loaded"]').waitFor();
+      expect(await page.getByRole('dialog').count()).toBe(0);
+      expect(kernelRequests).toEqual([]);
+      expect(mediaRequests.some((request) => /\/v\d+\/|session/i.test(request))).toBe(false);
+    } finally {
+      await closePage(page);
+    }
   }
 });

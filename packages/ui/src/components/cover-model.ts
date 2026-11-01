@@ -18,6 +18,98 @@ export type CoverRatio = `${number}:${number}`;
 export type CoverSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'fill';
 export type CoverFormat = 'avif' | 'webp';
 export type CoverFit = 'cover' | 'contain';
+export type CoverVariant = CoverSummary['variants'][number];
+
+export type ResolvedCoverVariant = CoverVariant & { src: string };
+
+/** Published variants in a stable order, with duplicates and unusable widths removed. */
+export function usableCoverVariants(variants: readonly CoverVariant[] | null | undefined): CoverVariant[] {
+  const unique = new Map<string, CoverVariant>();
+  for (const variant of variants ?? []) {
+    if (
+      (variant.format !== 'avif' && variant.format !== 'webp') ||
+      !Number.isFinite(variant.width) ||
+      !Number.isInteger(variant.width) ||
+      variant.width <= 0
+    )
+      continue;
+    unique.set(`${variant.format}:${variant.width}`, { format: variant.format, width: variant.width });
+  }
+  return [...unique.values()].toSorted(
+    (a, b) => (a.format === b.format ? a.width - b.width : a.format === 'avif' ? -1 : 1),
+  );
+}
+
+/** Resolve each distinct published variant once for one render. */
+export function resolveCoverVariants(
+  cover: Pick<CoverSummary, 'media' | 'variants'>,
+  src: (media: string, format: CoverFormat, width: number) => string,
+): ResolvedCoverVariant[] {
+  return usableCoverVariants(cover.variants).map((variant) => ({
+    ...variant,
+    src: src(cover.media, variant.format, variant.width),
+  }));
+}
+
+/** One format's resolved, published sources as a `srcset`. */
+export function resolvedCoverSrcSet(variants: readonly ResolvedCoverVariant[], format: CoverFormat): string {
+  return variants
+    .filter((variant) => variant.format === format && variant.src.trim() !== '')
+    .map((variant) => `${variant.src} ${variant.width}w`)
+    .join(', ');
+}
+
+/** The fallback variant for one display size, or null when no usable source was published. */
+export function resolvedCoverFallback(
+  variants: readonly ResolvedCoverVariant[],
+  format: CoverFormat,
+  size: CoverSize,
+): ResolvedCoverVariant | null {
+  const available = variants.filter(
+    (variant) =>
+      variant.format === format &&
+      Number.isFinite(variant.width) &&
+      Number.isInteger(variant.width) &&
+      variant.width > 0 &&
+      variant.src.trim() !== '',
+  );
+  const wanted = (size === 'fill' ? fillReferenceWidth : coverWidths[size]) * 3;
+  return available.find((variant) => variant.width >= wanted) ?? available.at(-1) ?? null;
+}
+
+/** Stable identity for the published cover and the actual variant URLs the current resolver supplies. */
+export function coverIncarnation(
+  subject: Pick<CoverSubject, 'id' | 'types'>,
+  cover: CoverSummary | null,
+  resolved: readonly ResolvedCoverVariant[],
+): string {
+  const topCrop = keepsTop(subject.types);
+  const variants = usableCoverVariants(cover?.variants).map((variant) => [variant.format, variant.width]);
+  const addresses = resolved.map((variant) => [variant.format, variant.width, variant.src]);
+  const focalPoint = cover?.focalPoint;
+  const credit = cover?.credit;
+  return JSON.stringify({
+    subject: [subject.id, topCrop],
+    cover: cover
+      ? {
+          media: cover.media,
+          width: cover.width,
+          height: cover.height,
+          placeholder: [cover.placeholder?.color ?? null, cover.placeholder?.thumbhash ?? null],
+          variants,
+          addresses,
+          focalPoint:
+            focalPoint && Number.isFinite(focalPoint.x) && Number.isFinite(focalPoint.y)
+              ? [focalPoint.x, focalPoint.y]
+              : null,
+          withheld: cover.withheld ?? null,
+          credit: credit
+            ? [credit.rightsHolder, credit.via?.name ?? null, credit.via?.url ?? null, credit.license ?? null]
+            : null,
+        }
+      : null,
+  });
+}
 
 /** Width in CSS pixels of each named size; `fill` is sized by its parent. */
 export const coverWidths = { xs: 48, sm: 96, md: 160, lg: 240, xl: 320 } as const;
@@ -135,10 +227,11 @@ export function coverSrcSet(
   format: CoverFormat,
   src: (media: string, format: CoverFormat, width: number) => string,
 ): string {
-  return variants
+  return usableCoverVariants(variants)
     .filter((variant) => variant.format === format)
-    .toSorted((a, b) => a.width - b.width)
-    .map((variant) => `${src(media, format, variant.width)} ${variant.width}w`)
+    .map((variant) => ({ ...variant, src: src(media, format, variant.width) }))
+    .filter((variant) => variant.src.trim() !== '')
+    .map((variant) => `${variant.src} ${variant.width}w`)
     .join(', ');
 }
 
@@ -150,12 +243,10 @@ export function coverFallback(
   size: CoverSize,
   src: (media: string, format: CoverFormat, width: number) => string,
 ): string {
-  const widths = variants
+  const resolved = usableCoverVariants(variants)
     .filter((variant) => variant.format === format)
-    .map((variant) => variant.width)
-    .toSorted((a, b) => a - b);
-  const wanted = (size === 'fill' ? fillReferenceWidth : coverWidths[size]) * 3;
-  return src(media, format, widths.find((width) => width >= wanted) ?? widths.at(-1)!);
+    .map((variant) => ({ ...variant, src: src(media, format, variant.width) }));
+  return resolvedCoverFallback(resolved, format, size)?.src ?? '';
 }
 
 const decoded = new Map<string, string | null>();

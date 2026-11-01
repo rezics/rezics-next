@@ -1,8 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useRef, type ComponentProps } from 'react';
 import { cn } from '../utils.ts';
-import { mediaSources, placeholderColor, type MediaSrc, type MediaSummary } from './media-image-sources.ts';
+import {
+  mediaImageIncarnation,
+  mediaSourcesFromVariants,
+  placeholderColor,
+  resolveMediaVariants,
+  useIncarnationState,
+  type MediaSrc,
+  type MediaSummary,
+} from './media-image-sources.ts';
 
 export interface MediaImageProps
   extends MediaSummary, Omit<ComponentProps<'span'>, 'children' | 'placeholder' | 'onError'> {
@@ -47,18 +55,27 @@ export function MediaImage({
   style,
   ...rest
 }: MediaImageProps) {
-  const [failedMedia, setFailedMedia] = useState<string | null>(null);
   const image = useRef<HTMLImageElement>(null);
-  const { sources, image: fallback } = mediaSources({ media, variants }, src);
-  const failed = failedMedia === media || fallback === undefined;
+  const resolved = resolveMediaVariants({ media, variants }, src);
+  const { sources, image: fallback } = mediaSourcesFromVariants(resolved);
+  const incarnation = mediaImageIncarnation({ media, width, height, placeholder }, resolved);
+  const lifetime = useIncarnationState(incarnation, () => false);
+  const failed = lifetime.value || fallback === undefined;
   const intrinsic = positive(width) && positive(height);
   const ratio = frame !== undefined && positive(frame) ? frame : intrinsic ? width / height : 1;
 
   // A failure that happened before the handlers attached (server-rendered markup) fires no event.
+  const track = useCallback(
+    (element: HTMLImageElement | null) => {
+      image.current = element;
+      if (element?.complete && element.currentSrc) lifetime.setValue(element.naturalWidth === 0);
+    },
+    [incarnation, lifetime.setValue],
+  );
   useEffect(() => {
     const element = image.current;
-    if (element && element.complete && element.currentSrc && element.naturalWidth === 0) setFailedMedia(media);
-  }, [media]);
+    if (element?.complete && element.currentSrc) lifetime.setValue(element.naturalWidth === 0);
+  }, [incarnation, lifetime.setValue]);
 
   return (
     <span
@@ -87,12 +104,12 @@ export function MediaImage({
           </span>
         </span>
       ) : (
-        <picture className="block size-full">
+        <picture key={lifetime.generation} className="block size-full">
           {sources.map((source) => (
             <source key={source.type} type={source.type} srcSet={source.srcSet} sizes={sizes} />
           ))}
           <img
-            ref={image}
+            ref={track}
             src={fallback.src}
             srcSet={fallback.srcSet}
             sizes={sizes}
@@ -103,7 +120,7 @@ export function MediaImage({
             fetchPriority={priority ? 'high' : 'auto'}
             decoding="async"
             className="block size-full object-cover"
-            onError={() => setFailedMedia(media)}
+            onError={() => lifetime.setValue(true)}
           />
         </picture>
       )}

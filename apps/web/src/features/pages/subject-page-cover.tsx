@@ -1,6 +1,16 @@
-import { Cover, type CoverLabels, type CoverRatio, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
+import {
+  Cover,
+  type CoverLabels,
+  type CoverRatio,
+  type CoverSubject,
+  type CoverSummary,
+  coverIncarnation,
+  resolveCoverVariants,
+  usableCoverVariants,
+  useIncarnationState,
+} from '@rezics/ui/cover';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
-import { useState } from 'react';
+import { useMemo } from 'react';
 import type { Reader } from '../../subject/reader';
 
 export function SubjectPageCover({
@@ -32,8 +42,13 @@ export function SubjectPageCover({
   decorative?: boolean;
   ratio?: CoverRatio;
 }) {
-  const [open, setOpen] = useState(false);
-  const usable = cover && cover.variants.length > 0 ? cover : null;
+  const resolved = useMemo(() => (cover ? resolveCoverVariants(cover, src) : []), [cover, src]);
+  const incarnation = `${coverIncarnation(subject, cover, resolved)}:${suitability}`;
+  const viewer = useIncarnationState(incarnation, () => false);
+  const usable =
+    cover && usableCoverVariants(cover.variants).length > 0 && resolved.some((variant) => variant.src.trim() !== '')
+      ? cover
+      : null;
   return (
     <>
       <Cover
@@ -46,7 +61,7 @@ export function SubjectPageCover({
         {...(priority ? { priority } : {})}
         {...(decorative ? { decorative } : {})}
         {...(ratio ? { ratio } : {})}
-        action={{ label: openLabel, onActivate: () => setOpen(true) }}
+        action={{ label: openLabel, onActivate: () => viewer.setValue(true) }}
       />
       {usable ? (
         <CoverViewer
@@ -54,8 +69,8 @@ export function SubjectPageCover({
           cover={usable}
           src={src}
           labels={{ title, via, close: closeLabel }}
-          open={open}
-          onOpenChange={setOpen}
+          open={viewer.value}
+          onOpenChange={viewer.setValue}
         />
       ) : null}
     </>

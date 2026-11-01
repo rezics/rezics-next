@@ -6,11 +6,18 @@ import { RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
 import { composedCommunityRegion } from './subject-community';
 import { pickLanguage, type PageRead } from '@rezics/composition';
-import { Cover as CoverFrame, type CoverRatio } from '@rezics/ui/cover';
+import {
+  Cover as CoverFrame,
+  coverIncarnation,
+  resolveCoverVariants,
+  usableCoverVariants,
+  useIncarnationState,
+  type CoverRatio,
+} from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
@@ -840,19 +847,31 @@ export function CollectionList(props: Record<string, unknown>) {
 }
 
 export function Cover(props: Record<string, unknown>) {
-  const [viewerOpen, setViewerOpen] = useState(false);
   const state = useOverview(props.id);
-  if (!state) return null;
-  const { value, section } = state;
-  if (!section) return null;
+  const value = state?.value;
+  const section = state?.section;
   const read = subjectRead(section);
+  const original = read ? originalLanguage(read.subject) : undefined;
+  const title = read && value ? pageText(read.subject.labels, value.locale, original).text || value.unlabelled : '';
+  const image = read ? coverOf(read.summary) : null;
+  const subject = read
+    ? coverSubject(read.subject.id, title, read.summary, read.subject.type)
+    : { id: String(props.id), title: '', types: [] };
+  const resolved = useMemo(() => (image ? resolveCoverVariants(image, coverSrc) : []), [image]);
+  const incarnation = read
+    ? coverIncarnation(subject, image, resolved)
+    : JSON.stringify(['unavailable-subject', String(props.id)]);
+  const viewer = useIncarnationState(`${incarnation}:${value?.reader.suitability ?? 'blur'}`, () => false);
+
+  if (!state) return null;
+  if (!section) return null;
   if (!read) return <Failed slot="subject-cover" id={String(props.id)} title={value.cover} locale={value.locale} />;
-  const original = originalLanguage(read.subject);
-  const title = pageText(read.subject.labels, value.locale, original).text || value.unlabelled;
-  const image = coverOf(read.summary);
-  const subject = coverSubject(read.subject.id, title, read.summary, read.subject.type);
   const openLabel = m.subject_cover_open({ title }, { locale: value.locale as never });
   const closeLabel = m.subject_cover_close({}, { locale: value.locale as never });
+  const usable =
+    image && usableCoverVariants(image.variants).length > 0 && resolved.some((variant) => variant.src.trim() !== '')
+      ? image
+      : null;
   return (
     <div data-slot="subject-cover" className="w-60 max-w-full">
       <CoverFrame
@@ -862,17 +881,17 @@ export function Cover(props: Record<string, unknown>) {
         src={coverSrc}
         suitability={value.reader.suitability}
         labels={value.labels.cover}
-        action={{ label: openLabel, onActivate: () => setViewerOpen(true) }}
+        action={{ label: openLabel, onActivate: () => viewer.setValue(true) }}
         {...((value.frameRatio ?? value.ratio) ? { ratio: (value.frameRatio ?? value.ratio)! } : {})}
       />
-      {image && image.variants.length > 0 ? (
+      {usable ? (
         <CoverViewer
           subject={subject}
-          cover={image}
+          cover={usable}
           src={coverSrc}
           labels={{ title, via: value.coverVia, close: closeLabel }}
-          open={viewerOpen}
-          onOpenChange={setViewerOpen}
+          open={viewer.value}
+          onOpenChange={viewer.setValue}
         />
       ) : null}
     </div>

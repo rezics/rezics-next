@@ -1,30 +1,40 @@
 import { EyeIcon, ImageIcon } from 'lucide-react';
-import { useCallback, useState, type CSSProperties } from 'react';
+import { useCallback, useMemo, type CSSProperties } from 'react';
 import { AspectRatio } from '../shadcn/aspect-ratio.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { cn } from '../utils.ts';
 import { listPresentationRatio, parseListPresentation, type ListPresentation } from './list-presentation-model.ts';
 import {
-  coverFallback,
   coverFit,
+  coverIncarnation,
   coverRatio,
   coverSizes,
-  coverSrcSet,
   coverWidths,
   intrinsicSize,
   objectPosition,
   parseCoverRatio,
   placeholderColors,
   ratioValue,
+  resolveCoverVariants,
+  resolvedCoverFallback,
+  resolvedCoverSrcSet,
   thumbhashImage,
+  usableCoverVariants,
   type CoverFormat,
   type CoverRatio,
   type CoverSize,
   type CoverSubject,
   type CoverSummary,
 } from './cover-model.ts';
+import { useIncarnationState } from './media-image-sources.ts';
 
 export { coverRatio, defaultCoverRatio, parseCoverRatio, placeholderColors, sharedRatio } from './cover-model.ts';
+export {
+  coverIncarnation,
+  resolveCoverVariants,
+  usableCoverVariants,
+} from './cover-model.ts';
+export { useIncarnationState } from './media-image-sources.ts';
 export type { CoverRatio, CoverSize, CoverSubject, CoverSummary } from './cover-model.ts';
 export {
   fallbackListFactProperties,
@@ -41,9 +51,10 @@ export function coverImagePreload(
   src: (media: string, format: CoverFormat, width: number) => string,
   size: CoverSize = 'lg',
 ) {
-  const format = cover.variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif';
+  const variants = resolveCoverVariants(cover, src).filter((variant) => variant.src.trim() !== '');
+  const format = variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif';
   return {
-    imagesrcset: coverSrcSet(cover.media, cover.variants, format, src),
+    imagesrcset: resolvedCoverSrcSet(variants, format),
     imagesizes: coverSizes(size),
   };
 }
@@ -85,7 +96,7 @@ export interface CoverProps {
   className?: string;
 }
 
-type Status = { media: string; value: 'loaded' | 'failed' };
+type Status = { outcome: 'loaded' | 'failed' | null; backdrop: string | null };
 
 /**
  * The image area of any subject, which always renders: the image fitted to a frame whose ratio comes from the
@@ -116,24 +127,29 @@ export function Cover({
     (memberPresentation ? listPresentationRatio(memberPresentation) : undefined) ??
     (ratio === undefined ? undefined : parseCoverRatio(ratio)) ??
     coverRatio(subject.types);
-  const image = cover && cover.variants.length > 0 ? cover : null;
-  const [status, setStatus] = useState<Status | null>(null);
-  const [backdrop, setBackdrop] = useState<{ media: string; src: string } | null>(null);
-  const [revealed, setRevealed] = useState<string | null>(null);
+  const resolved = useMemo(() => (cover ? resolveCoverVariants(cover, src) : []), [cover, src]);
+  const incarnation = coverIncarnation(subject, cover, resolved);
+  const variants = resolved.filter((variant) => variant.src.trim() !== '');
+  const image = cover && usableCoverVariants(cover.variants).length > 0 && variants.length > 0 ? cover : null;
+  const hasImage = image !== null;
+  const lifetime = useIncarnationState<Status>(incarnation, () => ({ outcome: null, backdrop: null }));
+  const reveal = useIncarnationState(incarnation, () => false);
+  const fallbackFormat = variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif';
+  const fallback = image ? resolvedCoverFallback(variants, fallbackFormat, size) : null;
 
-  const withheld = image?.withheld === 'suitability' && suitability !== 'show' && revealed !== image.media;
-  const outcome = image && status?.media === image.media ? status.value : null;
+  const withheld = image?.withheld === 'suitability' && suitability !== 'show' && !reveal.value;
+  const outcome = image ? lifetime.value.outcome : null;
   const state = !image || outcome === 'failed' ? 'placeholder' : withheld ? 'withheld' : outcome ? 'loaded' : 'loading';
   const fit = image ? coverFit(image, frameRatio) : null;
 
   // An image that finished before this component hydrated fires no event; read its state when it mounts.
   const track = useCallback(
     (element: HTMLImageElement | null) => {
-      if (!element || !image || !element.complete) return;
-      setStatus({ media: image.media, value: element.naturalWidth > 0 ? 'loaded' : 'failed' });
-      if (element.naturalWidth > 0) setBackdrop({ media: image.media, src: element.currentSrc });
+      if (!element || !hasImage || !element.complete) return;
+      const loaded = element.naturalWidth > 0;
+      lifetime.setValue({ outcome: loaded ? 'loaded' : 'failed', backdrop: loaded ? element.currentSrc || null : null });
     },
-    [image?.media],
+    [hasImage, lifetime.setValue],
   );
 
   const colors = placeholderColors(subject);
@@ -169,13 +185,13 @@ export function Cover({
               <Withheld text={text} />
             ) : (
               <>
-                <picture>
+                <picture key={lifetime.generation}>
                   {(['avif', 'webp'] as const).map((format) =>
-                    image!.variants.some((variant) => variant.format === format) ? (
+                    variants.some((variant) => variant.format === format) ? (
                       <source
                         key={format}
                         type={`image/${format}`}
-                        srcSet={coverSrcSet(image!.media, image!.variants, format, src)}
+                        srcSet={resolvedCoverSrcSet(variants, format)}
                         sizes={coverSizes(size)}
                       />
                     ) : null,
@@ -187,19 +203,8 @@ export function Cover({
                       fit === 'cover' ? 'object-cover' : 'object-contain',
                     )}
                     style={{ objectPosition: objectPosition(subject.types, image!.focalPoint) }}
-                    src={coverFallback(
-                      image!.media,
-                      image!.variants,
-                      image!.variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif',
-                      size,
-                      src,
-                    )}
-                    srcSet={coverSrcSet(
-                      image!.media,
-                      image!.variants,
-                      image!.variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif',
-                      src,
-                    )}
+                    src={fallback?.src ?? ''}
+                    srcSet={resolvedCoverSrcSet(variants, fallbackFormat)}
                     sizes={coverSizes(size)}
                     width={dimensions.width}
                     height={dimensions.height}
@@ -208,10 +213,13 @@ export function Cover({
                     fetchPriority={priority ? 'high' : undefined}
                     decoding="async"
                     onLoad={(event) => {
-                      setStatus({ media: image!.media, value: 'loaded' });
-                      setBackdrop({ media: image!.media, src: event.currentTarget.currentSrc });
+                      const loaded = event.currentTarget.naturalWidth > 0;
+                      lifetime.setValue({
+                        outcome: loaded ? 'loaded' : 'failed',
+                        backdrop: loaded ? event.currentTarget.currentSrc || null : null,
+                      });
                     }}
-                    onError={() => setStatus({ media: image!.media, value: 'failed' })}
+                    onError={() => lifetime.setValue({ outcome: 'failed', backdrop: null })}
                   />
                 </picture>
                 {fit === 'contain' && (
@@ -221,7 +229,7 @@ export function Cover({
                     className="absolute inset-0 scale-110 bg-cover bg-center blur-xl brightness-50"
                     style={{
                       backgroundImage:
-                        backdrop?.media === image!.media ? `url(${JSON.stringify(backdrop.src)})` : undefined,
+                        lifetime.value.backdrop ? `url(${JSON.stringify(lifetime.value.backdrop)})` : undefined,
                     }}
                   />
                 )}
@@ -237,7 +245,7 @@ export function Cover({
             onClick={action.onActivate}
           />
         ) : null}
-        {state === 'withheld' ? <RevealButton text={text} onReveal={() => setRevealed(image!.media)} /> : null}
+        {state === 'withheld' ? <RevealButton text={text} onReveal={() => reveal.setValue(true)} /> : null}
       </AspectRatio>
     </div>
   );
