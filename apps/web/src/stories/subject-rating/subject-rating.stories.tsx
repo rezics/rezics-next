@@ -37,8 +37,8 @@ function Figures({
   );
 }
 
-function Vote({ failed = false }: { failed?: boolean }) {
-  const [units, setUnits] = useState<number | null>(null);
+function Vote({ failed = false, pending = false }: { failed?: boolean; pending?: boolean }) {
+  const [units, setUnits] = useState<number | null>(pending ? 15 : null);
   const [failure, setFailure] = useState<string | null>(null);
   const locale = getLocale();
   return (
@@ -49,7 +49,7 @@ function Vote({ failed = false }: { failed?: boolean }) {
         locale={locale}
         returnTo={`/${locale}/subjects/${subject}/kokoro`}
         state={{ kind: 'ready', units }}
-        pending={false}
+        pending={pending}
         failure={failure}
         onSet={(value) => {
           if (failed) setFailure(m.subject_rating_control_error());
@@ -59,6 +59,32 @@ function Vote({ failed = false }: { failed?: boolean }) {
       />
     </div>
   );
+}
+
+async function expectComfortableAction(action: HTMLElement) {
+  const bounds = action.getBoundingClientRect();
+  await expect(bounds.height).toBeGreaterThanOrEqual(44);
+  await expect(bounds.width).toBeGreaterThanOrEqual(44);
+  await expect(getComputedStyle(action).whiteSpace).toBe('normal');
+
+  // Exercise the current translated copy in a narrow column without replacing its accessible name.
+  const maxWidth = action.style.maxWidth;
+  try {
+    action.style.maxWidth = '4rem';
+    await expect(action.scrollWidth).toBeLessThanOrEqual(action.clientWidth);
+    await expect(action.scrollHeight).toBeLessThanOrEqual(action.clientHeight);
+    await expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  } finally {
+    action.style.maxWidth = maxWidth;
+  }
+}
+
+async function expectKeyboardFocus(action: HTMLElement) {
+  await expect(action).toHaveFocus();
+  await expect(action.matches(':focus-visible')).toBe(true);
+  const style = getComputedStyle(action);
+  await expect(Number.parseFloat(style.outlineWidth)).toBeGreaterThanOrEqual(2);
+  await expect(style.outlineStyle).toBe('solid');
 }
 
 const meta = {
@@ -101,13 +127,72 @@ export const SaveClearZero: Story = {
   render: () => <Vote />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
+    const save = view.getByRole('button', { name: m.subject_rating_control_save() });
+    const clear = view.getByRole('button', { name: m.subject_rating_control_clear() });
+    await expectComfortableAction(save);
+    await expectComfortableAction(clear);
+    await expect(save).toBeDisabled();
+    await expect(clear).toBeDisabled();
     await userEvent.click(view.getByRole('slider'));
     await userEvent.keyboard('{Home}');
+    await expect(view.getByRole('slider')).toHaveAttribute('aria-valuenow', '0');
+    await userEvent.keyboard('{ArrowRight}');
+    await expect(view.getByRole('slider')).toHaveAttribute('aria-valuenow', '1');
+    await userEvent.keyboard('{Home}');
+    await userEvent.tab();
+    await expectKeyboardFocus(save);
     await userEvent.click(view.getByRole('button', { name: m.subject_rating_control_save() }));
     await expect(view.getByRole('button', { name: m.subject_rating_control_clear() })).toBeEnabled();
     await expect(view.getByRole('slider')).toHaveAttribute('aria-valuenow', '0');
+    await expect(save).toBeDisabled();
+    await userEvent.tab();
+    await expectKeyboardFocus(clear);
     await userEvent.click(view.getByRole('button', { name: m.subject_rating_control_clear() }));
     await expect(view.getByText(m.subject_rating_control_unrated())).toBeVisible();
+  },
+};
+export const SignedOut: Story = {
+  render: () => (
+    <div className="mx-auto max-w-lg p-4 sm:p-6">
+      <RatingControlView
+        question={standardRatingQuestion}
+        subjectId={subject}
+        locale={getLocale()}
+        returnTo={`/${getLocale()}/subjects/${subject}/kokoro`}
+        state={{ kind: 'signed-out' }}
+        pending={false}
+        failure={null}
+        onSet={() => {}}
+        onClear={() => {}}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const signIn = within(canvasElement).getByRole('link', { name: m.account_sign_in() });
+    await expect(signIn).toHaveAttribute(
+      'href',
+      `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/subjects/${subject}/kokoro`)}`,
+    );
+    await expectComfortableAction(signIn);
+    await userEvent.tab();
+    await expectKeyboardFocus(signIn);
+  },
+};
+export const Saving: Story = {
+  render: () => <Vote pending />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(canvasElement.querySelector('[data-slot="rating-control-reserved"]')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    await expect(view.getByRole('slider')).toBeDisabled();
+    await expect(view.getByRole('slider')).toHaveAttribute('aria-valuenow', '15');
+    for (const name of [m.subject_rating_control_save(), m.subject_rating_control_clear()]) {
+      const action = view.getByRole('button', { name });
+      await expect(action).toBeDisabled();
+      await expectComfortableAction(action);
+    }
   },
 };
 export const SaveFailure: Story = {

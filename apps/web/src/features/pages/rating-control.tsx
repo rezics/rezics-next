@@ -15,6 +15,9 @@ export type RatingControlState =
 
 type RatingWrite = (input: { units: number | null; idempotencyKey: string }) => Promise<boolean>;
 
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+
 export async function applyOptimisticRatingChange(input: {
   queryClient: ReturnType<typeof useQueryClient>;
   subjectId: string;
@@ -83,9 +86,9 @@ export function RatingControlView({
 
   if (state.kind === 'signed-out')
     return (
-      <div className="min-h-12" data-slot="rating-control-reserved">
+      <div className="min-h-12 min-w-0" data-slot="rating-control-reserved">
         <a
-          className="text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+          className={`inline-flex items-center text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/80 ${actionClassName}`}
           href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
         >
           {m.account_sign_in({}, options)}
@@ -139,7 +142,7 @@ export function RatingControlView({
       onKeyDownCapture={clearOnKey}
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <span className="font-medium text-sm">{question.label}</span>
+        <span className="min-w-0 wrap-anywhere font-medium text-sm">{question.label}</span>
         <output aria-live="polite" className="font-semibold tabular-nums" data-slot="rating-control-value">
           {valueText}
         </output>
@@ -191,6 +194,7 @@ export function RatingControlView({
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
+          className={actionClassName}
           disabled={pending || value === null || value === state.units}
           onClick={() => {
             editing.current = false;
@@ -201,6 +205,7 @@ export function RatingControlView({
           {m.subject_rating_control_save({}, options)}
         </Button>
         <Button
+          className={actionClassName}
           disabled={pending || state.units === null}
           onClick={() => {
             editing.current = false;
@@ -238,11 +243,12 @@ function NoScriptForm({
   return (
     <noscript>
       <form action={returnTo} className="mt-3 flex flex-wrap items-center gap-2" method="post">
-        <label className="text-sm" htmlFor="rating-no-script">
+        <label className="min-w-0 wrap-anywhere text-sm" htmlFor="rating-no-script">
           {question.label}
         </label>
         <input
           aria-label={question.label}
+          className="min-h-11 min-w-11 max-w-full"
           defaultValue={
             value ??
             question.scale.min +
@@ -257,7 +263,7 @@ function NoScriptForm({
           type="range"
         />
         <button
-          className="rounded-2xl bg-primary px-3 py-1.5 text-primary-foreground text-sm"
+          className={`rounded-2xl bg-primary px-3 text-primary-foreground text-sm ${actionClassName}`}
           name="intent"
           type="submit"
           value="save"
@@ -265,7 +271,12 @@ function NoScriptForm({
           {m.subject_rating_control_save({}, options)}
         </button>
         {value !== null && (
-          <button className="rounded-2xl border px-3 py-1.5 text-sm" name="intent" type="submit" value="clear">
+          <button
+            className={`rounded-2xl border px-3 text-sm ${actionClassName}`}
+            name="intent"
+            type="submit"
+            value="clear"
+          >
             {m.subject_rating_control_clear({}, options)}
           </button>
         )}
