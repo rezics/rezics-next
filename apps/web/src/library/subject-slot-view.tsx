@@ -832,7 +832,10 @@ function SubjectLibrarySlotView({
                 data: {
                   intent: 'assign',
                   subjectId: subject.id,
-                  labelId: input.label && 'labelId' in input.label ? input.label.labelId : (input.label?.id ?? ''),
+                  labelId:
+                    input.label && 'labelId' in input.label && typeof input.label.labelId === 'string'
+                      ? input.label.labelId
+                      : (input.label?.id ?? ''),
                   idempotencyKey: crypto.randomUUID(),
                   ...(data.labelAssignKey ? { idempotencyKey: data.labelAssignKey } : {}),
                 },
@@ -842,7 +845,10 @@ function SubjectLibrarySlotView({
                 data: {
                   intent: 'restore',
                   subjectId: subject.id,
-                  labelId: input.label && 'labelId' in input.label ? input.label.labelId : (input.label?.id ?? ''),
+                  labelId:
+                    input.label && 'labelId' in input.label && typeof input.label.labelId === 'string'
+                      ? input.label.labelId
+                      : (input.label?.id ?? ''),
                   assignmentId: input.assignment?.id ?? '',
                   revision: input.revision ?? 0,
                   idempotencyKey: crypto.randomUUID(),
@@ -863,7 +869,7 @@ function SubjectLibrarySlotView({
       if (input.intent !== 'restore') setLabelUndo(labelUndo);
       const label = response.label ?? input.label;
       if (label?.name) {
-        const labelId = 'labelId' in label ? label.labelId : label.id;
+        const labelId = 'labelId' in label && typeof label.labelId === 'string' ? label.labelId : label.id;
         setLabels((current) => [
           ...current.filter((row) => row.labelId !== labelId),
           { id: response.assignment.id, labelId, name: label.name, revision: response.assignment.revision },
