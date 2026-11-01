@@ -188,6 +188,8 @@ point and separate COMMIT and ROLLBACK controls before beginning a read snapshot
 the unused rollback reservation; a failed COMMIT keeps it for the actual ROLLBACK, charging both dispatched
 controls. A failed BEGIN cancels both unused controls and discards its connection. Caller-owned
 commands retain their existing checkout/Core fence/commit/rollback accounting: these helpers open none of those.
+Only the exact registered `COMMIT` and `ROLLBACK` literals can consume those reservations; a control prefix
+cannot admit appended or otherwise unknown SQL.
 
 Nested Semantic validation transfers the remaining original reservation through `NativeCollectionWork.compose`
 and accounts its returned work or settled failure receipt. A child with no valid failure receipt consumes the

@@ -224,7 +224,7 @@ function observeNativeCollectionClient(client: PoolClient, delegated = false): v
     const sql = typeof config === 'string' ? config : config.text;
     const values = (typeof config === 'string' ? args[1] : config.values) as unknown[] | undefined;
     const beginning = /^BEGIN\b/i.test(sql);
-    const control = /^COMMIT\b/i.test(sql) ? 'commit' : /^ROLLBACK\b/i.test(sql) ? 'rollback' : undefined;
+    const control = sql === 'COMMIT' ? 'commit' : sql === 'ROLLBACK' ? 'rollback' : undefined;
     const finishing = control !== undefined && terminal?.work === active.work;
     let beganReservation = false;
     let reservation: ReturnType<NativeCollectionWork['reserve']>;

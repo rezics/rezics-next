@@ -461,6 +461,48 @@ test('a genuine deferred COMMIT failure retains independent rollback funding and
   expect((await s.producer.apply(s.capture, work())).status).toBe('applied');
 }, 120000);
 
+test('a terminal reservation cannot admit unknown SQL appended to production COMMIT', async () => {
+  const s = await setup([]);
+  await exhaust(s);
+  expect((await s.producer.seal(s.capture, work())).status).toBe('sealed');
+  let staged = false;
+  let injected = false;
+  const originals = new Map<PoolClient, PoolClient['query']>();
+  const inject = (client: PoolClient) => {
+    if (originals.has(client)) return;
+    const original = client.query;
+    originals.set(client, original);
+    client.query = function (this: PoolClient, ...args: unknown[]) {
+      const config = args[0] as string | { text: string };
+      const sql = typeof config === 'string' ? config : config.text;
+      if (sql === transitionInsertSQL.sql) staged = true;
+      if (staged && !injected && sql === 'COMMIT') {
+        injected = true;
+        args[0] = typeof config === 'string' ? 'COMMIT; SELECT 1' : { ...config, text: 'COMMIT; SELECT 1' };
+      }
+      return (original as (...args: unknown[]) => unknown).apply(this, args);
+    } as PoolClient['query'];
+  };
+  f.pool.on('acquire', inject);
+  try {
+    await expect(s.producer.apply(s.capture, work())).rejects.toThrow('Dependency Unavailable');
+  } finally {
+    f.pool.off('acquire', inject);
+    for (const [client, original] of originals) client.query = original;
+  }
+  expect(injected).toBe(true);
+  for (const table of ['fence', 'disposition', 'transition'] as const) expect(await count(table, s.capture)).toBe(0);
+  expect(
+    (
+      await f.pool.query(
+        'SELECT role,consumed_by FROM library.native_public_output_hold WHERE partition_no=$1 AND capture_id=$2',
+        [s.capture.partition, s.capture.captureId],
+      )
+    ).rows,
+  ).toEqual([{ role: 'predecessor', consumed_by: null }]);
+  expect((await s.producer.apply(s.capture, work())).status).toBe('applied');
+}, 120000);
+
 test('a cancelled admitted Subject cut stays fenced and retained without genuine foreign removal custody', async () => {
   const s = await setup([await f.createSubject('game')]);
   await exhaust(s);
