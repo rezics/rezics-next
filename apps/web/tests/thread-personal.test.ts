@@ -64,11 +64,17 @@ test('personal controls use browser queries and reserve their first-paint space'
   expect(queries).toContain('personalRead');
   expect(queries).toContain('threadPersonalQuery');
   const route = await source('src/routes/threads/$id_.$slug.tsx');
+  const caller = await source('src/threads/thread-page-caller.tsx');
   expect(route).toContain('useQuery');
-  expect(route).toContain("enabled: session === 'signed-in'");
+  expect(route).toMatch(/enabled:\s*session === 'signed-in'/);
+  expect(route).toContain('caller?.beginPersonalRead(');
+  expect(route).toContain('caller.selectPersonal(personalQuery.data, personalAttempt)');
   expect(route).toContain('personal');
   expect(route).toContain('min-h');
   expect(route).toContain('SignInPrompt');
+  expect(caller).toContain('targetKey !== target');
+  expect(caller).toContain('sameSession(attempt.session, session)');
+  expect(caller).toContain('viewerId !== session.subject');
 });
 
 test('thread mutations update or invalidate cached thread and personal reads', async () => {

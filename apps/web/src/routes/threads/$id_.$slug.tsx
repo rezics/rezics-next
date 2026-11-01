@@ -51,6 +51,14 @@ import {
   PostCommandLifetime,
   type PostCommandBinding,
 } from '../../threads/post-command-lifetime';
+import {
+  runThreadPageQuery,
+  ThreadPageCaller,
+  ThreadPageCallerRetired,
+  useThreadPageCaller,
+  type ThreadPageAdmission,
+  type ThreadPageRouteIdentity,
+} from '../../threads/thread-page-caller';
 
 function threadSearch(search: Record<string, unknown>): { cursor?: string } {
   const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
@@ -65,19 +73,38 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
     const mode = context.credentialMode;
     const known = rememberedThreadSlug(params.id);
     const expectedSlug = known !== undefined && slugMatches(params.slug, known) ? undefined : params.slug;
-    const page = await context.queryClient.ensureQueryData(threadPageQuery(params.id, deps.cursor, mode, expectedSlug));
+    const query = threadPageQuery(params.id, deps.cursor, mode, expectedSlug);
+    const identity: ThreadPageRouteIdentity = {
+      id: params.id,
+      ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+      slug: params.slug,
+      locale: getLocale(),
+      credentialMode: mode,
+    };
+    const caller = ThreadPageCaller.capture(context.queryClient, identity, expectedSlug, query.queryKey);
+    const page = await runThreadPageQuery(context.queryClient, caller, query, (guarded) =>
+      context.queryClient.ensureQueryData(guarded),
+    );
+    caller.assertReadCurrent();
     if ('redirect' in page) {
       rememberThreadSlug(page.redirect.id, page.redirect.title);
-      throw redirect({ href: threadLocation(getLocale(), page.redirect, deps.cursor), statusCode: 301 });
+      caller.assertReadCurrent();
+      const href = threadLocation(getLocale(), page.redirect, deps.cursor);
+      caller.assertReadCurrent();
+      caller.retireFromRouteChange();
+      throw redirect({ href, statusCode: 301 });
     }
     const title = threadTitle(page.thread);
+    caller.assertReadCurrent();
     rememberThreadSlug(page.thread.id, title);
-    if (!sameThreadSlug(params.slug, title))
-      throw redirect({
-        href: threadLocation(getLocale(), { id: page.thread.id, title }, deps.cursor),
-        statusCode: 301,
-      });
-    return { ...page, indexable: deps.cursor === undefined };
+    caller.assertReadCurrent();
+    if (!sameThreadSlug(params.slug, title)) {
+      const href = threadLocation(getLocale(), { id: page.thread.id, title }, deps.cursor);
+      caller.assertReadCurrent();
+      caller.retireFromRouteChange();
+      throw redirect({ href, statusCode: 301 });
+    }
+    return { ...page, callerAdmission: caller.admission, indexable: deps.cursor === undefined };
   },
   head: ({ loaderData }) => (loaderData ? threadPageHead(loaderData) : { meta: [{ title: m.threads_untitled() }] }),
   component: ThreadPage,
@@ -93,32 +120,84 @@ export function ThreadReadingHeader({ page, title }: { page: ThreadReadingPage; 
   );
 }
 
-function ThreadPage() {
+export function ThreadPage() {
   const loadedPage = Route.useLoaderData();
-  const [refreshed, setRefreshed] = useState<{ source: typeof loadedPage; scope: object; page?: ThreadReadingPage }>();
+  const [refreshed, setRefreshed] = useState<{
+    source: typeof loadedPage;
+    page: ThreadReadingPage;
+    admission: ThreadPageAdmission;
+  }>();
   const [postIds, setPostIds] = useState(() => loadedPage.posts.posts.map((post) => post.id));
-  const { state: session, subject, csrfToken } = useSession();
+  const { state: session, subject } = useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
   const location = useLocation();
   const id = Route.useParams().id;
+  const slug = Route.useParams().slug;
   const cursor = Route.useSearch().cursor;
+  const locale = getLocale();
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
-  const readerScope = useMemo(() => ({}), [session, subject, csrfToken]);
-  const readScope = useMemo(() => ({}), [loadedPage, id, cursor, readerScope]);
-  const [lastCurrentReader, setLastCurrentReader] = useState<object>();
-  const expiredRead = refreshed !== undefined && refreshed.scope !== readScope;
-  if (expiredRead) setRefreshed(undefined);
+  const activeRefresh = refreshed?.source === loadedPage ? refreshed : undefined;
+  const activePage = activeRefresh?.page ?? loadedPage;
+  const activeAdmission = activeRefresh?.admission ?? loadedPage.callerAdmission;
+  const identity = useMemo<ThreadPageRouteIdentity>(
+    () => ({ id, ...(cursor === undefined ? {} : { cursor }), slug, locale, credentialMode: activeAdmission.identity.credentialMode }),
+    [id, cursor, slug, locale, activeAdmission.identity.credentialMode],
+  );
+  const binding = useThreadPageCaller(activeAdmission, activePage, identity);
+  const caller = binding.caller;
+  const callbackRevision = JSON.stringify([
+    caller?.admission.id ?? null,
+    caller?.sessionRevision ?? 0,
+    caller?.connectionTicket ?? 0,
+  ]);
+  const callbackTicket = useMemo(
+    () => caller?.captureEffects(),
+    [caller, caller?.sessionRevision, caller?.connectionTicket],
+  );
+  const isCallbackCurrent = () => !!caller && !!callbackTicket && caller.isEffectTicketCurrent(callbackTicket);
+  const readScope = useMemo(() => ({}), [id]);
+  const pageIsPrivate = activeAdmission.identity.credentialMode === 'session' || activePage.viewerId !== undefined;
   const currentPageUnavailable =
-    (lastCurrentReader !== undefined && lastCurrentReader !== readerScope) ||
-    (loadedPage.viewerId !== undefined && (session !== 'signed-in' || loadedPage.viewerId !== subject));
-  const page =
-    !expiredRead && !currentPageUnavailable && refreshed?.source === loadedPage ? refreshed.page! : loadedPage;
+    !binding.current ||
+    (pageIsPrivate && activePage.viewerId !== undefined &&
+      (session !== 'signed-in' || activePage.viewerId !== subject));
+  const page = activePage;
+  const personalOptions = useMemo(() => threadPersonalQuery(id, cursor, postIds), [id, cursor, postIds]);
+  const personalAttempt = useMemo(
+    () =>
+      caller?.beginPersonalRead(personalOptions.queryKey, JSON.stringify([id, cursor ?? null, ...postIds])),
+    [
+      caller,
+      personalOptions.queryKey,
+      id,
+      cursor,
+      postIds,
+      caller?.sessionRevision,
+      caller?.connectionTicket,
+      caller?.personalRevision,
+    ],
+  );
   const personalQuery = useQuery({
-    ...threadPersonalQuery(id, cursor, postIds),
-    enabled: session === 'signed-in',
+    ...personalOptions,
+    enabled:
+      session === 'signed-in' &&
+      !!caller &&
+      binding.current &&
+      caller.personalSessionReady() &&
+      caller.isConnectedCurrent(),
+    structuralSharing: false,
+    queryFn: async (context) => {
+      if (!caller || !personalAttempt) throw new ThreadPageCallerRetired();
+      const original = personalOptions.queryFn;
+      if (!original) throw new ThreadPageCallerRetired();
+      return caller.readPersonal(personalAttempt, () => original(context));
+    },
   });
-  const personal = session === 'signed-in' && personalQuery.data?.viewerId === subject ? personalQuery.data : undefined;
+  const personal =
+    session === 'signed-in' && subject && caller && personalAttempt
+      ? (caller.selectPersonal(personalQuery.data, personalAttempt) as typeof personalQuery.data)
+      : undefined;
   const currentRead = useRef({ scope: readScope, sequence: 0 });
   if (currentRead.current.scope !== readScope) currentRead.current = { scope: readScope, sequence: 0 };
   const mounted = useRef(true);
@@ -128,57 +207,96 @@ function ThreadPage() {
       mounted.current = false;
     };
   }, []);
-  useEffect(() => setPostIds(page.posts.posts.map((post) => post.id)), [page.posts]);
+  useEffect(() => {
+    if (isCallbackCurrent()) setPostIds(page.posts.posts.map((post) => post.id));
+  }, [page.posts, callbackRevision, caller?.connectionTicket]);
 
   useEffect(() => {
+    if (!isCallbackCurrent()) return;
     const hash = window.location.hash.slice(1);
     if (hash.startsWith('post-')) document.getElementById(hash)?.scrollIntoView();
     else if (!hash) window.scrollTo(0, 0);
-  }, [id, location.hash, page.posts]);
+  }, [id, location.hash, page.posts, callbackRevision]);
 
   async function refreshThreadQueries() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['thread-page', id] }),
-      queryClient.invalidateQueries({ queryKey: ['thread-personal', id] }),
-    ]);
+    if (!isCallbackCurrent()) throw new ThreadPageCallerRetired();
+    await queryClient.invalidateQueries({ queryKey: ['thread-page', id] });
+    if (!isCallbackCurrent()) throw new ThreadPageCallerRetired();
+    await queryClient.invalidateQueries({ queryKey: ['thread-personal', id] });
+    if (!isCallbackCurrent()) throw new ThreadPageCallerRetired();
   }
 
-  async function refreshThreadPage() {
+  async function refreshThreadPage(recovery = false) {
+    if (!recovery && (!isCallbackCurrent() || !caller)) throw new ThreadPageCallerRetired();
+    const currentCaller = caller;
+    const currentTicket = callbackTicket;
+    const routeIsCurrent = () =>
+      mounted.current &&
+      getLocale() === locale &&
+      router.state.location.pathname === location.pathname &&
+      JSON.stringify(router.state.location.search) === JSON.stringify(location.search);
+    if (recovery && !routeIsCurrent()) throw new ThreadPageCallerRetired();
     const read = currentRead.current;
     const sequence = ++read.sequence;
-    const current = () => mounted.current && currentRead.current === read && read.sequence === sequence;
-    await queryClient.cancelQueries({ queryKey: ['thread-page', id] });
-    if (!current()) throw new Error('Thread reader changed');
-    // Retire pre-command pages as well as in-flight reads, so navigation cannot reuse their old bodies.
-    queryClient.removeQueries({ queryKey: ['thread-page', id] });
-    const updated = await queryClient.fetchQuery({
-      ...threadPageQuery(id, cursor, session === 'signed-in' ? 'session' : 'anonymous'),
-      staleTime: 0,
-      retry: false,
-    });
-    if (!current() || 'redirect' in updated) throw new Error('Current thread page unavailable');
-    if (session === 'signed-in' && (!subject || updated.viewerId !== subject))
-      throw new Error('Current thread reader unavailable');
-    setLastCurrentReader(readerScope);
-    setRefreshed({ source: loadedPage, scope: readScope, page: updated });
-    rememberThreadSlug(updated.thread.id, updated.thread.title);
-    const destination = threadLocation(getLocale(), { id: updated.thread.id, title: updated.thread.title }, cursor);
-    if (new URL(destination, window.location.origin).pathname !== location.pathname)
-      await router.navigate({ to: destination });
-    return updated;
-  }
-
-  if (currentPageUnavailable) {
-    return (
-      <div role="alert" className="space-y-3 p-4">
-        <p>{m.thread_post_unavailable()}</p>
-        <Button onClick={() => void refreshThreadPage().catch(() => {})}>{m.thread_post_refresh()}</Button>
-      </div>
-    );
+    let nextCaller: ThreadPageCaller | undefined;
+    const current = () =>
+      routeIsCurrent() &&
+      currentRead.current === read &&
+      read.sequence === sequence &&
+      (recovery
+        ? !!nextCaller && nextCaller.isRefreshContinuationCurrent({ session: nextCaller.admission.session })
+        : !!currentCaller &&
+          !!currentTicket &&
+          currentCaller.isRefreshContinuationCurrent(currentTicket));
+    const mode = session === 'signed-in' ? 'session' : 'anonymous';
+    const query = threadPageQuery(id, cursor, mode);
+    const nextIdentity: ThreadPageRouteIdentity = {
+      id,
+      ...(cursor === undefined ? {} : { cursor }),
+      slug,
+      locale,
+      credentialMode: mode,
+    };
+    nextCaller = ThreadPageCaller.capture(queryClient, nextIdentity, undefined, query.queryKey);
+    let accepted = false;
+    try {
+      await queryClient.cancelQueries({ queryKey: ['thread-page', id] });
+      if (!current()) throw new Error('Thread reader changed');
+      // Retire pre-command pages as well as in-flight reads, so navigation cannot reuse their old bodies.
+      queryClient.removeQueries({ queryKey: ['thread-page', id] });
+      if (!current()) throw new Error('Thread reader changed');
+      const updated = await runThreadPageQuery(queryClient, nextCaller, query, (guarded) =>
+        queryClient.fetchQuery({ ...guarded, staleTime: 0, retry: false }),
+      );
+      if (!current() || 'redirect' in updated) throw new Error('Current thread page unavailable');
+      if (session === 'signed-in' && updated.viewerId !== undefined && (!subject || updated.viewerId !== subject))
+        throw new Error('Current thread reader unavailable');
+      nextCaller.assertReadCurrent();
+      setRefreshed({ source: loadedPage, page: updated, admission: nextCaller.admission });
+      rememberThreadSlug(updated.thread.id, updated.thread.title);
+      nextCaller.assertReadCurrent();
+      const destination = threadLocation(locale, { id: updated.thread.id, title: updated.thread.title }, cursor);
+      if (!current()) throw new Error('Thread reader changed');
+      accepted = true;
+      if (new URL(destination, window.location.origin).pathname !== location.pathname) {
+        await router.navigate({ to: destination });
+        if (router.state.location.pathname !== new URL(destination, window.location.origin).pathname)
+          throw new Error('Thread navigation changed');
+      }
+      return updated;
+    } finally {
+      if (!accepted) nextCaller.retireFromRouteChange();
+    }
   }
 
   return (
     <AuthoringDepartureProvider>
+      {currentPageUnavailable ? (
+        <div role="alert" className="mx-auto max-w-3xl space-y-3 p-4">
+          <p>{m.thread_post_unavailable()}</p>
+          <Button onClick={() => void refreshThreadPage(true).catch(() => {})}>{m.thread_post_refresh()}</Button>
+        </div>
+      ) : null}
       <ThreadReading
         key={id}
         page={page}
@@ -188,8 +306,11 @@ function ThreadPage() {
         signedOut={<SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />}
         personal={personal}
         session={session}
+        pageCurrent={!currentPageUnavailable}
+        pageCallbackRevision={callbackRevision}
+        isPageCallbackCurrent={isCallbackCurrent}
         returnTo={returnTo}
-        renderHeader={(title) => <ThreadReadingHeader page={page} title={title} />}
+        renderHeader={(title, visiblePage) => <ThreadReadingHeader page={visiblePage} title={title} />}
         onMutation={refreshThreadQueries}
         onPageRefresh={refreshThreadPage}
         onPostIdsChange={setPostIds}

@@ -3,6 +3,7 @@ import * as v from 'valibot';
 import { getLocale } from '../../paraglide/runtime.js';
 import { threadSlugQuery } from '../../threads/thread-queries';
 import { rememberThreadSlug, threadLocation } from '../../threads/thread-href';
+import { runThreadPageQuery, ThreadPageCaller } from '../../threads/thread-page-caller';
 
 function threadSearch(search: Record<string, unknown>): { cursor?: string } {
   const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
@@ -14,9 +15,28 @@ export const Route = createFileRoute('/threads/$id')({
   validateSearch: threadSearch,
   loaderDeps: ({ search }) => ({ cursor: threadSearch(search).cursor }),
   loader: async ({ params, deps, context }) => {
-    const head = await context.queryClient.ensureQueryData(threadSlugQuery(params.id, context.credentialMode));
+    const query = threadSlugQuery(params.id, context.credentialMode);
+    const caller = ThreadPageCaller.capture(
+      context.queryClient,
+      {
+        id: params.id,
+        ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+        locale: getLocale(),
+        credentialMode: context.credentialMode,
+      },
+      undefined,
+      query.queryKey,
+    );
+    const head = await runThreadPageQuery(context.queryClient, caller, query, (guarded) =>
+      context.queryClient.ensureQueryData(guarded),
+    );
+    caller.assertReadCurrent();
     rememberThreadSlug(head.id, head.title);
-    throw redirect({ href: threadLocation(getLocale(), head, deps.cursor), statusCode: 301 });
+    caller.assertReadCurrent();
+    const href = threadLocation(getLocale(), head, deps.cursor);
+    caller.assertReadCurrent();
+    caller.retireFromRouteChange();
+    throw redirect({ href, statusCode: 301 });
   },
   component: () => null,
 });

@@ -2,6 +2,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { reactionKinds } from '@rezics/ui/reactions';
+import { fromPlainText } from '@rezics/document';
 import { QueryClientContext } from '@tanstack/react-query';
 import {
   useCallback,
@@ -40,9 +41,88 @@ export type ThreadReadingPage = LoadedThreadPage & {
 };
 export type ThreadReadingPersonal = Awaited<ReturnType<typeof readThreadPersonal>> & { idempotencyKey: string };
 
+/** Remove obsolete page disclosure while keeping each keyed post component mounted for local drafts. */
+function redactThreadReadingPage(page: ThreadReadingPage): ThreadReadingPage {
+  const empty = fromPlainText('', 'blocks');
+  const threadRecord = page.thread as typeof page.thread & { authorId?: string };
+  const { authorId: _threadAuthor, firstPost, subjectIds: _subjectIds, ...threadFields } = threadRecord;
+  const {
+    authorId: _openingAuthor,
+    revisedAt: _openingRevisedAt,
+    revisionId: _openingRevisionId,
+    sha256: _openingSha256,
+    mediaIds: _openingMediaIds,
+    subjectIds: _openingSubjectIds,
+    subjectId: _openingSubjectId,
+    body: _openingBody,
+    ...openingFields
+  } = firstPost as typeof firstPost & {
+    authorId?: string;
+    revisedAt?: string;
+    revisionId?: string;
+    sha256?: string | null;
+    mediaIds?: string[];
+    subjectIds?: string[];
+    subjectId?: string;
+    body?: unknown;
+  };
+  void [
+    _threadAuthor,
+    _subjectIds,
+    _openingAuthor,
+    _openingRevisedAt,
+    _openingRevisionId,
+    _openingSha256,
+    _openingMediaIds,
+    _openingSubjectIds,
+    _openingSubjectId,
+    _openingBody,
+  ];
+  const safeThread = {
+    ...threadFields,
+    title: null,
+    firstPost: { ...openingFields, body: empty },
+  } as typeof page.thread;
+  const safePosts = page.posts.posts.map((post) => {
+    if (post.availability !== 'available') return post;
+    const value = post as typeof post & {
+      authorId?: string;
+      revisedAt?: string;
+      revisionId?: string;
+      sha256?: string | null;
+      mediaIds?: string[];
+      body?: unknown;
+    };
+    const {
+      authorId: _postAuthor,
+      revisedAt: _revisedAt,
+      revisionId: _revisionId,
+      body: _body,
+      mediaIds: _mediaIds,
+      ...safePost
+    } = value;
+    void [_postAuthor, _revisedAt, _revisionId, _body, _mediaIds];
+    return { ...safePost, body: empty, mediaIds: [], sha256: null } as unknown as typeof post;
+  });
+  const { board: _board, realm: _realm, documentMedia: _documentMedia, ...safePage } = page;
+  void [_board, _realm, _documentMedia];
+  return {
+    ...safePage,
+    thread: safeThread,
+    posts: { ...page.posts, posts: safePosts },
+    mentions: {},
+    authors: {},
+    subjects: [],
+    provenanceSubjects: [],
+  };
+}
+
 /** The real reading region; native commands, one composer and immutable revision views stay together. */
 export function ThreadReading({
   page: sourcePage,
+  pageCurrent = true,
+  pageCallbackRevision = '0:0',
+  isPageCallbackCurrent = () => true,
   readAuthority,
   personal,
   session,
@@ -57,6 +137,9 @@ export function ThreadReading({
   authorErasure,
 }: {
   page: ThreadReadingPage;
+  pageCurrent?: boolean;
+  pageCallbackRevision?: string;
+  isPageCallbackCurrent?: () => boolean;
   readAuthority?: object;
   Post: typeof ThreadReadingPost;
   signedOut: ReactNode;
@@ -64,16 +147,25 @@ export function ThreadReading({
   session: SessionState | 'unknown';
   readerSubject?: string | null | undefined;
   returnTo: string;
-  renderHeader: (title: string | null) => ReactNode;
+  renderHeader: (title: string | null, page: ThreadReadingPage) => ReactNode;
   onMutation: () => Promise<void>;
   onPageRefresh: () => Promise<ThreadReadingPage | undefined>;
   onPostIdsChange?: (ids: string[]) => void;
   authorErasure?: Omit<ComponentProps<typeof AuthorErasureEntry>, 'threadId'>;
 }) {
-  const [reading, setReading] = useState({ source: sourcePage, page: sourcePage });
+  const [reading, setReading] = useState({ source: sourcePage, page: sourcePage, redacted: false });
   // Replace the complete disclosure together, including bylines, media, placement and title.
-  const page = reading.source === sourcePage ? reading.page : sourcePage;
-  if (reading.source !== sourcePage) setReading({ source: sourcePage, page: sourcePage });
+  let page: ThreadReadingPage;
+  if (!pageCurrent) {
+    const current = reading.source === sourcePage ? reading.page : sourcePage;
+    if (reading.source !== sourcePage || !reading.redacted)
+      setReading({ source: sourcePage, page: redactThreadReadingPage(current), redacted: true });
+    page = reading.source === sourcePage && reading.redacted ? reading.page : redactThreadReadingPage(current);
+  } else {
+    page = reading.source === sourcePage && !reading.redacted ? reading.page : sourcePage;
+    if (reading.source !== sourcePage || reading.redacted)
+      setReading({ source: sourcePage, page: sourcePage, redacted: false });
+  }
   const {
     thread,
     realm,
@@ -96,7 +188,24 @@ export function ThreadReading({
   const [replyPending, setReplyPending] = useState(false);
   const replyParents = useMemo(() => new Map(posts.posts.map((post) => [post.id, post])), [posts.posts]);
   // Private data is consumed only while the session still says signed in.
-  const currentPersonal = session === 'signed-in' ? personal : undefined;
+  const currentPersonal = pageCurrent && session === 'signed-in' ? personal : undefined;
+  const retainedCommandAuthority = useRef<{
+    session: SessionState | 'unknown';
+    viewerId?: string | null;
+    personalReady: boolean;
+  }>(undefined);
+  if (pageCurrent && session === 'signed-in' && currentPersonal && !retainedCommandAuthority.current)
+    retainedCommandAuthority.current = {
+      session,
+      viewerId: currentPersonal.viewerId,
+      personalReady: true,
+    };
+  const commandAuthority = retainedCommandAuthority.current;
+  const commandSession = pageCurrent ? session : (commandAuthority?.session ?? session);
+  const commandViewerId = pageCurrent ? currentPersonal?.viewerId : commandAuthority?.viewerId;
+  const commandPersonalReady = pageCurrent
+    ? session !== 'signed-in' || currentPersonal !== undefined
+    : (commandAuthority?.personalReady ?? false);
   const client = useContext(QueryClientContext);
   const observation = useMemo(() => authorErasureSessionSource(client), [client]);
   const sessionRevision = observation.snapshot();
@@ -163,7 +272,7 @@ export function ThreadReading({
   }, [parentReader]);
   const refreshScope = useMemo(
     () => ({}),
-    [readAuthority, thread.id, thread.boardId, realm?.id, session, currentPersonal?.viewerId],
+    [readAuthority, thread.id, thread.boardId, realm?.id, session, currentPersonal?.viewerId, pageCallbackRevision],
   );
   const currentRefresh = useRef(refreshScope);
   currentRefresh.current = refreshScope;
@@ -181,21 +290,26 @@ export function ThreadReading({
     composer.current = { viewerId: currentPersonal.viewerId, initialKey: currentPersonal.idempotencyKey };
   }
   const summary = realm?.summary?.trim();
-  useEffect(() => onPostIdsChange?.(posts.posts.map((post) => post.id)), [posts.posts, onPostIdsChange]);
+  useEffect(() => {
+    if (isPageCallbackCurrent()) onPostIdsChange?.(posts.posts.map((post) => post.id));
+  }, [posts.posts, onPostIdsChange, pageCallbackRevision]);
 
   function selectReplyParent(parentId: string | null) {
     if (replyPending) return;
     setReplyTarget((current) => ({ parentId, focusRequest: current.focusRequest + 1 }));
   }
   function updatePost(post: ThreadPost) {
+    if (!isPageCallbackCurrent()) return;
     setPosts((current) => ({ ...current, posts: current.posts.map((item) => (item.id === post.id ? post : item)) }));
   }
   async function refreshPage() {
+    if (!isPageCallbackCurrent()) throw new Error('Thread reader changed');
     const scope = currentRefresh.current;
     const updated = await onPageRefresh();
-    if (!mounted.current || currentRefresh.current !== scope) throw new Error('Thread reader changed');
+    if (!mounted.current || currentRefresh.current !== scope || !isPageCallbackCurrent())
+      throw new Error('Thread reader changed');
     if (!updated) throw new Error('Current thread page unavailable');
-    setReading({ source: sourcePage, page: updated });
+    setReading({ source: sourcePage, page: updated, redacted: false });
     return updated;
   }
 
@@ -209,7 +323,7 @@ export function ThreadReading({
         }
       >
         <div data-slot="thread-reading-column" className="mx-auto w-full min-w-0 max-w-3xl space-y-5">
-          {renderHeader(displayTitle)}
+          {renderHeader(displayTitle, page)}
           <section aria-labelledby="thread-posts-heading" className="min-w-0 space-y-3">
             <ContentItemHeading
               level={2}
@@ -219,7 +333,12 @@ export function ThreadReading({
               {m.thread_posts_heading()}
             </ContentItemHeading>
             {posts.posts.length ? (
-              <ol id={`thread-${thread.id}`} className="space-y-3 scroll-mt-24">
+              <ol
+                id={`thread-${thread.id}`}
+                aria-hidden={!pageCurrent}
+                inert={!pageCurrent}
+                className={pageCurrent ? 'space-y-3 scroll-mt-24' : 'invisible space-y-3 scroll-mt-24'}
+              >
                 {posts.posts.map((post) => {
                   const firstPost = post.id === thread.firstPost.id;
                   return (
@@ -232,8 +351,8 @@ export function ThreadReading({
                       mentions={currentMentions}
                       documentMedia={documentMedia}
                       now={now}
-                      viewerId={currentPersonal?.viewerId ?? undefined}
-                      personalReady={session !== 'signed-in' || currentPersonal !== undefined}
+                      viewerId={commandViewerId ?? undefined}
+                      personalReady={commandPersonalReady}
                       onChange={updatePost}
                       target={firstPost ? { kind: 'thread', id: thread.id } : { kind: 'post', id: post.id }}
                       counts={firstPost ? (thread.reactions ?? {}) : (post.reactions ?? {})}
@@ -242,18 +361,20 @@ export function ThreadReading({
                           (kind) => kind === currentPersonal?.reactions[firstPost ? thread.id : post.id],
                         ) ?? null
                       }
-                      signedIn={session === 'signed-in'}
+                      signedIn={commandSession === 'signed-in'}
                       returnTo={returnTo}
                       verification={verification}
                       onMutation={onMutation}
                       onPageRefresh={refreshPage}
                       onOpeningPostChange={(restored) => {
+                        if (!isPageCallbackCurrent()) return;
                         const title = restored ? thread.title : null;
                         setReading((current) => ({
                           ...current,
                           page: { ...current.page, thread: { ...current.page.thread, title } },
                         }));
                         rememberThreadSlug(thread.id, title);
+                        if (!isPageCallbackCurrent()) return;
                       }}
                       replyParents={replyParents}
                       replyParentReader={parentReader}
@@ -271,7 +392,7 @@ export function ThreadReading({
                 {posts.next ? m.thread_reading_empty_page() : m.thread_posts_empty()}
               </p>
             )}
-            {posts.next ? (
+            {pageCurrent && posts.next ? (
               <nav aria-label={m.thread_posts_heading()}>
                 <a
                   href={threadLocation(getLocale(), { id: thread.id, title: displayTitle }, posts.next)}
@@ -286,8 +407,8 @@ export function ThreadReading({
             <section
               aria-label={m.thread_reply_label()}
               className="min-w-0"
-              hidden={!currentPersonal}
-              inert={!currentPersonal}
+              hidden={!currentPersonal || !pageCurrent}
+              inert={!currentPersonal || !pageCurrent}
             >
               <ThreadReplyComposer
                 key={`${thread.id}:${composer.current.viewerId}`}
@@ -301,6 +422,7 @@ export function ThreadReading({
                 onPendingChange={setReplyPending}
                 onCancel={() => selectReplyParent(null)}
                 onSubmit={async ({ body, idempotencyKey, mediaIds, parentId }) => {
+                  if (!isPageCallbackCurrent()) throw new Error('Thread reader changed');
                   const result = await replyToThread({
                     data: {
                       threadId: thread.id,
@@ -315,6 +437,7 @@ export function ThreadReading({
                   return result.ok ? { ok: true as const, value: result.post } : result;
                 }}
                 onSuccess={(post) => {
+                  if (!isPageCallbackCurrent()) return;
                   setPosts((current) => ({
                     ...current,
                     posts: current.posts.some((item) => item.id === post.id)
@@ -322,7 +445,7 @@ export function ThreadReading({
                       : [...current.posts, post],
                   }));
                   setReplyTarget((current) => ({ ...current, parentId: null }));
-                  void onMutation();
+                  if (isPageCallbackCurrent()) void onMutation();
                 }}
               />
             </section>
