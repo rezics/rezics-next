@@ -254,7 +254,10 @@ export function PersonalLibraryPage({
   // Keep the write lease while a predicate replaces rows or temporarily shows no matches.
   const [fallbackLease] = useState(shelfMutationLease);
   const mutationLease = originatingLease ?? fallbackLease;
-  const navigation = useQuery({ ...libraryNavigationQuery(locale), enabled: acceptedNavigation === undefined && libraryNavigationQuery(locale).enabled });
+  const navigation = useQuery({
+    ...libraryNavigationQuery(locale),
+    enabled: acceptedNavigation === undefined && (libraryNavigationQuery(locale).enabled ?? false),
+  });
   const currentNavigation = acceptedNavigation ?? navigation.data;
   const readContinue = useCallback(() => readContinueEntries({ data: {} }), []);
   const resume = useContinueRefresh(continueState, continueRead ?? readContinue, locale);
@@ -392,28 +395,30 @@ export function PersonalLibraryPage({
             locale={locale}
             {...display}
             empty={
-          <ShelfEmpty
-            kind={page.type || page.state ? 'no-match' : 'library'}
-            title={
-              page.type
-                ? m.library_type_empty_title({ type: typeLabel })
-                : page.state
-                  ? m.library_filter_empty_title({ status: page.stateLabel ?? m.library_other() })
-                  : m.library_empty_title()
-            }
-            description={page.type || page.state ? m.library_filter_empty_description() : m.library_empty_description()}
-            actions={
-              page.type ? (
-                <a href={clearTypeHref} className={buttonVariants({ variant: 'outline' })}>
-                  {m.library_type_clear()}
-                </a>
-              ) : (
-                <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
-                  {m.library_browse()}
-                </a>
-              )
-            }
-          />
+              <ShelfEmpty
+                kind={page.type || page.state ? 'no-match' : 'library'}
+                title={
+                  page.type
+                    ? m.library_type_empty_title({ type: typeLabel })
+                    : page.state
+                      ? m.library_filter_empty_title({ status: page.stateLabel ?? m.library_other() })
+                      : m.library_empty_title()
+                }
+                description={
+                  page.type || page.state ? m.library_filter_empty_description() : m.library_empty_description()
+                }
+                actions={
+                  page.type ? (
+                    <a href={clearTypeHref} className={buttonVariants({ variant: 'outline' })}>
+                      {m.library_type_clear()}
+                    </a>
+                  ) : (
+                    <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
+                      {m.library_browse()}
+                    </a>
+                  )
+                }
+              />
             }
           />
         )}

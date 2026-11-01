@@ -159,12 +159,15 @@ export const Route = createFileRoute('/library/')({
           labelResult: deps.labelResult,
         },
       });
-    return readPersonalLibraryCurrent({ data: {
-      orderBy: deps.orderBy, direction: deps.direction,
-      ...(deps.state ? { state: deps.state } : {}),
-      ...(deps.type ? { type: deps.type } : {}),
-      ...(deps.cursor ? { cursor: deps.cursor } : {}),
-    } });
+    return readPersonalLibraryCurrent({
+      data: {
+        orderBy: deps.orderBy,
+        direction: deps.direction,
+        ...(deps.state ? { state: deps.state } : {}),
+        ...(deps.type ? { type: deps.type } : {}),
+        ...(deps.cursor ? { cursor: deps.cursor } : {}),
+      },
+    });
   },
   head: ({ match, loaderData }) =>
     pageHead(
@@ -181,12 +184,5 @@ function LibraryRoute() {
   const search = validateShelfSearch(Route.useSearch());
   const data = Route.useLoaderData();
   if (!('page' in data)) return <LabelShelfPage page={data} locale={getLocale()} display={shelfDisplay(search)} />;
-  return (
-    <PersonalLibraryCurrent
-      initial={data}
-      search={search}
-      locale={getLocale()}
-      display={shelfDisplay(search)}
-    />
-  );
+  return <PersonalLibraryCurrent initial={data} search={search} locale={getLocale()} display={shelfDisplay(search)} />;
 }

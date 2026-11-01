@@ -19,10 +19,23 @@ export type PersonalLibraryAddress = ShelfSort & {
 };
 export function personalLibraryAddress(input: ShelfSearch, locale: string): PersonalLibraryAddress {
   const search = validateShelfSearch(input as Record<string, unknown>);
-  return { type: search.type ?? null, state: search.state ?? null, cursor: search.cursor ?? null, ...shelfSort(search), locale };
+  return {
+    type: search.type ?? null,
+    state: search.state ?? null,
+    cursor: search.cursor ?? null,
+    ...shelfSort(search),
+    locale,
+  };
 }
 export function samePersonalLibraryAddress(a: PersonalLibraryAddress, b: PersonalLibraryAddress): boolean {
-  return a.type === b.type && a.state === b.state && a.cursor === b.cursor && a.orderBy === b.orderBy && a.direction === b.direction && a.locale === b.locale;
+  return (
+    a.type === b.type &&
+    a.state === b.state &&
+    a.cursor === b.cursor &&
+    a.orderBy === b.orderBy &&
+    a.direction === b.direction &&
+    a.locale === b.locale
+  );
 }
 export type PersonalLibraryCurrentRead = {
   sessionSubject: string | null;
@@ -38,7 +51,9 @@ export type PersonalContinueRead = {
 };
 
 function validateInput(input: unknown): ShelfSearch {
-  return validateShelfSearch(input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : {});
+  return validateShelfSearch(
+    input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {},
+  );
 }
 function prepared(request: Request) {
   const subject = sessionSubject(request);
@@ -63,13 +78,20 @@ export async function loadPersonalLibraryCurrent(
   ]);
   const origins = requests.map(prepared);
   const origin = origins[0];
-  if (!origin || !origins.every((value) => value?.subject === origin.subject && value.credential === origin.credential)) {
+  if (
+    !origin ||
+    !origins.every((value) => value?.subject === origin.subject && value.credential === origin.credential)
+  ) {
     return {
       sessionSubject: null,
       requested,
       page: page.signedIn ? { ...page, entries: [], next: null, readState: page.readState ?? 'unavailable' } : page,
       continueEntries: continueEntries.state === 'loaded' ? { state: 'unavailable' } : continueEntries,
-      navigation: { pins: navigation.pins.state === 'loaded' ? { state: 'unavailable' } : navigation.pins, collections: [], collectionsState: 'unavailable' },
+      navigation: {
+        pins: navigation.pins.state === 'loaded' ? { state: 'unavailable' } : navigation.pins,
+        collections: [],
+        collectionsState: 'unavailable',
+      },
     };
   }
   return { sessionSubject: origin.subject, requested, page, continueEntries, navigation };
@@ -103,5 +125,9 @@ export const readPersonalLibraryContinue = createServerFn({ method: 'GET' })
     const requested = personalLibraryAddress(data, requestLocale(request) ?? 'en');
     const result = await loadContinueState(kernelClient(), request, env as Partial<SessionEnv>);
     const origin = prepared(request);
-    return { sessionSubject: origin?.subject ?? null, requested, result: !origin && result.state === 'loaded' ? { state: 'unavailable' } : result };
+    return {
+      sessionSubject: origin?.subject ?? null,
+      requested,
+      result: !origin && result.state === 'loaded' ? { state: 'unavailable' } : result,
+    };
   });

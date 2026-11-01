@@ -181,13 +181,19 @@ function EntryMenu({
     entries.push({
       type: 'item',
       label: m.library_entry_copies(),
-      onSelect: () => { if (controls.isCurrent() && controls.copiesAdmitted()) void navigate({ to: '/library/copies', search: { subjectId } }); },
+      onSelect: () => {
+        if (controls.isCurrent() && controls.copiesAdmitted())
+          void navigate({ to: '/library/copies', search: { subjectId } });
+      },
     });
     if (progressAdmitted)
       entries.push({
         type: 'item',
         label: m.library_entry_progress(),
-        onSelect: () => { if (controls.isCurrent() && controls.progressAdmitted()) void navigate({ to: '/library/progress', search: { subjectId } }); },
+        onSelect: () => {
+          if (controls.isCurrent() && controls.progressAdmitted())
+            void navigate({ to: '/library/progress', search: { subjectId } });
+        },
       });
   }
   if (deleteAdmitted && !row.unknownIntent && !row.unknownLabelIntent) {
@@ -513,7 +519,13 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
           }
         : {})}
       onSort={(field, direction) => {
-        if (!controls.isCurrent() || !controls.sortAdmitted() || !sortable || !['added', 'finished', 'lastActivity'].includes(field)) return;
+        if (
+          !controls.isCurrent() ||
+          !controls.sortAdmitted() ||
+          !sortable ||
+          !['added', 'finished', 'lastActivity'].includes(field)
+        )
+          return;
         const orderBy = field === 'added' ? 'createdAt' : field === 'finished' ? 'finishedAt' : 'lastActivity';
         void navigate({
           to: '/library',
@@ -558,7 +570,9 @@ export function ShelfEntries(props: ShelfEntriesProps) {
   // selection on these same rows; actor, source URL and replacement loader rows still reset the page.
   const sourceUrl = new URL(location.href, 'https://shelf.invalid');
   for (const field of ['columns', 'layout', 'size']) sourceUrl.searchParams.delete(field);
-  const population = props.isCurrent ? JSON.stringify([props.type, props.state, props.sort, props.cursor]) : sourceUrl.href;
+  const population = props.isCurrent
+    ? JSON.stringify([props.type, props.state, props.sort, props.cursor])
+    : sourceUrl.href;
   const context = `${session.subject ?? session.state}:${props.locale}:${population}`;
   const [source, setSource] = useState({ entries: props.entries, context, generation: 0, active: true });
   const latest = useRef(props.isCurrent);
@@ -569,7 +583,14 @@ export function ShelfEntries(props: ShelfEntriesProps) {
     source.active = false;
     setSource({ entries: props.entries, context, generation: source.generation + 1, active: true });
   }
-  return <ShelfEntriesPage key={source.generation} {...props} isCurrent={() => source.active && (latest.current?.() ?? true)} mutationLease={mutationLease} />;
+  return (
+    <ShelfEntriesPage
+      key={source.generation}
+      {...props}
+      isCurrent={() => source.active && (latest.current?.() ?? true)}
+      mutationLease={mutationLease}
+    />
+  );
 }
 
 function ShelfEntriesPage({

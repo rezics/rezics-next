@@ -22,13 +22,22 @@ function matches(value: PersonalLibraryCurrentRead | undefined, subject: string,
 }
 
 /** The actual personal route's render boundary, including its native shelf children. */
-export function PersonalLibraryCurrent({ initial, search, locale, display }: {
+export function PersonalLibraryCurrent({
+  initial,
+  search,
+  locale,
+  display,
+}: {
   initial: PersonalLibraryCurrentRead;
   search: ShelfSearch;
   locale: string;
   display: ShelfDisplay;
 }) {
-  const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
+  const hydrated = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false,
+  );
   const session = useSession();
   const entries = useOperation('library_entry.list');
   const progress = useOperation('progress_session.list');
@@ -37,7 +46,7 @@ export function PersonalLibraryCurrent({ initial, search, locale, display }: {
   const labels = useOperation('library_label.list');
   const continueList = useOperation('library_continue.list');
   const labelAssign = useOperation('library_label.assign');
-  const subject = hydrated ? session.state === 'signed-in' ? session.subject : null : initial.sessionSubject;
+  const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
   const admitted = !hydrated || (entries && progress && continueList);
   const address = personalLibraryAddress(search, locale);
   const actorKey = JSON.stringify([subject, admitted, hydrated ? [pins, collections, labels, labelAssign] : null]);
@@ -51,18 +60,61 @@ export function PersonalLibraryCurrent({ initial, search, locale, display }: {
     origin.current.active = false;
     origin.current = { key, active: true };
   }
-  if (scope.key !== key) setScope({ key, generation: scope.generation + 1, seed: scope.seed && !scope.hydrated && !!subject && admitted, hydrated });
+  if (scope.key !== key)
+    setScope({
+      key,
+      generation: scope.generation + 1,
+      seed: scope.seed && !scope.hydrated && !!subject && admitted,
+      hydrated,
+    });
   else if (scope.hydrated !== hydrated) setScope({ ...scope, hydrated });
   useLayoutEffect(() => {
     origin.current.active = true;
-    return () => { origin.current.active = false; };
+    return () => {
+      origin.current.active = false;
+    };
   }, []);
-  if (!subject || !admitted) return <p role="status">{session.state === 'signed-out' ? m.library_sign_in() : !admitted ? m.library_sort_denied() : m.library_sort_preparing()}</p>;
-  return <PersonalLibraryRead key={scope.generation} subject={subject} address={address} initial={initial} seed={scope.seed}
-    hydrated={hydrated} display={display} origin={origin.current} mutationLease={lease.value} input={search} pinsAdmitted={!hydrated || pins} collectionsAdmitted={!hydrated || collections} />;
+  if (!subject || !admitted)
+    return (
+      <p role="status">
+        {session.state === 'signed-out'
+          ? m.library_sign_in()
+          : !admitted
+            ? m.library_sort_denied()
+            : m.library_sort_preparing()}
+      </p>
+    );
+  return (
+    <PersonalLibraryRead
+      key={scope.generation}
+      subject={subject}
+      address={address}
+      initial={initial}
+      seed={scope.seed}
+      hydrated={hydrated}
+      display={display}
+      origin={origin.current}
+      mutationLease={lease.value}
+      input={search}
+      pinsAdmitted={!hydrated || pins}
+      collectionsAdmitted={!hydrated || collections}
+    />
+  );
 }
 
-function PersonalLibraryRead({ subject, address, initial, seed, hydrated, display, origin, input, pinsAdmitted, collectionsAdmitted, mutationLease }: {
+function PersonalLibraryRead({
+  subject,
+  address,
+  initial,
+  seed,
+  hydrated,
+  display,
+  origin,
+  input,
+  pinsAdmitted,
+  collectionsAdmitted,
+  mutationLease,
+}: {
   subject: string;
   address: PersonalLibraryAddress;
   initial: PersonalLibraryCurrentRead;
@@ -76,7 +128,7 @@ function PersonalLibraryRead({ subject, address, initial, seed, hydrated, displa
   mutationLease: ShelfMutationLease;
 }) {
   const [lifetime] = useState(() => crypto.randomUUID());
-  const [initialData] = useState(() => seed && matches(initial, subject, address) ? initial : undefined);
+  const [initialData] = useState(() => (seed && matches(initial, subject, address) ? initial : undefined));
   const query = useQuery({
     ...personalRead,
     queryKey: ['personal-library-current', subject, address, lifetime],
@@ -106,20 +158,36 @@ function PersonalLibraryRead({ subject, address, initial, seed, hydrated, displa
   const [isCurrent] = useState(() => () => origin.active && current.current);
   const [readContinue] = useState(() => async () => {
     if (!isCurrent()) return { state: 'unavailable' } as const;
-    const result = await readPersonalLibraryContinue({ data: {
-      type: address.type ?? undefined, state: address.state ?? undefined, cursor: address.cursor ?? undefined,
-      orderBy: address.orderBy, direction: address.direction,
-    } });
+    const result = await readPersonalLibraryContinue({
+      data: {
+        type: address.type ?? undefined,
+        state: address.state ?? undefined,
+        cursor: address.cursor ?? undefined,
+        orderBy: address.orderBy,
+        direction: address.direction,
+      },
+    });
     return isCurrent() && result.sessionSubject === subject && samePersonalLibraryAddress(result.requested, address)
-      ? result.result : { state: 'unavailable' } as const;
+      ? result.result
+      : ({ state: 'unavailable' } as const);
   });
-  if (!accepted) return <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>;
-  return <PersonalLibraryPage page={accepted.page} locale={address.locale} display={display}
-    {...(address.cursor ? { cursor: address.cursor } : {})}
-    acceptedNavigation={{
-      pins: pinsAdmitted ? accepted.navigation.pins : { state: 'closed' },
-      collections: collectionsAdmitted ? accepted.navigation.collections : [],
-      collectionsState: collectionsAdmitted ? accepted.navigation.collectionsState ?? 'loaded' : 'loaded',
-    }} continueState={accepted.continueEntries}
-    continueRead={readContinue} isCurrent={isCurrent} originatingLease={mutationLease} />;
+  if (!accepted)
+    return <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>;
+  return (
+    <PersonalLibraryPage
+      page={accepted.page}
+      locale={address.locale}
+      display={display}
+      {...(address.cursor ? { cursor: address.cursor } : {})}
+      acceptedNavigation={{
+        pins: pinsAdmitted ? accepted.navigation.pins : { state: 'closed' },
+        collections: collectionsAdmitted ? accepted.navigation.collections : [],
+        collectionsState: collectionsAdmitted ? (accepted.navigation.collectionsState ?? 'loaded') : 'loaded',
+      }}
+      continueState={accepted.continueEntries}
+      continueRead={readContinue}
+      isCurrent={isCurrent}
+      originatingLease={mutationLease}
+    />
+  );
 }
