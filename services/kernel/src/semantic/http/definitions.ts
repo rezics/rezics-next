@@ -99,8 +99,8 @@ const pinnedKindSchema = t.Object({
 });
 const catalogueStatusSchema = t.Object({
   pin: cataloguePinSchema,
-  state: t.Union(['building', 'incomplete', 'refused', 'ready'].map((value) => t.Literal(value))),
-  phase: t.Union(['node', 'release', 'declaration'].map((value) => t.Literal(value))),
+  state: t.Union([t.Literal('building'), t.Literal('incomplete'), t.Literal('refused'), t.Literal('ready')]),
+  phase: t.Union([t.Literal('node'), t.Literal('release'), t.Literal('declaration')]),
   steps: t.String(),
   nodes: t.String(),
   releases: t.String(),
@@ -170,7 +170,7 @@ export function definitionRoutes(
         headers: writeHeaders,
         body: t.Object(
           {
-            kind: t.Union(['root', 'node', 'release', 'declaration'].map((value) => t.Literal(value))),
+            kind: t.Union([t.Literal('root'), t.Literal('node'), t.Literal('release'), t.Literal('declaration')]),
             artifact: releaseObject,
           },
           { additionalProperties: false },

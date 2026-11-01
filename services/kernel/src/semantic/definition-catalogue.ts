@@ -245,8 +245,8 @@ export function createNativeDefinitionCatalogue({
       let rows: KeyRow[];
       if (metadata) {
         const languageKey = catalogueKey(input.language);
-        let afterLabel = Buffer.alloc(0),
-          afterOrdinal = '0';
+        let afterLabel: Buffer = Buffer.alloc(0);
+        let afterOrdinal = '0';
         if (after) {
           const boundary = (
             await query<{ label_sort: Buffer; language: string }>(
