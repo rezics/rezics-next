@@ -3080,7 +3080,11 @@ type HostProvider = () => Host[];
 type Placement = Pick<Host, 'name' | 'address' | 'identity'>;
 
 /** Reads once per admission round and keeps the last complete valid configuration through partial rewrites. */
-function liveHosts(initial: Host[], file?: string, requested: readonly string[] = PERFORMANCE_HOST_NAMES): HostProvider {
+function liveHosts(
+  initial: Host[],
+  file?: string,
+  requested: readonly string[] = PERFORMANCE_HOST_NAMES,
+): HostProvider {
   const allowed = new Set(requested.filter((name) => (PERFORMANCE_HOST_NAMES as readonly string[]).includes(name)));
   const eligible = (hosts: Host[]) => hosts.filter(({ name }) => allowed.has(name));
   let lastValid = eligible(initial);
@@ -4613,7 +4617,10 @@ function parse(argv: string[]): RemoteCheck {
       const value = rest.shift();
       if (!value) throw new Error('--allowed-hosts needs a comma-separated a/b host list');
       allowedHosts = value.split(',');
-      if (allowedHosts.length === 0 || allowedHosts.some((name) => !(PERFORMANCE_HOST_NAMES as readonly string[]).includes(name)))
+      if (
+        allowedHosts.length === 0 ||
+        allowedHosts.some((name) => !(PERFORMANCE_HOST_NAMES as readonly string[]).includes(name))
+      )
         throw new Error('--allowed-hosts may contain only a and b');
       continue;
     }

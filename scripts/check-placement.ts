@@ -70,7 +70,9 @@ export function splitEnvironmentCommand(argv: readonly string[]): EnvironmentCom
 }
 
 function pathSegments(path: string): string[] {
-  return resolve(path).split(/[\\/]+/).filter(Boolean);
+  return resolve(path)
+    .split(/[\\/]+/)
+    .filter(Boolean);
 }
 
 function hasPathPair(path: string, parent: string, child: string): boolean {
@@ -251,8 +253,7 @@ export function environmentCommandIsSafe(argv: readonly string[], depth = 0): bo
 
 function importsOf(source: string): string[] {
   const imports: string[] = [];
-  const expression =
-    /(?:\bfrom\s*|\bimport\s*\(|\bimport\s+|\brequire\s*\()(['"])([^'"\n]+)\1/g;
+  const expression = /(?:\bfrom\s*|\bimport\s*\(|\bimport\s+|\brequire\s*\()(['"])([^'"\n]+)\1/g;
   for (const match of source.matchAll(expression)) imports.push(match[2]!);
   return imports;
 }
@@ -273,7 +274,11 @@ function smallUnitFile(root: string, file: string, seen: Set<string>): boolean {
   } catch {
     return false;
   }
-  if (/\b(?:Bun\.(?:serve|spawn|spawnSync|listen)|Deno\.serve|chromium\.launch|firefox\.launch|webkit\.launch|createServer\s*\(|fetch\s*\(|new\s+Worker\s*\()/.test(source))
+  if (
+    /\b(?:Bun\.(?:serve|spawn|spawnSync|listen)|Deno\.serve|chromium\.launch|firefox\.launch|webkit\.launch|createServer\s*\(|fetch\s*\(|new\s+Worker\s*\()/.test(
+      source,
+    )
+  )
     return false;
   if (/\b(?:import|require)\s*\(\s*(?!['"])/.test(source)) return false;
   const imports = importsOf(source);
@@ -400,10 +405,8 @@ function classifyCommand(argv: readonly string[], cwd: string, root: string, dep
       const script = argv[scriptIndex];
       if (!script) return { placement: 'remote', reason: 'missing package script' };
       const source = packageScript(directory, script);
-      if (isPureRootTypecheck(directory, script, source))
-        return { placement: 'local', reason: 'root typecheck' };
-      if (isPureWebTypecheck(directory, script, source))
-        return { placement: 'local', reason: 'web typecheck' };
+      if (isPureRootTypecheck(directory, script, source)) return { placement: 'local', reason: 'root typecheck' };
+      if (isPureWebTypecheck(directory, script, source)) return { placement: 'local', reason: 'web typecheck' };
       const scriptPath = resolve(directory, script);
       if (isNativeStackPath(directory) || isNativeStackPath(scriptPath) || isNativeScript(scriptPath))
         return { placement: 'remote', reason: 'script belongs to a native stack workspace' };
@@ -462,13 +465,15 @@ export function isCheckHostRun(cwd: string, cgroup?: string): boolean {
   if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)) return false;
   const runId = inside.split(sep)[0];
   if (!runId || !/^[a-z0-9-]+$/i.test(runId)) return false;
-  const currentCgroup = cgroup ?? (() => {
-    try {
-      return readFileSync('/proc/self/cgroup', 'utf8');
-    } catch {
-      return '';
-    }
-  })();
+  const currentCgroup =
+    cgroup ??
+    (() => {
+      try {
+        return readFileSync('/proc/self/cgroup', 'utf8');
+      } catch {
+        return '';
+      }
+    })();
   if (!new RegExp(`(?:^|/)rezics-check-${runId}\\.scope(?:/|$)`).test(currentCgroup)) return false;
   const marker = join(runs, runId, '.remote-check-supervisor');
   try {
@@ -483,7 +488,10 @@ export function isCheckHostRun(cwd: string, cgroup?: string): boolean {
     )
       return false;
     const processStat = readFileSync(`/proc/${owner.pid}/stat`, 'utf8');
-    const supervisor = processStat.slice(processStat.lastIndexOf(')') + 1).trim().split(/\s+/);
+    const supervisor = processStat
+      .slice(processStat.lastIndexOf(')') + 1)
+      .trim()
+      .split(/\s+/);
     return (
       supervisor[0] !== 'Z' &&
       supervisor[0] !== 'X' &&

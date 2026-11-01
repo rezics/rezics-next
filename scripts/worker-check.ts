@@ -1298,7 +1298,9 @@ export async function runWorkerCheck(
   const remoteHostsFile = 'file' in locatedHosts ? locatedHosts.file : undefined;
   let remoteHostFailure: string | undefined;
   if (needsStack) {
-    if (!remoteHostsFile) remoteHostFailure = 'remote check hosts are unavailable: ' + ('reason' in locatedHosts ? locatedHosts.reason : 'no file');
+    if (!remoteHostsFile)
+      remoteHostFailure =
+        'remote check hosts are unavailable: ' + ('reason' in locatedHosts ? locatedHosts.reason : 'no file');
     else {
       try {
         if (performanceHosts(readHosts(remoteHostsFile)).length === 0)
@@ -1643,16 +1645,13 @@ export async function runWorkerCheck(
     const cancelledLogical = logicalCheckId !== undefined && checkCancelled(root, logicalCheckId) !== undefined;
     const remoteTerminal = remoteCustody?.physicalRunId === physicalRunId && remoteCustody.status === 'terminal';
     wait.stop();
-    const exitCode =
-      remoteSignal !== undefined
-        ? 128 + remoteSignal
-        : cancelledLogical || stopped
-          ? 125
-          : remoteCode;
+    const exitCode = remoteSignal !== undefined ? 128 + remoteSignal : cancelledLogical || stopped ? 125 : remoteCode;
     if (ledger && Object.keys(remoteCommandPhases).length) ledger.commandPhases = remoteCommandPhases;
-    const terminalityCause = failedTransport && !remoteTerminal
-      ? `${failedTransport}; remote execution terminality is unknown`
-      : failedTransport ?? (remoteCode === 75 && !remoteTerminal ? 'remote execution terminality is unknown' : undefined);
+    const terminalityCause =
+      failedTransport && !remoteTerminal
+        ? `${failedTransport}; remote execution terminality is unknown`
+        : (failedTransport ??
+          (remoteCode === 75 && !remoteTerminal ? 'remote execution terminality is unknown' : undefined));
     endLedger(exitCode, lifetimeReason ?? terminalityCause);
     closeSync(descriptor);
     return report(exitCode);

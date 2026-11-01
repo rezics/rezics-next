@@ -132,7 +132,8 @@ const FORBIDDEN_REMOTE_ENVIRONMENT = new Set([
 function absoluteDirectory(value: string, flag: string): string {
   if (!isAbsolute(value)) throw new Error(`${flag} must be an absolute path`);
   const resolved = resolve(value);
-  if (!existsSync(resolved) || !lstatSync(resolved).isDirectory()) throw new Error(`${flag} is not a directory: ${value}`);
+  if (!existsSync(resolved) || !lstatSync(resolved).isDirectory())
+    throw new Error(`${flag} is not a directory: ${value}`);
   return resolved;
 }
 
@@ -173,7 +174,9 @@ function git(root: string, args: string[]): string {
     timeout: 30_000,
   });
   if (result.exitCode !== 0)
-    throw new CheckRunUnavailable(`check-run: Git ${args[0] ?? 'operation'} failed: ${result.stderr.toString().trim()}`);
+    throw new CheckRunUnavailable(
+      `check-run: Git ${args[0] ?? 'operation'} failed: ${result.stderr.toString().trim()}`,
+    );
   return result.stdout.toString().trim();
 }
 
@@ -187,7 +190,9 @@ function gitList(root: string, args: string[]): string[] {
     timeout: 30_000,
   });
   if (result.exitCode !== 0)
-    throw new CheckRunUnavailable(`check-run: Git ${args[0] ?? 'operation'} failed: ${result.stderr.toString().trim()}`);
+    throw new CheckRunUnavailable(
+      `check-run: Git ${args[0] ?? 'operation'} failed: ${result.stderr.toString().trim()}`,
+    );
   return result.stdout.toString().split('\0').filter(Boolean);
 }
 
@@ -197,7 +202,9 @@ function excludedTransferPath(file: string): boolean {
     parts[0] === '.git' ||
     parts[0] === '.temp' ||
     parts.includes('node_modules') ||
-    parts.some((part) => ['build', 'dist', 'out', 'coverage', '.next', '.turbo', 'playwright-report', 'test-results'].includes(part))
+    parts.some((part) =>
+      ['build', 'dist', 'out', 'coverage', '.next', '.turbo', 'playwright-report', 'test-results'].includes(part),
+    )
   );
 }
 
@@ -229,10 +236,7 @@ function hasPrivateKeyMaterial(file: string): boolean {
 function assertCandidateInputs(root: string, excludedPaths: readonly string[]): void {
   const listed = gitList(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']);
   for (const file of listed) {
-    if (
-      excludedTransferPath(file) ||
-      excludedPaths.some((path) => file === path || file.startsWith(`${path}/`))
-    )
+    if (excludedTransferPath(file) || excludedPaths.some((path) => file === path || file.startsWith(`${path}/`)))
       continue;
     const absolute = resolve(root, file);
     let stats;
@@ -255,7 +259,8 @@ function assertCandidateInputs(root: string, excludedPaths: readonly string[]): 
 }
 
 function assertContainedSymlink(root: string, absolute: string, target: string): void {
-  if (isAbsolute(target)) throw new CheckRunUnavailable(`check-run: absolute source symlink is not portable: ${relative(root, absolute)}`);
+  if (isAbsolute(target))
+    throw new CheckRunUnavailable(`check-run: absolute source symlink is not portable: ${relative(root, absolute)}`);
   const resolvedTarget = resolve(dirname(absolute), target);
   const inside = relative(root, resolvedTarget);
   if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside))
@@ -296,12 +301,12 @@ async function inputFingerprint(
       const target = readlinkSync(absolute);
       assertContainedSymlink(root, absolute, target);
       hash.update(`link\0${target}\0`);
-    }
-    else if (stat.isFile()) hash.update(`file\0${await hashFile(absolute)}\0`);
+    } else if (stat.isFile()) hash.update(`file\0${await hashFile(absolute)}\0`);
     else throw new CheckRunUnavailable(`check-run: unsupported source input type: ${file}`);
   }
   for (const file of gitList(root, ['ls-files', '--deleted', '-z'])) {
-    if (excludedTransferPath(file) || excludedPaths.some((path) => file === path || file.startsWith(`${path}/`))) continue;
+    if (excludedTransferPath(file) || excludedPaths.some((path) => file === path || file.startsWith(`${path}/`)))
+      continue;
     hash.update(`deleted\0${file}\0`);
   }
   const head = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
@@ -354,7 +359,9 @@ function validateNonOverlappingReturns(paths: readonly string[]): string[] {
   const declarations = validateArtifactDeclarations(paths);
   for (const path of declarations) {
     if (sensitivePath(path))
-      throw new CheckRunUnavailable(`check-run: declared return path is protected credential or host-local data: ${path}`);
+      throw new CheckRunUnavailable(
+        `check-run: declared return path is protected credential or host-local data: ${path}`,
+      );
   }
   for (let index = 0; index < declarations.length; index += 1) {
     for (let other = index + 1; other < declarations.length; other += 1) {
@@ -409,7 +416,9 @@ export async function prepareCandidateSnapshot(
     throw new CheckRunUnavailable(`check-run: --workspace must be the candidate Git root (received ${root})`);
   const head = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
   if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(sourceRevision) || head !== sourceRevision)
-    throw new CheckRunUnavailable(`check-run: source revision mismatch (requested ${sourceRevision}, candidate ${head})`);
+    throw new CheckRunUnavailable(
+      `check-run: source revision mismatch (requested ${sourceRevision}, candidate ${head})`,
+    );
   assertCandidateInputs(root, excludedInputs);
   const files = workspaceFiles(root);
   const beforeFingerprint = await inputFingerprint(root, files, excludedInputs);
@@ -427,7 +436,9 @@ export async function prepareCandidateSnapshot(
       { cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: 60_000 },
     );
     if (add.exitCode !== 0)
-      throw new CheckRunUnavailable(`check-run: candidate worktree preparation failed: ${add.stderr.toString().trim()}`);
+      throw new CheckRunUnavailable(
+        `check-run: candidate worktree preparation failed: ${add.stderr.toString().trim()}`,
+      );
     worktreeRegistered = true;
     const selected = new Set(files);
     for (const tracked of baseFiles) if (!selected.has(tracked)) removeCandidateFile(frozen, tracked);
@@ -437,12 +448,17 @@ export async function prepareCandidateSnapshot(
       await copyFrozenInput(root, frozen, file);
     }
     const frozenIndex = git(frozen, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
-    const readTree = Bun.spawnSync(
-      ['git', '-c', 'core.hooksPath=/dev/null', '-C', frozen, 'read-tree', indexTree],
-      { cwd: frozen, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: 30_000 },
-    );
+    const readTree = Bun.spawnSync(['git', '-c', 'core.hooksPath=/dev/null', '-C', frozen, 'read-tree', indexTree], {
+      cwd: frozen,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: 30_000,
+    });
     if (readTree.exitCode !== 0)
-      throw new CheckRunUnavailable(`check-run: candidate index snapshot could not be prepared: ${readTree.stderr.toString().trim()}`);
+      throw new CheckRunUnavailable(
+        `check-run: candidate index snapshot could not be prepared: ${readTree.stderr.toString().trim()}`,
+      );
     if (!existsSync(frozenIndex)) throw new CheckRunUnavailable('check-run: frozen native index is missing');
     const afterFingerprint = await inputFingerprint(root, files, excludedInputs);
     const frozenFingerprint = await inputFingerprint(frozen, workspaceFiles(frozen), excludedInputs);
@@ -474,7 +490,8 @@ export function readEnvironmentFile(file: string, workspace: string): Record<str
     throw new Error('--env-file must be a private regular file with mode 0600 or stricter');
   if (stat.size > 1024 * 1024) throw new Error('--env-file exceeds the 1 MiB environment bound');
   const value: unknown = JSON.parse(readFileSync(absolute, 'utf8'));
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('--env-file must contain a JSON object');
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('--env-file must contain a JSON object');
   const entries = Object.entries(value as Record<string, unknown>);
   if (entries.length > 256) throw new Error('--env-file contains too many environment values');
   const output: Record<string, string> = {};
@@ -512,7 +529,9 @@ function relocateEnvironment(
       throw new CheckRunUnavailable(`check-run: host-absolute environment dependency ${name} is unsupported`);
     const pathLike = name === 'GROWTH_PROFILE' || /(?:_FILE|_PATH|_DIR|_ROOT)$/.test(name);
     if (!pathLike)
-      throw new CheckRunUnavailable(`check-run: absolute environment dependency ${name} is not a declared workspace path`);
+      throw new CheckRunUnavailable(
+        `check-run: absolute environment dependency ${name} is not a declared workspace path`,
+      );
     relocated[name] = relative(resolve(targetWorkspace, cwd), resolve(targetWorkspace, inside)) || '.';
   }
   return relocated;
@@ -544,7 +563,9 @@ function preparationCommands(
       throw new CheckRunUnavailable(`check-run: required generated-input package is missing: ${path}`);
     }
     if (stat.isSymbolicLink() || !stat.isFile() || stat.size > 1024 * 1024)
-      throw new CheckRunUnavailable(`check-run: generated-input package manifest is not a bounded regular file: ${path}`);
+      throw new CheckRunUnavailable(
+        `check-run: generated-input package manifest is not a bounded regular file: ${path}`,
+      );
     let parsed: { scripts?: Record<string, unknown> };
     try {
       parsed = JSON.parse(readFileSync(manifestPath, 'utf8')) as { scripts?: Record<string, unknown> };
@@ -598,7 +619,8 @@ export function parseCheckRunArguments(argv: readonly string[]): CheckRunArgumen
   if (args.shift() !== '--' || args.length === 0) throw new Error('check-run requires -- <original-argv...>');
   result.command = args;
   for (const name of ['hosts', 'workspace', 'cwd', 'sourceRevision', 'envFile'] as const) {
-    if (typeof result[name] !== 'string' || !result[name]) throw new Error(`check-run requires --${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`);
+    if (typeof result[name] !== 'string' || !result[name])
+      throw new Error(`check-run requires --${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`);
   }
   return result as CheckRunArguments;
 }
@@ -746,7 +768,11 @@ export async function runCheck(
   const returns = validateNonOverlappingReturns(
     args.returns.map((path) => workspaceRelative(candidateRoot, path, '--returns')),
   );
-  if (args.command.length === 0 || args.command.length > 1024 || args.command.some((argument) => argument.length > 4096))
+  if (
+    args.command.length === 0 ||
+    args.command.length > 1024 ||
+    args.command.some((argument) => argument.length > 4096)
+  )
     throw new Error('check-run: original argv exceeds its argument bounds');
   if (new TextEncoder().encode(JSON.stringify(args.command)).byteLength > 16 * 1024)
     throw new Error('check-run: original argv exceeds its encoded size bound');
@@ -777,7 +803,9 @@ export async function runCheck(
     const preparation = preparationCommands(snapshot.workspace, cwd, frozenArgs);
     const producerSourceHash = await hashFile(resolve(import.meta.path));
     const hostConfigurationHash = await hashFile(hostsFile);
-    const preparationHash = createHash('sha256').update(JSON.stringify(preparation ?? [])).digest('hex');
+    const preparationHash = createHash('sha256')
+      .update(JSON.stringify(preparation ?? []))
+      .digest('hex');
     const sourceEnvironmentHash = createHash('sha256')
       .update(JSON.stringify(Object.entries(originalEnvironment).sort(([left], [right]) => left.localeCompare(right))))
       .digest('hex');
@@ -815,7 +843,8 @@ export async function runCheck(
       started: (host) => {
         if (signal.aborted || executionCancellation(cancellation))
           throw new Aborted('check-run: cancelled command cannot start');
-        if (host !== 'a' && host !== 'b') throw new CheckRunUnavailable(`check-run: remote transport selected forbidden host ${host}`);
+        if (host !== 'a' && host !== 'b')
+          throw new CheckRunUnavailable(`check-run: remote transport selected forbidden host ${host}`);
         dependencies.onStarted?.(host);
       },
       completed: (receipt) => {
@@ -894,7 +923,9 @@ export async function runCheck(
         (dependencies.cleanupWorktree ?? cleanupWorktree)(candidateRoot, snapshot.workspace, snapshot.scratch);
       } catch (error) {
         cleanupFailure = error;
-        process.stderr.write(`check-run: frozen source cleanup failed: ${error instanceof Error ? error.message : String(error)}\n`);
+        process.stderr.write(
+          `check-run: frozen source cleanup failed: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
         if (outcome === 0) outcome = 1;
       }
     } else {
@@ -904,7 +935,9 @@ export async function runCheck(
       try {
         dependencies.onRetainSnapshot?.(snapshot);
       } catch (error) {
-        process.stderr.write(`check-run: retained snapshot observer failed: ${error instanceof Error ? error.message : String(error)}\n`);
+        process.stderr.write(
+          `check-run: retained snapshot observer failed: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
       }
     }
   }

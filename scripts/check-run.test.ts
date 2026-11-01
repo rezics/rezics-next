@@ -3,12 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import {
-  parseCheckRunArguments,
-  runCheck,
-  type CandidateSnapshot,
-  type CheckRunArguments,
-} from './check-run.ts';
+import { parseCheckRunArguments, runCheck, type CandidateSnapshot, type CheckRunArguments } from './check-run.ts';
 import type { RemoteCheck, RemotePhysicalRunReceipt } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
@@ -100,10 +95,14 @@ function finish(options: RemoteCheck, host = 'a', exitCode = 0): void {
 }
 
 function removeRetainedSnapshot(fixture: ReturnType<typeof candidate>, snapshot: CandidateSnapshot): void {
-  spawnSync('git', ['-c', 'core.hooksPath=/dev/null', '-C', fixture.root, 'worktree', 'remove', '--force', snapshot.workspace], {
-    encoding: 'utf8',
-    timeout: 15_000,
-  });
+  spawnSync(
+    'git',
+    ['-c', 'core.hooksPath=/dev/null', '-C', fixture.root, 'worktree', 'remove', '--force', snapshot.workspace],
+    {
+      encoding: 'utf8',
+      timeout: 15_000,
+    },
+  );
   rmSync(snapshot.scratch, { recursive: true, force: true });
 }
 
@@ -165,12 +164,7 @@ test('generic driver freezes a separate candidate, preserves environment, cwd, p
         expect(options.hosts.map(({ name }) => name)).toEqual(['a', 'b']);
         expect(options.allowedHosts).toEqual(['a', 'b']);
         expect(options.priority).toBe('critical');
-        expect(options.command).toEqual([
-          'env',
-          `LABEL=${overlay.LABEL}`,
-          'SETTINGS_FILE=settings.json',
-          ...argv,
-        ]);
+        expect(options.command).toEqual(['env', `LABEL=${overlay.LABEL}`, 'SETTINGS_FILE=settings.json', ...argv]);
         expect(options.prepare).toEqual([
           { cwd: '.', command: ['bun', 'run', '--cwd', 'apps/web', 'generate'] },
           { cwd: '.', command: ['bun', 'run', '--cwd', 'apps/web', 'generate:routes'] },
@@ -211,17 +205,40 @@ test('source mismatch, c-only hosts, forbidden env values, and missing generated
   ).rejects.toThrow('source revision mismatch');
   expect(transports).toBe(0);
 
-  writeFileSync(fixture.hosts, JSON.stringify({ hosts: [{ name: 'c', address: 'root@c.example', identity: '/keys/c', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 8 }] }));
+  writeFileSync(
+    fixture.hosts,
+    JSON.stringify({
+      hosts: [
+        { name: 'c', address: 'root@c.example', identity: '/keys/c', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 8 },
+      ],
+    }),
+  );
   await expect(runCheck(argsFor(fixture, ['bun', 'test']), dependencies)).rejects.toThrow('no approved a/b host');
   expect(transports).toBe(0);
 
-  writeFileSync(fixture.hosts, JSON.stringify({ hosts: ['a', 'b'].map((name) => ({ name, address: `root@${name}.example`, identity: `/keys/${name}`, memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 8 })) }));
+  writeFileSync(
+    fixture.hosts,
+    JSON.stringify({
+      hosts: ['a', 'b'].map((name) => ({
+        name,
+        address: `root@${name}.example`,
+        identity: `/keys/${name}`,
+        memoryMaxGiB: 16,
+        cpuQuotaPercent: 800,
+        slots: 8,
+      })),
+    }),
+  );
   writeFileSync(fixture.envFile, JSON.stringify({ PATH: '/tmp/attacker-bin' }) + '\n');
-  await expect(runCheck(argsFor(fixture, ['bun', 'test']), dependencies)).rejects.toThrow('host-local or placement authority');
+  await expect(runCheck(argsFor(fixture, ['bun', 'test']), dependencies)).rejects.toThrow(
+    'host-local or placement authority',
+  );
   expect(transports).toBe(0);
 
   writeFileSync(fixture.envFile, JSON.stringify({ REMOTE_CHECK_PRIORITY: 'critical' }) + '\n');
-  await expect(runCheck(argsFor(fixture, ['bun', 'test']), dependencies)).rejects.toThrow('host-local or placement authority');
+  await expect(runCheck(argsFor(fixture, ['bun', 'test']), dependencies)).rejects.toThrow(
+    'host-local or placement authority',
+  );
   expect(transports).toBe(0);
 
   writeFileSync(fixture.envFile, '{}\n');
@@ -239,7 +256,9 @@ test('source mismatch, c-only hosts, forbidden env values, and missing generated
   const credential = candidate();
   const privateKey = join(credential.root, 'src/private.pem');
   writeFileSync(privateKey, '-----BEGIN PRIVATE KEY-----\nfake fixture\n');
-  await expect(runCheck(argsFor(credential, ['bun', 'run', 'check']), dependencies)).rejects.toThrow('private key material');
+  await expect(runCheck(argsFor(credential, ['bun', 'run', 'check']), dependencies)).rejects.toThrow(
+    'private key material',
+  );
   rmSync(privateKey);
   await expect(runCheck(argsFor(credential, ['bun', 'run', 'check'], ['.env']), dependencies)).rejects.toThrow(
     'protected credential or host-local data',
@@ -259,7 +278,9 @@ test('generic driver freezes tracked edits, staged index, deletions, and admitte
   const result = await runCheck(argsFor(fixture, ['bun', 'test', 'test/unit.test.ts']), {
     transport: async (options) => {
       expect(await Bun.file(join(options.workspace, 'src/input.ts')).text()).toBe('working tree version\n');
-      expect(await Bun.file(join(options.workspace, 'src/staged.ts')).text()).toBe('working tree version of staged file\n');
+      expect(await Bun.file(join(options.workspace, 'src/staged.ts')).text()).toBe(
+        'working tree version of staged file\n',
+      );
       expect(git(options.workspace, 'show', ':src/staged.ts')).toBe('index version');
       expect(await Bun.file(join(options.workspace, 'src/untracked.ts')).text()).toBe('untracked source\n');
       expect(existsSync(join(options.workspace, 'src/deleted.ts'))).toBe(false);
@@ -329,15 +350,12 @@ test('transport failure and queued cancellation never start a local command and 
   let retained: CandidateSnapshot | undefined;
   let starts = 0;
   try {
-    const failed = await runCheck(
-      argsFor(fixture, ['bun', 'run', 'check']),
-      {
-        onRetainSnapshot: (snapshot) => (retained = snapshot),
-        transport: async () => {
-          throw new Error('remote-check: no check host answered');
-        },
+    const failed = await runCheck(argsFor(fixture, ['bun', 'run', 'check']), {
+      onRetainSnapshot: (snapshot) => (retained = snapshot),
+      transport: async () => {
+        throw new Error('remote-check: no check host answered');
       },
-    );
+    });
     expect(failed).toBe(75);
     expect(retained).toBeDefined();
     expect(existsSync(retained!.workspace)).toBe(true);

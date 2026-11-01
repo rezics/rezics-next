@@ -217,7 +217,9 @@ export async function runOnCheckHost(
     try {
       hosts = performanceHosts(readHosts(reason.hostsFile));
     } catch (error) {
-      console.error(`stack-run: ${run.label} unavailable: invalid check hosts: ${error instanceof Error ? error.message : error}`);
+      console.error(
+        `stack-run: ${run.label} unavailable: invalid check hosts: ${error instanceof Error ? error.message : error}`,
+      );
       return REMOTE_TRANSPORT_FAILURE;
     }
     if (hosts.length === 0) {
@@ -246,7 +248,7 @@ export async function runOnCheckHost(
             run.started?.(host);
             console.error(`stack-run: ${run.label}${priority ? ` priority ${priority}` : ''} on ${host}`);
           },
-      },
+        },
         controller.signal,
       );
     } catch (error) {

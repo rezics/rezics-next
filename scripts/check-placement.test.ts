@@ -84,7 +84,9 @@ test('pure root and web typechecks, compiler tools, and explicit small unit sele
     ['env', 'MODE=small', 'bun', 'run', '--cwd', 'packages/util', 'unit'],
   ];
   for (const argv of cases) expect(classifyCheck(argv, root).placement, argv.join(' ')).toBe('local');
-  expect(classifyCheck(['env', 'PATH=/tmp/untrusted', 'bun', 'test', 'packages/util/test/unit.test.ts'], root).placement).toBe('remote');
+  expect(
+    classifyCheck(['env', 'PATH=/tmp/untrusted', 'bun', 'test', 'packages/util/test/unit.test.ts'], root).placement,
+  ).toBe('remote');
   expect(workerCheckNeedsStack(['bun', 'test'], root)).toBe(true);
 });
 
@@ -112,9 +114,13 @@ test('discovery, preload, shell, native-stack, browser, server, database, and un
     expect(classifyCheck(['bun', 'test', `packages/util/test/${name}`], root).placement, name).toBe('remote');
   }
   expect(classifyCheck(['bun', 'test'], root).placement).toBe('remote');
-  expect(classifyCheck(['bun', 'test', '--preload', 'test/setup.ts', 'packages/util/test/unit.test.ts'], root).placement).toBe('remote');
+  expect(
+    classifyCheck(['bun', 'test', '--preload', 'test/setup.ts', 'packages/util/test/unit.test.ts'], root).placement,
+  ).toBe('remote');
   expect(classifyCheck(['sh', '-c', 'bun test'], root).placement).toBe('remote');
-  expect(classifyCheck(['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/a.test.ts'], root).placement).toBe('remote');
+  expect(classifyCheck(['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/a.test.ts'], root).placement).toBe(
+    'remote',
+  );
   expect(classifyCheck(['bun', 'run', 'heavy'], root).placement).toBe('remote');
   const large = join(root, 'packages/util/test/large.test.ts');
   writeFileSync(large, `// ${'x'.repeat(256 * 1024)}\n`);
