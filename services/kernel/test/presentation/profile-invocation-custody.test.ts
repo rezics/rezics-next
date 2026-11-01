@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { PROFILE_FORMAT, profileDigest, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
-import { IdempotencyConflictError, commandTime } from '../../src/command/command.ts';
+import { IdempotencyConflictError, commandTime, type CommandAttempt } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { ProfileCache, profileSnapshot } from '../../src/presentation/profile-cache.ts';
 import {
@@ -231,6 +231,7 @@ test('publish and activate keep the actual original callback while native checko
       const target = await publishProfile(pool, { ...options(), profile: original });
       const held = barrier();
       const connect = pool.connect;
+      const checkout: () => Promise<pg.PoolClient> = connect.bind(pool);
       let first = true;
       // Delegate every checkout to the real migrated pool; delay only the first call.
       pool.connect = (async () => {
@@ -238,7 +239,7 @@ test('publish and activate keep the actual original callback while native checko
           first = false;
           await held.wait();
         }
-        return connect.call(pool);
+        return checkout();
       }) as typeof pool.connect;
       let originalCalls = 0;
       let replacementCalls = 0;
@@ -499,7 +500,7 @@ test('native prepared authorization retains its live object, same time and evide
     const authorize = native.authorize;
     const held = barrier();
     let proof: unknown;
-    let time: unknown;
+    let time!: CommandAttempt['time'];
     let calls = 0;
     let preparations = 0;
     native.prepare = async function (attempt) {
