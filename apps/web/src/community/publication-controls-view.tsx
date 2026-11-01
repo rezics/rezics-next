@@ -148,7 +148,7 @@ export function usePublicationControls(
       };
       return createPublicationDraft(realmId, send, saved, () => subjects.current, enabled, {
         current,
-        watch: source?.subscribe,
+        ...(source ? { watch: source.subscribe } : {}),
         startDisconnected: true,
       });
     },
