@@ -239,9 +239,10 @@ Current original AND terminal eligibility, foreign resources, mounts and owner l
 
 ### Authentic native creation and current restoration
 
-During `CommandAuthorization.prepare`, after actual native command admission and before target checkout, call
-[`captureDurableInitiator`](../access/durable-initiator-capture.ts)(`commandAccessContext(context, attempt)`, actor).
-The actor must be the exact admitted account object. Capture the original account floor/operator and, for
+During `CommandAuthorization.prepare`, after actual native command admission and before target checkout, use the
+[`capture helper`](../access/durable-initiator-capture.ts) as
+`captureDurableInitiator(commandAccessContext(context, attempt), actor)`. The actor must be the exact admitted
+account object. Capture the original account floor/operator and, for
 `requestedBy`, the exact live native assignment transaction and `issued_valid` snapshot at that attempt's T.
 Do not reconstruct these observations later.
 
@@ -252,7 +253,7 @@ source payload/creation target and `sourceDigest`, including operation/source/tr
 complete exported record: `operation`, `initiatorAccountId`, `actor`, `recordedTransactionId`, `sourceDigest`,
 `originalDelegation`, `originalAccount` and `creation` (original command kind, idempotency key, request digest and
 target route/id). `BulkStore.readOperation(route, operationId)` has a different signature and evidence contract;
-it and the throwing `createBulkStore`/`admitBulkOperation` factories do not supply this trusted producer.
+it and the throwing `createBulkStore`/`admitBulkOperation` bodies do not supply this trusted producer.
 
 Native creation authenticates and authorizes normally, committing the immutable operation and actual source/target
 binding with its exact account-principal creation receipt. Independently verify that receipt at
@@ -260,14 +261,16 @@ binding with its exact account-principal creation receipt. Independently verify 
 Its `response.durableInitiator` must equal `durableInitiatorCommitment(record)`: lowercase SHA-256 over RFC 8785
 canonical JSON of the complete allowlisted record, including creation evidence. The reader verifies the source and
 receipt independently; restoration repeats the exact receipt check. Absent, collected/minimized or substitute
-operation/source/transaction/receipt evidence fails closed; no history scan or replacement can supply it.
+operation/source/transaction/receipt evidence and row-shaped callbacks fail closed; no history scan or replacement
+can supply it.
 
 Preserve every exported nested key and wire constraint in `DurableInitiatorRecord`, without extra policy/private
 fields: lowercase routable UUIDv7/v8 IDs and matching explicit routes; 1–255 non-space printable ASCII operation
 kind/command kind/key; exact account actor and initiator equality; 1–1,024 non-space printable ASCII client ID;
-positive safe-integer authentication epoch; at most 512 scope tokens of 1–128 ASCII characters excluding space,
-quote and backslash; null or the exact native requestedBy URN of at most 128 characters; 64-character lowercase
-hexadecimal digests; original positive canonical decimal floor of at most 19 digits and null/routable operator;
+positive safe-integer authentication epoch; at most 512 scope tokens of 1–128 non-space printable ASCII characters
+excluding quote and backslash; requestedBy null or the exact native `urn:rezics:request:<principal UUID>:<request UUID>`
+of at most 128 characters; 64-character lowercase hexadecimal digests; original positive canonical decimal floor
+of at most 19 digits and null/routable operator;
 null delegation iff requestedBy is null, otherwise its original routable transaction and canonical PostgreSQL
 `issued_valid::text` of at most 256 characters. Every nested object has exactly its exported keys, and the complete
 record must be cloneable and RFC 8785 canonicalizable. These are installed evidence constraints, not a new field ABI.
@@ -342,9 +345,9 @@ an adopted checked root/row relationship, not caller JSON. Decimal ordinals are 
 not mutable Collection order. Reuse `bulk_effect` only for compatible evidence with exact native receipt meaning.
 Lock operation transitions and native slot/parent/member targets consistently; retry deadlocks with the same keys.
 
-Use the existing atomic command outbox and registered deterministic effect-delivery route.
-[`command/fence.sql`](../command/fence.sql) commits domain mutation, receipt, partition fence and outbox event in
-the same command transaction. The registered native page event must bind its actual continuation locator to the
+Use the existing atomic command outbox and registered deterministic effect-delivery route. Domain mutation commits
+with the receipt, partition fence and outbox event through [`command/fence.sql`](../command/fence.sql) in the same
+command transaction. The registered native page event must bind its actual continuation locator to the
 exact immutable operation/page/checkpoint transition, under ordinary authorization and History classification.
 Later delivery consumes that committed intent; it neither expands the manifest nor authorizes targets.
 
@@ -473,7 +476,7 @@ Access, locks, rollback, Core receipts/outbox and WorkClient SQL/bytes. No hidde
   operation/manifest/outcome/continuation/target and delivery SQL/bytes/children, failure, rollback, finalization and
   minimization aggregates inside the original admitted frame/deadline. No guessed quote, budget, renewal or allowance
   increase follows from a helper's local bound or the chosen route.
-- Growth check: deferred exact creation/source substitution and collection, current consent/account/delegation loss,
+- Growth check: deferred exact creation/source substitution and collected evidence, current consent/account/delegation loss,
   receipt hit/miss and no-effect/unknown reconciliation, outbox redelivery, native custody and erasure/minimization;
   include repeated authorization and all nested delivery branches in native growth evidence.
 
