@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
@@ -37,7 +38,9 @@ const qualifierClassName =
   'min-w-0 w-full sm:w-auto sm:basis-64 sm:flex-1 [&_input]:min-h-11 md:pointer-fine:[&_input]:min-h-8 [&_[data-slot=field-label]]:min-w-0 [&_[data-slot=field-label]]:max-w-full [&_[data-slot=field-label]]:flex-wrap [&_[data-slot=field-label]]:[overflow-wrap:anywhere]';
 
 /** Initial facts only. Every optional assertion begins with the reader explicitly adding its field. */
-export function AlbumProfileCreate({
+export const AlbumProfileCreate = catalogueEditor(AlbumProfileCreateLive);
+
+function AlbumProfileCreateLive({
   release: initialRelease,
   locale,
   transport,
@@ -50,6 +53,7 @@ export function AlbumProfileCreate({
   search: EntityPickerSearch;
   enabled: boolean;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const [release, setRelease] = useState(initialRelease);
   const [metadataFailure, setMetadataFailure] = useState(false);
@@ -71,6 +75,7 @@ export function AlbumProfileCreate({
   const definiteFailure = failure && failure.reason !== 'unavailable';
 
   async function submit() {
+    if (!lifetime.active()) return;
     if (running.current || created || !enabled || metadataFailure || (pending.current && definiteFailure)) return;
     if (!pending.current) {
       const draft = albumDraft(
@@ -89,24 +94,29 @@ export function AlbumProfileCreate({
     setFailure(undefined);
     try {
       const result = await transport.create(pending.current);
+      if (!lifetime.active()) return;
       if (result.ok) setCreated(result);
       else {
         setFailure(result);
         if (result.refreshDefinitions) {
           try {
             const next = await transport.load();
+            if (!lifetime.active()) return;
             if (next.ok && next.release.types[albumType]) {
               setRelease(next.release);
               setMetadataFailure(false);
             } else setMetadataFailure(true);
           } catch {
+      if (!lifetime.active()) return;
             setMetadataFailure(true);
           }
         }
       }
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
@@ -138,8 +148,10 @@ export function AlbumProfileCreate({
                 try {
                   setCreated({ ...created, reader: await transport.read(created.id) });
                 } catch {
+      if (!lifetime.active()) return;
                   setCreated({ ...created, reader: { state: 'unavailable' } });
                 } finally {
+      if (!lifetime.active()) return;
                   running.current = false;
                   setBusy(false);
                 }
@@ -325,13 +337,16 @@ export function AlbumProfileCreate({
               setBusy(true);
               try {
                 const next = await transport.load();
+                if (!lifetime.active()) return;
                 if (next.ok && next.release.types[albumType]) {
                   setRelease(next.release);
                   setMetadataFailure(false);
                 }
               } catch {
+      if (!lifetime.active()) return;
                 setMetadataFailure(true);
               } finally {
+      if (!lifetime.active()) return;
                 running.current = false;
                 setBusy(false);
               }

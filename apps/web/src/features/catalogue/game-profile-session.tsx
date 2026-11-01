@@ -1,3 +1,5 @@
+import { editorRequest } from './editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
 import { useCallback } from 'react';
 import { useSession } from '../../session/query';
@@ -16,6 +18,7 @@ import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelati
 import { relationTargetSearch } from './relation-editor-search';
 
 function GameProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
@@ -32,21 +35,21 @@ function GameProfileSessionLive({ id, locale }: { id?: string; locale: string })
       }}
       transport={{
         load: () => loadGameProfile({ data: id }),
-        create: (data) => createCatalogueGame({ data, headers: csrfHeaders() }),
+        create: (data) => createCatalogueGame({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
         facts: {
-          read: () => readCorrection({ data: { id: id! } }),
-          propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
+          read: () => readCorrection({ data: editorRequest({ id: id! }, editorWork)}),
+          propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         },
         classifications: {
-          read: () => readCorrection({ data: { id: id! } }),
-          propose: (data) => proposeGameClassification({ data, headers: csrfHeaders() }),
+          read: () => readCorrection({ data: editorRequest({ id: id! }, editorWork)}),
+          propose: (data) => proposeGameClassification({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         },
         relations: {
           read: (slot, cursor, session) =>
-            readSubjectRelationEditor({ data: { id: id!, slot, cursor, session }, headers: csrfHeaders() }),
-          propose: (data) => proposeSubjectRelation({ data, headers: csrfHeaders() }),
-          confirm: (data) => confirmSubjectRelation({ data, headers: csrfHeaders() }),
+            readSubjectRelationEditor({ data: editorRequest({ id: id!, slot, cursor, session }, editorWork), headers: csrfHeaders() }),
+          propose: (data) => proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+          confirm: (data) => confirmSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         },
         review: (property, initialSession) => {
           return {

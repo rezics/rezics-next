@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { LiteraryProfileEntry } from './literary-profile-entry';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -34,7 +35,9 @@ type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 type Created = Extract<CreateResult, { ok: true }>;
 
 /** The same small initial-terms form is used by the route and its request-backed stories. */
-export function CreateSubjectForm({
+export const CreateSubjectForm = catalogueEditor(CreateSubjectFormLive);
+
+function CreateSubjectFormLive({
   locale,
   session,
   transport,
@@ -63,9 +66,10 @@ export function CreateSubjectForm({
   onNavigate: (href: string) => void;
   onCreated?: (result: Created) => void;
 }) {
+  const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
   const client = useQueryClient();
-  const queryKey = ['catalogue-create', 'definitions', locale];
+  const queryKey = ['catalogue-create', 'definitions', locale, String(lifetime.generation)];
   if (profile) queryKey.push(profile.scope);
   // Definitions and the route's session read start independently.
   const definitions = useQuery({ queryKey, queryFn: () => transport.definitions(), retry: false });
@@ -126,6 +130,7 @@ export function CreateSubjectForm({
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
+    if (!lifetime.active()) return;
     event.preventDefault();
     if (running.current || session !== 'signed-in' || created || failure?.reason === 'conflict') return;
     if (!request.current) {
@@ -147,6 +152,7 @@ export function CreateSubjectForm({
     setFailure(undefined);
     try {
       const result = await transport.submit(request.current);
+      if (!lifetime.active()) return;
       if (result.ok) {
         setCreated(result);
         onCreated?.(result);
@@ -159,30 +165,37 @@ export function CreateSubjectForm({
           request.current = null;
         if (result.refreshDefinitions) {
           const refreshed = await transport.definitions(true).catch(() => ({ ok: false as const }));
+          if (!lifetime.active()) return;
           client.setQueryData(queryKey, refreshed);
         }
       }
     } catch {
+      if (!lifetime.active()) return;
       if (profile) unresolvedProfile.current = true;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
 
   async function openCreated() {
+    if (!lifetime.active()) return;
     if (!created || running.current) return;
     running.current = true;
     setBusy(true);
     try {
       const reader = await transport.read(created.id);
+      if (!lifetime.active()) return;
       setCreated({ ...created, reader });
       onCreated?.({ ...created, reader });
       if (reader.state === 'ready') onNavigate(reader.href);
     } catch {
+      if (!lifetime.active()) return;
       setCreated({ ...created, reader: { state: 'unavailable' } });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }

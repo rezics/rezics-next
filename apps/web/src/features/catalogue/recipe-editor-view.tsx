@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { hasDocumentContent } from '@rezics/document';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
@@ -46,7 +47,9 @@ const newRow = (property: string): Row => ({
   },
 });
 
-export function RecipeEditor({
+export const RecipeEditor = catalogueEditor(RecipeEditorLive);
+
+function RecipeEditorLive({
   id,
   locale,
   session,
@@ -61,14 +64,16 @@ export function RecipeEditor({
   search: EntityPickerSearch;
   review?: (property: string, slot: CandidateSlot | undefined, session?: string) => CandidateTransport;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
-    queryKey: ['recipe-editor', id, locale],
+    queryKey: ['recipe-editor', id, locale, lifetime.generation],
     queryFn: transport.load,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     staleTime: Infinity,
+    gcTime: 0,
   });
   const read = query.data?.ok ? query.data : undefined;
   const termsId = useId();
@@ -84,6 +89,7 @@ export function RecipeEditor({
   const locked = busy || !!pending.current;
   const name = (id: string) => pickText(read?.release.properties[id]?.labels ?? {}, locale).text;
   async function create() {
+    if (!lifetime.active()) return;
     if (running.current || !read || created || session !== 'signed-in' || failure?.reason === 'conflict') return;
     if (!pending.current) {
       const draft = recipeDraft(
@@ -113,6 +119,7 @@ export function RecipeEditor({
     setFailure(undefined);
     try {
       const result = await transport.create(pending.current);
+      if (!lifetime.active()) return;
       if (result.ok) {
         setCreated(result);
         pending.current = null;
@@ -121,8 +128,10 @@ export function RecipeEditor({
         if (result.reason !== 'unavailable' && result.reason !== 'conflict') pending.current = null;
       }
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       setBusy(false);
       running.current = false;
     }
@@ -186,8 +195,10 @@ export function RecipeEditor({
                   try {
                     setCreated({ ...created, reader: await transport.read(created.id) });
                   } catch {
+      if (!lifetime.active()) return;
                     setCreated({ ...created, reader: { state: 'unavailable' } });
                   } finally {
+      if (!lifetime.active()) return;
                     setBusy(false);
                     running.current = false;
                   }
@@ -435,7 +446,9 @@ export function RecipeEditor({
   );
 }
 
-function RecipeField({
+const RecipeField = catalogueEditor(RecipeFieldLive);
+
+function RecipeFieldLive({
   row,
   read,
   locale,
@@ -458,6 +471,7 @@ function RecipeField({
   onRemove: () => void;
   onOriginal: (original: boolean) => void;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const property = row.statement.property.id;
   const definition = read.release.properties[property]!;
@@ -483,6 +497,7 @@ function RecipeField({
       ? { target: row.statement.value.content }
       : undefined;
   async function submit() {
+    if (!lifetime.active()) return;
     if (!read.public || running.current) return;
     command.current ??= {
       id: read.public.subject.id,
@@ -493,11 +508,14 @@ function RecipeField({
     setBusy(true);
     try {
       const next = await transport.propose(command.current);
+      if (!lifetime.active()) return;
       setResult(next);
       if (next.ok) command.current = null;
     } catch {
+      if (!lifetime.active()) return;
       setResult({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       setBusy(false);
       running.current = false;
     }

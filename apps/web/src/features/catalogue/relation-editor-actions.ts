@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -48,21 +50,16 @@ function address(input: unknown) {
     ...(typeof value.cursor === 'string' ? { cursor: value.cursor } : {}),
   };
 }
-async function session() {
-  setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
-  return viewerCredential(request);
-}
+
 // readRelease retains the complete emitted JSON; its display-facing type omits effective editor metadata.
 async function release(): Promise<Release> {
   return (await readRelease()) as unknown as Release;
 }
 
 export const readSubjectRelationEditor = createServerFn({ method: 'POST', strict: false })
-  .validator(address)
+  .validator(originalReaderInput(address))
   .handler(async ({ data }): Promise<RelationRead> => {
-    const authorization = await session();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     try {
       const definitions = release();
@@ -82,7 +79,7 @@ export const readSubjectRelationEditor = createServerFn({ method: 'POST', strict
   });
 
 export const proposeSubjectRelation = createServerFn({ method: 'POST', strict: false })
-  .validator((input: unknown): RelationProposal => {
+  .validator(originalReaderInput((input: unknown): RelationProposal => {
     const checked = address(input);
     const value = record(input);
     if (!checked.slot || typeof value.key !== 'string' || !uuid.test(value.key)) throw new Error('Invalid proposal');
@@ -96,9 +93,9 @@ export const proposeSubjectRelation = createServerFn({ method: 'POST', strict: f
       key: value.key,
       statement: statement as RelationProposal['statement'],
     };
-  })
+  }))
   .handler(async ({ data }): Promise<RelationProposalResult> => {
-    const authorization = await session();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     try {
       return await proposeRelation(kernelClient(), authorization, release(), data);
@@ -108,7 +105,7 @@ export const proposeSubjectRelation = createServerFn({ method: 'POST', strict: f
   });
 
 export const confirmSubjectRelation = createServerFn({ method: 'POST', strict: false })
-  .validator((input: unknown): RelationConfirmation => {
+  .validator(originalReaderInput((input: unknown): RelationConfirmation => {
     const checked = address(input);
     const value = record(input);
     if (
@@ -133,9 +130,9 @@ export const confirmSubjectRelation = createServerFn({ method: 'POST', strict: f
       ...(checked.session ? { session: checked.session } : {}),
       ...(value.rank ? { rank: value.rank as 'normal' | 'preferred' } : {}),
     };
-  })
+  }))
   .handler(async ({ data }): Promise<RelationResult> => {
-    const authorization = await session();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     try {
       return await confirmRelation(kernelClient(), authorization, release(), data);

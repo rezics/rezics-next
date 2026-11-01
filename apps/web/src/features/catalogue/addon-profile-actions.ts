@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -27,7 +29,7 @@ export const loadAddonProfile = createServerFn({ method: 'GET', strict: false })
     return readAddonProfile(kernelClient(), data);
   });
 export const createCatalogueAddon = createServerFn({ method: 'POST', strict: false })
-  .validator((input: CreateSubjectCommand): CreateSubjectCommand => {
+  .validator(originalReaderInput((input: CreateSubjectCommand): CreateSubjectCommand => {
     if (
       !input ||
       !addonUuid.test(input.key) ||
@@ -37,8 +39,9 @@ export const createCatalogueAddon = createServerFn({ method: 'POST', strict: fal
     )
       throw new Error('Invalid add-on creation');
     return { key: input.key, item: input.item };
-  })
+  }))
   .handler(async ({ data }): Promise<CreateResult> => {
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     return createAddon(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
   });

@@ -12,7 +12,7 @@ import {
 import { useSession } from '../session/query';
 
 export type CandidateWork = { reader: string; live: () => boolean };
-type Lifetime = CandidateWork & { generation: number; retire: () => void };
+type Lifetime = CandidateWork & { generation: number; retire: () => void; active: () => boolean };
 let nextGeneration = 0;
 const Reader = createContext<Lifetime | null>(null);
 
@@ -30,7 +30,8 @@ function useLifetime(identity: string, reader: string, parent?: CandidateWork | 
       retire: () => {
         retired = true;
       },
-      live: () => !retired && mounted.current && !!reader && (!parent || parent.live()),
+      active: () => !retired && mounted.current && (!parent || ('active' in parent ? (parent as Lifetime).active() : parent.live())),
+      live: () => !!reader && value.active(),
     };
     previous.current = { identity, parent, value };
   }
@@ -92,6 +93,7 @@ export function candidateSession<Props extends object>(Component: ComponentType<
           Reflect.get(props, 'locale'),
           Reflect.get(props, 'realm'),
           Reflect.get(props, 'context'),
+          Reflect.get(props, 'address'),
         ])}
       >
         <Component {...props} />
@@ -142,4 +144,10 @@ function sessionChanges(client: QueryClient) {
     sessionObservers.set(client, store);
   }
   return store;
+}
+
+/** Public reads still retire with their mount/admission, without requiring sign-in. */
+export function useCatalogueLifetime(address: string) {
+  const parent = useContext(Reader);
+  return useLifetime(address, parent?.reader ?? '', parent);
 }

@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -29,7 +30,9 @@ export type AddonProfileProps = AddonAddress & {
   relations: (id: string) => RelationTransport;
 };
 
-export function AddonProfile({
+export const AddonProfile = catalogueEditor(AddonProfileLive);
+
+function AddonProfileLive({
   id: initialId,
   work,
   locale,
@@ -40,14 +43,16 @@ export function AddonProfile({
   review,
   relations,
 }: AddonProfileProps) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const [id, setId] = useState(initialId);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
   const query = useQuery({
-    queryKey: ['addon-profile', id, work, locale, session],
+    queryKey: [...['addon-profile', id, work, locale, session], lifetime.generation],
     queryFn: () => transport.load({ id, work }),
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -120,6 +125,7 @@ export function AddonProfile({
                 }
                 onValueChange={(items) => {
                   if (items[0]) setId(items[0].id);
+                  if (!lifetime.active()) return;
                 }}
               />
               <AddonProfileCreate

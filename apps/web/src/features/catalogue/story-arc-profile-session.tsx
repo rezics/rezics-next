@@ -1,3 +1,5 @@
+import { editorRequest } from './editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
 import { useCallback } from 'react';
 import { useSession } from '../../session/query';
@@ -17,6 +19,7 @@ function StoryArcProfileSessionLive({
   realm,
   ...address
 }: StoryArcAddress & { locale: string; realm?: string | undefined }) {
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
@@ -40,7 +43,7 @@ function StoryArcProfileSessionLive({
         load: (data) => loadStoryArcProfile({ data }),
         creation: {
           definitions: (data) => readCreateDefinitions({ data }),
-          submit: (data) => createCatalogueSubject({ data, headers: csrfHeaders() }),
+          submit: (data) => createCatalogueSubject({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
           read: (data) => readCreatedCatalogueSubject({ data }),
         },
       }}
@@ -49,7 +52,7 @@ function StoryArcProfileSessionLive({
           const read = await loadStoryArcProfile({ data: { id } });
           return read.ok ? storyArcFacts(read) : read;
         },
-        propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
+        propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       })}
       review={(id, _property, initialSession) => {
         return {
@@ -70,9 +73,9 @@ function StoryArcProfileSessionLive({
       }}
       relations={(id) => ({
         read: (slot, cursor, session) =>
-          readSubjectRelationEditor({ data: { id, slot, cursor, session }, headers: csrfHeaders() }),
-        propose: (data) => proposeSubjectRelation({ data, headers: csrfHeaders() }),
-        confirm: (data) => confirmSubjectRelation({ data, headers: csrfHeaders() }),
+          readSubjectRelationEditor({ data: editorRequest({ id, slot, cursor, session }, editorWork), headers: csrfHeaders() }),
+        propose: (data) => proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        confirm: (data) => confirmSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       })}
     />
   );

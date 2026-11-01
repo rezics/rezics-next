@@ -1,3 +1,5 @@
+import { editorRequest } from './editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '../../session/query';
@@ -23,7 +25,7 @@ import type { LiteraryCommand } from './literary-profile';
 function LiteraryAuthored({ id, locale }: { id: string; locale: string }) {
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const read = (property?: string, session?: string) =>
-    loadAuthoredField({ data: { id, property, session }, headers: csrfHeaders() });
+    loadAuthoredField({ data: editorRequest({ id, property, session }, editorWork), headers: csrfHeaders() });
   const query = useQuery({
     queryKey: ['literary-authored', id, locale, candidateWork.generation],
     queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),
@@ -49,7 +51,7 @@ function LiteraryAuthored({ id, locale }: { id: string; locale: string }) {
       locale={locale}
       transport={{
         read,
-        propose: (data) => submitAuthoredField({ data, headers: csrfHeaders() }),
+        propose: (data) => submitAuthoredField({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         review: (property, candidate, cursor, session, work) =>
           !work?.live()
             ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null })
@@ -67,6 +69,7 @@ function LiteraryAuthored({ id, locale }: { id: string; locale: string }) {
   );
 }
 function LiteraryProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   return (
     <LiteraryProfile
@@ -75,12 +78,12 @@ function LiteraryProfileSessionLive({ id, locale }: { id?: string; locale: strin
       session={state}
       transport={{
         load: () => loadLiteraryProfile({ data: id }),
-        submit: (command) => createCatalogueLiteraryWork({ data: command as LiteraryCommand, headers: csrfHeaders() }),
+        submit: (command) => createCatalogueLiteraryWork({ data: editorRequest(command as LiteraryCommand, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
       facts={{
-        read: () => readCorrection({ data: { id: id ?? '' }, headers: csrfHeaders() }),
-        propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
+        read: () => readCorrection({ data: editorRequest({ id: id ?? '' }, editorWork), headers: csrfHeaders() }),
+        propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       }}
       review={(property, initialSession) => {
         return {

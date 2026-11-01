@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
@@ -37,7 +38,9 @@ const linkClassName =
   'block w-fit max-w-full font-sans font-semibold underline max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
 
 /** Each opened assertion owns the existing editor's independent draft, request key and exact-slot review. */
-export function WorkPartsPage({
+export const WorkPartsPage = catalogueEditor(WorkPartsPageLive);
+
+function WorkPartsPageLive({
   id,
   locale,
   transport,
@@ -50,13 +53,15 @@ export function WorkPartsPage({
   search: EntityPickerSearch;
   initial?: WorkPartsRead | undefined;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
-    queryKey: ['work-parts', id, locale],
+    queryKey: [...['work-parts', id, locale], lifetime.generation],
     queryFn: () => transport.read(),
     initialData: initial,
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -74,6 +79,7 @@ export function WorkPartsPage({
   const stream = read?.stream;
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   async function load(key = stream?.key, next?: string) {
+    if (!lifetime.active()) return;
     if (running.current) return;
     running.current = true;
     setBusy(true);
@@ -83,6 +89,7 @@ export function WorkPartsPage({
         next,
         session.current ?? (query.data?.ok ? query.data.session : undefined),
       );
+      if (!lifetime.active()) return;
       if (!value.ok) {
         setFailure(value);
         return;
@@ -93,13 +100,16 @@ export function WorkPartsPage({
       setFailure(undefined);
       setPart([]);
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
   function open(row: PartRow, selected: PartStream) {
+    if (!lifetime.active()) return;
     const correction = partCorrection(row, selected);
     if (!correction) return;
     const key = `${row.holder}:${row.statementId}`;
@@ -110,6 +120,7 @@ export function WorkPartsPage({
     );
   }
   function add() {
+    if (!lifetime.active()) return;
     if (!stream || !part[0]) return;
     const holder = stream.direction === 'forward' ? id : part[0].id;
     const target = stream.direction === 'forward' ? part[0].id : id;

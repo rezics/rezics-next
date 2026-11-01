@@ -1,3 +1,6 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
+import { editorRequest } from '../../features/catalogue/editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
@@ -61,13 +64,14 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/statement-consent')(
       data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
     }),
   head: () => ({ meta: [{ title: m.statement_consent_title() }, { name: 'robots', content: 'noindex' }] }),
-  component: ConsentRoute,
+  component: candidateSession(ConsentRoute),
 });
 function ConsentRoute() {
   const { id } = Route.useLoaderData();
   const { property, candidate, target, sameAs, key } = Route.useSearch();
   const address = { id, ...consentSelection({ property, candidate, slot: { target, sameAs, key } }) };
   const locale = getLocale();
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   if (state === 'signed-out')
     return (
@@ -87,10 +91,10 @@ function ConsentRoute() {
       address={address}
       locale={locale}
       transport={{
-        read: (cursor, session) => readConsent({ data: { ...address, cursor, session }, headers: csrfHeaders() }),
-        change: (data) => changeConsent({ data, headers: csrfHeaders() }),
+        read: (cursor, session) => readConsent({ data: editorRequest({ ...address, cursor, session }, editorWork), headers: csrfHeaders() }),
+        change: (data) => changeConsent({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         public: (session, terminal) =>
-          refreshConsentPublic({ data: { ...address, session, terminal }, headers: csrfHeaders() }),
+          refreshConsentPublic({ data: editorRequest({ ...address, session, terminal }, editorWork), headers: csrfHeaders() }),
       }}
     />
   );

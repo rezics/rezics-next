@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -276,7 +277,9 @@ function FactField({
   );
 }
 
-export function SubjectFacts({
+export const SubjectFacts = catalogueEditor(SubjectFactsLive);
+
+function SubjectFactsLive({
   initial,
   locale,
   transport,
@@ -297,6 +300,7 @@ export function SubjectFacts({
   profileRelations?: ReactNode;
   embedded?: boolean;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const [read, setRead] = useState(initial);
   const [previousInitial, setPreviousInitial] = useState(initial);
@@ -328,6 +332,7 @@ export function SubjectFacts({
     setDrafts((previous) => previous.map((item) => (item.property === next.property ? next : item)));
   }
   async function submit() {
+    if (!lifetime.active()) return;
     if (!current || running.current || !changed.length) return;
     if (staleDraft) return;
     running.current = true;
@@ -335,23 +340,33 @@ export function SubjectFacts({
     setDrafts(sealed);
     setBusy(true);
     try {
-      await sendFacts(sealed, transport.propose, (property, result) =>
+      await sendFacts(sealed, (command) => {
+        if (!lifetime.active()) throw new Error('Retired catalogue editor');
+        return transport.propose(command);
+      }, (property, result) => lifetime.active() &&
         setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft))),
       );
+      if (!lifetime.active()) return;
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
   async function reload() {
+    if (!lifetime.active()) return;
     if (running.current) return;
     running.current = true;
     setBusy(true);
     try {
-      setRead(await transport.read());
+      const next = await transport.read();
+      if (!lifetime.active()) return;
+      setRead(next);
     } catch {
+      if (!lifetime.active()) return;
       setRead({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }

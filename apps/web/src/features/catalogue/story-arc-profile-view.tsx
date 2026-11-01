@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -44,7 +45,9 @@ export type StoryArcProfileProps = StoryArcAddress & {
 };
 
 /** Composition of the ordinary creation, scalar and exact-slot relationship workspaces. */
-export function StoryArcProfile({
+export const StoryArcProfile = catalogueEditor(StoryArcProfileLive);
+
+function StoryArcProfileLive({
   id: initialId,
   work: initialWork,
   locale,
@@ -55,12 +58,13 @@ export function StoryArcProfile({
   review,
   relations,
 }: StoryArcProfileProps) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const [id, setId] = useState(initialId);
   const [work, setWork] = useState(initialWork);
   const [createdHref, setCreatedHref] = useState<string>();
   const query = useQuery({
-    queryKey: ['story-arc-profile', id, work, locale, session],
+    queryKey: [...['story-arc-profile', id, work, locale, session], lifetime.generation],
     queryFn: () => transport.load({ id, work }),
     retry: false,
     staleTime: Infinity,

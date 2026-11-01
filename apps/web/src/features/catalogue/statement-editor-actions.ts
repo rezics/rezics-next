@@ -1,3 +1,4 @@
+import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -38,25 +39,20 @@ export function editorAddress(value: unknown): EditorAddress {
     ...(typeof input.statement === 'string' ? { statement: input.statement } : {}),
   };
 }
-async function bearer() {
-  setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
-  return viewerCredential(request);
-}
+
 
 // POST actions use the existing origin, session and CSRF middleware. Credentials stay on the server.
 export const readCorrection = createServerFn({ method: 'POST', strict: false })
-  .validator(editorAddress)
+  .validator(originalReaderInput(editorAddress))
   .handler(async ({ data }): Promise<EditorRead> => {
-    if (!(await bearer())) return { ok: false, reason: 'denied' };
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     return readStatementEditor(kernelClient(), data);
   });
 
 export const submitCorrection = createServerFn({ method: 'POST', strict: false })
-  .validator(proposalInput)
+  .validator(originalReaderInput(proposalInput))
   .handler(async ({ data }): Promise<ProposalResult> => {
-    const authorization = await bearer();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     if ('invalid' in data) return { ok: false, reason: 'invalid' };
     // Native proposal validation owns current Type/release/disclosure decisions and receipted replay.

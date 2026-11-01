@@ -1,3 +1,6 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
+import { editorRequest } from '../../features/catalogue/editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { createFileRoute } from '@tanstack/react-router';
 import { PublicationEditor } from '../../features/catalogue/publication-editor-form';
 import { createWorkPublication, loadPublicationEditor } from '../../features/catalogue/publication-editor-actions';
@@ -16,11 +19,12 @@ export const Route = createFileRoute('/catalogue/publication')({
   }),
   head: ({ match }) =>
     pageHead({ title: m.publication_add(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
-  component: PublicationRoute,
+  component: candidateSession(PublicationRoute),
 });
 
 function PublicationRoute() {
   const { work } = Route.useSearch();
+  const editorWork = useCatalogueLifetime('transport');
   const { state, csrfToken } = useSession();
   const locale = getLocale();
   return (
@@ -33,7 +37,7 @@ function PublicationRoute() {
       search={(text, signal) => relationTargetSearch(text, signal, locale)}
       transport={{
         load: () => loadPublicationEditor({ data: work }),
-        submit: (command) => createWorkPublication({ data: command, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
+        submit: (command) => createWorkPublication({ data: editorRequest(command, editorWork), headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
         read: (id) => readCreatedCatalogueSubject({ data: id }),
       }}
     />

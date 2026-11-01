@@ -1,3 +1,5 @@
+import { editorRequest } from './editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
@@ -11,6 +13,7 @@ function IdentifiersProfileSessionLive({
   locale,
   initialReview,
 }: Pick<IdentifiersProfileProps, 'id' | 'locale' | 'initialReview'>) {
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   return (
     <IdentifiersProfile
@@ -20,8 +23,8 @@ function IdentifiersProfileSessionLive({
       session={state}
       initialReview={initialReview}
       transport={{
-        read: () => readCorrection({ data: { id }, headers: csrfHeaders() }),
-        propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
+        read: () => readCorrection({ data: editorRequest({ id }, editorWork), headers: csrfHeaders() }),
+        propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       }}
       review={(_property, initialSession) => {
         return {

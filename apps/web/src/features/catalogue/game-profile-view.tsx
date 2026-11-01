@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
@@ -37,7 +38,9 @@ export type GameProfileTransport = {
   review: (property: string, session?: string) => CandidateTransport;
   classificationReview: (property: string, session?: string) => CandidateTransport;
 };
-export function GameProfile({
+export const GameProfile = catalogueEditor(GameProfileLive);
+
+function GameProfileLive({
   id,
   locale,
   session,
@@ -52,7 +55,8 @@ export function GameProfile({
   search: EntityPickerSearch;
   onNavigate: (href: string) => void;
 }) {
-  const query = useQuery({ queryKey: ['game-profile', id ?? 'new', locale], queryFn: transport.load, retry: false });
+  const lifetime = useEditorLifetime();
+  const query = useQuery({ queryKey: [...['game-profile', id ?? 'new', locale], lifetime.generation], queryFn: transport.load, retry: false });
   const [drafts, setDrafts] = useState<Record<string, { key: string; statement: StatementInput }[]>>({});
   const o = { locale: locale as never };
   const read = query.data;
@@ -108,6 +112,7 @@ export function GameProfile({
           transport={{
             definitions: async (refresh) => {
               const current = refresh ? (await query.refetch()).data : read;
+              if (!lifetime.active()) return;
               return current?.ok ? { ok: true, types: gameDefinitions(current.release, locale) } : { ok: false };
             },
             submit: (command) => {

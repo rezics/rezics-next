@@ -1,3 +1,5 @@
+import { editorRequest } from './editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
@@ -10,6 +12,7 @@ import { PeopleProfileEditor } from './people-profile-view';
 import type { PeopleAddress } from './people-profile';
 
 function PeopleProfileSessionLive({ id, work, locale }: PeopleAddress & { locale: string }) {
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   return (
     <PeopleProfileEditor
@@ -19,10 +22,10 @@ function PeopleProfileSessionLive({ id, work, locale }: PeopleAddress & { locale
       session={state}
       transport={{
         load: () => loadPeopleProfile({ data: { ...(id ? { id } : {}), ...(work !== undefined ? { work } : {}) } }),
-        create: (data) => createCataloguePeopleProfile({ data, headers: csrfHeaders() }),
+        create: (data) => createCataloguePeopleProfile({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
-      propose={(data) => submitFactCorrection({ data, headers: csrfHeaders() })}
+      propose={(data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() })}
       review={(_property, initialSession) => {
         return {
           read: async (property, cursor, session = initialSession, work) => {

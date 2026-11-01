@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -20,7 +22,7 @@ export const loadMangaProfile = createServerFn({ method: 'GET', strict: false })
     return readMangaProfile(kernelClient(), data);
   });
 export const createCatalogueManga = createServerFn({ method: 'POST', strict: false })
-  .validator((input: MangaCommand): MangaCommand => {
+  .validator(originalReaderInput((input: MangaCommand): MangaCommand => {
     if (
       !input ||
       !mangaUuid.test(input.key) ||
@@ -30,8 +32,9 @@ export const createCatalogueManga = createServerFn({ method: 'POST', strict: fal
     )
       throw new Error('Invalid manga creation');
     return { key: input.key, item: input.item, independent: input.independent };
-  })
+  }))
   .handler(async ({ data }): Promise<CreateResult> => {
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     return createManga(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
   });

@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
@@ -42,7 +43,9 @@ export type CharacterProfileProps = CharacterAddress & {
   relations: (id: string) => RelationTransport;
 };
 
-export function CharacterProfile({
+export const CharacterProfile = catalogueEditor(CharacterProfileLive);
+
+function CharacterProfileLive({
   id: initialId,
   work: initialWork,
   locale,
@@ -53,16 +56,18 @@ export function CharacterProfile({
   review,
   relations,
 }: CharacterProfileProps) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const [id, setId] = useState(initialId);
   const [work, setWork] = useState(initialWork);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
   const [reading, setReading] = useState(false);
   const query = useQuery({
-    queryKey: ['character-profile', id, work, locale],
+    queryKey: [...['character-profile', id, work, locale], lifetime.generation],
     queryFn: () => transport.load({ id, work }),
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -170,8 +175,10 @@ export function CharacterProfile({
                         try {
                           setCreated({ ...created, reader: await transport.read(created.id) });
                         } catch {
+      if (!lifetime.active()) return;
                           setCreated({ ...created, reader: { state: 'unavailable' } });
                         } finally {
+      if (!lifetime.active()) return;
                           setReading(false);
                         }
                       }}
@@ -192,6 +199,7 @@ export function CharacterProfile({
                   }
                   onValueChange={(items) => {
                     if (items[0]) setId(items[0].id);
+                    if (!lifetime.active()) return;
                   }}
                 />
                 <CharacterProfileCreate
@@ -346,6 +354,7 @@ export function CharacterProfile({
                 }
                 onValueChange={(items) => {
                   if (items[0]) setWork(items[0].id);
+                  if (!lifetime.active()) return;
                 }}
               />
             )}

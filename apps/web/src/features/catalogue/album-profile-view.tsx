@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -35,7 +36,9 @@ export type AlbumEditors = {
   onSelected?: () => void | Promise<void>;
 };
 
-export function AlbumProfile({
+export const AlbumProfile = catalogueEditor(AlbumProfileLive);
+
+function AlbumProfileLive({
   id,
   locale,
   session,
@@ -50,12 +53,14 @@ export function AlbumProfile({
   search: EntityPickerSearch;
   editors?: AlbumEditors;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
-    queryKey: ['album-profile', id, locale],
+    queryKey: [...['album-profile', id, locale], lifetime.generation],
     queryFn: transport.load,
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -163,13 +168,16 @@ function AlbumCorrections({
     setBusy(true);
     try {
       const next = await editors.facts.read();
+      if (!lifetime.active()) return;
       if (next.ok && next.public.subject.type === albumType && next.release.types[albumType]) {
         setRead(next);
         setLoadFailure(undefined);
       } else setLoadFailure(next.ok ? 'invalid' : next.reason);
     } catch {
+      if (!lifetime.active()) return;
       setLoadFailure('unavailable');
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
@@ -184,7 +192,9 @@ function AlbumCorrections({
       await sendFacts(sealed, editors.facts.propose, (property, result) =>
         setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft))),
       );
+      if (!lifetime.active()) return;
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
@@ -315,6 +325,7 @@ function AlbumCorrections({
             }}
             onSelected={async () => {
               await Promise.all([reload(), editors.onSelected?.()]);
+              if (!lifetime.active()) return;
             }}
           />
         </fieldset>

@@ -1,3 +1,5 @@
+import { editorRequest } from './editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
 import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -22,6 +24,7 @@ import {
 import { EditorFailure } from './statement-editor-view';
 
 function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
@@ -36,7 +39,7 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
       search={search}
       transport={{
         load,
-        create: (data) => createCatalogueManga({ data, headers: csrfHeaders() }),
+        create: (data) => createCatalogueManga({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
       correction={
@@ -49,7 +52,7 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
                     ? { ...read, public: read.public, source: null }
                     : { ok: false, reason: 'unavailable' };
                 },
-                propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
+                propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
               },
               review: (_property, initialSession) => {
                 return {
@@ -85,7 +88,7 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
   const [open, setOpen] = useState(false);
   const o = { locale: locale as never };
   const read = (property = 'schema:abstract', session?: string) =>
-    loadAuthoredField({ data: { id, property, session }, headers: csrfHeaders() });
+    loadAuthoredField({ data: editorRequest({ id, property, session }, editorWork), headers: csrfHeaders() });
   const query = useQuery({
     queryKey: ['manga-authored', id, locale, candidateWork.generation],
     queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),
@@ -114,7 +117,7 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
           initial={query.data}
           transport={{
             read,
-            propose: (data) => submitAuthoredField({ data, headers: csrfHeaders() }),
+            propose: (data) => submitAuthoredField({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
             review: (property, candidate, cursor, session, work) =>
               !work?.live()
                 ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null })

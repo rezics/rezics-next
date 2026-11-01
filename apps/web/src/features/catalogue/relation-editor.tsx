@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { useId } from 'react';
 import type { SubjectRead } from '@rezics/client';
@@ -40,7 +41,9 @@ const blankDraft = (property: string): RelationDraft => ({
 });
 
 /** One contribution and exact-slot comparison; all mutations belong to explicit confirmation events. */
-export function RelationEditor({
+export const RelationEditor = catalogueEditor(RelationEditorLive);
+
+function RelationEditorLive({
   id,
   locale,
   transport,
@@ -65,6 +68,7 @@ export function RelationEditor({
     session?: string | undefined;
   };
 }) {
+  const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
   const formId = useId();
   const [read, setRead] = useState(initial);
@@ -96,6 +100,7 @@ export function RelationEditor({
   const proposedCandidate = useRef<string | undefined>(undefined);
   const picked = useRef<Record<string, EntityPickerSubject>>({});
   const remember = (items: EntityPickerSubject[]) => {
+    if (!lifetime.active()) return;
     for (const item of items) picked.current[item.id] = item;
   };
   const current = read?.ok ? read : undefined;
@@ -149,6 +154,7 @@ export function RelationEditor({
       return { property: next.property.id, sameAs: external.value.content };
   }
   function edit(next: RelationDraft) {
+    if (!lifetime.active()) return;
     setDraft(next);
     setOwnConsent(false);
     setConsentEntry(undefined);
@@ -164,6 +170,7 @@ export function RelationEditor({
     pageCursor.current = undefined;
   }
   async function load(address = slot, cursor?: string) {
+    if (!lifetime.active()) return;
     if (running.current || uncertain) return;
     running.current = true;
     setBusy(true);
@@ -173,6 +180,7 @@ export function RelationEditor({
     request.current = undefined;
     try {
       const next = await transport.read(address, cursor, nativeSession.current);
+      if (!lifetime.active()) return;
       if (!next.ok) {
         setFailure(next);
         return;
@@ -186,13 +194,16 @@ export function RelationEditor({
       if (proposedCandidate.current)
         setCandidate(next.page?.candidates.find((item) => item.id === proposedCandidate.current));
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       setBusy(false);
       running.current = false;
     }
   }
   async function confirm() {
+    if (!lifetime.active()) return;
     if (running.current || !confirmation || !field) return;
     const address = confirmation === 'propose' ? draftSlot() : slot;
     if (!address || (!candidate && confirmation !== 'propose')) return;
@@ -217,6 +228,7 @@ export function RelationEditor({
       const pending = request.current;
       if ('statement' in pending) {
         const next = await transport.propose(pending);
+        if (!lifetime.active()) return;
         if (!next.ok) {
           setFailure(next);
           return;
@@ -238,6 +250,7 @@ export function RelationEditor({
         setConfirmation(undefined);
         request.current = undefined;
         const refreshed = await transport.read(address, undefined, nativeSession.current);
+        if (!lifetime.active()) return;
         if (refreshed.ok) {
           pageCursor.current = undefined;
           setRead(refreshed);
@@ -245,6 +258,7 @@ export function RelationEditor({
         } else setFailure(refreshed);
       } else {
         const next = await transport.confirm(pending);
+        if (!lifetime.active()) return;
         if (!next.ok) {
           setFailure(next);
           return;
@@ -254,10 +268,13 @@ export function RelationEditor({
         setConfirmation(undefined);
         request.current = undefined;
         if (next.kind === 'selected') await onSelected?.();
+        if (!lifetime.active()) return;
       }
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       setBusy(false);
       running.current = false;
     }

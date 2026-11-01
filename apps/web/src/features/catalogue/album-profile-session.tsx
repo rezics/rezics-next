@@ -1,3 +1,5 @@
+import { editorRequest } from './editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
 import { useCallback, useMemo } from 'react';
 import { useRouter } from '@tanstack/react-router';
@@ -13,6 +15,7 @@ import { submitFactCorrection } from './subject-facts-actions';
 import type { AlbumTransport } from './album-profile';
 
 function AlbumProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const router = useRouter();
   const search = useCallback(
@@ -22,18 +25,18 @@ function AlbumProfileSessionLive({ id, locale }: { id?: string; locale: string }
   const transport = useMemo<AlbumTransport>(
     () => ({
       load: () => loadAlbumProfile({ data: id }),
-      create: (data) => createCatalogueAlbum({ data, headers: csrfHeaders() }),
+      create: (data) => createCatalogueAlbum({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       read: (data: string) => readCreatedCatalogueSubject({ data }),
     }),
-    [id],
+    [id, editorWork],
   );
   const editors = useMemo<AlbumEditors | undefined>(
     () =>
       id
         ? {
             facts: {
-              read: () => readCorrection({ data: { id }, headers: csrfHeaders() }),
-              propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
+              read: () => readCorrection({ data: editorRequest({ id }, editorWork), headers: csrfHeaders() }),
+              propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
             },
             review: (property, initialSession) => {
               return {
@@ -57,14 +60,14 @@ function AlbumProfileSessionLive({ id, locale }: { id?: string; locale: string }
             },
             relations: {
               read: (slot, cursor, session) =>
-                readSubjectRelationEditor({ data: { id, slot, cursor, session }, headers: csrfHeaders() }),
-              propose: (data) => proposeSubjectRelation({ data, headers: csrfHeaders() }),
-              confirm: (data) => confirmSubjectRelation({ data, headers: csrfHeaders() }),
+                readSubjectRelationEditor({ data: editorRequest({ id, slot, cursor, session }, editorWork), headers: csrfHeaders() }),
+              propose: (data) => proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+              confirm: (data) => confirmSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
             },
             onSelected: () => router.invalidate(),
           }
         : undefined,
-    [id, router],
+    [id, router, editorWork],
   );
   return (
     <AlbumProfile

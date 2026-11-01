@@ -1,3 +1,5 @@
+import { editorRequest } from './editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
 import { useCallback } from 'react';
 import { useSession } from '../../session/query';
@@ -14,6 +16,7 @@ import {
 import { readCreatedCatalogueSubject } from './create-subject-actions';
 
 function RecipeEditorSessionLive({ id, locale }: { id?: string; locale: string }) {
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
@@ -27,8 +30,8 @@ function RecipeEditorSessionLive({ id, locale }: { id?: string; locale: string }
       search={search}
       transport={{
         load: () => loadRecipeEditor({ data: id }),
-        create: (data) => createCatalogueRecipe({ data, headers: csrfHeaders() }),
-        propose: (data) => submitRecipeCorrection({ data, headers: csrfHeaders() }),
+        create: (data) => createCatalogueRecipe({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        propose: (data) => submitRecipeCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
       review={(property, slot, initialSession) => {

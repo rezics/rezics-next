@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -15,12 +17,7 @@ import {
   type ConsentPublic,
 } from './statement-consent';
 
-async function credential() {
-  setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
-  return viewerCredential(request);
-}
+
 function readInput(value: unknown) {
   const address = consentAddress(value);
   const input = value as Record<string, unknown>;
@@ -39,24 +36,24 @@ function readInput(value: unknown) {
 }
 // POST server functions retain the application's origin/session/CSRF middleware. No credential enters the browser.
 export const readConsent = createServerFn({ method: 'POST', strict: false })
-  .validator(readInput)
+  .validator(originalReaderInput(readInput))
   .handler(async ({ data }): Promise<ConsentRead> => {
-    const authorization = await credential();
+    const authorization = await candidateAuthorization(data.expectedReader);
     return authorization
       ? readStatementConsent(kernelClient(), authorization, data, data.cursor, data.session)
       : { ok: false, reason: 'denied' };
   });
 export const changeConsent = createServerFn({ method: 'POST', strict: false })
-  .validator(consentCommand)
+  .validator(originalReaderInput(consentCommand))
   .handler(async ({ data }): Promise<ConsentResult> => {
-    const authorization = await credential();
+    const authorization = await candidateAuthorization(data.expectedReader);
     return authorization
       ? changeStatementConsent(kernelClient(), authorization, data)
       : { ok: false, reason: 'denied' };
   });
 export const refreshConsentPublic = createServerFn({ method: 'POST', strict: false })
-  .validator(readInput)
+  .validator(originalReaderInput(readInput))
   .handler(async ({ data }): Promise<ConsentPublic> => {
-    if (!(await credential())) return { state: 'denied' };
+    if (!(await candidateAuthorization(data.expectedReader))) return { state: 'denied' };
     return readConsentPublic(kernelClient(), data, data.session, data.terminal);
   });

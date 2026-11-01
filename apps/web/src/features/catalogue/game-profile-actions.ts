@@ -1,3 +1,4 @@
+import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -23,7 +24,7 @@ export const loadGameProfile = createServerFn({ method: 'GET', strict: false })
     return readGameProfile(kernelClient(), data);
   });
 export const createCatalogueGame = createServerFn({ method: 'POST', strict: false })
-  .validator((command: GameCommand) => {
+  .validator(originalReaderInput((command: GameCommand) => {
     if (
       !command ||
       typeof command.key !== 'string' ||
@@ -33,8 +34,9 @@ export const createCatalogueGame = createServerFn({ method: 'POST', strict: fals
     )
       throw new Error('Invalid game creation');
     return command;
-  })
+  }))
   .handler(async ({ data }): Promise<CreateResult> => {
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     try {
       return await createGameProfile(
@@ -51,17 +53,12 @@ export const createCatalogueGame = createServerFn({ method: 'POST', strict: fals
       };
     }
   });
-async function bearer() {
-  setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
-  return viewerCredential(request);
-}
+
 /** Classification claims use a scalar competition slot, with the native item value and all its qualifiers. */
 export const proposeGameClassification = createServerFn({ method: 'POST', strict: false })
-  .validator(factCommandInput)
+  .validator(originalReaderInput(factCommandInput))
   .handler(async ({ data }): Promise<FactResult> => {
-    const authorization = await bearer();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     if ('invalid' in data) return { ok: false, reason: 'invalid' };
     const read = await readGameProfile(kernelClient(), data.id);

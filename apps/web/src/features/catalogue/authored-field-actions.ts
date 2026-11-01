@@ -1,3 +1,4 @@
+import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -38,23 +39,18 @@ function address(value: unknown): AuthoredAddress {
     ...(typeof input.session === 'string' ? { session: input.session } : {}),
   };
 }
-async function credential() {
-  setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
-  return viewerCredential(request);
-}
+
 
 // The existing POST server-function middleware owns origin/session/CSRF checks. No credential enters the DTO.
 export const loadAuthoredField = createServerFn({ method: 'POST', strict: false })
-  .validator(address)
+  .validator(originalReaderInput(address))
   .handler(async ({ data }): Promise<AuthoredRead> => {
-    if (!(await credential())) return { ok: false, reason: 'denied' };
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     return readAuthoredField(kernelClient(), data, requestLocale() ?? 'en');
   });
 
 export const submitAuthoredField = createServerFn({ method: 'POST', strict: false })
-  .validator((value: unknown): AuthoredCommand | { invalid: true } => {
+  .validator(originalReaderInput((value: unknown): AuthoredCommand | { invalid: true } => {
     const input = record(value);
     const base = address(value);
     if (
@@ -70,9 +66,9 @@ export const submitAuthoredField = createServerFn({ method: 'POST', strict: fals
       statement: input.statement as AuthoredCommand['statement'],
       ...(base.session ? { session: base.session } : {}),
     };
-  })
+  }))
   .handler(async ({ data }): Promise<ProposalResult> => {
-    const authorization = await credential();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     if ('invalid' in data) return { ok: false, reason: 'invalid' };
     return proposeAuthoredField(kernelClient(), authorization, data);

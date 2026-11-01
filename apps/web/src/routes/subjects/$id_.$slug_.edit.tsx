@@ -1,3 +1,5 @@
+import { editorRequest } from '../../features/catalogue/editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../../features/pages/curate-actions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -80,8 +82,9 @@ function CorrectionRoute() {
   const { property, statement, reviewProperty, candidate } = Route.useSearch();
   const locale = getLocale();
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
-  const read = () => readCorrection({ data: { id, property, statement }, headers: csrfHeaders() });
+  const read = () => readCorrection({ data: editorRequest({ id, property, statement }, editorWork), headers: csrfHeaders() });
   const query = useQuery({
     queryKey: ['statement-editor', id, property, statement, locale, candidateWork.generation],
     queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),
@@ -119,7 +122,7 @@ function CorrectionRoute() {
         key={`${id}:${locale}`}
         initial={query.data}
         locale={locale}
-        transport={{ read, propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }) }}
+        transport={{ read, propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }) }}
         initialReview={reviewProperty && candidate ? { property: reviewProperty, candidate } : undefined}
         review={(_property, initialSession) => {
           return {
@@ -145,10 +148,10 @@ function CorrectionRoute() {
       key={`${id}:${property}:${statement}:${locale}`}
       initial={query.data}
       locale={locale}
-      transport={{ read, propose: (data) => submitCorrection({ data, headers: csrfHeaders() }) }}
+      transport={{ read, propose: (data) => submitCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }) }}
       lifecycle={{
-        change: (data) => changeOwnContribution({ data, headers: csrfHeaders() }),
-        read: (data) => rereadOwnContribution({ data, headers: csrfHeaders() }),
+        change: (data) => changeOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        read: (data) => rereadOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       }}
       onLifecycleClear={async () => {
         // Cancel in-flight reads before dropping cached subject/candidate payloads.

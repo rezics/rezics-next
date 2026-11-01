@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { m } from '../../paraglide/messages.js';
@@ -19,10 +20,13 @@ export type IdentifiersProfileProps = {
 };
 
 /** A scoped presentation of the ordinary fact workspace, with its native controls and commands. */
-export function IdentifiersProfile({ id, locale, session, transport, review, initialReview }: IdentifiersProfileProps) {
+export const IdentifiersProfile = catalogueEditor(IdentifiersProfileLive);
+
+function IdentifiersProfileLive({ id, locale, session, transport, review, initialReview }: IdentifiersProfileProps) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
-    queryKey: ['catalogue-identifiers', id, locale],
+    queryKey: [...['catalogue-identifiers', id, locale], lifetime.generation],
     queryFn: transport.read,
     enabled: session === 'signed-in',
     staleTime: 0,

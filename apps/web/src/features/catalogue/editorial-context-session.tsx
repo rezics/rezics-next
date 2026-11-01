@@ -1,3 +1,6 @@
+import { editorRequest } from './editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useMemo, type ReactNode } from 'react';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
@@ -6,7 +9,9 @@ import { readEditorialWorkspace, changeEditorialWorkspace } from './editorial-co
 import { EditorialContextWorkspace } from './editorial-context-view';
 import type { EditorialTransport } from './editorial-context';
 
-export function EditorialContextSession({
+export const EditorialContextSession = candidateSession(EditorialContextSessionLive);
+
+function EditorialContextSessionLive({
   id,
   locale,
   reviewHref,
@@ -19,13 +24,14 @@ export function EditorialContextSession({
   createHref?: string;
   children?: (id: string) => ReactNode;
 }) {
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const transport = useMemo<EditorialTransport>(
     () => ({
-      read: (address) => readEditorialWorkspace({ data: address, headers: csrfHeaders() }),
-      submit: (command) => changeEditorialWorkspace({ data: command, headers: csrfHeaders() }),
+      read: (address) => readEditorialWorkspace({ data: editorRequest(address, editorWork), headers: csrfHeaders() }),
+      submit: (command) => changeEditorialWorkspace({ data: editorRequest(command, editorWork), headers: csrfHeaders() }),
     }),
-    [],
+    [editorWork],
   );
   if (state !== 'signed-in')
     return (

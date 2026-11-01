@@ -1,3 +1,4 @@
+import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -121,17 +122,18 @@ export const loadRecipeEditor = createServerFn({ method: 'GET', strict: false })
     return readRecipeEditor(kernelClient(), requestLocale() ?? 'en', data);
   });
 export const createCatalogueRecipe = createServerFn({ method: 'POST', strict: false })
-  .validator((input: RecipeCommand): RecipeCommand => {
+  .validator(originalReaderInput((input: RecipeCommand): RecipeCommand => {
     if (!input || !recipeUuid.test(input.key) || !input.item || input.item.type !== 'schema:Recipe')
       throw new Error('Invalid recipe request');
     return { key: input.key, item: input.item };
-  })
+  }))
   .handler(async ({ data }): Promise<CreateResult> => {
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     return createRecipe(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
   });
 export const submitRecipeCorrection = createServerFn({ method: 'POST', strict: false })
-  .validator(proposalInput)
+  .validator(originalReaderInput(proposalInput))
   .handler(async ({ data }): Promise<ProposalResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     if ('invalid' in data) return { ok: false, reason: 'invalid' };

@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import type { ReactNode } from 'react';
 import type { PropertyDefinition } from '@rezics/definitions';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -612,7 +613,9 @@ export function StatementFields({
   );
 }
 
-export function StatementEditor({
+export const StatementEditor = catalogueEditor(StatementEditorLive);
+
+function StatementEditorLive({
   initial,
   locale,
   transport,
@@ -627,6 +630,7 @@ export function StatementEditor({
   lifecycle?: ContributionTransport;
   onLifecycleClear?: () => void | Promise<void>;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const feedbackId = useId();
   const [read, setRead] = useState(initial);
@@ -664,24 +668,29 @@ export function StatementEditor({
     }
   };
   async function reload() {
+    if (!lifetime.active()) return;
     if (running.current) return;
     running.current = true;
     setBusy(true);
     try {
       const next = await transport.read();
+      if (!lifetime.active()) return;
       if (next.ok) {
         setRead(next);
         if (!draft && next.source) setDraft(statementInput(next.source));
         setFailure(null);
       } else setFailure(next);
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
   async function submit() {
+    if (!lifetime.active()) return;
     if (!draft || !subject || running.current) return;
     if (!pending.current) {
       const errors = validateStatement(draft, current?.release);
@@ -696,6 +705,7 @@ export function StatementEditor({
     setFailure(null);
     try {
       const next = await transport.propose(pending.current);
+      if (!lifetime.active()) return;
       if (next.ok) {
         setResult(next);
         setSubmitted({
@@ -713,8 +723,10 @@ export function StatementEditor({
         if (next.reason !== 'unavailable') pending.current = null;
       }
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
@@ -796,6 +808,7 @@ export function StatementEditor({
                 setFailure(null);
                 pending.current = null;
                 await onLifecycleClear?.();
+                if (!lifetime.active()) return;
               }}
             />
           )}

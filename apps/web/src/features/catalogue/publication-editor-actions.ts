@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -20,7 +22,7 @@ export const loadPublicationEditor = createServerFn({ method: 'GET', strict: fal
   });
 
 export const createWorkPublication = createServerFn({ method: 'POST', strict: false })
-  .validator((input: PublicationCommand): PublicationCommand => {
+  .validator(originalReaderInput((input: PublicationCommand): PublicationCommand => {
     if (
       !input ||
       !publicationUuid.test(input.work) ||
@@ -32,8 +34,9 @@ export const createWorkPublication = createServerFn({ method: 'POST', strict: fa
     )
       throw new Error('Invalid publication request');
     return { work: input.work, relation: input.relation, key: input.key, item: input.item };
-  })
+  }))
   .handler(async ({ data }): Promise<CreateResult> => {
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     try {
       return await createPublication(

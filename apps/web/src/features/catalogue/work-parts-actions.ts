@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -8,8 +10,7 @@ import { fetchGuideRelease } from './definition-guide';
 import { readWorkParts, type WorkPartsRead } from './work-parts';
 
 export const readSubjectWorkParts = createServerFn({ method: 'POST', strict: false })
-  .validator(
-    (input: { id: string; stream?: string | undefined; cursor?: string | undefined; session?: string | undefined }) => {
+  .validator(originalReaderInput((input: { id: string; stream?: string | undefined; cursor?: string | undefined; session?: string | undefined }) => {
       if (
         !input ||
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id) ||
@@ -19,13 +20,12 @@ export const readSubjectWorkParts = createServerFn({ method: 'POST', strict: fal
       )
         throw new Error('Invalid work parts address');
       return { id: input.id, stream: input.stream, cursor: input.cursor, session: input.session };
-    },
-  )
+    }))
   .handler(async ({ data }): Promise<WorkPartsRead> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
-    const authorization = viewerCredential(request);
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     const client = kernelClient();
     return readWorkParts(

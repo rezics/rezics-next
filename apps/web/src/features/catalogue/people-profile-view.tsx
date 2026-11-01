@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -158,6 +159,7 @@ function PeopleCreate({
   transport: PeopleTransport;
   onNavigate: (href: string) => void;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const [read, setRead] = useState(initial);
   const [drafts, setDrafts] = useState<Record<string, Record<string, StatementInput>>>({});
@@ -189,12 +191,14 @@ function PeopleCreate({
         transport={{
           definitions: async (refresh) => {
             const next = refresh ? await transport.load() : read;
+            if (!lifetime.active()) return;
             if (!next.ok) return { ok: false };
             if (refresh) setRead(next);
             return { ok: true, types: next.profiles.map(({ id, label, description }) => ({ id, label, description })) };
           },
           submit: async (command) => {
             const result = await transport.create(command);
+            if (!lifetime.active()) return;
             setFailure(result.ok ? undefined : result);
             return result;
           },
@@ -348,7 +352,9 @@ function PeopleCreate({
 }
 
 /** One guided surface composed from the existing creation, multi-field and exact native review controls. */
-export function PeopleProfileEditor({
+export const PeopleProfileEditor = catalogueEditor(PeopleProfileEditorLive);
+
+function PeopleProfileEditorLive({
   id,
   work,
   locale,
@@ -369,15 +375,17 @@ export function PeopleProfileEditor({
   relations?: ReactNode;
   onNavigate: (href: string) => void;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const client = useQueryClient();
   const query = useQuery({
-    queryKey: ['people-profile', id ?? 'new', work ?? '', locale],
+    queryKey: [...['people-profile', id ?? 'new', work ?? '', locale], lifetime.generation],
     queryFn: transport.load,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     staleTime: Infinity,
+    gcTime: 0,
   });
   const read = query.data;
   if (!read?.ok)
@@ -457,6 +465,7 @@ export function PeopleProfileEditor({
           propose,
           read: async () => {
             const next = await transport.load();
+            if (!lifetime.active()) return;
             return next.ok && next.public
               ? { ok: true, public: next.public, release: next.release, source: null }
               : next.ok

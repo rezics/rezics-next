@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { useRef, useState, type ReactNode } from 'react';
@@ -180,7 +181,9 @@ function InitialFacts({
   );
 }
 
-export function LiteraryProfile({
+export const LiteraryProfile = catalogueEditor(LiteraryProfileLive);
+
+function LiteraryProfileLive({
   id,
   locale,
   session,
@@ -199,12 +202,14 @@ export function LiteraryProfile({
   relations?: ReactNode;
   authored?: ReactNode;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
-    queryKey: ['literary-profile', id, locale],
+    queryKey: [...['literary-profile', id, locale], lifetime.generation],
     queryFn: transport.load,
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -256,6 +261,7 @@ export function LiteraryProfile({
             ...transport,
             definitions: async (refresh) => {
               const metadata = refresh || query.data?.ok === false ? (await query.refetch()).data : read;
+              if (!lifetime.active()) return;
               return metadata?.ok
                 ? { ok: true, types: createTypes(metadata.release, locale).filter((type) => isLiteraryType(type.id)) }
                 : { ok: false };

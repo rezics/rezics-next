@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
@@ -22,7 +23,9 @@ import type {
 /** Mounted only for the exact candidate returned by this session's successful native proposal.
  * The affordance is not authorization: both native operations recheck the original author and current grants.
  */
-export function ContributionLifecycle({
+export const ContributionLifecycle = catalogueEditor(ContributionLifecycleLive);
+
+function ContributionLifecycleLive({
   address,
   locale,
   transport,
@@ -33,6 +36,7 @@ export function ContributionLifecycle({
   transport: ContributionTransport;
   onClear: () => void | Promise<void>;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const [state, setState] = useState<'active' | 'deleted' | 'restored' | 'expired'>('active');
   const [confirmation, setConfirmation] = useState<ContributionCommand['operation'] | null>(null);
@@ -47,6 +51,7 @@ export function ContributionLifecycle({
   const action = operation === 'delete' ? m.contribution_withdraw({}, o) : m.contribution_restore({}, o);
 
   async function change() {
+    if (!lifetime.active()) return;
     if (running.current || needsRead || state === 'expired' || (!confirmation && !pending.current)) return;
     pending.current ??= {
       ...address,
@@ -60,6 +65,7 @@ export function ContributionLifecycle({
     setFailure(undefined);
     try {
       const result = await transport.change(pending.current);
+      if (!lifetime.active()) return;
       if (!result.ok) {
         setFailure(result.reason);
         if (result.reason !== 'unavailable') {
@@ -71,6 +77,7 @@ export function ContributionLifecycle({
         if (result.reason === 'denied') {
           setCurrent(undefined);
           await onClear();
+          if (!lifetime.active()) return;
         }
         return;
       }
@@ -80,20 +87,25 @@ export function ContributionLifecycle({
       setCurrent(result.current);
       setState(result.operation === 'delete' ? 'deleted' : 'restored');
       if (result.operation === 'delete') await onClear();
+      if (!lifetime.active()) return;
     } catch {
+      if (!lifetime.active()) return;
       setFailure('unavailable');
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
 
   async function refresh() {
+    if (!lifetime.active()) return;
     if (running.current || pending.current) return;
     running.current = true;
     setBusy(true);
     try {
       const next = await transport.read({ ...address, ...(session.current ? { session: session.current } : {}) });
+      if (!lifetime.active()) return;
       session.current = next.session ?? session.current;
       setCurrent(next);
       if (next.subject === 'available' && next.candidate !== 'unconfirmed') {
@@ -102,8 +114,10 @@ export function ContributionLifecycle({
         if (next.candidate === 'deleted') setState('deleted');
       }
     } catch {
+      if (!lifetime.active()) return;
       setCurrent({ subject: 'unavailable', candidate: 'unconfirmed', selected: null });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }

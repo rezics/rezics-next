@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -75,7 +76,9 @@ function PublicResult({ value, locale }: { value: ConsentPublic; locale: string 
 }
 
 /** Private, event-owned preparation and commands; no assertion body is placed in a shared query cache. */
-export function StatementConsentPage({
+export const StatementConsentPage = catalogueEditor(StatementConsentPageLive);
+
+function StatementConsentPageLive({
   address,
   locale,
   transport,
@@ -86,12 +89,13 @@ export function StatementConsentPage({
   transport: ConsentTransport;
   initial?: ConsentRead;
 }) {
+  const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
   const confirmationId = useId();
   const ownershipId = useId();
   const actionButtons = useRef<Partial<Record<ConsentCommand['operation'], HTMLButtonElement | null>>>({});
   const returnFocus = useRef<ConsentCommand['operation'] | undefined>(undefined);
-  const focusConfirmation = useCallback((node: HTMLHeadingElement | null) => node?.focus(), []);
+  const focusConfirmation = useCallback((node: HTMLHeadingElement | null) => lifetime.active() && node?.focus(), [lifetime]);
   const [read, setRead] = useState(initial);
   const [result, setResult] = useState<Extract<ConsentResult, { ok: true }>>();
   const [failure, setFailure] = useState<ConsentFailure>();
@@ -128,17 +132,19 @@ export function StatementConsentPage({
     </dl>
   );
   useEffect(() => {
-    if (!confirmation && returnFocus.current) {
+    if (lifetime.active() && !confirmation && returnFocus.current) {
       actionButtons.current[returnFocus.current]?.focus();
       returnFocus.current = undefined;
     }
-  }, [confirmation]);
+  }, [confirmation, lifetime]);
   function openConfirmation(operation: ConsentCommand['operation']) {
+    if (!lifetime.active()) return;
     if (busy || reload || uncertain || !attempt || !assertion?.identified) return;
     setConfirmation(operation);
   }
 
   async function load(cursor?: string) {
+    if (!lifetime.active()) return;
     if (running.current || request.current || terminal) return;
     running.current = true;
     setBusy(true);
@@ -149,17 +155,21 @@ export function StatementConsentPage({
     setOwn(false);
     try {
       const next = await transport.read(cursor, session.current);
+      if (!lifetime.active()) return;
       setRead(next);
       setReload(false);
       if (next.ok) session.current = next.session ?? session.current;
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
   async function change() {
+    if (!lifetime.active()) return;
     if (
       running.current ||
       !current ||
@@ -177,6 +187,7 @@ export function StatementConsentPage({
     setFailure(undefined);
     try {
       const next = await transport.change(request.current);
+      if (!lifetime.active()) return;
       if (!next.ok) {
         setFailure(next);
         if (next.reason !== 'unavailable') {
@@ -199,24 +210,30 @@ export function StatementConsentPage({
       setConfirmation(undefined);
       setOwn(false);
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
   async function refreshPublic() {
+    if (!lifetime.active()) return;
     if (running.current || request.current) return;
     running.current = true;
     setBusy(true);
     try {
       const next = await transport.public(session.current, !!terminal);
+      if (!lifetime.active()) return;
       setResult((previous) => (previous ? { ...previous, public: next } : previous));
       setRead((previous) => (previous?.ok ? { ...previous, public: next } : previous));
     } catch {
+      if (!lifetime.active()) return;
       setResult((previous) => (previous ? { ...previous, public: { state: 'unavailable' } } : previous));
       setRead((previous) => (previous?.ok ? { ...previous, public: { state: 'unavailable' } } : previous));
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }

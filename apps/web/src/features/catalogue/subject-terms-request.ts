@@ -2,7 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { MediaProblem } from '../../media/kernel';
 import type { SessionEnv } from '../../session/client';
-import { prepareSession, viewerCredential } from '../../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { verifiedHandle } from '../../subject/load-subject';
 import { accountHref, subjectHref } from '../../subject/subject-href';
 import { candidateContext } from '../../subject/candidates';
@@ -89,12 +89,14 @@ export async function patchSubjectTerms(
   env: Partial<SessionEnv>,
   command: TermsCommand,
   locale: string,
+  expectedReader?: string,
 ): Promise<TermsResult> {
   if (!isTermsCommand(command)) return { ok: false, reason: 'invalid' };
   try {
     const stale = await prepareSession(request, env);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { ok: false, reason: 'signed-out' };
+    if (expectedReader !== undefined && sessionSubject(request) !== expectedReader) return { ok: false, reason: 'denied' };
     const requestHeaders = {
       authorization,
       'if-match': command.etag,

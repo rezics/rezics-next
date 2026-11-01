@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useId, useRef, useState } from 'react';
 import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
@@ -18,7 +19,9 @@ const actionClassName =
 const labelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
 
 /** Initial terms and explicitly added facts use the existing validators, scalar controls and subject POST. */
-export function CharacterProfileCreate({
+export const CharacterProfileCreate = catalogueEditor(CharacterProfileCreateLive);
+
+function CharacterProfileCreateLive({
   release,
   locale,
   transport,
@@ -29,6 +32,7 @@ export function CharacterProfileCreate({
   transport: CharacterTransport;
   onCreated: (result: Extract<CreateResult, { ok: true }>) => void;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const termsId = useId();
   const nextTermId = useRef(1);
@@ -46,6 +50,7 @@ export function CharacterProfileCreate({
     .flat()
     .filter((id) => editableScalar(release.properties[id]) && id !== 'schema:alternateName');
   async function submit() {
+    if (!lifetime.active()) return;
     if (running.current || failure?.reason === 'conflict') return;
     if (!pending.current) {
       const draft = characterDraft(release, terms, facts);
@@ -59,6 +64,7 @@ export function CharacterProfileCreate({
     setBusy(true);
     try {
       const result = await transport.create(pending.current);
+      if (!lifetime.active()) return;
       if (result.ok) {
         pending.current = null;
         onCreated(result);
@@ -67,8 +73,10 @@ export function CharacterProfileCreate({
         if (result.reason !== 'unavailable' && result.reason !== 'conflict') pending.current = null;
       }
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }

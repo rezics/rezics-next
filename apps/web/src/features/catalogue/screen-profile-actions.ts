@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -15,7 +17,7 @@ export const loadScreenProfile = createServerFn({ method: 'GET', strict: false }
     return readScreenProfile(kernelClient(), data);
   });
 export const createCatalogueScreen = createServerFn({ method: 'POST', strict: false })
-  .validator((input: ScreenCommand) => {
+  .validator(originalReaderInput((input: ScreenCommand) => {
     if (
       !input ||
       !uuid.test(input.key) ||
@@ -27,8 +29,9 @@ export const createCatalogueScreen = createServerFn({ method: 'POST', strict: fa
     )
       throw new Error('Invalid screen profile creation');
     return { key: input.key, item: input.item };
-  })
+  }))
   .handler(async ({ data }) => {
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     return createScreenProfile(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
   });

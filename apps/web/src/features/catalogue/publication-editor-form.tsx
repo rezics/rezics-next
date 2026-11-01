@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
@@ -35,7 +36,9 @@ const actionLinkClassName = cn(buttonVariants(), actionClassName);
 const outlineLinkClassName = cn(buttonVariants({ variant: 'outline' }), actionClassName);
 
 /** Ordinary initial facts for one independently identified publication, anchored to an existing work. */
-export function PublicationEditor({
+export const PublicationEditor = catalogueEditor(PublicationEditorLive);
+
+function PublicationEditorLive({
   work,
   locale,
   session,
@@ -50,10 +53,11 @@ export function PublicationEditor({
   search: EntityPickerSearch;
   onNavigate: (href: string) => void;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   // Session and the independent public work/definition reads start together.
   const query = useQuery({
-    queryKey: ['publication-editor', work, locale],
+    queryKey: [...['publication-editor', work, locale], lifetime.generation],
     queryFn: () => transport.load(),
     retry: false,
   });
@@ -107,6 +111,7 @@ export function PublicationEditor({
   }
 
   async function submit(event: FormEvent) {
+    if (!lifetime.active()) return;
     event.preventDefault();
     if (running.current || created || !read || !profile || session !== 'signed-in' || failure?.reason === 'conflict')
       return;
@@ -131,31 +136,39 @@ export function PublicationEditor({
     setFailure(undefined);
     try {
       const result = await transport.submit(command.current);
+      if (!lifetime.active()) return;
       if (result.ok) {
         setCreated(result);
         if (result.reader.state === 'ready') onNavigate(result.reader.href);
       } else {
         setFailure(result);
         if (result.refreshDefinitions) await query.refetch();
+        if (!lifetime.active()) return;
       }
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
   async function openCreated() {
+    if (!lifetime.active()) return;
     if (!created || running.current) return;
     running.current = true;
     setBusy(true);
     try {
       const reader = await transport.read(created.id);
+      if (!lifetime.active()) return;
       setCreated({ ...created, reader });
       if (reader.state === 'ready') onNavigate(reader.href);
     } catch {
+      if (!lifetime.active()) return;
       setCreated({ ...created, reader: { state: 'unavailable' } });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
@@ -344,6 +357,7 @@ export function PublicationEditor({
                           onValueChange={(items) =>
                             edit(() => {
                               setPublisher(items);
+                              if (!lifetime.active()) return;
                               setFacts({ ...facts, [property]: { type: 'value', content: items[0]?.id ?? '' } });
                             })
                           }

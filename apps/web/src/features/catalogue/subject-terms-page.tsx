@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -34,7 +35,9 @@ const selectClassName = 'min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
 
-export function SubjectTermsPage({
+export const SubjectTermsPage = catalogueEditor(SubjectTermsPageLive);
+
+function SubjectTermsPageLive({
   id,
   locale,
   session,
@@ -47,12 +50,14 @@ export function SubjectTermsPage({
   transport: TermsTransport;
   typeLabels?: Record<string, string>;
 }) {
+  const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
   const query = useQuery({
-    queryKey: ['catalogue-terms', id, locale],
+    queryKey: [...['catalogue-terms', id, locale], lifetime.generation],
     queryFn: () => transport.read(id),
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -97,6 +102,7 @@ export function SubjectTermsPage({
                 : m.catalogue_terms_uncertain({}, options);
 
   function update(field: TermField, edit: Partial<LanguageDraft[TermField]>) {
+    if (!lifetime.active()) return;
     if (!base || locked) return;
     setDrafts((previous) => {
       const current = previous[language] ?? languageDraft(base.subject, language);
@@ -106,6 +112,7 @@ export function SubjectTermsPage({
   }
 
   async function submit(event: FormEvent<HTMLFormElement>, confirmed?: TermsSnapshot) {
+    if (!lifetime.active()) return;
     event.preventDefault();
     if (!base || running.current || saved || session !== 'signed-in' || (stale && !confirmed)) return;
     const snapshot = confirmed ?? base;
@@ -130,6 +137,7 @@ export function SubjectTermsPage({
     setFailure(undefined);
     try {
       const result = await transport.submit(pending.current);
+      if (!lifetime.active()) return;
       if (result.ok) {
         setSaved(result);
         pending.current = null;
@@ -138,25 +146,31 @@ export function SubjectTermsPage({
         if (!['unavailable', 'stale', 'conflict'].includes(result.reason)) pending.current = null;
       }
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
 
   async function reread() {
+    if (!lifetime.active()) return;
     if (!base || running.current) return;
     running.current = true;
     setBusy(true);
     try {
       const result = saved ? await transport.read(saved.id, saved.session) : await transport.read(id, base.session);
+      if (!lifetime.active()) return;
       if (saved) setSaved({ ...saved, reader: result });
       else setComparison(result);
     } catch {
+      if (!lifetime.active()) return;
       if (saved) setSaved({ ...saved, reader: { state: 'unavailable' } });
       else setComparison({ state: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }

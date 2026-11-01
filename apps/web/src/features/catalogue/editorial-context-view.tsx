@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -23,7 +24,9 @@ const languageControlClass =
   'max-w-full max-md:w-full pointer-coarse:w-full md:pointer-fine:w-fit max-md:[&_select]:h-11 max-md:[&_select]:min-h-11 max-md:[&_select]:min-w-11 pointer-coarse:[&_select]:h-11 pointer-coarse:[&_select]:min-h-11 pointer-coarse:[&_select]:min-w-11 md:pointer-fine:[&_select]:h-8 md:pointer-fine:[&_select]:min-h-8';
 
 /** Private, short-lived reading. A known tombstone exists only after this workspace's native delete response. */
-export function EditorialContextWorkspace({
+export const EditorialContextWorkspace = catalogueEditor(EditorialContextWorkspaceLive);
+
+function EditorialContextWorkspaceLive({
   id,
   locale,
   transport,
@@ -38,6 +41,7 @@ export function EditorialContextWorkspace({
   createHref?: string;
   children?: ((id: string) => ReactNode) | undefined;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const fieldId = useId();
   const [currentId, setCurrentId] = useState(id);
@@ -57,6 +61,7 @@ export function EditorialContextWorkspace({
   const languageNames = new Intl.DisplayNames([locale], { type: 'language' });
 
   async function refresh(target = currentId) {
+    if (!lifetime.active()) return;
     if (!target || running.current) return;
     running.current = true;
     setBusy(true);
@@ -65,6 +70,7 @@ export function EditorialContextWorkspace({
     setConfirmation(undefined);
     try {
       const next = await transport.read({ id: target, ...(session.current ? { session: session.current } : {}) });
+      if (!lifetime.active()) return;
       if (!mounted.current) return;
       session.current = next.session ?? session.current;
       setReading(next);
@@ -73,8 +79,10 @@ export function EditorialContextWorkspace({
         setRestoreBlocked(false);
       }
     } catch {
+      if (!lifetime.active()) return;
       if (mounted.current) setReading({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       if (mounted.current) setBusy(false);
     }
@@ -89,6 +97,7 @@ export function EditorialContextWorkspace({
   }, [id, transport]);
 
   async function submit(operation: EditorialCommand['operation']) {
+    if (!lifetime.active()) return;
     if (running.current) return;
     let command = pending;
     if (!command) {
@@ -100,6 +109,7 @@ export function EditorialContextWorkspace({
           ...(operation === 'create' ? { labels: { [language]: name.trim() } } : { id: currentId }),
         });
       } catch {
+      if (!lifetime.active()) return;
         setFailure({ ok: false, reason: 'invalid' });
         return;
       }
@@ -113,6 +123,7 @@ export function EditorialContextWorkspace({
     setReading(undefined);
     try {
       const result = await transport.submit(command);
+      if (!lifetime.active()) return;
       if (!mounted.current) return;
       session.current = result.session ?? session.current;
       if (!result.ok) {
@@ -129,9 +140,12 @@ export function EditorialContextWorkspace({
       setName('');
       running.current = false;
       await refresh(result.id);
+      if (!lifetime.active()) return;
     } catch {
+      if (!lifetime.active()) return;
       if (mounted.current) setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       if (mounted.current) setBusy(false);
     }

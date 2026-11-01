@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -29,7 +31,7 @@ export const loadPeopleProfile = createServerFn({ method: 'GET', strict: false }
   });
 
 export const createCataloguePeopleProfile = createServerFn({ method: 'POST', strict: false })
-  .validator((input: PeopleCommand): PeopleCommand => {
+  .validator(originalReaderInput((input: PeopleCommand): PeopleCommand => {
     if (
       !input ||
       typeof input.key !== 'string' ||
@@ -40,8 +42,9 @@ export const createCataloguePeopleProfile = createServerFn({ method: 'POST', str
     )
       throw new Error('Invalid catalogue profile request');
     return { key: input.key, item: input.item };
-  })
+  }))
   .handler(async ({ data }): Promise<CreateResult> => {
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     return createPeopleProfile(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
   });

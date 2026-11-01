@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { useId, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
@@ -42,7 +43,9 @@ export function mangaGroupLabels(locale: string) {
   };
 }
 
-export function MangaProfileEditor({
+export const MangaProfileEditor = catalogueEditor(MangaProfileEditorLive);
+
+function MangaProfileEditorLive({
   id,
   locale,
   session,
@@ -57,12 +60,14 @@ export function MangaProfileEditor({
   search: EntityPickerSearch;
   correction?: MangaCorrectionPorts | undefined;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
-    queryKey: ['manga-profile', id, locale],
+    queryKey: [...['manga-profile', id, locale], lifetime.generation],
     queryFn: transport.load,
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -155,6 +160,7 @@ function MangaCreate({
     }
   }
   async function submit() {
+    if (!lifetime.active()) return;
     if (!read || disabled || running.current || created || failure?.reason === 'conflict') return;
     if (!request.current) {
       const draft = mangaDraft(
@@ -180,6 +186,7 @@ function MangaCreate({
     setFailure(undefined);
     try {
       const result = await transport.create(request.current);
+      if (!lifetime.active()) return;
       if (result.ok) {
         setCreated(result);
         request.current = null;
@@ -187,10 +194,13 @@ function MangaCreate({
         setFailure(result);
         if (!['unavailable', 'conflict'].includes(result.reason)) request.current = null;
         if (result.refreshDefinitions) await refresh();
+        if (!lifetime.active()) return;
       }
     } catch {
+      if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
@@ -236,8 +246,10 @@ function MangaCreate({
                 try {
                   setCreated({ ...created, reader: await transport.read(created.id) });
                 } catch {
+      if (!lifetime.active()) return;
                   setCreated({ ...created, reader: { state: 'unavailable' } });
                 } finally {
+      if (!lifetime.active()) return;
                   running.current = false;
                   setBusy(false);
                 }

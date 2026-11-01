@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -25,7 +27,7 @@ export const readCreateDefinitions = createServerFn({ method: 'GET' })
   });
 
 export const createCatalogueSubject = createServerFn({ method: 'POST', strict: false })
-  .validator((input: CreateSubjectCommand): CreateSubjectCommand => {
+  .validator(originalReaderInput((input: CreateSubjectCommand): CreateSubjectCommand => {
     if (!input || typeof input.key !== 'string' || !input.item || typeof input.item.type !== 'string')
       throw new Error('Invalid subject request');
     // Initial terms only: never admit statements, caller-selected IDs or custom definitions through this form.
@@ -38,8 +40,9 @@ export const createCatalogueSubject = createServerFn({ method: 'POST', strict: f
         ...(input.item.aliases === undefined ? {} : { aliases: input.item.aliases }),
       },
     };
-  })
+  }))
   .handler(async ({ data }): Promise<CreateResult> => {
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     return createSubjectRecord(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
   });

@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -29,7 +31,7 @@ export const loadCharacterProfile = createServerFn({ method: 'GET', strict: fals
     return readCharacterProfile(kernelClient(), data);
   });
 export const createCatalogueCharacter = createServerFn({ method: 'POST', strict: false })
-  .validator((input: CharacterCommand): CharacterCommand => {
+  .validator(originalReaderInput((input: CharacterCommand): CharacterCommand => {
     if (
       !input ||
       !characterUuid.test(input.key) ||
@@ -40,8 +42,9 @@ export const createCatalogueCharacter = createServerFn({ method: 'POST', strict:
     )
       throw new Error('Invalid character creation');
     return { key: input.key, item: input.item };
-  })
+  }))
   .handler(async ({ data }): Promise<CreateResult> => {
+    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     return createCharacter(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
   });

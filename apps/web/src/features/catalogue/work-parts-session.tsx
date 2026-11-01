@@ -1,3 +1,6 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
+import { editorRequest } from './editor-request';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { useCallback } from 'react';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
@@ -8,7 +11,9 @@ import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelati
 import { readSubjectWorkParts } from './work-parts-actions';
 import { WorkPartsPage } from './work-parts-page';
 
-export function WorkPartsSession({
+export const WorkPartsSession = candidateSession(WorkPartsSessionLive);
+
+function WorkPartsSessionLive({
   id,
   locale,
   context,
@@ -19,6 +24,7 @@ export function WorkPartsSession({
   context?: string | undefined;
   realm?: string | undefined;
 }) {
+  const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
@@ -34,12 +40,12 @@ export function WorkPartsSession({
       search={search}
       transport={{
         read: (stream, cursor, session) =>
-          readSubjectWorkParts({ data: { id, stream, cursor, session }, headers: csrfHeaders() }),
+          readSubjectWorkParts({ data: editorRequest({ id, stream, cursor, session }, editorWork), headers: csrfHeaders() }),
         relation: (holder) => ({
           read: (slot, cursor, session) =>
-            readSubjectRelationEditor({ data: { id: holder, slot, cursor, session }, headers: csrfHeaders() }),
-          propose: (data) => proposeSubjectRelation({ data, headers: csrfHeaders() }),
-          confirm: (data) => confirmSubjectRelation({ data, headers: csrfHeaders() }),
+            readSubjectRelationEditor({ data: editorRequest({ id: holder, slot, cursor, session }, editorWork), headers: csrfHeaders() }),
+          propose: (data) => proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+          confirm: (data) => confirmSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         }),
       }}
     />

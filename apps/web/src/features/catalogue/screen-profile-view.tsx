@@ -1,3 +1,4 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
@@ -44,7 +45,9 @@ const screenActionClassName =
 const screenSummaryClassName =
   'min-h-11 max-w-full cursor-pointer py-2 font-semibold [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
 
-export function ScreenProfile({
+export const ScreenProfile = catalogueEditor(ScreenProfileLive);
+
+function ScreenProfileLive({
   id,
   locale,
   session,
@@ -59,14 +62,16 @@ export function ScreenProfile({
   search: EntityPickerSearch;
   onNavigate: (href: string) => void;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
-    queryKey: ['screen-profile', id, locale],
+    queryKey: [...['screen-profile', id, locale], lifetime.generation],
     queryFn: transport.load,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     staleTime: Infinity,
+    gcTime: 0,
   });
   const [drafts, setDrafts] = useState<Record<string, ScreenRow[]>>({});
   const retained = useRef<Extract<ScreenRead, { ok: true }>>(undefined);
@@ -119,6 +124,7 @@ export function ScreenProfile({
           transport={{
             definitions: async (refresh) => {
               const next = refresh ? (await query.refetch()).data : read;
+              if (!lifetime.active()) return;
               return next?.ok ? { ok: true, types: screenCreateTypes(next.release, locale) } : { ok: false };
             },
             submit: (command) => transport.create(command as ScreenCommand),

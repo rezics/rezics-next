@@ -1,3 +1,5 @@
+import { candidateAuthorization } from '../../subject/candidate-admission';
+import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -15,12 +17,12 @@ import {
   type EditorialResult,
 } from './editorial-context';
 
-async function credential(): Promise<string | EditorialFailure> {
+async function credential(expectedReader: string): Promise<string | EditorialFailure> {
   setResponseHeader('cache-control', 'private, no-store');
   try {
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
-    return viewerCredential(request) ?? { ok: false, reason: 'denied' };
+    return (await candidateAuthorization(expectedReader)) ?? { ok: false, reason: 'denied' };
   } catch (error) {
     return {
       ok: false,
@@ -32,17 +34,17 @@ async function credential(): Promise<string | EditorialFailure> {
   }
 }
 export const readEditorialWorkspace = createServerFn({ method: 'POST', strict: false })
-  .validator(editorialAddress)
+  .validator(originalReaderInput(editorialAddress))
   .handler(async ({ data }): Promise<EditorialRead> => {
-    const authorization = await credential();
+    const authorization = await credential(data.expectedReader);
     return typeof authorization === 'string'
       ? readEditorialContext(kernelClient(), authorization, data)
       : authorization;
   });
 export const changeEditorialWorkspace = createServerFn({ method: 'POST', strict: false })
-  .validator(editorialCommand)
+  .validator(originalReaderInput(editorialCommand))
   .handler(async ({ data }): Promise<EditorialResult> => {
-    const authorization = await credential();
+    const authorization = await credential(data.expectedReader);
     return typeof authorization === 'string'
       ? submitEditorialContext(kernelClient(), authorization, data)
       : authorization;
