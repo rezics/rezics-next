@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider, QueryObserver, dehydrate, hydrate } f
 import type { ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { RealmBoard, PublishedSubject, SpacePageData } from '../src/community/space';
+import type { SpacePageQueryResult } from '../src/community/space-queries';
 import type { SpacePageAdmission, SpacePageTarget } from '../src/community/space-page-lifetime';
 
 // Authored UNRUN: real route queries, admission/lifetime code, actions, session preparation and native client.
@@ -62,6 +63,7 @@ let nativeSubject: string | null = subject;
 let nativeAccessToken = accessToken;
 let browserCsrfToken: string | null = csrfToken;
 let credentialCsrfToken: string | null = credentialCsrf;
+let nativeSpaceAddress: string | null = null;
 let holdShelfReads = false;
 let shelfFailure = new Map<string, number>();
 let pendingShelfReads: { request: Request; work: ReturnType<typeof deferred<Response>>; settled: boolean }[] = [];
@@ -202,7 +204,7 @@ async function nativeFetch(input: RequestInfo | URL, init?: RequestInit): Promis
           createdAt: '2026-11-02T00:00:00.000Z',
           creator: subject,
           predecessor: null,
-          address: null,
+          address: nativeSpaceAddress,
           title: 'Connected Space',
           summary: 'The original route read.',
           revisionCreatedAt: '2026-11-02T00:00:00.000Z',
@@ -298,11 +300,19 @@ const { Route: spaceRoute } = await import('../src/routes/spaces/$address');
 const { Route: realmRoute } = await import('../src/routes/realms/$id');
 
 type RouteContext = { queryClient: QueryClient; credentialMode: 'anonymous' | 'session' };
-type SpaceLoader = (input: { params: { address: string }; context: RouteContext }) => Promise<{
+type SpaceLoader = (input: {
+  params: { address: string };
+  context: RouteContext;
+  abortController: AbortController;
+}) => Promise<{
   page: SpacePageData;
   admission: SpacePageAdmission;
 }>;
-type RealmLoader = (input: { params: { id: string }; context: RouteContext }) => Promise<{
+type RealmLoader = (input: {
+  params: { id: string };
+  context: RouteContext;
+  abortController: AbortController;
+}) => Promise<{
   page: SpacePageData;
   admission: SpacePageAdmission;
 }>;
@@ -325,17 +335,25 @@ function routeTarget(): SpacePageTarget {
   return { kind: 'space', address };
 }
 
-async function loadSpace(client: QueryClient, credentialMode: RouteContext['credentialMode'] = 'anonymous') {
+async function loadSpace(
+  client: QueryClient,
+  credentialMode: RouteContext['credentialMode'] = 'anonymous',
+  abortController = new AbortController(),
+) {
   const request = activeRequest ?? setRequest();
   return requests.run(request, () =>
-    loadSpaceRoute({ params: { address }, context: { queryClient: client, credentialMode } }),
+    loadSpaceRoute({ params: { address }, context: { queryClient: client, credentialMode }, abortController }),
   );
 }
 
-async function loadRealm(client: QueryClient, credentialMode: RouteContext['credentialMode']) {
+async function loadRealm(
+  client: QueryClient,
+  credentialMode: RouteContext['credentialMode'],
+  abortController = new AbortController(),
+) {
   const request = activeRequest ?? setRequest();
   return requests.run(request, () =>
-    loadRealmRoute({ params: { id: realmId }, context: { queryClient: client, credentialMode } }),
+    loadRealmRoute({ params: { id: realmId }, context: { queryClient: client, credentialMode }, abortController }),
   );
 }
 
@@ -404,6 +422,7 @@ function resetTransport() {
   pendingShelfReads = [];
   shelfFailure = new Map();
   holdShelfReads = false;
+  nativeSpaceAddress = null;
 }
 
 function newClient() {
@@ -439,6 +458,10 @@ async function click(label: string) {
 
 type ProbeState<T extends { id: string }> = ReturnType<typeof useShelfList<T>>;
 let latestProbe: { boards: ProbeState<RealmBoard>; publications: ProbeState<PublishedSubject> } | undefined;
+
+function sameQueryKey(actual: readonly unknown[], expected: readonly unknown[]) {
+  return actual.length === expected.length && actual.every((part, index) => part === expected[index]);
+}
 
 function ShelfPairProbe() {
   const lifetime = useContext(SpacePageLifetimeContext);
@@ -1035,4 +1058,209 @@ test('pending original reads retire on equal success, refresh error, removal and
       globalThis.fetch = actualFetch;
     }
   }
+});
+
+test('actual route loaders recover after QueryClient subscribers retire committed results before continuation', async () => {
+  setLocale('en', { reload: false });
+  const { spaceQuery } = await import('../src/community/space-queries');
+  const transitions = ['equal', 'error', 'remove', 'aba'] as const;
+
+  for (const transition of transitions) {
+    resetTransport();
+    nativeSubject = subject;
+    browserCsrfToken = csrfToken;
+    credentialCsrfToken = credentialCsrf;
+    const client = newClient();
+    client.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
+    setRequest();
+    const queryKey = spaceQuery(address, 'en', 'anonymous').queryKey;
+    let retired = false;
+    const stop = client.getQueryCache().subscribe((event) => {
+      if (
+        retired ||
+        event.type !== 'updated' ||
+        !('action' in event) ||
+        event.action.type !== 'success' ||
+        !sameQueryKey(event.query.queryKey, queryKey)
+      )
+        return;
+      retired = true;
+      if (transition === 'equal') client.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
+      if (transition === 'aba') {
+        client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+        client.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
+      }
+      if (transition === 'remove') client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+      if (transition === 'error') {
+        const session = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+        if (!session) throw new Error('Missing prepared session query');
+        session.setState({
+          ...session.state,
+          status: 'error',
+          error: new Error('session refresh failed'),
+          errorUpdateCount: session.state.errorUpdateCount + 1,
+        });
+      }
+    });
+    try {
+      const loaded = await loadSpace(client, 'anonymous');
+      expect(retired).toBe(true);
+      expect(loaded.page.space.title).toBe('Connected Space');
+      expect(loaded.admission.readerOrigin).toEqual({ kind: 'anonymous' });
+      expect(nativeCalls.filter((call) => call.path === `/v1/spaceAddresses/${address}`)).toHaveLength(2);
+      expect(nativeCalls.filter((call) => call.path.startsWith('/v1/')).every((call) => call.authorization === null)).toBe(
+        true,
+      );
+    } finally {
+      stop();
+    }
+  }
+});
+
+test('a successor cache result survives predecessor completion and bounded recovery', async () => {
+  setLocale('en', { reload: false });
+  const { spaceQuery } = await import('../src/community/space-queries');
+
+  for (const replacement of ['result', 'query'] as const) {
+    resetTransport();
+    nativeSubject = subject;
+    const client = newClient();
+    setRequest();
+    const queryKey = spaceQuery(address, 'en', 'anonymous').queryKey;
+    let installed = false;
+    let originalQuery: unknown;
+    const stop = client.getQueryCache().subscribe((event) => {
+      if (
+        installed ||
+        event.type !== 'updated' ||
+        !('action' in event) ||
+        event.action.type !== 'success' ||
+        !sameQueryKey(event.query.queryKey, queryKey)
+      )
+        return;
+      installed = true;
+      originalQuery = event.query;
+      const current = client.getQueryData<SpacePageQueryResult>(queryKey);
+      if (!current) throw new Error('Missing committed page result');
+      if (replacement === 'query') client.removeQueries({ queryKey, exact: true });
+      client.setQueryData<SpacePageQueryResult>(queryKey, {
+        ...current,
+        page: {
+          ...current.page,
+          space: { ...current.page.space, title: `Healthy ${replacement} successor` },
+        },
+      });
+    });
+    try {
+      await expect(loadSpace(client, 'anonymous')).rejects.toThrow('obsolete visit');
+      const successor = client.getQueryData<SpacePageQueryResult>(queryKey);
+      expect(installed).toBe(true);
+      expect(successor?.page.space.title).toBe(`Healthy ${replacement} successor`);
+      expect(nativeCalls.filter((call) => call.path === `/v1/spaceAddresses/${address}`)).toHaveLength(1);
+      if (replacement === 'query')
+        expect(client.getQueryCache().find({ queryKey, exact: true })).not.toBe(originalQuery);
+    } finally {
+      stop();
+    }
+  }
+});
+
+test('a stale Realm redirect is discarded when session retirement happens during cache notification', async () => {
+  setLocale('en', { reload: false });
+  resetTransport();
+  nativeSubject = subject;
+  browserCsrfToken = null;
+  credentialCsrfToken = null;
+  nativeSpaceAddress = 'canonical-space';
+  setRequest();
+  const client = newClient();
+  client.setQueryData(sessionQuery.queryKey, signedInSession(subject, null));
+  const { realmPageQuery } = await import('../src/community/space-queries');
+  const queryKey = realmPageQuery(realmId, 'en', 'session').queryKey;
+  let retired = false;
+  const stop = client.getQueryCache().subscribe((event) => {
+    if (
+      !retired &&
+      event.type === 'updated' &&
+      'action' in event &&
+      event.action.type === 'success' &&
+      sameQueryKey(event.query.queryKey, queryKey)
+    ) {
+      retired = true;
+      client.setQueryData(sessionQuery.queryKey, signedInSession(subject, null));
+      nativeSpaceAddress = null;
+    }
+  });
+  try {
+    const loaded = await loadRealm(client, 'session');
+    expect(retired).toBe(true);
+    expect(loaded.page.space.title).toBe('Connected Space');
+    expect(loaded.page.realm?.title).toBe('Connected Realm');
+    expect(nativeCalls.filter((call) => call.path === `/v1/realms/${realmId}`)).toHaveLength(2);
+  } finally {
+    stop();
+    nativeSpaceAddress = null;
+  }
+});
+
+test('Space pages and Realm 307 results cannot escape after route abort in the success notification', async () => {
+  setLocale('en', { reload: false });
+  const { spaceQuery, realmPageQuery } = await import('../src/community/space-queries');
+  for (const route of ['space', 'realm'] as const) {
+    resetTransport();
+    nativeSubject = subject;
+    browserCsrfToken = null;
+    credentialCsrfToken = null;
+    nativeSpaceAddress = route === 'realm' ? 'late-canonical-space' : null;
+    setRequest();
+    const client = newClient();
+    client.setQueryData(sessionQuery.queryKey, signedInSession(subject, null));
+    const queryKey =
+      route === 'space'
+        ? spaceQuery(address, 'en', 'anonymous').queryKey
+        : realmPageQuery(realmId, 'en', 'session').queryKey;
+    const abortController = new AbortController();
+    let aborted = false;
+    const stop = client.getQueryCache().subscribe((event) => {
+      if (
+        !aborted &&
+        event.type === 'updated' &&
+        'action' in event &&
+        event.action.type === 'success' &&
+        sameQueryKey(event.query.queryKey, queryKey)
+      ) {
+        aborted = true;
+        abortController.abort();
+      }
+    });
+    try {
+      if (route === 'space') await expect(loadSpace(client, 'anonymous', abortController)).rejects.toThrow('obsolete visit');
+      else await expect(loadRealm(client, 'session', abortController)).rejects.toThrow('obsolete visit');
+      expect(aborted).toBe(true);
+      expect(abortController.signal.aborted).toBe(true);
+      if (route === 'realm') expect(nativeCalls.filter((call) => call.path === `/v1/realms/${realmId}`)).toHaveLength(1);
+    } finally {
+      stop();
+      nativeSpaceAddress = null;
+    }
+  }
+});
+
+test('a healthy Realm 307 keeps its canonical locale and encoded Space address', async () => {
+  setLocale('ja', { reload: false });
+  resetTransport();
+  nativeSubject = subject;
+  nativeSpaceAddress = 'space & one';
+  setRequest();
+  const client = newClient();
+  client.setQueryData(sessionQuery.queryKey, signedInSession(subject, null));
+  let redirectResult: unknown;
+  try {
+    await loadRealm(client, 'session');
+  } catch (error) {
+    redirectResult = error;
+  }
+  expect(redirectResult).toMatchObject({
+    options: { href: '/ja/spaces/space%20%26%20one', statusCode: 307 },
+  });
 });

@@ -14,6 +14,20 @@ expected session fields with the hydrated session. Source IDs, generation counte
 inputs only; none authenticates a reader or proves that a different QueryClient observed every intervening update.
 The digest is only used to reject a changed cached CSRF value.
 
+Each original route attempt keeps its own runtime. Before its BFF read, the query function binds the exact Query object,
+query key, baseline data-update count and TanStack cancellation signal. The returned envelope is recorded as the only
+result generation that attempt can publish. After each await, the loader checks the original session observation, route
+abort, Query object, result reference and data-update count. A synchronous cache subscriber that changes the session,
+removes and recreates the Query, or replaces its result retires the old attempt before the loader can return a page or
+throw the Realm's canonical 307.
+
+Router abort races only the route loader's wait; it does not cancel a shared QueryClient fetch. The attempt is
+permanently retired on abort, and its late transport result cannot become that loader's page or redirect. Query-owned
+cancellation or exact-query removal can receive one fresh eligible attempt while the route remains active. Recovery is
+bounded to one retry and required read errors pass through. Mounted route effects allow one invalidate/refetch for
+each current route and session observation. They check the current admission immediately before acting so an older
+effect cannot invalidate a successor.
+
 A same-QueryClient observer advances its private generation for successful session data replacements (including equal
 data), session query errors and removal. Ordinary fetch starts, observer notifications and StrictMode effect replay do
 not advance it. A private page admission is retired after any observed generation or session tuple change. A public
@@ -35,6 +49,15 @@ client begins observing cannot be proven from the final tuple or serialized coun
 claim either missing proof. A future stronger guarantee requires a non-secret monotonic session credential generation
 from the existing session producer, which is outside this reader-only contract.
 
-The composed acceptance is `apps/web/tests/space-reader-compatibility.test.tsx`. It is authored but remains UNRUN under
-the current execution policy. The existing native bounds remain in `realm-pages.test.ts`, `realm-publications.test.ts`
-and the read-only `realm-pages-cost.test.ts`.
+The composed acceptance is authored in `apps/web/tests/space-page-lifetime.test.tsx` and
+`apps/web/tests/space-reader-compatibility.test.tsx`; its assertions remain UNRUN under the current execution policy.
+It retains actual route loaders, QueryClient cache notifications, server preparation and the deferred native client
+seam, alongside healthy cache/native success, observer/fetch activity, rerenders, StrictMode reconnect, initial public
+session refresh, null-CSRF reads and the existing shelf limits and serialization checks. The existing native bounds
+remain in `realm-pages.test.ts`, `realm-publications.test.ts` and the read-only `realm-pages-cost.test.ts`.
+
+Private first-render provenance remains unresolved. Serialized comparison fields do not prove the actual cookie or
+authorization credential, independent-cache provenance or unobserved credential history. This change does not alter
+private server-rendered output, add a trusted generation or raw credential transport, or add preparation/native reads.
+The existing `createRoot` serialization cases are not `renderToString`/`hydrateRoot` first-paint proof; the private
+first-render producer/SSR contract remains deferred.

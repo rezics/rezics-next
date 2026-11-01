@@ -59,6 +59,26 @@ type AdmissionRuntime = {
   baseline: SessionSnapshot;
   revision: number;
   initialized: boolean;
+  routeSignal?: AbortSignal;
+  routeAborted: boolean;
+  stopRouteAbort?: () => void;
+  queryRead?: SpacePageQueryRead;
+};
+
+type SpacePageQueryObject = {
+  readonly queryKey: readonly unknown[];
+  readonly state: { readonly data: unknown; readonly dataUpdateCount: number };
+};
+
+type SpacePageQueryRead = {
+  readonly query: SpacePageQueryObject;
+  readonly queryKey: readonly unknown[];
+  readonly baselineDataUpdateCount: number;
+  readonly baselineData: unknown;
+  readonly signal: AbortSignal;
+  result?: unknown;
+  resultDataUpdateCount?: number;
+  retryableFailure?: boolean;
 };
 
 export type ShelfReadTicket = {
@@ -232,6 +252,21 @@ function readerOriginMatches(admission: SpacePageAdmission, origin: ReaderOrigin
   );
 }
 
+function queryReadIsCurrent(runtime: AdmissionRuntime) {
+  const read = runtime.queryRead;
+  if (!read) return true;
+  if (read.signal.aborted) return false;
+  const current = runtime.client.getQueryCache().find({ queryKey: read.queryKey, exact: true });
+  if (current !== read.query) return false;
+  if (read.result === undefined)
+    return read.query.state.dataUpdateCount === read.baselineDataUpdateCount;
+  return (
+    read.resultDataUpdateCount === read.baselineDataUpdateCount + 1 &&
+    read.query.state.dataUpdateCount === read.resultDataUpdateCount &&
+    read.query.state.data === read.result
+  );
+}
+
 function resolveRuntime(admission: SpacePageAdmission, client: QueryClient): AdmissionRuntime | null {
   const source = spacePageSessionSource(client);
   const current = toSnapshot(source);
@@ -266,12 +301,14 @@ function resolveRuntime(admission: SpacePageAdmission, client: QueryClient): Adm
     baseline: current,
     revision: source.revision(),
     initialized: current.state !== 'unknown' || canBridgeInitialSession(admission, current),
+    routeAborted: false,
   };
   runtimes.set(admission, runtime);
   return runtime;
 }
 
 function runtimeIsCurrent(admission: SpacePageAdmission, runtime: AdmissionRuntime) {
+  if (runtime.routeAborted || runtime.routeSignal?.aborted || !queryReadIsCurrent(runtime)) return false;
   const current = toSnapshot(runtime.source);
   if (runtime.source.revision() === runtime.revision && sameSnapshot(runtime.baseline, current)) return true;
   if (!runtime.initialized && canAdoptInitialSession(admission, runtime.baseline, current)) {
@@ -286,7 +323,12 @@ function runtimeIsCurrent(admission: SpacePageAdmission, runtime: AdmissionRunti
 /** Capture the expected QueryClient/session observation before starting the original read. */
 export function captureSpacePageAdmission(
   client: QueryClient,
-  input: { target: SpacePageTarget; locale: string; credentialMode: ReadCredentialMode },
+  input: {
+    target: SpacePageTarget;
+    locale: string;
+    credentialMode: ReadCredentialMode;
+    signal?: AbortSignal;
+  },
 ): SpacePageAdmission {
   const source = spacePageSessionSource(client);
   const current = toSnapshot(source);
@@ -308,14 +350,169 @@ export function captureSpacePageAdmission(
     locale: input.locale,
     realmId: null,
   };
-  runtimes.set(admission, {
+  const runtime: AdmissionRuntime = {
     client,
     source,
     baseline: current,
     revision: source.revision(),
     initialized: current.state !== 'unknown',
-  });
+    routeSignal: input.signal,
+    routeAborted: !!input.signal?.aborted,
+  };
+  if (input.signal && !input.signal.aborted) {
+    const onAbort = () => {
+      runtime.routeAborted = true;
+    };
+    input.signal.addEventListener('abort', onAbort, { once: true });
+    runtime.stopRouteAbort = () => input.signal?.removeEventListener('abort', onAbort);
+  }
+  runtimes.set(admission, runtime);
   return admission;
+}
+
+/** Bind the exact Query and cache generation before its admitted transport starts. */
+export function beginSpacePageQueryRead(
+  admission: SpacePageAdmission,
+  client: QueryClient,
+  queryKey: readonly unknown[],
+  signal: AbortSignal,
+) {
+  const runtime = runtimes.get(admission);
+  if (!runtime || runtime.client !== client || runtime.routeAborted || runtime.routeSignal?.aborted || signal.aborted)
+    return false;
+  const query = client.getQueryCache().find({ queryKey, exact: true });
+  if (!query) return false;
+  if (runtime.queryRead) {
+    const read = runtime.queryRead;
+    if (
+      read.query !== query ||
+      read.signal !== signal ||
+      read.result !== undefined ||
+      !read.retryableFailure ||
+      !queryReadIsCurrent(runtime)
+    )
+      return false;
+    read.retryableFailure = false;
+    return true;
+  }
+  runtime.queryRead = {
+    query,
+    queryKey: query.queryKey,
+    baselineDataUpdateCount: query.state.dataUpdateCount,
+    baselineData: query.state.data,
+    signal,
+  };
+  return runtimeIsCurrent(admission, runtime);
+}
+
+/** Preserve React Query's configured retry behavior for required read failures. */
+export function allowSpacePageQueryRetry(admission: SpacePageAdmission) {
+  const runtime = runtimes.get(admission);
+  const read = runtime?.queryRead;
+  if (runtime && read && read.result === undefined && runtimeIsCurrent(admission, runtime))
+    read.retryableFailure = true;
+}
+
+/** Record the value whose next exact Query success is owned by this admitted read. */
+export function recordSpacePageQueryResult(admission: SpacePageAdmission, result: object) {
+  const runtime = runtimes.get(admission);
+  const read = runtime?.queryRead;
+  if (!runtime || !read || !runtimeIsCurrent(admission, runtime)) return false;
+  read.result = result;
+  read.resultDataUpdateCount = read.baselineDataUpdateCount + 1;
+  return true;
+}
+
+/** Validate the committed value after QueryClient listeners have run. */
+export function spacePageQueryResultIsCurrent(
+  admission: SpacePageAdmission,
+  client: QueryClient,
+  queryKey: readonly unknown[],
+  result: object,
+) {
+  const runtime = runtimes.get(admission);
+  const read = runtime?.queryRead;
+  return !!(
+    runtime &&
+    runtime.client === client &&
+    read &&
+    read.result === result &&
+    read.queryKey.length === queryKey.length &&
+    read.queryKey.every((part, index) => part === queryKey[index]) &&
+    runtimeIsCurrent(admission, runtime)
+  );
+}
+
+/** Release only the request-abort listener owned by this loader attempt. */
+export function releaseSpacePageRead(admission: SpacePageAdmission) {
+  const runtime = runtimes.get(admission);
+  runtime?.stopRouteAbort?.();
+  if (runtime) {
+    runtime.stopRouteAbort = undefined;
+    runtime.routeSignal = undefined;
+  }
+}
+
+/** Wait for this loader attempt while allowing a router abort to retire it promptly. */
+export function awaitSpacePageRead<T>(admission: SpacePageAdmission, promise: Promise<T>): Promise<T> {
+  const runtime = runtimes.get(admission);
+  const signal = runtime?.routeSignal;
+  if (!runtime || !signal) return promise;
+  if (signal.aborted) {
+    runtime.routeAborted = true;
+    return Promise.reject(new ObsoleteSpacePageReadError());
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      runtime.routeAborted = true;
+      cleanup();
+      reject(new ObsoleteSpacePageReadError());
+    };
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error: unknown) => {
+        cleanup();
+        reject(error);
+      },
+    );
+  });
+}
+
+export function spacePageReadWasCancelled(admission: SpacePageAdmission, client: QueryClient) {
+  const runtime = runtimes.get(admission);
+  return !!(
+    runtime &&
+    runtime.client === client &&
+    !runtime.routeAborted &&
+    !runtime.routeSignal?.aborted &&
+    (runtime.queryRead?.signal.aborted ||
+      (runtime.queryRead &&
+        client.getQueryCache().find({ queryKey: runtime.queryRead.queryKey, exact: true }) !== runtime.queryRead.query))
+  );
+}
+
+/** A cache result already owned by a successor must not be overwritten by this attempt's recovery. */
+export function spacePageReadResultWasReplaced(admission: SpacePageAdmission, client: QueryClient) {
+  const runtime = runtimes.get(admission);
+  const read = runtime?.queryRead;
+  if (!runtime || runtime.client !== client || !read) return false;
+  const current = client.getQueryCache().find({ queryKey: read.queryKey, exact: true });
+  if (current !== read.query)
+    return !!current && (current.state.dataUpdateCount > 0 || current.state.data !== undefined);
+  if (read.result === undefined)
+    return (
+      read.query.state.dataUpdateCount !== read.baselineDataUpdateCount ||
+      read.query.state.data !== read.baselineData
+    );
+  return (
+    read.query.state.dataUpdateCount !== read.resultDataUpdateCount ||
+    read.query.state.data !== read.result
+  );
 }
 
 export function spacePageAdmissionIsCurrent(admission: SpacePageAdmission, client: QueryClient) {
@@ -591,10 +788,21 @@ export class SpacePageLifetime {
     this.connected = true;
     activeAdmissions.set(this.admission, this);
     if (!this.stopWatching && this.runtime) {
-      this.stopWatching = this.runtime.source.subscribe(() => {
+      const onChange = () => {
         if (!this.disposed && (!this.runtime || !runtimeIsCurrent(this.admission, this.runtime))) this.retire();
         else this.publish();
-      });
+      };
+      const stopSession = this.runtime.source.subscribe(onChange);
+      const ownedQuery = this.runtime.queryRead?.query;
+      const stopQuery = ownedQuery
+        ? this.runtime.client.getQueryCache().subscribe((event) => {
+            if (event.query === ownedQuery) onChange();
+          })
+        : undefined;
+      this.stopWatching = () => {
+        stopSession();
+        stopQuery?.();
+      };
       this.snapshot();
     }
     if (!wasConnected && !this.disposed) this.publish();

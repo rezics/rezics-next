@@ -4,6 +4,7 @@ import { act, StrictMode, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import type { Root } from 'react-dom/client';
 import * as start from '../.storybook/react-start';
+import type { SpacePageQueryResult } from '../src/community/space-queries';
 import type { RealmBoard, RealmHome, SpacePageData, ShelfPage, PublishedSubject } from '../src/community/space';
 import type { SpacePageAdmission, SpacePageTarget } from '../src/community/space-page-lifetime';
 
@@ -198,7 +199,11 @@ const { setLocale } = await import('../src/paraglide/runtime.js');
 const { Route: spaceRoute } = await import('../src/routes/spaces/$address');
 const { Route: realmRoute } = await import('../src/routes/realms/$id');
 
-type RouteLoader = (input: unknown) => Promise<{ page: SpacePageData; admission: SpacePageAdmission }>;
+type RouteLoader = (input: {
+  params: { address: string };
+  context: { queryClient: QueryClient };
+  abortController: AbortController;
+}) => Promise<{ page: SpacePageData; admission: SpacePageAdmission }>;
 const actualSpaceLoader = (spaceRoute.options as unknown as { loader: RouteLoader }).loader;
 
 function fileRouteTree(route: unknown, path: string) {
@@ -296,7 +301,34 @@ async function loadSpaceRoute(
   queryClient: QueryClient,
   routeAddress = address,
 ): Promise<{ page: SpacePageData; admission: SpacePageAdmission }> {
-  return actualSpaceLoader({ params: { address: routeAddress }, context: { queryClient } });
+  return actualSpaceLoader({
+    params: { address: routeAddress },
+    context: { queryClient },
+    abortController: new AbortController(),
+  });
+}
+
+function sameQueryKey(actual: readonly unknown[], expected: readonly unknown[]) {
+  return actual.length === expected.length && actual.every((part, index) => part === expected[index]);
+}
+
+function retireObservedSession(client: QueryClient, transition: 'equal' | 'error' | 'remove' | 'aba') {
+  if (transition === 'equal') client.setQueryData(sessionQuery.queryKey, viewer());
+  if (transition === 'aba') {
+    client.setQueryData(sessionQuery.queryKey, signedOut());
+    client.setQueryData(sessionQuery.queryKey, viewer());
+  }
+  if (transition === 'remove') client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+  if (transition === 'error') {
+    const query = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+    if (!query) throw new Error('Missing prepared session query');
+    query.setState({
+      ...query.state,
+      status: 'error',
+      error: new Error('session refresh failed'),
+      errorUpdateCount: query.state.errorUpdateCount + 1,
+    });
+  }
 }
 
 async function loadSessionSpace(queryClient: QueryClient, routeAddress = address, locale = 'en') {
@@ -476,6 +508,31 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     expect(host.textContent).toContain('Original publication');
   });
 
+  test('mounted route recovery refreshes one retired public visit without looping', async () => {
+    setLocale('en', { reload: false });
+    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    client = nextClient;
+    nextClient.setQueryData(sessionQuery.queryKey, signedOut());
+    let reads = 0;
+    pageReader = async (input) => {
+      reads++;
+      return {
+        ...pageFor(input.address, false),
+        space: { id: spaceId, title: `Mounted public result ${reads}`, summary: '' },
+      };
+    };
+    await mountFileRoute(fileRouteTree(spaceRoute, '/spaces/$address'), `/spaces/${address}`, nextClient);
+    expect(host.textContent).toContain('Mounted public result 1');
+    await act(async () => {
+      nextClient.setQueryData(sessionQuery.queryKey, signedOut());
+      await tick();
+    });
+    await settle();
+    expect(host.textContent).toContain('Mounted public result 2');
+    expect(reads).toBe(2);
+    expect(calls.pages).toHaveLength(2);
+  });
+
   test('the actual Space route composes its signed-in query and hides an obsolete ready result while the replacement is pending', async () => {
     setLocale('en', { reload: false });
     const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
@@ -530,6 +587,169 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     expect(second.admission.readId).not.toBe(first.admission.readId);
     expect(second.page.space.title).toBe('Fresh route read');
     expect(calls.pages).toHaveLength(2);
+  });
+
+  test('the actual loader recovers once when its committed Query success is retired before continuation', async () => {
+    setLocale('en', { reload: false });
+    for (const transition of ['equal', 'error', 'remove', 'aba'] as const) {
+      calls.pages.length = 0;
+      const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+      client = nextClient;
+      nextClient.setQueryData(sessionQuery.queryKey, viewer());
+      let reads = 0;
+      pageReader = async (input) => {
+        reads++;
+        return {
+          ...pageFor(input.address, false),
+          space: { id: spaceId, title: `${transition} read ${reads}`, summary: '' },
+        };
+      };
+      const queryKey = spaceQuery(address, 'en', 'anonymous').queryKey;
+      let retired = false;
+      const stop = nextClient.getQueryCache().subscribe((event) => {
+        if (
+          !retired &&
+          event.type === 'updated' &&
+          'action' in event &&
+          event.action.type === 'success' &&
+          sameQueryKey(event.query.queryKey, queryKey)
+        ) {
+          retired = true;
+          retireObservedSession(nextClient, transition);
+        }
+      });
+      try {
+        const recovered = await loadSpaceRoute(nextClient);
+        expect(retired).toBe(true);
+        expect(recovered.page.space.title).toBe(`${transition} read 2`);
+        expect(reads).toBe(2);
+        expect(calls.pages).toHaveLength(2);
+      } finally {
+        stop();
+      }
+    }
+  });
+
+  test('the actual loader stops after one fresh recovery when each committed result is retired', async () => {
+    setLocale('en', { reload: false });
+    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    client = nextClient;
+    nextClient.setQueryData(sessionQuery.queryKey, viewer());
+    let reads = 0;
+    pageReader = async (input) => {
+      reads++;
+      return {
+        ...pageFor(input.address, false),
+        space: { id: spaceId, title: `Retired attempt ${reads}`, summary: '' },
+      };
+    };
+    const queryKey = spaceQuery(address, 'en', 'anonymous').queryKey;
+    const stop = nextClient.getQueryCache().subscribe((event) => {
+      if (
+        event.type === 'updated' &&
+        'action' in event &&
+        event.action.type === 'success' &&
+        sameQueryKey(event.query.queryKey, queryKey)
+      )
+        nextClient.setQueryData(sessionQuery.queryKey, viewer());
+    });
+    try {
+      await expect(loadSpaceRoute(nextClient)).rejects.toThrow('obsolete visit');
+      expect(reads).toBe(2);
+      expect(calls.pages).toHaveLength(2);
+    } finally {
+      stop();
+    }
+  });
+
+  test('removing the exact original Query allows one fresh read when no successor owns its cache entry', async () => {
+    setLocale('en', { reload: false });
+    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    client = nextClient;
+    let reads = 0;
+    pageReader = async (input) => {
+      reads++;
+      return {
+        ...pageFor(input.address, false),
+        space: { id: spaceId, title: `Fresh after removal ${reads}`, summary: '' },
+      };
+    };
+    const queryKey = spaceQuery(address, 'en', 'anonymous').queryKey;
+    let removed = false;
+    const stop = nextClient.getQueryCache().subscribe((event) => {
+      if (
+        !removed &&
+        event.type === 'updated' &&
+        'action' in event &&
+        event.action.type === 'success' &&
+        sameQueryKey(event.query.queryKey, queryKey)
+      ) {
+        removed = true;
+        nextClient.removeQueries({ queryKey, exact: true });
+      }
+    });
+    try {
+      const recovered = await loadSpaceRoute(nextClient);
+      expect(removed).toBe(true);
+      expect(recovered.page.space.title).toBe('Fresh after removal 2');
+      expect(reads).toBe(2);
+    } finally {
+      stop();
+    }
+  });
+
+  test('a replaced result or recreated healthy Query stays owned by its successor', async () => {
+    setLocale('en', { reload: false });
+    for (const replacement of ['result', 'query'] as const) {
+      calls.pages.length = 0;
+      const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+      client = nextClient;
+      let reads = 0;
+      pageReader = async (input) => {
+        reads++;
+        return {
+          ...pageFor(input.address, false),
+          space: { id: spaceId, title: `Predecessor ${reads}`, summary: '' },
+        };
+      };
+      const queryKey = spaceQuery(address, 'en', 'anonymous').queryKey;
+      let replaced = false;
+      let originalQuery: unknown;
+      const stop = nextClient.getQueryCache().subscribe((event) => {
+        if (
+          !replaced &&
+          event.type === 'updated' &&
+          'action' in event &&
+          event.action.type === 'success' &&
+          sameQueryKey(event.query.queryKey, queryKey)
+        ) {
+          replaced = true;
+          originalQuery = event.query;
+          if (replacement === 'query') nextClient.removeQueries({ queryKey, exact: true });
+          const current = nextClient.getQueryData<SpacePageQueryResult>(queryKey);
+          if (!current) throw new Error('Missing committed page result');
+          nextClient.setQueryData<SpacePageQueryResult>(queryKey, {
+            ...current,
+            page: {
+              ...current.page,
+              space: { ...current.page.space, title: `Healthy ${replacement} successor` },
+            },
+          });
+        }
+      });
+      try {
+        await expect(loadSpaceRoute(nextClient)).rejects.toThrow('obsolete visit');
+        const successor = nextClient.getQueryData<SpacePageQueryResult>(queryKey);
+        expect(replaced).toBe(true);
+        expect(successor?.page.space.title).toBe(`Healthy ${replacement} successor`);
+        expect(reads).toBe(1);
+        expect(calls.pages).toHaveLength(1);
+        if (replacement === 'query')
+          expect(nextClient.getQueryCache().find({ queryKey, exact: true })).not.toBe(originalQuery);
+      } finally {
+        stop();
+      }
+    }
   });
 
   test('a same-account credential replacement rejects an in-flight private page result before QueryClient caches success', async () => {

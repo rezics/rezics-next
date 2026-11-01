@@ -5,11 +5,14 @@ import { locateRealmPage, readSpacePage } from './space-actions';
 import { useEffect, useRef, useState } from 'react';
 import type { ReaderOrigin, ShelfPage } from './space';
 import {
+  allowSpacePageQueryRetry,
   bindRealmPageResult,
   bindSpacePageResult,
   captureStandaloneShelfRead,
   captureSpacePageAdmission,
+  beginSpacePageQueryRead,
   ObsoleteSpacePageReadError,
+  recordSpacePageQueryResult,
   spacePageAdmissionIsCurrent,
   standaloneShelfReadIsCurrent,
   standaloneShelfReaderMatches,
@@ -159,15 +162,27 @@ export const spaceQuery = (
   queryOptions({
     ...(credentialMode === 'session' ? personalRead : publicRead),
     queryKey: readQueryKey(['space', address, locale], credentialMode),
-    queryFn: async ({ client }) => {
+    queryFn: async ({ client, signal }) => {
       const target: SpacePageTarget = { kind: 'space', address };
       const admission = originalAdmission ?? captureSpacePageAdmission(client, { target, locale, credentialMode });
-      if (!spacePageAdmissionIsCurrent(admission, client)) throw new ObsoleteSpacePageReadError();
-      const page = await readSpacePage({ data: { address, credentialMode } });
+      if (
+        !beginSpacePageQueryRead(admission, client, readQueryKey(['space', address, locale], credentialMode), signal) ||
+        !spacePageAdmissionIsCurrent(admission, client)
+      )
+        throw new ObsoleteSpacePageReadError();
+      let page: Awaited<ReturnType<typeof readSpacePage>>;
+      try {
+        page = await readSpacePage({ data: { address, credentialMode } });
+      } catch (error) {
+        if (!(error instanceof ObsoleteSpacePageReadError)) allowSpacePageQueryRetry(admission);
+        throw error;
+      }
       if (!spacePageAdmissionIsCurrent(admission, client)) throw new ObsoleteSpacePageReadError();
       const bound = bindSpacePageResult(page, admission, page.readerOrigin, client);
       if (!bound) throw new ObsoleteSpacePageReadError();
-      return { page, admission: bound } satisfies SpacePageQueryResult;
+      const result = { page, admission: bound } satisfies SpacePageQueryResult;
+      if (!recordSpacePageQueryResult(admission, result)) throw new ObsoleteSpacePageReadError();
+      return result;
     },
   });
 
@@ -180,14 +195,26 @@ export const realmPageQuery = (
   queryOptions({
     ...(credentialMode === 'session' ? personalRead : publicRead),
     queryKey: readQueryKey(['realm-page', id, locale], credentialMode),
-    queryFn: async ({ client }) => {
+    queryFn: async ({ client, signal }) => {
       const target: SpacePageTarget = { kind: 'realm', id };
       const admission = originalAdmission ?? captureSpacePageAdmission(client, { target, locale, credentialMode });
-      if (!spacePageAdmissionIsCurrent(admission, client)) throw new ObsoleteSpacePageReadError();
-      const located = await locateRealmPage({ data: { realmId: id, credentialMode } });
+      if (
+        !beginSpacePageQueryRead(admission, client, readQueryKey(['realm-page', id, locale], credentialMode), signal) ||
+        !spacePageAdmissionIsCurrent(admission, client)
+      )
+        throw new ObsoleteSpacePageReadError();
+      let located: Awaited<ReturnType<typeof locateRealmPage>>;
+      try {
+        located = await locateRealmPage({ data: { realmId: id, credentialMode } });
+      } catch (error) {
+        if (!(error instanceof ObsoleteSpacePageReadError)) allowSpacePageQueryRetry(admission);
+        throw error;
+      }
       if (!spacePageAdmissionIsCurrent(admission, client)) throw new ObsoleteSpacePageReadError();
       const bound = bindRealmPageResult(located, admission, client);
       if (!bound) throw new ObsoleteSpacePageReadError();
-      return { located, admission: bound } satisfies RealmPageQueryResult;
+      const result = { located, admission: bound } satisfies RealmPageQueryResult;
+      if (!recordSpacePageQueryResult(admission, result)) throw new ObsoleteSpacePageReadError();
+      return result;
     },
   });
