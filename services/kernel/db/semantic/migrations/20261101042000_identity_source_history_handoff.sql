@@ -1,4 +1,36 @@
 -- migrate:up
+-- Source already rechecks genuine Account settlement before subject discharge.
+-- Keep that same native terminal check usable for discharged as well as transferred rows.
+CREATE OR REPLACE FUNCTION semantic.identity_source_consumer_terminal_matches(
+ p_home integer,p_custody bigint,p_sequence bigint,p_reference jsonb,p_generation jsonb,p_tx uuid)
+RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE matched boolean;
+BEGIN
+ IF NOT semantic.identity_source_consumer_terminal_hook_installed() THEN RETURN false; END IF;
+ EXECUTE $q$SELECT EXISTS(
+  SELECT 1 FROM semantic.identity_epoch_source_consumer_terminal t
+  JOIN semantic.identity_epoch_source_consumer_custody r ON r.partition_no=t.partition_no
+   AND r.erasure_key=t.custody_key
+  JOIN semantic.erasure_source_commit n ON n.partition_no=t.partition_no
+   AND n.transaction_id=t.transaction_id AND n.epoch=t.owner_epoch AND n.xmin=t.xmin
+  JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch
+   AND p.write_state='active' AND p.moved_to IS NULL
+   AND (p.position>=n.position OR (n.transaction_id=$6 AND n.position=p.position+1))
+  WHERE t.partition_no=$1 AND t.custody_key=$2 AND t.sequence=$3 AND t.state=CASE WHEN $4->>'erasedRole'='subject' THEN 'discharged' ELSE 'transferred' END
+   AND r.receipt_key::jsonb=jsonb_build_array($4#>>'{receipt,kind}',$4#>>'{receipt,account}',$4#>>'{receipt,receipt}')
+   AND r.source_digest=$4->>'sourceDigest' AND r.source_epoch::text=$4#>>'{source,epoch}'
+   AND r.source_position::text=$4#>>'{source,position}' AND r.source_transaction_id::text=$4#>>'{source,transactionId}'
+   AND r.job_id::text=$4#>>'{job,jobId}' AND r.job_epoch::text=$4#>>'{job,epoch}'
+   AND r.barrier_account_id::text=$4#>>'{barrier,accountId}'
+   AND r.barrier_account_route::text=$4#>>'{barrier,accountRoute}'
+   AND r.barrier_version::text=$4#>>'{barrier,version}' AND r.barrier_at=($4#>>'{barrier,at}')::timestamptz
+   AND r.erased_role=$4->>'erasedRole' AND r.binding_generation=t.replay_generation
+   AND t.replay_generation::text=$5->>'replayGeneration'
+   AND t.undo_generation::text=$5->>'undoGeneration' AND t.restore_generation::text=$5->>'restoreGeneration'
+ )$q$ INTO matched USING p_home,p_custody,p_sequence,p_reference,p_generation,p_tx;
+ RETURN matched;
+END $$;
+
 -- The authority remains the original enrolled Source custody and terminal pointer.
 -- No copied terminal, handoff ledger, History mutation or foreign SDK SQL is installed.
 CREATE FUNCTION semantic.lock_identity_source_history_handoff(p_reference jsonb, p_expected jsonb DEFAULT NULL)
@@ -93,11 +125,9 @@ BEGIN
   AND r.barrier_at=(p_reference#>>'{barrier,at}')::timestamptz
   AND r.erased_role=p_reference->>'erasedRole'
   AND ((r.erased_role='subject' AND t.state='discharged' AND r.barrier_account_id=b.account_id)
-    OR (r.erased_role IN ('requester','decider') AND
-      ((c.receipt->>'kind'='account-agent.verify' AND t.state='transferred'
-        AND t.receiving_partition=0 AND t.receiving_epoch=p.epoch
-        AND t.receiving_position>0 AND t.receiving_transaction_id IS NOT NULL)
-       OR (c.receipt->>'kind'='account-agent.unverify' AND t.state='discharged'))))
+    OR (r.erased_role IN ('requester','decider') AND t.state='transferred'
+      AND t.receiving_partition=0 AND t.receiving_epoch=p.epoch
+      AND t.receiving_position>0 AND t.receiving_transaction_id IS NOT NULL))
  FOR UPDATE OF b FOR SHARE OF r,t,c,k,admission,undo,retained,terminal_commit,p,
    retained_role,terminal_role,retained_locator,terminal_locator;
 
@@ -106,4 +136,34 @@ BEGIN
 END $$;
 
 -- migrate:down
+CREATE OR REPLACE FUNCTION semantic.identity_source_consumer_terminal_matches(
+ p_home integer,p_custody bigint,p_sequence bigint,p_reference jsonb,p_generation jsonb,p_tx uuid)
+RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE matched boolean;
+BEGIN
+ IF NOT semantic.identity_source_consumer_terminal_hook_installed() THEN RETURN false; END IF;
+ EXECUTE $q$SELECT EXISTS(
+  SELECT 1 FROM semantic.identity_epoch_source_consumer_terminal t
+  JOIN semantic.identity_epoch_source_consumer_custody r ON r.partition_no=t.partition_no
+   AND r.erasure_key=t.custody_key
+  JOIN semantic.erasure_source_commit n ON n.partition_no=t.partition_no
+   AND n.transaction_id=t.transaction_id AND n.epoch=t.owner_epoch AND n.xmin=t.xmin
+  JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch
+   AND p.write_state='active' AND p.moved_to IS NULL
+   AND (p.position>=n.position OR (n.transaction_id=$6 AND n.position=p.position+1))
+  WHERE t.partition_no=$1 AND t.custody_key=$2 AND t.sequence=$3 AND t.state='transferred'
+   AND r.receipt_key::jsonb=jsonb_build_array($4#>>'{receipt,kind}',$4#>>'{receipt,account}',$4#>>'{receipt,receipt}')
+   AND r.source_digest=$4->>'sourceDigest' AND r.source_epoch::text=$4#>>'{source,epoch}'
+   AND r.source_position::text=$4#>>'{source,position}' AND r.source_transaction_id::text=$4#>>'{source,transactionId}'
+   AND r.job_id::text=$4#>>'{job,jobId}' AND r.job_epoch::text=$4#>>'{job,epoch}'
+   AND r.barrier_account_id::text=$4#>>'{barrier,accountId}'
+   AND r.barrier_account_route::text=$4#>>'{barrier,accountRoute}'
+   AND r.barrier_version::text=$4#>>'{barrier,version}' AND r.barrier_at=($4#>>'{barrier,at}')::timestamptz
+   AND r.erased_role=$4->>'erasedRole' AND r.binding_generation=t.replay_generation
+   AND t.replay_generation::text=$5->>'replayGeneration'
+   AND t.undo_generation::text=$5->>'undoGeneration' AND t.restore_generation::text=$5->>'restoreGeneration'
+ )$q$ INTO matched USING p_home,p_custody,p_sequence,p_reference,p_generation,p_tx;
+ RETURN matched;
+END $$;
+
 DROP FUNCTION semantic.lock_identity_source_history_handoff(jsonb,jsonb);

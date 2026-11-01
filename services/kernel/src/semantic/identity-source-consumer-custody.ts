@@ -1200,13 +1200,14 @@ export const IDENTITY_SOURCE_HISTORY_GUARD_COST: NativeStepWork = Object.freeze(
   engineRequests: 0,
 });
 
-// Additional fixed calls in the supported composition below. Source and Account
-// verifiers still pre-reserve their OWN work; these allowances never replace it.
+// History recheck plus the complete nested Source verifier, including technical
+// fallback and both native terminal-hook lookups. Existing Source/Account charges
+// still apply separately; no prior reservation is refunded or reallocated here.
 export const IDENTITY_SOURCE_HISTORY_RECHECK_COST: NativeStepWork = Object.freeze({
-  rows: 32,
-  points: 32,
-  statements: 8,
-  bytes: 131072,
+  rows: 128,
+  points: 128,
+  statements: 24,
+  bytes: 262144,
   engineRequests: 0,
 });
 export const IDENTITY_SOURCE_HISTORY_RECEIVER_COST: NativeStepWork = Object.freeze({

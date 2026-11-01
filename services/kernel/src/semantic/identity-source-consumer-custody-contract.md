@@ -351,11 +351,16 @@ latest-receipt scan. It joins the original enrolled custody and terminal, exact 
 claim/claim commit, original admission and undo native commits, both original
 `erasure_source_commit` records, current partition, both native roles and both
 physical erasure locators. The existing terminal-binding trigger must be installed
-and enabled. Original transaction `xmin` provenance is required. All joined native
+and enabled. The forward migration also fixes the existing terminal matcher to
+select discharged for a subject and transferred for other roles; its previous
+transferred-only predicate made genuine subject verification impossible. The Source
+caller still invokes actual Account settlement verification before this matcher.
+No historical migration, Account verifier or native provenance condition is removed.
+Original transaction `xmin` provenance is required. All joined native
 owner rows are locked through commit; the binding is locked for update. There is no
 new trigger dispatch, write, receipt registry or coordinator. Missing evidence returns
-null. The existing Source role rules remain: subject discharge, surviving verification
-requester/decider transfer with the actual technical receiver, and reversal discharge.
+null. The existing Source role rules remain: subject discharge and non-subject
+requester/decider transfer with the actual technical receiver.
 Account reversal settlement and technical-custody verification remain separate real
 owner checks performed by the existing verifier.
 
@@ -397,12 +402,12 @@ There is no cached positive verdict, second frame, local ledger or engine reques
 | One dispatch / allowance | Rows | Points | Statements | Bytes | Engine |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | New native Source guard | 17 | 15 | 2 | 32768 | 0 |
-| History barrier/original Account source/association recheck overhead | 32 | 32 | 8 | 131072 | 0 |
+| History recheck and complete nested Source verifier envelope | 128 | 128 | 24 | 262144 | 0 |
 | Existing Source proof verification, independently reserved | 4 | 4 | 6 | 8192 | 0 |
 | Existing subject Account verification, independently reserved | 64 | 64 | 15 | 65536 | 0 |
 | Real receiving binding, including native mapping, roles and barrier | 160 | 80 | 6 | 131072 | 0 |
 | Work current same-command lock | 4 | 2 | 4 | 8192 | 0 |
-| **One complete new composed call, conservative subject maximum** | **281** | **197** | **41** | **376832** | **0** |
+| **One complete new composed call, conservative subject maximum** | **377** | **293** | **57** | **507904** | **0** |
 | Work released observation, separately dispatched by its owner | 3 | 2 | 1 | 8192 | 0 |
 
 The native guard's fifteen keyed inputs include the installed trigger catalogue row;
@@ -410,15 +415,30 @@ its seventeen rows include the native and outer result. Two statements cover the
 outer SELECT and joined native SELECT. PL/pgSQL comparisons and RETURN contain no
 SQL and a read fires no row trigger. Reference and expected-address inputs are capped
 at 2048 and 4096 bytes before dispatch and checked again natively. The row locks do
-not enqueue work or dispatch nested owner writers.
+not enqueue work or dispatch nested owner writers. When called directly by a
+native History guard, the Source function's nested body is 16/15/1/32768/0; the
+standalone 17/15/2 allowance additionally counts its outer SELECT/result. History
+must separately charge its own outer statement and native trigger work.
 
-The recheck allowance covers the barrier, Account row, original intent/partition,
+The History-only part of the recheck covers the barrier, Account row, original intent/partition,
 optional technical-source fallback (technical source/partition/History domain),
 accepted binding validation and its native joins, at most two physical technical roles,
 and original History source/partition/domain association, including its input CTE.
-It allows eight statements for both original and fallback branches, with 32 bounded
-input/result rows and points. Source and subject Account verification still reserve
-their separate allowances shown above; the overhead never pays for them a second time.
+That part allows eight statements for both original and fallback branches, with 32
+bounded input/result rows and points. The existing Source verifier additionally reads
+custody (7 input/result rows), accepted claim with its parameter CTE (7), continuation
+including its subquery (5), current consumer claim with its CTE and nested native
+trigger lookup (12), original Account source including technical fallback (20),
+terminal match including its outer SELECT, nested hook and native joined SELECT (8),
+and technical receiver/accepted binding/physical roles (15). Those are at most 74 rows
+and 16 statements. The complete new envelope rounds their sum, 106 rows and 24
+statements, to 128 rows/128 points/24 statements. Its 262144-byte allowance combines
+the History 131072-byte bound and sixteen Source projections of at most 8192 bytes;
+Account identity admission captures only its at-most-two closed endpoint records,
+not group membership. Existing Source and subject Account verification still reserve
+their separate charges shown above; these are retained conservative reservations,
+not refunds, replacement allocations or a claim that the prior Source charge alone
+funds this nested work.
 The receiving allowance covers three mapping/current-partition/domain statements,
 one mapping/history-work join, the native locator read capped at 65 rows (including
 its refusal sentinel), and one barrier statement. Counting 72 keyed input rows plus
@@ -432,7 +452,7 @@ physical probes and nested trigger work are absent from the paid stopped body.
 For illustration only, baseline Source preparation without its old two History
 checks is 441/441/131/483328/0. If integration replaces those two checks with two
 complete new composed calls and performs one released observation, the arithmetic
-subtotal is 1006/837/214/1245184/0. That conditional subtotal excludes the missing
+subtotal is 1198/1029/246/1507328/0. That conditional subtotal excludes the missing
 History operations and is **not** a sufficient aggregate or a funded default.
 The paid stopped path's one current SDK lock plus one observation is independently
 7/4/5/16384/0; it also establishes no full-completion count.
