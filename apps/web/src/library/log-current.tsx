@@ -77,7 +77,7 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
       previous.active = false;
       boundary[name] = admission(allowed);
       // A previously observed admission cannot be reseeded from the loader, including ABA.
-      boundary.seed = undefined;
+      delete boundary.seed;
     }
   }
   const remove = boundary.remove;
@@ -182,5 +182,12 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
     (currentAdmission(restore, 'published_log.create') && restore.owner) ||
     null;
   const log = query.data?.log.id === id ? query.data.log : loaded.log;
-  return <PublishedLogPageView log={log} isOwner={!!owner} revision={owner?.revision} originating={originating} />;
+  return (
+    <PublishedLogPageView
+      log={log}
+      isOwner={!!owner}
+      {...(owner ? { revision: owner.revision } : {})}
+      originating={originating}
+    />
+  );
 }
