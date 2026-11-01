@@ -31,7 +31,8 @@ export function agentIdentityCopyRetention(
   const gaps = copy
     ? [...new Set([verified?.gap ?? copy.inventory.gap, copy.sdkGap].filter((gap): gap is string => gap !== null))]
     : ['agent-identity-original-inventory-unsealed', 'agent-identity-sdk-recording-port-unavailable'];
-  if (gaps.length === 0) return Object.freeze({ state: 'received', gaps: Object.freeze([]), native: 'verified' });
+  if (gaps.length === 0)
+    return Object.freeze({ state: 'received', gaps: Object.freeze([]) as readonly [], native: 'verified' });
   return Object.freeze({
     state: 'pending',
     gaps: Object.freeze(gaps),
