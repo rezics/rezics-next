@@ -129,7 +129,13 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
     previewStatus: 'ready',
     previewMembers: [1, 2, 3].map((id) => ({
       subjectId: `subject-${id}`,
-      subject: { id: `subject-${id}`, type: 'Book', types: ['Book'], label: `Book ${id}`, cover: null },
+      subject: {
+        id: `subject-${id}`,
+        type: 'Book',
+        types: ['Book'],
+        label: { value: `Book ${id}`, language: 'en' },
+        cover: null,
+      },
     })),
   };
   const pins = [
@@ -180,7 +186,10 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
     ]);
     expect(previews.navigationCollections).toEqual(previews.collections);
     expect(previews.collections.map((item) => item.preview)).toEqual([
-      { state: 'loaded', members: collection.previewMembers.map(({ subject }) => subject) },
+      {
+        state: 'loaded',
+        members: collection.previewMembers.map(({ subject }) => ({ ...subject, labelLanguage: 'en' })),
+      },
       { state: 'preparing' },
       { state: 'loaded', members: [], emptyConfirmed: true },
     ]);
