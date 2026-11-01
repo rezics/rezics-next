@@ -6,6 +6,13 @@ decision recheck. There is no history, enumeration, target fallback or additiona
 its text and link; it cannot admit or revoke the author's private decision. Native decision denial discards the
 entire page. The private decision stays readable after the inclusive 183-day appeal deadline.
 
+The original decision, current outcome, independently read current target and appeal use the shared
+`ContentItemFrame` and named `ContentItemHeading` anatomy. The full original reason, submitted appeal draft, independent
+review statement, deadline and outcome time remain readable. A withheld target has no link or identifier spill; an
+available target stays a separate link beside the open appeal form. Pending, reversed and upheld cases have no extra
+appeal action. `OpenWithAvailableTarget` exercises the independent link and form; the uncertain-retry story checks the
+same complete draft and immutable command on both attempts.
+
 Prepared sessions supply the viewer, CSRF session epoch and a fresh read generation. Credentials remain server-only;
 responses and Kernel reads are private/no-store. SSR can render the prepared page. After hydration, only the matching
 known browser viewer and session epoch admit it. Initial unknown identity is loading; a failed session read offers
@@ -30,6 +37,8 @@ Existing story IDs remain. Both families add `Loading`, `ReadUnavailable`, `Read
 content during failure and restores the same-session draft only after explicit read retry. Fixtures remain
 constructed interface evidence, not native authority.
 
+`tests/moderation-private-case-content-item.test.tsx` composes the production case views and checks their shared frame,
+named headings, complete text, separate target disclosure, native timestamps and reachable references.
 `tests/moderation-decision.test.ts` adds one default-composition regression using the actual browser session hook,
 prepared BFF and generated transport, covering withheld targets, subject/session transitions, late refresh/command
 settlement, exact retry across transient failure, final denial, navigation and unmount. It is authored **UNRUN**;

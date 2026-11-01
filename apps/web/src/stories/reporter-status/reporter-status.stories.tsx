@@ -16,6 +16,18 @@ import { m } from '../../paraglide/messages.js';
 const evidence = submittedReport.evidence;
 const revisionId = submittedReport.revisionId;
 if (!evidence || !revisionId) throw new Error('The report story requires submitted evidence and a revision reference');
+const fullEvidence = Array.from(
+  { length: 12 },
+  (_, index) =>
+    `Evidence paragraph ${index + 1}: I submitted the original report because repeated unsolicited advertising disrupted the discussion. The complete account records where I saw it and why I believed it needed review.`,
+).join('\n\n');
+const fullEvidenceReport = {
+  ...submittedReport,
+  evidence: fullEvidence,
+  targetAvailability: 'available' as const,
+  outcome: 'dismissed' as const,
+  resolvedAt: '2026-10-31T10:00:00.000Z',
+};
 
 const meta = {
   title: 'Patterns/Reporter status',
@@ -44,6 +56,10 @@ type Story = StoryObj<typeof meta>;
 export const Pending: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    await expect(canvas.getByRole('heading', { level: 2, name: m.reporter_status_timeline() })).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: m.reporter_status_submission() })).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: m.reporter_status_target() })).toBeVisible();
     await expect(canvas.getByText(m.reporter_status_pending())).toBeVisible();
     await expect(canvas.getByText(evidence)).toBeVisible();
     await expect(canvas.queryByRole('link')).toBeNull();
@@ -81,6 +97,27 @@ export const TargetUnavailable: Story = {
     await userEvent.click(canvas.getByText(m.reporter_status_reference(), { exact: true }));
     await expect(canvas.getByText(`post ${submittedReport.target.id}`)).toBeVisible();
     await expect(canvas.getByText(revisionId)).toBeVisible();
+  },
+};
+export const FullEvidence: Story = {
+  args: { report: fullEvidenceReport },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(fullEvidence)).toBeVisible();
+    await expect(canvas.getByText(m.report_spam(), { exact: true })).toBeVisible();
+    await expect(canvas.getByText(m.reporter_status_available())).toBeVisible();
+    await expect(canvas.getByText(m.reporter_status_dismissed_explanation())).toBeVisible();
+    await expect(canvasElement.querySelector('time[datetime="2026-10-30T10:00:00.000Z"]')).not.toBeNull();
+    await expect(canvasElement.querySelector('time[datetime="2026-10-31T10:00:00.000Z"]')).not.toBeNull();
+    await expect(canvasElement.textContent).toContain('UTC');
+    await expect(canvas.queryByRole('link')).toBeNull();
+    await userEvent.click(canvas.getByText(m.reporter_status_reference(), { exact: true }));
+    await expect(canvas.getByText(m.reporter_status_report_id(), { exact: true })).toBeVisible();
+    await expect(canvas.getByText(m.reporter_status_revision(), { exact: true })).toBeVisible();
+    await expect(canvas.getByText(submittedReport.id, { exact: true })).toBeVisible();
+    await expect(canvas.getByText(`${submittedReport.target.kind} ${submittedReport.target.id}`, { exact: true })).toBeVisible();
+    await expect(canvas.getByText(revisionId, { exact: true })).toBeVisible();
+    await expect(canvas.queryByRole('link')).toBeNull();
   },
 };
 export const SubmittedDetails: Story = {

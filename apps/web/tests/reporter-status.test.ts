@@ -363,10 +363,18 @@ test('The default private reporter-status journey retires submitted evidence and
     Object.defineProperty(window.navigator, 'clipboard', {
       configurable: true,
       value: {
-        writeText: () =>
-          new Promise<void>((resolve) => {
+        writeText: (value: string) => {
+          expect(value).toBe(
+            [
+              `${m.reporter_status_report_id()}: ${report.id}`,
+              `${m.reporter_status_target()}: ${report.target.kind} ${report.target.id}`,
+              `${m.reporter_status_revision()}: ${report.revisionId}`,
+            ].join('\n'),
+          );
+          return new Promise<void>((resolve) => {
             copied = resolve;
-          }),
+          });
+        },
       },
     });
     const copy = [...host.querySelectorAll('button')].find((item) =>

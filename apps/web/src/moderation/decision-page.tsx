@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowLeft, ArrowUpRight, Check, FileText, ShieldCheck } from 'lucide-react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Withheld } from '@rezics/ui/withheld';
@@ -399,34 +400,38 @@ function DecisionVisit({
             </h1>
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-5 sm:p-6" role="status">
-          <p className="text-xs font-medium text-muted-foreground">{m.decision_current_outcome()}</p>
+        <ContentItemFrame as="div" className="p-5 sm:p-6" role="status">
+          <ContentItemHeading level={2} className="text-xs font-medium text-muted-foreground">
+            {m.decision_current_outcome()}
+          </ContentItemHeading>
           <p className="mt-2 text-xl font-semibold tracking-tight">{outcome}</p>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             {appeal ? m.decision_outcome_independent() : m.decision_original_effect()}
           </p>
-        </div>
+        </ContentItemFrame>
       </header>
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <section className="min-w-0 space-y-4" aria-labelledby="decision-reasons">
-          <h2 id="decision-reasons" className="flex items-center gap-2 text-base font-semibold">
+          <ContentItemHeading id="decision-reasons" level={2} className="flex items-center gap-2 text-base font-semibold">
             <FileText className="size-4 text-muted-foreground" aria-hidden="true" />
             {m.decision_original_heading()}
-          </h2>
-          <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+          </ContentItemHeading>
+          <ContentItemFrame as="div" className="p-5 sm:p-6">
             <p className="text-xs font-medium text-muted-foreground">{m.decision_original_action()}</p>
-            <h3 className="mt-5 text-sm font-semibold">{m.decision_reasons_heading()}</h3>
+            <ContentItemHeading level={3} className="mt-5 text-sm font-semibold">
+              {m.decision_reasons_heading()}
+            </ContentItemHeading>
             <p className="mt-2 whitespace-pre-wrap wrap-anywhere text-sm leading-7">{decision.statement}</p>
             <p className="mt-5 border-t border-border pt-4 text-xs leading-6 text-muted-foreground">
               {m.decision_decided_label()} <DecisionTime instant={decision.decidedAt} now={now} locale={locale} />
             </p>
-          </div>
+          </ContentItemFrame>
         </section>
         <section className="min-w-0 space-y-4" aria-labelledby="decision-applies">
-          <h2 id="decision-applies" className="text-base font-semibold">
+          <ContentItemHeading id="decision-applies" level={2} className="text-base font-semibold">
             {m.decision_current_target()}
-          </h2>
-          <div className="rounded-2xl border border-border bg-muted/30 p-5 sm:p-6">
+          </ContentItemHeading>
+          <ContentItemFrame as="div" className="p-5 sm:p-6">
             {target ? (
               <>
                 <p className="text-sm font-medium">{m.decision_target_available()}</p>
@@ -447,106 +452,105 @@ function DecisionVisit({
             <Button className="mt-4 min-h-11" variant="outline" disabled={busy} onClick={() => void refresh()}>
               {busy ? m.decision_refreshing() : m.decision_refresh()}
             </Button>
-          </div>
+          </ContentItemFrame>
         </section>
       </div>
-      <section
-        className="min-w-0 rounded-2xl border border-border bg-card p-5 sm:p-6"
-        aria-labelledby="decision-appeal"
-      >
-        <h2 id="decision-appeal" className="text-lg font-semibold">
-          {m.decision_appeal_heading()}
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{m.decision_appeal_explanation()}</p>
-        <dl className="mt-5 border-y border-border py-4 text-sm leading-6 sm:flex sm:gap-6">
-          <dt className="font-medium">{m.decision_deadline_label()}</dt>
-          <dd className="mt-1 text-muted-foreground sm:mt-0">
-            <DecisionTime instant={decision.appealDeadline} now={now} locale={locale} />
-          </dd>
-        </dl>
-        {appeal ? (
-          <div className="mt-5 space-y-3">
-            <p className="flex items-center gap-2 font-medium">
-              <Check className="size-4 text-primary" aria-hidden="true" />
-              {appeal.outcome ? m.decision_review_heading() : m.decision_appeal_pending()}
-            </p>
-            <p className="text-sm leading-6 text-muted-foreground">
-              {appeal.outcome ? m.decision_review_explanation() : m.decision_pending_explanation()}
-            </p>
-            {appeal.outcome && appeal.statement ? (
-              <blockquote className="border-s-2 border-primary/30 ps-4 whitespace-pre-wrap wrap-anywhere text-sm leading-7">
-                {appeal.statement}
-              </blockquote>
-            ) : null}
-            {appeal.resolvedAt ? (
-              <p className="text-xs text-muted-foreground">
-                {m.decision_resolved_label()} <DecisionTime instant={appeal.resolvedAt} now={now} locale={locale} />
+      <section className="min-w-0" aria-labelledby="decision-appeal">
+        <ContentItemFrame as="div" className="p-5 sm:p-6">
+          <ContentItemHeading id="decision-appeal" level={2} className="text-lg font-semibold">
+            {m.decision_appeal_heading()}
+          </ContentItemHeading>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{m.decision_appeal_explanation()}</p>
+          <dl className="mt-5 border-y border-border py-4 text-sm leading-6 sm:flex sm:gap-6">
+            <dt className="font-medium">{m.decision_deadline_label()}</dt>
+            <dd className="mt-1 text-muted-foreground sm:mt-0">
+              <DecisionTime instant={decision.appealDeadline} now={now} locale={locale} />
+            </dd>
+          </dl>
+          {appeal ? (
+            <div className="mt-5 space-y-3">
+              <p className="flex items-center gap-2 font-medium">
+                <Check className="size-4 text-primary" aria-hidden="true" />
+                {appeal.outcome ? m.decision_review_heading() : m.decision_appeal_pending()}
               </p>
-            ) : null}
-          </div>
-        ) : allowed ? (
-          <form
-            className="mt-5 space-y-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submit();
-            }}
-          >
-            <label htmlFor="appeal-statement" className="block text-sm font-medium">
-              {m.decision_appeal_prompt()}
-            </label>
-            <Textarea
-              id="appeal-statement"
-              name="statement"
-              value={text}
-              onChange={(event) => {
-                commandIntent.changed();
-                setText(event.target.value);
-                setFeedback(null);
+              <p className="text-sm leading-6 text-muted-foreground">
+                {appeal.outcome ? m.decision_review_explanation() : m.decision_pending_explanation()}
+              </p>
+              {appeal.outcome && appeal.statement ? (
+                <blockquote className="border-s-2 border-primary/30 ps-4 whitespace-pre-wrap wrap-anywhere text-sm leading-7">
+                  {appeal.statement}
+                </blockquote>
+              ) : null}
+              {appeal.resolvedAt ? (
+                <p className="text-xs text-muted-foreground">
+                  {m.decision_resolved_label()} <DecisionTime instant={appeal.resolvedAt} now={now} locale={locale} />
+                </p>
+              ) : null}
+            </div>
+          ) : allowed ? (
+            <form
+              className="mt-5 space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submit();
               }}
-              disabled={busy || locked}
-              rows={5}
-              className="min-h-36"
-              aria-describedby="appeal-count appeal-hint"
-              aria-invalid={feedback === 'invalid' || count > 2000}
-            />
-            <p id="appeal-count" className="text-xs text-muted-foreground">
-              {m.decision_appeal_count({ count })}
-            </p>
-            <p id="appeal-hint" className="text-xs leading-6 text-muted-foreground">
-              {m.decision_authority_hint()}
-            </p>
-            <Button
-              type="submit"
-              className="min-h-11 w-full sm:w-auto"
-              disabled={busy || locked || count < 1 || count > 2000}
             >
-              {busy ? m.decision_appeal_sending() : m.decision_appeal_submit()}
-            </Button>
-          </form>
-        ) : (
-          <p className="mt-5 text-sm leading-6 text-muted-foreground">
-            {now > Date.parse(decision.appealDeadline) ? m.decision_appeal_expired() : m.decision_author_only()}
-          </p>
-        )}
-        {text && (appeal || !allowed) ? (
-          <div className="mt-5 space-y-2 border-t border-border pt-4">
-            <p className="text-xs font-medium text-muted-foreground">{m.decision_draft_label()}</p>
-            <p className="whitespace-pre-wrap wrap-anywhere text-sm leading-6">{text}</p>
-          </div>
-        ) : null}
-        {feedback ? (
-          <div className="mt-5 space-y-3 rounded-xl border border-border bg-muted/50 p-4">
-            <p role="alert" className="text-sm leading-6">
-              {feedbackText}
-            </p>
-            {feedback === 'uncertain' ? (
-              <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void submit(true)}>
-                {m.decision_retry_same()}
+              <label htmlFor="appeal-statement" className="block text-sm font-medium">
+                {m.decision_appeal_prompt()}
+              </label>
+              <Textarea
+                id="appeal-statement"
+                name="statement"
+                value={text}
+                onChange={(event) => {
+                  commandIntent.changed();
+                  setText(event.target.value);
+                  setFeedback(null);
+                }}
+                disabled={busy || locked}
+                rows={5}
+                className="min-h-36"
+                aria-describedby="appeal-count appeal-hint"
+                aria-invalid={feedback === 'invalid' || count > 2000}
+              />
+              <p id="appeal-count" className="text-xs text-muted-foreground">
+                {m.decision_appeal_count({ count })}
+              </p>
+              <p id="appeal-hint" className="text-xs leading-6 text-muted-foreground">
+                {m.decision_authority_hint()}
+              </p>
+              <Button
+                type="submit"
+                className="min-h-11 w-full sm:w-auto"
+                disabled={busy || locked || count < 1 || count > 2000}
+              >
+                {busy ? m.decision_appeal_sending() : m.decision_appeal_submit()}
               </Button>
-            ) : null}
-          </div>
-        ) : null}
+            </form>
+          ) : (
+            <p className="mt-5 text-sm leading-6 text-muted-foreground">
+              {now > Date.parse(decision.appealDeadline) ? m.decision_appeal_expired() : m.decision_author_only()}
+            </p>
+          )}
+          {text && (appeal || !allowed) ? (
+            <div className="mt-5 space-y-2 border-t border-border pt-4">
+              <p className="text-xs font-medium text-muted-foreground">{m.decision_draft_label()}</p>
+              <p className="whitespace-pre-wrap wrap-anywhere text-sm leading-6">{text}</p>
+            </div>
+          ) : null}
+          {feedback ? (
+            <ContentItemFrame as="div" className="mt-5 space-y-3 p-4">
+              <p role="alert" className="text-sm leading-6">
+                {feedbackText}
+              </p>
+              {feedback === 'uncertain' ? (
+                <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void submit(true)}>
+                  {m.decision_retry_same()}
+                </Button>
+              ) : null}
+            </ContentItemFrame>
+          ) : null}
+        </ContentItemFrame>
       </section>
       <p className="wrap-anywhere border-t border-border pt-4 text-xs leading-6 text-muted-foreground">
         {m.decision_reference()} <span className="font-mono">{decision.id}</span>

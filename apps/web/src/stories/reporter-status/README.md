@@ -10,9 +10,16 @@ The page offers the existing localized Inbox destination; the DTO supplies no au
 The page performs one exact report GET with the current viewer credential, with private no-store responses.
 A missing or unrelated report uses the same concealed unknown/not-visible state. Service failures use retry without submitting another report.
 
+The complete receipt uses the shared `ContentItemFrame` for its timeline, submitted evidence, target annotation and
+expandable reference, with named `ContentItemHeading` section headings. The entire submitted reason and evidence,
+both UTC timestamps and all existing reference values stay available. Target availability remains annotation only:
+neither the available nor unavailable state adds a target link, body, reporter identity or moderation spill. Reference
+IDs remain inside the native disclosure beside the existing exact-label clipboard action. The `FullEvidence` pattern
+keeps a long submission visible and checks both timestamps and the reachable report, target and revision references.
+
 Patterns/Reporter status uses the same presenter as Pages/Reporter status. Review the same IDs with phone390 and
 desktop1280 viewport globals, locale and theme globals; no viewport or locale exports. Pattern IDs:
-`patterns-reporter-status--pending`, `--actioned`, `--dismissed`, `--target-unavailable`, `--submitted-details`, `--native-error`, `--retry`.
+`patterns-reporter-status--pending`, `--actioned`, `--dismissed`, `--target-unavailable`, `--full-evidence`, `--submitted-details`, `--native-error`, `--retry`.
 Page ID: `pages-reporter-status--submitted-report`. It uses the actual route, shared site shell and existing
 report-unavailable fixture rather than another page wrapper. Plays cover status/reference visibility, native
 details opening, clipboard outcome, absence of target links and keyboard retry that remains failed on refusal.

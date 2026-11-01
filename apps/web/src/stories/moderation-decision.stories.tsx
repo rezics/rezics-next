@@ -39,6 +39,7 @@ export const Pending: Story = { ...pattern.Pending };
 export const ReversedUnavailable: Story = { ...pattern.ReversedUnavailable };
 export const Upheld: Story = { ...pattern.Upheld };
 export const Available: Story = { ...pattern.Available };
+export const OpenWithAvailableTarget: Story = { ...pattern.OpenWithAvailableTarget };
 export const Expired: Story = { ...pattern.Expired };
 export const NativeDenied: Story = { ...pattern.NativeDenied };
 export const Conflict: Story = { ...pattern.Conflict };

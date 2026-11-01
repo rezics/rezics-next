@@ -33,9 +33,18 @@ export const SubmittedReport: Story = {
     await expect(page.getByText(m.reporter_status_dismissed_explanation())).toBeVisible();
     await expect(page.getByText(m.report_spam(), { exact: true })).toBeVisible();
     await expect(page.getByText('Repeated advertising in this discussion.')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: m.reporter_status_timeline() })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: m.reporter_status_submission() })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: m.reporter_status_target() })).toBeVisible();
     await expect(page.getByText(m.moderation_target_unavailable())).toBeVisible();
     await expect(page.getByText(m.reporter_status_submitted(), { exact: true })).toBeVisible();
     await expect(page.getByText(m.reporter_status_reviewed(), { exact: true })).toBeVisible();
+    const timeline = page.getByRole('list', { name: m.reporter_status_timeline() });
+    await expect(timeline.querySelectorAll('li')).toHaveLength(2);
+    await expect(timeline.querySelectorAll('time')).toHaveLength(2);
+    await expect(timeline.querySelector('time[datetime="2026-10-27T08:00:00.000Z"]')).not.toBeNull();
+    await expect(timeline.querySelector('time[datetime="2026-10-28T08:00:00.000Z"]')).not.toBeNull();
+    await expect(timeline.textContent).toContain('UTC');
     await expect(page.queryByText(m.reporter_status_pending(), { exact: true })).toBeNull();
     await expect(page.queryByRole('alert')).toBeNull();
     await expect(page.getByRole('link', { name: m.reporter_status_back() })).toHaveAttribute(

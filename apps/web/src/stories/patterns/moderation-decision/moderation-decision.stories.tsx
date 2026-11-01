@@ -1,6 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, mocked, userEvent, within } from 'storybook/test';
-import { DecisionPageView, DecisionReadStatus, type DecisionAppealAction } from '../../../moderation/decision-page';
+import {
+  DecisionPageView,
+  DecisionReadStatus,
+  type DecisionAppealAction,
+} from '../../../moderation/decision-page';
+import type { DecisionPage } from '../../../moderation/decision-read';
 import { m } from '../../../paraglide/messages.js';
 import {
   appealDraft,
@@ -26,75 +31,162 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function submit(canvasElement: HTMLElement) {
+const fullDecisionReason = Array.from(
+  { length: 10 },
+  (_, index) =>
+    `Reason detail ${index + 1}: the report was reviewed against the community rules and the material supplied with the original post. The decision records why the identified information had to be removed and what the author can appeal.`,
+).join('\n\n');
+const fullAppealReviewStatement = [
+  'The independent reviewer checked the original decision, the context available at the time and the additional statement submitted with the appeal.',
+  'The public event information was published by its organization for that purpose, and the review found no private contact details in the affected post.',
+  'The reviewer therefore reversed the original takedown and retained the complete explanation with the resolution date.',
+].join('\n\n');
+const fullAppealDraft = `${appealDraft}\n\n${Array.from(
+  { length: 12 },
+  () => 'The complete appeal includes additional context that must remain available for an exact retry.',
+).join('\n')}`;
+const withFullReason = (page: DecisionPage): DecisionPage => ({
+  ...page,
+  decision: { ...page.decision, statement: fullDecisionReason },
+});
+const fullOpenDecision = withFullReason(openDecision);
+const fullPendingDecision = withFullReason(pendingDecision);
+const fullResolvedDecision = (outcome: 'reversed' | 'upheld') => {
+  const page = withFullReason(resolvedDecision(outcome));
+  return {
+    ...page,
+    decision: {
+      ...page.decision,
+      appeal: { ...page.decision.appeal!, statement: fullAppealReviewStatement },
+    },
+  };
+};
+const openWithAvailableTarget = { ...fullOpenDecision, target: availableDecision.target };
+
+async function submit(canvasElement: HTMLElement, statement = fullAppealDraft) {
   const view = within(canvasElement);
-  await userEvent.type(view.getByRole('textbox', { name: m.decision_appeal_prompt() }), appealDraft);
+  await userEvent.type(view.getByRole('textbox', { name: m.decision_appeal_prompt() }), statement);
   await userEvent.click(view.getByRole('button', { name: m.decision_appeal_submit() }));
   return view;
 }
 export const Open: Story = {
+  args: {
+    page: fullOpenDecision,
+    onAppeal: fn<DecisionAppealAction>(async () => ({ state: 'pending', decision: fullPendingDecision.decision })),
+  },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
-    await expect(view.getByText(openDecision.decision.statement)).toBeVisible();
+    await expect(view.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    await expect(view.getByRole('heading', { level: 2, name: m.decision_current_outcome() })).toBeVisible();
+    await expect(view.getByRole('heading', { level: 2, name: m.decision_original_heading() })).toBeVisible();
+    await expect(view.getByRole('heading', { level: 2, name: m.decision_current_target() })).toBeVisible();
+    await expect(view.getByRole('heading', { level: 2, name: m.decision_appeal_heading() })).toBeVisible();
+    await expect(view.getByRole('heading', { level: 3, name: m.decision_reasons_heading() })).toBeVisible();
+    await expect(view.getByText(fullDecisionReason)).toBeVisible();
     await expect(view.queryByText(openDecision.decision.targetId)).toBeNull();
     await expect(view.queryByRole('link', { name: /affected by this decision/ })).toBeNull();
     await submit(canvasElement);
     await expect(await view.findByText(m.decision_appeal_pending())).toBeVisible();
     await expect(view.queryByRole('textbox')).toBeNull();
-    await expect(view.getByText(appealDraft)).toBeVisible();
+    await expect(view.getByText(fullAppealDraft)).toBeVisible();
     await expect(args.onAppeal).toHaveBeenCalledTimes(1);
   },
 };
-export const Pending: Story = { args: { page: pendingDecision } };
+export const Pending: Story = {
+  args: { page: fullPendingDecision },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByText(m.decision_appeal_pending())).toBeVisible();
+    await expect(canvasElement.querySelector('form')).toBeNull();
+    await expect(view.queryByRole('textbox')).toBeNull();
+    await expect(view.queryByRole('button', { name: m.decision_appeal_submit() })).toBeNull();
+  },
+};
 export const ReversedUnavailable: Story = {
-  args: { page: resolvedDecision('reversed') },
+  args: { page: fullResolvedDecision('reversed') },
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await expect(view.getByText(m.decision_appeal_reversed())).toBeVisible();
     await expect(view.getByText(m.moderation_target_unavailable())).toBeVisible();
-    await expect(view.getByText(openDecision.decision.statement)).toBeVisible();
+    await expect(view.getByText(fullDecisionReason)).toBeVisible();
+    await expect(view.getByText(fullAppealReviewStatement)).toBeVisible();
     await expect(view.queryByText(openDecision.decision.targetId)).toBeNull();
+    await expect(view.queryByRole('textbox')).toBeNull();
+    await expect(canvasElement.querySelector('form')).toBeNull();
+  },
+};
+export const Upheld: Story = {
+  args: { page: fullResolvedDecision('upheld') },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByText(m.decision_appeal_upheld())).toBeVisible();
+    await expect(view.getByText(fullAppealReviewStatement)).toBeVisible();
+    await expect(canvasElement.querySelector('time[datetime="2026-10-30T10:15:00.000Z"]')).not.toBeNull();
+    await expect(canvasElement.querySelector('form')).toBeNull();
     await expect(view.queryByRole('textbox')).toBeNull();
   },
 };
-export const Upheld: Story = { args: { page: resolvedDecision('upheld') } };
-export const Available: Story = { args: { page: availableDecision } };
+export const Available: Story = {
+  args: { page: availableDecision },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const target = view.getByRole('link', { name: /Community event: practical information/ });
+    await expect(target.getAttribute('href')).toContain('/threads/');
+    await expect(canvasElement.querySelector('form')).toBeNull();
+  },
+};
+export const OpenWithAvailableTarget: Story = {
+  args: { page: openWithAvailableTarget },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const target = view.getByRole('link', { name: /Community event: practical information/ });
+    const form = canvasElement.querySelector('form');
+    await expect(form).not.toBeNull();
+    await expect(target.getAttribute('href')).toContain('/threads/');
+    await expect(target.contains(form)).toBe(false);
+    await expect(form?.contains(target)).toBe(false);
+  },
+};
 export const Expired: Story = { args: { page: expiredDecision } };
 export const NativeDenied: Story = {
-  args: { onAppeal: fn<DecisionAppealAction>(async () => ({ state: 'denied' })) },
+  args: { page: fullOpenDecision, onAppeal: fn<DecisionAppealAction>(async () => ({ state: 'denied' })) },
   play: async ({ canvasElement, args }) => {
     const view = await submit(canvasElement);
     await expect(await view.findByRole('alert')).toHaveTextContent(m.decision_appeal_denied());
-    await expect(view.getByRole('textbox')).toHaveValue(appealDraft);
+    await expect(view.getByRole('textbox')).toHaveValue(fullAppealDraft);
     await expect(view.getByRole('button', { name: m.decision_appeal_submit() })).toBeDisabled();
     await expect(view.queryByRole('button', { name: m.decision_retry_same() })).toBeNull();
     await userEvent.click(view.getByRole('button', { name: m.decision_refresh() }));
     await expect(args.onRefresh).toHaveBeenCalledTimes(1);
-    await expect(view.getByRole('textbox')).toHaveValue(appealDraft);
+    await expect(view.getByRole('textbox')).toHaveValue(fullAppealDraft);
     await expect(args.onAppeal).toHaveBeenCalledTimes(1);
   },
 };
 export const Conflict: Story = {
-  args: { onAppeal: fn<DecisionAppealAction>(async () => ({ state: 'updated', decision: pendingDecision.decision })) },
+  args: {
+    page: fullOpenDecision,
+    onAppeal: fn<DecisionAppealAction>(async () => ({ state: 'updated', decision: fullPendingDecision.decision })),
+  },
   play: async ({ canvasElement }) => {
     const view = await submit(canvasElement);
     await expect(await view.findByRole('alert')).toHaveTextContent(m.decision_appeal_conflict());
     await expect(view.getByText(m.decision_appeal_pending())).toBeVisible();
-    await expect(view.getByText(appealDraft)).toBeVisible();
+    await expect(view.getByText(fullAppealDraft)).toBeVisible();
     await expect(view.queryByRole('button', { name: m.decision_retry_same() })).toBeNull();
     await expect(view.queryByRole('textbox')).toBeNull();
   },
 };
 export const UncertainRetry: Story = {
   args: {
+    page: fullOpenDecision,
     onAppeal: fn<DecisionAppealAction>()
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce({ state: 'pending', decision: pendingDecision.decision }),
+      .mockResolvedValueOnce({ state: 'pending', decision: fullPendingDecision.decision }),
   },
   play: async ({ canvasElement, args }) => {
     const view = await submit(canvasElement);
     await expect(await view.findByRole('alert')).toHaveTextContent(m.decision_appeal_uncertain());
-    await expect(view.getByRole('textbox')).toHaveValue(appealDraft);
+    await expect(view.getByRole('textbox')).toHaveValue(fullAppealDraft);
     await expect(view.getByRole('textbox')).toBeDisabled();
     await expect(view.getByText(m.decision_status_taken_down())).toBeVisible();
     await userEvent.click(view.getByRole('button', { name: m.decision_retry_same() }));
@@ -113,17 +205,18 @@ export const ReadClosed: Story = { render: () => <DecisionReadStatus state="clos
 export const PlatformClosed: Story = { render: () => <DecisionReadStatus state="platform-closed" /> };
 export const RefreshRecovery: Story = {
   args: {
-    onRefresh: fn().mockRejectedValueOnce(new Error('Read unavailable')).mockResolvedValue(openDecision),
+    page: fullOpenDecision,
+    onRefresh: fn().mockRejectedValueOnce(new Error('Read unavailable')).mockResolvedValue(fullOpenDecision),
   },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
-    await userEvent.type(view.getByRole('textbox'), appealDraft);
+    await userEvent.type(view.getByRole('textbox'), fullAppealDraft);
     await userEvent.click(view.getByRole('button', { name: m.decision_refresh() }));
     await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_decision_read_unavailable());
-    await expect(view.queryByText(openDecision.decision.statement)).toBeNull();
+    await expect(view.queryByText(fullDecisionReason)).toBeNull();
     await expect(view.queryByRole('textbox')).toBeNull();
     await userEvent.click(view.getByRole('button', { name: m.moderation_decision_read_retry() }));
-    await expect(await view.findByRole('textbox')).toHaveValue(appealDraft);
+    await expect(await view.findByRole('textbox')).toHaveValue(fullAppealDraft);
     await expect(args.onRefresh).toHaveBeenCalledTimes(2);
     await expect(args.onAppeal).not.toHaveBeenCalled();
   },
