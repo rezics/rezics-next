@@ -540,9 +540,7 @@ test('Default erasure progress explains accepted deletion, ongoing removal and r
           observation.retentionOutstanding ? m.erasure_retained_yes() : m.erasure_retained_no(),
         );
         expect(primary).toContain(observation.lateItems ? m.erasure_late_yes() : m.erasure_late_no());
-        expect(primary).toContain(
-          observation.effectsFrontier ? m.erasure_frontier_yes() : m.erasure_frontier_no(),
-        );
+        expect(primary).toContain(observation.effectsFrontier ? m.erasure_frontier_yes() : m.erasure_frontier_no());
         if (observation.state === 'pending') {
           expect(host.querySelector('h2')?.textContent).toBe(m.erasure_pending());
           expect(primary).toContain(m.erasure_pending_help());
