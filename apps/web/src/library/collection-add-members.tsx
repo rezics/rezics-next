@@ -2,11 +2,21 @@ import { EntityPicker, type EntityPickerSubject } from '@rezics/ui/entity-picker
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { useOperation } from '../kernel/exposure';
+import { QueryClientContext } from '@tanstack/react-query';
+import {
+  useContext,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from 'react';
+import { operationIsAdmitted, useOperation } from '../kernel/exposure';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
-import { useSession } from '../session/query';
+import { exposureQuery, sessionQuery, useSession } from '../session/query';
 import { searchContentSubjects } from '../threads/content-subject-search';
 import { addCollectionMember } from './collection-edit';
 
@@ -18,27 +28,101 @@ type CollectionAddMembersProps = {
 
 /** Each explicit add creates an occurrence, including when the subject is already a member. */
 export function CollectionAddMembers(props: CollectionAddMembersProps) {
-  const { state, subject, csrfToken } = useSession();
+  const session = useSession();
   const admitted = useOperation('collection_member.create');
-  if (state !== 'signed-in' || !subject || !csrfToken || !admitted || !props.collectionId) return null;
-  // Losing admission unmounts the draft; returning to the same viewer starts a new lifetime.
-  // An ordinary refresh or nonempty CSRF rotation preserves the captured intent.
+  const client = useContext(QueryClientContext);
+  const observation = useMemo(() => {
+    let snapshot = { subject: null as string | null, generation: 0 };
+    function read() {
+      const actual = client?.getQueryState<ReturnType<typeof useSession>>(sessionQuery.queryKey);
+      const exposure = client?.getQueryState<readonly string[]>(exposureQuery.queryKey);
+      const viewer = actual?.data;
+      const subject =
+        actual?.status === 'success' &&
+        viewer?.state === 'signed-in' &&
+        viewer.subject &&
+        viewer.csrfToken &&
+        exposure?.status === 'success' &&
+        operationIsAdmitted('collection_member.create', exposure.data)
+          ? viewer.subject
+          : null;
+      if (subject !== snapshot.subject) snapshot = { subject, generation: snapshot.generation + 1 };
+      return snapshot;
+    }
+    return {
+      read,
+      subscribe: (notify: () => void) => {
+        // QueryCache notifications are synchronous, including away/back transitions batched before a React commit.
+        const unsubscribe = client?.getQueryCache().subscribe(() => {
+          read();
+          notify();
+        });
+        read();
+        return () => unsubscribe?.();
+      },
+    };
+  }, [client]);
+  const snapshot = useSyncExternalStore(observation.subscribe, observation.read, observation.read);
+  const ready = Boolean(
+    snapshot.subject &&
+    session.state === 'signed-in' &&
+    session.subject === snapshot.subject &&
+    session.csrfToken &&
+    admitted &&
+    props.collectionId,
+  );
+  const signature = JSON.stringify([snapshot.generation, props.collectionId, ready]);
+  const boundary = useRef({ signature, observation, generation: 0, mounted: false, retired: false });
+  if (boundary.current.signature !== signature || boundary.current.observation !== observation) {
+    boundary.current.retired = true;
+    boundary.current = {
+      signature,
+      observation,
+      generation: boundary.current.generation + 1,
+      mounted: false,
+      retired: false,
+    };
+  }
+  const origin = boundary.current;
+  useLayoutEffect(() => {
+    origin.mounted = true;
+    return () => {
+      // A dispatched write can still commit; only its UI completion is retired.
+      origin.mounted = false;
+    };
+  }, [origin]);
+  function currentCsrf() {
+    if (observation.read() !== snapshot) origin.retired = true;
+    if (!ready || !origin.mounted || origin.retired) return null;
+    const actual = client?.getQueryData(sessionQuery.queryKey);
+    return actual?.state === 'signed-in' && actual.subject === snapshot.subject && actual.csrfToken
+      ? actual.csrfToken
+      : null;
+  }
+  function close() {
+    if (!currentCsrf()) return;
+    origin.retired = true;
+    props.onClose();
+  }
+  if (!ready) return null;
+  // A nonempty token rotation preserves the occurrence; viewer/admission/address replacement retires it.
   return (
-    <CollectionAddMembersForm key={JSON.stringify([subject, props.collectionId])} {...props} csrfToken={csrfToken} />
+    <CollectionAddMembersForm key={origin.generation} {...props} currentCsrf={currentCsrf} onClose={close} />
   );
 }
 
 type AddReceipt = {
   data: { collectionId: string; subjectId: string; note: string | null; idempotencyKey: string };
   accepted: boolean;
+  uncertain: boolean;
 };
 
 function CollectionAddMembersForm({
   collectionId,
   onAdded,
   onClose,
-  csrfToken,
-}: CollectionAddMembersProps & { csrfToken: string }) {
+  currentCsrf,
+}: CollectionAddMembersProps & { currentCsrf: () => string | null }) {
   const noteId = useId();
   const [selected, setSelected] = useState<EntityPickerSubject[]>([]);
   const [note, setNote] = useState('');
@@ -47,20 +131,11 @@ function CollectionAddMembersForm({
   const [failure, setFailure] = useState('');
   const locked = useRef(false);
   const receipt = useRef<AddReceipt | null>(null);
-  const lifetime = useRef({ active: false });
-  useLayoutEffect(() => {
-    const current = { active: true };
-    lifetime.current = current;
-    return () => {
-      // A dispatched write can still commit; only its UI completion is retired.
-      current.active = false;
-    };
-  }, []);
+  const frozen = Boolean(receipt.current?.uncertain || accepted);
 
   async function add(event: FormEvent) {
     event.preventDefault();
-    const current = lifetime.current;
-    if (!current.active || locked.current || !selected[0]) return;
+    if (!currentCsrf() || locked.current || !selected[0]) return;
     locked.current = true;
     setPending(true);
     setFailure('');
@@ -68,14 +143,20 @@ function CollectionAddMembersForm({
       const captured = (receipt.current ??= {
         data: { collectionId, subjectId: selected[0].id, note: note || null, idempotencyKey: crypto.randomUUID() },
         accepted: false,
+        uncertain: true,
       });
       if (!captured.accepted) {
+        const csrfToken = currentCsrf();
+        if (!csrfToken) return;
+        captured.uncertain = true;
         const result = await addCollectionMember({
           data: captured.data,
           headers: { 'X-CSRF-Token': csrfToken },
         });
-        if (!current.active) return;
+        if (!currentCsrf()) return;
         if (!result.ok) {
+          // Only a known refusal permits correcting this command. An unknown outcome keeps its exact input/key.
+          captured.uncertain = result.reason === 'unavailable';
           setFailure(
             result.reason === 'full'
               ? m.library_collection_full()
@@ -86,15 +167,17 @@ function CollectionAddMembersForm({
           return;
         }
         captured.accepted = true;
+        captured.uncertain = false;
         setAccepted(true);
       }
+      if (!currentCsrf()) return;
       await onAdded();
-      if (!current.active) return;
+      if (!currentCsrf()) return;
       onClose();
     } catch {
-      if (current.active) setFailure(m.error_message());
+      if (currentCsrf()) setFailure(m.error_message());
     } finally {
-      if (current.active) {
+      if (currentCsrf()) {
         locked.current = false;
         setPending(false);
       }
@@ -114,11 +197,11 @@ function CollectionAddMembersForm({
         src={coverSrc}
         value={selected}
         onValueChange={(value) => {
-          if (locked.current || receipt.current?.accepted) return;
+          if (!currentCsrf() || locked.current || receipt.current?.accepted || receipt.current?.uncertain) return;
           receipt.current = null;
           setSelected(value);
         }}
-        disabled={pending || accepted}
+        disabled={pending || frozen}
       />
       {selected.length ? (
         <details>
@@ -129,9 +212,9 @@ function CollectionAddMembersForm({
               id={noteId}
               value={note}
               maxLength={20_000}
-              disabled={pending || accepted}
+              disabled={pending || frozen}
               onChange={(event) => {
-                if (locked.current || receipt.current?.accepted) return;
+                if (!currentCsrf() || locked.current || receipt.current?.accepted || receipt.current?.uncertain) return;
                 receipt.current = null;
                 setNote(event.target.value);
               }}
@@ -144,7 +227,14 @@ function CollectionAddMembersForm({
         <Button type="submit" disabled={pending || selected.length === 0} aria-busy={pending}>
           {accepted ? m.library_collection_reload() : m.library_collection_add_selected()}
         </Button>
-        <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending}
+          onClick={() => {
+            if (currentCsrf() && !locked.current) onClose();
+          }}
+        >
           {m.library_collection_cancel()}
         </Button>
       </div>
