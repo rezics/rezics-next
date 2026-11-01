@@ -340,7 +340,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         expect(row.complete).toBe(true);
       }
       const baselines = await pool.query<{
-        homes: number; sealed: boolean; original: boolean; summaries: number;
+        homes: number; sealed: boolean; original: boolean; summaries: number; pinned: boolean;
       }>(
         `SELECT count(*)::integer AS homes,
            bool_and(b.coverage_sealed AND b.coverage_after=4096 AND c.after_home=4096
@@ -350,7 +350,11 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
              AND h.native_enqueue_revision=n.native_enqueue_revision
              AND h.native_revision IS NOT DISTINCT FROM n.native_revision
              AND h.native_claim_revision IS NOT DISTINCT FROM n.native_claim_revision) AS original,
-           count(s.source_home)::integer AS summaries
+           count(s.source_home)::integer AS summaries,
+           bool_and(p.consumer IS NOT NULL AND h.creation_consumer IS NOT NULL
+             AND h.creation_consumer='public_filter_' || replace(h.bootstrap::text,'-','')
+             AND p.consumer=h.creation_consumer AND p.position<=h.creation_position
+             AND (p.epoch IS NULL OR p.epoch=h.owner_epoch)) AS pinned
          FROM semantic.public_filter_home_enrollment h
          JOIN semantic.public_filter_bootstrap b ON b.partition_no=0 AND b.bootstrap=h.bootstrap
          JOIN search.public_filter_coverage_preparation c
@@ -359,6 +363,8 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
            ON (n.partition_no,n.registration,n.bootstrap,n.source_home)=(0,h.registration,h.bootstrap,h.partition_no)
          LEFT JOIN search.public_filter_coverage_home s
            ON (s.partition_no,s.registration,s.source_home)=(0,h.registration,h.partition_no)
+         LEFT JOIN core.consumer_checkpoint p
+           ON (p.partition_no,p.consumer)=(h.partition_no,h.creation_consumer)
          WHERE b.state='adopted' AND b.consumer LIKE $1 GROUP BY h.bootstrap`, [`%${prefix}%`],
       );
       expect(baselines.rows).toHaveLength(enrolled.rows.length);
@@ -367,6 +373,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         expect(row.summaries).toBe(4096);
         expect(row.sealed).toBe(true);
         expect(row.original).toBe(true);
+        expect(row.pinned).toBe(true);
       }
       // The default repair job must retain the native Account input alongside
       // actual writer effects. Neither a Subject projection nor an intent tick

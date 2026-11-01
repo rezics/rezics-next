@@ -87,6 +87,15 @@ export type AccountDiscoveryEnrollment = AccountDiscoveryReductionHead & Readonl
   complete: boolean;
 }>;
 
+/** The ordinary outbox checkpoint pins the original creation/change window.
+ * It is retained until native Source/copy retirement, never advanced by a query.
+ */
+export function publicFilterCreationConsumer(bootstrap: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(bootstrap))
+    throw new TypeError('Creation retention requires a native bootstrap');
+  return 'public_filter_' + bootstrap.replaceAll('-', '');
+}
+
 /** Enrol one bounded page of the immutable compiler closure in its writer home.
  * Account writers and enrollment take population -> Source head -> enrollment.
  * No registration-home transaction is held across this operation. The original
@@ -109,6 +118,7 @@ export async function enrollAccountDiscoveryHome(
     throw new RangeError('Enrollment requires an exact native home');
   const keys = [...new Set(input.keys)].sort((a,b) => Buffer.compare(Buffer.from(a),Buffer.from(b)));
   const keyDigest = createHash('sha256').update(JSON.stringify(keys)).digest('hex');
+  const creationConsumer = publicFilterCreationConsumer(input.bootstrap);
   const { withConnection, discardConnection } = await import('../database/pool.ts');
   return withRequestDeadline(context.deadline, () => withConnection(pool, async (client) => {
     requireAccessDeadline(context.deadline);
@@ -138,22 +148,22 @@ export async function enrollAccountDiscoveryHome(
       await client.query(
         `INSERT INTO semantic.public_filter_home_enrollment
            (partition_no,bootstrap,registration_partition,registration,read_definition,owner_epoch,
-            source_position,native_revision,native_claim_revision,key_digest)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (partition_no,bootstrap) DO NOTHING`,
+            source_position,native_revision,native_claim_revision,key_digest,creation_consumer)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (partition_no,bootstrap) DO NOTHING`,
         [input.partition,input.bootstrap,input.registration.partition,input.registration.id,input.readDefinition,
           owner.epoch,source.position,input.accounts ? account.revision : null,
-          input.accounts ? account.claim_revision : null,keyDigest],
+          input.accounts ? account.claim_revision : null,keyDigest,creationConsumer],
       );
       const original = (await client.query<{
         owner_epoch: number; source_position: string; native_revision: string | null;
         native_claim_revision: string | null; key_after: string | null; complete: boolean;
         registration_partition: number; registration: string; read_definition: string;
         creation_position: string | null; native_enqueue_revision: string | null;
-        key_digest: string | null; receipt: string | null;
+        key_digest: string | null; receipt: string | null; creation_consumer: string | null;
       }>(
         `SELECT owner_epoch,source_position::text,native_revision::text,native_claim_revision::text,
            key_after,complete,registration_partition,registration,read_definition::text,
-           creation_position::text,native_enqueue_revision::text,key_digest,receipt
+           creation_position::text,native_enqueue_revision::text,key_digest,receipt,creation_consumer
          FROM semantic.public_filter_home_enrollment WHERE (partition_no,bootstrap)=($1,$2) FOR UPDATE`,
         [input.partition,input.bootstrap],
       )).rows[0];
@@ -161,9 +171,26 @@ export async function enrollAccountDiscoveryHome(
         original.registration_partition !== input.registration.partition ||
         original.registration !== input.registration.id || original.read_definition !== input.readDefinition ||
         original.key_digest !== keyDigest ||
+        original.creation_consumer !== creationConsumer ||
         (original.complete && (original.receipt === null || original.creation_position === null ||
           original.native_enqueue_revision === null)) ||
         (original.native_revision !== null) !== input.accounts)
+        throw new CommandUnavailableError('contention', input.partition);
+      // Install the pin before admitting the original baseline, under the same
+      // native writer locks. A legacy sealed row without this pin cannot be
+      // repaired by installing one later: its earlier log may already be gone.
+      if (!original.complete) {
+        await client.query(
+          `INSERT INTO core.consumer_checkpoint(partition_no,consumer)
+           VALUES ($1,$2) ON CONFLICT DO NOTHING`, [input.partition,creationConsumer],
+        );
+      }
+      const pin = (await client.query<{ epoch: number | null; position: string }>(
+        `SELECT epoch,position::text FROM core.consumer_checkpoint
+         WHERE (partition_no,consumer)=($1,$2) FOR SHARE`, [input.partition,creationConsumer],
+      )).rows[0];
+      if (!pin || (pin.epoch !== null && pin.epoch !== owner.epoch) ||
+        BigInt(pin.position) > BigInt(original.creation_position ?? owner.position))
         throw new CommandUnavailableError('contention', input.partition);
       // Byte admission remains with the original definition compiler. Key writes,
       // lookahead and control rows all share this maintenance step's 1000 inputs.

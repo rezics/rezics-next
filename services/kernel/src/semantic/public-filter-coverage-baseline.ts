@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import type { AccountDiscoveryEnrollment } from '../access/account-discovery-reduction.ts';
+import { publicFilterCreationConsumer, type AccountDiscoveryEnrollment } from '../access/account-discovery-reduction.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 
@@ -117,11 +117,16 @@ export async function adoptPublicFilterCoverageBaseline(
          AND owner_epoch=$6 AND source_position=$7 AND creation_position=$8
          AND native_enqueue_revision=$9 AND key_digest=$10 AND receipt=$11
          AND native_revision IS NOT DISTINCT FROM $12::bigint
-         AND native_claim_revision IS NOT DISTINCT FROM $13::bigint FOR SHARE`,
+         AND native_claim_revision IS NOT DISTINCT FROM $13::bigint
+         AND creation_consumer=$14
+         AND EXISTS (SELECT 1 FROM core.consumer_checkpoint c
+           WHERE c.partition_no=$1 AND c.consumer=$14 AND c.position<=$8::bigint
+             AND (c.epoch IS NULL OR c.epoch=$6)) FOR SHARE`,
       [receipt.partition,binding.bootstrap,binding.registration.partition,binding.registration.id,
         binding.definition,receipt.epoch,String(receipt.sourcePosition),String(receipt.creationPosition),
         String(receipt.enqueueRevision),receipt.keyDigest,receipt.receipt,
-        binding.accounts ? String(receipt.revision) : null,binding.accounts ? String(receipt.claimRevision) : null],
+        binding.accounts ? String(receipt.revision) : null,binding.accounts ? String(receipt.claimRevision) : null,
+        publicFilterCreationConsumer(binding.bootstrap)],
     )).rows[0];
     if (!original) throw new CommandUnavailableError('contention',receipt.partition);
   });

@@ -147,6 +147,20 @@ projection; sampled Source statements and named membership probes cannot discove
 - Bound: `inputLimit` is 1..1000 examined keys including rejects, rereads and lookahead; all lower native Source/capture/step, SQL, byte and deadline limits still apply. No served-request catalogue scan or per-key home/dependency vector is admitted.
 - Growth check: reuse the existing measured Source/population controls; this declaration supplies no runtime or growth evidence.
 
+The native repair producer retains its creation bridge in the original immutable
+`public_filter_repair_step` input/successor chain. Enrollment installs the ordinary
+`core.consumer_checkpoint` named by `publicFilterCreationConsumer(bootstrap)` before
+admitting the original home receipt. `readPublicFilterCreationWindow(pool, input,
+context, retained?)` captures a finite native home interval; replay validates the
+same retained interval rather than extending its through-position.
+`readPublicFilterCreationEvent(pool, {bootstrap, window}, context)` reads one exact
+outbox event and preserves its event-count/sequence boundary. Missing positions,
+changed ownership, missing pins and partial event groups remain unavailable.
+The repair producer routes actual Subject and Account change events through their
+separate native repair phases before returning to that retained successor. These
+bodies do not themselves establish the final all-home Source seal, receiver
+settlement, contiguous ACK or eligibility of an old served observation.
+
 ## Complete bounded selected facets
 
 `readPublicFilterProjectionPage` receives an actual original subject, immutable `meaning.digest/release/type`, input limit and

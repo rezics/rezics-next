@@ -30,6 +30,11 @@ import { enrollAccountDiscoveryHome } from '../access/account-discovery-reductio
 import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
 import { beginPublicFilterCoverageBaseline, adoptPublicFilterCoverageBaseline } from './public-filter-coverage-baseline.ts';
+import {
+  readPublicFilterCreationWindow,
+  readPublicFilterCreationEvent,
+  type PublicFilterCreationWindow,
+} from './public-filter-creation-window.ts';
 import { encodePublicFilterNativeState } from '../search/public-filter-custody.ts';
 import readAccounts from './public-filter-source-binding-accounts.sql';
 import repairState from './public-filter-source-binding-repair-state.sql';
@@ -752,11 +757,14 @@ export function createPublicFilterSourceBinding(
     partition: number;
     after: { route: number; id: string } | null;
     subject: string | null;
-    phase: 'scan' | 'advance' | 'project' | 'account';
+    phase: 'scan' | 'advance' | 'project' | 'account' | 'window' | 'bridge';
     advance: string;
     version: bigint | null;
     epoch: number | null;
     projection: PublicFilterProjectionFrontier | null;
+    bridge?: PublicFilterCreationWindow;
+    /** Return to the exact captured event successor after its actual owner repair. */
+    resumeBridge?: PublicFilterCreationWindow;
   };
   type RepairRecord = {
     input: RepairState;
@@ -781,6 +789,51 @@ export function createPublicFilterSourceBinding(
         heads: page.status === 'complete' ? page.requiredHeads : undefined,
       }),
     );
+  }
+  function resumeCreationBridge(state: RepairState): RepairState {
+    const window = state.resumeBridge;
+    if (!window) throw new BindingError('binding_mismatch');
+    const { resumeBridge: _resume, ...rest } = state;
+    return { ...rest, owner: 'semantic', partition: window.partition, epoch: window.epoch,
+      subject: null, after: null, phase: 'bridge', version: null, projection: null, bridge: window };
+  }
+  async function advanceCreationBridge(
+    bootstrap: string, state: RepairState, db: Pool, context: PublicFilterConsumerContext,
+    accounts: boolean, retained?: RepairState,
+  ): Promise<RepairState> {
+    if (state.resumeBridge || state.subject !== null || state.projection !== null)
+      throw new BindingError('binding_mismatch');
+    if (state.phase === 'window') {
+      const window = await readPublicFilterCreationWindow(db,
+        { bootstrap: nativeId(bootstrap), partition: state.partition }, context, retained?.bridge);
+      return { ...state, epoch: window.epoch, phase: 'bridge', bridge: window };
+    }
+    if (state.phase !== 'bridge' || !state.bridge || state.partition !== state.bridge.partition ||
+      state.epoch !== state.bridge.epoch)
+      throw new BindingError('binding_mismatch');
+    const result = await readPublicFilterCreationEvent(db,
+      { bootstrap: nativeId(bootstrap), window: state.bridge }, context);
+    if (result.event === null) {
+      const { bridge: _bridge, ...rest } = state;
+      return { ...rest, partition: state.partition+1, epoch: null, phase: 'window' };
+    }
+    const event = result.event;
+    const subject = event.type.startsWith('com.rezics.subject.');
+    const account = accounts &&
+      ['com.rezics.access.account-updated.v1','com.rezics.access.account-tombstoned.v1',
+        'com.rezics.access.account-discovery-changed.v1'].includes(event.type);
+    if (!subject && !account) return { ...state, bridge: result.next };
+    const route = event.subject === null ? null : routeOf(event.subject);
+    if (route === null || (subject && partitionOf(route) !== state.partition))
+      throw new BindingError('binding_mismatch');
+    // The event home and the Account home may differ (claim delivery). Resolve
+    // the owner on the next bounded step; no foreign home is joined here.
+    const { bridge: _bridge, ...rest } = state;
+    const owner = await readPartition(db,partitionOf(route));
+    if (!owner || owner.writeState !== 'active') throw new BindingError('owner_unavailable');
+    return { ...rest, owner: account ? 'accounts' : 'semantic', partition: partitionOf(route),
+      epoch: owner.epoch, subject: event.subject, after: null, phase: account ? 'account' : 'advance',
+      advance: retained?.advance ?? randomUUID(), version: null, projection: null, resumeBridge: result.next };
   }
   function producedRepair(
     bootstrap: string,
@@ -897,13 +950,21 @@ export function createPublicFilterSourceBinding(
       account: AccountDiscoveryRepairObservation | undefined,
       complete = false;
     if (state.partition === 4096) {
+      if (state.phase === 'window') {
+        // The fixed bridge is exhausted, but its complete native Source/receiver
+        // closure is still required below. This is not a successful empty cut.
+        await validateOriginalAndFinal(bootstrap, joined, cost, context);
+        complete = true;
+      } else
       if ('representation' in bootstrap.definition.capture && state.owner !== 'accounts') {
         next = { ...next, owner: 'accounts', partition: 0, after: null, subject: null, epoch: null, phase: 'scan' };
       } else {
-      // A full enumeration alone cannot close the creation/change bridge or certify a moving Source.
-      await validateOriginalAndFinal(bootstrap, joined, cost, context);
-      complete = true;
+        next = { ...next, owner: 'semantic', partition: 0, after: null, subject: null, epoch: null, phase: 'window' };
       }
+    } else if (state.phase === 'window' || state.phase === 'bridge') {
+      next = await advanceCreationBridge(bootstrap.id,state,db,context,
+        'representation' in bootstrap.definition.capture,replay?.next);
+      cost.inputKeys++;
     } else {
       const owner = await readPartition(db, state.partition);
       if (!owner || owner.writeState !== 'active') throw new BindingError('owner_unavailable');
@@ -938,7 +999,7 @@ export function createPublicFilterSourceBinding(
             throw new BindingError('configuration_changed');
           cost.inputKeys += 2;
           cost.candidates++;
-          next = { ...next, subject: null, phase: 'scan' };
+          next = state.resumeBridge ? resumeCreationBridge(next) : { ...next, subject: null, phase: 'scan' };
         } else throw new BindingError('binding_mismatch');
       } else
       if (state.phase === 'scan') {
@@ -1069,7 +1130,8 @@ export function createPublicFilterSourceBinding(
         }));
         next =
           page.status === 'complete'
-            ? { ...next, subject: null, phase: 'scan', projection: null, version: null }
+            ? state.resumeBridge ? resumeCreationBridge(next)
+              : { ...next, subject: null, phase: 'scan', projection: null, version: null }
             : { ...next, projection: output.frontier };
       }
     }
@@ -1323,6 +1385,21 @@ export function createPublicFilterSourceBinding(
           throw new BindingError('owner_unavailable');
         const record = decode<RepairRecord>(row.state);
         const receiptDigests = unpackRepairLocatorDigests(row.repair_locator_digests, row.input_limit);
+        // Resolve the actual native predecessor, not an asserted matching cursor.
+        // Its immutable successor binds the next input even on a crash/replay.
+        if (input.predecessor !== null) {
+          const predecessor = await repairState.run(db, {
+            bootstrap: bootstrapId, execution: input.execution, step: input.predecessor,
+          });
+          if (!predecessor || predecessor.complete || predecessor.receipt_protocol !== 1 ||
+            encode(decode<RepairRecord>(predecessor.state).next) !== encode(record.input))
+            throw new BindingError('binding_mismatch');
+        } else if (record.input.partition !== 0 || record.input.owner !== undefined ||
+          record.input.phase !== 'scan' || record.input.after !== null || record.input.subject !== null ||
+          record.input.epoch !== null || record.input.version !== null || record.input.projection !== null ||
+          record.input.bridge !== undefined || record.input.resumeBridge !== undefined) {
+          throw new BindingError('binding_mismatch');
+        }
         // A table's complete bit and an exhausted raw-key enumeration are not an original-cut proof.
         if (row.complete) throw new BindingError('owner_unavailable');
         if (!uuid.test(row.step)) throw new BindingError('binding_mismatch');
@@ -1362,6 +1439,12 @@ export function createPublicFilterSourceBinding(
           const current = await readAccountDiscoveryRepairObservation(db, record.account.id, { deadline });
           if (!isDeepStrictEqual({ ...current, position: record.account.position }, record.account))
             throw new BindingError('configuration_changed');
+        } else if (record.input.phase === 'window' || record.input.phase === 'bridge') {
+          if (receiptDigests.length !== 0 || record.input.partition >= 4096 ||
+            encode(await advanceCreationBridge(input.bootstrap,record.input,db,{ deadline },
+              'representation' in cut.definition.capture,record.next)) !== encode(record.next))
+            throw new BindingError('binding_mismatch');
+          cost.inputKeys++;
         } else if (
           (record.input.phase !== 'scan' && record.input.phase !== 'advance') ||
           receiptDigests.length !== 0
