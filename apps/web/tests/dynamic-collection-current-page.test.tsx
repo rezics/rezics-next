@@ -134,8 +134,7 @@ async function mount() {
   const nativeSetTimeout = globalThis.setTimeout;
   const nativeClearTimeout = globalThis.clearTimeout;
   const timerSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((run, delay, ...args) => {
-    if (typeof delay !== 'number' || delay < 1000 || delay > 30_000)
-      return nativeSetTimeout(run, delay, ...args);
+    if (typeof delay !== 'number' || delay < 1000 || delay > 30_000) return nativeSetTimeout(run, delay, ...args);
     const id = nextTimer--;
     timers.set(id, { at: now + delay, run: () => run(...args) });
     return id;
