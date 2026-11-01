@@ -536,6 +536,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
   );
 }
 type ShelfEntriesProps = {
+  mutationLease?: ShelfMutationLease;
   type?: string;
   entries: PersonalLibraryEntry[];
   locale: string;
@@ -557,7 +558,8 @@ export function ShelfEntries(props: ShelfEntriesProps) {
   sourceUrl.searchParams.delete('columns');
   const context = `${session.subject ?? session.state}:${props.locale}:${sourceUrl.href}:${props.type ?? ''}:${props.state ?? ''}`;
   const [source, setSource] = useState({ entries: props.entries, context, generation: 0 });
-  const [mutationLease] = useState(shelfMutationLease);
+  const [fallbackLease] = useState(shelfMutationLease);
+  const mutationLease = props.mutationLease ?? fallbackLease;
   if (source.entries !== props.entries || source.context !== context) {
     setSource({ entries: props.entries, context, generation: source.generation + 1 });
   }

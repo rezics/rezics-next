@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
@@ -31,7 +31,7 @@ import {
 } from './shelf-params';
 import { ShelfEntries } from './shelf-view';
 import { ShelfColumnsControl } from './shelf-columns';
-import { useHydrated } from './shelf-rows';
+import { shelfMutationLease, useHydrated } from './shelf-rows';
 import { LabelShelfEntries } from './shelf-view';
 import type { LabelShelfPageData } from './label-shelf-read';
 import { SubjectLabelNotice } from './subject-labels.tsx';
@@ -241,6 +241,8 @@ export function PersonalLibraryPage({
   restore?: LibraryRestoreResult;
   csrfToken?: string | null;
 }) {
+  // Keep the write lease while a predicate replaces rows or temporarily shows no matches.
+  const [mutationLease] = useState(shelfMutationLease);
   const navigation = useQuery(libraryNavigationQuery(locale));
   const readContinue = useCallback(() => readContinueEntries({ data: {} }), []);
   const resume = useContinueRefresh(continueState, readContinue, locale);
@@ -287,6 +289,7 @@ export function PersonalLibraryPage({
           locale={locale}
           csrfToken={csrfToken ?? null}
           returnTo={shelfHref(locale, {
+            ...typeSearch,
             ...display,
             ...sort,
             ...(page.state ? { state: page.state } : {}),
@@ -365,6 +368,7 @@ export function PersonalLibraryPage({
         ) : page.entries.length ? (
           <ShelfEntries
             key={`${page.type ?? ''}:${page.state ?? 'all'}:${sort.orderBy}:${sort.direction}:${effectiveCursor ?? ''}`}
+            mutationLease={mutationLease}
             {...typeSearch}
             sort={sort}
             {...(filterSort ? { filterSort } : {})}
