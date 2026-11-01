@@ -51,8 +51,8 @@ function NewThreadPage() {
     <NewThreadComposition
       board={board}
       idempotencyKey={idempotencyKey}
-      presetSubject={presetSubject}
-      presetSubjectTitle={presetSubjectTitle}
+      {...(presetSubject ? { presetSubject } : {})}
+      {...(presetSubjectTitle ? { presetSubjectTitle } : {})}
     />
   );
 }
@@ -214,7 +214,7 @@ type ThreadSubmissionContext =
 
 function cloneSubmissionContext(context: ThreadSubmissionContext | undefined): ThreadSubmissionContext | undefined {
   if (!context) return undefined;
-  return context.kind === 'review'
+  return 'kind' in context && context.kind === 'review'
     ? {
         kind: 'review',
         subjectId: context.subjectId,

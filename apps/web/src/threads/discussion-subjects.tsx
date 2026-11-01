@@ -19,7 +19,7 @@ export function DiscussionSubjects({
       key={props.searchScope}
       value={props.value}
       onValueChange={props.onValueChange}
-      disabled={props.disabled}
+      {...(props.disabled === undefined ? {} : { disabled: props.disabled })}
     />
   );
 }

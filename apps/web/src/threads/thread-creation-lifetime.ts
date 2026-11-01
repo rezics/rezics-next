@@ -48,14 +48,15 @@ export function threadCreationSessionSource(client: QueryClient | undefined): Th
   let previous = identity();
   let revision = 0;
   const listeners = new Set<() => void>();
-  client.getQueryCache().subscribe(({ query, type, action }) => {
+  client.getQueryCache().subscribe((event) => {
+    const { query, type } = event;
     if (
-      query.queryKey.length !== sessionQuery.queryKey.length ||
-      query.queryKey.some((key, index) => key !== sessionQuery.queryKey[index])
+      JSON.stringify(query.queryKey) !== JSON.stringify(sessionQuery.queryKey)
     )
       return;
     const next = identity();
-    const replaced = type === 'added' || type === 'removed' || (type === 'updated' && action.type === 'success');
+    // Every update to this exact cache entry changes the observed session authority, including equal replacements.
+    const replaced = type === 'added' || type === 'removed' || type === 'updated';
     if (next === previous && !replaced) return;
     previous = next;
     revision++;
