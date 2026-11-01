@@ -171,3 +171,20 @@ test('Mixed pages retain readable decisions while exhausted deleted pages stay e
     expect(html).not.toContain(fixture.native.candidate.id);
   }
 });
+
+// Authored UNRUN: these retain native bounds as unrelated fixture populations grow.
+test('unrelated Contexts Subjects candidates and revisions do not enlarge the explicit queue or exact read neighbourhood', async () => {
+  for (const scale of [0, 1000, 10000]) {
+    const fixture = providerQueueFixture('comparison');
+    for (const relation of Object.values(fixture.population))
+      for (let index = 0; index < scale; index++) relation.push({ id: index });
+    const read = await fixture.transport.read(fixture.scope, undefined, 'original-native-session');
+    expect(read.state).toBe('ready');
+    if (read.state !== 'ready') throw new Error('Expected bounded native page');
+    expect(read.page.candidates).toHaveLength(2);
+    expect(read.readings).toHaveLength(1);
+    expect(fixture.calls).toHaveLength(3); // Queue, Context terms, one distinct exact Subject/Context.
+    expect(new URL(fixture.calls[0]!.path, 'https://queue.test').searchParams.get('limit')).toBe('20');
+    expect(fixture.calls[2]!.session).toBe('queue-session');
+  }
+});

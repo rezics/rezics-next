@@ -4116,5 +4116,18 @@
   "search_reader_results_unavailable": "Suchergebnisse sind momentan nicht verfügbar. Deine Suchanfrage und Filter bleiben erhalten.",
   "reporter_status_read_closed": "Der Berichtsstatus ist auf dieser Plattform nicht verfügbar.",
   "changes_abstained_detail": "Die Prüfentscheidung ist Enthaltung; sie bestätigt weder Annahme noch Auswahl.",
-  "changes_rank_deprecated": "Veraltet"
+  "changes_rank_deprecated": "Veraltet",
+  "provider_scope_context": "Kontext",
+  "provider_scope_help": "Redaktionelle Kontexte suchen oder Global ausdrücklich auswählen. Jede Auswahl wird vor dem Laden unabhängig geprüft.",
+  "provider_scope_search": "Kontexte suchen",
+  "provider_scope_find": "Suchen",
+  "provider_scope_choose": "Auswählen",
+  "provider_scope_selected": "Gewählter Kontext: {label}",
+  "provider_scope_empty": "Keine lesbaren Kontexte auf dieser Seite.",
+  "provider_scope_denied": "Dieser Kontext ist nicht mehr verfügbar. Wähle einen aktuellen Kontext.",
+  "provider_scope_query_invalid": "Die Kontextsuche darf höchstens 256 Zeichen enthalten.",
+  "provider_scope_cursor_invalid": "Diese Fortsetzung ist ungültig. Starte eine neue Suche.",
+  "provider_scope_source_invalid": "Der Quellschlüssel beginnt mit einem Kleinbuchstaben; danach sind bis zu 31 Kleinbuchstaben, Ziffern, Unterstriche oder Bindestriche erlaubt.",
+  "provider_scope_source_help": "Wähle einen Anbieter oder gib einen exakten konfigurierten Quellalias ein.",
+  "provider_scope_unnamed": "Unbenannter Kontext"
 }

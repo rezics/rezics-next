@@ -4116,5 +4116,18 @@
   "search_reader_results_unavailable": "Los resultados de búsqueda no están disponibles ahora. Se conservan tu búsqueda y tus filtros.",
   "reporter_status_read_closed": "El estado de las denuncias no está disponible en esta plataforma.",
   "changes_abstained_detail": "La decisión de revisión es abstenerse; no confirma la aceptación ni la selección.",
-  "changes_rank_deprecated": "Obsoleto"
+  "changes_rank_deprecated": "Obsoleto",
+  "provider_scope_context": "Contexto",
+  "provider_scope_help": "Busca contextos editoriales o elige Global explícitamente. Cada selección se comprueba por separado antes de cargar propuestas.",
+  "provider_scope_search": "Buscar contextos",
+  "provider_scope_find": "Buscar",
+  "provider_scope_choose": "Elegir",
+  "provider_scope_selected": "Contexto elegido: {label}",
+  "provider_scope_empty": "No hay contextos legibles en esta página.",
+  "provider_scope_denied": "Este contexto ya no está disponible. Elige un contexto actual.",
+  "provider_scope_query_invalid": "Usa como máximo 256 caracteres para buscar contextos.",
+  "provider_scope_cursor_invalid": "Esta continuación no es válida. Inicia una nueva búsqueda.",
+  "provider_scope_source_invalid": "La clave debe comenzar con una letra minúscula, seguida de hasta 31 letras minúsculas, dígitos, guiones bajos o guiones.",
+  "provider_scope_source_help": "Elige un proveedor o introduce un alias de fuente configurado exacto.",
+  "provider_scope_unnamed": "Contexto sin nombre"
 }

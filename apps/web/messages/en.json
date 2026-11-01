@@ -4117,5 +4117,18 @@
   "search_reader_facets_not_ready": "Some filter choices are unavailable right now. Your selected filters remain applied.",
   "search_reader_facets_unavailable": "Some filter choices could not be loaded. Your selected filters remain applied.",
   "search_reader_results_unavailable": "Search results are unavailable right now. Your query and filters are kept.",
-  "reporter_status_read_closed": "Report status is not available on this platform."
+  "reporter_status_read_closed": "Report status is not available on this platform.",
+  "provider_scope_context": "Context",
+  "provider_scope_help": "Search editorial Contexts, or explicitly choose Global. Each choice is checked independently before loading proposals.",
+  "provider_scope_search": "Search Contexts",
+  "provider_scope_find": "Search",
+  "provider_scope_choose": "Choose",
+  "provider_scope_selected": "Selected Context: {label}",
+  "provider_scope_empty": "No readable Contexts on this page.",
+  "provider_scope_denied": "This Context is no longer available. Choose a current Context.",
+  "provider_scope_query_invalid": "Use at most 256 characters for Context search.",
+  "provider_scope_cursor_invalid": "This continuation is invalid. Start a new search.",
+  "provider_scope_source_invalid": "Use a source key starting with a lowercase letter, followed by up to 31 lowercase letters, digits, underscores or hyphens.",
+  "provider_scope_source_help": "Choose a launch provider or enter an exact configured source alias.",
+  "provider_scope_unnamed": "Unnamed Context"
 }

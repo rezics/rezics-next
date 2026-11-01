@@ -4116,5 +4116,18 @@
   "search_reader_results_unavailable": "搜尋結果目前無法使用。你的搜尋內容和篩選條件會保留。",
   "reporter_status_read_closed": "此平台暫不提供檢舉狀態。",
   "changes_abstained_detail": "審核決定為棄權；這並不代表接受或選用。",
-  "changes_rank_deprecated": "已棄用"
+  "changes_rank_deprecated": "已棄用",
+  "provider_scope_context": "情境",
+  "provider_scope_help": "搜尋編輯情境，或明確選擇 全域。載入提案前會獨立核實每個選擇。",
+  "provider_scope_search": "搜尋情境",
+  "provider_scope_find": "搜尋",
+  "provider_scope_choose": "選擇",
+  "provider_scope_selected": "已選情境：{label}",
+  "provider_scope_empty": "此頁沒有可讀取的情境。",
+  "provider_scope_denied": "此情境已無法使用。請選擇目前可用的情境。",
+  "provider_scope_query_invalid": "情境搜尋最多可輸入256個字元。",
+  "provider_scope_cursor_invalid": "此續頁無效。請重新搜尋。",
+  "provider_scope_source_invalid": "來源鍵須以小寫字母開頭，後接最多31個小寫字母、數字、底線或連字號。",
+  "provider_scope_source_help": "選擇提供方，或輸入已設定的準確來源別名。",
+  "provider_scope_unnamed": "未命名情境"
 }

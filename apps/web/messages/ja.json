@@ -4116,5 +4116,18 @@
   "search_reader_results_unavailable": "検索結果を現在利用できません。検索内容とフィルターは保持されています。",
   "reporter_status_read_closed": "このプラットフォームでは通報状況を確認できません。",
   "changes_abstained_detail": "審査の判断は棄権です。承認や選択を示すものではありません。",
-  "changes_rank_deprecated": "非推奨"
+  "changes_rank_deprecated": "非推奨",
+  "provider_scope_context": "コンテキスト",
+  "provider_scope_help": "編集コンテキストを検索するか、Global を明示的に選択してください。提案を読み込む前に各選択を個別に確認します。",
+  "provider_scope_search": "コンテキストを検索",
+  "provider_scope_find": "検索",
+  "provider_scope_choose": "選択",
+  "provider_scope_selected": "選択したコンテキスト: {label}",
+  "provider_scope_empty": "このページに閲覧できるコンテキストはありません。",
+  "provider_scope_denied": "このコンテキストは利用できません。現在のコンテキストを選択してください。",
+  "provider_scope_query_invalid": "コンテキストの検索は256文字以内で入力してください。",
+  "provider_scope_cursor_invalid": "この続きは無効です。新しく検索してください。",
+  "provider_scope_source_invalid": "ソースキーは英小文字で始まり、その後は31文字以内の英小文字、数字、アンダースコア、ハイフンを使えます。",
+  "provider_scope_source_help": "プロバイダーを選択するか、設定済みの正確なソース別名を入力してください。",
+  "provider_scope_unnamed": "名前のないコンテキスト"
 }

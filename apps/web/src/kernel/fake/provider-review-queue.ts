@@ -1,3 +1,5 @@
+import { readContextChoices, readContextChoice } from '../../features/contexts/choice-native';
+import type { ProviderContextSource } from '../../features/import-review/provider-context-choice';
 import { createKernelClient } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { candidateFixture } from './subject-candidates';
@@ -76,6 +78,54 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
   }[] = [];
   let current = scenario;
   let readingStatus = 200;
+  const subjectStatuses = new Map<string, number>();
+  const candidateSubjects = new Map<string, string>();
+  const population = {
+    contexts: [] as unknown[],
+    subjects: [] as unknown[],
+    candidates: [] as unknown[],
+    revisions: [] as unknown[],
+  };
+  let choiceStatus = 200;
+  let decisionMode: 'normal' | 'unknown' = 'normal';
+  const editorial = {
+    id: '019a1b2c-3d4e-7000-8000-001000000001',
+    kind: 'community' as const,
+    labels: {
+      en: 'Book editors',
+      de: 'Buchredaktion',
+      fr: 'Équipe livres',
+      es: 'Edición de libros',
+      ja: '書籍編集部',
+      ko: '도서 편집부',
+      'zh-Hans': '图书编辑组',
+      'zh-Hant': '圖書編輯組',
+    },
+    state: 'active' as 'active' | 'deleted',
+    deletedAt: null,
+    purgeAfter: null,
+  };
+  const global = { ...editorial, id: globalReviewContext, kind: 'global' as const, labels: { en: 'Global' } };
+  let directory = [editorial];
+  let directoryNext: string | null = null;
+  const deferred = new Map<string, { promise: Promise<void>; release: () => void }>();
+  const effects: string[] = [];
+  function deferNext(kind: 'search' | 'resolve' | 'queue' | 'prepare' | 'decision' | 'reread') {
+    let release!: () => void;
+    const promise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    deferred.set(kind, { promise, release });
+    return release;
+  }
+  async function delayed<T>(kind: string, operation: () => Promise<T>): Promise<T> {
+    effects.push(kind);
+    const gate = deferred.get(kind);
+    if (gate) deferred.delete(kind);
+    const result = await operation();
+    if (gate) await gate.promise;
+    return result;
+  }
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
       status,
@@ -97,18 +147,43 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
       session: request.headers.get('rezics-session-token'),
       key: request.headers.get('idempotency-key'),
     });
+    if (url.pathname === '/v1/contexts') {
+      return json({ contexts: directory, next: directoryNext });
+    }
+    if (url.pathname.endsWith('/lifecycle')) {
+      if (choiceStatus !== 200) return json({ code: 'not_found' }, choiceStatus);
+      const context = url.pathname.includes(editorial.id) ? editorial : global;
+      return json({ context });
+    }
     if (url.pathname === '/v1/review-candidates:prepare') {
       current = 'preparing';
       return json({ preparing: true }, 202);
     }
-    if (url.pathname === `/v1/subjects/${native.id}` && request.method === 'GET')
-      return readingStatus === 200 ? json(native.publicRead) : json({ code: 'unavailable' }, readingStatus);
+    if (
+      url.pathname.startsWith('/v1/subjects/') &&
+      request.method === 'GET' &&
+      !url.pathname.includes('/candidates/')
+    ) {
+      const subject = url.pathname.split('/').at(-1)!;
+      const status = subjectStatuses.get(subject) ?? readingStatus;
+      return status === 200
+        ? json({
+            ...native.publicRead,
+            subject: {
+              ...native.publicRead.subject,
+              id: subject,
+              context: url.searchParams.get('context') ?? scope.context,
+            },
+          })
+        : json({ code: 'unavailable' }, status);
+    }
     const decision = suggestions.find(
       (candidate) =>
         url.pathname === `/v1/subjects/${native.id}/candidates/${candidate.id}:accept` ||
         url.pathname === `/v1/subjects/${native.id}/candidates/${candidate.id}:reject`,
     );
-    if (scenario === 'comparison' && request.method === 'POST' && decision) {
+    if (request.method === 'POST' && decision) {
+      if (decisionMode === 'unknown') return json({ code: 'unavailable' }, 503);
       const command = body as { context: string; expected_head: number | null };
       if (command.expected_head !== decision.head) return json({ code: 'stale_editorial_head' }, 409);
       return json({
@@ -142,7 +217,7 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
         candidate.decision = 'accepted';
         candidate.head = 1;
       }
-      return { subject: native.id, candidate, adoption: null };
+      return { subject: candidateSubjects.get(candidate.id) ?? native.id, candidate, adoption: null };
     });
     return json({
       ...page,
@@ -153,17 +228,23 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
   const client = createKernelClient('https://queue.test', { fetch: fetcher });
   const transport: QueueTransport = {
     read: (scope, cursor, session) =>
-      readProviderQueue(
-        client,
-        'Bearer fixture',
-        Promise.resolve(definitions.release as unknown as Release),
-        scope,
-        cursor,
-        session,
+      delayed('queue', () =>
+        readProviderQueue(
+          client,
+          'Bearer fixture',
+          Promise.resolve(definitions.release as unknown as Release),
+          scope,
+          cursor,
+          session,
+        ),
       ),
-    prepare: (scope) => prepareProviderQueue(client, 'Bearer fixture', scope),
-    decide: (command) => decideProviderCandidate(client, 'Bearer fixture', command),
-    readings: (commands) => readProviderDecisionSubjects(client, 'Bearer fixture', commands),
+    prepare: (scope) => delayed('prepare', () => prepareProviderQueue(client, 'Bearer fixture', scope)),
+    decide: (command) => delayed('decision', () => decideProviderCandidate(client, 'Bearer fixture', command)),
+    readings: (commands) => delayed('reread', () => readProviderDecisionSubjects(client, 'Bearer fixture', commands)),
+  };
+  const contexts: ProviderContextSource = {
+    search: (input) => delayed('search', () => readContextChoices(client.contexts, 'Bearer fixture', input)),
+    resolve: (id) => delayed('resolve', () => readContextChoice(client, 'Bearer fixture', id)),
   };
   const initial: QueueState =
     scenario === 'loaded' || scenario === 'comparison' || scenario === 'empty'
@@ -183,6 +264,28 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
         : { state: scenario };
   return {
     scope,
+    contexts,
+    population,
+    setSubjectStatus: (subject: string, status: number) => {
+      subjectStatuses.set(subject, status);
+    },
+    setCandidateSubject: (candidate: string, subject: string) => {
+      candidateSubjects.set(candidate, subject);
+    },
+    editorial,
+    global,
+    effects,
+    deferNext,
+    setDirectory: (rows: typeof directory, next: string | null = null) => {
+      directory = rows;
+      directoryNext = next;
+    },
+    setChoiceStatus: (status: number) => {
+      choiceStatus = status;
+    },
+    setDecisionMode: (mode: typeof decisionMode) => {
+      decisionMode = mode;
+    },
     initial,
     transport,
     calls,

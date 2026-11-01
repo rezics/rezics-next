@@ -4116,5 +4116,18 @@
   "search_reader_results_unavailable": "Les résultats de recherche sont indisponibles pour le moment. Votre recherche et vos filtres sont conservés.",
   "reporter_status_read_closed": "Le statut des signalements est indisponible sur cette plateforme.",
   "changes_abstained_detail": "La décision de révision est une abstention ; elle ne confirme ni acceptation ni sélection.",
-  "changes_rank_deprecated": "Obsolète"
+  "changes_rank_deprecated": "Obsolète",
+  "provider_scope_context": "Contexte",
+  "provider_scope_help": "Recherchez des contextes éditoriaux ou choisissez explicitement Global. Chaque choix est vérifié indépendamment avant le chargement des propositions.",
+  "provider_scope_search": "Rechercher des contextes",
+  "provider_scope_find": "Rechercher",
+  "provider_scope_choose": "Choisir",
+  "provider_scope_selected": "Contexte choisi : {label}",
+  "provider_scope_empty": "Aucun contexte lisible sur cette page.",
+  "provider_scope_denied": "Ce contexte est indisponible. Choisissez un contexte actuel.",
+  "provider_scope_query_invalid": "La recherche de contextes est limitée à 256 caractères.",
+  "provider_scope_cursor_invalid": "Cette continuation est invalide. Lancez une nouvelle recherche.",
+  "provider_scope_source_invalid": "La clé commence par une lettre minuscule, suivie de 31 lettres minuscules, chiffres, tirets bas ou tirets au maximum.",
+  "provider_scope_source_help": "Choisissez un fournisseur ou saisissez un alias de source configuré exact.",
+  "provider_scope_unnamed": "Contexte sans nom"
 }

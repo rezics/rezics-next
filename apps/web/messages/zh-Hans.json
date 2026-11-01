@@ -4117,5 +4117,18 @@
   "search_reader_results_unavailable": "搜索结果目前不可用。你的搜索内容和筛选条件已保留。",
   "reporter_status_read_closed": "此平台暂不提供举报状态。",
   "changes_abstained_detail": "审核决定为弃权；这并不代表接受或选用。",
-  "changes_rank_deprecated": "已弃用"
+  "changes_rank_deprecated": "已弃用",
+  "provider_scope_context": "上下文",
+  "provider_scope_help": "搜索编辑上下文，或明确选择 全局。加载提案前会独立核实每个选择。",
+  "provider_scope_search": "搜索上下文",
+  "provider_scope_find": "搜索",
+  "provider_scope_choose": "选择",
+  "provider_scope_selected": "已选上下文：{label}",
+  "provider_scope_empty": "此页没有可读取的上下文。",
+  "provider_scope_denied": "此上下文已不可用。请选择当前可用的上下文。",
+  "provider_scope_query_invalid": "上下文搜索最多可输入256个字符。",
+  "provider_scope_cursor_invalid": "此续页无效。请重新搜索。",
+  "provider_scope_source_invalid": "来源键须以小写字母开头，后接最多31个小写字母、数字、下划线或连字符。",
+  "provider_scope_source_help": "选择提供方，或输入已配置的准确来源别名。",
+  "provider_scope_unnamed": "未命名上下文"
 }

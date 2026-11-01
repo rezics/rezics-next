@@ -207,3 +207,45 @@ test('current subject readings refresh independently in parallel with exact iden
     ),
   ).toBe(true);
 });
+
+// Additional immutable-custody acceptance; authored UNRUN for the connected Web delivery.
+test('unknown-write failed reread retains original intent and native confirmed successes cannot be resubmitted', async () => {
+  const { scope, rows } = visible();
+  const batch = prepareProviderBatch(
+    scope,
+    rows,
+    rows.slice(0, 2).map(providerRowKey),
+    'reject',
+    () => crypto.randomUUID(),
+    'original-native-session',
+  )!;
+  const original = structuredClone(batch);
+  const calls: ProviderDecision[] = [];
+  const partial = await runProviderBatch(batch, async (command) => {
+    calls.push(structuredClone(command));
+    return calls.length === 1 ? { ok: true, kind: 'rejected' } : { ok: false, reason: 'unavailable' };
+  });
+  const deniedClient = createKernelClient('https://denied.test', {
+    fetch: async () => Response.json({ code: 'unavailable' }, { status: 503 }),
+  });
+  const reread = await readProviderDecisionSubjects(
+    deniedClient,
+    'Bearer original',
+    partial.attempts.map((entry) => entry.command),
+  );
+  expect(reread.every((entry) => !entry.result.ok && entry.result.reason === 'unavailable')).toBe(true);
+  expect(partial.attempts[1]!.result).toEqual({ ok: false, reason: 'unavailable' });
+  expect(calls).toHaveLength(2);
+  rows.forEach((row) => {
+    row.candidate.head = 100;
+    row.label = 'New display label';
+  });
+  const retried = await runProviderBatch(partial, async (command) => {
+    calls.push(structuredClone(command));
+    return { ok: true, kind: 'rejected' };
+  });
+  expect(calls).toHaveLength(3);
+  expect(calls[2]).toEqual(original.attempts[1]!.command);
+  expect(retried.attempts[0]!.command).toEqual(original.attempts[0]!.command);
+  expect(retried.attempts[1]!.command.session).toBe('original-native-session');
+});

@@ -59,3 +59,14 @@ Run focused native commands through the kernel check runner; the applicable pack
 
 Source licensing and external vocabulary availability constrain imported definitions. Functional tests use pinned
 fixtures; production source availability and deployment configuration are external conditions.
+
+## Provider review
+
+The first-scope audit assigns Web sole ownership of the complete provider-review route, UI, Context-choice adapter,
+messages, stories and caller closure. The missing outcome was named current Context selection connected to exact
+Subject/proposal comparison, bounded selection, explicit consent and immutable uncertain-decision readback; a raw
+UUID input or a chooser in isolation does not deliver it. The [feature contract](../../apps/web/src/features/import-review/README.md)
+owns this connected Web surface. Native Context read/accept checks, independent Subject disclosure and importer
+registrations retain their existing authority. No parallel Semantic UI task or broader importer/catalogue expansion
+is included. Authored connected assertions remain UNRUN pending integration acceptance; typing alone is not native,
+browser, growth or private-SSR proof. The Web rating owner alone updates its Goal document.

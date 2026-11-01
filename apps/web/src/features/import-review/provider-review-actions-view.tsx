@@ -33,6 +33,7 @@ import {
   type ProviderDecisionRow,
   type ProviderScope,
 } from './provider-review-actions';
+import { providerAlwaysCurrent, useProviderVisit, type ProviderVisit } from './provider-visit';
 import type { ProviderQueuePage, ProviderQueueRead } from './provider-queue';
 
 export type ProviderReviewTransport = {
@@ -189,6 +190,8 @@ export function ProviderReviewActions({
   disabled = false,
   renderDetails,
   currentScope,
+  current = providerAlwaysCurrent,
+  onCustodyChange,
 }: {
   page?: ProviderQueuePage | undefined;
   locale: string;
@@ -198,13 +201,28 @@ export function ProviderReviewActions({
   disabled?: boolean;
   renderDetails?: (row: ProviderDecisionRow) => ReactNode;
   currentScope?: ProviderScope;
+  current?: () => boolean;
+  onCustodyChange?: (held: boolean, phase?: 'confirmation' | 'writing' | 'settled') => void;
 }) {
   const o = { locale: locale as never };
   const selectedScope = currentScope ?? page?.scope;
   const scope = selectedScope ? providerScopeKey(selectedScope) : '';
+  const visit = useProviderVisit(current, scope);
+  const enabled = useRef(!disabled);
+  if (enabled.current && disabled) visit.retire();
+  enabled.current = !disabled;
   const [selection, setSelection] = useState<{ scope: string; ids: string[] }>({ scope, ids: [] });
   const [batch, setBatch] = useState<ProviderBatch>();
   const [confirmation, setConfirmation] = useState<ProviderBatch>();
+  const confirmationOwner = useRef<ProviderBatch | null>(null);
+  const batchOwner = useRef<ProviderBatch | null>(null);
+  // Sealed presentation and transport stay with the original confirmation, just like native operands.
+  const custody = useRef(
+    new WeakMap<
+      ProviderBatch,
+      { visit: ProviderVisit; transport: ProviderReviewTransport; source: string; context: string; status: string }
+    >(),
+  );
   const [busy, setBusy] = useState(false);
   const [readings, setReadings] = useState<ProviderReading[]>([]);
   const [refreshFailed, setRefreshFailed] = useState(false);
@@ -213,7 +231,10 @@ export function ProviderReviewActions({
   if (selectedScope) lastScope.current = scope;
   // A changed source, Context or status clears checkboxes before the new scope can be acted on.
   if (selection.scope !== scope) setSelection({ scope, ids: [] });
-  if (confirmation && providerScopeKey(confirmation.scope) !== scope) setConfirmation(undefined);
+  if (confirmation && providerScopeKey(confirmation.scope) !== scope) {
+    confirmationOwner.current = null;
+    setConfirmation(undefined);
+  }
   const selected = providerSelectionInScope(selection, scope);
   const visible = page?.rows ?? [];
   function concealed(row: ProviderDecisionRow) {
@@ -245,8 +266,10 @@ export function ProviderReviewActions({
           concealed(row) ||
           !visible.some((current) => providerRowKey(current) === providerRowKey(row) && !concealed(current)),
       ))
-  )
+  ) {
+    confirmationOwner.current = null;
     setConfirmation(undefined);
+  }
   const sameScope = !batch || providerScopeKey(batch.scope) === lastScope.current;
   const attempted = batch?.attempts.some((attempt) => attempt.result);
   const uncertain = batch?.attempts.some(
@@ -260,46 +283,102 @@ export function ProviderReviewActions({
   }
 
   function review(operation: ProviderDecision['operation']) {
-    if (!page || locked) return;
+    if (!visit.live() || !enabled.current || !page || locked) return;
     const next = prepareProviderBatch(page.scope, visible, selected, operation, undefined, page.session);
-    if (next) setConfirmation(next);
+    if (next) {
+      custody.current.set(next, {
+        visit,
+        transport,
+        source: page.sourceLabel,
+        context: page.contextLabel,
+        status: page.statusLabel,
+      });
+      confirmationOwner.current = next;
+      onCustodyChange?.(true, 'confirmation');
+      setConfirmation(next);
+    }
   }
 
-  async function refresh(current: ProviderBatch) {
+  async function refresh(current: ProviderBatch, insideExecution = false) {
+    if (!visit.live() || !enabled.current || batchOwner.current !== current || (!insideExecution && running.current))
+      return;
+    if (!insideExecution) {
+      running.current = true;
+      setBusy(true);
+    }
     setReadings((previous) =>
       previous.map((entry) => (entry.result.ok ? { ...entry, result: { ok: false, reason: 'unavailable' } } : entry)),
     );
     try {
-      const next = await transport.refresh(current);
+      const original = custody.current.get(current);
+      if (!original || original.visit !== visit || !visit.live()) return;
+      const next = await original.transport.refresh(current);
+      if (!visit.live()) return;
       setReadings(next.readings);
       setRefreshFailed(!next.queue.ok);
       // An older decision must not navigate the owning queue back after a scope change.
       if (providerScopeKey(current.scope) === lastScope.current) onRefresh(next.queue);
     } catch {
+      if (!visit.live()) return;
       setRefreshFailed(true);
       if (providerScopeKey(current.scope) === lastScope.current) onRefresh({ ok: false, reason: 'unavailable' });
+    } finally {
+      if (visit.live() && !insideExecution) {
+        running.current = false;
+        setBusy(false);
+      }
     }
   }
 
   async function execute(current: ProviderBatch) {
-    if (running.current) return;
+    if (!visit.live() || !enabled.current || running.current) return;
+    if (
+      current.attempts.some((attempt) => attempt.result)
+        ? batchOwner.current !== current
+        : confirmationOwner.current !== current
+    )
+      return;
+    const original = custody.current.get(current);
+    if (!original || original.visit !== visit) return;
+    confirmationOwner.current = null;
+    batchOwner.current = current;
     running.current = true;
+    onCustodyChange?.(true, 'writing');
     setBusy(true);
     setConfirmation(undefined);
     setSelection({ scope, ids: [] });
     setBatch(current);
     try {
-      const next = await runProviderBatch(current, transport.confirm);
+      const next = await runProviderBatch(current, (command) => {
+        visit.assert();
+        if (!enabled.current) throw new Error('Provider write authority retired');
+        return original.transport.confirm(command);
+      });
+      if (!visit.live()) return;
+      custody.current.set(next, original);
+      batchOwner.current = next;
       setBatch(next);
-      await refresh(next);
+      await refresh(next, true);
     } finally {
-      setBusy(false);
-      running.current = false;
+      if (visit.live()) {
+        setBusy(false);
+        running.current = false;
+        onCustodyChange?.(true, 'settled');
+      }
     }
   }
 
+  if (!visit.live()) return null;
   return (
-    <div className="space-y-5">
+    <div
+      className="space-y-5"
+      onClickCapture={(event) => {
+        if (!visit.live()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+    >
       {page && visible.length > 0 && !concealRows && (
         <>
           {visible.some((row) => !concealed(row)) && (
@@ -332,7 +411,9 @@ export function ProviderReviewActions({
                   variant="ghost"
                   className="min-h-11"
                   disabled={locked || !selected.length}
-                  onClick={() => setSelection({ scope, ids: [] })}
+                  onClick={() => {
+                    if (visit.live()) setSelection({ scope, ids: [] });
+                  }}
                 >
                   {m.provider_clear({}, o)}
                 </Button>
@@ -373,15 +454,21 @@ export function ProviderReviewActions({
                           checked={checked}
                           disabled={
                             locked ||
+                            !row.reading?.ok ||
                             !providerRowIsSelectable(row, page.scope) ||
                             (!checked && selected.length >= providerSelectionLimit)
                           }
-                          onCheckedChange={(value) =>
-                            setSelection({
-                              scope,
-                              ids: value ? [...new Set([...selected, key])] : selected.filter((id) => id !== key),
-                            })
-                          }
+                          onCheckedChange={(value) => {
+                            if (!visit.live() || !enabled.current || locked) return;
+                            setSelection((previous) => {
+                              const ids = providerSelectionInScope(previous, scope);
+                              if (value && !ids.includes(key) && ids.length >= providerSelectionLimit) return previous;
+                              return {
+                                scope,
+                                ids: value ? [...new Set([...ids, key])] : ids.filter((id) => id !== key),
+                              };
+                            });
+                          }}
                         />
                         <span className="sr-only">
                           {m.provider_select_row({ number: index + 1, label: row.label }, o)}
@@ -398,10 +485,18 @@ export function ProviderReviewActions({
       <AlertDialog
         open={!!confirmation && providerScopeKey(confirmation.scope) === scope}
         onOpenChange={(open) => {
-          if (!open) setConfirmation(undefined);
+          if (visit.live() && !open) {
+            confirmationOwner.current = null;
+            setConfirmation(undefined);
+            if (!batch) onCustodyChange?.(false);
+          }
         }}
       >
-        <AlertDialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+        <AlertDialogContent
+          initialFocus={() => (visit.live() ? true : false)}
+          finalFocus={() => (visit.live() ? true : false)}
+          className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
+        >
           <AlertDialogHeader>
             <AlertDialogTitle render={<ContentItemHeading level={2} />} className="text-lg font-medium">
               {m.provider_confirm_title({}, o)}
@@ -411,7 +506,9 @@ export function ProviderReviewActions({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <p className="text-sm">
-            {confirmation?.scope.source} · {confirmation?.scope.context} · {page?.statusLabel}
+            {confirmation && custody.current.get(confirmation)?.source} ·{' '}
+            {confirmation && custody.current.get(confirmation)?.context} ·{' '}
+            {confirmation && custody.current.get(confirmation)?.status}
           </p>
           <ul className="space-y-4">
             {confirmation?.attempts.map(({ row, command }) => (
@@ -428,14 +525,24 @@ export function ProviderReviewActions({
             ))}
           </ul>
           <AlertDialogFooter>
-            <Button variant="outline" className="min-h-11" onClick={() => setConfirmation(undefined)}>
+            <Button
+              variant="outline"
+              className="min-h-11"
+              onClick={() => {
+                if (visit.live()) {
+                  confirmationOwner.current = null;
+                  setConfirmation(undefined);
+                  if (!batch) onCustodyChange?.(false);
+                }
+              }}
+            >
               {m.provider_cancel({}, o)}
             </Button>
             <Button
               className="min-h-11"
               disabled={disabled || busy || !confirmation || providerScopeKey(confirmation.scope) !== scope}
               onClick={() => {
-                if (confirmation) void execute(confirmation);
+                if (visit.live() && confirmation) void execute(confirmation);
               }}
             >
               {confirmation?.attempts[0]?.command.operation === 'reject'
@@ -450,6 +557,10 @@ export function ProviderReviewActions({
           <ContentItemHeading level={2} className="text-lg font-semibold">
             {m.provider_results({}, o)}
           </ContentItemHeading>
+          <p className="text-sm">
+            {custody.current.get(batch)?.source} · {custody.current.get(batch)?.context} ·{' '}
+            {custody.current.get(batch)?.status}
+          </p>
           {!sameScope && <p>{m.provider_scope_changed({}, o)}</p>}
           {busy && <p role="status">{m.provider_working({}, o)}</p>}
           <ul className="space-y-3" aria-live="polite">
@@ -532,6 +643,9 @@ export function ProviderReviewActions({
                 className="min-h-11"
                 disabled={busy}
                 onClick={() => {
+                  if (!visit.live()) return;
+                  batchOwner.current = null;
+                  onCustodyChange?.(false);
                   setBatch(undefined);
                   setReadings([]);
                 }}
