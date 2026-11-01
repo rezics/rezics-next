@@ -238,8 +238,9 @@ function PersonalLibraryRead({
     const listeners = new Set<() => void>();
     const read = () => {
       const actual = client.getQueryState<ReturnType<typeof envelope>>(queryKey);
-      const next =
-        actual?.status === 'error' || (actual?.status === 'success' && !matches(actual.data?.value, subject, address));
+      const valid = actual?.status === 'success' && matches(actual.data?.value, subject, address);
+      const next = actual?.status === 'error' || (seen && !valid) || (actual?.status === 'success' && !valid);
+      seen ||= valid;
       if (next && !invalid) generation++;
       invalid = next;
       return generation;
@@ -319,7 +320,7 @@ function PersonalLibraryRead({
         ? result.result
         : ({ state: 'unavailable' } as const);
     },
-    [origin, accepted],
+    [origin, accepted, isCurrent],
   );
   if (!accepted)
     return <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>;
