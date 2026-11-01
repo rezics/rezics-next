@@ -1,4 +1,5 @@
 import { Exposure, useOperation } from '../kernel/exposure';
+import { ContentItem } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@rezics/ui/shadcn/empty';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -291,22 +292,19 @@ export function MineCollectionsPageView({
               </h2>
               <ul className="space-y-1">
                 {pins.pins.map((pin) => (
-                  <li
+                  <ContentItem
                     key={pin.collectionId}
-                    className="flex min-w-0 items-center justify-between gap-2 rounded-lg px-2 py-1"
-                  >
-                    {pin.target ? (
-                      <a
-                        className="truncate hover:underline"
-                        href={`/${getLocale()}/collections/${encodeURIComponent(pin.collectionId)}`}
-                      >
-                        {browseCollectionTitle({ ...pin.target, title: pin.target.title ?? null })}
-                      </a>
-                    ) : (
-                      <span>{m.library_pin_unavailable()}</span>
-                    )}
-                    <PinControl collectionId={pin.collectionId} pins={pins} mode="list" />
-                  </li>
+                    title={
+                      pin.target
+                        ? browseCollectionTitle({ ...pin.target, title: pin.target.title ?? null })
+                        : m.library_pin_unavailable()
+                    }
+                    headingLevel={3}
+                    {...(pin.target
+                      ? { href: `/${getLocale()}/collections/${encodeURIComponent(pin.collectionId)}` }
+                      : {})}
+                    actions={<PinControl collectionId={pin.collectionId} pins={pins} mode="list" />}
+                  />
                 ))}
               </ul>
             </section>
