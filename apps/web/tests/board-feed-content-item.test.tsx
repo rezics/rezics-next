@@ -69,7 +69,8 @@ test('Discussion rows use shared ContentItem headings and destinations while ret
   expect(markup).toContain('data-slot="board-feed-card"');
   const heading = markup.match(/<h3\b(?=[^>]*data-slot="board-feed-card")[^>]*>[\s\S]*?<\/h3>/u)?.[0];
   const primaryLink = markup.match(/<a\b(?=[^>]*data-slot="list-row-link")[^>]*>/u)?.[0];
-  if (!heading || !primaryLink) throw new Error('The discussion row should expose its visible heading and primary link.');
+  if (!heading || !primaryLink)
+    throw new Error('The discussion row should expose its visible heading and primary link.');
   const headingOpening = heading.slice(0, heading.indexOf('>') + 1);
   const headingId = headingOpening.match(/\bid="([^"]+)"/u)?.[1];
   expect(headingId).toBeDefined();
