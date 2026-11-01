@@ -58,9 +58,9 @@ export const refreshConsentPublic = createServerFn({ method: 'POST', strict: fal
   }))
   .handler(async ({ data }): Promise<ConsentPublic> => {
     setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
     if (data.expectedReader !== null) {
-      const request = getRequest();
-      await prepareSession(request, env as Partial<SessionEnv>);
       if (sessionSubject(request) !== data.expectedReader) return { state: 'denied' };
     } else if (data.session) return { state: 'denied' };
     return readConsentPublic(kernelClient(), data, data.session, data.terminal);

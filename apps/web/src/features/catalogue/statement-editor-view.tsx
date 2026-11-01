@@ -1,4 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import type { ReactNode } from 'react';
 import type { PropertyDefinition } from '@rezics/definitions';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -630,7 +631,7 @@ function StatementEditorLive({
   lifecycle?: ContributionTransport;
   onLifecycleClear?: () => void | Promise<void>;
 }) {
-  const lifetime = useEditorLifetime();
+  const mount = useEditorLifetime();
   const o = { locale: locale as never };
   const feedbackId = useId();
   const [read, setRead] = useState(initial);
@@ -645,6 +646,8 @@ function StatementEditorLive({
   const [cleared, setCleared] = useState(false);
   const pending = useRef<ProposalCommand | null>(null);
   const running = useRef(false);
+  const draftRevision = useRef(0);
+  const lifetime = useCatalogueLifetime(JSON.stringify([draftRevision.current, draft?.property.id]), mount);
   const current = read.ok ? read : undefined;
   const subject = current?.public.subject;
   const label = subject ? pageText(subject.labels, locale).text : '';
@@ -662,7 +665,12 @@ function StatementEditorLive({
       ? `${href}/edit?${new URLSearchParams({ property: draft.property.id, ...(current?.source ? { statement: current.source.id } : {}) })}`
       : undefined;
   const change = (next: StatementInput) => {
+    if (!lifetime.active()) return;
     if (!pending.current) {
+      lifetime.retire();
+      draftRevision.current++;
+      running.current = false;
+      setBusy(false);
       setDraft(next);
       setFailure(null);
     }
@@ -801,6 +809,7 @@ function StatementEditorLive({
               locale={locale}
               transport={lifecycle}
               onClear={async () => {
+                if (!lifetime.active()) return;
                 setCleared(true);
                 setReviewing(false);
                 setDraft(null);

@@ -82,7 +82,7 @@ function CorrectionRoute() {
   const { property, statement, reviewProperty, candidate } = Route.useSearch();
   const locale = getLocale();
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
-  const editorWork = useCatalogueLifetime('transport');
+  const editorWork = useCatalogueLifetime(JSON.stringify([id, locale, property, statement]));
   const { state } = useSession();
   const read = () =>
     readCorrection({ data: editorRequest({ id, property, statement }, editorWork), headers: csrfHeaders() });
@@ -161,8 +161,10 @@ function CorrectionRoute() {
         read: (data) => rereadOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       }}
       onLifecycleClear={async () => {
+        if (!editorWork.live()) return;
         // Cancel in-flight reads before dropping cached subject/candidate payloads.
         await queryClient.cancelQueries({ predicate: (query) => query.queryKey.includes(id) });
+        if (!editorWork.live()) return;
         queryClient.setQueriesData(
           { predicate: (query) => query.queryKey.includes(id) && query.queryKey[0] === 'statement-editor' },
           { ok: false, reason: 'unavailable' },

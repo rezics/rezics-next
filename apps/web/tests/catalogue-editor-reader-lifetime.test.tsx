@@ -31,7 +31,7 @@ function deferred<T>() {
 }
 type Delivery = 'success' | 'failure' | 'throw';
 type Gate = {
-  matches: (data: Record<string, unknown>) => boolean;
+  matches: (data: Record<string, unknown>, raw: Record<string, unknown>) => boolean;
   entered: ReturnType<typeof deferred<void>>;
   delivery: ReturnType<typeof deferred<Delivery>>;
 };
@@ -92,7 +92,10 @@ mock.module('@tanstack/react-start', () => ({
           currentRequest = new Request('https://site.test/en/_server/catalogue', { method: options.method, headers });
           const request = currentRequest;
           const bound = !!data && typeof data === 'object' && 'expectedReader' in data;
-          const held = bound && gate?.matches(data as Record<string, unknown>) ? gate : undefined;
+          const held =
+            bound && gate?.matches(data as Record<string, unknown>, input.data as Record<string, unknown>)
+              ? gate
+              : undefined;
           if (held) gate = undefined;
           if (bound) envelopes.push({ data: structuredClone(data) as Record<string, unknown>, request });
           const result = await handler({ data });
@@ -837,7 +840,7 @@ test('catalogue editors retain only their original live reader, exact address an
             held = delay((data) => data.operation === 'disclose');
             await ui.click(m.statement_consent_confirm());
           } else {
-            held = delay((data) => !('operation' in data) && !('cursor' in data));
+            held = delay((_data, raw) => 'terminal' in raw);
             await ui.click(m.statement_consent_refresh_public());
           }
         }
@@ -886,13 +889,13 @@ test('catalogue editors retain only their original live reader, exact address an
     await consentConfirmation();
     await ui.click(m.statement_consent_confirm());
     await ui.until(() => ui.buttons(m.candidate_retry()).length > 0);
-    const disclosure = structuredClone(uncertainConsent.calls.find((call) => call.path.endsWith(':disclose'))!);
+    const disclosure = structuredClone(uncertainConsent.calls.find((call) => call.path.endsWith('/disclose'))!);
     expect(disclosure.body).toBe('');
     expect(disclosure.keyHeader).toContain(disclosure.key!);
     expect(disclosure.authorization).toBe('Bearer target-owner');
     await ui.click(m.candidate_retry());
-    await ui.until(() => uncertainConsent.calls.filter((call) => call.path.endsWith(':disclose')).length === 2);
-    expect(uncertainConsent.calls.filter((call) => call.path.endsWith(':disclose'))[1]).toEqual(disclosure);
+    await ui.until(() => uncertainConsent.calls.filter((call) => call.path.endsWith('/disclose')).length === 2);
+    expect(uncertainConsent.calls.filter((call) => call.path.endsWith('/disclose'))[1]).toEqual(disclosure);
     await ui.until(() => ui.buttons(m.statement_consent_retract()).length > 0);
 
     // Lifecycle's onClear and finally belong to the exact candidate/admission. Neither

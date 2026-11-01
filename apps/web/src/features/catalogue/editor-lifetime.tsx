@@ -8,8 +8,10 @@ export function catalogueEditor<Props extends object>(Component: ComponentType<P
   return function CatalogueEditor(props: Props) {
     const value = (key: string): unknown => Reflect.get(props, key);
     const composition = value('composition') as { slot?: unknown; statement?: unknown } | undefined;
-    const initial = value('initial') as { public?: { subject?: { id?: string } }; property?: unknown } | undefined;
-    const row = value('row') as { statement?: { id?: string; property?: { id?: string } } } | undefined;
+    const initial = value('initial') as
+      | { public?: { subject?: { id?: string } }; property?: unknown; source?: { id?: string } }
+      | undefined;
+    const row = value('row') as { id?: string; statement?: { id?: string; property?: { id?: string } } } | undefined;
     const read = value('read') as { public?: { subject?: { id?: string } } } | undefined;
     const ancestor = useContext(Work);
     const work = useCatalogueLifetime(
@@ -26,7 +28,9 @@ export function catalogueEditor<Props extends object>(Component: ComponentType<P
         composition?.statement,
         initial?.public?.subject?.id,
         initial?.property,
+        initial?.source?.id,
         read?.public?.subject?.id,
+        row?.id,
         row?.statement?.id,
         row?.statement?.property?.id,
       ]),
@@ -35,9 +39,18 @@ export function catalogueEditor<Props extends object>(Component: ComponentType<P
     const bound = { ...props };
     for (const key of Object.keys(bound)) {
       if (
-        ['transport', 'editors', 'facts', 'relations', 'review', 'confirm', 'propose', 'search', 'refresh'].includes(
-          key,
-        )
+        [
+          'transport',
+          'lifecycle',
+          'editors',
+          'facts',
+          'relations',
+          'review',
+          'confirm',
+          'propose',
+          'search',
+          'refresh',
+        ].includes(key)
       )
         Reflect.set(bound, key, fence(value(key), work));
       else if (key.startsWith('on') && typeof value(key) === 'function') {

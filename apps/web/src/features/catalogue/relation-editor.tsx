@@ -1,4 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { useRef, useState } from 'react';
 import { useId } from 'react';
 import type { SubjectRead } from '@rezics/client';
@@ -68,12 +69,13 @@ function RelationEditorLive({
     session?: string | undefined;
   };
 }) {
-  const lifetime = useEditorLifetime();
+  const mount = useEditorLifetime();
+  const draftRevision = useRef(0);
   const options = { locale: locale as never };
   const formId = useId();
   const [read, setRead] = useState(initial);
   const [draft, setDraft] = useState<RelationDraft>(() => structuredClone(composition?.statement ?? blankDraft('')));
-  const [slot, setSlot] = useState<RelationSlot>(composition?.slot);
+  const [slot, setSlot] = useState<RelationSlot | undefined>(composition?.slot);
   const [candidate, setCandidate] = useState<Candidate>();
   const [rank, setRank] = useState<'normal' | 'preferred'>('normal');
   const [citation, setCitation] = useState('');
@@ -92,6 +94,17 @@ function RelationEditorLive({
   const running = useRef(false);
   const proposedCandidate = useRef<string | undefined>(undefined);
   const picked = useRef<Record<string, EntityPickerSubject>>({});
+  const lifetime = useCatalogueLifetime(
+    JSON.stringify([
+      draftRevision.current,
+      draft.property.id,
+      draft.value,
+      draft.qualifiers,
+      candidate?.id,
+      candidate?.head,
+    ]),
+    mount,
+  );
   const remember = (items: EntityPickerSubject[]) => {
     if (!lifetime.active()) return;
     for (const item of items) picked.current[item.id] = item;
@@ -148,6 +161,11 @@ function RelationEditorLive({
   }
   function edit(next: RelationDraft) {
     if (!lifetime.active()) return;
+    lifetime.retire();
+    draftRevision.current++;
+    running.current = false;
+    setBusy(false);
+    nativeSession.current = undefined;
     setDraft(next);
     setOwnConsent(false);
     setConsentEntry(undefined);
