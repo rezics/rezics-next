@@ -10,12 +10,14 @@ import type { PublishedLogCurrentRead, PublishedLogOwner } from './logs-read';
 const subscribe = () => () => {};
 type Admission = { id: string; active: boolean; allowed: boolean; owner: PublishedLogOwner | null };
 const admission = (allowed: boolean): Admission => ({ id: crypto.randomUUID(), active: true, allowed, owner: null });
+type OwnerRead = { value: PublishedLogCurrentRead; removeId: string | null; restoreId: string | null };
 type Boundary = {
   signature: string;
   active: boolean;
   remove: Admission;
   restore: Admission;
-  seed?: PublishedLogCurrentRead;
+  readId: string;
+  seed?: OwnerRead;
 };
 
 function matches(value: PublishedLogCurrentRead | undefined, viewer: string | null, id: string) {
@@ -59,12 +61,17 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
   const first = boundaryRef.current === null;
   if (boundaryRef.current?.signature !== signature || !boundaryRef.current.active) {
     if (boundaryRef.current) boundaryRef.current.active = false;
+    const remove = admission(!hydrated || removeAllowed);
+    const restore = admission(!hydrated || restoreAllowed);
     boundaryRef.current = {
       signature,
       active: true,
-      remove: admission(!hydrated || removeAllowed),
-      restore: admission(!hydrated || restoreAllowed),
-      ...(first && matches(loaded, viewer, id) ? { seed: loaded } : {}),
+      remove,
+      restore,
+      readId: crypto.randomUUID(),
+      ...(first && matches(loaded, viewer, id)
+        ? { seed: { value: loaded, removeId: remove.id, restoreId: restore.id } }
+        : {}),
     };
   }
   const boundary = boundaryRef.current!;
@@ -76,6 +83,9 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
     if (!previous.active || previous.allowed !== allowed) {
       previous.active = false;
       boundary[name] = admission(allowed);
+      // Losing an admission must not refresh/retire the other operation's exact intent.
+      // A newly admitted episode needs fresh evidence, rather than the old query's payload.
+      if (allowed) boundary.readId = crypto.randomUUID();
       // A previously observed admission cannot be reseeded from the loader, including ABA.
       delete boundary.seed;
     }
@@ -103,7 +113,6 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
     };
   }, [boundary]);
   useLayoutEffect(() => {
-    boundary.active = true;
     const observe = () => {
       if (!hydrated || !boundary.active || !viewer) return;
       let retired = false;
@@ -132,7 +141,7 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
   }, [boundary, remove, restore, client, hydrated]);
   const query = useQuery({
     ...personalRead,
-    queryKey: ['published-log-owner', signature, remove.id, restore.id],
+    queryKey: ['published-log-owner', signature, boundary.readId],
     enabled: personalRead.enabled && hydrated && !!viewer && (remove.allowed || restore.allowed),
     initialData: boundary.seed,
     staleTime: Infinity,
@@ -141,17 +150,23 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     queryFn: async () => {
-      if (!currentViewer() || !remove.active || !restore.active) throw new Error('Published log read retired');
+      if (!currentViewer()) throw new Error('Published log read retired');
+      const needsRemove = !remove.owner && currentAdmission(remove, 'published_log.delete');
+      const needsRestore = !restore.owner && currentAdmission(restore, 'published_log.create');
       const value = await readPublishedLogCurrent({ data: { id } });
-      if (!currentViewer() || !remove.active || !restore.active || value.requestedId !== id || value.log.id !== id)
+      if (!currentViewer() || value.requestedId !== id || value.log.id !== id)
         throw new Error('Published log read retired');
-      return value;
+      return {
+        value,
+        removeId: needsRemove && currentAdmission(remove, 'published_log.delete') ? remove.id : null,
+        restoreId: needsRestore && currentAdmission(restore, 'published_log.create') ? restore.id : null,
+      };
     },
   });
-  if (query.data || query.isError) {
-    const owner = !query.isError && matches(query.data, viewer, id) ? query.data!.owner : null;
-    if (remove.allowed) remove.owner = owner;
-    if (restore.allowed) restore.owner = owner;
+  if (query.data && !query.isError) {
+    const owner = matches(query.data.value, viewer, id) ? query.data.value.owner : null;
+    if (query.data.removeId === remove.id && currentAdmission(remove, 'published_log.delete')) remove.owner = owner;
+    if (query.data.restoreId === restore.id && currentAdmission(restore, 'published_log.create')) restore.owner = owner;
   }
   function operand(value: Admission, operation: 'published_log.delete' | 'published_log.create') {
     const owner = value.owner;
@@ -181,7 +196,7 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
     (currentAdmission(remove, 'published_log.delete') && remove.owner) ||
     (currentAdmission(restore, 'published_log.create') && restore.owner) ||
     null;
-  const log = query.data?.log.id === id ? query.data.log : loaded.log;
+  const log = query.data?.value.log.id === id ? query.data.value.log : loaded.log;
   return (
     <PublishedLogPageView
       log={log}

@@ -142,7 +142,8 @@ mock.module('../src/library/copies-undo', () => ({
   },
 }));
 const { CurrentPublishedLog } = await import('../src/library/log-current');
-const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const exposure = await import('../src/kernel/exposure');
+const { QueryClient, QueryClientProvider, useQuery } = await import('@tanstack/react-query');
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
@@ -180,7 +181,7 @@ async function mount(initial?: PublishedLogCurrentRead, observed?: Viewer, hydra
   });
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   cache.setQueryData(['session'], current);
-  cache.setQueryData(['exposure', 'viewer'], ['reading_progress']);
+  cache.setQueryData(['exposure', 'viewer'], ['reading_progress', 'published_log.delete', 'published_log.create']);
   cache.setQueryData(['exposure', 'anonymous'], ['reading_progress']);
   const router = createRouter({
     routeTree: createRootRoute(),
@@ -408,6 +409,74 @@ test('observed viewer/admission ABA retires private state and requires a fresh a
     expect(h.host.querySelector('[role="alert"]')).toBeNull();
   } finally {
     await h.close();
+  }
+});
+
+test('independent admission loss preserves the other operation and readmission needs fresh evidence', async () => {
+  // Exercise the two existing operations independently even while today's catalogue maps them to one group.
+  const admitted = spyOn(exposure, 'operationIsAdmitted').mockImplementation(
+    (operation, groups) => groups?.includes(operation) ?? false,
+  );
+  const operation = spyOn(exposure, 'useOperation').mockImplementation((operation) => {
+    const { data } = useQuery<string[]>({ queryKey: ['exposure', 'viewer'], enabled: false });
+    return data?.includes(operation) ?? false;
+  });
+  try {
+    const deleting = await mount();
+    try {
+      await deleting.remove();
+      const first = writes[0]!;
+      await settle(() =>
+        deleting.cache.setQueryData(['exposure', 'viewer'], ['reading_progress', 'published_log.delete']),
+      );
+      expect(deleting.reads).toHaveLength(0);
+      expect(deleting.button(m.library_logs_confirm_delete())!.disabled).toBe(true);
+      await settle(() => first.work.resolve(Response.json({ code: 'conflict' }, { status: 409 })));
+      await deleting.click(m.library_logs_confirm_delete());
+      expect(writes[1]!.request.headers.get('idempotency-key')).toBe(first.request.headers.get('idempotency-key'));
+      await settle(() => writes[1]!.work.resolve(deleted()));
+      expect(deleting.button(m.editor_undo())).toBeUndefined();
+    } finally {
+      await deleting.close();
+    }
+    const restoring = await mount();
+    try {
+      await restoring.remove();
+      await settle(() => writes[0]!.work.resolve(deleted()));
+      const deadline = undoProps!.deadline;
+      await settle(() =>
+        restoring.cache.setQueryData(['exposure', 'viewer'], ['reading_progress', 'published_log.create']),
+      );
+      expect(restoring.reads).toHaveLength(0);
+      expect(undoProps!.deadline).toBe(deadline);
+      await restoring.click(m.editor_undo());
+      expect(writes[1]!.body).toEqual({ deletionId, revision: 8 });
+      await settle(() =>
+        writes[1]!.work.resolve(
+          Response.json(
+            { publishedLog: { id: 'original' } },
+            {
+              headers: { 'Library-Published-Log-Revision': '11' },
+            },
+          ),
+        ),
+      );
+      expect(restoring.button(m.library_logs_delete())).toBeUndefined();
+      await settle(() =>
+        restoring.cache.setQueryData(
+          ['exposure', 'viewer'],
+          ['reading_progress', 'published_log.create', 'published_log.delete'],
+        ),
+      );
+      expect(restoring.button(m.library_logs_delete())).toBeUndefined();
+      await restoring.resolveRead('A', 'original', 11);
+      expect(restoring.button(m.library_logs_delete())).toBeDefined();
+    } finally {
+      await restoring.close();
+    }
+  } finally {
+    operation.mockRestore();
+    admitted.mockRestore();
   }
 });
 
