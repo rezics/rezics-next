@@ -38,7 +38,7 @@ test('reservePerHour accepts every finite positive fractional hourly value while
       ).toThrow('invalid reservePerHour');
     }
 
-    expect(reloadWithReserve(0)).toEqual(initial[0]);
+    expect(reloadWithReserve(0)).toEqual(initial[0]!);
     expect(events).toHaveLength(1);
     expect(events[0]).toContain('invalid reservePerHour');
   } finally {
