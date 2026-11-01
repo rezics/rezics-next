@@ -344,11 +344,7 @@ function MangaCreate({
                 <CreateSubjectLanguageRemove
                   locale={locale}
                   rowId={`${termsId}-row-${term.id}`}
-                  focusId={
-                    terms[index + 1]
-                      ? `${termsId}-language-${terms[index + 1]!.id}`
-                      : `${termsId}-add-language`
-                  }
+                  focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add-language`}
                   disabled={locked}
                   onRemove={() => {
                     if (locked || running.current || request.current) return;
