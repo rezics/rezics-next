@@ -3347,7 +3347,7 @@ CREATE TABLE semantic.definition_catalogue_identity (
     route integer NOT NULL,
     root_digest text NOT NULL,
     identity_key text NOT NULL,
-    identity text NOT NULL,
+    identity bytea NOT NULL,
     digest text NOT NULL,
     CONSTRAINT definition_catalogue_identity_route_check CHECK ((route = 0))
 );
@@ -3361,12 +3361,12 @@ CREATE TABLE semantic.definition_catalogue_kind (
     route integer NOT NULL,
     root_digest text NOT NULL,
     id_key text NOT NULL,
-    id text NOT NULL,
+    id bytea NOT NULL,
     ordinal bigint NOT NULL,
     declaration_digest text NOT NULL,
-    body jsonb NOT NULL,
+    body json NOT NULL,
     exact_type_key text NOT NULL,
-    exact_type_id text NOT NULL,
+    exact_type_id bytea NOT NULL,
     precedence integer NOT NULL,
     eligible boolean NOT NULL,
     CONSTRAINT definition_catalogue_kind_route_check CHECK ((route = 0))
@@ -3399,8 +3399,8 @@ CREATE TABLE semantic.definition_catalogue_member (
     release_digest text NOT NULL,
     category text NOT NULL,
     id_key text NOT NULL,
-    id text NOT NULL,
-    body jsonb NOT NULL,
+    id bytea NOT NULL,
+    body json NOT NULL,
     CONSTRAINT definition_catalogue_member_category_check CHECK ((category = ANY (ARRAY['type'::text, 'property'::text, 'profile'::text]))),
     CONSTRAINT definition_catalogue_member_route_check CHECK ((route = 0))
 );
@@ -3416,9 +3416,9 @@ CREATE TABLE semantic.definition_catalogue_task (
     task_id bigint NOT NULL,
     kind text NOT NULL,
     digest text NOT NULL,
-    entry_key text,
-    first_key text,
-    last_key text,
+    entry_key bytea,
+    first_key bytea,
+    last_key bytea,
     next_node bigint,
     offset_rows integer DEFAULT 0 NOT NULL,
     done boolean DEFAULT false NOT NULL,
