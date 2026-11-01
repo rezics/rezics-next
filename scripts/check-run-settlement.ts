@@ -272,7 +272,8 @@ function validateNative(value: unknown): CheckRunNativeDisposition | null {
   const item = closedObject(value, ['exitCode', 'lifetimeFailure', 'receiptSha256'], 'native result');
   if (!Number.isInteger(item.exitCode) || (item.exitCode as number) < 0 || (item.exitCode as number) > 255)
     throw new Error('check-run-settlement: invalid native exit code');
-  if (typeof item.lifetimeFailure !== 'boolean') throw new Error('check-run-settlement: invalid native lifetime status');
+  if (typeof item.lifetimeFailure !== 'boolean')
+    throw new Error('check-run-settlement: invalid native lifetime status');
   return {
     exitCode: item.exitCode as number,
     lifetimeFailure: item.lifetimeFailure,
@@ -281,11 +282,16 @@ function validateNative(value: unknown): CheckRunNativeDisposition | null {
 }
 
 function validatePreparedInputs(value: unknown): CheckRunPreparedInputs {
-  const item = closedObject(value, ['status', 'sourceSha256', 'manifestSha256', 'fileCount', 'totalBytes'], 'prepared inputs');
+  const item = closedObject(
+    value,
+    ['status', 'sourceSha256', 'manifestSha256', 'fileCount', 'totalBytes'],
+    'prepared inputs',
+  );
   if (item.status !== 'verified' && item.status !== 'unavailable')
     throw new Error('check-run-settlement: invalid prepared input status');
   const sourceSha256 = item.sourceSha256 === null ? null : boundedHash(item.sourceSha256, 'prepared source hash');
-  const manifestSha256 = item.manifestSha256 === null ? null : boundedHash(item.manifestSha256, 'prepared manifest hash');
+  const manifestSha256 =
+    item.manifestSha256 === null ? null : boundedHash(item.manifestSha256, 'prepared manifest hash');
   const fileCount = boundedCount(item.fileCount, 'prepared input file count', 50_000);
   const totalBytes = boundedCount(item.totalBytes, 'prepared input byte count', 1024 * 1024 * 1024);
   if (item.status === 'verified' && (!sourceSha256 || !manifestSha256))
@@ -481,7 +487,19 @@ function validateCleanup(value: unknown): CheckRunCleanupDisposition {
 export function validateCheckRunFinalSettlement(value: unknown): CheckRunFinalSettlement {
   const item = closedObject(
     value,
-    ['schema', 'type', 'invocationId', 'nonce', 'binding', 'physical', 'native', 'preparedInputs', 'returns', 'cleanup', 'failures'],
+    [
+      'schema',
+      'type',
+      'invocationId',
+      'nonce',
+      'binding',
+      'physical',
+      'native',
+      'preparedInputs',
+      'returns',
+      'cleanup',
+      'failures',
+    ],
     'final settlement',
   );
   if (item.schema !== CHECK_RUN_SETTLEMENT_SCHEMA || item.type !== 'final-settlement')
@@ -499,7 +517,7 @@ export function validateCheckRunFinalSettlement(value: unknown): CheckRunFinalSe
   if (
     cleanup.disposition === 'settled' &&
     (preparedInputs.status !== 'verified' ||
-      returns.status !== 'empty' && returns.status !== 'restored' ||
+      (returns.status !== 'empty' && returns.status !== 'restored') ||
       cleanup.remote !== 'verified' ||
       cleanup.transportChild !== 'reaped' ||
       cleanup.source !== 'verified' ||
@@ -553,11 +571,14 @@ export function decodeCheckRunSettlement(raw: string, expected: CheckRunMessageE
     throw new Error('check-run-settlement: malformed or partial message');
   }
   const message = validateCheckRunFinalSettlement(parsed);
-  if (!expected.nativeTerminalSeen) throw new Error('check-run-settlement: final settlement arrived before native terminal');
+  if (!expected.nativeTerminalSeen)
+    throw new Error('check-run-settlement: final settlement arrived before native terminal');
   if (message.invocationId !== expected.invocationId) throw new Error('check-run-settlement: foreign invocation id');
   if (message.nonce !== expected.nonce) throw new Error('check-run-settlement: wrong invocation nonce');
   if (checkRunBindingHash(message.binding) !== checkRunBindingHash(expected.binding))
-    throw new Error('check-run-settlement: candidate, argv, environment, producer, host, preparation or return binding mismatch');
+    throw new Error(
+      'check-run-settlement: candidate, argv, environment, producer, host, preparation or return binding mismatch',
+    );
   if (message.returns.declarationsSha256 !== expected.binding.returnsSha256)
     throw new Error('check-run-settlement: returned artifacts do not match the declared return binding');
   if (
@@ -817,9 +838,17 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
   const nonce = boundedText(item.nonce, 'invocation nonce', 128);
   if (!/^[a-f0-9]{64}$/.test(nonce)) throw new Error('check-run-settlement: invalid invocation record nonce');
   if (
-    !['registered', 'queued', 'uploading', 'running', 'native-terminal', 'settled', 'unknown', 'cancel-requested', 'cancelled'].includes(
-      String(item.phase),
-    )
+    ![
+      'registered',
+      'queued',
+      'uploading',
+      'running',
+      'native-terminal',
+      'settled',
+      'unknown',
+      'cancel-requested',
+      'cancelled',
+    ].includes(String(item.phase))
   )
     throw new Error('check-run-settlement: invalid invocation phase');
   const cancellation = closedObject(item.cancellation, ['requested', 'signal'], 'cancellation state');
@@ -830,10 +859,15 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
     throw new Error('check-run-settlement: invalid cancellation state');
   let snapshot: CheckRunInvocationRecord['snapshot'] = null;
   if (item.snapshot !== null) {
-    const rawSnapshot = closedObject(item.snapshot, ['workspace', 'scratch', 'sourceSha256', 'inputFiles'], 'snapshot state');
+    const rawSnapshot = closedObject(
+      item.snapshot,
+      ['workspace', 'scratch', 'sourceSha256', 'inputFiles'],
+      'snapshot state',
+    );
     const workspace = boundedText(rawSnapshot.workspace, 'frozen workspace path', 4096);
     const scratch = boundedText(rawSnapshot.scratch, 'frozen scratch path', 4096);
-    if (!isAbsolute(workspace) || !isAbsolute(scratch)) throw new Error('check-run-settlement: snapshot paths must be absolute');
+    if (!isAbsolute(workspace) || !isAbsolute(scratch))
+      throw new Error('check-run-settlement: snapshot paths must be absolute');
     snapshot = {
       workspace,
       scratch,
@@ -844,7 +878,8 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
   let candidateWorkspace: string | null = null;
   if (item.candidateWorkspace !== null) {
     candidateWorkspace = boundedText(item.candidateWorkspace, 'candidate workspace path', 4096);
-    if (!isAbsolute(candidateWorkspace)) throw new Error('check-run-settlement: candidate workspace path must be absolute');
+    if (!isAbsolute(candidateWorkspace))
+      throw new Error('check-run-settlement: candidate workspace path must be absolute');
   }
   if (!Array.isArray(item.returns) || item.returns.length > CHECK_RUN_SETTLEMENT_MAX_ITEMS)
     throw new Error('check-run-settlement: invalid declared returns');
@@ -987,10 +1022,16 @@ export async function markCheckRunQueued(
       (!options.returns ||
         boundedHash(options.snapshot.sourceSha256, 'snapshot source hash') !== record.binding.sourceSha256)
     )
-      throw new Error('check-run-settlement: frozen snapshot or return declarations do not match the registered binding');
+      throw new Error(
+        'check-run-settlement: frozen snapshot or return declarations do not match the registered binding',
+      );
     if (record.phase === 'queued') {
-      const candidateWorkspace = options.candidateWorkspace ? resolve(options.candidateWorkspace) : record.candidateWorkspace;
-      const paths = options.returns ? validatePathList([...options.returns], 'declared return path', true) : record.returns;
+      const candidateWorkspace = options.candidateWorkspace
+        ? resolve(options.candidateWorkspace)
+        : record.candidateWorkspace;
+      const paths = options.returns
+        ? validatePathList([...options.returns], 'declared return path', true)
+        : record.returns;
       const snapshot = options.snapshot
         ? {
             workspace: resolve(options.snapshot.workspace),
@@ -1032,7 +1073,8 @@ export async function allocateCheckRunPhysical(
 ): Promise<CheckRunInvocationRecord> {
   return mutateRecord(invocationId, options, async (directory, record) => {
     if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
-    if (record.cancellation.requested) throw new Error('check-run-settlement: cancelled invocation cannot allocate a run');
+    if (record.cancellation.requested)
+      throw new Error('check-run-settlement: cancelled invocation cannot allocate a run');
     if (record.phase !== 'queued' && record.phase !== 'uploading')
       throw new Error(`check-run-settlement: cannot allocate a run from ${record.phase}`);
     const physical = validatePhysical({ host, run });
@@ -1055,11 +1097,7 @@ export async function withCheckRunSpawnPermit<T>(
     const physical = validatePhysical({ host, run });
     if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
     if (record.cancellation.requested) throw new Error('check-run-settlement: cancelled invocation cannot start');
-    if (
-      !record.physical ||
-      record.physical.host !== physical.host ||
-      record.physical.run !== physical.run
-    )
+    if (!record.physical || record.physical.host !== physical.host || record.physical.run !== physical.run)
       throw new Error('check-run-settlement: spawn does not match the registered physical run');
     if (record.phase !== 'uploading' && record.phase !== 'running')
       throw new Error(`check-run-settlement: cannot start from ${record.phase}`);
@@ -1092,11 +1130,7 @@ export async function markCheckRunNativeTerminal(
   return mutateRecord(invocationId, options, async (directory, record) => {
     const physical = validatePhysical({ host: nativeValue.host, run: nativeValue.run });
     if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
-    if (
-      !record.physical ||
-      record.physical.host !== physical.host ||
-      record.physical.run !== physical.run
-    )
+    if (!record.physical || record.physical.host !== physical.host || record.physical.run !== physical.run)
       throw new Error('check-run-settlement: native result does not match its physical run');
     if (record.native) throw new Error('check-run-settlement: duplicate native terminal event');
     if (!['uploading', 'running', 'cancel-requested'].includes(record.phase))
@@ -1172,10 +1206,7 @@ export async function cancelCheckRunInvocation(
       phase: 'cancel-requested',
       cancellation: { requested: true, signal: selectedSignal },
     });
-    requestExecutionCancellation(
-      { file: cancellationFile(directory, invocationId), id: invocationId },
-      selectedSignal,
-    );
+    requestExecutionCancellation({ file: cancellationFile(directory, invocationId), id: invocationId }, selectedSignal);
     return next;
   });
 }
@@ -1299,7 +1330,9 @@ export async function setCheckRunUnknown(
 }
 
 export function checkRunBindingHash(bindingValue: CheckRunInvocationBinding): string {
-  return createHash('sha256').update(JSON.stringify(validateCheckRunInvocationBinding(bindingValue))).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify(validateCheckRunInvocationBinding(bindingValue)))
+    .digest('hex');
 }
 
 export function checkRunNativeReceiptDigest(receipt: RemotePhysicalRunReceipt): string {
@@ -1360,7 +1393,8 @@ if (import.meta.main) {
       const id = args[0];
       const hostsAt = args.indexOf('--hosts');
       const hostsFile = hostsAt >= 0 ? args[hostsAt + 1] : undefined;
-      if (!id || !hostsFile || !isAbsolute(hostsFile)) throw new Error('reconcile needs an id and absolute --hosts file');
+      if (!id || !hostsFile || !isAbsolute(hostsFile))
+        throw new Error('reconcile needs an id and absolute --hosts file');
       const record = await getCheckRunStatus(id, stateOptions);
       if (record.final) {
         process.stdout.write(`${JSON.stringify(record)}\n`);

@@ -633,7 +633,8 @@ function parseReceiptChannel(
     !nonce ||
     nonce.length > 256 ||
     (invocationId !== undefined && !/^[a-f0-9]{64}$/.test(nonce)) ||
-    (invocationId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(invocationId))
+    (invocationId !== undefined &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(invocationId))
   )
     throw new Error('check-run: authenticated settlement needs FD 3, a 64-character nonce, and a UUID invocation id');
   return {
@@ -820,7 +821,10 @@ function identifyTransportChild(pid: number): CheckRunTransportChildIdentity | n
   if (process.platform !== 'linux' || !Number.isSafeInteger(pid) || pid < 1 || pid === process.pid) return null;
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-    const fields = stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/);
+    const fields = stat
+      .slice(stat.lastIndexOf(')') + 1)
+      .trim()
+      .split(/\s+/);
     const bootId = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
     const start = fields[19];
     if (!start || !/^\d+$/.test(start)) return null;
@@ -980,7 +984,8 @@ async function trustedProducerClosureHash(trustedRoot: string): Promise<string> 
 }
 
 function finalPreparedInputs(evidence: RemotePreparedInputsEvidence | null): CheckRunPreparedInputs {
-  if (!evidence) return { status: 'unavailable', sourceSha256: null, manifestSha256: null, fileCount: 0, totalBytes: 0 };
+  if (!evidence)
+    return { status: 'unavailable', sourceSha256: null, manifestSha256: null, fileCount: 0, totalBytes: 0 };
   return {
     status: 'verified',
     sourceSha256: evidence.sourceSha256,
@@ -996,8 +1001,7 @@ function finalReturns(
   local: ReturnedOutputResult | undefined,
   declarations: readonly string[],
 ): CheckRunReturnDisposition {
-  if (declarations.length === 0)
-    return { status: 'empty', declarationsSha256, entries: [], missing: [], failures: [] };
+  if (declarations.length === 0) return { status: 'empty', declarationsSha256, entries: [], missing: [], failures: [] };
   if (!manifest || manifest.status === 'unknown')
     return {
       status: 'unknown',
@@ -1064,15 +1068,15 @@ function finalCleanup(
 function remoteCleanupIsVerified(remote: RemoteCheckSettlement | undefined): boolean {
   return Boolean(
     remote &&
-      remote.cleanup.schema === 1 &&
-      remote.cleanup.status === 'verified' &&
-      remote.cleanup.host === remote.host &&
-      remote.cleanup.run === remote.run &&
-      remote.cleanup.supervisorStopped === true &&
-      remote.cleanup.commandGroupTerminal === true &&
-      remote.cleanup.containersRemoved === true &&
-      remote.cleanup.runDirectoryRemoved === true &&
-      remote.cleanup.failures.length === 0,
+    remote.cleanup.schema === 1 &&
+    remote.cleanup.status === 'verified' &&
+    remote.cleanup.host === remote.host &&
+    remote.cleanup.run === remote.run &&
+    remote.cleanup.supervisorStopped === true &&
+    remote.cleanup.commandGroupTerminal === true &&
+    remote.cleanup.containersRemoved === true &&
+    remote.cleanup.runDirectoryRemoved === true &&
+    remote.cleanup.failures.length === 0,
   );
 }
 
@@ -1521,11 +1525,10 @@ async function runCheckWithFinalSettlement(
         nativeReceiptPromise = (async () => {
           const parsed = parseRemotePhysicalRunReceipt(receipt);
           if (!parsed || !['a', 'b'].includes(parsed.host))
-            throw new CheckRunUnavailable('check-run: remote native terminal receipt is invalid or names a forbidden host');
-          if (
-            allocatedPhysical &&
-            (allocatedPhysical.host !== parsed.host || allocatedPhysical.run !== parsed.run)
-          )
+            throw new CheckRunUnavailable(
+              'check-run: remote native terminal receipt is invalid or names a forbidden host',
+            );
+          if (allocatedPhysical && (allocatedPhysical.host !== parsed.host || allocatedPhysical.run !== parsed.run))
             throw new CheckRunUnavailable('check-run: native receipt does not match the admitted physical identity');
           receivedReceipt = parsed;
           const digest = checkRunNativeReceiptDigest(parsed);
@@ -1548,7 +1551,8 @@ async function runCheckWithFinalSettlement(
             physical: { host: parsed.host, run: parsed.run },
             receipt: parsed,
           });
-          const nativeWriter = dependencies.receiptWriter ?? (receiptChannel?.invocationId ? receiptChannel.write : undefined);
+          const nativeWriter =
+            dependencies.receiptWriter ?? (receiptChannel?.invocationId ? receiptChannel.write : undefined);
           if (nativeWriter) {
             try {
               nativeWriter(`${JSON.stringify(message)}\n`);
@@ -1562,16 +1566,20 @@ async function runCheckWithFinalSettlement(
         return nativeReceiptPromise;
       },
       settled: (settlement) => {
-        remoteSettlementPromise = Promise.resolve().then(() => {
-          if (
-            allocatedPhysical &&
-            (settlement.host !== allocatedPhysical.host || settlement.run !== allocatedPhysical.run)
-          )
-            throw new CheckRunUnavailable('check-run: remote final evidence does not match the admitted physical identity');
-          remoteSettlement = settlement;
-        }).catch((error) => {
-          runFailure ??= error;
-        });
+        remoteSettlementPromise = Promise.resolve()
+          .then(() => {
+            if (
+              allocatedPhysical &&
+              (settlement.host !== allocatedPhysical.host || settlement.run !== allocatedPhysical.run)
+            )
+              throw new CheckRunUnavailable(
+                'check-run: remote final evidence does not match the admitted physical identity',
+              );
+            remoteSettlement = settlement;
+          })
+          .catch((error) => {
+            runFailure ??= error;
+          });
         return remoteSettlementPromise;
       },
     };
@@ -1622,7 +1630,9 @@ async function runCheckWithFinalSettlement(
       try {
         dependencies.onRetainSnapshot?.(snapshot);
       } catch (error) {
-        process.stderr.write(`check-run: retained snapshot observer failed: ${error instanceof Error ? error.message : error}\n`);
+        process.stderr.write(
+          `check-run: retained snapshot observer failed: ${error instanceof Error ? error.message : error}\n`,
+        );
       }
     } else {
       try {
@@ -1643,7 +1653,13 @@ async function runCheckWithFinalSettlement(
       run: receivedReceipt.run,
       native: receivedReceipt,
       preparedInputs: null,
-      returns: { schema: 1, status: 'unknown', entries: [], missing: [], failures: ['remote return and cleanup settlement is unavailable'] },
+      returns: {
+        schema: 1,
+        status: 'unknown',
+        entries: [],
+        missing: [],
+        failures: ['remote return and cleanup settlement is unavailable'],
+      },
       cleanup: {
         schema: 1,
         host: receivedReceipt.host,
@@ -1680,7 +1696,9 @@ async function runCheckWithFinalSettlement(
 
   const preparedInputs = finalPreparedInputs(remoteSettlement.preparedInputs);
   if (preparedInputs.status !== 'verified' || preparedInputs.sourceSha256 !== snapshot.sourceHash) {
-    runFailure ??= new CheckRunUnavailable('check-run: remote prepared source/generated input evidence is unavailable or mismatched');
+    runFailure ??= new CheckRunUnavailable(
+      'check-run: remote prepared source/generated input evidence is unavailable or mismatched',
+    );
   }
   try {
     clearDeclaredArtifacts(candidateRoot, returns);
@@ -1714,7 +1732,9 @@ async function runCheckWithFinalSettlement(
     const candidateFingerprint = await inputFingerprint(candidateRoot, workspaceFiles(candidateRoot), returns);
     if (frozenFingerprint !== snapshot.sourceHash || candidateFingerprint !== snapshot.sourceHash) {
       sourceState = 'changed';
-      runFailure ??= new CheckRunUnavailable('check-run: candidate or frozen source changed while the remote run was active');
+      runFailure ??= new CheckRunUnavailable(
+        'check-run: candidate or frozen source changed while the remote run was active',
+      );
     } else sourceState = 'verified';
   } catch (error) {
     sourceState = 'unknown';
@@ -1741,26 +1761,40 @@ async function runCheckWithFinalSettlement(
     } catch (error) {
       cleanupFailure = error;
       localWorktree = existsSync(snapshot.workspace) ? 'retained' : 'unknown';
-      process.stderr.write(`check-run: frozen source cleanup failed: ${error instanceof Error ? error.message : error}\n`);
+      process.stderr.write(
+        `check-run: frozen source cleanup failed: ${error instanceof Error ? error.message : error}\n`,
+      );
     }
   }
   if (localWorktree !== 'removed') {
     try {
       dependencies.onRetainSnapshot?.(snapshot);
     } catch (error) {
-      process.stderr.write(`check-run: retained snapshot observer failed: ${error instanceof Error ? error.message : error}\n`);
+      process.stderr.write(
+        `check-run: retained snapshot observer failed: ${error instanceof Error ? error.message : error}\n`,
+      );
     }
   }
 
   const cleanupFailures = [
     ...(cleanupFailure ? [cleanupFailure instanceof Error ? cleanupFailure.message : String(cleanupFailure)] : []),
     ...(receiptForwardFailure
-      ? [`native terminal FD 3 write failed: ${receiptForwardFailure instanceof Error ? receiptForwardFailure.message : String(receiptForwardFailure)}`]
+      ? [
+          `native terminal FD 3 write failed: ${receiptForwardFailure instanceof Error ? receiptForwardFailure.message : String(receiptForwardFailure)}`,
+        ]
       : []),
     ...(remoteSettlement.cleanup.failures ?? []),
   ].map((failure) => failure.slice(0, 512));
-  if (!remoteCleanupComplete && cleanupFailures.length === 0) cleanupFailures.push('remote cleanup or transport child terminality is unknown');
-  const cleanupDisposition = finalCleanup(remoteSettlement, sourceState, localWorktree, cleanupFailures, preparedInputs, returnDisposition);
+  if (!remoteCleanupComplete && cleanupFailures.length === 0)
+    cleanupFailures.push('remote cleanup or transport child terminality is unknown');
+  const cleanupDisposition = finalCleanup(
+    remoteSettlement,
+    sourceState,
+    localWorktree,
+    cleanupFailures,
+    preparedInputs,
+    returnDisposition,
+  );
   const primaryFailures = [
     ...(runFailure ? [runFailure instanceof Error ? runFailure.message : String(runFailure)] : []),
     ...(returnFailure ? [returnFailure instanceof Error ? returnFailure.message : String(returnFailure)] : []),
@@ -1819,9 +1853,9 @@ async function runCheckWithFinalSettlement(
   }
 
   if (runFailure) process.stderr.write(`${runFailure instanceof Error ? runFailure.message : String(runFailure)}\n`);
-  if (returnFailure) process.stderr.write(`${returnFailure instanceof Error ? returnFailure.message : String(returnFailure)}\n`);
-  if (finalRecord?.final?.native && finalRecord.final.native.exitCode !== 0)
-    return finalRecord.final.native.exitCode;
+  if (returnFailure)
+    process.stderr.write(`${returnFailure instanceof Error ? returnFailure.message : String(returnFailure)}\n`);
+  if (finalRecord?.final?.native && finalRecord.final.native.exitCode !== 0) return finalRecord.final.native.exitCode;
   if (receivedReceipt.exitCode !== 0) return receivedReceipt.exitCode;
   if (!finalRecord?.final || finalRecord.final.cleanup.disposition !== 'settled') return REMOTE_TRANSPORT_FAILURE;
   return 0;
@@ -1916,14 +1950,11 @@ export async function reconcileRegisteredCheckRun(
           returnFailure = error;
         }
       } else {
-        returnFailure = new CheckRunUnavailable('check-run: retained source changed before reconciliation output restoration');
+        returnFailure = new CheckRunUnavailable(
+          'check-run: retained source changed before reconciliation output restoration',
+        );
       }
-      const returnDisposition = finalReturns(
-        remote.returns,
-        record.binding.returnsSha256,
-        local,
-        record.returns,
-      );
+      const returnDisposition = finalReturns(remote.returns, record.binding.returnsSha256, local, record.returns);
       let source: CheckRunCleanupDisposition['source'] = 'unknown';
       try {
         const frozenNow = await inputFingerprint(record.snapshot.workspace, record.snapshot.inputFiles, record.returns);
@@ -1937,7 +1968,9 @@ export async function reconcileRegisteredCheckRun(
       }
       const prepared = finalPreparedInputs(remote.preparedInputs);
       if (prepared.status !== 'verified' || prepared.sourceSha256 !== record.binding.sourceSha256)
-        returnFailure ??= new CheckRunUnavailable('check-run: retained prepared-input evidence is unavailable or mismatched');
+        returnFailure ??= new CheckRunUnavailable(
+          'check-run: retained prepared-input evidence is unavailable or mismatched',
+        );
       const returnComplete = returnDisposition.status === 'empty' || returnDisposition.status === 'restored';
       let localWorktree: CheckRunCleanupDisposition['localWorktree'] = 'retained';
       if (
@@ -1950,7 +1983,8 @@ export async function reconcileRegisteredCheckRun(
       ) {
         try {
           cleanupWorktree(candidateRoot, record.snapshot.workspace, record.snapshot.scratch);
-          localWorktree = !existsSync(record.snapshot.workspace) && !existsSync(record.snapshot.scratch) ? 'removed' : 'unknown';
+          localWorktree =
+            !existsSync(record.snapshot.workspace) && !existsSync(record.snapshot.scratch) ? 'removed' : 'unknown';
         } catch {
           localWorktree = existsSync(record.snapshot.workspace) ? 'retained' : 'unknown';
         }
@@ -1960,7 +1994,14 @@ export async function reconcileRegisteredCheckRun(
         ...(!remoteCleanupIsVerified(remote) ? ['remote cleanup is unverified'] : []),
         ...(reconciledRemote.transportChildReaped ? [] : ['original transport child is unverified']),
       ].slice(0, 64);
-      const cleanup = finalCleanup(reconciledRemote, source, localWorktree, cleanupFailures, prepared, returnDisposition);
+      const cleanup = finalCleanup(
+        reconciledRemote,
+        source,
+        localWorktree,
+        cleanupFailures,
+        prepared,
+        returnDisposition,
+      );
       const primaryFailures = returnFailure
         ? [returnFailure instanceof Error ? returnFailure.message.slice(0, 512) : 'returns restoration failed']
         : [];
@@ -1991,7 +2032,10 @@ async function reapRetainedTransportChild(identity: CheckRunTransportChildIdenti
       const bootId = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
       if (bootId !== identity.bootId) return false;
       const stat = readFileSync(`/proc/${identity.pid}/stat`, 'utf8');
-      const fields = stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/);
+      const fields = stat
+        .slice(stat.lastIndexOf(')') + 1)
+        .trim()
+        .split(/\s+/);
       return fields[19] === identity.start;
     } catch {
       return false;

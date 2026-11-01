@@ -437,25 +437,22 @@ test('Early native zero cannot settle before returns source verification and cle
   const missing = candidate({ output: 'reports/result.txt' });
   const missingFinals: string[] = [];
   let missingRetained: CandidateSnapshot | undefined;
-  const missingCode = await runCheck(
-    argsFor(missing, ['bun', 'run', 'check'], ['reports/result.txt']),
-    {
-      settlementWriter: (line) => missingFinals.push(line),
-      stateDirectory: missing.parent,
-      onRetainSnapshot: (snapshot) => (missingRetained = snapshot),
-      transport: async (options) => {
-        const native = receipt('a', 0);
-        await options.allocated?.({ host: 'a', run: native.run });
-        options.completed?.(native);
-        options.settled?.(
-          remoteSettlement(options, native, {
-            returns: { schema: 1, status: 'missing', entries: [], failures: ['reports/result.txt absent'] },
-          }),
-        );
-        return 0;
-      },
+  const missingCode = await runCheck(argsFor(missing, ['bun', 'run', 'check'], ['reports/result.txt']), {
+    settlementWriter: (line) => missingFinals.push(line),
+    stateDirectory: missing.parent,
+    onRetainSnapshot: (snapshot) => (missingRetained = snapshot),
+    transport: async (options) => {
+      const native = receipt('a', 0);
+      await options.allocated?.({ host: 'a', run: native.run });
+      options.completed?.(native);
+      options.settled?.(
+        remoteSettlement(options, native, {
+          returns: { schema: 1, status: 'missing', entries: [], failures: ['reports/result.txt absent'] },
+        }),
+      );
+      return 0;
     },
-  );
+  });
   expect(missingCode).toBe(75);
   expect(missingFinals).toHaveLength(1);
   expect(JSON.parse(missingFinals[0]!).cleanup).toMatchObject({ disposition: 'unknown' });
@@ -485,35 +482,32 @@ test('Early native zero cannot settle before returns source verification and cle
   let retained: CandidateSnapshot | undefined;
   const cleanupFinals: string[] = [];
   try {
-    const cleanupCode = await runCheck(
-      argsFor(cleanup, ['bun', 'run', 'check']),
-      {
-        settlementWriter: (line) => cleanupFinals.push(line),
-        stateDirectory: cleanup.parent,
-        onRetainSnapshot: (snapshot) => (retained = snapshot),
-        transport: async (options) => {
-          const native = receipt('a', 0);
-          await options.allocated?.({ host: 'a', run: native.run });
-          options.completed?.(native);
-          options.settled?.(
-            remoteSettlement(options, native, {
-              cleanup: {
-                schema: 1,
-                host: 'a',
-                run: native.run,
-                status: 'unknown',
-                supervisorStopped: false,
-                commandGroupTerminal: false,
-                containersRemoved: false,
-                runDirectoryRemoved: false,
-                failures: ['mock remote cleanup failure'],
-              },
-            }),
-          );
-          return 0;
-        },
+    const cleanupCode = await runCheck(argsFor(cleanup, ['bun', 'run', 'check']), {
+      settlementWriter: (line) => cleanupFinals.push(line),
+      stateDirectory: cleanup.parent,
+      onRetainSnapshot: (snapshot) => (retained = snapshot),
+      transport: async (options) => {
+        const native = receipt('a', 0);
+        await options.allocated?.({ host: 'a', run: native.run });
+        options.completed?.(native);
+        options.settled?.(
+          remoteSettlement(options, native, {
+            cleanup: {
+              schema: 1,
+              host: 'a',
+              run: native.run,
+              status: 'unknown',
+              supervisorStopped: false,
+              commandGroupTerminal: false,
+              containersRemoved: false,
+              runDirectoryRemoved: false,
+              failures: ['mock remote cleanup failure'],
+            },
+          }),
+        );
+        return 0;
       },
-    );
+    });
     expect(cleanupCode).toBe(75);
     expect(cleanupFinals).toHaveLength(1);
     expect(retained).toBeDefined();
@@ -593,7 +587,9 @@ test('private environment rejects runtime injection and host executable path aut
     ['LD_PRELOAD', '/tmp/injected.so'],
   ]) {
     writeFileSync(fixture.envFile, JSON.stringify({ [name]: value }) + '\n');
-    await expect(runCheck(argsFor(fixture, ['bun', 'run', 'check']), { transport: async () => 0 })).rejects.toThrow(name);
+    await expect(runCheck(argsFor(fixture, ['bun', 'run', 'check']), { transport: async () => 0 })).rejects.toThrow(
+      name,
+    );
   }
 });
 

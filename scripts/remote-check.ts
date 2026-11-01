@@ -4227,7 +4227,8 @@ async function copyReturns(
       if (!present.includes(file)) present.push(file);
       if (present.length > CHECK_ARTIFACTS_MAX_FILES) throw new Error('remote-check: too many returned files');
     } else if (missingMatch) {
-      if (!paths.includes(missingMatch[1]!)) throw new Error(`remote-check: undeclared missing output from ${host.name}`);
+      if (!paths.includes(missingMatch[1]!))
+        throw new Error(`remote-check: undeclared missing output from ${host.name}`);
       seen.add(missingMatch[1]!);
       missing.push(missingMatch[1]!);
       console.error(`remote-check: ${missingMatch[1]} is not on ${host.name}, skipping`);
@@ -4450,7 +4451,12 @@ async function cleanupPreparedRun(prepared: PreparedRun): Promise<RemoteCleanupR
         false,
       );
       if (cleaned !== 0 || output.trim() !== `CLEANED ${prepared.id}`) {
-        throw new RemoteTransportError(prepared.host.name, 'run cleanup verification', cleaned || REMOTE_TRANSPORT_FAILURE, false);
+        throw new RemoteTransportError(
+          prepared.host.name,
+          'run cleanup verification',
+          cleaned || REMOTE_TRANSPORT_FAILURE,
+          false,
+        );
       }
       return {
         schema: 1,
@@ -4490,7 +4496,12 @@ async function stopPreparedRun(prepared: PreparedRun): Promise<void> {
         false,
       );
       if (code !== 0 || output.trim() !== 'STOPPED')
-        throw new RemoteTransportError(prepared.host.name, 'original run stop verification', code || REMOTE_TRANSPORT_FAILURE, false);
+        throw new RemoteTransportError(
+          prepared.host.name,
+          'original run stop verification',
+          code || REMOTE_TRANSPORT_FAILURE,
+          false,
+        );
       return;
     } catch (error) {
       lastFailure = error;
@@ -4641,7 +4652,12 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
     10_000,
   );
   if (observed.code !== 0 || Buffer.byteLength(observed.output) > 24 * 1024)
-    throw new RemoteTransportError(host.name, 'reconciliation status', observed.code || REMOTE_TRANSPORT_FAILURE, false);
+    throw new RemoteTransportError(
+      host.name,
+      'reconciliation status',
+      observed.code || REMOTE_TRANSPORT_FAILURE,
+      false,
+    );
   let native: RemotePhysicalRunReceipt | null = null;
   let preparedInputs: RemotePreparedInputsEvidence | null = null;
   const evidenceFailures: string[] = [];
@@ -4661,9 +4677,10 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
         item.run !== runId
       )
         throw new Error('stored native identity mismatch');
-      const lifetimeFailure = root.lifetimeFailure === null
-        ? null
-        : parseRunLifetimeFailure(`${RUN_LIFETIME_FAILURE_MARKER}${JSON.stringify(root.lifetimeFailure)}`);
+      const lifetimeFailure =
+        root.lifetimeFailure === null
+          ? null
+          : parseRunLifetimeFailure(`${RUN_LIFETIME_FAILURE_MARKER}${JSON.stringify(root.lifetimeFailure)}`);
       native = parseRemotePhysicalRunReceipt({
         schema: 1,
         host: hostName,
@@ -4757,7 +4774,8 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
       failures: [reason],
     };
   }
-  if (evidenceFailures.length) returns = { ...returns, status: 'failed', failures: [...returns.failures, ...evidenceFailures] };
+  if (evidenceFailures.length)
+    returns = { ...returns, status: 'failed', failures: [...returns.failures, ...evidenceFailures] };
   return {
     schema: 1,
     host: hostName,
@@ -4847,9 +4865,7 @@ async function runLeased(
         ],
         { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
       );
-    run = options.spawnWithCustody
-      ? await options.spawnWithCustody({ host: host.name, run: id }, launch)
-      : launch();
+    run = options.spawnWithCustody ? await options.spawnWithCustody({ host: host.name, run: id }, launch) : launch();
     transportChildReaped = false;
     const maxMs = effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
     const heartbeatMs = options.livenessIntervalMs ?? DEFAULT_LIVENESS_INTERVAL_MS;
@@ -4929,7 +4945,9 @@ async function runLeased(
     try {
       await releaseLease();
     } catch (error) {
-      cleanupFailures.push(`slot lease release failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`);
+      cleanupFailures.push(
+        `slot lease release failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`,
+      );
       primaryFailure ??= error;
     }
     let lifetimeFailure: RunLifetimeFailure | null = null;
@@ -4981,20 +4999,26 @@ async function runLeased(
         await run.exited;
         transportChildReaped = true;
       } catch (error) {
-        cleanupFailures.push(`transport child reap failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`);
+        cleanupFailures.push(
+          `transport child reap failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`,
+        );
       }
     } else if (run) {
       try {
         await run.exited;
         transportChildReaped = true;
       } catch (error) {
-        cleanupFailures.push(`transport child reap failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`);
+        cleanupFailures.push(
+          `transport child reap failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`,
+        );
       }
     }
     try {
       await releaseLease();
     } catch (error) {
-      cleanupFailures.push(`slot lease release failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`);
+      cleanupFailures.push(
+        `slot lease release failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`,
+      );
     } finally {
       try {
         cleanup = await cleanupPreparedRun(prepared);
@@ -5007,7 +5031,11 @@ async function runLeased(
   }
   if (!transportChildReaped) {
     cleanupFailures.push('local SSH transport child terminality is unknown');
-    cleanup = { ...cleanup, status: 'unknown', failures: [...cleanup.failures, 'local SSH transport child terminality is unknown'] };
+    cleanup = {
+      ...cleanup,
+      status: 'unknown',
+      failures: [...cleanup.failures, 'local SSH transport child terminality is unknown'],
+    };
   }
   if (cleanupFailures.length && cleanup.status === 'verified')
     cleanup = { ...cleanup, status: 'unknown', failures: [...cleanup.failures, ...cleanupFailures] };
