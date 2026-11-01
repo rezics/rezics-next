@@ -3,6 +3,10 @@ import type { ThreadView } from './reads.ts';
 import type { ItemView } from './model.ts';
 import type { AccountDiscoverySummary } from '../search/discovery.ts';
 import type { CollectionResourceView } from '../library/collection-reads.ts';
+export declare const FeedKindSchema: import("typebox").TString;
+/** Use the native kind.in literal grammar, including its UTF-8 byte and control-character bounds.
+ * Exact IDs are preserved: no trimming, case folding or catalogue-type coercion. */
+export declare function readFeedKind(kind: string | undefined): string | undefined;
 export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox").TObject<{
     id: import("typebox").TString;
     occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;

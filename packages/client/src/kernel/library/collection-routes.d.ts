@@ -7749,7 +7749,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         $move: {
                             post: {
                                 body: {
-                                    after: string | null;
+                                    after?: string | null;
                                 };
                                 params: {
                                     collectionId: string;

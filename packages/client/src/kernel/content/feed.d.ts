@@ -5,7 +5,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { DiscoverySearch } from '../search/discovery-service.ts';
 import type { SearchService } from '../search/service-scope.ts';
-import type { FeedPage } from './feed-contract.ts';
+import { type FeedPage } from './feed-contract.ts';
 export type FeedDependencies = {
     pool: Pool;
     routeKey: Uint8Array;
@@ -22,5 +22,6 @@ export declare function createFeedReads(deps: FeedDependencies): {
         stream?: 'home' | 'following';
         limit?: number;
         cursor?: string;
+        kind?: string;
     }, deadline: number, languages: readonly string[]): Promise<FeedPage>;
 };
