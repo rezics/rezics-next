@@ -19,7 +19,7 @@ multiversion-visibility exclusion applies: none of the findings depends on invis
 lag, transaction overlap or an engine maintenance failure. Fixtures use ordinary visible committed rows.
 
 The lockfile and [workspace manifest](../../services/kernel/package.json) pin DBOS `5.5.3-preview`, with the
-[repository patch](../../patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch). Installed source was read, not executed.
+[repository patch](../../patches/@dbos-inc%252Fdbos-sdk@5.5.3-preview.patch). Installed source was read, not executed.
 For reproducible citations, `SDK/` below means
 `services/kernel/node_modules/@dbos-inc/dbos-sdk/dist/src/`; installed bytes have these SHA-256 pins:
 
@@ -155,8 +155,11 @@ Session-partitioned refresh. Hashing/coalescing sessions into kernel home bucket
   `idx_workflow_status_partition_dequeue_v3(queue_name,status,queue_partition_key,priority,created_at,workflow_uuid)`
   includes application ownership but does not key version. `headOf` filters version while walking that key's
   history before its `LIMIT 1`. This also affects fixed generic effect keys across versioned deployments. The
-  nonpartitioned `findAndMarkStartableWorkflows` uses the same residual version eligibility before its ordered
-  limit; include it in the same repair and caller inventory, rather than fixing only partitioned queues.
+  nonpartitioned `findAndMarkStartableWorkflows/claimStartableWorkflows` (lines 3381–3599) uses the same residual
+  version eligibility before its ordered limit through `idx_workflow_status_in_flight_v2`, also without a version
+  key. `wfqueue.js:pollQueue` calls this branch for the mounted nonpartitioned queues, including `workflows`
+  (Commerce's Stripe-event/reconcile parents) and `maintenance` (retention). Include it in the same repair and
+  caller inventory, rather than fixing only partitioned queues.
 
 **Existing oracle:** [`growth-effects.test.ts`](../../services/kernel/test/growth-effects.test.ts) grows SUCCESS
 workflow/input/output/step history, which is absent from the partial in-flight index; it does not grow queued
@@ -284,9 +287,7 @@ const logger = new GlobalLogger();
 const native = new SystemDatabase(databaseUrl, logger, DBOSJSON, 10, db.pool,
   'dbos', false, undefined, undefined, WORK_APPLICATION);
 const effects = new WorkflowQueue(WorkflowQueue.recordFromParams('effects', WORK_QUEUES.effects));
-// One free slot is a real worker state; this is the exact production-called SDK method.
-const claim = () => native.findAndMarkStartablePartitionedWorkflows(
-  effects, 'growth-discovery', 'live-version', 1, crypto.randomUUID(), true);
+const workflows = new WorkflowQueue(WorkflowQueue.recordFromParams('workflows', WORK_QUEUES.workflows));
 // No DBOS launch/init or runtime dispatcher is needed for this native statement probe.
 // Finally destroy the handle/logger and close the GrowthDatabase; do not end a foreign pool.
 ```
@@ -296,22 +297,34 @@ Compose with `checkGrowth`, `expect`, `checkoutPartitionKey` and the lifecycle/i
 
 ```ts
 const root = `queue-discovery:${crypto.randomUUID()}:`;
+const workflowId = (id: string) => root + id.padEnd(24, '_');
 const provider = { accountNamespace: 'acct_growth', livemode: false };
 const sessionKey = (n: number) => checkoutPartitionKey(provider, `cs_test_${String(n).padStart(8,'0')}`);
 
-async function queued(id: string, key: string, status: 'PENDING'|'ENQUEUED', version: string, n: number) {
+async function queued(id: string, queueName: string, key: string|null,
+  status: 'PENDING'|'ENQUEUED', version: string, n: number) {
   await db.admin.query(`INSERT INTO dbos.workflow_status
     (workflow_uuid,status,name,queue_name,queue_partition_key,application_name,application_version,
      authenticated_roles,recovery_attempts,priority,created_at,updated_at)
-    VALUES ($1,$2,'commerce.checkoutSync','effects',$3,'rezics-kernel',$4,'[]',0,0,$5,$5)`,
-    [root+id,key === '' ? 'ENQUEUED' : status,key,version,1_700_000_000_000+n]);
+    VALUES ($1,$2,'commerce.checkoutSync',$3,$4,'rezics-kernel',$5,'[]',0,0,$6,$6)`,
+    [workflowId(id),status,queueName,key,version,1_700_000_000_000+n]);
 }
 
+for (const selector of ['partitioned','nonpartitioned'] as const) {
 for (const axis of ['keys-hit','keys-busy-miss','hot-version-hit','hot-version-miss'] as const) {
-  test(`one native queue discovery stays bounded: ${axis}`, async () => {
+  if (selector === 'nonpartitioned' && !axis.startsWith('hot-')) continue;
+  test(`one native queue discovery stays bounded: ${selector}/${axis}`, async () => {
+    const queueName = selector === 'partitioned' ? 'effects' : 'workflows';
+    const key = (n: number) => selector === 'partitioned' ? sessionKey(n) : null;
+    // One free slot is a real worker state. Exercise production-called SDK methods.
+    const claim = () => selector === 'partitioned'
+      ? native.findAndMarkStartablePartitionedWorkflows(
+          effects, 'growth-discovery', 'live-version', 1, crypto.randomUUID(), true)
+      : native.findAndMarkStartableWorkflows(
+          workflows, 'growth-discovery', 'live-version', undefined, 7, 0, crypto.randomUUID(), true);
     let claimed: string[] = [];
     await checkGrowth(db, {
-      name: `native queue discovery ${axis}`,
+      name: `native queue discovery ${selector}/${axis}`,
       rule: 'series', scales: [256,1024,4096], repetitions: 1,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       async grow(_db, scale) {
@@ -319,13 +332,13 @@ for (const axis of ['keys-hit','keys-busy-miss','hot-version-hit','hot-version-m
         // Materialization batches these identical fixture inserts outside capture, as seed() does.
         for (let n=0; n<16*scale; n++) {
           const hot = axis.startsWith('hot-');
-          await queued(`q:${n}`, sessionKey(hot ? 0 : n), 'ENQUEUED',
+          await queued(`q:${n}`, queueName, key(hot ? 0 : n), 'ENQUEUED',
             hot ? 'other-version' : 'live-version', n);
           if (axis === 'keys-busy-miss')
-            await queued(`owner:${n}`, sessionKey(n), 'PENDING', 'live-version', n);
+            await queued(`owner:${n}`, queueName, key(n), 'PENDING', 'live-version', n);
         }
         if (axis === 'hot-version-hit')
-          await queued('probe', sessionKey(0), 'ENQUEUED', 'live-version', 16*scale+1);
+          await queued('probe', queueName, key(0), 'ENQUEUED', 'live-version', 16*scale+1);
       },
       async prepare() {
         // Restore only our previous claims; preserve deliberately PENDING owners.
@@ -335,10 +348,11 @@ for (const axis of ['keys-hit','keys-busy-miss','hot-version-hit','hot-version-m
       async operation() {
         claimed = await claim();
         expect(claimed).toHaveLength(axis.endsWith('hit') ? 1 : 0);
-        if (axis === 'hot-version-hit') expect(claimed).toEqual([root+'probe']);
+        if (axis === 'hot-version-hit') expect(claimed).toEqual([workflowId('probe')]);
       },
     });
   });
+}
 }
 ```
 
