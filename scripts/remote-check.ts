@@ -1548,10 +1548,11 @@ def validate_producer_controls(root,run,host,stage):
         raise SystemExit('producer slot identity is malformed')
 
     if stage=='source':
-        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor'}
+        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor','bun-runtime-transpiler-cache'}
     elif stage=='prepared':
         allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor',
-                 '.bun-install-complete','.preparation-started','preparation-install.json'}
+                 '.bun-install-complete','.preparation-started','preparation-install.json',
+                 'bun-runtime-transpiler-cache'}
         if control_info(root,'.bun-install-complete',0,required=True,empty=True) is None:
             raise SystemExit('producer install completion is missing')
         preparation=read_control_json(root,'.preparation-started')
