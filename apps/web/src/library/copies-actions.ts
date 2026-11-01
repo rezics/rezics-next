@@ -105,10 +105,12 @@ export const undoCopy = createServerFn({ method: 'POST' })
 
 async function readCopySubjectSummary(id: string, authorization: string | null): Promise<LibrarySubject | null> {
   if (!copiesSubjectId(id) || !authorization) return null;
-  const result = await kernelClient().subjects({ id }).get({
-    headers: { authorization },
-    fetch: { cache: 'no-store', redirect: 'manual' },
-  });
+  const result = await kernelClient()
+    .subjects({ id })
+    .get({
+      headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    });
   if (result.error || result.data?.subject?.id !== id) return null;
   const subject = result.data.subject;
   const locale = getLocale();
@@ -127,10 +129,12 @@ async function resolveSubject(id: string): Promise<CopySubjectResult> {
     if (await prepareSession(request, env as Partial<SessionEnv>)) return { state: 'forbidden' };
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'forbidden' };
-    const result = await kernelClient().subjects({ id }).get({
-      headers: { authorization },
-      fetch: { cache: 'no-store', redirect: 'manual' },
-    });
+    const result = await kernelClient()
+      .subjects({ id })
+      .get({
+        headers: { authorization },
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      });
     if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
     if ([401, 403, 404].includes(result.status)) return { state: 'forbidden' };
     if (result.error || result.data?.subject?.id !== id) return { state: 'unavailable' };

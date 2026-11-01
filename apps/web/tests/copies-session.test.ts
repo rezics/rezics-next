@@ -34,9 +34,7 @@ const release = {
   libraryProfiles: {
     books: {
       copies: {
-        kinds: [
-          { id: 'print', labels: { en: 'Print today' }, statuses: [{ id: 'loan', labels: { en: 'On loan' } }] },
-        ],
+        kinds: [{ id: 'print', labels: { en: 'Print today' }, statuses: [{ id: 'loan', labels: { en: 'On loan' } }] }],
       },
     },
   },
@@ -74,9 +72,7 @@ const env = {
         counts.credential++;
         const status = preparation;
         if (refuseNextPreparation) preparation = 'absent';
-        return status === 'active'
-          ? { status, accessToken, subject: 'owner', csrfToken }
-          : { status, csrfToken };
+        return status === 'active' ? { status, accessToken, subject: 'owner', csrfToken } : { status, csrfToken };
       },
       signedIn: async () => {
         counts.identity++;
