@@ -62,12 +62,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function assertCallerTarget(
-  target: HTMLElement,
-  container: HTMLElement,
-  view: Window,
-  phoneOrCoarse: boolean,
-) {
+async function assertCallerTarget(target: HTMLElement, container: HTMLElement, view: Window, phoneOrCoarse: boolean) {
   const bounds = container.getBoundingClientRect();
   const rect = target.getBoundingClientRect();
   await expect(target).toBeVisible();
