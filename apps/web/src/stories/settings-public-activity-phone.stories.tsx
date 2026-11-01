@@ -8,7 +8,7 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, mocked, userEvent, waitFor, within } from 'storybook/test';
 import { createProfileStoryIO } from '../kernel/fake/settings-profile';
 import { m } from '../paraglide/messages.js';
 import { ProfileCard } from '../settings/profile';
@@ -98,6 +98,9 @@ export const RefusedSaveRecovery: Story = {
   globals: { viewport: { value: 'phone390' } },
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
+    const onEditor = mocked(args.onEditor);
+    const onPending = mocked(args.onPending);
+    const onSave = mocked(args.onSave);
     const displayName = await canvas.findByRole('textbox', { name: m.settings_profile_display_name() });
     await userEvent.clear(displayName);
     await userEvent.type(displayName, 'Unrelated profile draft');
@@ -107,10 +110,10 @@ export const RefusedSaveRecovery: Story = {
     await canvas.findByText(m.settings_public_activity_conflict());
     await expect(reviews).not.toBeChecked();
     await expect(displayName).toHaveValue('Unrelated profile draft');
-    await expect(args.onSave).toHaveBeenCalledTimes(1);
+    await expect(onSave).toHaveBeenCalledTimes(1);
 
-    const firstAttempt = args.onSave.mock.calls[0]?.[0];
-    const editor = args.onEditor.mock.calls.at(-1)?.[0];
+    const firstAttempt = onSave.mock.calls[0]?.[0];
+    const editor = onEditor.mock.calls.at(-1)?.[0];
     if (!firstAttempt || !editor) throw new Error('The refused public-activity attempt was not observed.');
     await expect(editor.snapshot().phase).toBe('refused');
     await expect(editor.snapshot().attempt).toBeNull();
@@ -131,22 +134,22 @@ export const RefusedSaveRecovery: Story = {
 
     saveActivity.focus();
     await expect(saveActivity).toHaveFocus();
-    await expect(args.onSave).toHaveBeenCalledTimes(1);
+    await expect(onSave).toHaveBeenCalledTimes(1);
     await userEvent.keyboard('{Enter}');
     await canvas.findByText(m.settings_saving());
-    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
 
-    const secondAttempt = args.onSave.mock.calls[1]?.[0];
+    const secondAttempt = onSave.mock.calls[1]?.[0];
     if (!secondAttempt) throw new Error('The explicit public-activity resubmission was not observed.');
     await expect(secondAttempt.scope).toBe('views');
     await expect(secondAttempt.patch).toEqual({ publicViews: { reviews: false } });
     await expect(secondAttempt.idempotencyKey).not.toBe(firstAttempt.idempotencyKey);
 
     await editor.submit('views');
-    await expect(args.onSave).toHaveBeenCalledTimes(2);
+    await expect(onSave).toHaveBeenCalledTimes(2);
     await expect(editor.snapshot().attempt?.idempotencyKey).toBe(secondAttempt.idempotencyKey);
 
-    const release = args.onPending.mock.calls.at(-1)?.[0];
+    const release = onPending.mock.calls.at(-1)?.[0];
     if (!release) throw new Error('The pending public-activity save has no release control.');
     release();
     await waitFor(() => expect(args.onConfirmed).toHaveBeenCalledTimes(2));
@@ -159,7 +162,7 @@ export const RefusedSaveRecovery: Story = {
     await expect(displayName).toHaveValue('Unrelated profile draft');
     await expect(canvas.getByRole('button', { name: m.settings_profile_save() })).toBeEnabled();
     await expect(canvas.getByRole('switch', { name: m.settings_public_reviews() })).not.toBeChecked();
-    await expect(args.onSave).toHaveBeenCalledTimes(2);
+    await expect(onSave).toHaveBeenCalledTimes(2);
     await expect(canvas.queryByRole('button', { name: m.settings_profile_save_activity() })).toBeNull();
   },
 };
