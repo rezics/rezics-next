@@ -27,6 +27,26 @@ test('discussion references accept zero, the existing single preset, and exactly
     expect(() => discussionSubjectIds(invalid)).toThrow();
 });
 
+test('discussion selection snapshots keep the complete ordered 128-reference limit in the caller intent', () => {
+  const intent = new ReplyIntent<{ subjectIds: string[] }>(id(130));
+  const selected = [...subjects].reverse();
+  const draft = {
+    title: 'Ordered references',
+    body: fromPlainText('One ordinary discussion', 'blocks'),
+    mediaIds: [],
+    submissionContext: { subjectIds: selected },
+  };
+  const command = intent.prepare(draft, null, JSON.stringify([null, id(131), 'viewer', 'csrf']));
+
+  selected.pop();
+  expect(command.submissionContext).toEqual({ subjectIds: [...subjects].reverse() });
+  expect(command.submissionContext?.subjectIds).toHaveLength(128);
+  expect(command.submissionContext).not.toHaveProperty('voteCitation');
+  expect(discussionSubjectIds({ subjectIds: command.submissionContext!.subjectIds })).toEqual([
+    ...subjects,
+  ].reverse());
+});
+
 test('a multi-reference discussion keeps the exact body, media, ordered selection and key through a lost response', async () => {
   const calls: { body: unknown; key: string }[] = [];
   const client = {

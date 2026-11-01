@@ -4,24 +4,42 @@ import { useId, useState } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { searchContentSubjects } from './content-subject-search';
+import { useThreadCreationVisit } from './thread-creation-lifetime';
 
 export function DiscussionSubjects({
-  value,
-  onValueChange,
-  searchScope,
-  disabled = false,
+  ...props
 }: {
   value: readonly EntityPickerSubject[];
   onValueChange: (items: EntityPickerSubject[]) => void;
   searchScope: string;
   disabled?: boolean;
 }) {
+  return (
+    <DiscussionSubjectsVisit
+      key={props.searchScope}
+      value={props.value}
+      onValueChange={props.onValueChange}
+      disabled={props.disabled}
+    />
+  );
+}
+
+function DiscussionSubjectsVisit({
+  value,
+  onValueChange,
+  disabled = false,
+}: {
+  value: readonly EntityPickerSubject[];
+  onValueChange: (items: EntityPickerSubject[]) => void;
+  disabled?: boolean;
+}) {
   const countId = useId();
   const [overLimit, setOverLimit] = useState(false);
+  const visit = useThreadCreationVisit();
   const limit = 128;
 
   function choose(items: EntityPickerSubject[]) {
-    if (disabled) return;
+    if (disabled || !visit.isEditable()) return;
     if (items.length > limit) {
       setOverLimit(true);
       return;
@@ -41,7 +59,6 @@ export function DiscussionSubjects({
         {m.thread_discussion_subject_count({ count: value.length, limit })}
       </p>
       <EntityPicker
-        key={searchScope}
         multiple
         label={m.thread_discussion_subjects()}
         search={searchContentSubjects}

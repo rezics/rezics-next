@@ -1,5 +1,4 @@
 import { requireSignedIn } from '../../session/guard';
-import { useSession } from '../../session/query';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -18,6 +17,10 @@ import { canSubmitThread } from '../../threads/review-policy';
 import { DiscussionSubjects } from '../../threads/discussion-subjects';
 import { contentSubjectPreset } from '../../threads/content-subject-search';
 import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
+import {
+  ThreadCreationLifetimeProvider,
+  useThreadCreationLifetime,
+} from '../../threads/thread-creation-lifetime';
 
 type NewThreadSearch = { subject?: string; subjectTitle?: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -44,92 +47,178 @@ export const Route = createFileRoute('/boards/$id_/new')({
 function NewThreadPage() {
   const { board, idempotencyKey } = Route.useLoaderData();
   const { subject: presetSubject, subjectTitle: presetSubjectTitle } = Route.useSearch();
-  const { csrfToken, subject: accountId, state: sessionState } = useSession();
-  const searchScope = JSON.stringify([getLocale(), sessionState, accountId, csrfToken]);
-  const review = board.purpose === 'reviews';
-  const [subjectId, setSubjectId] = useState<string | null>(presetSubject ?? null);
+  return (
+    <NewThreadComposition
+      board={board}
+      idempotencyKey={idempotencyKey}
+      presetSubject={presetSubject}
+      presetSubjectTitle={presetSubjectTitle}
+    />
+  );
+}
+
+export function NewThreadComposition({
+  board,
+  idempotencyKey,
+  presetSubject,
+  presetSubjectTitle,
+}: {
+  board: Awaited<ReturnType<typeof readNewThreadPage>>['board'];
+  idempotencyKey: string;
+  presetSubject?: string;
+  presetSubjectTitle?: string;
+}) {
+  const visit = useThreadCreationLifetime({
+    boardId: board.id,
+    purpose: board.purpose,
+    initialKey: idempotencyKey,
+    ...(presetSubject ? { initialSubject: presetSubject } : {}),
+    ...(presetSubjectTitle ? { initialSubjectTitle: presetSubjectTitle } : {}),
+  });
+  const { lifetime, ticket, current, bound } = visit;
+  const [origin] = useState(() => ({
+    boardId: board.id,
+    purpose: board.purpose,
+    idempotencyKey,
+    presetSubject: presetSubject ?? null,
+    presetSubjectTitle: presetSubjectTitle ?? null,
+  }));
+  const review = origin.purpose === 'reviews';
+  const [subjectId, setSubjectId] = useState<string | null>(origin.presetSubject);
   const [discussionSubjects, setDiscussionSubjects] = useState(() =>
-    presetSubject ? [contentSubjectPreset(presetSubject, presetSubjectTitle ?? m.thread_discussion_subject())] : [],
+    origin.presetSubject
+      ? [contentSubjectPreset(origin.presetSubject, origin.presetSubjectTitle ?? m.thread_discussion_subject())]
+      : [],
   );
   const [voteCitation, setVoteCitation] = useState<VoteCitation | undefined>();
-  const [metadataLocked, setMetadataLocked] = useState(false);
-  const metadataLockedRef = useRef(false);
+  const lockedSubmissionContext = useRef({
+    active: false,
+    value: undefined as ThreadSubmissionContext | undefined,
+  });
+  const renderedSubmissionContext = useRef<ThreadSubmissionContext | undefined>(undefined);
+  const editable = lifetime.isEditable(ticket);
+  const searchScope = JSON.stringify([
+    visit.scopeKey,
+    lifetime.accountId,
+    lifetime.csrfToken,
+    visit.sessionRevision,
+  ]);
+
   const handleIntentLockChange = useCallback((locked: boolean) => {
-    metadataLockedRef.current = locked;
-    setMetadataLocked(locked);
-  }, []);
+    if (!lifetime.isCurrent(ticket)) return;
+    lockedSubmissionContext.current = locked
+      ? { active: true, value: cloneSubmissionContext(renderedSubmissionContext.current) }
+      : { active: false, value: undefined };
+    lifetime.setIntentLocked(ticket, locked);
+  }, [lifetime, ticket]);
   const handleSubjectChange = useCallback((next: string | null) => {
-    if (metadataLockedRef.current) return;
+    if (!lifetime.isEditable(ticket)) return;
     setSubjectId(next);
     setVoteCitation(undefined);
-  }, []);
+  }, [lifetime, ticket]);
   const handleVoteCitationChange = useCallback((next: VoteCitation | undefined) => {
-    if (!metadataLockedRef.current) setVoteCitation(next);
-  }, []);
-  const submissionContext = review
-    ? { kind: 'review' as const, subjectId: subjectId!, ...(voteCitation ? { voteCitation } : {}) }
-    : { subjectIds: discussionSubjects.map((subject) => subject.id) };
+    if (lifetime.isEditable(ticket)) setVoteCitation(next);
+  }, [lifetime, ticket]);
+  const liveSubmissionContext: ThreadSubmissionContext | undefined = bound
+    ? review
+      ? { kind: 'review', subjectId: subjectId ?? '', ...(voteCitation ? { voteCitation } : {}) }
+      : { subjectIds: discussionSubjects.map((subject) => subject.id) }
+    : undefined;
+  renderedSubmissionContext.current = liveSubmissionContext;
+  const submissionContext = lockedSubmissionContext.current.active
+    ? lockedSubmissionContext.current.value
+    : liveSubmissionContext;
 
   return (
-    <AuthoringDepartureProvider>
-      <article className="max-w-4xl space-y-8 text-foreground">
-        <header className="space-y-3">
-          <p className="text-sm font-medium text-muted-foreground">{board.title ?? m.threads_untitled()}</p>
-          <PageHeading>{m.thread_new_heading()}</PageHeading>
-        </header>
-        <div className="space-y-5">
-          {review ? (
-            <ReviewFields
-              {...(presetSubject ? { initialSubjectId: presetSubject } : {})}
-              {...(presetSubjectTitle ? { initialSubjectTitle: presetSubjectTitle } : {})}
-              onSubjectChange={handleSubjectChange}
-              onVoteCitationChange={handleVoteCitationChange}
-              disabled={metadataLocked}
-              searchScope={searchScope}
-            />
-          ) : (
-            <DiscussionSubjects
-              value={discussionSubjects}
-              onValueChange={(items) => {
-                if (!metadataLockedRef.current) setDiscussionSubjects(items);
+    <ThreadCreationLifetimeProvider lifetime={lifetime}>
+      <AuthoringDepartureProvider>
+        <article className="max-w-4xl space-y-8 text-foreground">
+          <header className="space-y-3">
+            <p className="text-sm font-medium text-muted-foreground">{board.title ?? m.threads_untitled()}</p>
+            <PageHeading>{m.thread_new_heading()}</PageHeading>
+          </header>
+          <div className="space-y-5">
+            {bound ? (
+              review ? (
+                <ReviewFields
+                  key={searchScope}
+                  {...(origin.presetSubject ? { initialSubjectId: origin.presetSubject } : {})}
+                  {...(origin.presetSubjectTitle ? { initialSubjectTitle: origin.presetSubjectTitle } : {})}
+                  onSubjectChange={handleSubjectChange}
+                  onVoteCitationChange={handleVoteCitationChange}
+                  disabled={!editable}
+                  searchScope={searchScope}
+                />
+              ) : (
+                <DiscussionSubjects
+                  key={searchScope}
+                  value={discussionSubjects}
+                  onValueChange={(items) => {
+                    if (lifetime.isEditable(ticket)) setDiscussionSubjects(items);
+                  }}
+                  disabled={!editable}
+                  searchScope={searchScope}
+                />
+              )
+            ) : (
+              <p role="status">{m.thread_authoring_session_changed()}</p>
+            )}
+            <PostComposer
+              initialKey={origin.idempotencyKey}
+              titleRequired
+              canSubmit={current && canSubmitThread(origin.purpose, subjectId)}
+              boardId={origin.boardId}
+              submissionContext={submissionContext}
+              onIntentLockChange={handleIntentLockChange}
+              onSubmit={async ({ title, body, idempotencyKey: key, mediaIds, submissionContext: originalContext }) => {
+                if (!lifetime.isCurrent(ticket)) return { ok: false as const, reason: 'unavailable' as const };
+                const result = await startThread({
+                  data: {
+                    boardId: origin.boardId,
+                    title,
+                    body,
+                    idempotencyKey: key,
+                    ...originalContext!,
+                    ...(mediaIds.length > 0 ? { mediaIds } : {}),
+                  },
+                  headers: { 'X-CSRF-Token': lifetime.csrfToken },
+                  fetch: draftFetch(body),
+                });
+                if (!lifetime.isCurrent(ticket)) return { ok: false as const, reason: 'unavailable' as const };
+                if (result.ok)
+                  document.cookie = `rezics_draft_key=${result.thread.id}.${key}; Path=/; Max-Age=120; SameSite=Lax`;
+                return result.ok ? { ok: true as const, value: result.thread } : result;
               }}
-              disabled={metadataLocked}
-              searchScope={searchScope}
+              onSuccess={(thread) => {
+                if (!lifetime.isCurrent(ticket)) return;
+                window.location.assign(`/${getLocale()}${threadHref({ id: thread.id, title: threadTitle(thread) })}`);
+              }}
             />
-          )}
-          <PostComposer
-            initialKey={idempotencyKey}
-            titleRequired
-            canSubmit={canSubmitThread(board.purpose, subjectId)}
-            boardId={board.id}
-            submissionContext={submissionContext}
-            onIntentLockChange={handleIntentLockChange}
-            onSubmit={async ({ title, body, idempotencyKey: key, mediaIds, submissionContext: originalContext }) => {
-              const result = await startThread({
-                data: {
-                  boardId: board.id,
-                  title,
-                  body,
-                  idempotencyKey: key,
-                  ...originalContext!,
-                  ...(mediaIds.length > 0 ? { mediaIds } : {}),
-                },
-                headers: { 'X-CSRF-Token': csrfToken ?? '' },
-                fetch: draftFetch(body),
-              });
-              if (result.ok)
-                document.cookie = `rezics_draft_key=${result.thread.id}.${key}; Path=/; Max-Age=120; SameSite=Lax`;
-              return result.ok ? { ok: true as const, value: result.thread } : result;
-            }}
-            onSuccess={(thread) => {
-              window.location.assign(`/${getLocale()}${threadHref({ id: thread.id, title: threadTitle(thread) })}`);
-            }}
-          />
-        </div>
-        <Link to="/boards/$id" params={{ id: board.id }} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-          {m.board_threads_heading()}
-        </Link>
-      </article>
-    </AuthoringDepartureProvider>
+          </div>
+          <Link
+            to="/boards/$id"
+            params={{ id: board.id }}
+            className={buttonVariants({ variant: 'outline', size: 'lg' })}
+          >
+            {m.board_threads_heading()}
+          </Link>
+        </article>
+      </AuthoringDepartureProvider>
+    </ThreadCreationLifetimeProvider>
   );
+}
+
+type ThreadSubmissionContext =
+  | { kind: 'review'; subjectId: string; voteCitation?: VoteCitation }
+  | { subjectIds: string[] };
+
+function cloneSubmissionContext(context: ThreadSubmissionContext | undefined): ThreadSubmissionContext | undefined {
+  if (!context) return undefined;
+  return context.kind === 'review'
+    ? {
+        kind: 'review',
+        subjectId: context.subjectId,
+        ...(context.voteCitation ? { voteCitation: { ...context.voteCitation } } : {}),
+      }
+    : { subjectIds: [...context.subjectIds] };
 }

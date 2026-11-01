@@ -89,6 +89,27 @@ test("a review can cite the author's current vote and sends its question, units 
   expect(selectedVoteCitation(null, true)).toBeUndefined();
 });
 
+test('an unavailable private vote cannot manufacture a review citation', async () => {
+  const requested: string[] = [];
+  const client = {
+    subjects: ({ id: subjectId }: { id: string }) => ({
+      ratings: ({ questionId }: { questionId: string }) => ({
+        vote: {
+          get: async () => {
+            requested.push(`${subjectId}:${questionId}`);
+            return { status: 503, error: { value: { code: 'unavailable' } } };
+          },
+        },
+      }),
+    }),
+  } as unknown as KernelClient;
+  const current = await loadCurrentReviewVote(client, id(14), 'Bearer viewer');
+
+  expect(requested).toEqual([`${id(14)}:${STANDARD_QUESTION_ID}`]);
+  expect(current).toBeNull();
+  expect(selectedVoteCitation(current, true)).toBeUndefined();
+});
+
 test('a duplicate live review links to the existing review', () => {
   const markup = renderToStaticMarkup(createElement(ExistingReviewNotice, { reviewId: id(9) }));
 
