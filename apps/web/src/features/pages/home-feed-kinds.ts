@@ -20,7 +20,7 @@ export type HomeKindsReader = (cursor: string | undefined, signal: AbortSignal) 
 type Snapshot = {
   status: DiscoveryKindsState['status'] | 'idle';
   kinds?: DiscoveryKinds;
-  selected?: HomeKindChoice;
+  selected?: HomeKindChoice | undefined;
 };
 
 /** One metadata page plus one selected label. Selection/viewer changes retire pending metadata reads. */

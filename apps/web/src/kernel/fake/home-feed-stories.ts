@@ -154,7 +154,11 @@ export const routes: FakeRoute[] = [
         limit?: number;
         kindPage?: { cursor?: string };
       };
-      if (body.representation !== 'discovery-v1' || (body.limit !== 1 && !body.kindPage?.cursor)) return;
+      if (
+        body.representation !== 'discovery-v1' ||
+        (body.limit !== 1 && body.kindPage?.cursor !== 'illustrative-kind-frontier')
+      )
+        return;
       if (selected === 'kinds-unavailable') return { status: 503, code: 'dependency_unavailable' };
       const kinds = homeKindStoryPage(body.kindPage?.cursor);
       return body.kindPage?.cursor
