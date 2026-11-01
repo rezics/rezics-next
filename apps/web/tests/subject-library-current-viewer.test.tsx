@@ -417,7 +417,7 @@ test('Current B can write before A entry, prefix, collection picker and unassign
   expect(host.querySelector('a[href="/en/@public-curator"]')?.textContent).toContain('Public curator');
 });
 
-test('Healthy current entry, member and assignment episodes retain exact requests, while deferred Undo and signed label pages retire across ABA', async () => {
+test('The complete mounted Subject Library workflow accepts only its actual current viewer and address and retires old entry label picker member and Undo continuations', async () => {
   await paint();
   await click(m.library_subject_remove());
   const original = entries[0]!.data;
