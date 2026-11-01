@@ -2,8 +2,8 @@ import { PublicAccountState } from '../../accounts/public-profile/view';
 import { readFailure } from '../../accounts/public-profile/read';
 import { useOperation } from '../../kernel/exposure';
 import { Cover } from '@rezics/ui/cover';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
-import { MetaLine } from '@rezics/ui/meta-line';
+import { ContentItem } from '@rezics/ui/content-item';
+import { ListRowControl } from '@rezics/ui/list-row';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import type { ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
@@ -334,22 +334,18 @@ export function AccountPosts(props: Record<string, unknown>) {
           const when = dateText(post.createdAt, value.locale);
           const href = threadHref(value.locale, { id: post.threadId, title: thread?.title });
           return (
-            <ListRow key={typeof post.id === 'string' ? post.id : index} className="space-y-1 py-3">
-              <ListRowLink href={href}>{title}</ListRowLink>
-              <Quiet>
-                <MetaLine
-                  items={[
-                    <span aria-hidden="true" className={`${linkClass} ${linkColor} font-medium underline`}>
-                      {title}
-                    </span>,
-                    when,
-                  ]}
-                />
-              </Quiet>
-              <ListRowControl>
-                <Excerpt body={post.body} value={value} />
-              </ListRowControl>
-            </ListRow>
+            <ContentItem
+              key={typeof post.id === 'string' ? post.id : index}
+              title={title}
+              href={href}
+              headingLevel={3}
+              metadata={when ? <Quiet>{when}</Quiet> : null}
+              preview={
+                <ListRowControl>
+                  <Excerpt body={post.body} value={value} />
+                </ListRowControl>
+              }
+            />
           );
         },
       }}
@@ -379,16 +375,18 @@ export function AccountThreads(props: Record<string, unknown>) {
           const when = dateText(first?.createdAt, value.locale);
           const href = threadHref(value.locale, { id: thread.id, title: thread.title });
           return (
-            <ListRow key={typeof thread.id === 'string' ? thread.id : index} className="space-y-1 py-3">
-              <ListRowLink href={href}>{title}</ListRowLink>
-              <p aria-hidden="true" className="font-medium">
-                <span className={`${linkClass} ${linkColor} underline`}>{title}</span>
-              </p>
-              {when && <Quiet>{when}</Quiet>}
-              <ListRowControl>
-                <Excerpt body={first?.body} value={value} />
-              </ListRowControl>
-            </ListRow>
+            <ContentItem
+              key={typeof thread.id === 'string' ? thread.id : index}
+              title={title}
+              href={href}
+              headingLevel={3}
+              metadata={when ? <Quiet>{when}</Quiet> : null}
+              preview={
+                <ListRowControl>
+                  <Excerpt body={first?.body} value={value} />
+                </ListRowControl>
+              }
+            />
           );
         },
       }}
@@ -413,29 +411,24 @@ export function AccountCollections(props: Record<string, unknown>) {
           const title = typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled;
           const href = `/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`;
           return (
-            <ListRow key={typeof collection.id === 'string' ? collection.id : index} className="space-y-1 py-3">
-              {readable ? <ListRowLink href={href}>{title}</ListRowLink> : null}
-              <p className="font-medium">
-                <MetaLine
-                  items={[
-                    <span
-                      aria-hidden={readable || undefined}
-                      className={`${linkClass} ${linkColor} ${readable ? 'underline' : ''}`}
-                    >
-                      {title}
-                    </span>,
-                    members !== undefined ? (
-                      <span className="text-sm font-normal text-muted-foreground">
-                        {m.agent_collection_items({ count: members }, options)}
-                      </span>
-                    ) : null,
-                  ]}
-                />
-              </p>
-              {typeof collection.description === 'string' && collection.description && (
-                <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{collection.description}</p>
-              )}
-            </ListRow>
+            <ContentItem
+              key={typeof collection.id === 'string' ? collection.id : index}
+              title={title}
+              {...(readable ? { href } : {})}
+              headingLevel={3}
+              metadata={
+                members !== undefined ? (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {m.agent_collection_items({ count: members }, options)}
+                  </span>
+                ) : null
+              }
+              preview={
+                typeof collection.description === 'string' && collection.description ? (
+                  <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{collection.description}</p>
+                ) : null
+              }
+            />
           );
         },
       }}
