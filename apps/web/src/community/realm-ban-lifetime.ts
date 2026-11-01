@@ -67,23 +67,28 @@ export class RealmBanLifetime {
   current = () => this.connected && !this.snapshot();
   ticket = () => this.serial;
   owns = (ticket: number) => this.current() && this.serial === ticket;
-  subscribe = (listener: () => void) => {
+  /** Layout ownership fences disconnection before passive effects or queued callbacks run. */
+  connect = () => {
     this.connected = true;
+    return () => {
+      this.connected = false;
+      this.serial++;
+      this.onDisconnect?.();
+      // Effect replay may reconnect this visit. Its disconnected work stays obsolete.
+      queueMicrotask(() => {
+        if (!this.connected) this.retire();
+      });
+    };
+  };
+  subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     const stop = this.watch?.(() => {
       this.snapshot();
     });
     this.snapshot();
     return () => {
-      this.connected = false;
-      this.serial++;
-      this.onDisconnect?.();
       this.listeners.delete(listener);
       stop?.();
-      // Effect replay may reconnect this visit. Its disconnected work stays obsolete.
-      queueMicrotask(() => {
-        if (!this.connected) this.retire();
-      });
     };
   };
 }

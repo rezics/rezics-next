@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -153,6 +153,7 @@ export function RealmBansControl(props: RealmBansControlProps) {
   }
   const current = visit.current!;
   const retired = useSyncExternalStore(current.gate.subscribe, current.gate.snapshot, serverCurrent);
+  useLayoutEffect(() => current.gate.connect(), [current]);
   if (retired || !props.ready) return null;
   return <RealmBansVisit key={current.gate.id} {...props} initial={current.initial} gate={current.gate} />;
 }

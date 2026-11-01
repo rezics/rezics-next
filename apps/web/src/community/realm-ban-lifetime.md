@@ -23,7 +23,7 @@ receipt. Returning an old tuple does not restore them. A replacement ready calle
 native list. A repeated initial read object cannot seed another visit after replacement or disconnection;
 a distinct initial object is an explicitly supplied new read generation for standalone callers.
 
-Cleanup disconnects synchronously and invalidates connection tickets. Strict Mode may reconnect the same
+Layout cleanup disconnects synchronously and invalidates connection tickets. Strict Mode may reconnect the same
 visit, restarting its outstanding read; previously disconnected work remains obsolete. A weak initial-read
 retirement marker prevents a genuinely new mount from borrowing a disconnected visit's initial page even
 within the synchronous effect-replay window. Default Panel mounts always perform a new native read.

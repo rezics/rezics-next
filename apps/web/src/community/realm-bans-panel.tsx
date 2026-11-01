@@ -1,4 +1,4 @@
-import { useContext, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useSession } from '../session/query';
 import { changeRealmBan, readRealmBans, resolveRealmBanTarget } from './space-actions';
@@ -61,5 +61,6 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
     previous.current.lifetime.retire();
     previous.current = binding;
   }
+  useLayoutEffect(() => binding.lifetime.connect(), [binding]);
   return <RealmBansControl realmId={realmId} {...binding} ready={state === 'signed-in' && !!subject && !!csrfToken} />;
 }
