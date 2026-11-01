@@ -21,7 +21,7 @@ import {
 import { Button } from '@rezics/ui/shadcn/button';
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
@@ -143,7 +143,7 @@ function EntryMenu({
   const title = titleOf(entry, controls.locale).text;
   const subjectId = entry.subject?.id;
   const entries: ItemMenuEntry[] = [];
-  if (admitted && entry.stateOptions?.length && !row.unknownIntent && !row.unknownLabelIntent) {
+  if (admitted && entry.stateOptions?.length && !row.unknownIntent && !row.unknownLabelIntent && !row.unknownRemove) {
     entries.push({
       type: 'submenu',
       label: m.library_menu_status(),
@@ -170,7 +170,7 @@ function EntryMenu({
       type: 'item',
       label: m.library_menu_open(),
       onSelect: () => {
-        if (!entry.subject) return;
+        if (!controls.isCurrent() || !entry.subject) return;
         const href = subjectHref(
           { id: entry.subject.id, label: displayLibraryTitle(entry.subject.label, controls.locale).text },
           controls.locale,
@@ -181,13 +181,13 @@ function EntryMenu({
     entries.push({
       type: 'item',
       label: m.library_entry_copies(),
-      onSelect: () => void navigate({ to: '/library/copies', search: { subjectId } }),
+      onSelect: () => { if (controls.isCurrent() && controls.copiesAdmitted()) void navigate({ to: '/library/copies', search: { subjectId } }); },
     });
     if (progressAdmitted)
       entries.push({
         type: 'item',
         label: m.library_entry_progress(),
-        onSelect: () => void navigate({ to: '/library/progress', search: { subjectId } }),
+        onSelect: () => { if (controls.isCurrent() && controls.progressAdmitted()) void navigate({ to: '/library/progress', search: { subjectId } }); },
       });
   }
   if (deleteAdmitted && !row.unknownIntent && !row.unknownLabelIntent) {
@@ -513,7 +513,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
           }
         : {})}
       onSort={(field, direction) => {
-        if (!sortable || !['added', 'finished', 'lastActivity'].includes(field)) return;
+        if (!controls.isCurrent() || !controls.sortAdmitted() || !sortable || !['added', 'finished', 'lastActivity'].includes(field)) return;
         const orderBy = field === 'added' ? 'createdAt' : field === 'finished' ? 'finishedAt' : 'lastActivity';
         void navigate({
           to: '/library',
@@ -537,6 +537,8 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
 }
 type ShelfEntriesProps = {
   mutationLease?: ShelfMutationLease;
+  isCurrent?: () => boolean;
+  empty?: ReactNode;
   type?: string;
   entries: PersonalLibraryEntry[];
   locale: string;
@@ -555,15 +557,19 @@ export function ShelfEntries(props: ShelfEntriesProps) {
   // Column visibility cannot change the loaded population. Keep the mounted command/unknown intent and
   // selection on these same rows; actor, source URL and replacement loader rows still reset the page.
   const sourceUrl = new URL(location.href, 'https://shelf.invalid');
-  sourceUrl.searchParams.delete('columns');
-  const context = `${session.subject ?? session.state}:${props.locale}:${sourceUrl.href}:${props.type ?? ''}:${props.state ?? ''}`;
-  const [source, setSource] = useState({ entries: props.entries, context, generation: 0 });
+  for (const field of ['columns', 'layout', 'size']) sourceUrl.searchParams.delete(field);
+  const population = props.isCurrent ? JSON.stringify([props.type, props.state, props.sort, props.cursor]) : sourceUrl.href;
+  const context = `${session.subject ?? session.state}:${props.locale}:${population}`;
+  const [source, setSource] = useState({ entries: props.entries, context, generation: 0, active: true });
+  const latest = useRef(props.isCurrent);
+  latest.current = props.isCurrent;
   const [fallbackLease] = useState(shelfMutationLease);
   const mutationLease = props.mutationLease ?? fallbackLease;
-  if (source.entries !== props.entries || source.context !== context) {
-    setSource({ entries: props.entries, context, generation: source.generation + 1 });
+  if ((!props.isCurrent && source.entries !== props.entries) || source.context !== context) {
+    source.active = false;
+    setSource({ entries: props.entries, context, generation: source.generation + 1, active: true });
   }
-  return <ShelfEntriesPage key={source.generation} {...props} mutationLease={mutationLease} />;
+  return <ShelfEntriesPage key={source.generation} {...props} isCurrent={() => source.active && (latest.current?.() ?? true)} mutationLease={mutationLease} />;
 }
 
 function ShelfEntriesPage({
@@ -578,9 +584,11 @@ function ShelfEntriesPage({
   cursor,
   state,
   mutationLease,
+  isCurrent,
+  empty,
 }: ShelfEntriesProps & { mutationLease: ShelfMutationLease }) {
   const hydrated = useHydrated();
-  const shelfRows = useShelfRows(entries, locale, mutationLease);
+  const shelfRows = useShelfRows(entries, locale, mutationLease, isCurrent);
   const controls: Controls = {
     ...shelfRows,
     locale,
@@ -600,7 +608,7 @@ function ShelfEntriesPage({
     !shelfRows.outcomes.length &&
     !shelfRows.labelOutcomes.length
   )
-    return null;
+    return empty ?? null;
   return (
     <>
       <SelectionBar controls={controls} />

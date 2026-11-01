@@ -36,6 +36,7 @@ export type ShelfRow = {
   conflict: boolean;
   failure: ShelfFailure | null;
   unknownIntent?: ShelfStateIntent;
+  unknownRemove?: boolean;
   unknownLabelIntent?: ShelfLabelIntent;
 };
 
@@ -63,7 +64,7 @@ export function useHydrated(): boolean {
  * its new status; a conflict replaces it with the entry as it now is; a removal drops it. Each write carries the
  * revision, incarnation and idempotency key the entry holds, and takes a fresh key once it has been answered.
  */
-export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, busy: ShelfMutationLease) {
+export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, busy: ShelfMutationLease, originatingCurrent?: () => boolean) {
   const [rows, setRows] = useState<ShelfRow[]>(() =>
     initial.map((entry) => ({ entry, conflict: false, failure: null })),
   );
@@ -91,6 +92,15 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const restoreAdmitted = useOperation('library_entry.restore');
   const writeAdmitted = useOperation('library_entry.put');
+  const removeAdmitted = useOperation('library_entry.delete');
+  const progress = useOperation('progress_session.list');
+  const list = useOperation('library_entry.list');
+  const copies = useOperation('copy.list');
+  const permissions = useRef({ restoreAdmitted, removeAdmitted, progress, list, copies });
+  permissions.current = { restoreAdmitted, removeAdmitted, progress, list, copies };
+  const origin = useRef(originatingCurrent);
+  origin.current = originatingCurrent;
+  const isCurrent = useCallback(() => mounted.current && (origin.current?.() ?? true), []);
   const authority = useRef(writeAdmitted);
   authority.current = writeAdmitted;
   const labelWriteAdmitted = useOperation('library_label.assign');
@@ -104,16 +114,28 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     };
   }, []);
 
+  const previousInitial = useRef(initial);
+  if (previousInitial.current !== initial) {
+    previousInitial.current = initial;
+    const unresolved = currentRows.current.filter((row) => row.unknownIntent || row.unknownLabelIntent || row.unknownRemove || busy.current);
+    const next = initial.map((entry) => unresolved.find((row) => row.entry.subjectId === entry.subjectId)
+      ?? { entry, conflict: false, failure: null });
+    for (const row of unresolved) if (!next.some((item) => item.entry.subjectId === row.entry.subjectId)) next.push(row);
+    currentRows.current = next;
+    setRows(next);
+    setSelected((current) => current.filter((id) => next.some((row) => row.entry.subjectId === id && selectableEntry(row.entry))));
+  }
+
   // Update the imperative snapshot together with React state, so a sequence never reads a previous render's rows.
   const updateRows = useCallback((change: (current: ShelfRow[]) => ShelfRow[]) => {
-    if (!mounted.current) return;
+    if (!isCurrent()) return;
     const next = change(currentRows.current);
     currentRows.current = next;
     setRows(next);
     setSelected((current) =>
       current.filter((id) => next.some((row) => row.entry.subjectId === id && selectableEntry(row.entry))),
     );
-  }, []);
+  }, [isCurrent]);
   const patch = useCallback(
     (subjectId: string, change: (row: ShelfRow) => ShelfRow | null) =>
       updateRows((current) =>
@@ -126,7 +148,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     [updateRows],
   );
   const lock = () => {
-    if (!mounted.current || busy.current) return false;
+    if (!isCurrent() || busy.current) return false;
     busy.current = true;
     busy.listeners.forEach((listener) => listener());
     return true;
@@ -136,17 +158,17 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     busy.listeners.forEach((listener) => listener());
     const undo = queuedUndo.current;
     queuedUndo.current = null;
-    undo?.();
+    if (isCurrent()) undo?.();
   };
 
   /** Shared by single-row changes, selected-page commands and deliberate same-key recovery. */
   const transition = async (intent: ShelfStateIntent): Promise<{ status: ShelfOutcome['status']; stop?: boolean }> => {
-    if (!mounted.current || !authority.current) return { status: 'not-attempted', stop: true };
+    if (!isCurrent() || !authority.current) return { status: 'not-attempted', stop: true };
     const row = currentRows.current.find((item) => item.entry.subjectId === intent.subjectId);
-    if (!row || row.unknownLabelIntent || !matchesShelfIntent(row.entry, intent)) return { status: 'not-attempted' };
+    if (!row || row.unknownRemove || row.unknownLabelIntent || !matchesShelfIntent(row.entry, intent)) return { status: 'not-attempted' };
     try {
       const result = await savePersonalLibraryEntry({ data: intent, headers: csrfHeaders() });
-      if (!mounted.current) return { status: 'unknown', stop: true };
+      if (!isCurrent() || !authority.current) return { status: 'unknown', stop: true };
       if (result.ok && result.entry && result.entry.subjectId === intent.subjectId) {
         const saved = result.entry;
         patch(intent.subjectId, (current) => ({
@@ -190,6 +212,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     } catch {
       // Transport loss says nothing about whether the native command committed.
     }
+    if (!isCurrent() || !authority.current) return { status: 'unknown', stop: true };
     patch(intent.subjectId, (current) => ({ ...current, failure: 'unavailable', unknownIntent: intent }));
     return { status: 'unknown' };
   };
@@ -198,7 +221,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
   const selectedRows = rows.filter((row) => selected.includes(row.entry.subjectId) && selectableEntry(row.entry));
   const commonStates = commonShelfStates(selectedRows.map((row) => row.entry));
   const select = (subjectId: string, value: boolean) => {
-    if (busy.current || !eligible.some((row) => row.entry.subjectId === subjectId)) return;
+    if (!isCurrent() || busy.current || !eligible.some((row) => row.entry.subjectId === subjectId)) return;
     setSelected((current) =>
       value
         ? current.includes(subjectId) || current.length >= shelfSelectionLimit
@@ -208,7 +231,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     );
   };
   const record = (subjectId: string, status: ShelfOutcome['status']) => {
-    if (!mounted.current) return;
+    if (!isCurrent() || !authority.current) return;
     setOutcomes((current) =>
       current.map((outcome) => (outcome.subjectId === subjectId ? { ...outcome, status } : outcome)),
     );
@@ -217,7 +240,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
   };
   const changeState = async (subjectId: string, value: string) => {
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
-    if (!row || row.unknownIntent || row.unknownLabelIntent || row.entry.state === value || !authority.current) return;
+    if (!row || row.unknownIntent || row.unknownRemove || row.unknownLabelIntent || row.entry.state === value || !authority.current) return;
     const intent = shelfStateIntent(row.entry, value);
     if (!intent || !lock()) return;
     try {
@@ -242,7 +265,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     if (
       !targets.length ||
       targets.length > shelfSelectionLimit ||
-      targets.some((row) => row.unknownIntent || row.unknownLabelIntent) ||
+      targets.some((row) => row.unknownIntent || row.unknownLabelIntent || row.unknownRemove) ||
       !commonShelfStates(targets.map((row) => row.entry)).some((option) => option.id === value) ||
       !authority.current
     )
@@ -258,7 +281,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     setOutcomes(snapshot.map(({ intent, title }) => ({ subjectId: intent.subjectId, title, status: 'not-attempted' })));
     try {
       for (const { intent, unchanged } of snapshot) {
-        if (!mounted.current || !authority.current) break;
+        if (!isCurrent() || !authority.current) break;
         if (unchanged) {
           record(intent.subjectId, 'unchanged');
           continue;
@@ -273,7 +296,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
   };
 
   const recordLabel = (subjectId: string, result: Pick<ShelfLabelOutcome, 'status' | 'reason'>) => {
-    if (!mounted.current) return;
+    if (!isCurrent() || !labelAuthority.current) return;
     setLabelOutcomes((current) =>
       current.map((outcome) =>
         outcome.subjectId === subjectId ? { subjectId, title: outcome.title, ...result } : outcome,
@@ -283,16 +306,16 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
   const assignLabel = async (intent: ShelfLabelIntent): Promise<Pick<ShelfLabelOutcome, 'status' | 'reason'>> => {
     const row = currentRows.current.find((item) => item.entry.subjectId === intent.input.subjectId);
     if (
-      !mounted.current ||
+      !isCurrent() ||
       !labelAuthority.current ||
       !row ||
-      row.unknownIntent ||
+      row.unknownIntent || row.unknownRemove ||
       !matchesShelfLabelIntent(row.entry, intent)
     )
       return { status: 'not-attempted' };
     try {
       const result = await mutateSubjectLabelAction({ data: intent.input, headers: csrfHeaders() });
-      if (!mounted.current) return { status: 'unknown' };
+      if (!isCurrent() || !labelAuthority.current) return { status: 'unknown' };
       if (
         result.ok &&
         typeof result.assignment?.id === 'string' &&
@@ -317,6 +340,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     } catch {
       // The ordinary adapter can collapse transport loss or refusal to unavailable. Keep the exact command.
     }
+    if (!isCurrent() || !labelAuthority.current) return { status: 'unknown' };
     patch(intent.input.subjectId, (current) => ({ ...current, unknownLabelIntent: intent }));
     return { status: 'unknown' };
   };
@@ -327,7 +351,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
       !targets.length ||
       targets.length > shelfSelectionLimit ||
       currentRows.current.some((row) => row.unknownLabelIntent) ||
-      targets.some((row) => row.unknownIntent || !selectableEntry(row.entry))
+      targets.some((row) => row.unknownIntent || row.unknownRemove || !selectableEntry(row.entry))
     )
       return;
     // Fixed loaded targets, row identities, supplied label name and independent command keys before any await.
@@ -357,7 +381,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     );
     try {
       for (const { intent } of snapshot) {
-        if (!mounted.current || !labelAuthority.current) break;
+        if (!isCurrent() || !labelAuthority.current) break;
         const result = await assignLabel(intent);
         recordLabel(intent.input.subjectId, result);
         if (result.status !== 'assigned') break;
@@ -372,7 +396,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     if (
       !row ||
       !intent ||
-      row.unknownIntent ||
+      row.unknownIntent || row.unknownRemove ||
       !matchesShelfLabelIntent(row.entry, intent) ||
       !labelAuthority.current ||
       !lock()
@@ -388,7 +412,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
   const remove = async () => {
     const subjectId = removing;
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
-    if (!subjectId || !row || row.unknownIntent || row.unknownLabelIntent || !lock()) return;
+    if (!isCurrent() || !permissions.current.removeAdmitted || !subjectId || !row || row.unknownIntent || row.unknownLabelIntent || !lock()) return;
     try {
       const { entry } = row;
       const result = await deletePersonalLibraryEntry({
@@ -400,16 +424,16 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
         },
         headers: csrfHeaders(),
       });
-      if (!mounted.current) return;
+      if (!isCurrent() || !permissions.current.removeAdmitted) return;
       if (result.ok || result.reason === 'missing') {
         patch(subjectId, () => null);
-        if (result.ok && result.undo && restoreAdmitted) {
+        if (result.ok && result.undo && permissions.current.restoreAdmitted) {
           const receipt = result.undo;
           undoToast(
             m.library_removed(),
             () => {
               const restore = () => {
-                if (!mounted.current || !restoreAdmitted) return;
+                if (!isCurrent() || !permissions.current.restoreAdmitted) return;
                 // Undo is an explicit user command too. Keep it behind the current request lease rather than losing it.
                 if (!lock()) {
                   queuedUndo.current = restore;
@@ -417,7 +441,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
                 }
                 void restorePersonalLibraryEntryAction({ data: { subjectId, ...receipt }, headers: csrfHeaders() })
                   .then((restored) => {
-                    if (!mounted.current) return;
+                    if (!isCurrent() || !permissions.current.restoreAdmitted) return;
                     if (restored.ok) {
                       updateRows((current) => [
                         ...current.filter((row) => row.entry.subjectId !== subjectId),
@@ -448,7 +472,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
                     else setRestoreMessage(m.library_subject_unavailable());
                   })
                   .catch(() => {
-                    if (mounted.current) setRestoreMessage(m.library_subject_unavailable());
+                    if (isCurrent() && permissions.current.restoreAdmitted) setRestoreMessage(m.library_subject_unavailable());
                   })
                   .finally(unlock);
               };
@@ -471,18 +495,22 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
           };
         });
       } else {
-        patch(subjectId, (current) => ({ ...current, failure: failureOf(result.reason) }));
+        patch(subjectId, (current) => ({ ...current, failure: failureOf(result.reason), unknownRemove: result.reason === 'unavailable' }));
       }
     } catch {
-      patch(subjectId, (current) => ({ ...current, failure: 'unavailable' }));
+      if (isCurrent() && permissions.current.removeAdmitted) patch(subjectId, (current) => ({ ...current, failure: 'unavailable', unknownRemove: true }));
     } finally {
       unlock();
-      if (mounted.current) setRemoving(null);
+      if (isCurrent()) setRemoving(null);
     }
   };
 
   return {
     rows,
+    isCurrent,
+    copiesAdmitted: () => permissions.current.copies,
+    progressAdmitted: () => permissions.current.progress,
+    sortAdmitted: () => permissions.current.progress && permissions.current.list,
     pending,
     restoreMessage,
     removing,
@@ -495,26 +523,26 @@ export function useShelfRows(initial: PersonalLibraryEntry[], locale: string, bu
     assignSelectedLabel,
     retryLabel,
     labelSelectionBlocked:
-      selectedRows.some((row) => !!row.unknownIntent) || rows.some((row) => !!row.unknownLabelIntent),
+      selectedRows.some((row) => !!row.unknownIntent || !!row.unknownRemove) || rows.some((row) => !!row.unknownLabelIntent),
     select,
     selectPage: () => {
-      if (!busy.current) setSelected(eligible.slice(0, shelfSelectionLimit).map((row) => row.entry.subjectId));
+      if (isCurrent() && !busy.current) setSelected(eligible.slice(0, shelfSelectionLimit).map((row) => row.entry.subjectId));
     },
     clearSelection: () => {
-      if (!busy.current) setSelected([]);
+      if (isCurrent() && !busy.current) setSelected([]);
     },
     changeSelectedState,
     retryState,
     writeAdmitted,
-    selectionBlocked: selectedRows.some((row) => !!row.unknownIntent || !!row.unknownLabelIntent),
+    selectionBlocked: selectedRows.some((row) => !!row.unknownIntent || !!row.unknownLabelIntent || !!row.unknownRemove),
     askRemove: (subjectId: string) => {
       if (
-        !busy.current &&
+        isCurrent() && permissions.current.removeAdmitted && !busy.current &&
         !currentRows.current.some((row) => row.entry.subjectId === subjectId && row.unknownLabelIntent)
       )
         setRemoving(subjectId);
     },
-    cancelRemove: () => setRemoving(null),
+    cancelRemove: () => { if (isCurrent()) setRemoving(null); },
     changeState,
     remove,
   };

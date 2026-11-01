@@ -7,15 +7,15 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
-import { LabelShelfPage, PersonalLibraryPage } from '../../library/entries-page';
-import { readPersonalLibrary } from '../../library/entries-actions';
+import { LabelShelfPage } from '../../library/entries-page';
+import { readPersonalLibraryCurrent } from '../../library/personal-library-server';
+import { PersonalLibraryCurrent } from '../../library/personal-library-current';
 import { loadLabelShelfPage, type LabelShelfPageData } from '../../library/label-shelf-read';
 import { submitSubjectLabelForm } from '../../library/subject-slot-form-action';
 import type { SessionEnv } from '../../session/client';
 import { shelfDisplay, validateShelfSearch } from '../../library/shelf-params';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import { readContinueEntries } from '../../library/continue-read';
 
 const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const readLabelShelf = createServerFn({ method: 'GET' })
@@ -159,19 +159,12 @@ export const Route = createFileRoute('/library/')({
           labelResult: deps.labelResult,
         },
       });
-    const [page, continueEntries] = await Promise.all([
-      readPersonalLibrary({
-        data: {
-          orderBy: deps.orderBy,
-          direction: deps.direction,
-          ...(deps.state ? { state: deps.state } : {}),
-          ...(deps.type ? { type: deps.type } : {}),
-          ...(deps.cursor ? { cursor: deps.cursor } : {}),
-        },
-      }),
-      readContinueEntries({ data: {} }),
-    ]);
-    return { page, continueEntries };
+    return readPersonalLibraryCurrent({ data: {
+      orderBy: deps.orderBy, direction: deps.direction,
+      ...(deps.state ? { state: deps.state } : {}),
+      ...(deps.type ? { type: deps.type } : {}),
+      ...(deps.cursor ? { cursor: deps.cursor } : {}),
+    } });
   },
   head: ({ match, loaderData }) =>
     pageHead(
@@ -189,12 +182,11 @@ function LibraryRoute() {
   const data = Route.useLoaderData();
   if (!('page' in data)) return <LabelShelfPage page={data} locale={getLocale()} display={shelfDisplay(search)} />;
   return (
-    <PersonalLibraryPage
-      page={data.page}
-      continueState={data.continueEntries}
+    <PersonalLibraryCurrent
+      initial={data}
+      search={search}
       locale={getLocale()}
       display={shelfDisplay(search)}
-      {...(search.cursor ? { cursor: search.cursor } : {})}
     />
   );
 }

@@ -8,7 +8,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
 import { ContinueSection, useContinueRefresh } from './continue';
 import { LibraryNavigation } from './library-nav';
-import { libraryNavigationQuery } from './pins-read';
+import { libraryNavigationQuery, type LibraryNavigationRead } from './pins-read';
 import { readContinueEntries, type ContinueEntry, type ContinueView } from './continue-read';
 import type {
   LibraryEntryStateWrite,
@@ -31,7 +31,7 @@ import {
 } from './shelf-params';
 import { ShelfEntries } from './shelf-view';
 import { ShelfColumnsControl } from './shelf-columns';
-import { shelfMutationLease, useHydrated } from './shelf-rows';
+import { shelfMutationLease, useHydrated, type ShelfMutationLease } from './shelf-rows';
 import { LabelShelfEntries } from './shelf-view';
 import type { LabelShelfPageData } from './label-shelf-read';
 import { SubjectLabelNotice } from './subject-labels.tsx';
@@ -58,6 +58,7 @@ function DisplayControls({
   cursor,
   filterSort,
   tableAvailable,
+  isCurrent,
 }: {
   state?: LibraryEntryStateWrite;
   type?: string;
@@ -68,6 +69,7 @@ function DisplayControls({
   filterSort?: ShelfSort;
   cursor?: string;
   tableAvailable?: boolean;
+  isCurrent?: () => boolean;
 }) {
   const hydrated = useHydrated();
   const navigate = useNavigate();
@@ -122,7 +124,7 @@ function DisplayControls({
         value={[display.layout]}
         onValueChange={(values) => {
           const layout = values[0] as ShelfLayout | undefined;
-          if (layout)
+          if (layout && (isCurrent?.() ?? true))
             void navigate({
               to: '/library',
               search: (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...display, layout }),
@@ -147,7 +149,7 @@ function DisplayControls({
           value={[display.size]}
           onValueChange={(values) => {
             const size = values[0] as ShelfSize | undefined;
-            if (size)
+            if (size && (isCurrent?.() ?? true))
               void navigate({
                 to: '/library',
                 search: (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...display, size }),
@@ -230,6 +232,10 @@ export function PersonalLibraryPage({
   undo,
   restore,
   csrfToken,
+  acceptedNavigation,
+  originatingLease,
+  continueRead,
+  isCurrent,
 }: {
   page: PersonalLibraryView;
   locale: string;
@@ -240,12 +246,18 @@ export function PersonalLibraryPage({
   undo?: LibraryRestoreInput;
   restore?: LibraryRestoreResult;
   csrfToken?: string | null;
+  acceptedNavigation?: LibraryNavigationRead;
+  originatingLease?: ShelfMutationLease;
+  continueRead?: () => Promise<Exclude<ContinueView, { state: 'unknown' }>>;
+  isCurrent?: () => boolean;
 }) {
   // Keep the write lease while a predicate replaces rows or temporarily shows no matches.
-  const [mutationLease] = useState(shelfMutationLease);
-  const navigation = useQuery(libraryNavigationQuery(locale));
+  const [fallbackLease] = useState(shelfMutationLease);
+  const mutationLease = originatingLease ?? fallbackLease;
+  const navigation = useQuery({ ...libraryNavigationQuery(locale), enabled: acceptedNavigation === undefined && libraryNavigationQuery(locale).enabled });
+  const currentNavigation = acceptedNavigation ?? navigation.data;
   const readContinue = useCallback(() => readContinueEntries({ data: {} }), []);
-  const resume = useContinueRefresh(continueState, readContinue, locale);
+  const resume = useContinueRefresh(continueState, continueRead ?? readContinue, locale);
   const currentContinue = continueState ? resume.result : undefined;
   // Only a successful exhausted source establishes absence; readiness and failed reads remain visible.
   const continueAbsent =
@@ -279,9 +291,9 @@ export function PersonalLibraryPage({
       <LibraryNavigation
         current="tracked"
         locale={locale}
-        pins={navigation.data?.pins ?? { state: navigation.isError ? 'unavailable' : 'preparing' }}
-        collections={navigation.data?.collections ?? []}
-        collectionsState={navigation.data?.collectionsState ?? (navigation.isError ? 'unavailable' : 'preparing')}
+        pins={currentNavigation?.pins ?? { state: navigation.isError ? 'unavailable' : 'preparing' }}
+        collections={currentNavigation?.collections ?? []}
+        collectionsState={currentNavigation?.collectionsState ?? (navigation.isError ? 'unavailable' : 'preparing')}
       />
       {undo ? (
         <EntryUndoForm
@@ -318,6 +330,7 @@ export function PersonalLibraryPage({
               {...(page.state ? { state: page.state } : {})}
               locale={locale}
               display={display}
+              {...(isCurrent ? { isCurrent } : {})}
               tableAvailable={!page.readState && page.entries.length > 0}
               sort={sort}
               {...(filterSort ? { filterSort } : {})}
@@ -365,10 +378,11 @@ export function PersonalLibraryPage({
                   ? m.library_sort_preparing()
                   : m.error_message()}
           </p>
-        ) : page.entries.length ? (
+        ) : (
           <ShelfEntries
             key={`${page.type ?? ''}:${page.state ?? 'all'}:${sort.orderBy}:${sort.direction}:${effectiveCursor ?? ''}`}
             mutationLease={mutationLease}
+            {...(isCurrent ? { isCurrent } : {})}
             {...typeSearch}
             sort={sort}
             {...(filterSort ? { filterSort } : {})}
@@ -377,8 +391,7 @@ export function PersonalLibraryPage({
             {...(effectiveCursor ? { cursor: effectiveCursor } : {})}
             locale={locale}
             {...display}
-          />
-        ) : (
+            empty={
           <ShelfEmpty
             kind={page.type || page.state ? 'no-match' : 'library'}
             title={
@@ -399,6 +412,8 @@ export function PersonalLibraryPage({
                   {m.library_browse()}
                 </a>
               )
+            }
+          />
             }
           />
         )}
