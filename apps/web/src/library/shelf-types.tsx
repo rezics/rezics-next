@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useContext, useRef, useState } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
   Dialog,
@@ -9,56 +10,97 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@rezics/ui/shadcn/dialog';
-import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { shelfHref, type ShelfSearch } from './shelf-params';
-import { readShelfTypes, type ShelfTypesView } from './shelf-types-read';
-import { useHydrated } from './shelf-rows';
-import { useSession } from '../session/query';
+import { readShelfTypesCurrent, SHELF_TYPES_LIMIT, type ShelfTypesView } from './shelf-types-read';
+import { useShelfTypesLifetime } from './shelf-types-current';
 
 type Props = { locale: string; view: ShelfSearch; typeLabel?: string };
 
 export function ShelfTypes(props: Props) {
-  const session = useSession();
-  return <OwnerShelfTypes key={`${session.subject ?? session.state}:${props.locale}`} {...props} />;
+  // Standalone/pure previews have no observed viewer and cannot make private requests.
+  const client = useContext(QueryClientContext);
+  return client ? <CurrentShelfTypes {...props} /> : null;
+}
+
+function CurrentShelfTypes(props: Props) {
+  const lifetime = useShelfTypesLifetime(props.locale, props.view);
+  if (!lifetime.subject || !lifetime.admitted) return null;
+  return (
+    <OwnerShelfTypes
+      key={lifetime.key}
+      {...props}
+      subject={lifetime.subject}
+      hydrated={lifetime.hydrated}
+      isCurrent={lifetime.isCurrent}
+    />
+  );
 }
 
 /** Local to this mounted owner view: one replaceable page, no automatic requests or cursor history. */
-function OwnerShelfTypes({ locale, view, typeLabel }: Props) {
-  const admitted = useOperation('library_entry.list');
-  const hydrated = useHydrated();
+function OwnerShelfTypes({
+  locale,
+  view,
+  typeLabel,
+  subject,
+  hydrated,
+  isCurrent,
+}: Props & { subject: string; hydrated: boolean; isCurrent: () => boolean }) {
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<ShelfTypesView>();
   const [busy, setBusy] = useState(false);
   const currentCursor = useRef<string | undefined>(undefined);
   const inFlight = useRef(false);
+  const revision = useRef(0);
+  const renderedRevision = revision.current;
+  const currentChoice = () => isCurrent() && renderedRevision === revision.current;
   const selectionLabel = view.type ? (typeLabel ?? m.library_type_unnamed()) : m.library_types_all();
   const { type: _type, cursor: _cursor, ...retained } = view;
   const href = (type?: string) => shelfHref(locale, { ...retained, ...(type ? { type } : {}) });
   async function read(cursor?: string) {
-    if (inFlight.current) return;
+    if (!currentChoice() || inFlight.current) return;
+    const attempt = ++revision.current;
+    const currentRequest = () => isCurrent() && revision.current === attempt;
     inFlight.current = true;
     currentCursor.current = cursor;
     setBusy(true);
     // Release the previous choices immediately; failure is never represented as an empty successful page.
     setPage(undefined);
     try {
-      setPage(await readShelfTypes({ data: cursor ? { cursor } : {} }));
+      if (!currentRequest()) return;
+      const result = await readShelfTypesCurrent({ data: cursor ? { cursor } : {} });
+      if (!currentRequest()) return;
+      const requested = result.requested;
+      const matches =
+        requested.cursor === (cursor ?? null) && requested.limit === SHELF_TYPES_LIMIT && requested.locale === locale;
+      setPage(
+        matches && result.sessionSubject === subject && result.authorizationAgrees
+          ? result.page
+          : matches && result.sessionSubject === null && result.page.state === 'signed-out'
+            ? { state: 'signed-out' }
+            : { state: 'unavailable' },
+      );
     } catch {
-      setPage({ state: 'unavailable' });
+      if (currentRequest()) setPage({ state: 'unavailable' });
     } finally {
-      inFlight.current = false;
-      setBusy(false);
+      if (currentRequest()) {
+        inFlight.current = false;
+        setBusy(false);
+      }
     }
   }
-  if (!admitted) return null;
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (isCurrent()) setOpen(value);
+      }}
+    >
       <DialogTrigger
         render={<Button variant="outline" className="h-auto max-w-full whitespace-normal break-words" />}
         disabled={!hydrated}
         onClick={() => {
-          if (!page && !busy) void read();
+          if (currentChoice() && !page && !busy) void read();
         }}
       >
         {m.library_type_action({ type: selectionLabel })}
@@ -75,6 +117,9 @@ function OwnerShelfTypes({ locale, view, typeLabel }: Props) {
         <a
           className={buttonVariants({ variant: 'outline' })}
           href={href()}
+          onClick={(event) => {
+            if (!currentChoice()) event.preventDefault();
+          }}
           aria-current={!view.type ? 'page' : undefined}
         >
           {m.library_types_all()}
@@ -89,6 +134,9 @@ function OwnerShelfTypes({ locale, view, typeLabel }: Props) {
                     key={choice.type}
                     className={`${buttonVariants({ variant: choice.type === view.type ? 'secondary' : 'outline' })} h-auto whitespace-normal break-words`}
                     href={href(choice.type)}
+                    onClick={(event) => {
+                      if (!currentChoice()) event.preventDefault();
+                    }}
                     aria-current={choice.type === view.type ? 'page' : undefined}
                   >
                     {choice.label ?? m.library_type_unnamed_option({ position: index + 1 })}
