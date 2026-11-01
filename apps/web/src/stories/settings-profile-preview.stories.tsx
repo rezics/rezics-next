@@ -41,11 +41,7 @@ function captureProfilePreviewTraffic() {
           { status: 403 },
         );
       }
-    } else if (
-      request.method === 'GET' &&
-      url.pathname.startsWith('/v1/accounts') &&
-      !editableProfile
-    ) {
+    } else if (request.method === 'GET' && url.pathname.startsWith('/v1/accounts') && !editableProfile) {
       traffic.publicReads++;
     }
 
@@ -152,7 +148,9 @@ export const DraftPreview: Story = {
 
         await userEvent.click(profile.getByRole('button', { name: m.settings_profile_save() }));
         await profile.findByText(m.settings_profile_read_denied());
-        await waitFor(() => expect(profile.queryByRole('region', { name: m.settings_profile_preview_heading() })).toBeNull());
+        await waitFor(() =>
+          expect(profile.queryByRole('region', { name: m.settings_profile_preview_heading() })).toBeNull(),
+        );
         await expect(profile.queryByText(draftName)).toBeNull();
         await expect(profile.queryByText(draftBiography)).toBeNull();
         await expect(traffic.patches).toHaveLength(1);
@@ -162,7 +160,9 @@ export const DraftPreview: Story = {
           key: expect.any(String),
         });
         const idempotencyKey = JSON.parse(traffic.patches[0]!.key!);
-        await expect(idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+        await expect(idempotencyKey).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        );
         await expect(traffic.editableReads).toBe(initialEditableReads + 1);
         await expect(traffic.publicReads).toBe(initialPublicReads);
       },

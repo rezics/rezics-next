@@ -85,9 +85,7 @@ export function ProfilePreview({
             </h3>
             <p className="text-sm text-muted-foreground">{m.settings_profile_preview_description()}</p>
             <p role="status" className="text-sm font-medium">
-              {hasUnsavedChanges
-                ? m.settings_profile_preview_draft()
-                : m.settings_profile_preview_saved()}
+              {hasUnsavedChanges ? m.settings_profile_preview_draft() : m.settings_profile_preview_saved()}
             </p>
           </header>
 
