@@ -441,7 +441,8 @@ export async function locateRealmWithOrigin(
   const { auth } = prepared;
   const { realm } = readCommunity(await client.realms({ realmId: input.realmId }).get(auth));
   const { space } = readCommunity(await client.spaces({ spaceId: realm.spaceId }).get(auth));
-  if (space.address) return { value: { kind: 'redirect', address: space.address }, readerOrigin: prepared.readerOrigin };
+  if (space.address)
+    return { value: { kind: 'redirect', address: space.address }, readerOrigin: prepared.readerOrigin };
   const home = await readHome(client, realm, auth, credentialMode, space);
   return {
     value: {

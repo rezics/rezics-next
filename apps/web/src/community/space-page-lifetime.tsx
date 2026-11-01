@@ -17,10 +17,7 @@ type SessionSnapshot = {
   errorUpdateCount: number;
 };
 
-export type ExpectedReader =
-  | { kind: 'anonymous' }
-  | { kind: 'signed-in'; subject: string }
-  | { kind: 'unknown' };
+export type ExpectedReader = { kind: 'anonymous' } | { kind: 'signed-in'; subject: string } | { kind: 'unknown' };
 
 export type SpacePageSessionSource = {
   /** Local observation handle; it is not a reader identity or hydration proof. */
@@ -441,15 +438,16 @@ export function spacePageAdmissionFor(
 }
 
 /** A production shelf mounted outside a route host still captures its own pre-read observation. */
-export function captureStandaloneShelfRead(client: QueryClient, credentialMode: ReadCredentialMode): ShelfReadTicket | null {
+export function captureStandaloneShelfRead(
+  client: QueryClient,
+  credentialMode: ReadCredentialMode,
+): ShelfReadTicket | null {
   const source = spacePageSessionSource(client);
   const baseline = toSnapshot(source);
   const expected = expectedReader(baseline, credentialMode);
   if (credentialMode === 'session' && expected.kind === 'unknown') return null;
   const origin: ReaderOrigin =
-    expected.kind === 'signed-in'
-      ? { kind: 'signed-in', subject: expected.subject }
-      : { kind: 'anonymous' };
+    expected.kind === 'signed-in' ? { kind: 'signed-in', subject: expected.subject } : { kind: 'anonymous' };
   return {
     pageReadId: `standalone:${source.id}:${++nextReadId}`,
     ticket: 0,
@@ -563,7 +561,8 @@ export class SpacePageLifetime {
     )
       return false;
     const current = toSnapshot(this.runtime.source);
-    const sameObservation = ticket.sourceRevision === this.runtime.source.revision() && sameSnapshot(ticket.baseline, current);
+    const sameObservation =
+      ticket.sourceRevision === this.runtime.source.revision() && sameSnapshot(ticket.baseline, current);
     return sameObservation || canAdoptInitialSession(this.admission, ticket.baseline, current);
   };
 

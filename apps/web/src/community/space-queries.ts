@@ -20,12 +20,18 @@ import type { SpacePageLifetime } from './space-page-lifetime';
 import type { Located, SpacePageData } from './space';
 
 export type SpacePageQueryResult = { page: SpacePageData; admission: SpacePageAdmission };
-export type RealmPageQueryResult = { located: Located & { readerOrigin?: ReaderOrigin }; admission: SpacePageAdmission };
+export type RealmPageQueryResult = {
+  located: Located & { readerOrigin?: ReaderOrigin };
+  admission: SpacePageAdmission;
+};
 
 /** A failed continuation retains both its window and cursor. Only an explicit restart replaces them. */
 export function useShelfList<T extends { id: string }>(
   initial: { items: T[]; next: string | null; unavailable: number; credentialMode: ReadCredentialMode },
-  read: (input: { cursor?: string; credentialMode: ReadCredentialMode }) => Promise<ShelfPage<T> & { readerOrigin?: ReaderOrigin }>,
+  read: (input: {
+    cursor?: string;
+    credentialMode: ReadCredentialMode;
+  }) => Promise<ShelfPage<T> & { readerOrigin?: ReaderOrigin }>,
   lifetime?: SpacePageLifetime | null,
   requireReaderOrigin = false,
 ) {
@@ -57,12 +63,7 @@ export function useShelfList<T extends { id: string }>(
   const canPublish = () => mounted.current && (!lifetime || lifetime.current());
   async function load(restart = false) {
     const previous = active.current;
-    if (
-      !canPublish() ||
-      (previous && previous.generation === generation.current) ||
-      (!restart && !page.next)
-    )
-      return;
+    if (!canPublish() || (previous && previous.generation === generation.current) || (!restart && !page.next)) return;
     const shelfTicket = lifetime
       ? lifetime.captureShelfRead()
       : requireReaderOrigin

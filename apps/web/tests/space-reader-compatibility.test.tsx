@@ -223,7 +223,9 @@ async function nativeFetch(input: RequestInfo | URL, init?: RequestInit): Promis
         },
       });
     if (path === `${realmPath}/boards`)
-      return json(call.cursor ? { items: [boardWire('Native board')], next: null } : { items: [], next: 'board-first' });
+      return json(
+        call.cursor ? { items: [boardWire('Native board')], next: null } : { items: [], next: 'board-first' },
+      );
     if (path === `${realmPath}/publications`)
       return json(
         call.cursor
@@ -231,22 +233,33 @@ async function nativeFetch(input: RequestInfo | URL, init?: RequestInit): Promis
           : { items: [], next: 'publication-first' },
       );
     const subjectId = /^\/v1\/subjects\/([^/]+)$/.exec(path)?.[1];
-    if (subjectId) return subjectId === oldSubjectId ? subjectWire(oldSubjectId, 'Obsolete publication') : subjectWire(subjectId, 'Native publication');
+    if (subjectId)
+      return subjectId === oldSubjectId
+        ? subjectWire(oldSubjectId, 'Obsolete publication')
+        : subjectWire(subjectId, 'Native publication');
     if (path === '/v1/definitions/active') return json({ digest: 'test-release' });
     if (path === '/v1/definitions/releases/test-release')
-      return json({ digest: 'test-release', release: { types: { 'schema:Book': { labels: { en: 'Book' } } }, properties: {} } });
+      return json({
+        digest: 'test-release',
+        release: { types: { 'schema:Book': { labels: { en: 'Book' } } }, properties: {} },
+      });
     return problem(404);
   }
   if (path === '/v1/definitions/active') return json({ digest: 'test-release' });
   if (path === '/v1/definitions/releases/test-release')
-    return json({ digest: 'test-release', release: { types: { 'schema:Book': { labels: { en: 'Book' } } }, properties: {} } });
+    return json({
+      digest: 'test-release',
+      release: { types: { 'schema:Book': { labels: { en: 'Book' } } }, properties: {} },
+    });
   return problem(404);
 }
 
 const originalFetch = globalThis.fetch;
 globalThis.fetch = nativeFetch as typeof fetch;
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/spaces/atlas' });
 const globals = {
   window,
@@ -267,17 +280,14 @@ const globals = {
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previousGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
 const { sessionQuery } = await import('../src/session/query');
-const {
-  captureSpacePageAdmission,
-  SpacePageLifetimeContext,
-  SpacePageLifetimeHost,
-  spacePageAdmissionIsCurrent,
-} =
+const { captureSpacePageAdmission, SpacePageLifetimeContext, SpacePageLifetimeHost, spacePageAdmissionIsCurrent } =
   await import('../src/community/space-page-lifetime');
 const { useShelfList } = await import('../src/community/space-queries');
 const { RealmShelf } = await import('../src/community/space-page');
@@ -317,12 +327,16 @@ function routeTarget(): SpacePageTarget {
 
 async function loadSpace(client: QueryClient, credentialMode: RouteContext['credentialMode'] = 'anonymous') {
   const request = activeRequest ?? setRequest();
-  return requests.run(request, () => loadSpaceRoute({ params: { address }, context: { queryClient: client, credentialMode } }));
+  return requests.run(request, () =>
+    loadSpaceRoute({ params: { address }, context: { queryClient: client, credentialMode } }),
+  );
 }
 
 async function loadRealm(client: QueryClient, credentialMode: RouteContext['credentialMode']) {
   const request = activeRequest ?? setRequest();
-  return requests.run(request, () => loadRealmRoute({ params: { id: realmId }, context: { queryClient: client, credentialMode } }));
+  return requests.run(request, () =>
+    loadRealmRoute({ params: { id: realmId }, context: { queryClient: client, credentialMode } }),
+  );
 }
 
 function ConnectedPage({
@@ -429,14 +443,27 @@ let latestProbe: { boards: ProbeState<RealmBoard>; publications: ProbeState<Publ
 function ShelfPairProbe() {
   const lifetime = useContext(SpacePageLifetimeContext);
   const boards = useShelfList(
-    { items: [{ id: boardId, title: 'Original board', purpose: 'discussion', visibility: 'published' }], next: 'board-first', unavailable: 0, credentialMode: 'anonymous' },
+    {
+      items: [{ id: boardId, title: 'Original board', purpose: 'discussion', visibility: 'published' }],
+      next: 'board-first',
+      unavailable: 0,
+      credentialMode: 'anonymous',
+    },
     (input) => readRealmBoards({ data: { realmId, ...input } }),
     lifetime,
     true,
   );
   const publications = useShelfList(
     {
-      items: [{ id: oldSubjectId, labels: { en: 'Original publication' }, label: 'Original publication', types: ['schema:Book'], cover: null }],
+      items: [
+        {
+          id: oldSubjectId,
+          labels: { en: 'Original publication' },
+          label: 'Original publication',
+          types: ['schema:Book'],
+          cover: null,
+        },
+      ],
       next: 'publication-first',
       unavailable: 0,
       credentialMode: 'anonymous',
@@ -448,8 +475,12 @@ function ShelfPairProbe() {
   latestProbe = { boards, publications };
   return (
     <div>
-      <output data-testid="boards">{boards.items.map((item) => item.title).join(',')} {String(boards.busy)}</output>
-      <output data-testid="publications">{publications.items.map((item) => item.label).join(',')} {String(publications.busy)}</output>
+      <output data-testid="boards">
+        {boards.items.map((item) => item.title).join(',')} {String(boards.busy)}
+      </output>
+      <output data-testid="publications">
+        {publications.items.map((item) => item.label).join(',')} {String(publications.busy)}
+      </output>
       <button onClick={() => void boards.load()}>load boards</button>
       <button onClick={() => void boards.load(true)}>restart boards</button>
       <button onClick={() => void publications.load()}>load publications</button>
@@ -460,7 +491,13 @@ function ShelfPairProbe() {
 
 function ProbePage({ page, admission }: { page: SpacePageData; admission: SpacePageAdmission }) {
   return (
-    <SpacePageLifetimeHost page={page} admission={admission} target={routeTarget()} locale="en" credentialMode="anonymous">
+    <SpacePageLifetimeHost
+      page={page}
+      admission={admission}
+      target={routeTarget()}
+      locale="en"
+      credentialMode="anonymous"
+    >
       <ShelfPairProbe />
     </SpacePageLifetimeHost>
   );
@@ -471,7 +508,11 @@ async function mountProbe(client: QueryClient, page: SpacePageData, admission: S
   root = createRoot(host);
   latestProbe = undefined;
   await act(async () => {
-    root!.render(<QueryClientProvider client={client}><ProbePage page={page} admission={admission} /></QueryClientProvider>);
+    root!.render(
+      <QueryClientProvider client={client}>
+        <ProbePage page={page} admission={admission} />
+      </QueryClientProvider>,
+    );
     await tick();
   });
 }
@@ -508,8 +549,16 @@ test('connected Space and Realm reads preserve their original reader through hyd
   const loaded = await loadSpace(serverClient);
   expect(loaded.page.space.title).toBe('Connected Space');
   expect(loaded.admission.readerOrigin).toEqual({ kind: 'anonymous' });
-  expect(nativeCalls.filter((call) => call.path.startsWith('/v1/')).every((call) => call.authorization === null)).toBe(true);
-  expect(renderToString(<QueryClientProvider client={serverClient}><ConnectedPage page={loaded.page} admission={loaded.admission} /></QueryClientProvider>)).toContain('Connected Space');
+  expect(nativeCalls.filter((call) => call.path.startsWith('/v1/')).every((call) => call.authorization === null)).toBe(
+    true,
+  );
+  expect(
+    renderToString(
+      <QueryClientProvider client={serverClient}>
+        <ConnectedPage page={loaded.page} admission={loaded.admission} />
+      </QueryClientProvider>,
+    ),
+  ).toContain('Connected Space');
 
   const serverCache = JSON.parse(JSON.stringify(dehydrate(serverClient))) as ReturnType<typeof dehydrate>;
   const routeEnvelope = JSON.parse(JSON.stringify(loaded)) as typeof loaded;
@@ -536,8 +585,22 @@ test('connected Space and Realm reads preserve their original reader through hyd
   await click(m.realm_boards_more());
   await click(m.realm_publications_more());
   await tick();
-  expect(nativeCalls).toContainEqual(expect.objectContaining({ path: `/v1/realms/${realmId}/boards`, cursor: 'board-first', authorization: null, limit: '20' }));
-  expect(nativeCalls).toContainEqual(expect.objectContaining({ path: `/v1/realms/${realmId}/publications`, cursor: 'publication-first', authorization: null, limit: '12' }));
+  expect(nativeCalls).toContainEqual(
+    expect.objectContaining({
+      path: `/v1/realms/${realmId}/boards`,
+      cursor: 'board-first',
+      authorization: null,
+      limit: '20',
+    }),
+  );
+  expect(nativeCalls).toContainEqual(
+    expect.objectContaining({
+      path: `/v1/realms/${realmId}/publications`,
+      cursor: 'publication-first',
+      authorization: null,
+      limit: '12',
+    }),
+  );
   expect(host.textContent).toContain('Native board');
   expect(host.textContent).toContain('Native publication');
 
@@ -552,14 +615,22 @@ test('connected Space and Realm reads preserve their original reader through hyd
   const realmLoaded = await loadRealm(realmClient, 'session');
   expect(realmLoaded.admission.readerOrigin).toEqual({ kind: 'signed-in', subject });
   expect(realmLoaded.page.realm?.credentialMode).toBe('session');
-  expect(nativeCalls.filter((call) => call.path.startsWith('/v1/')).every((call) => call.authorization === `Bearer ${accessToken}`)).toBe(true);
+  expect(
+    nativeCalls
+      .filter((call) => call.path.startsWith('/v1/'))
+      .every((call) => call.authorization === `Bearer ${accessToken}`),
+  ).toBe(true);
   await mount(realmClient, realmLoaded.page, realmLoaded.admission, 'session', false, { kind: 'realm', id: realmId });
   await click(m.realm_boards_more());
   await click(m.realm_publications_more());
   expect(host.textContent).toContain('Native board');
   expect(host.textContent).toContain('Native publication');
-  expect(nativeCalls.some((call) => call.path.endsWith('/boards') && call.authorization === `Bearer ${accessToken}`)).toBe(true);
-  expect(nativeCalls.some((call) => call.path.endsWith('/publications') && call.authorization === `Bearer ${accessToken}`)).toBe(true);
+  expect(
+    nativeCalls.some((call) => call.path.endsWith('/boards') && call.authorization === `Bearer ${accessToken}`),
+  ).toBe(true);
+  expect(
+    nativeCalls.some((call) => call.path.endsWith('/publications') && call.authorization === `Bearer ${accessToken}`),
+  ).toBe(true);
 });
 
 test('missing and mismatched actual subjects never get filled from the expected QueryClient reader', async () => {
@@ -572,7 +643,11 @@ test('missing and mismatched actual subjects never get filled from the expected 
   mismatchClient.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
   nativeSubject = otherSubject;
   setRequest();
-  const mismatchAdmission = captureSpacePageAdmission(mismatchClient, { target: routeTarget(), locale: 'en', credentialMode: 'session' });
+  const mismatchAdmission = captureSpacePageAdmission(mismatchClient, {
+    target: routeTarget(),
+    locale: 'en',
+    credentialMode: 'session',
+  });
   const mismatch = mismatchClient.fetchQuery(spaceQuery(address, 'en', 'session', mismatchAdmission));
   await expect(mismatch).rejects.toThrow('obsolete visit');
   expect(mismatchClient.getQueryData(spaceQuery(address, 'en', 'session').queryKey)).toBeUndefined();
@@ -583,7 +658,11 @@ test('missing and mismatched actual subjects never get filled from the expected 
   const missingClient = newClient();
   missingClient.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
   setRequest({ authorization: 'Bearer opaque-explicit-reader' });
-  const missingAdmission = captureSpacePageAdmission(missingClient, { target: routeTarget(), locale: 'en', credentialMode: 'session' });
+  const missingAdmission = captureSpacePageAdmission(missingClient, {
+    target: routeTarget(),
+    locale: 'en',
+    credentialMode: 'session',
+  });
   const missing = missingClient.fetchQuery(spaceQuery(address, 'en', 'session', missingAdmission));
   await expect(missing).rejects.toThrow('obsolete visit');
   expect(nativeCalls.some((call) => call.authorization === 'Bearer opaque-explicit-reader')).toBe(true);
@@ -595,12 +674,17 @@ test('one QueryClient retires ready and pending admissions for committed replace
   resetTransport();
   nativeSubject = subject;
   const { spaceQuery } = await import('../src/community/space-queries');
-  const { captureSpacePageAdmission, spacePageAdmissionIsCurrent: isCurrent } = await import('../src/community/space-page-lifetime');
+  const { captureSpacePageAdmission, spacePageAdmissionIsCurrent: isCurrent } =
+    await import('../src/community/space-page-lifetime');
 
   const client = newClient();
   client.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
   setRequest();
-  const admission = captureSpacePageAdmission(client, { target: routeTarget(), locale: 'en', credentialMode: 'session' });
+  const admission = captureSpacePageAdmission(client, {
+    target: routeTarget(),
+    locale: 'en',
+    credentialMode: 'session',
+  });
   const bound = await client.fetchQuery(spaceQuery(address, 'en', 'session', admission));
   expect(isCurrent(bound.admission, client)).toBe(true);
 
@@ -610,7 +694,12 @@ test('one QueryClient retires ready and pending admissions for committed replace
   expect(isCurrent(bound.admission, client)).toBe(true);
 
   const refreshing = deferred<ReturnType<typeof signedInSession>>();
-  const pendingFetch = client.fetchQuery({ ...sessionQuery, queryFn: () => refreshing.promise, staleTime: 0, retry: false });
+  const pendingFetch = client.fetchQuery({
+    ...sessionQuery,
+    queryFn: () => refreshing.promise,
+    staleTime: 0,
+    retry: false,
+  });
   await tick();
   expect(isCurrent(bound.admission, client)).toBe(true);
   refreshing.resolve(signedInSession(subject, csrfToken));
@@ -620,24 +709,45 @@ test('one QueryClient retires ready and pending admissions for committed replace
   const replacementClient = newClient();
   replacementClient.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
   setRequest();
-  const replacementAdmission = captureSpacePageAdmission(replacementClient, { target: routeTarget(), locale: 'en', credentialMode: 'session' });
-  const replacementPage = await replacementClient.fetchQuery(spaceQuery(address, 'en', 'session', replacementAdmission));
+  const replacementAdmission = captureSpacePageAdmission(replacementClient, {
+    target: routeTarget(),
+    locale: 'en',
+    credentialMode: 'session',
+  });
+  const replacementPage = await replacementClient.fetchQuery(
+    spaceQuery(address, 'en', 'session', replacementAdmission),
+  );
   replacementClient.setQueryData(sessionQuery.queryKey, signedInSession(otherSubject, 'replacement-csrf'));
   expect(isCurrent(replacementPage.admission, replacementClient)).toBe(false);
 
   const errorClient = newClient();
   errorClient.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
   setRequest();
-  const errorAdmission = captureSpacePageAdmission(errorClient, { target: routeTarget(), locale: 'en', credentialMode: 'session' });
+  const errorAdmission = captureSpacePageAdmission(errorClient, {
+    target: routeTarget(),
+    locale: 'en',
+    credentialMode: 'session',
+  });
   const errorPage = await errorClient.fetchQuery(spaceQuery(address, 'en', 'session', errorAdmission));
-  const errorRefresh = errorClient.fetchQuery({ ...sessionQuery, queryFn: async () => { throw new Error('session refresh failed'); }, staleTime: 0, retry: false });
+  const errorRefresh = errorClient.fetchQuery({
+    ...sessionQuery,
+    queryFn: async () => {
+      throw new Error('session refresh failed');
+    },
+    staleTime: 0,
+    retry: false,
+  });
   await expect(errorRefresh).rejects.toThrow('session refresh failed');
   expect(isCurrent(errorPage.admission, errorClient)).toBe(false);
 
   const removalClient = newClient();
   removalClient.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
   setRequest();
-  const removalAdmission = captureSpacePageAdmission(removalClient, { target: routeTarget(), locale: 'en', credentialMode: 'session' });
+  const removalAdmission = captureSpacePageAdmission(removalClient, {
+    target: routeTarget(),
+    locale: 'en',
+    credentialMode: 'session',
+  });
   const removalPage = await removalClient.fetchQuery(spaceQuery(address, 'en', 'session', removalAdmission));
   removalClient.removeQueries({ queryKey: sessionQuery.queryKey });
   expect(isCurrent(removalPage.admission, removalClient)).toBe(false);
@@ -645,7 +755,11 @@ test('one QueryClient retires ready and pending admissions for committed replace
   const abaClient = newClient();
   abaClient.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
   setRequest();
-  const abaAdmission = captureSpacePageAdmission(abaClient, { target: routeTarget(), locale: 'en', credentialMode: 'session' });
+  const abaAdmission = captureSpacePageAdmission(abaClient, {
+    target: routeTarget(),
+    locale: 'en',
+    credentialMode: 'session',
+  });
   const abaPage = await abaClient.fetchQuery(spaceQuery(address, 'en', 'session', abaAdmission));
   abaClient.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
   abaClient.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
@@ -791,7 +905,11 @@ test('a pending original read is rejected before it enters the QueryClient after
   const client = newClient();
   client.setQueryData(sessionQuery.queryKey, signedInSession(subject, csrfToken));
   setRequest();
-  const admission = captureSpacePageAdmission(client, { target: routeTarget(), locale: 'en', credentialMode: 'session' });
+  const admission = captureSpacePageAdmission(client, {
+    target: routeTarget(),
+    locale: 'en',
+    credentialMode: 'session',
+  });
   const pending = deferred<Response>();
   let held = false;
   const actualFetch = globalThis.fetch;
@@ -799,7 +917,12 @@ test('a pending original read is rejected before it enters the QueryClient after
     const request = new Request(input, init);
     if (!held && request.url.includes(`/v1/spaceAddresses/${address}`)) {
       held = true;
-      nativeCalls.push({ path: `/v1/spaceAddresses/${address}`, cursor: null, authorization: request.headers.get('authorization'), limit: null });
+      nativeCalls.push({
+        path: `/v1/spaceAddresses/${address}`,
+        cursor: null,
+        authorization: request.headers.get('authorization'),
+        limit: null,
+      });
       return pending.promise;
     }
     return nativeFetch(request);
